@@ -47,7 +47,9 @@ pub use app::murmure::{
     SealedChannelKey, SearchMatch, SpaceCommand, SpaceEvent, Timestamp, Topic, UnreadCount,
 };
 pub use command::SyncCommand;
-pub use event::{LeaseAnswer, LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict};
+pub use event::{
+    FoldAnswer, LeaseAnswer, LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict,
+};
 // Trame data plane (command + event + value types) lives under `app::trame`;
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
 pub use app::trame::{

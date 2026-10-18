@@ -40,12 +40,15 @@ meta:peers/{id}: binary
 meta:peers: map
 meta:segments/*/amendments: string
 meta:segments/*/document_id: string
+meta:segments/*/folded: string
 meta:segments/*/from_ts: i64
 meta:segments/*/state: string
 meta:segments/*: map
 meta:segments: list
 segment:header/channel_id: string
 segment:header/created_at: i64
+segment:header/folded: string
+segment:header/folded_seq: i64
 segment:header/kind: string
 segment:header: map
 segment:messages/*/author: string

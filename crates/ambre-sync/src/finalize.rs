@@ -228,7 +228,7 @@ mod tests {
             Ok((200, link)),
             Ok((200, serde_json::Value::Null)),
             Ok((200, serde_json::json!({ "snapshot_id": given.to_string() }))),
-            Ok((204, serde_json::Value::Null)),
+            Ok((200, serde_json::json!({ "folded": null }))),
             Ok((204, serde_json::Value::Null)),
         ]);
         let auth = session("access-1", "refresh-1");

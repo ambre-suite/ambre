@@ -565,6 +565,24 @@ impl LogicState {
                 withdrawn,
                 message,
             } => self.segment_finalize_failed(channel_id, segment, withdrawn, &message),
+            LogicEvent::FoldLeaseAnswered {
+                channel_id,
+                segment,
+                answer,
+            } => self.fold_lease_answered(channel_id, segment, answer),
+            LogicEvent::SegmentFolded {
+                channel_id,
+                segment,
+            } => self.segment_folded(channel_id, segment),
+            LogicEvent::SegmentFoldFailed {
+                channel_id,
+                segment,
+                message,
+            } => self.segment_fold_failed(channel_id, segment, &message),
+            LogicEvent::AmendmentsFolded {
+                document_id,
+                amendments,
+            } => self.amendments_folded(document_id, amendments),
             LogicEvent::DeltasLocked {
                 document_id,
                 deltas,

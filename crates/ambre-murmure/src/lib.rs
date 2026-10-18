@@ -39,6 +39,8 @@ mod edit_tests;
 #[cfg(test)]
 mod finalizing_tests;
 #[cfg(test)]
+mod folding_tests;
+#[cfg(test)]
 mod mention_tests;
 #[cfg(test)]
 mod reaction_tests;
@@ -52,8 +54,9 @@ mod space_tests;
 mod unread_tests;
 
 pub use channel::{
-    ChangeTarget, ChannelState, Closed, FINALIZE_RETRY_MS, FinalSnapshot, Linked, Named, Relocated,
-    Replay, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS, Sent,
+    ChangeTarget, ChannelState, Closed, FINALIZE_RETRY_MS, FOLD_DELAY_MS, FinalSnapshot,
+    FoldSnapshot, Linked, Named, Relocated, Replay, SEGMENT_BYTES, SEGMENT_MESSAGES,
+    SUCCESSOR_RETRY_MS, Sent, Settled,
 };
 pub use delta::{JSON_SCHEMA_VERSION, Refusal, Signer};
 pub use error::MurmureError;

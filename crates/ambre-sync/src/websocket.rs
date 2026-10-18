@@ -883,6 +883,36 @@ impl SyncState {
                 }),
                 Err(message) => self.finalize_failed(channel_id, segment, false, &message),
             },
+            SyncEvent::FoldLeaseAnswered {
+                channel_id,
+                segment,
+                result,
+            } => match result {
+                Ok(answer) => self.send_to_logic(LogicEvent::FoldLeaseAnswered {
+                    channel_id,
+                    segment,
+                    answer,
+                }),
+                Err(message) => self.fold_failed(channel_id, segment, &message),
+            },
+            SyncEvent::SegmentFolded {
+                channel_id,
+                segment,
+                result,
+            } => match result {
+                Ok(()) => self.send_to_logic(LogicEvent::SegmentFolded {
+                    channel_id,
+                    segment,
+                }),
+                Err(message) => self.fold_failed(channel_id, segment, &message),
+            },
+            SyncEvent::AmendmentsFolded {
+                document_id,
+                amendments,
+            } => self.send_to_logic(LogicEvent::AmendmentsFolded {
+                document_id,
+                amendments,
+            }),
             SyncEvent::DirectMessageOpened { requested, result } => {
                 self.channel_answered(
                     requested,

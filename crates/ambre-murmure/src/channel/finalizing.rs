@@ -20,7 +20,7 @@ use crate::schema::{self, SEGMENT_DOCUMENT, SEGMENT_STATE, SEGMENTS, SegmentStat
 pub const FINALIZE_RETRY_MS: u64 = 2_000;
 
 /// The doublings past which the delay stops growing: about half an hour.
-const RETRY_DOUBLINGS: u32 = 10;
+pub(super) const RETRY_DOUBLINGS: u32 = 10;
 
 /// The finalization of one closing segment, as this client drives it.
 #[derive(Debug)]

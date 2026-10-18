@@ -1083,6 +1083,7 @@ impl LogicState {
                     });
                 }
                 self.drive_finalization(channel_id, now);
+                self.drive_fold(channel_id, now);
                 let watchers = self.channel_watchers.entry(channel_id).or_default();
                 let changed = watchers.tick(now);
                 if watchers.owes_watching(now) {
@@ -1498,8 +1499,8 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::{
-        ActivityKind, LeaseAnswer, LeaseId, Mention, MentionTarget, MessageDraft, MurmureEvent,
-        RestEvent, SegmentId, Timestamp,
+        ActivityKind, FoldAnswer, LeaseAnswer, LeaseId, Mention, MentionTarget, MessageDraft,
+        MurmureEvent, RestEvent, SegmentId, Timestamp,
     };
     use ambre_murmure::ChannelType;
 
@@ -3722,6 +3723,151 @@ mod tests {
             .try_into()
             .expect("a create again");
         assert_ne!(second, first);
+    }
+
+    // --- The fold of the amendments of a final segment ---
+
+    /// The fold commands Logic sent: a lease request names no reach.
+    fn folds(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, Option<u64>)> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|c| match c {
+                SyncCommand::TakeFoldLease { segment, .. } => Some((segment, None)),
+                SyncCommand::FoldSegment {
+                    segment,
+                    amendments_seq,
+                    ..
+                } => Some((segment, Some(amendments_seq))),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A final segment whose one message this client edited into amendments
+    /// that went up whole. Returns the segment, the message and the
+    /// amendments.
+    fn amended_channel(
+        state: &mut LogicState,
+        sync: &Receiver<SyncCommand>,
+    ) -> (ChannelId, SegmentId, MessageId, DocumentId) {
+        let (channel_id, closing) = closed_channel(state, sync);
+        state.record_channel_seq(closing.document_id(), 1, None);
+        finalize_at_one(state, sync, channel_id, closing, NOW);
+        drain(sync);
+        let message = state.channels[&channel_id].messages(closing).expect("held")[0].id;
+        command(state, channel_id, edit_to(closing, message, "two", at(1)));
+        let [(_, amendments)] = created_amendments(sync).try_into().expect("one create");
+        state.handle_logic_event(LogicEvent::AmendmentsLinked {
+            channel_id,
+            segment: closing,
+            amendments,
+        });
+        state.grant_identity(amendments);
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: amendments,
+            role: ambre_bus::Role::Owner,
+        });
+        drain(sync);
+        (channel_id, closing, message, amendments)
+    }
+
+    /// The fold of the Murmure segments spec, in Logic. The tick asks for
+    /// the lease, the granted lease sends the fold snapshot, and a commit
+    /// waits out the fold delay. A failure asks again past its retry delay.
+    #[test]
+    fn a_final_segment_with_amendments_asks_and_commits_its_fold() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, segment, _, amendments) = amended_channel(&mut state, &sync);
+        command(&mut state, channel_id, MurmureCommand::Tick { now: at(2) });
+        assert_eq!(folds(&sync), [(segment, None)], "the lease is asked");
+        state.handle_logic_event(LogicEvent::SegmentFoldFailed {
+            channel_id,
+            segment,
+            message: "HTTP 500".to_owned(),
+        });
+        command(&mut state, channel_id, MurmureCommand::Tick { now: at(3) });
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(2_002) },
+        );
+        assert!(folds(&sync).is_empty(), "the retry delay runs");
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(2_003) },
+        );
+        assert_eq!(folds(&sync), [(segment, None)], "the lease is asked again");
+
+        state.handle_logic_event(LogicEvent::FoldLeaseAnswered {
+            channel_id,
+            segment,
+            answer: FoldAnswer::Granted {
+                lease: LeaseId::new(),
+                horizon: 1,
+                amendments,
+                amendments_seq: 0,
+                expires_in: 30_000,
+            },
+        });
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(2_004) },
+        );
+        assert_eq!(folds(&sync), [(segment, Some(0))], "the fold leaves");
+        state.handle_logic_event(LogicEvent::SegmentFolded {
+            channel_id,
+            segment,
+        });
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(2_005) },
+        );
+        assert!(folds(&sync).is_empty(), "the fold delay runs");
+    }
+
+    /// A confirmation of this client settled the fold. `meta` marks the
+    /// amendments folded, the document closes, and the view reads the
+    /// segment as folded. The edit the relay never sequenced is written
+    /// again at the next tick (the Murmure segments spec).
+    #[test]
+    fn a_settled_fold_marks_meta_closes_the_amendments_and_replays_the_rest() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, segment, _, amendments) = amended_channel(&mut state, &sync);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::AmendmentsFolded {
+            document_id: segment.document_id(),
+            amendments,
+        });
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let sent = drain(&sync);
+        assert!(sent.iter().any(|c| matches!(c,
+            SyncCommand::SendUpdate { document_id, .. } if *document_id == meta)));
+        assert!(sent.iter().any(|c| matches!(c,
+            SyncCommand::CloseDocument { document_id } if *document_id == amendments)));
+        let shown = channel_events(&ui);
+        assert!(
+            shown.iter().any(|(_, event)| matches!(event,
+                MurmureEvent::Messages { segment: s, messages }
+                    if *s == segment && messages[0].text == "one" && !messages[0].edited)),
+            "the view reads the fold {shown:?}"
+        );
+        state.handle_logic_event(LogicEvent::AmendmentsFolded {
+            document_id: segment.document_id(),
+            amendments,
+        });
+        assert!(
+            !drain(&sync).iter().any(|c| matches!(c,
+                SyncCommand::SendUpdate { document_id, .. } if *document_id == meta)),
+            "a fold marked already sends no delta"
+        );
+
+        command(&mut state, channel_id, MurmureCommand::Tick { now: at(3) });
+        let [(again, other)] = created_amendments(&sync).try_into().expect("a replay");
+        assert_eq!(again, segment);
+        assert_ne!(other, amendments, "the replay goes to new amendments");
     }
 
     /// An edit the lock refused is replayed as an amendment at the

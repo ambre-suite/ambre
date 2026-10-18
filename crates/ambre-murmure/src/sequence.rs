@@ -124,6 +124,26 @@ impl Sequence {
         self.unresolved.push(Range { seq, start, end });
     }
 
+    /// Note one payload of a document that holds no message, an amendments
+    /// document: its number and the end of its operations, and nothing to
+    /// match.
+    pub(crate) fn note_bare(&mut self, order: Order, payload: &[u8]) {
+        let seq = match order {
+            Order::Update(seq) | Order::Snapshot(seq) => seq,
+        };
+        self.passed(seq);
+        if let Ok(meta) = LoroDoc::decode_import_blob_meta(loro_part(payload), false) {
+            self.relay(&meta.partial_end_vv);
+        }
+    }
+
+    /// Note one JSON update of a document that holds no message, by the end
+    /// of its range.
+    pub(crate) fn note_bare_range(&mut self, seq: Seq, end: &VersionVector) {
+        self.passed(seq);
+        self.relay(end);
+    }
+
     /// Raise the end of the operations delivered to `end`.
     fn relay(&mut self, end: &VersionVector) {
         for (peer, &counter) in end.iter() {

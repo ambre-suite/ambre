@@ -22,8 +22,8 @@
 use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
     ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelPlace,
-    ClipboardCell, ClipboardPayload, DocType, DocumentId, LeaseAnswer, LeaseId, LogicEvent,
-    MemberChannel, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent, Role,
+    ClipboardCell, ClipboardPayload, DocType, DocumentId, FoldAnswer, LeaseAnswer, LeaseId,
+    LogicEvent, MemberChannel, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent, Role,
     SelectionKind, SyncCommand, Timestamp, TrameCommand, UserId,
 };
 
@@ -273,6 +273,8 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::CreateAmendments { .. } => "CreateAmendments",
         SyncCommand::TakeFinalizeLease { .. } => "TakeFinalizeLease",
         SyncCommand::FinalizeSegment { .. } => "FinalizeSegment",
+        SyncCommand::TakeFoldLease { .. } => "TakeFoldLease",
+        SyncCommand::FoldSegment { .. } => "FoldSegment",
         SyncCommand::WatchSegment { .. } => "WatchSegment",
         SyncCommand::JoinChannel { .. } => "JoinChannel",
         SyncCommand::DeleteChannel { .. } => "DeleteChannel",
@@ -324,6 +326,10 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::FinalizeLeaseAnswered { .. } => "FinalizeLeaseAnswered",
         LogicEvent::SegmentFinalized { .. } => "SegmentFinalized",
         LogicEvent::SegmentFinalizeFailed { .. } => "SegmentFinalizeFailed",
+        LogicEvent::FoldLeaseAnswered { .. } => "FoldLeaseAnswered",
+        LogicEvent::SegmentFolded { .. } => "SegmentFolded",
+        LogicEvent::SegmentFoldFailed { .. } => "SegmentFoldFailed",
+        LogicEvent::AmendmentsFolded { .. } => "AmendmentsFolded",
         LogicEvent::DeltasLocked { .. } => "DeltasLocked",
         LogicEvent::ChannelJoined { .. } => "ChannelJoined",
         LogicEvent::DirectMessageOpened { .. } => "DirectMessageOpened",
@@ -343,8 +349,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 31;
-const EVENT_VARIANTS: usize = 46;
+const SYNC_VARIANTS: usize = 33;
+const EVENT_VARIANTS: usize = 50;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -466,6 +472,18 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             lease: LeaseId::new(),
             horizon: 42,
             payload: vec![4; 3],
+        },
+        SyncCommand::TakeFoldLease {
+            channel_id: chan,
+            segment,
+        },
+        SyncCommand::FoldSegment {
+            channel_id: chan,
+            segment,
+            lease: LeaseId::new(),
+            horizon: 42,
+            amendments_seq: 7,
+            payload: vec![5; 3],
         },
         SyncCommand::WatchSegment { segment, meta },
         SyncCommand::DeleteChannel { channel_id: chan },
@@ -653,6 +671,30 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             withdrawn: true,
             message: "refused".to_owned(),
+        },
+        LogicEvent::FoldLeaseAnswered {
+            channel_id: chan,
+            segment,
+            answer: FoldAnswer::Granted {
+                lease: LeaseId::new(),
+                horizon: 42,
+                amendments: DocumentId::new(),
+                amendments_seq: 7,
+                expires_in: 30_000,
+            },
+        },
+        LogicEvent::SegmentFolded {
+            channel_id: chan,
+            segment,
+        },
+        LogicEvent::SegmentFoldFailed {
+            channel_id: chan,
+            segment,
+            message: "refused".to_owned(),
+        },
+        LogicEvent::AmendmentsFolded {
+            document_id: segment.document_id(),
+            amendments: DocumentId::new(),
         },
         LogicEvent::DeltasLocked {
             document_id: segment.document_id(),

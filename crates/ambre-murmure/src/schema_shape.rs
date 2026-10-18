@@ -290,6 +290,11 @@ fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
     state
         .delete(segment, messages[2].id, AUTHOR)
         .expect("amend");
+    // A fold writes the segment's header and the `meta` entry
+    // (`MURMURE-075`, `MURMURE-076`).
+    let amendments = state.amendments_id(segment).expect("amended");
+    state.fold_in_place(segment).expect("fold");
+    state.mark_folded(segment, amendments).expect("mark");
 }
 
 /// The segment of the scenario that holds its messages, and its

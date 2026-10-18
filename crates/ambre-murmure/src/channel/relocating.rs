@@ -76,6 +76,14 @@ impl ChannelState {
         if document_id == self.active.id {
             return Err(MurmureError::NotActive(document_id));
         }
+        // Only a fold seals amendments, and it erases them next. `meta` then
+        // marks them folded, and their settle replays what the seal refused.
+        if self.is_amendments(document_id) {
+            return Ok(Relocated {
+                sent: None,
+                replay: Vec::new(),
+            });
+        }
         if self.active.session.is_none() {
             return Err(MurmureError::NoSession(self.active.id));
         }
@@ -166,7 +174,11 @@ impl ChannelState {
 
 /// The change the refused deltas made to a message the relay holds, `None`
 /// when they changed neither its body nor its deletion.
-fn replay_of(segment: SegmentId, before: &MessageView, now: MessageView) -> Option<Replay> {
+pub(super) fn replay_of(
+    segment: SegmentId,
+    before: &MessageView,
+    now: MessageView,
+) -> Option<Replay> {
     let draft = if now.deleted {
         if before.deleted {
             return None;

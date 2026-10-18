@@ -124,10 +124,11 @@ names the unit two concurrent writers race for. Every document also carries the 
 | `space` | `channels` | Map | a `ChannelId` | `{name: String, topic: String, category_id: CategoryId, position: u32, key: SealedChannelKey}` | the field | spaces | design |
 | `space` | `emoji` | Map | a `CustomEmojiId` | `{name: String, media_ref, media_type: MediaType}` | the entry | emoji | design |
 | `meta` | `channel` | Map | `type`, `layout`, `name`, `topic` | `ChannelType`, `ChannelLayout`, String, String | the key | channels | built |
-| `meta` | `segments` | List | position | `{document_id: DocumentId, from_ts: Timestamp, to_ts: Timestamp, msg_count: u32, state: SegmentState, amendments: DocumentId}` | the field | segments | built |
+| `meta` | `segments` | List | position | `{document_id: DocumentId, from_ts: Timestamp, to_ts: Timestamp, msg_count: u32, state: SegmentState, amendments: DocumentId, folded: DocumentId}` | the field | segments | built |
 | `meta` | `pinned` | Map | a `MessageId` | `{segment: SegmentId, pinned_at: Timestamp}` | the entry | pins | design |
 | `meta` | `tags` | Map | a `TagId`, for a forum | `{name: String}` | the entry | forums | design |
 | `meta` | `commands` | Map | a command name | `{bot: PublicKey, description: String}` | the entry | bots | design |
+| segment | `header` | Map | `folded`, `folded_seq` | `DocumentId`, `u64`, on a fold snapshot | the key | segments | built |
 | segment, thread | `messages` | List | position | one message map | list order, no LWW | messages | built |
 | segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `MessageId`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `MeetingId`, `NoticeKind`, `UserId` | the key | messages | built |
 | segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark | none: char-CRDT | messages, mentions | built |
@@ -153,7 +154,9 @@ to nothing: text typed beside it is not part of the mention. **The `emoji` mark*
 
 **Absence is a value** (`MURMURE-018`). No `name` on a direct message means the client composes one
 at display (`MURMURE-016`). No `thread` means the message has no reply. A segment entry with no
-`amendments` has no amendments document.
+`amendments` has no amendments document. A segment entry whose `folded` names its `amendments` holds
+them in its final snapshot, so no client opens them. A segment header with no `folded` folds
+nothing in.
 
 ---
 

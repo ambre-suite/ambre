@@ -36,6 +36,11 @@ pub(crate) const HEADER_SPACE: &str = "space_id";
 /// The key an amendments document names its segment under, beside its
 /// channel (`MURMURE-013`).
 pub(crate) const HEADER_SEGMENT: &str = "segment_id";
+/// The amendments document a fold snapshot of a segment folded in, absent
+/// from every other snapshot.
+pub(crate) const HEADER_FOLDED: &str = "folded";
+/// The last delta number of those amendments the fold holds.
+pub(crate) const HEADER_FOLDED_SEQ: &str = "folded_seq";
 
 /// The `space` root of a space document.
 pub(crate) const SPACE: &str = "space";
@@ -67,6 +72,9 @@ pub(crate) const SEGMENT_FROM: &str = "from_ts";
 pub(crate) const SEGMENT_STATE: &str = "state";
 /// The amendments document of a locked segment, absent while it has none.
 pub(crate) const SEGMENT_AMENDMENTS: &str = "amendments";
+/// The amendments document the final snapshot folded in, which the relay
+/// erased. An `amendments` that names it names no document.
+pub(crate) const SEGMENT_FOLDED: &str = "folded";
 
 /// The `amendments` root of an amendments document, one entry per
 /// `MessageId` of its segment, and the fields of one entry.

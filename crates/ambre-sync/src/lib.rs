@@ -136,6 +136,7 @@ mod channels;
 mod docfile;
 mod documents;
 mod finalize;
+mod fold;
 #[cfg(feature = "fuzz")]
 pub mod fuzz;
 mod http;
@@ -388,6 +389,24 @@ enum SyncEvent {
         channel_id: ChannelId,
         segment: ambre_bus::SegmentId,
         result: Result<(), String>,
+    },
+    /// The answer to a fold lease request (`SyncCommand::TakeFoldLease`).
+    FoldLeaseAnswered {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        result: Result<ambre_bus::FoldAnswer, String>,
+    },
+    /// The answer to a fold commit (`SyncCommand::FoldSegment`).
+    SegmentFolded {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        result: Result<(), String>,
+    },
+    /// A confirmation of this client settled the fold of the segment
+    /// `document_id`, and the relay erased `amendments` (`SRV-211`).
+    AmendmentsFolded {
+        document_id: DocumentId,
+        amendments: DocumentId,
     },
     /// The answer to a direct message request
     /// (`SyncCommand::CreateDirectMessage`): the channel the relay created
@@ -1396,6 +1415,24 @@ impl SyncState {
                 horizon,
                 payload,
             } => self.handle_finalize_segment(channel_id, segment, lease, horizon, &payload),
+            SyncCommand::TakeFoldLease {
+                channel_id,
+                segment,
+            } => self.handle_take_fold_lease(channel_id, segment),
+            SyncCommand::FoldSegment {
+                channel_id,
+                segment,
+                lease,
+                horizon,
+                amendments_seq,
+                payload,
+            } => {
+                let reach = fold::FoldReach {
+                    lease,
+                    amendments_seq,
+                };
+                self.handle_fold_segment(channel_id, segment, reach, horizon, &payload);
+            }
             SyncCommand::WatchSegment { segment, meta } => self.handle_watch_segment(segment, meta),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
             SyncCommand::LeaveChannel { channel_id } => self.handle_leave_channel(channel_id),

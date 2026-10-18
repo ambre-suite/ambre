@@ -358,17 +358,24 @@ impl SyncState {
         snapshot_id: SnapshotId,
         vouch: Vouch,
     ) {
-        if self.event_tx.is_none() {
+        let Some(tx) = self.event_tx.clone() else {
             tracing::info!("Sync: snapshot {snapshot_id:?} vouch, no relay (test path)");
             return;
-        }
+        };
         let base = format!("{}://{}", self.url_scheme, self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let sent =
                 send_vouch(&http::Fetch, &auth, &base, document_id, snapshot_id, &vouch).await;
-            if let Err(e) = sent {
-                tracing::warn!("Sync: snapshot {snapshot_id:?} vouch failed: {e}");
+            match sent {
+                Ok(Some(amendments)) => {
+                    let _ = tx.send(SyncEvent::AmendmentsFolded {
+                        document_id,
+                        amendments,
+                    });
+                }
+                Ok(None) => {}
+                Err(e) => tracing::warn!("Sync: snapshot {snapshot_id:?} vouch failed: {e}"),
             }
         });
     }
@@ -1487,7 +1494,8 @@ pub(crate) enum Vouch {
 }
 
 /// Posts `vouch` on `snapshot_id` to the relay at `base`, under the
-/// session's token.
+/// session's token. A confirmation that settled a fold names the amendments
+/// the relay erased (`SRV-211`).
 pub(crate) async fn send_vouch(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
@@ -1495,19 +1503,23 @@ pub(crate) async fn send_vouch(
     document_id: DocumentId,
     snapshot_id: SnapshotId,
     vouch: &Vouch,
-) -> Result<(), String> {
+) -> Result<Option<DocumentId>, String> {
     let url = format!("{base}/api/documents/{document_id}/snapshots/{snapshot_id}");
     let post = http::Method::Post;
     match vouch {
         Vouch::Confirm => {
             let body = serde_json::json!({});
-            http::send_json_auth_via(transport, post, &format!("{url}/confirm"), &body, auth).await
+            let confirmed: http::ConfirmSnapshotResponse =
+                http::post_json_auth_via(transport, &format!("{url}/confirm"), &body, auth).await?;
+            Ok(confirmed.folded)
         }
         Vouch::Report(signature) => {
             let body = http::ReportSnapshotRequest {
                 signature: signature.clone(),
             };
-            http::send_json_auth_via(transport, post, &format!("{url}/report"), &body, auth).await
+            http::send_json_auth_via(transport, post, &format!("{url}/report"), &body, auth)
+                .await
+                .map(|()| None)
         }
     }
 }
@@ -2903,11 +2915,16 @@ mod tests {
                 continue;
             };
             let vouch = vouch.expect("a checked snapshot is answered");
-            let transport = Scripted::new([Ok((204, serde_json::Value::Null))]);
+            let answer = match vouch {
+                Vouch::Confirm => (200, serde_json::json!({ "folded": null })),
+                Vouch::Report(_) => (204, serde_json::Value::Null),
+            };
+            let transport = Scripted::new([Ok(answer)]);
             let auth = session("access-1", "refresh-1");
-            send_vouch(&transport, &auth, base, doc, pending, &vouch)
+            let folded = send_vouch(&transport, &auth, base, doc, pending, &vouch)
                 .await
                 .expect("posted");
+            assert_eq!(folded, None, "no fold settles here");
             let url = format!("{base}/api/documents/{doc}/snapshots/{pending}/{route}");
             assert_eq!(transport.calls(), [(http::Method::Post, url)]);
             if let Vouch::Report(signature) = vouch {
@@ -2985,7 +3002,7 @@ mod tests {
                     stored,
                     serde_json::json!({ "snapshot_id": given.to_string() }),
                 )),
-                Ok((204, serde_json::Value::Null)),
+                Ok((200, serde_json::json!({ "folded": null }))),
             ]);
             let auth = session("access-1", "refresh-1");
 

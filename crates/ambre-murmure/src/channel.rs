@@ -34,12 +34,16 @@ mod amending;
 mod closing;
 mod confirming;
 mod finalizing;
+mod folding;
 mod relocating;
 
 pub use amending::{ChangeTarget, Linked};
 pub use closing::{Closed, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS};
 pub use finalizing::{FINALIZE_RETRY_MS, FinalSnapshot};
+pub use folding::{FOLD_DELAY_MS, FoldSnapshot, Settled};
 pub use relocating::{Relocated, Replay};
+#[cfg(test)]
+pub(crate) use {amending::folded_amendments, folding::header_fold};
 
 /// One document the channel holds, with the identifier the Sync worker routes
 /// it by.
@@ -203,6 +207,9 @@ pub struct ChannelState {
     /// A final segment whose final snapshot a report dropped, finalized again
     /// before the closing one.
     refinalizing: Option<SegmentId>,
+    /// The fold of the amendments of a final segment, as this client drives
+    /// it.
+    folding: Option<folding::Folding>,
     /// The amendments document of each locked segment it holds, by that
     /// segment (`MURMURE-013`).
     amendments: HashMap<SegmentId, Held>,
@@ -366,6 +373,7 @@ impl ChannelState {
             successor_retry: None,
             finalizing: None,
             refinalizing: None,
+            folding: None,
             amendments: HashMap::new(),
             amendments_pending: HashMap::new(),
             locked: HashSet::new(),
@@ -1117,11 +1125,18 @@ impl ChannelState {
         payload: &[u8],
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
         // An amendments document still arriving keeps its bytes too. It has
-        // no message, so no number.
+        // no message to number, but a fold names how far it reaches.
         if let Some(pending) = self.amendments_pending.get_mut(&document_id) {
             pending.arrivals.push(Arrival::Bytes(payload.to_vec()));
+            if let Some(order) = order {
+                self.sequences
+                    .entry(document_id)
+                    .or_default()
+                    .note_bare(order, payload);
+            }
             return Ok(Vec::new());
         }
+        let amendments = self.amended_by(document_id).is_some();
         // An older segment still arriving keeps its bytes until it is ready.
         // Its numbers are noted now and matched once it is admitted.
         if let Some(arrivals) = self.pending.get_mut(&SegmentId::from_document(document_id)) {
@@ -1138,6 +1153,15 @@ impl ChannelState {
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
         let status = doc.import(sequence::loro_part(payload))?;
+        if amendments {
+            if let Some(order) = order {
+                self.sequences
+                    .entry(document_id)
+                    .or_default()
+                    .note_bare(order, payload);
+            }
+            return self.answer(document_id, false, None::<fn(&mut Sequence)>);
+        }
         if status.pending.is_some() && matches!(order, Some(Order::Snapshot(_))) {
             self.replace_from_shallow(document_id, sequence::loro_part(payload))?;
         }
@@ -1203,7 +1227,7 @@ impl ChannelState {
             return Err(MurmureError::NotHeld(document_id));
         }
         if self.is_amendments(document_id) {
-            return self.apply_amendment(document_id, payload, signer);
+            return self.apply_amendment(document_id, seq, payload, signer);
         }
         let sequence = self.sequences.entry(document_id).or_default();
         sequence.passed(seq);

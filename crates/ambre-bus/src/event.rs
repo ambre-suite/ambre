@@ -278,6 +278,32 @@ pub enum LogicEvent {
         withdrawn: bool,
         message: String,
     },
+    /// The relay's answer to
+    /// [`SyncCommand::TakeFoldLease`](crate::SyncCommand::TakeFoldLease).
+    FoldLeaseAnswered {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        answer: FoldAnswer,
+    },
+    /// The relay took the fold snapshot of `segment`, answering
+    /// [`SyncCommand::FoldSegment`](crate::SyncCommand::FoldSegment).
+    SegmentFolded {
+        channel_id: ChannelId,
+        segment: SegmentId,
+    },
+    /// A fold lease request or a fold commit of `segment` failed.
+    SegmentFoldFailed {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        message: String,
+    },
+    /// This client's confirmation made a fold snapshot of the segment
+    /// `document_id` final, and the relay erased `amendments`, which it
+    /// folds in whole (`SRV-211`).
+    AmendmentsFolded {
+        document_id: DocumentId,
+        amendments: DocumentId,
+    },
     /// The relay refused deltas of `document_id` for its lock. `deltas` are
     /// the Loro updates this client sent from the first one refused, in the
     /// order they left. None of them reached another member, and none leaves
@@ -390,6 +416,24 @@ pub enum LeaseAnswer {
         expires_in: u64,
     },
     /// No lease yet: ask again in `retry_in` milliseconds. The grace period
+    /// runs, or another member holds the lease.
+    Deferred { retry_in: u64 },
+}
+
+/// The relay's answer to a fold lease request (`SRV-204`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FoldAnswer {
+    /// This client holds the lease for `expires_in` milliseconds. Its
+    /// snapshot covers the deltas of the segment up to `horizon`, and folds
+    /// `amendments` up to at least `amendments_seq`.
+    Granted {
+        lease: LeaseId,
+        horizon: u64,
+        amendments: DocumentId,
+        amendments_seq: u64,
+        expires_in: u64,
+    },
+    /// No lease yet: ask again in `retry_in` milliseconds. The fold delay
     /// runs, or another member holds the lease.
     Deferred { retry_in: u64 },
 }

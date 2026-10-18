@@ -9,7 +9,7 @@
 //! (`MURMURE-013`, `MURMURE-253`).
 
 use ambre_bus::{MessageDraft, MessageView, MurmureEvent, Timestamp};
-use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId, UserId};
+use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId, Seq, UserId};
 use loro::{Container, LoroDoc, LoroList, LoroMap, LoroText, UpdateOptions, ValueOrContainer};
 
 use super::{ChannelState, Created, Held, Sent};
@@ -18,7 +18,8 @@ use crate::error::MurmureError;
 use crate::mention;
 use crate::schema::{
     self, AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENTS, DeletedBy, DocumentKind,
-    HEADER, HEADER_SEGMENT, MENTION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT, SEGMENTS,
+    HEADER, HEADER_SEGMENT, MENTION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT, SEGMENT_FOLDED,
+    SEGMENTS,
 };
 use crate::sequence::Sequence;
 use crate::session::Session;
@@ -27,7 +28,7 @@ use crate::session::Session;
 #[derive(Debug)]
 pub(super) struct Pending {
     /// The locked segment it amends.
-    segment: SegmentId,
+    pub(super) segment: SegmentId,
     /// Its payloads, in the order they came.
     pub(super) arrivals: Vec<Arrival>,
     /// The identity issued for it, adopted once it is admitted.
@@ -41,6 +42,16 @@ impl Pending {
             arrivals: Vec::new(),
             session: None,
         }
+    }
+}
+
+#[cfg(test)]
+impl ChannelState {
+    /// Wait for the bytes of `amendments` of `segment`, though `meta` marks
+    /// them folded: the schema belts read them as a second peer does.
+    pub(crate) fn expect_amendments(&mut self, segment: SegmentId, amendments: DocumentId) {
+        self.amendments_pending
+            .insert(amendments, Pending::of(segment));
     }
 }
 
@@ -302,9 +313,12 @@ impl ChannelState {
         self.amendments_pending.contains_key(&document_id) || self.amended_by(document_id).is_some()
     }
 
-    /// Import a signed amendments delta once its check passed against the
-    /// locked segment (step 6 of the authorship check). A document still
-    /// arriving keeps it until it is admitted.
+    /// Import a signed amendments delta numbered `seq` once its check passed
+    /// against the locked segment (step 6 of the authorship check). A
+    /// document still arriving keeps it until it is admitted.
+    ///
+    /// A refused delta still counts as delivered, so a fold names how far
+    /// the relay's copy reaches.
     ///
     /// # Errors
     /// [`MurmureError::Refused`] for a delta the check refuses, which
@@ -312,11 +326,16 @@ impl ChannelState {
     pub(super) fn apply_amendment(
         &mut self,
         document_id: DocumentId,
+        seq: Seq,
         payload: &[u8],
         signer: Signer,
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
+        let sequence = self.sequences.entry(document_id).or_default();
+        sequence.passed(seq);
         let update = delta::read(payload)?;
+        let (_, end) = delta::range(&update);
         if let Some(pending) = self.amendments_pending.get_mut(&document_id) {
+            sequence.note_bare_range(seq, &end);
             pending.arrivals.push(Arrival::Signed { update, signer });
             return Ok(Vec::new());
         }
@@ -336,6 +355,10 @@ impl ChannelState {
         };
         delta::verdict(doc, rules, &update, signer)?;
         doc.import_json_updates(update)?;
+        self.sequences
+            .entry(document_id)
+            .or_default()
+            .note_bare_range(seq, &end);
         self.answer(document_id, false, None::<fn(&mut Sequence)>)
     }
 
@@ -440,7 +463,7 @@ fn write_edit(
 }
 
 /// The edited body of one amendment entry, `None` when it has none.
-fn entry_content(entry: &LoroMap) -> Option<LoroText> {
+pub(super) fn entry_content(entry: &LoroMap) -> Option<LoroText> {
     match entry.get(AMENDMENT_CONTENT) {
         Some(ValueOrContainer::Container(Container::Text(content))) => Some(content),
         _ => None,
@@ -474,7 +497,7 @@ pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channe
 }
 
 /// The first entry of `meta.segments` that lists `segment`.
-fn segment_entry(meta: &LoroDoc, segment: SegmentId) -> Option<LoroMap> {
+pub(super) fn segment_entry(meta: &LoroDoc, segment: SegmentId) -> Option<LoroMap> {
     let wanted = segment.to_string();
     let list: LoroList = meta.get_list(SEGMENTS);
     (0..list.len()).find_map(|index| match list.get(index) {
@@ -488,10 +511,24 @@ fn segment_entry(meta: &LoroDoc, segment: SegmentId) -> Option<LoroMap> {
 }
 
 /// The amendments document `meta` names for `segment`, `None` when it names
-/// none.
-fn named_amendments(meta: &LoroDoc, segment: SegmentId) -> Option<DocumentId> {
+/// none, or only the one a fold erased.
+pub(super) fn named_amendments(meta: &LoroDoc, segment: SegmentId) -> Option<DocumentId> {
+    live_amendments(&segment_entry(meta, segment)?)
+}
+
+/// The amendments document a segment entry names, unless a fold erased it.
+fn live_amendments(entry: &LoroMap) -> Option<DocumentId> {
+    let named = schema::string(entry, SEGMENT_AMENDMENTS)?;
+    if schema::string(entry, SEGMENT_FOLDED).as_deref() == Some(named.as_str()) {
+        return None;
+    }
+    DocumentId::parse_str(&named).ok()
+}
+
+/// The amendments document `meta` marks folded for `segment`.
+pub(crate) fn folded_amendments(meta: &LoroDoc, segment: SegmentId) -> Option<DocumentId> {
     let entry = segment_entry(meta, segment)?;
-    DocumentId::parse_str(&schema::string(&entry, SEGMENT_AMENDMENTS)?).ok()
+    DocumentId::parse_str(&schema::string(&entry, SEGMENT_FOLDED)?).ok()
 }
 
 /// Every segment `meta` names an amendments document for, with that
@@ -505,8 +542,7 @@ fn amendments_entries(meta: &LoroDoc) -> Vec<(SegmentId, DocumentId)> {
         };
         let segment =
             schema::string(&entry, SEGMENT_DOCUMENT).and_then(|s| SegmentId::parse_str(&s).ok());
-        let amendments =
-            schema::string(&entry, SEGMENT_AMENDMENTS).and_then(|s| DocumentId::parse_str(&s).ok());
+        let amendments = live_amendments(&entry);
         if let (Some(segment), Some(amendments)) = (segment, amendments)
             && !entries.iter().any(|(listed, _)| *listed == segment)
         {

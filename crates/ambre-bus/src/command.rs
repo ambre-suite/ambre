@@ -197,6 +197,27 @@ pub enum SyncCommand {
         horizon: u64,
         payload: Vec<u8>,
     },
+    /// Ask the relay for the lease that folds the amendments of the final
+    /// segment `segment` into it (`SRV-204`). Answered by
+    /// [`crate::LogicEvent::FoldLeaseAnswered`] or by
+    /// [`crate::LogicEvent::SegmentFoldFailed`].
+    TakeFoldLease {
+        channel_id: ChannelId,
+        segment: SegmentId,
+    },
+    /// Upload `payload`, the fold snapshot of `segment` up to `horizon`,
+    /// then commit it under `lease` as reaching the delta `amendments_seq`
+    /// of its amendments (`SRV-207`). Answered by
+    /// [`crate::LogicEvent::SegmentFolded`] or by
+    /// [`crate::LogicEvent::SegmentFoldFailed`].
+    FoldSegment {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        lease: LeaseId,
+        horizon: u64,
+        amendments_seq: u64,
+        payload: Vec<u8>,
+    },
     /// Count a segment of a closed channel as a light subscription, from its
     /// first number. It opens under the key of the light subscription of
     /// `meta`, as every document of the channel does.

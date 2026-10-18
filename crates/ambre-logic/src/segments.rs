@@ -5,13 +5,14 @@
 // successor, and `meta` records the answer. A member who did not write the
 // close follows it from `meta`, and a closed channel watches the new segment.
 // The closing segment then finalizes: the lease holder seals its shallow
-// snapshot, and `meta` marks it final.
+// snapshot, and `meta` marks it final. Its amendments fold in later, the
+// same way, under a fold lease.
 // ============================================================================
 
 use super::*;
 use ambre_bus::{
-    ChannelDocument, ChannelDocumentKind, ChannelId, LeaseAnswer, MurmureCommand, MurmureEvent,
-    SegmentId, Timestamp,
+    ChannelDocument, ChannelDocumentKind, ChannelId, FoldAnswer, LeaseAnswer, MurmureCommand,
+    MurmureEvent, SegmentId, Timestamp,
 };
 
 impl LogicState {
@@ -193,6 +194,125 @@ impl LogicState {
             channel.finalize_withdrawn(segment);
         } else {
             channel.finalize_failed(segment);
+        }
+    }
+
+    /// Drive the fold of the amendments of a final segment of `channel_id` at
+    /// `now`: ask for its lease when due. The fold snapshot goes to the Sync
+    /// worker once this copy holds the amendments the lease names.
+    pub(crate) fn drive_fold(&mut self, channel_id: ChannelId, now: Timestamp) {
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        if let Some(segment) = channel.fold_lease_to_ask(now) {
+            return self.send_to_sync(SyncCommand::TakeFoldLease {
+                channel_id,
+                segment,
+            });
+        }
+        match channel.fold_snapshot(now) {
+            Ok(Some(fold)) => self.send_to_sync(SyncCommand::FoldSegment {
+                channel_id,
+                segment: fold.segment,
+                lease: fold.lease,
+                horizon: fold.horizon,
+                amendments_seq: fold.amendments_seq,
+                payload: fold.payload,
+            }),
+            Ok(None) => {}
+            Err(error) => tracing::warn!("Logic: fold snapshot on {channel_id} refused: {error}"),
+        }
+    }
+
+    /// The relay answered the fold lease request for `segment`.
+    pub(crate) fn fold_lease_answered(
+        &mut self,
+        channel_id: ChannelId,
+        segment: SegmentId,
+        answer: FoldAnswer,
+    ) {
+        if let Some(channel) = self.channels.get_mut(&channel_id) {
+            channel.fold_answered(segment, answer);
+        }
+    }
+
+    /// The relay took the fold of `segment`; another member's check settles
+    /// it.
+    pub(crate) fn segment_folded(&mut self, channel_id: ChannelId, segment: SegmentId) {
+        if let Some(channel) = self.channels.get_mut(&channel_id) {
+            channel.fold_committed(segment);
+        }
+    }
+
+    /// A fold lease request or a fold commit of `segment` failed: it is asked
+    /// again later.
+    pub(crate) fn segment_fold_failed(
+        &mut self,
+        channel_id: ChannelId,
+        segment: SegmentId,
+        message: &str,
+    ) {
+        tracing::warn!("Logic: fold of {segment} on {channel_id} failed: {message}");
+        if let Some(channel) = self.channels.get_mut(&channel_id) {
+            channel.fold_failed(segment);
+        }
+    }
+
+    /// This client's confirmation settled the fold of the segment
+    /// `document_id`, and the relay erased `amendments` (`SRV-211`). `meta`
+    /// marks them folded, and the delta leaves for the other members.
+    pub(crate) fn amendments_folded(&mut self, document_id: DocumentId, amendments: DocumentId) {
+        let Some((&channel_id, channel)) = self
+            .channels
+            .iter_mut()
+            .find(|(_, channel)| channel.holds(document_id))
+        else {
+            return;
+        };
+        let segment = SegmentId::from_document(document_id);
+        match channel.mark_folded(segment, amendments) {
+            Ok(Some(payload)) => {
+                let meta = channel.meta_id().document_id();
+                self.send_to_sync(SyncCommand::SendUpdate {
+                    document_id: meta,
+                    payload,
+                    summary: None,
+                });
+            }
+            Ok(None) => {}
+            Err(error) => {
+                return tracing::warn!("Logic: fold mark of {segment} refused: {error}");
+            }
+        }
+        self.settle_folds(channel_id);
+    }
+
+    /// Fold in every amendments document `meta` marks folded, then close it.
+    /// The changes of this client the relay never sequenced are written again
+    /// at the next tick (the Murmure segments spec).
+    pub(crate) fn settle_folds(&mut self, channel_id: ChannelId) {
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        let settled = match channel.settle_folds() {
+            Ok(settled) => settled,
+            Err(error) => return tracing::warn!("Logic: folds of {channel_id} refused: {error}"),
+        };
+        for settled in settled {
+            self.forget_murmure_session(settled.amendments);
+            self.send_to_sync(SyncCommand::CloseDocument {
+                document_id: settled.amendments,
+            });
+            if !settled.replay.is_empty() {
+                self.owed_replays
+                    .entry(channel_id)
+                    .or_default()
+                    .extend(settled.replay);
+            }
+            self.send_to_ui(UiEvent::Channel {
+                channel_id,
+                event: settled.event,
+            });
         }
     }
 
@@ -396,8 +516,10 @@ impl LogicState {
                 doc_type: DocType::Murmure,
             });
         }
-        // The delta may name the amendments another member linked.
+        // The delta may name the amendments another member linked, or mark
+        // some folded.
         self.open_amendments(channel_id);
+        self.settle_folds(channel_id);
     }
 
     /// The `meta` of a closed channel moved: it may name a new segment, so

@@ -10,7 +10,7 @@ use ambre_bus::SnapshotVerdict;
 use ambre_core::DocumentId;
 use loro::{LoroDoc, VersionVector};
 
-use super::ChannelState;
+use super::{ChannelState, folding};
 use crate::error::MurmureError;
 use crate::sequence::{self, Sequence};
 
@@ -41,6 +41,11 @@ impl ChannelState {
         let theirs = LoroDoc::new();
         if theirs.import(sequence::loro_part(snapshot)).is_err() {
             return Ok(SnapshotVerdict::Mismatch);
+        }
+        // A fold holds operations no delta carried: it is checked by folding
+        // this copy the same way (`MURMURE-075`).
+        if let Some((amendments, seq)) = folding::header_fold(&theirs) {
+            return Ok(self.check_fold(document_id, &theirs, amendments, seq));
         }
         let (own_vv, their_vv) = (own.oplog_vv(), theirs.oplog_vv());
         let held = |vv: &VersionVector, peer| vv.get(peer).copied().unwrap_or(0);
