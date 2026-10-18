@@ -165,6 +165,9 @@ pub enum MurmureCommand {
         draft: MessageDraft,
         /// The instant the author sent it, stamped by the view.
         now: Timestamp,
+        /// The author confirmed the `@channel` the Logic thread asked about
+        /// (`MURMURE-231`). `false` on a first send.
+        confirmed: bool,
     },
     /// Load the final segment listed before `segment`, because the view
     /// scrolled past the oldest message it holds (`MURMURE-023`).
@@ -333,6 +336,13 @@ pub enum MurmureEvent {
         watching: Vec<UserId>,
         typing: Vec<UserId>,
     },
+    /// The members of the channel, as the relay lists them: the `@` list of
+    /// the composer offers them alone. Sent at the open and on every change.
+    Members { members: Vec<crate::MemberInfo> },
+    /// The draft mentions the whole channel, which holds `members` members.
+    /// Nothing was sent: the view asks the author, then sends it again
+    /// confirmed (`MURMURE-231`).
+    ConfirmChannelMention { members: usize },
 }
 
 /// A channel key sealed under the key of its space (`MURMURE-157`).

@@ -706,6 +706,11 @@ struct LogicState {
     /// own samples (the Murmure typing and presence spec). Taken on the
     /// first tick, removed with the channel and on `Logout`.
     channel_watchers: HashMap<ambre_bus::ChannelId, ambre_murmure::Watchers>,
+    /// The members of each open or opening channel, as Sync lists them for
+    /// its `meta` (`SYNC-150`). The `@` list offers them, and a mention of
+    /// anyone else notifies no one (the Murmure mentions spec). Removed with
+    /// the channel and on `Logout`.
+    channel_members: HashMap<ambre_bus::ChannelId, Vec<ambre_bus::MemberInfo>>,
     /// Open Murmure spaces, keyed by `space_id`: one document each, apart
     /// from `docs` (the Murmure spaces spec). Removed on `CloseSpace` and
     /// `Logout`.
@@ -818,6 +823,7 @@ impl LogicState {
             read_cursors: HashMap::new(),
             closed_channels: HashMap::new(),
             channel_watchers: HashMap::new(),
+            channel_members: HashMap::new(),
             spaces: HashMap::new(),
             space_opening: HashMap::new(),
             creating: HashMap::new(),

@@ -196,7 +196,7 @@ pub struct DocumentSummary {
 }
 
 /// Member of a document or channel.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemberInfo {
     pub user_id: UserId,
     pub display_name: String,

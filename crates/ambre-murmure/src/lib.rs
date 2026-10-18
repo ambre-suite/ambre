@@ -50,6 +50,7 @@ pub use members::{
     PRESENCE_EXPIRY_MS, REFRESH_PERIOD_MS, Roster, find_members, is_presence_sample,
     presence_sample,
 };
+pub use mention::{CONFIRM_CHANNEL_PAST, Screened, screen};
 pub use opening::{Opening, OpeningChannel};
 pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};
 pub use search::Query;

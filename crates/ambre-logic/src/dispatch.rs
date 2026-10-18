@@ -110,6 +110,7 @@ impl LogicState {
                         self.read_cursors.clear();
                         self.closed_channels.clear();
                         self.channel_watchers.clear();
+                        self.channel_members.clear();
                         self.spaces.clear();
                         self.space_opening.clear();
                         self.creating.clear();
@@ -351,9 +352,11 @@ impl LogicState {
                 document_id,
                 members,
             } => {
-                // Only a space shows its members live today; any other
+                // A channel and a space show their members live; any other
                 // document reads them when its view asks.
-                self.space_members_changed(document_id, members);
+                if let Some(members) = self.channel_members_changed(document_id, members) {
+                    self.space_members_changed(document_id, members);
+                }
             }
 
             LogicEvent::SnapshotNeeded { document_id } => {

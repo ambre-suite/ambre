@@ -5,7 +5,7 @@
 //! it stays out of the mention. The marks are the truth: nothing here parses
 //! the text (`MURMURE-103`).
 
-use ambre_bus::{Mention, MentionTarget};
+use ambre_bus::{Mention, MentionTarget, MessageDraft};
 use ambre_core::{ChannelId, UserId};
 use loro::{ExpandType, LoroDoc, LoroText, LoroValue, StyleConfig, StyleConfigMap, TextDelta};
 
@@ -97,6 +97,47 @@ pub(crate) fn read(content: &LoroText, channel: ChannelId) -> Vec<Mention> {
         at += len;
     }
     mentions
+}
+
+/// How many members a channel holds past which an `@channel` asks for
+/// confirmation (`ambre-spec-budgets.md section 6`).
+pub const CONFIRM_CHANNEL_PAST: usize = 10;
+
+/// What a draft needs before it is sent, read against the members of its
+/// channel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Screened {
+    /// Send this draft. A mention of a user outside the channel is no mark
+    /// in it: its text stays, and nobody is notified (`MURMURE-099`).
+    Send(MessageDraft),
+    /// The draft mentions the channel, which holds this many members, past
+    /// [`CONFIRM_CHANNEL_PAST`]. Nothing is sent before the author confirms
+    /// (`MURMURE-231`).
+    Confirm { members: usize },
+}
+
+/// Screen `draft` against `members`, the users of its channel. `None` before
+/// the relay has listed them: every mention stays, and the relay still
+/// routes nothing of the channel to a user outside it. `confirmed` says the
+/// author confirmed an `@channel`.
+pub fn screen(mut draft: MessageDraft, members: Option<&[UserId]>, confirmed: bool) -> Screened {
+    let Some(members) = members else {
+        return Screened::Send(draft);
+    };
+    draft.mentions.retain(|mention| match mention.target {
+        MentionTarget::User(user) => members.contains(&user),
+        MentionTarget::Channel => true,
+    });
+    let all = draft
+        .mentions
+        .iter()
+        .any(|mention| mention.target == MentionTarget::Channel);
+    if all && !confirmed && members.len() > CONFIRM_CHANNEL_PAST {
+        return Screened::Confirm {
+            members: members.len(),
+        };
+    }
+    Screened::Send(draft)
 }
 
 /// Whether `mentions` names `me`, or the channel and so every member

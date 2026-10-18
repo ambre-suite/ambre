@@ -6,7 +6,10 @@ use ambre_core::{ChannelId, Seq, UserId};
 use loro::{Container, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{MENTION, MESSAGE_CONTENT, MESSAGES};
-use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Sent, Signer};
+use crate::{
+    CONFIRM_CHANNEL_PAST, ChannelState, ChannelType, MurmureError, Opening, OpeningChannel,
+    Screened, Sent, Signer, screen,
+};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
@@ -287,4 +290,55 @@ fn a_mention_outside_the_body_writes_nothing() {
     let doc = state.doc(state.active_id().document_id()).expect("held");
     assert_eq!(doc.oplog_vv(), before);
     assert!(messages(&state).is_empty());
+}
+
+// --- MURMURE-099 ---
+
+/// A mention of a user outside the channel leaves the draft as no mark, its
+/// text untouched. Before the members are listed, every mention stays.
+#[test]
+fn a_mention_of_a_non_member_is_no_mark() {
+    let (bob, eve) = (UserId::new(), UserId::new());
+    let both = draft(
+        "@bob @eve",
+        vec![
+            at(MentionTarget::User(bob), 0..4),
+            at(MentionTarget::User(eve), 5..9),
+        ],
+    );
+    assert_eq!(
+        screen(both.clone(), Some(&[bob]), false),
+        Screened::Send(draft("@bob @eve", vec![at(MentionTarget::User(bob), 0..4)]))
+    );
+    assert_eq!(screen(both.clone(), None, false), Screened::Send(both));
+}
+
+// --- MURMURE-231 ---
+
+/// An `@channel` past the member threshold waits for the author's
+/// confirmation. At the threshold, or once confirmed, it is sent.
+#[test]
+fn an_at_channel_past_the_threshold_waits_for_confirmation() {
+    let all = draft("@channel", vec![at(MentionTarget::Channel, 0..8)]);
+    let members: Vec<UserId> = (0..=CONFIRM_CHANNEL_PAST).map(|_| UserId::new()).collect();
+    let at_threshold = &members[..CONFIRM_CHANNEL_PAST];
+    assert_eq!(
+        screen(all.clone(), Some(at_threshold), false),
+        Screened::Send(all.clone())
+    );
+    assert_eq!(
+        screen(all.clone(), Some(&members), false),
+        Screened::Confirm {
+            members: CONFIRM_CHANNEL_PAST + 1
+        }
+    );
+    assert_eq!(
+        screen(all.clone(), Some(&members), true),
+        Screened::Send(all)
+    );
+    let plain = draft("hello", vec![]);
+    assert_eq!(
+        screen(plain.clone(), Some(&members), false),
+        Screened::Send(plain)
+    );
 }

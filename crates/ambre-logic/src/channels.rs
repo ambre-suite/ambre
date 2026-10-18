@@ -10,9 +10,10 @@ use ambre_bus::{
     ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, ChannelMatches,
     DocumentActivity, MetaId, MurmureCommand, MurmureEvent,
 };
-use ambre_bus::{MentionCount, MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
+use ambre_bus::{MemberInfo, MentionCount, MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
 use ambre_murmure::{
-    ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample, Sent, Signer,
+    ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample, Screened, Sent,
+    Signer, screen,
 };
 
 /// This user's read cursor on one channel document (the Murmure unread spec).
@@ -311,8 +312,9 @@ impl LogicState {
             return self.end_channel(channel_id);
         };
         // Its documents leave the relay's watch, so the other members see
-        // this user go (`SRV-097`).
+        // this user go (`SRV-097`). A reopen lists the members again.
         self.channel_watchers.remove(&channel_id);
+        self.channel_members.remove(&channel_id);
         let base = self
             .my_user_id
             .and_then(|me| counts_of(&channel, &self.read_cursors, me));
@@ -459,6 +461,7 @@ impl LogicState {
     pub(crate) fn end_channel(&mut self, channel_id: ChannelId) {
         self.end_light_channel(channel_id);
         self.channel_watchers.remove(&channel_id);
+        self.channel_members.remove(&channel_id);
         let documents = match (
             self.channels.remove(&channel_id),
             self.opening.remove(&channel_id),
@@ -618,6 +621,7 @@ impl LogicState {
                 }
                 let documents = state.document_ids();
                 self.channels.insert(channel_id, *state);
+                self.show_channel_members(channel_id);
                 self.settle_reopen(channel_id);
                 // Each identity landed while the channel was opening.
                 for document_id in documents {
@@ -762,7 +766,27 @@ impl LogicState {
             return;
         };
         match command {
-            MurmureCommand::SendMessage { draft, now } => {
+            MurmureCommand::SendMessage {
+                draft,
+                now,
+                confirmed,
+            } => {
+                // A mention of anyone outside the channel is no mark, and an
+                // `@channel` past the threshold waits for the author (the
+                // Murmure mentions spec).
+                let members: Option<Vec<UserId>> = self
+                    .channel_members
+                    .get(&channel_id)
+                    .map(|rows| rows.iter().map(|row| row.user_id).collect());
+                let draft = match screen(draft, members.as_deref(), confirmed) {
+                    Screened::Send(draft) => draft,
+                    Screened::Confirm { members } => {
+                        return self.send_to_ui(UiEvent::Channel {
+                            channel_id,
+                            event: MurmureEvent::ConfirmChannelMention { members },
+                        });
+                    }
+                };
                 // The author is this session's user. Before `SessionReady`
                 // there is none, and a message with no author is refused
                 // rather than written under a placeholder (the Murmure schema).
@@ -933,6 +957,42 @@ impl LogicState {
             channel_id,
             event: MurmureEvent::Watchers { watching, typing },
         });
+    }
+
+    /// Sync listed the members of a document again. Returns the rows back
+    /// when no channel, open or opening, has it as its `meta`. An open
+    /// channel hands them to the view, and an opening one at its open.
+    pub(crate) fn channel_members_changed(
+        &mut self,
+        document_id: DocumentId,
+        members: Vec<MemberInfo>,
+    ) -> Option<Vec<MemberInfo>> {
+        let opening = self.opening.iter().find_map(|(&channel_id, opening)| {
+            opening
+                .as_ref()
+                .filter(|o| o.meta_id().document_id() == document_id)
+                .map(|_| channel_id)
+        });
+        let Some(channel_id) = self.channel_of_meta(document_id).or(opening) else {
+            return Some(members);
+        };
+        self.channel_members.insert(channel_id, members);
+        if self.channels.contains_key(&channel_id) {
+            self.show_channel_members(channel_id);
+        }
+        None
+    }
+
+    /// Hand the view the members of a channel, once Sync listed them.
+    fn show_channel_members(&self, channel_id: ChannelId) {
+        if let Some(members) = self.channel_members.get(&channel_id) {
+            self.send_to_ui(UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::Members {
+                    members: members.clone(),
+                },
+            });
+        }
     }
 
     /// The open channel whose `meta` is `document_id`.
@@ -1322,6 +1382,7 @@ mod tests {
                 mentions,
             },
             now: NOW,
+            confirmed: false,
         }
     }
 
@@ -2772,5 +2833,122 @@ mod tests {
         let bob = UserId::new();
         hear(&mut state, first_meta, bob, Sample::Watching);
         assert_eq!(watchers(&ui), [(first, vec![bob], Vec::new())]);
+    }
+
+    // --- The members of a channel, and the mentions they screen ---
+
+    fn member(user_id: UserId) -> MemberInfo {
+        MemberInfo {
+            user_id,
+            display_name: "bob".to_owned(),
+            email: "bob@example.org".to_owned(),
+            role: Role::Editor,
+            standing: ambre_bus::MemberStanding::Verified,
+        }
+    }
+
+    /// The channel events that reached the view.
+    fn channel_events(ui: &Receiver<UiEvent>) -> Vec<(ChannelId, MurmureEvent)> {
+        drain(ui)
+            .into_iter()
+            .filter_map(|event| match event {
+                UiEvent::Channel { channel_id, event } => Some((channel_id, event)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The summaries of the updates that left for the Sync worker.
+    fn summaries(sync: &Receiver<SyncCommand>) -> Vec<ambre_bus::ActivitySummary> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|sent| match sent {
+                SyncCommand::SendUpdate {
+                    summary: Some(summary),
+                    ..
+                } => Some(summary),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The members the relay lists on a channel's `meta` reach the view. A
+    /// mention of a user outside them leaves no mark in the summary (the
+    /// Murmure mentions spec).
+    #[test]
+    fn the_members_of_a_channel_reach_the_view_and_screen_its_mentions() {
+        let (mut state, ui, sync) = harness();
+        let alice = UserId::new();
+        signed_in(&mut state, alice);
+        let (channel_id, _active) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        drain(&ui);
+        drain(&sync);
+        let (bob, eve) = (UserId::new(), UserId::new());
+        let members = vec![member(alice), member(bob)];
+        state.handle_logic_event(LogicEvent::MembersChanged {
+            document_id: meta,
+            members: members.clone(),
+        });
+        assert_eq!(
+            channel_events(&ui),
+            [(channel_id, MurmureEvent::Members { members })]
+        );
+
+        let mention = |target, range| Mention { target, range };
+        let draft = send(
+            "@bob @eve",
+            vec![
+                mention(MentionTarget::User(bob), 0..4),
+                mention(MentionTarget::User(eve), 5..9),
+            ],
+        );
+        command(&mut state, channel_id, draft);
+        let [summary] = summaries(&sync).try_into().expect("one update");
+        assert_eq!(summary.mentions, [bob]);
+    }
+
+    /// An `@channel` past the member threshold asks the view first and
+    /// sends nothing. The confirmed resend leaves and notifies every member
+    /// (the Murmure mentions spec).
+    #[test]
+    fn an_at_channel_past_the_threshold_asks_before_it_sends() {
+        let (mut state, ui, sync) = harness();
+        let alice = UserId::new();
+        signed_in(&mut state, alice);
+        let (channel_id, _active) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let members: Vec<MemberInfo> = (0..=ambre_murmure::CONFIRM_CHANNEL_PAST)
+            .map(|_| member(UserId::new()))
+            .collect();
+        state.handle_logic_event(LogicEvent::MembersChanged {
+            document_id: meta,
+            members,
+        });
+        drain(&ui);
+        drain(&sync);
+        let all = vec![Mention {
+            target: MentionTarget::Channel,
+            range: 0..8,
+        }];
+
+        command(&mut state, channel_id, send("@channel", all.clone()));
+        let asked = MurmureEvent::ConfirmChannelMention {
+            members: ambre_murmure::CONFIRM_CHANNEL_PAST + 1,
+        };
+        assert_eq!(channel_events(&ui), [(channel_id, asked)]);
+        assert!(drain(&sync).is_empty(), "nothing leaves unconfirmed");
+
+        let confirmed = MurmureCommand::SendMessage {
+            draft: MessageDraft {
+                text: "@channel".to_owned(),
+                mentions: all,
+            },
+            now: NOW,
+            confirmed: true,
+        };
+        command(&mut state, channel_id, confirmed);
+        let [summary] = summaries(&sync).try_into().expect("one update");
+        assert!(summary.mentions_all);
     }
 }
