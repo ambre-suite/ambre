@@ -22,6 +22,9 @@ pub const DELETED: &str = "This message was deleted.";
 /// What follows the body of an edited message (`MURMURE-186`).
 pub const EDITED: &str = "(edited)";
 
+/// What the line above the first unread message reads (`MURMURE-184`).
+pub const UNREAD_LINE: &str = "New messages";
+
 /// The name a member shows before the view knows theirs.
 pub const UNKNOWN_MEMBER: &str = "A member";
 
@@ -216,6 +219,9 @@ pub struct Conversations {
     channels: HashMap<ChannelId, MessageList>,
     /// Each thread by its channel and its root, with its document.
     threads: HashMap<(ChannelId, MessageId), (DocumentId, MessageList)>,
+    /// The first unread message of each channel, as the Logic thread last
+    /// named it (`MURMURE-499`). Absent while its count is unknown.
+    first_unread: HashMap<ChannelId, Option<MessageId>>,
 }
 
 impl Conversations {
@@ -245,8 +251,12 @@ impl Conversations {
                 list.absorb(SegmentId::from_document(thread), messages);
                 true
             }
+            MurmureEvent::FirstUnread { message } => {
+                self.first_unread.insert(channel_id, message) != Some(message)
+            }
             MurmureEvent::Left => {
                 self.channels.remove(&channel_id);
+                self.first_unread.remove(&channel_id);
                 self.threads
                     .retain(|(channel, _), _| *channel != channel_id);
                 true
@@ -271,6 +281,41 @@ impl Conversations {
         self.threads
             .get(&(channel, root))
             .map(|&(document, _)| document)
+    }
+
+    /// The first unread message of `channel`: `Some(None)` when all is
+    /// read, `None` while the Logic thread named none yet.
+    pub fn first_unread(&self, channel: ChannelId) -> Option<Option<MessageId>> {
+        self.first_unread.get(&channel).copied()
+    }
+}
+
+/// The line above the first unread message, held while its channel stays
+/// on screen (`MURMURE-184`).
+///
+/// The list marks the channel read as soon as it shows the latest message.
+/// So the line keeps what was unread when the channel came on screen.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UnreadLine {
+    /// The channel on screen, and the message the line sits above once
+    /// known.
+    held: Option<(ChannelId, Option<Option<MessageId>>)>,
+}
+
+impl UnreadLine {
+    /// The message the line sits above while `shown` is on screen. A new
+    /// channel starts over, and its first known value then holds.
+    pub fn above(&mut self, shown: Option<ChannelId>, talks: &Conversations) -> Option<MessageId> {
+        let Some(channel) = shown else {
+            self.held = None;
+            return None;
+        };
+        let known = match self.held {
+            Some((held, Some(known))) if held == channel => Some(known),
+            _ => talks.first_unread(channel),
+        };
+        self.held = Some((channel, known));
+        known.flatten()
     }
 }
 
@@ -601,5 +646,33 @@ pub(crate) mod tests {
             "the channel marks apart"
         );
         assert!(read(marks.thread_drawn(channel, thread, second)));
+    }
+
+    /// The line keeps the first unread message the channel had when it came
+    /// on screen, and starts over on another channel (`MURMURE-184`).
+    #[test]
+    fn the_unread_line_holds_while_its_channel_stays_on_screen() {
+        let (channel, other) = (ChannelId::new(), ChannelId::new());
+        let first = MessageId::new();
+        let mut talks = Conversations::default();
+        let named = |talks: &mut Conversations, channel_id, message| {
+            let event = MurmureEvent::FirstUnread { message };
+            talks.absorb(UiEvent::Channel { channel_id, event })
+        };
+        let mut line = UnreadLine::default();
+        assert_eq!(line.above(Some(channel), &talks), None, "nothing known yet");
+        assert!(named(&mut talks, channel, Some(first)));
+        assert!(!named(&mut talks, channel, Some(first)), "no change");
+        assert_eq!(line.above(Some(channel), &talks), Some(first));
+
+        assert!(named(&mut talks, channel, None));
+        assert_eq!(
+            line.above(Some(channel), &talks),
+            Some(first),
+            "the channel read on screen keeps its line"
+        );
+        assert_eq!(line.above(Some(other), &talks), None);
+        assert_eq!(line.above(Some(channel), &talks), None, "back, all read");
+        assert_eq!(line.above(None, &talks), None);
     }
 }

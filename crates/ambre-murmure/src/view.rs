@@ -22,8 +22,8 @@ use ambre_canvas::{
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::MurmurePane;
-use crate::list::{Conversations, MessageList, ReadMarks};
-use crate::paint::{Painted, paint_list};
+use crate::list::{Conversations, MessageList, ReadMarks, UnreadLine};
+use crate::paint::{Painted, Shown, paint_list};
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the
 /// host binds a cell to it while it is in the page.
@@ -67,6 +67,7 @@ pub struct MurmureView {
     lists: Rc<RefCell<Lists>>,
     region: Region,
     marks: ReadMarks,
+    unread_line: UnreadLine,
     /// The pane and the revision of the lists this region last painted.
     painted: (MurmurePane, u64),
     /// What the last paint did.
@@ -96,6 +97,7 @@ impl MurmureView {
             lists: Rc::default(),
             region: Region::Channel,
             marks: ReadMarks::default(),
+            unread_line: UnreadLine::default(),
             painted: (MurmurePane::default(), 0),
             last: None,
             theme_ctl,
@@ -184,11 +186,16 @@ impl MurmureView {
         let lists = lists.borrow();
         let empty = MessageList::default();
         let list = self.shown(&lists.conversations, pane).unwrap_or(&empty);
+        let on_screen = match self.region {
+            Region::Channel => pane.shown_channel(),
+            Region::Thread => None,
+        };
+        let unread = self.unread_line.above(on_screen, &lists.conversations);
         let painted = paint_list(
             surface,
             font_cx,
             text_cache,
-            list,
+            Shown { list, unread },
             self.size,
             self.theme.palette(),
             &*self.reads.name_of,
@@ -431,6 +438,37 @@ mod tests {
         assert!(frame(&mut thread_view), "the thread repaints on its reply");
         assert_eq!(laid_out(&thread_view), Some(4));
         assert_eq!(reads(&page), (0, 1), "a new last reply marks it again");
+    }
+
+    /// The unread line shows above the first unread message, and stays
+    /// after the list marks the channel read (`MURMURE-184`).
+    #[test]
+    fn the_unread_line_stays_after_the_channel_is_marked_read() {
+        let mut page = page();
+        let channel = ChannelId::new();
+        let ada = UserId::new();
+        let (read, unread) = (message(ada, 0, "a"), message(ada, 1, "b"));
+        let first = Some(unread.id);
+        let segment = SegmentId::new();
+        let messages = vec![read, unread];
+        send(&page, channel, MurmureEvent::Messages { segment, messages });
+        send(&page, channel, MurmureEvent::FirstUnread { message: first });
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        let line = |view: &MurmureView| view.last_painted().map(|p| p.line_shown);
+        assert!(frame(&mut page.view));
+        assert_eq!(line(&page.view), Some(true));
+        assert_eq!(reads(&page).0, 1);
+
+        // The Logic thread answers the mark read: nothing is unread now.
+        send(&page, channel, MurmureEvent::FirstUnread { message: None });
+        assert!(frame(&mut page.view));
+        assert_eq!(line(&page.view), Some(true), "held while on screen");
+
+        page.pane.set(MurmurePane::ChannelList);
+        assert!(frame(&mut page.view));
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        assert!(frame(&mut page.view));
+        assert_eq!(line(&page.view), Some(false), "back, all is read");
     }
 
     /// The region follows the pointer and consumes nothing.

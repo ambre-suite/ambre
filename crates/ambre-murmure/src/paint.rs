@@ -5,7 +5,7 @@
 //! It paints them on any drawing surface: the page's canvas, or the
 //! recording surface of a host test.
 
-use ambre_bus::{Timestamp, UserId};
+use ambre_bus::{MessageId, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
@@ -13,7 +13,7 @@ use ambre_draw::{
     PositionedLayoutItem, Rect,
 };
 
-use crate::list::{MessageList, RowWords, from_bottom};
+use crate::list::{MessageList, RowWords, UNREAD_LINE, from_bottom};
 
 /// What one paint of the list did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,9 +23,19 @@ pub struct Painted {
     pub laid_out: usize,
     /// The latest message is on screen.
     pub latest_shown: bool,
+    /// The unread line is on screen (`MURMURE-184`).
+    pub line_shown: bool,
 }
 
-/// Paint `list` resting on its latest message, in a viewport of `size`.
+/// What the list paints: the messages, and the first unread one, which the
+/// unread line sits above (`MURMURE-184`).
+#[derive(Debug, Clone, Copy)]
+pub struct Shown<'a> {
+    pub list: &'a MessageList,
+    pub unread: Option<MessageId>,
+}
+
+/// Paint `shown` resting on its latest message, in a viewport of `size`.
 ///
 /// `name_of` names a member, and `time_of` writes a time in the reader's
 /// language and zone (`MURMURE-418`).
@@ -34,7 +44,7 @@ pub fn paint_list<S: DrawSurface>(
     surface: &mut S,
     font_cx: &mut FontContext,
     cache: &mut TextCache,
-    list: &MessageList,
+    shown: Shown<'_>,
     size: (f32, f32),
     palette: &Palette,
     name_of: &dyn Fn(UserId) -> Option<String>,
@@ -43,24 +53,61 @@ pub fn paint_list<S: DrawSurface>(
     let (width, height) = size;
     let backdrop = Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
     surface.fill_rect(backdrop, palette.content_bg);
-    let rows = list.rows();
+    let rows = shown.list.rows();
     let text_width = (width - 2.0 * SPACE_8).max(1.0);
-    let mut words: Vec<RowWords> = Vec::new();
-    let shown = from_bottom(rows.len(), height, |i| {
-        let Some(row) = rows.get(i).map(|r| r.words(name_of, time_of)) else {
+    let mut words: Vec<(RowWords, bool)> = Vec::new();
+    let reached = from_bottom(rows.len(), height, |i| {
+        let Some(row) = rows.get(i) else {
             return 0.0;
         };
-        let tall = measure(font_cx, cache, &row, text_width);
-        words.push(row);
+        let line = shown.unread == Some(row.message.id);
+        let row = row.words(name_of, time_of);
+        let mut tall = measure(font_cx, cache, &row, text_width);
+        if line {
+            tall += line_height(font_cx, cache, text_width);
+        }
+        words.push((row, line));
         tall
     });
-    for (&(_, top), row) in shown.iter().zip(&words) {
+    for (&(_, top), (row, line)) in reached.iter().zip(&words) {
+        let mut top = top;
+        if *line {
+            top = draw_line(surface, font_cx, cache, top, width, palette);
+        }
         draw_row(surface, font_cx, cache, row, top, text_width, palette);
     }
     Painted {
         laid_out: words.len(),
-        latest_shown: !shown.is_empty(),
+        latest_shown: !reached.is_empty(),
+        line_shown: words.iter().any(|(_, line)| *line),
     }
+}
+
+/// The height of the unread line: its words and the space above them.
+fn line_height(font_cx: &mut FontContext, cache: &mut TextCache, width: f32) -> f32 {
+    SPACE_4 + shape(font_cx, cache, UNREAD_LINE, FONT_UI, width, true).height()
+}
+
+/// Paint the unread line whose top is at `top`: a rule across the list in
+/// the accent, its words over it. Returns where the row below starts.
+fn draw_line<S: DrawSurface>(
+    surface: &mut S,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    top: f32,
+    width: f32,
+    palette: &Palette,
+) -> f32 {
+    let text_width = (width - 2.0 * SPACE_8).max(1.0);
+    let y = top + SPACE_4;
+    let layout = shape(font_cx, cache, UNREAD_LINE, FONT_UI, text_width, true);
+    let (wide, tall) = (layout.width(), layout.height());
+    let middle = f64::from(y + tall / 2.0);
+    let rule_from = f64::from(SPACE_8 + wide + SPACE_4);
+    let rule = Rect::new(rule_from, middle, f64::from(width - SPACE_8), middle + 1.0);
+    surface.fill_rect(rule, palette.selection);
+    draw(surface, layout, SPACE_8, y, palette.selection);
+    y + tall
 }
 
 /// The layout of one text of a row, shaped once and kept in the cache.
@@ -167,13 +214,21 @@ mod tests {
     }
 
     fn paint(list: &MessageList, height: f32) -> (RecordingSurface, Painted) {
+        paint_above(list, None, height)
+    }
+
+    fn paint_above(
+        list: &MessageList,
+        unread: Option<MessageId>,
+        height: f32,
+    ) -> (RecordingSurface, Painted) {
         let (mut surface, mut font_cx) = (RecordingSurface::new(), fonts());
         let mut cache = TextCache::new(1.0);
         let painted = paint_list(
             &mut surface,
             &mut font_cx,
             &mut cache,
-            list,
+            Shown { list, unread },
             (400.0, height),
             &LIGHT,
             &|_| Some("Ada".to_owned()),
@@ -254,6 +309,39 @@ mod tests {
         assert!(!runs(&surface, LIGHT.selection).is_empty());
     }
 
+    /// The unread line paints in the accent between the read message and
+    /// the first unread one, and once (`MURMURE-184`).
+    #[test]
+    fn the_unread_line_paints_above_the_first_unread_message() {
+        let ada = UserId::new();
+        let mut list = MessageList::default();
+        let messages: Vec<_> = ["a", "abcd"].iter().map(|b| message(ada, 0, b)).collect();
+        let unread = messages.get(1).map(|m| m.id);
+        list.absorb(SegmentId::new(), messages);
+        let (plain, _) = paint(&list, 600.0);
+        assert!(runs(&plain, LIGHT.selection).is_empty());
+
+        let (surface, painted) = paint_above(&list, unread, 600.0);
+        assert_eq!(painted.laid_out, 2);
+        assert!(painted.line_shown);
+        let line = runs(&surface, LIGHT.selection);
+        let [(line_y, glyphs)] = line.as_slice() else {
+            panic!("one run of the line, got {line:?}");
+        };
+        assert_eq!(*glyphs, crate::list::UNREAD_LINE.chars().count());
+        let bodies = runs(&surface, LIGHT.cell_text);
+        let [_, (read_y, 1), (unread_y, 4)] = bodies.as_slice() else {
+            panic!("the author, then both bodies, got {bodies:?}");
+        };
+        assert!(read_y < line_y && line_y < unread_y);
+        let rules = surface
+            .fill_colors()
+            .iter()
+            .filter(|c| **c == LIGHT.selection)
+            .count();
+        assert_eq!(rules, 1);
+    }
+
     /// An empty list paints its backdrop and shows no latest message.
     #[test]
     fn an_empty_list_paints_only_its_backdrop() {
@@ -263,6 +351,7 @@ mod tests {
             Painted {
                 laid_out: 0,
                 latest_shown: false,
+                line_shown: false,
             }
         );
         assert!(

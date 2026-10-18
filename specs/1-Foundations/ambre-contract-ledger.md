@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3580 rows: 2963 shipped, of which 2 loose. 617 unbuilt.**
+**3581 rows: 2965 shipped, of which 2 loose. 616 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 851 | 418 | 816 | 609 | 267 | 2961 |
+| `verified` | 851 | 418 | 816 | 609 | 269 | 2963 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 193 | 55 | 29 | 109 | 231 | 617 |
+| `unimplemented` | 193 | 55 | 29 | 109 | 230 | 616 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -167,7 +167,7 @@
 | `ambre-spec-murmure-layout.md` | 24 | 19 | 19 |  | 5 |
 | `ambre-spec-murmure-members.md` | 21 | 16 | 16 |  | 5 |
 | `ambre-spec-murmure-mentions.md` | 13 | 13 | 13 |  |  |
-| `ambre-spec-murmure-message-list.md` | 31 | 9 | 9 |  | 22 |
+| `ambre-spec-murmure-message-list.md` | 31 | 10 | 10 |  | 21 |
 | `ambre-spec-murmure-messages.md` | 22 | 22 | 22 |  |  |
 | `ambre-spec-murmure-notifications.md` | 17 | 6 | 6 |  | 11 |
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
@@ -176,7 +176,7 @@
 | `ambre-spec-murmure-spaces.md` | 34 | 29 | 29 |  | 5 |
 | `ambre-spec-murmure-threads.md` | 20 | 14 | 14 |  | 6 |
 | `ambre-spec-murmure-typing-presence.md` | 9 | 7 | 7 |  | 2 |
-| `ambre-spec-murmure-unread.md` | 16 | 16 | 16 |  |  |
+| `ambre-spec-murmure-unread.md` | 17 | 17 | 17 |  |  |
 
 ## WHICH DOCUMENT DECLARES AN ID
 
@@ -239,7 +239,7 @@
 | `ambre-spec-murmure-spaces.md` | MURMURE-031..045,234..237,247..250,254,258,301..304,317,466,479..480,487 |
 | `ambre-spec-murmure-threads.md` | MURMURE-105..112,260..261,290..295,415,484..485,497 |
 | `ambre-spec-murmure-typing-presence.md` | MURMURE-121..127,296..297 |
-| `ambre-spec-murmure-unread.md` | MURMURE-113..120,154..156,460,470..471,477,495 |
+| `ambre-spec-murmure-unread.md` | MURMURE-113..120,154..156,460,470..471,477,495,499 |
 | `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079,121,138..141,158 |
 | `ambre-spec-op-authorship.md` | AUTHOR-001..029 |
 | `ambre-spec-organizations.md` | SRV-060..067,071,076..077 |

@@ -455,6 +455,10 @@ pub enum MurmureEvent {
         thread: DocumentId,
         messages: Vec<MessageView>,
     },
+    /// The first message past the read cursors, in list order, that another
+    /// member wrote. `None` when every held message is read. Sent each time
+    /// the count of the channel is known anew (`MURMURE-499`).
+    FirstUnread { message: Option<MessageId> },
     /// The channel could not open: the relay refused it, or one of its
     /// documents failed the checks. Nothing of it is held.
     OpenFailed { message: String },

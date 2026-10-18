@@ -709,11 +709,53 @@ impl ChannelState {
         me: UserId,
         counts: impl Fn(&LoroMap) -> bool,
     ) -> Result<u32, MurmureError> {
+        let mut count: u32 = 0;
+        self.each_unread(document_id, read, me, |_, message| {
+            if counts(message) {
+                count = count.saturating_add(1);
+            }
+        })?;
+        Ok(count)
+    }
+
+    /// The first message of the held segments, in list order, past the
+    /// cursor `read_of` gives its segment and written by someone other than
+    /// `me` (`MURMURE-499`). `None` when every held message is read.
+    ///
+    /// A message not numbered yet reads as unread, as it counts.
+    pub fn first_unread(
+        &self,
+        read_of: impl Fn(SegmentId) -> Seq,
+        me: UserId,
+    ) -> Option<MessageId> {
+        let held = self.held_segments();
+        segment_entries(&self.meta.doc)
+            .into_iter()
+            .map(|(id, _)| id)
+            .filter(|id| held.contains(id))
+            .find_map(|segment| {
+                let mut first = None;
+                let read = read_of(segment);
+                let found = self.each_unread(segment.document_id(), read, me, |id, _| {
+                    first.get_or_insert(id);
+                });
+                found.ok().and(first)
+            })
+    }
+
+    /// Hand `each` every message of a held segment or thread past `read`,
+    /// in list order, written by someone other than `me`.
+    fn each_unread(
+        &self,
+        document_id: DocumentId,
+        read: Seq,
+        me: UserId,
+        mut each: impl FnMut(MessageId, &LoroMap),
+    ) -> Result<(), MurmureError> {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
         let sequence = self.sequences.get(&document_id);
-        let mut count: u32 = 0;
         doc.get_list(MESSAGES).for_each(|item| {
             let ValueOrContainer::Container(Container::Map(message)) = item else {
                 return;
@@ -728,11 +770,11 @@ impl ChannelState {
                 Position::Exact(seq) | Position::AtMost(seq) => seq > read,
                 Position::Unknown => true,
             };
-            if past && counts(&message) {
-                count = count.saturating_add(1);
+            if past {
+                each(id, &message);
             }
         });
-        Ok(count)
+        Ok(())
     }
 
     /// Every segment the channel holds in memory: the live ones, then the

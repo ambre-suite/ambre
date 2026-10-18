@@ -260,7 +260,27 @@ impl LogicState {
             self.send_to_ui(UiEvent::ChannelActivity {
                 channels: vec![mark],
             });
+            self.emit_first_unread(channel_id);
         }
+    }
+
+    /// Hand the view the first unread message of an open channel, once its
+    /// count is known. The line of the message list sits above it.
+    fn emit_first_unread(&self, channel_id: ChannelId) {
+        let (Some(channel), Some(me)) = (self.channels.get(&channel_id), self.my_user_id) else {
+            return;
+        };
+        if counts_of(channel, &self.read_cursors, me).is_none() {
+            return;
+        }
+        let read_of = |segment: SegmentId| {
+            self.read_cursors
+                .get(&segment.document_id())
+                .map_or(Seq::ZERO, |cursor| cursor.read)
+        };
+        let message = channel.first_unread(read_of, me);
+        let event = MurmureEvent::FirstUnread { message };
+        self.send_to_ui(UiEvent::Channel { channel_id, event });
     }
 
     /// Ask the relay for the documents of a channel (the Murmure engine spec).
@@ -1155,6 +1175,7 @@ impl LogicState {
                 self.send_to_ui(UiEvent::ChannelActivity {
                     channels: vec![mark],
                 });
+                self.emit_first_unread(channel_id);
             }
             MurmureCommand::Name { name } => match channel.name_direct(name.as_deref()) {
                 Ok(named) => {
@@ -1557,12 +1578,17 @@ impl LogicState {
                 }
             }
         }
+        let mut counted_now = Vec::new();
         for mark in &mut channels {
             if let Some(counted) = self.counted(mark.channel_id) {
                 *mark = counted;
+                counted_now.push(mark.channel_id);
             }
         }
         self.send_to_ui(UiEvent::ChannelActivity { channels });
+        for channel_id in counted_now {
+            self.emit_first_unread(channel_id);
+        }
         self.segments_listed(documents);
         self.place_threads();
     }
@@ -2713,8 +2739,15 @@ mod tests {
         assert_eq!(*live, [active]);
         assert!(finals.is_empty());
         let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
-        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-            panic!("one activity event, got {shown:?}");
+        let [
+            UiEvent::ChannelActivity { channels },
+            UiEvent::Channel {
+                event: MurmureEvent::FirstUnread { message: None },
+                ..
+            },
+        ] = shown.as_slice()
+        else {
+            panic!("one activity event, then no first unread, got {shown:?}");
         };
         assert_eq!(
             *channels,
@@ -2946,6 +2979,21 @@ mod tests {
                 .collect()
         }
 
+        /// Every first unread message the view was handed for the channel
+        /// since the last call.
+        fn firsts(&self) -> Vec<Option<MessageId>> {
+            drain(&self.bob_ui)
+                .into_iter()
+                .filter_map(|e| match e {
+                    UiEvent::Channel {
+                        channel_id,
+                        event: MurmureEvent::FirstUnread { message },
+                    } if channel_id == self.channel_id => Some(message),
+                    _ => None,
+                })
+                .collect()
+        }
+
         fn message_ids(&self) -> Vec<MessageId> {
             self.bob.channels[&self.channel_id]
                 .messages(self.active)
@@ -3009,6 +3057,26 @@ mod tests {
         assert_eq!(m.counts(), [Some(2)]);
         m.answer(1);
         assert_eq!(m.counts(), [Some(1)]);
+    }
+
+    /// The view is handed the first unread message each time the count is
+    /// known anew, and none once the channel is read.
+    #[test]
+    fn the_view_is_handed_the_first_unread_message_with_each_count() {
+        let mut m = members();
+        m.deliver("before any answer", 1);
+        assert_eq!(m.firsts(), [], "no cursor yet, so no first unread");
+
+        m.answer(0);
+        let ids = m.message_ids();
+        assert_eq!(m.firsts(), [ids.first().copied()]);
+        m.deliver("two", 2);
+        assert_eq!(m.firsts(), [ids.first().copied()], "the first one stays");
+        m.bob.handle_logic_command(LogicCommand::Channel {
+            channel_id: m.channel_id,
+            command: MurmureCommand::MarkRead,
+        });
+        assert_eq!(m.firsts(), [None]);
     }
 
     /// Marking a message unread moves the cursor to just before it, so it
@@ -5017,8 +5085,12 @@ mod tests {
             })
         );
         let shown = drain(&m.bob_ui);
-        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-            panic!("expected the channel's mark, got {shown:?}");
+        let [
+            UiEvent::ChannelActivity { channels },
+            UiEvent::Channel { .. },
+        ] = shown.as_slice()
+        else {
+            panic!("expected the channel's mark and its first unread, got {shown:?}");
         };
         assert_eq!(channels[0].mentions, Some(MentionCount(0)));
         assert!(!channels[0].active);
