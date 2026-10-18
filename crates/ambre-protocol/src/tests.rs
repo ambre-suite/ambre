@@ -196,11 +196,11 @@ fn version_check() {
     assert!(check_version(other_version).is_err());
 }
 
-/// `SRV-100`: a frame that does not decode is a typed error on either side
+/// `SRV-100`: a wire message that does not decode is a typed error on either side
 /// of the socket. The cases are no bytes, a foreign version, and every
-/// truncation of a valid frame.
+/// truncation of a valid wire message.
 #[test]
-fn a_frame_that_does_not_decode_is_a_typed_error() {
+fn a_wire_message_that_does_not_decode_is_a_typed_error() {
     use crate::ws::{
         WireDecodeError, WsClientMsg, decode_client_msg, decode_server_msg, encode_client_msg,
     };
@@ -216,12 +216,12 @@ fn a_frame_that_does_not_decode_is_a_typed_error() {
         decode_client_msg(&[0x01, 0x00]),
         Err(WireDecodeError::UnsupportedVersion(0x01))
     ));
-    let frame = encode_client_msg(&WsClientMsg::Subscribe {
+    let wire = encode_client_msg(&WsClientMsg::Subscribe {
         document_id: DocumentId::new(),
     });
-    for cut in 1..frame.len() {
-        assert!(decode_client_msg(&frame[..cut]).is_err(), "cut at {cut}");
-        let _ = decode_server_msg(&frame[..cut]);
+    for cut in 1..wire.len() {
+        assert!(decode_client_msg(&wire[..cut]).is_err(), "cut at {cut}");
+        let _ = decode_server_msg(&wire[..cut]);
     }
 }
 
@@ -240,7 +240,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (6, "48119f86bf38225f347ae0afc20d3abe");
+const FROZEN_LAYOUT: (u8, &str) = (11, "2318d7af26bb0d94836508f9797a5b45");
 
 fn sample_update(fill: u8) -> Update {
     Update {
@@ -277,7 +277,6 @@ fn sample_ephemeral(fill: u8) -> Ephemeral {
 fn client_samples() -> Vec<crate::ws::WsClientMsg> {
     use crate::ws::WsClientMsg as C;
     let doc = DocumentId::from_bytes([1; 16]);
-    let channel = ambre_core::ChannelId::from_bytes([2; 16]);
     vec![
         C::Subscribe { document_id: doc },
         C::Unsubscribe { document_id: doc },
@@ -286,20 +285,6 @@ fn client_samples() -> Vec<crate::ws::WsClientMsg> {
         C::RequestMissing {
             document_id: doc,
             after_seq: Seq(3),
-        },
-        C::SubscribeChannel {
-            channel_id: channel,
-        },
-        C::UnsubscribeChannel {
-            channel_id: channel,
-        },
-        C::ChannelUpdate {
-            channel_id: channel,
-            update: sample_update(30),
-        },
-        C::ChannelEphemeral {
-            channel_id: channel,
-            ephemeral: sample_ephemeral(40),
         },
         C::Authenticate {
             token: crate::ws::AccessToken::new("t".into()),
@@ -315,7 +300,6 @@ fn client_samples() -> Vec<crate::ws::WsClientMsg> {
 fn server_samples() -> Vec<crate::ws::WsServerMsg> {
     use crate::ws::WsServerMsg as S;
     let doc = DocumentId::from_bytes([1; 16]);
-    let channel = ambre_core::ChannelId::from_bytes([2; 16]);
     vec![
         S::Subscribed { document_id: doc },
         S::Update {
@@ -346,21 +330,9 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
             document_id: doc,
             doc_type: ambre_core::DocType::Toile,
         },
-        S::ChannelSubscribed {
-            channel_id: channel,
-        },
-        S::ChannelUpdate {
-            channel_id: channel,
-            seq: Seq(8),
-            update: sample_update(80),
-        },
-        S::ChannelEphemeral {
-            channel_id: channel,
-            ephemeral: sample_ephemeral(90),
-        },
         S::Error {
-            code: 9,
-            message: "m".into(),
+            document_id: Some(doc),
+            code: ambre_core::RefusalCode::Forbidden,
         },
         S::KeyRefused {
             document_id: doc,
@@ -373,6 +345,24 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
             expected: Clock(13),
             signature: Signature([14; 64]),
         },
+        S::MembersChanged { document_id: doc },
+        S::ReplayStopped {
+            document_id: doc,
+            after_seq: Seq(15),
+        },
+        S::DeltaRefused {
+            document_id: doc,
+            signature: Signature([16; 64]),
+            code: ambre_core::RefusalCode::PayloadTooLarge,
+        },
+        S::SnapshotDropped {
+            document_id: doc,
+            snapshot_id: SnapshotId::from_bytes([17; 16]),
+            author: PublicKey::from_array([18; 32]),
+            reporter: PublicKey::from_array([19; 32]),
+            refinalize: true,
+        },
+        S::ThreadActivity { document_id: doc },
     ]
 }
 
@@ -402,6 +392,10 @@ fn assert_one_per_variant<T: serde::de::DeserializeOwned>(frames: &[Vec<u8>]) {
 /// `SRV-166`: the wire layout cannot move under an unchanged version byte. The
 /// digest covers one frame of every message variant. When it moves, the
 /// version moves with it, and the digest is frozen again under the new byte.
+///
+/// It covers the word of every refusal code too (`SRV-183`). An older peer
+/// cannot read a code it does not hold, so a new code moves the version. That
+/// peer is then sent to an update rather than left with a frame it drops.
 #[test]
 fn the_wire_layout_is_frozen_under_its_version() {
     use crate::ws::{WsClientMsg, WsServerMsg, encode_client_msg, encode_server_msg};
@@ -414,6 +408,11 @@ fn the_wire_layout_is_frozen_under_its_version() {
     for frame in client.iter().chain(&server) {
         hasher.update((frame.len() as u64).to_le_bytes());
         hasher.update(frame);
+    }
+    for code in ambre_core::RefusalCode::ALL {
+        let word = code.as_str();
+        hasher.update((word.len() as u64).to_le_bytes());
+        hasher.update(word);
     }
     let digest = hex::encode(&hasher.finalize()[..16]);
     let (version, frozen) = FROZEN_LAYOUT;
@@ -514,7 +513,7 @@ fn the_relay_reads_only_the_listed_fields() {
         commitment_tag: _,
         signature: _,
     } = ephemeral;
-    // An ephemeral frame shows its document, its sender, its key identifier
+    // An ephemeral shows its document, its sender, its key identifier
     // and its counter, and nothing else.
     let EphemeralPublicData {
         document_id,

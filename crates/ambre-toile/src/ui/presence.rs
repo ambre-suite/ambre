@@ -18,7 +18,7 @@
 // `DrawSurface`, so it is host-testable against `RecordingSurface` with no GPU.
 //
 // End-to-end multi-user waits on SYNC P4, the `pub_key` -> `UserId` resolution
-// that keys inbound frames (`toile-presence`). Until it lands, remote frames
+// that keys inbound samples (`toile-presence`). Until it lands, remote samples
 // never reach this thread, though the render pass itself is complete and
 // synthetic `PeerPresence` events exercise it today.
 // ============================================================================

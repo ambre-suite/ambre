@@ -35,7 +35,7 @@ tracing = { workspace = true }
 # (`features/ambre-spec-prose-engine.md section 3`).
 loro = { workspace = true }
 
-# The presence frame, and nothing else: a CRDT delta is already bytes
+# The presence sample, and nothing else: a CRDT delta is already bytes
 # (`features/ambre-spec-prose-engine.md section 3.D`).
 postcard = { workspace = true }
 

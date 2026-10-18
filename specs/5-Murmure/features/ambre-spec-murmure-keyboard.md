@@ -17,39 +17,39 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-170` | `INV` | Every Murmure shortcut MUST be a command with one description in the command table. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-171` | `INV` | No Murmure chord MUST take a chord the browser services. | this spec section 3; `UI-THREAD-011` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-213` | `INV` | A Murmure chord MUST keep the meaning the other applications give it: the palette chord opens the palette, the find chord opens the search. | this spec section 3; `UI-THREAD-037` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-170` | `INV` | Every Murmure shortcut MUST be a command with one description in the command table. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-171` | `INV` | No Murmure chord MUST take a chord the browser services. | this spec section 3; `UI-THREAD-011` | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-213` | `INV` | A Murmure chord MUST keep the meaning the other applications give it: the palette chord opens the palette, the find chord opens the search. | this spec section 3; `UI-THREAD-037` | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Switch channel from the palette
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-172` | `POST` | The palette MUST list first the channels and direct messages whose name matches what the user types. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-173` | `POST` | Choosing a channel in the palette MUST open it and close the palette. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-174` | `FRAME` | The palette MUST NOT send what the user types outside the client. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-172` | `POST` | The palette MUST list first the channels and direct messages whose name matches what the user types. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-173` | `POST` | Choosing a channel in the palette MUST open it and close the palette. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-174` | `FRAME` | The palette MUST NOT send what the user types outside the client. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Jump to the first unread
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-175` | `POST` | The command MUST scroll the message list to the first message after the read cursor. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-176` | `POST` | The next-unread command MUST open the next channel with activity, in sidebar order. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-177` | `FRAME` | Jumping MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-175` | `POST` | The command MUST scroll the message list to the first message after the read cursor. | this spec section 3 | not built | unbuilt -- lands with the `The keyboard in a conversation` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-176` | `POST` | The next-unread command MUST open the next channel with activity, in sidebar order. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-177` | `FRAME` | Jumping MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Edit the last message
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-178` | `POST` | The up arrow in an empty composer MUST open the last message of the user in this channel for edit. | this spec section 3; `features/ambre-spec-murmure-composer.md` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-179` | `FRAME` | The up arrow MUST NOT open a message of another member. | this spec section 3; `MURMURE-085` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-178` | `POST` | The up arrow in an empty composer MUST open the last message of the user in this channel for edit. | this spec section 3; `features/ambre-spec-murmure-composer.md` | not built | unbuilt -- lands with the `The keyboard in a conversation` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-179` | `FRAME` | The up arrow MUST NOT open a message of another member. | this spec section 3; `MURMURE-085` | not built | unbuilt -- lands with the `The keyboard in a conversation` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Mark everything read
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-180` | `POST` | The chord MUST run the mark-all-read command of the unread feature. | this spec section 3; `MURMURE-118` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-181` | `FRAME` | Marking everything read from the keyboard MUST NOT clear the draft of the composer. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-180` | `POST` | The chord MUST run the mark-all-read command of the unread feature. | this spec section 3; `MURMURE-118` | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-181` | `FRAME` | Marking everything read from the keyboard MUST NOT clear the draft of the composer. | this spec section 3 | not built | unbuilt -- lands with the `The keyboard in a conversation` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own: each shortcut runs a command another feature budgets.
 * **Boundary.** none: the palette filters names the client holds, and nothing it types leaves.

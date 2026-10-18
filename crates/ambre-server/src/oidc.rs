@@ -70,7 +70,8 @@ pub struct CallbackRequest {
 /// Returned by `POST /auth/{provider}/callback` after successful authentication.
 #[derive(serde::Serialize)]
 pub struct CallbackResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub email: String,
     pub display_name: String,
     /// True when the user row was just created (no master key yet).

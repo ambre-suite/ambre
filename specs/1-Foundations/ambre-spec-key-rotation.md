@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-044` | `INV` | The cache of previous keys MUST be bounded. | this spec section 3 | `ambre_sync::updates::tests::the_previous_key_cache_holds_ten` -- eleven rotations keep the ten latest previous keys, newest first, and the first key no longer opens without a link | none | verified |
 | `SYNC-078` | `INV` | A key leaving the cache MUST be wiped. | this spec section 3; `ZK-011` | type-level -- the document key derives `ZeroizeOnDrop`, so truncating the cache wipes what it drops and a key type that did not would be a change to the type rather than to this path | none | verified |
-| `SYNC-045` | `INV` | An inbound frame MUST be opened with the key it names, never by trying every key in turn. | this spec section 3; `SYNC-125` | `ambre_sync::updates::tests::a_frame_opens_with_the_key_it_names_and_no_other` -- a frame under the current key or a cached one opens with it, and a frame naming a key never held is refused before any open | none | verified |
+| `SYNC-045` | `INV` | An inbound sealed envelope MUST be opened with the key it names, never by trying every key in turn. | this spec section 3; `SYNC-125` | `ambre_sync::updates::tests::a_frame_opens_with_the_key_it_names_and_no_other` -- a frame under the current key or a cached one opens with it, and a frame naming a key never held is refused before any open | none | verified |
 | `SYNC-115` | `INV` | Every document key MUST be named by an identifier derived from the key itself. | this spec section 3 | `ambre_crypto::tests::a_key_id_is_derived_from_the_key` -- one key gives one identifier, another key another, and the key's bytes are not in it | none | verified |
 | `SYNC-116` | `INV` | Every rotation MUST leave a link that seals the previous key under the new one, except a rotation that records a history boundary. | this spec section 3 | `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` -- the revoke's link opens under the new key to the key it replaced; `ambre_sync::sharing::tests::an_owed_rotation_is_paid_for_every_member` -- so does the link of a paid debt; `ambre_crypto::tests::a_previous_key_opens_under_the_next_one_and_no_other` -- the seal opens under the next key alone | none | verified |
 | `SYNC-117` | `INV` | The relay MUST keep every link of a document for as long as the document exists. | this spec section 3; `ZK-007` | `ambre_server::routes::tests::handler_tests::the_relay_keeps_every_link_in_rotation_order` -- three rotations leave three links, served back to a member in the order they landed | none | verified |
@@ -60,11 +60,11 @@ Every other client is told the key rotated, fetches its new wrapped copy and swa
 
 ### 1.4 Recover a previous key
 
-A client that lacks the key a frame or a snapshot names walks the chain back from the current key.
+A client that lacks the key a delta or a snapshot names walks the chain back from the current key.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-119` | `POST` | A client that lacks the key a frame or a snapshot names MUST recover it by walking the links back from the current key. | this spec section 3; `SYNC-045` | `ambre_sync::chain::tests::the_current_key_walks_back_to_every_older_key` -- past the tenth rotation, the current key reaches every older key and none newer; `ambre_sync::updates::tests::an_open_walks_the_chain_to_a_snapshot_older_than_the_cache` -- an open recovers the key of a snapshot and of a frame twelve rotations back | none | verified |
+| `SYNC-119` | `POST` | A client that lacks the key a delta or a snapshot names MUST recover it by walking the links back from the current key. | this spec section 3; `SYNC-045` | `ambre_sync::chain::tests::the_current_key_walks_back_to_every_older_key` -- past the tenth rotation, the current key reaches every older key and none newer; `ambre_sync::updates::tests::an_open_walks_the_chain_to_a_snapshot_older_than_the_cache` -- an open recovers the key of a snapshot and of a delta twelve rotations back | none | verified |
 | `SYNC-120` | `FAIL` | Given a link whose unsealed key does not match the identifier it names, the client MUST refuse that link and every link past it. | this spec section 3; `SYNC-115` | `ambre_sync::chain::tests::a_link_naming_another_key_stops_the_walk_there` -- a link sealing another key than it names ends the walk, and every key past it stays out of reach; `ambre_sync::chain::tests::a_link_tampered_or_misfiled_opens_nothing` -- a re-sealed link and another document's open nothing | none | verified |
 | `SYNC-121` | `FAIL` | Given a link whose signer the membership log does not verify, and no rule of the application that owns the document accepts, the client MUST refuse the link. | this spec section 3; `SYNC-103`, `SYNC-106` | `ambre_sync::chain::tests::a_link_no_writer_signed_is_dropped` -- a link signed by a reader, or by a key the log never verified, is left out of the walk | none | verified |
 | `SYNC-122` | `FRAME` | A key recovered from the chain MUST NOT become the current key. | this spec section 3 | `ambre_sync::chain::tests::a_recovered_key_never_becomes_the_current_one` -- the walk hands the key back and leaves the current one; `ambre_sync::updates::tests::an_open_walks_the_chain_to_a_snapshot_older_than_the_cache` -- after the open, the current key is the one installed and the cache holds nothing recovered | none | verified |
@@ -76,8 +76,9 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-127` | `POST` | A member who leaves MUST post the removal alone, and leave the rotation owed. | this spec section 3; `SRV-122` | `ambre_sync::sharing::tests::leaving_posts_the_removal_alone_and_chooses_no_key` -- one removal of the user's own share, and no other call; `ambre_server::routes::tests::handler_tests::a_member_leaves_alone_and_the_document_owes_a_rotation` -- the relay records the debt | none | verified |
-| `SYNC-128` | `POST` | A client with write access that finds a rotation owed MUST rotate before it sends a frame. | this spec section 3; `SRV-123` | `ambre_sync::updates::tests::a_writer_opening_an_owed_document_pays_before_its_first_frame` -- a writer sends nothing before it pays, and a reader records no debt; `ambre_sync::rekey::tests::a_debt_found_holds_the_next_edit_until_the_key_lands` -- an edit waits for the key; `ambre_sync::sharing::tests::an_owed_rotation_is_paid_for_every_member` -- the payment wraps the key for every member; `ambre_sync::sharing::tests::a_paid_debt_posts_nothing_and_a_failed_one_is_retried` -- a debt already paid posts nothing, and a failed payment is tried again; `ambre_sync::updates::tests::a_frame_refused_for_an_owed_rotation_is_sent_again_at_its_clock` -- a refusal is how a writer in flight finds the debt; `ambre_sync::rekey::tests::a_refusal_under_the_current_key_pays_once_then_resends_at_the_same_clocks` -- many refusals start one payment | none | verified |
-| `SYNC-129` | `POST` | A frame the relay refuses for its key MUST be sealed again under the current key and sent again. | this spec section 3; `SRV-123` | `ambre_sync::updates::tests::a_frame_refused_for_an_owed_rotation_is_sent_again_at_its_clock` -- the refused frame leaves again at its own clock under the new key, before the edits that waited; `ambre_sync::updates::tests::a_frame_refused_under_an_older_key_is_sent_again_at_once` -- a refusal of a key already replaced is answered at once; `ambre_sync::rekey::tests::a_refusal_under_the_current_key_pays_once_then_resends_at_the_same_clocks` -- the refused frames come back at their own clocks, in order; `ambre_sync::rekey::tests::a_refusal_of_an_older_key_resends_without_paying` -- an older key owes no payment | none | verified |
+| `SYNC-128` | `POST` | A client with write access that finds a rotation owed MUST rotate before it sends a delta. | this spec section 3; `SRV-123` | `ambre_sync::updates::tests::a_writer_opening_an_owed_document_pays_before_its_first_frame` -- a writer sends nothing before it pays, and a reader records no debt; `ambre_sync::rekey::tests::a_debt_found_holds_the_next_edit_until_the_key_lands` -- an edit waits for the key; `ambre_sync::sharing::tests::an_owed_rotation_is_paid_for_every_member` -- the payment wraps the key for every member; `ambre_sync::sharing::tests::a_paid_debt_posts_nothing_and_a_failed_one_is_retried` -- a debt already paid posts nothing, and a failed payment is tried again; `ambre_sync::updates::tests::a_frame_refused_for_an_owed_rotation_is_sent_again_at_its_clock` -- a refusal is how a writer in flight finds the debt; `ambre_sync::rekey::tests::a_refusal_under_the_current_key_pays_once_then_resends_at_the_same_clocks` -- many refusals start one payment | none | verified |
+| `SYNC-129` | `POST` | A delta the relay refuses for its key MUST be sealed again under the current key and sent again. | this spec section 3; `SRV-123` | `ambre_sync::updates::tests::a_frame_refused_for_an_owed_rotation_is_sent_again_at_its_clock` -- the refused delta leaves again at its own clock under the new key, before the edits that waited; `ambre_sync::updates::tests::a_frame_refused_under_an_older_key_is_sent_again_at_once` -- a refusal of a key already replaced is answered at once; `ambre_sync::rekey::tests::a_refusal_under_the_current_key_pays_once_then_resends_at_the_same_clocks` -- the refused deltas come back at their own clocks, in order; `ambre_sync::rekey::tests::a_refusal_of_an_older_key_resends_without_paying` -- an older key owes no payment | none | verified |
+| `SYNC-168` | `POST` | A rotation this client makes MUST reach the rest of the client, naming its document. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-channels.md`, `MURMURE-060` | `ambre_sync::updates::tests::each_rotation_this_client_makes_reaches_logic` -- a revoke and an owed rotation paid each reach Logic once | none | verified |
 | `SYNC-130` | `FRAME` | Leaving MUST NOT choose the next key. | this spec section 3 | `ambre_sync::sharing::tests::leaving_posts_the_removal_alone_and_chooses_no_key` -- the departure reads no member and posts no key, so there is none to choose | none | verified |
 | `SYNC-141` | `POST` | A member who does not own a document MUST be able to leave it from the sharing screen, and the screen MUST send the departure from that document alone. | this spec section 3; `SYNC-127` | `ambre_app::shell::share::tests::a_member_who_does_not_own_the_document_leaves_it_from_their_row` -- a confirmed departure sends one command, the departure from the open document; `ambre_app::shell::share::tests::each_row_offers_the_action_its_owner_may_take` -- the user's own row offers the departure | none | verified |
 | `SYNC-142` | `FRAME` | The sharing screen MUST NOT offer an owner a departure. | this spec section 3 | `ambre_app::shell::share::tests::an_owner_is_offered_no_departure` -- the owner's own row carries no departure; `ambre_app::shell::share::tests::each_row_offers_the_action_its_owner_may_take` -- the owner's row offers nothing | none | verified |
@@ -89,9 +90,9 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
-* **Verification.** 27 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
+* **Verification.** 28 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
   open by name, the one-request revoke, the departure's debt and the chain. The notice follows the
-  stored copies.
+  stored copies, and each rotation this client makes reaches Logic.
 
 ---
 
@@ -147,18 +148,19 @@ again (`SRV-167`). If the rotation does, the invitation wraps a key it replaced 
 choose the next key: the members who stay would then trust a key the leaver picked (`SYNC-130`).
 
 1. The relay records the removal, and marks the document as owing a rotation (`SRV-122`).
-2. It refuses every frame sealed under the key the removal left behind (`SRV-123`).
+2. It refuses every delta sealed under the key the removal left behind (`SRV-123`).
 3. The first member client to send finds the debt, and rotates first (`SYNC-128`).
-4. A frame refused for its key is sealed again under the new key and sent again (`SYNC-129`).
+4. A delta refused for its key is sealed again under the new key and sent again (`SYNC-129`).
 
 A writer finds the debt in the members answer, at the open or at the notice a departure sends. It
 pays at its next edit, so a debt nobody writes after costs nothing. An edit made meanwhile waits
-unsealed for the new key.
+unsealed for the new key. Each rotation this client makes, paid or revoked, reaches Logic by its
+document (`SYNC-168`). An application whose history is split acts on it.
 
-**Why a refused frame keeps its clock.** The relay refuses before it reads the clock, so the clock
+**Why a refused delta keeps its clock.** The relay refuses before it reads the clock, so the clock
 is still free, and so is every one after it. The worker keeps each update it sent until the relay
 echoes it back. On a refusal, it seals the refused updates again under the new key, at their own
-clocks and in order. A late refusal names the key the frame no longer carries, and is ignored.
+clocks and in order. A late refusal names the key the delta no longer carries, and is ignored.
 
 **Every other client, in steps.**
 
@@ -260,7 +262,7 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 | Older keys come back through a chain of links | a signed bundle of every key, sent with each invite (Matrix MSC4268) | it serves the invitee alone: a reload, a member's new device, a self-join and an eleventh rotation still lose the history |
 | A sealed object keeps the key of its time | re-sealing the name and every blob at each rotation | a rotation would download and upload every picture, for a member who already saw them all |
 | A departure leaves the rotation owed | the leaving member rotates | the members who stay would trust a key the leaver chose |
-| The relay refuses the key a removal left behind | trusting the next writer to rotate | until someone rotates, a frame under the old key would reach the member who left |
+| The relay refuses the key a removal left behind | trusting the next writer to rotate | until someone rotates, a delta under the old key would reach the member who left |
 | Older keys come back through a chain of links | keys forwarded one by one by any member (Matrix MSC3061) | a key that arrives on its own proves nothing about its sender, and that flaw was exploited in Matrix |
 | A key identifier derived from the key | a random identifier | a random one binds nothing: a false link would name a real identifier and seal a false key |
 | History is not re-keyed | re-sealing every stored snapshot on every rotation | a snapshot from before the rotation is what the removed member already read, so re-sealing it protects nothing and costs a full upload per rotation |
@@ -278,9 +280,10 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 * **A member with an unparsable exchange key is reported, and still loses the document.** The
   rotation proceeds without them so the rest converge, and the user is told who was left out.
   Nothing re-wraps for that member later; a fresh invitation is the only way back (`SYNC-043`).
-* **A key rotated away still opens on the client.** An inbound frame opens with the key it names,
-  and a cached previous key is one of them (`SYNC-045`). That is the in-flight tolerance the cache
-  exists for. Refusing a frame under the key a removal left behind is the relay's job (`SRV-123`).
+* **A key rotated away still opens on the client.** An inbound sealed envelope opens with the key it
+  names, and a cached previous key is one of them (`SYNC-045`). That is the in-flight tolerance the
+  cache exists for. Refusing a delta under the key a removal left behind is the relay's job
+  (`SRV-123`).
 * **No snapshot follows a rotation.** The state after the removal is never sealed on its own, so the
   document's history stays a chain of deltas across the key change (`SYNC-048`).
 * **The relay can withhold a link.** It cannot forge one, and a link it drops ends the walk there: the

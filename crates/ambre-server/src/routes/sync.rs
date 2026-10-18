@@ -1,10 +1,11 @@
-use axum::extract::{Json, Path, Query, State};
+use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
+use crate::extract::Json;
 use crate::s3;
 use crate::state::AppState;
 
@@ -26,7 +27,8 @@ fn parse_snap_id(s: &str) -> Result<ambre_core::SnapshotId, AppError> {
 /// Summary of the latest snapshot (id + S3 key).
 #[derive(serde::Serialize)]
 pub struct SnapshotResponse {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     pub s3_key: String,
     /// Highest delta `seq` folded into this snapshot, so the client can gate its
     /// post-open `RequestMissing` and skip the already-replayed history.
@@ -44,7 +46,8 @@ pub struct SnapshotResponse {
 /// The reference snapshot named beside a self-confirmed one (`SRV-131`).
 #[derive(serde::Serialize)]
 pub struct ReferenceSnapshot {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     pub covered_seq: i64,
 }
 
@@ -67,13 +70,14 @@ pub async fn get_snapshot_metadata(
         db::SnapshotStatus::SelfConfirmed => db::get_reference_snapshot(&state.db, &doc_id)
             .await?
             .map(|r| ReferenceSnapshot {
-                snapshot_id: r.id.to_string(),
+                snapshot_id: r.id,
                 covered_seq: r.covered_seq,
             }),
         _ => None,
     };
+    let snap_id = snap.id;
     Ok(axum::Json(SnapshotResponse {
-        snapshot_id: snap.id.to_string(),
+        snapshot_id: snap_id,
         s3_key: snap.s3_key,
         covered_seq: snap.covered_seq,
         status: snap.status,
@@ -82,25 +86,58 @@ pub async fn get_snapshot_metadata(
     }))
 }
 
+/// The answer to a confirmation: the amendments document it erased, if the
+/// snapshot folded one in (`SRV-211`).
+#[derive(Debug, serde::Serialize)]
+pub struct ConfirmedSnapshotJson {
+    #[serde(with = "ambre_core::serde_id::document_id::option")]
+    pub folded: Option<ambre_core::DocumentId>,
+}
+
 /// Records that the caller checked a snapshot and vouches for it (`SRV-126`).
 /// Any member may confirm, since any member holds the deltas. The author's
 /// own confirmation makes it `self`, anyone else's `confirmed`.
+///
+/// A `confirmed` snapshot that folds amendments in becomes the final one of
+/// its segment (`SRV-208`), and the snapshots it replaces go (`SRV-209`). The
+/// amendments are sealed and deleted, unless a delta came past the fold
+/// (`SRV-211`).
 pub async fn confirm_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
     Path((document_id, snapshot_id)): Path<(String, String)>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<axum::Json<ConfirmedSnapshotJson>, AppError> {
     let doc_id = parse_doc_id(&document_id)?;
     let snap_id = parse_snap_id(&snapshot_id)?;
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    db::confirm_snapshot(&state.db, &doc_id, &snap_id, auth.signing_pubkey.as_array())
+    let confirmer = auth.signing_pubkey.as_array();
+    let status = db::confirm_snapshot(&state.db, &doc_id, &snap_id, confirmer)
         .await?
         .ok_or(AppError::NotFound {
             resource: "snapshot",
         })?;
-    Ok(axum::http::StatusCode::NO_CONTENT)
+    if status != db::SnapshotStatus::Confirmed {
+        return Ok(axum::Json(ConfirmedSnapshotJson { folded: None }));
+    }
+    let Some(fold) = db::settle_fold(&state.db, &doc_id, &snap_id).await? else {
+        return Ok(axum::Json(ConfirmedSnapshotJson { folded: None }));
+    };
+    for key in &fold.dropped_keys {
+        let deleted = state.s3.delete_object().bucket(&state.s3_bucket).key(key);
+        if let Err(e) = deleted.send().await {
+            tracing::warn!(s3_key = %key, error = %e, "replaced snapshot: S3 delete failed");
+        }
+    }
+    if !crate::redis_ops::seal_folded(&state.redis, &fold.amendments, fold.folded_seq).await? {
+        return Ok(axum::Json(ConfirmedSnapshotJson { folded: None }));
+    }
+    crate::deletion::delete_document(&state, &fold.amendments).await?;
+    tracing::info!(document_id = %doc_id, amendments = %fold.amendments, "folded amendments erased");
+    Ok(axum::Json(ConfirmedSnapshotJson {
+        folded: Some(fold.amendments),
+    }))
 }
 
 /// A signed mismatch report (`AUTHOR-023`).
@@ -148,8 +185,9 @@ pub async fn report_snapshot(
     if snap.status != db::SnapshotStatus::Pending {
         return Ok(axum::http::StatusCode::NO_CONTENT);
     }
-    if let Some(key) = db::drop_pending_snapshot(&state.db, &doc_id, &snap_id).await? {
+    if let Some(dropped) = db::drop_pending_snapshot(&state.db, &doc_id, &snap_id).await? {
         tracing::info!(document_id = %doc_id, snapshot_id = %snap_id, "snapshot reported, dropped");
+        let key = dropped.s3_key;
         if let Err(e) = state
             .s3
             .delete_object()
@@ -160,6 +198,18 @@ pub async fn report_snapshot(
         {
             tracing::warn!(s3_key = %key, error = %e, "reported snapshot: S3 delete failed");
         }
+        // Every member sees who sealed it and who reported it (the Murmure
+        // segments spec).
+        let shown = crate::payload::Payload::server_msg(
+            &ambre_protocol::ws::WsServerMsg::SnapshotDropped {
+                document_id: doc_id,
+                snapshot_id: snap_id,
+                author: ambre_core::PublicKey::from_array(author),
+                reporter: auth.signing_pubkey,
+                refinalize: dropped.refinalize,
+            },
+        );
+        let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &shown).await;
         let ask = crate::payload::Payload::server_msg(
             &ambre_protocol::ws::WsServerMsg::SnapshotRequired {
                 document_id: doc_id,
@@ -175,7 +225,8 @@ pub async fn report_snapshot(
 #[derive(serde::Deserialize)]
 pub struct CreateSnapshotRequest {
     #[allow(dead_code)]
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     pub author_pubkey: String,
     pub parent_hash: Option<String>,
     pub parent_snapshot_proof: Option<String>,
@@ -188,7 +239,8 @@ pub struct CreateSnapshotRequest {
 }
 #[derive(serde::Serialize)]
 pub struct CreateSnapshotResponse {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
 }
 
 pub async fn create_snapshot(
@@ -203,7 +255,7 @@ pub async fn create_snapshot(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !["owner", "editor"].contains(&m.role.as_str()) {
+    if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
 
@@ -272,9 +324,7 @@ pub async fn create_snapshot(
             covered_seq: ambre_protocol::messages::Seq(covered),
         });
     let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;
-    Ok(axum::Json(CreateSnapshotResponse {
-        snapshot_id: sid.to_string(),
-    }))
+    Ok(axum::Json(CreateSnapshotResponse { snapshot_id: sid }))
 }
 
 /// Request for a presigned snapshot upload URL. `size_bytes` is the size of the
@@ -303,7 +353,7 @@ pub async fn snapshot_upload_url(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !["owner", "editor"].contains(&m.role.as_str()) {
+    if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
     // Reject an oversized snapshot before handing out an upload URL. Bind the
@@ -335,7 +385,8 @@ pub async fn snapshot_upload_url(
 /// Request a presigned GET URL to download a specific snapshot blob.
 #[derive(serde::Deserialize)]
 pub struct SnapshotDownloadUrlRequest {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
 }
 #[derive(serde::Serialize)]
 pub struct SnapshotDownloadUrlResponse {
@@ -353,7 +404,7 @@ pub async fn snapshot_download_url(
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    let snap_id = parse_snap_id(&req.snapshot_id)?;
+    let snap_id = req.snapshot_id;
     // Resolve the snapshot scoped to the path document. A member of doc A must
     // never obtain a download URL for a snapshot of doc B (cross-document IDOR).
     let snap = db::get_snapshot(&state.db, &doc_id, &snap_id)

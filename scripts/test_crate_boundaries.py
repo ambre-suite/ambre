@@ -77,6 +77,31 @@ WALKS = {
 }
 
 
+# A route DTO whose identifiers reach JSON as their text, one adapter spread
+# over lines as rustfmt writes it, and a row the database reads.
+WIRE_ROUTE = (
+    "#[derive(Deserialize)]\n"
+    "pub(crate) struct RevokeRequest {\n"
+    '    #[serde(with = "ambre_core::serde_id::user_id")]\n'
+    "    pub user_id: UserId,\n"
+    "    #[serde(\n"
+    "        default,\n"
+    '        with = "ambre_core::serde_id::user_id::vec"\n'
+    "    )]\n"
+    "    pub members: Vec<UserId>,\n"
+    "    pub link: String,\n"
+    "}\n"
+)
+WIRE_ROW = (
+    "#[derive(sqlx::FromRow)]\n"
+    "pub struct UserRow {\n"
+    '    #[sqlx(try_from = "PgId")]\n'
+    "    pub id: UserId,\n"
+    "    pub oidc_subject: Option<String>,\n"
+    "}\n"
+)
+
+
 def scratch(tmp: str) -> Path:
     """A minimal tree that passes every check."""
     root = Path(tmp)
@@ -163,6 +188,8 @@ def scratch(tmp: str) -> Path:
     write(root, "crates/ambre-trame/src/logic/mod.rs", "fn h(&mut self) -> Outcome { Outcome::default() }\n")
     write(root, cb.CARGO_CONFIG, '[unstable]\nbuild-std = ["std", "panic_abort"]\n')
     write(root, f"{cb.BUS}/lib.rs", "pub struct SheetId(pub String);\npub enum C {\n    Go { sheet_id: SheetId },\n}\n")
+    write(root, f"{cb.WIRE_DIRS[0]}/share.rs", WIRE_ROUTE)
+    write(root, f"{cb.WIRE_DIRS[1]}/users.rs", WIRE_ROW)
     for rel, text in WALKS.items():
         write(root, rel, text)
     return root
@@ -201,6 +228,8 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_one_event_copy(errors)
             cb.check_signal_types(errors)
             cb.check_bus_ids(errors)
+            cb.check_wire_ids(errors)
+            cb.check_typed_answers(errors)
             cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
             cb.check_thread_reach(errors)
@@ -440,6 +469,70 @@ class CrateBoundaries(unittest.TestCase):
             write(root, "crates/ambre-canvas/src/fonts.rs", 'static F: &[u8] = include_bytes!("NotoSans.ttf");\n')
             errors = self.run_checks(root)
         self.assertTrue(any("a font embedded in the binary" in e for e in errors), errors)
+
+    def test_an_identifier_held_as_text_on_the_wire_is_refused(self):
+        for rel, untyped in (
+            (f"{cb.WIRE_DIRS[0]}/share.rs", "pub user_id: String,"),
+            (f"{cb.WIRE_DIRS[1]}/users.rs", "pub id: uuid::Uuid,"),
+            (cb.WIRE_FILES[0], "pub document_ids: Option<Vec<String>>,"),
+        ):
+            with self.subTest(rel=rel):
+                body = f"#[derive(sqlx::FromRow)]\npub struct Row {{\n    {untyped}\n}}\n"
+                errors = self.breach(rel, body)
+                self.assertTrue(any("carries an identifier as" in e for e in errors), errors)
+
+    def test_an_identifier_written_as_bytes_on_the_wire_is_refused(self):
+        bare = WIRE_ROUTE.replace('    #[serde(with = "ambre_core::serde_id::user_id")]\n', "")
+        errors = self.breach(f"{cb.WIRE_DIRS[0]}/share.rs", bare)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("the `user_id` field writes its identifier as bytes", errors[0])
+
+    def test_a_closed_set_held_as_text_on_the_wire_is_refused(self):
+        for rel, untyped in (
+            (f"{cb.WIRE_DIRS[1]}/documents.rs", "pub doc_type: String,"),
+            (cb.WIRE_FILES[0], "pub role: String,"),
+            (cb.WIRE_FILES[0], "pub status: Option<String>,"),
+            (f"{cb.WIRE_DIRS[0]}/channels.rs", "pub kind: &'static str,"),
+            (cb.WIRE_FILES[1], "pub error: &'static str,"),
+            (cb.WIRE_FILES[0], "error: String,"),
+        ):
+            with self.subTest(rel=rel, field=untyped):
+                body = f"#[derive(Deserialize)]\npub struct Row {{\n    {untyped}\n}}\n"
+                errors = self.breach(rel, body)
+                self.assertTrue(any("carries a closed set as" in e for e in errors), errors)
+
+    def test_a_closed_set_held_as_its_enum_stays_free(self):
+        body = (
+            "#[derive(Deserialize)]\npub struct Row {\n"
+            "    pub doc_type: ambre_core::DocType,\n"
+            "    pub status: Option<ambre_core::SnapshotStatus>,\n"
+            "    pub display_name: String,\n}\n"
+        )
+        self.assertEqual(self.breach(cb.WIRE_FILES[0], body), [])
+
+    def test_an_answer_built_with_json_is_refused(self):
+        """Holds `SRV-181`: a route, the refusal and a middleware each answer
+        with a type."""
+        body = 'fn answer() -> Json<Value> {\n    Json(serde_json::json!({ "status": "revoked" }))\n}\n'
+        for rel in (
+            f"{cb.ANSWER_SOURCES[0]}/share.rs",
+            cb.ANSWER_SOURCES[1],
+            f"{cb.ANSWER_SOURCES[2]}/rate_limit.rs",
+        ):
+            with self.subTest(rel=rel):
+                errors = self.breach(rel, body)
+                self.assertEqual(errors, [f"{rel}:2: an answer built with `json!`; give it a type"])
+
+    def test_json_in_the_tests_of_a_route_stays_free(self):
+        body = (
+            "fn answer() -> Json<Done> { Done::json(WriteStatus::Revoked) }\n\n"
+            "#[cfg(test)]\nmod tests {\n    fn body() { let _ = serde_json::json!({}); }\n}\n"
+        )
+        self.assertEqual(self.breach(f"{cb.ANSWER_SOURCES[0]}/share.rs", body), [])
+
+    def test_a_row_the_database_reads_needs_no_text_adapter(self):
+        errors = self.breach(f"{cb.WIRE_DIRS[1]}/users.rs", WIRE_ROW.replace("UserId", "OrgId"))
+        self.assertEqual(errors, [])
 
     def test_the_real_tree_is_clean(self):
         self.assertEqual(self.run_checks(cb.ROOT), [])

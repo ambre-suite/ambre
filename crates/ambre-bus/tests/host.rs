@@ -21,9 +21,10 @@
 
 use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
-    AppCommand, CellFormat, ChannelId, ClipboardCell, ClipboardPayload, DocType, DocumentId,
-    LogicEvent, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, TrameCommand,
-    UserId,
+    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelPlace,
+    ClipboardCell, ClipboardPayload, DocType, DocumentId, FoldAnswer, LeaseAnswer, LeaseId,
+    LogicEvent, MemberChannel, MemberInfo, MemberStanding, MessageId, RequestId, RestCommand,
+    RestEvent, Role, SelectionKind, SyncCommand, Timestamp, TrameCommand, UserId,
 };
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -183,15 +184,26 @@ fn sync_command_roundtrips_through_postcard() {
     roundtrip_sync(&SyncCommand::SendUpdate {
         document_id: doc,
         payload: vec![0, 1, 2, 250, 255],
+        summary: None,
+    });
+    roundtrip_sync(&SyncCommand::SendUpdate {
+        document_id: doc,
+        payload: vec![7],
+        summary: Some(ActivitySummary {
+            kind: ActivityKind::Content,
+            mentions: vec![UserId::new()],
+            mentions_all: true,
+            anchor: Some(ActivityAnchor(vec![1, 2])),
+        }),
     });
     roundtrip_sync(&SyncCommand::SendUnsent {
         document_id: doc,
         payload: vec![3, 4],
         nonce: ambre_core::SessionNonce([5; 16]),
     });
-    roundtrip_sync(&SyncCommand::SendChannelEphemeral {
+    roundtrip_sync(&SyncCommand::OpenChannel {
         channel_id: chan,
-        payload: vec![9, 8, 7],
+        listed_in: Some(ambre_core::SpaceId::new()),
     });
     roundtrip_sync(&SyncCommand::Shutdown);
 }
@@ -215,6 +227,12 @@ fn logic_event_roundtrips_through_postcard() {
             nonce: ambre_core::SessionNonce([2; 16]),
             peer: 7,
             user: Some(UserId::from_bytes([1; 16])),
+            summary: Some(ambre_bus::ActivitySummary {
+                kind: ambre_bus::ActivityKind::Content,
+                mentions: vec![UserId::from_bytes([3; 16])],
+                mentions_all: false,
+                anchor: None,
+            }),
         },
     });
     roundtrip_event(&LogicEvent::SessionIdentity {
@@ -249,11 +267,30 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::SendEphemeral { .. } => "SendEphemeral",
         SyncCommand::Reconnect { .. } => "Reconnect",
         SyncCommand::OpenChannel { .. } => "OpenChannel",
-        SyncCommand::CloseChannel { .. } => "CloseChannel",
-        SyncCommand::SendChannelUpdate { .. } => "SendChannelUpdate",
-        SyncCommand::SendChannelEphemeral { .. } => "SendChannelEphemeral",
+        SyncCommand::CreateChannel { .. } => "CreateChannel",
+        SyncCommand::RotateSpace { .. } => "RotateSpace",
+        SyncCommand::CloseSegment { .. } => "CloseSegment",
+        SyncCommand::CreateAmendments { .. } => "CreateAmendments",
+        SyncCommand::CreateThread { .. } => "CreateThread",
+        SyncCommand::TakeFinalizeLease { .. } => "TakeFinalizeLease",
+        SyncCommand::FinalizeSegment { .. } => "FinalizeSegment",
+        SyncCommand::TakeFoldLease { .. } => "TakeFoldLease",
+        SyncCommand::FoldSegment { .. } => "FoldSegment",
+        SyncCommand::WatchSegment { .. } => "WatchSegment",
+        SyncCommand::WatchThread { .. } => "WatchThread",
+        SyncCommand::JoinChannel { .. } => "JoinChannel",
+        SyncCommand::DeleteChannel { .. } => "DeleteChannel",
+        SyncCommand::LeaveChannel { .. } => "LeaveChannel",
+        SyncCommand::CreateDirectMessage { .. } => "CreateDirectMessage",
+        SyncCommand::ListSpaceChannels { .. } => "ListSpaceChannels",
+        SyncCommand::ListMemberChannels => "ListMemberChannels",
         SyncCommand::HoldInbound => "HoldInbound",
         SyncCommand::ReleaseInbound => "ReleaseInbound",
+        SyncCommand::MarkRead { .. } => "MarkRead",
+        SyncCommand::MoveReadCursors { .. } => "MoveReadCursors",
+        SyncCommand::MarkThreadRead { .. } => "MarkThreadRead",
+        SyncCommand::MarkAllRead => "MarkAllRead",
+        SyncCommand::FetchActivity => "FetchActivity",
         SyncCommand::Shutdown => "Shutdown",
     }
 }
@@ -267,8 +304,11 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::RemoteUpdateBatch { .. } => "RemoteUpdateBatch",
         LogicEvent::RemoteSnapshot { .. } => "RemoteSnapshot",
         LogicEvent::PendingSnapshot { .. } => "PendingSnapshot",
+        LogicEvent::SnapshotDropped { .. } => "SnapshotDropped",
+        LogicEvent::ThreadActivity { .. } => "ThreadActivity",
         LogicEvent::RemoteEphemeral { .. } => "RemoteEphemeral",
         LogicEvent::PeerLeft { .. } => "PeerLeft",
+        LogicEvent::MembersChanged { .. } => "MembersChanged",
         LogicEvent::DocumentReady { .. } => "DocumentReady",
         LogicEvent::ConnectionStatus { .. } => "ConnectionStatus",
         LogicEvent::Activity { .. } => "Activity",
@@ -276,13 +316,39 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::SyncWarning { .. } => "SyncWarning",
         LogicEvent::SnapshotNeeded { .. } => "SnapshotNeeded",
         LogicEvent::MemberRevoked { .. } => "MemberRevoked",
+        LogicEvent::DocumentGone { .. } => "DocumentGone",
+        LogicEvent::KeyRotated { .. } => "KeyRotated",
         LogicEvent::DocumentShared { .. } => "DocumentShared",
-        LogicEvent::ChannelRemoteUpdate { .. } => "ChannelRemoteUpdate",
-        LogicEvent::ChannelRemoteEphemeral { .. } => "ChannelRemoteEphemeral",
-        LogicEvent::ChannelConnectionStatus { .. } => "ChannelConnectionStatus",
-        LogicEvent::ChannelSnapshotNeeded { .. } => "ChannelSnapshotNeeded",
+        LogicEvent::ChannelDocuments { .. } => "ChannelDocuments",
+        LogicEvent::ChannelOpenFailed { .. } => "ChannelOpenFailed",
+        LogicEvent::ChannelRefused { .. } => "ChannelRefused",
+        LogicEvent::ChannelActivity { .. } => "ChannelActivity",
+        LogicEvent::ChannelCreated { .. } => "ChannelCreated",
+        LogicEvent::ChannelKeyResealed { .. } => "ChannelKeyResealed",
+        LogicEvent::SegmentClosed { .. } => "SegmentClosed",
+        LogicEvent::SegmentCloseFailed { .. } => "SegmentCloseFailed",
+        LogicEvent::AmendmentsLinked { .. } => "AmendmentsLinked",
+        LogicEvent::AmendmentsLinkFailed { .. } => "AmendmentsLinkFailed",
+        LogicEvent::ThreadLinked { .. } => "ThreadLinked",
+        LogicEvent::ThreadLinkFailed { .. } => "ThreadLinkFailed",
+        LogicEvent::FinalizeLeaseAnswered { .. } => "FinalizeLeaseAnswered",
+        LogicEvent::SegmentFinalized { .. } => "SegmentFinalized",
+        LogicEvent::SegmentFinalizeFailed { .. } => "SegmentFinalizeFailed",
+        LogicEvent::FoldLeaseAnswered { .. } => "FoldLeaseAnswered",
+        LogicEvent::SegmentFolded { .. } => "SegmentFolded",
+        LogicEvent::SegmentFoldFailed { .. } => "SegmentFoldFailed",
+        LogicEvent::AmendmentsFolded { .. } => "AmendmentsFolded",
+        LogicEvent::DeltasLocked { .. } => "DeltasLocked",
+        LogicEvent::ChannelJoined { .. } => "ChannelJoined",
+        LogicEvent::DirectMessageOpened { .. } => "DirectMessageOpened",
+        LogicEvent::ChannelDeleted { .. } => "ChannelDeleted",
+        LogicEvent::ChannelLeft { .. } => "ChannelLeft",
+        LogicEvent::ChannelRequestFailed { .. } => "ChannelRequestFailed",
+        LogicEvent::SpaceChannels { .. } => "SpaceChannels",
+        LogicEvent::MemberChannels { .. } => "MemberChannels",
         LogicEvent::MeetingParticipantJoined { .. } => "MeetingParticipantJoined",
         LogicEvent::MeetingParticipantLeft { .. } => "MeetingParticipantLeft",
+        LogicEvent::DocumentOpenFailed { .. } => "DocumentOpenFailed",
         LogicEvent::AuthError { .. } => "AuthError",
         LogicEvent::ApiError { .. } => "ApiError",
         LogicEvent::SetupRequired => "SetupRequired",
@@ -291,20 +357,27 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 17;
-const EVENT_VARIANTS: usize = 26;
+const SYNC_VARIANTS: usize = 36;
+const EVENT_VARIANTS: usize = 55;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
 /// samples cover each name exactly once.
 #[test]
 fn every_envelope_variant_roundtrips_through_postcard() {
-    use ambre_bus::{MeetingId, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict};
+    use ambre_bus::{
+        ChannelDocument, ChannelDocumentKind, DirectMember, DocumentActivity, MeetingId, MetaId,
+        SealedChannelKey, SegmentId, Seq, SignedDelta, SnapshotId, SnapshotPurpose,
+        SnapshotVerdict, SpaceId,
+    };
     use ambre_core::SessionNonce;
     use std::collections::BTreeSet;
 
     let doc = DocumentId::new();
     let chan = ChannelId::new();
+    let space = SpaceId::new();
+    let meta = MetaId::from_document(DocumentId::new());
+    let segment = SegmentId::from_document(DocumentId::new());
     let user = UserId::new();
     let snapshot = SnapshotId::genesis(doc);
     let delta = SignedDelta {
@@ -313,6 +386,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         nonce: SessionNonce([4; 16]),
         peer: 9,
         user: Some(user),
+        summary: None,
     };
     let commands = [
         SyncCommand::Rest {
@@ -334,6 +408,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::SendUpdate {
             document_id: doc,
             payload: vec![0, 7],
+            summary: Some(ActivitySummary {
+                kind: ActivityKind::Content,
+                mentions: vec![user],
+                mentions_all: false,
+                anchor: Some(ActivityAnchor(vec![3])),
+            }),
         },
         SyncCommand::SendUnsent {
             document_id: doc,
@@ -358,18 +438,99 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             payload: vec![5],
         },
         SyncCommand::Reconnect { document_id: doc },
-        SyncCommand::OpenChannel { channel_id: chan },
-        SyncCommand::CloseChannel { channel_id: chan },
-        SyncCommand::SendChannelUpdate {
+        SyncCommand::OpenChannel {
             channel_id: chan,
-            payload: vec![6, 6],
+            listed_in: None,
         },
-        SyncCommand::SendChannelEphemeral {
+        SyncCommand::RotateSpace {
+            space_id: space,
+            channels: vec![(chan, SealedChannelKey::from_bytes(vec![8; 3]))],
+        },
+        SyncCommand::CreateChannel {
             channel_id: chan,
-            payload: vec![7],
+            space_id: space,
+            meta,
+            segment,
+            public: true,
+        },
+        SyncCommand::JoinChannel {
+            channel_id: chan,
+            space_id: space,
+            key: SealedChannelKey::from_bytes(vec![6; 3]),
+        },
+        SyncCommand::CloseSegment {
+            channel_id: chan,
+            meta,
+            closing: segment,
+            successor: SegmentId::from_document(DocumentId::new()),
+        },
+        SyncCommand::CreateAmendments {
+            channel_id: chan,
+            meta,
+            segment,
+            amendments: DocumentId::new(),
+        },
+        SyncCommand::CreateThread {
+            channel_id: chan,
+            meta,
+            segment,
+            root: MessageId::new(),
+            thread: DocumentId::new(),
+        },
+        SyncCommand::TakeFinalizeLease {
+            channel_id: chan,
+            segment,
+        },
+        SyncCommand::FinalizeSegment {
+            channel_id: chan,
+            segment,
+            lease: LeaseId::new(),
+            horizon: 42,
+            payload: vec![4; 3],
+        },
+        SyncCommand::TakeFoldLease {
+            channel_id: chan,
+            segment,
+        },
+        SyncCommand::FoldSegment {
+            channel_id: chan,
+            segment,
+            lease: LeaseId::new(),
+            horizon: 42,
+            amendments_seq: 7,
+            payload: vec![5; 3],
+        },
+        SyncCommand::WatchSegment { segment, meta },
+        SyncCommand::WatchThread {
+            thread: doc,
+            meta,
+            after: Seq(3),
+        },
+        SyncCommand::DeleteChannel { channel_id: chan },
+        SyncCommand::LeaveChannel { channel_id: chan },
+        SyncCommand::ListSpaceChannels { space_id: space },
+        SyncCommand::ListMemberChannels,
+        SyncCommand::CreateDirectMessage {
+            channel_id: chan,
+            meta,
+            segment,
+            members: vec![DirectMember {
+                user_id: user,
+                exchange_pub_key: [7; 32],
+            }],
         },
         SyncCommand::HoldInbound,
         SyncCommand::ReleaseInbound,
+        SyncCommand::MarkRead {
+            live: vec![segment],
+            finals: Vec::new(),
+        },
+        SyncCommand::MoveReadCursors {
+            cursors: vec![(segment, Seq(4))],
+        },
+        SyncCommand::MarkThreadRead { thread: doc },
+        SyncCommand::MarkAllRead,
+        SyncCommand::FetchActivity,
         SyncCommand::Shutdown,
     ];
     let events = [
@@ -406,6 +567,13 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             payload: vec![4],
             purpose: SnapshotPurpose::Open,
         },
+        LogicEvent::SnapshotDropped {
+            document_id: doc,
+            author: Some(user),
+            reporter: None,
+            refinalize: true,
+        },
+        LogicEvent::ThreadActivity { document_id: doc },
         LogicEvent::RemoteEphemeral {
             document_id: doc,
             from_user_id: user,
@@ -414,6 +582,16 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::PeerLeft {
             document_id: doc,
             user_id: user,
+        },
+        LogicEvent::MembersChanged {
+            document_id: doc,
+            members: vec![MemberInfo {
+                user_id: user,
+                display_name: "Ada".into(),
+                email: "ada@example.org".into(),
+                role: Role::Editor,
+                standing: MemberStanding::Verified,
+            }],
         },
         LogicEvent::DocumentReady {
             document_id: doc,
@@ -442,23 +620,150 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             document_id: doc,
             revoked_user_id: user,
         },
+        LogicEvent::DocumentGone { document_id: doc },
+        LogicEvent::KeyRotated { document_id: doc },
         LogicEvent::DocumentShared {
             document_id: doc,
             doc_type: DocType::Trame,
         },
-        LogicEvent::ChannelRemoteUpdate {
+        LogicEvent::ChannelDocuments {
             channel_id: chan,
-            payload: vec![1],
+            documents: vec![ChannelDocument {
+                document_id: segment.document_id(),
+                kind: ChannelDocumentKind::Segment,
+            }],
         },
-        LogicEvent::ChannelRemoteEphemeral {
+        LogicEvent::ChannelOpenFailed {
             channel_id: chan,
-            payload: vec![2],
+            message: "gone".to_owned(),
         },
-        LogicEvent::ChannelConnectionStatus {
+        LogicEvent::ChannelRefused { channel_id: chan },
+        LogicEvent::ChannelActivity {
+            documents: vec![DocumentActivity {
+                channel_id: chan,
+                document_id: segment.document_id(),
+                active: true,
+                read: Seq(2),
+            }],
+        },
+        LogicEvent::ChannelCreated {
             channel_id: chan,
-            connected: true,
+            key: Some(SealedChannelKey::from_bytes(vec![1; 2])),
         },
-        LogicEvent::ChannelSnapshotNeeded { channel_id: chan },
+        LogicEvent::ChannelKeyResealed {
+            space_id: space,
+            channel_id: chan,
+            key: SealedChannelKey::from_bytes(vec![9; 2]),
+        },
+        LogicEvent::SegmentClosed {
+            channel_id: chan,
+            closing: segment,
+            active: SegmentId::from_document(DocumentId::new()),
+            created: false,
+        },
+        LogicEvent::SegmentCloseFailed {
+            channel_id: chan,
+            closing: segment,
+            message: "refused".to_owned(),
+        },
+        LogicEvent::AmendmentsLinked {
+            channel_id: chan,
+            segment,
+            amendments: DocumentId::new(),
+        },
+        LogicEvent::AmendmentsLinkFailed {
+            channel_id: chan,
+            segment,
+            amendments: DocumentId::new(),
+            message: "refused".to_owned(),
+        },
+        LogicEvent::ThreadLinked {
+            channel_id: chan,
+            segment,
+            root: MessageId::new(),
+            thread: DocumentId::new(),
+        },
+        LogicEvent::ThreadLinkFailed {
+            channel_id: chan,
+            segment,
+            root: MessageId::new(),
+            thread: DocumentId::new(),
+            message: "refused".to_owned(),
+        },
+        LogicEvent::FinalizeLeaseAnswered {
+            channel_id: chan,
+            segment,
+            answer: LeaseAnswer::Granted {
+                lease: LeaseId::new(),
+                horizon: 42,
+                expires_in: 30_000,
+            },
+        },
+        LogicEvent::SegmentFinalized {
+            channel_id: chan,
+            segment,
+        },
+        LogicEvent::SegmentFinalizeFailed {
+            channel_id: chan,
+            segment,
+            withdrawn: true,
+            message: "refused".to_owned(),
+        },
+        LogicEvent::FoldLeaseAnswered {
+            channel_id: chan,
+            segment,
+            answer: FoldAnswer::Granted {
+                lease: LeaseId::new(),
+                horizon: 42,
+                amendments: DocumentId::new(),
+                amendments_seq: 7,
+                expires_in: 30_000,
+            },
+        },
+        LogicEvent::SegmentFolded {
+            channel_id: chan,
+            segment,
+        },
+        LogicEvent::SegmentFoldFailed {
+            channel_id: chan,
+            segment,
+            message: "refused".to_owned(),
+        },
+        LogicEvent::AmendmentsFolded {
+            document_id: segment.document_id(),
+            amendments: DocumentId::new(),
+        },
+        LogicEvent::DeltasLocked {
+            document_id: segment.document_id(),
+            deltas: vec![b"{}".to_vec()],
+        },
+        LogicEvent::ChannelJoined { channel_id: chan },
+        LogicEvent::DirectMessageOpened {
+            requested: chan,
+            channel_id: ChannelId::new(),
+        },
+        LogicEvent::ChannelDeleted { channel_id: chan },
+        LogicEvent::ChannelLeft { channel_id: chan },
+        LogicEvent::ChannelRequestFailed {
+            channel_id: chan,
+            message: "refused".to_owned(),
+        },
+        LogicEvent::SpaceChannels {
+            space_id: space,
+            channels: vec![chan],
+        },
+        LogicEvent::MemberChannels {
+            channels: vec![
+                MemberChannel {
+                    channel_id: chan,
+                    place: ChannelPlace::Private(space),
+                },
+                MemberChannel {
+                    channel_id: ChannelId::new(),
+                    place: ChannelPlace::Direct,
+                },
+            ],
+        },
         LogicEvent::MeetingParticipantJoined {
             meeting_id: MeetingId::new(),
             user_id: user,
@@ -466,6 +771,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::MeetingParticipantLeft {
             meeting_id: MeetingId::new(),
             user_id: user,
+        },
+        LogicEvent::DocumentOpenFailed {
+            document_id: doc,
+            message: "unwrap".to_owned(),
         },
         LogicEvent::AuthError {
             message: "expired".to_owned(),
@@ -538,8 +847,10 @@ fn request_id_echo_is_preserved_across_the_hop() {
         cmd: RestCommand::InviteToDocument {
             document_id: DocumentId::new(),
             invitee_email: "x@y.z".to_string(),
+            invitee: UserId::new(),
             role: Role::Editor,
             expect_exchange_pub_key: [0u8; 32],
+            now: Timestamp(0),
         },
     };
     let bytes = postcard::to_allocvec(&cmd).unwrap();

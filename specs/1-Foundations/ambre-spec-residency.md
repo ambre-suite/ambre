@@ -46,7 +46,7 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-010` | `POST` | A reopened document MUST start from its local snapshot and replay only the deltas after it. | this spec section 3; `ambre-spec-sequencer.md` | `ambre_logic::residency::tests::a_reopen_starts_from_the_local_copy` -- Sync opens only once the local copy landed, and the ledger resumes at the horizon; `ambre_sync::light::tests::a_reopen_resumes_after_the_horizon_it_holds` -- the open skips a relay snapshot that folds in nothing past the horizon | none | verified |
 | `RESID-011` | `POST` | A reopened document MUST replace the counters its summaries produced with the counts it holds. | this spec section 3 | `ambre_logic::residency::tests::a_reopen_starts_from_the_local_copy` -- the reopen sends the badge back to empty counters | none | verified |
 | `RESID-012` | `FAIL` | Given a local snapshot that fails to open, the client MUST fetch the document from the relay. | this spec section 3; `SYNC-012` | `ambre_logic::residency::tests::a_reopen_with_no_usable_copy_fetches_from_the_relay` -- a missing copy and a refused one each drop the light subscription before the open | none | verified |
-| `RESID-013` | `FRAME` | Reopening a document MUST NOT move its read cursor. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `RESID-013` | `FRAME` | Reopening a document MUST NOT move its read cursor. | this spec section 3 | `ambre_logic::channels::tests::reopening_a_channel_leaves_its_read_cursor_where_it_was` -- a closed channel reopens with the cursors it had, and nothing marks it read | none | verified |
 
 ### 1.4 Count activity in the background
 
@@ -55,6 +55,7 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-014` | `POST` | An update that carries a summary MUST advance the counters of its document. | this spec section 3; `SYNC-113` | `ambre_sync::light::tests::a_light_update_moves_its_counters_from_the_summary` -- a sealed update with a mention moves the content and mention counts by one | none | verified |
 | `RESID-015` | `FAIL` | Given an update with no summary, the client MUST mark its document as active, with no count. | this spec section 3 | `ambre_sync::light::tests::a_light_update_with_no_summary_marks_activity_alone` -- an update with no summary, and one that does not open, each mark activity and count nothing | none | verified |
 | `RESID-016` | `FRAME` | Counting activity MUST NOT load the document. | this spec section 3 | `ambre_sync::light::tests::a_light_update_moves_its_counters_from_the_summary` -- nothing but the counters reaches the Logic thread, and no full session appears | none | verified |
+| `RESID-021` | `FRAME` | An update this user signed MUST NOT advance the counters of its document. | this spec section 3; `RESID-014` | `ambre_sync::light::tests::an_update_this_user_signed_counts_nothing` -- an update under the user's own key counts nothing, and another member's counts | none | verified |
 
 ### 1.5 Meet the browser quota
 
@@ -70,9 +71,8 @@ The browser can refuse a write before the local store reaches its own budget.
   store, and one light subscription. All three wait on a measure.
 * **Boundary.** the summary rides inside the ciphertext (`SYNC-113`), so the relay learns nothing
   of it. The local store stays on the device, owned by the launcher (`ambre-spec-launcher.md`).
-* **Verification.** 19 `verified`, 1 `unimplemented`, by host tests on the Logic, Sync and ledger
-  states. The browser tier holds the quota refusal and the persistent storage request. 1
-  `unimplemented`: no read cursor exists.
+* **Verification.** 21 `verified`, by host tests on the Logic, Sync and ledger states. The browser
+  tier holds the quota refusal and the persistent storage request.
 
 ---
 
@@ -182,7 +182,7 @@ Residency has no control of its own.
 | Memory holds what a view shows | a memory cache within a byte budget | a closed document reopens from the local store in one read, and a cache buys little for a budget no one has measured |
 | A byte budget for the local store | a cap on the number of documents | documents differ in size by orders of magnitude, so a count holds no byte budget |
 | Counters from a sealed summary | decoding each background delta | a Loro delta decodes only against its document, so every active document would stay in memory |
-| Counters from a sealed summary | a frame kind the relay reads | one more field outside the `ZK-007` set, for a count the client computes itself |
+| Counters from a sealed summary | a wire message kind the relay reads | one more field outside the `ZK-007` set, for a count the client computes itself |
 | A light subscription | the full Sync state for every document | the full state runs up to 1 MB, and hundreds of documents break the memory budget |
 | Immutable documents leave first | least recently viewed alone | an immutable document reloads with no loss, so it is the cheapest to drop |
 | A refused write evicts, then retries | stopping the document | the relay holds every acknowledged change, so losing the local copy costs a download, never data |

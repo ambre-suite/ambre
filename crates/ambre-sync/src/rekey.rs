@@ -70,6 +70,14 @@ pub(crate) struct Rekey {
     refused_from: Option<u64>,
     /// Edits made while the rotation is owed, sealed once it lands.
     waiting: Vec<Vec<u8>>,
+    /// The relay refused a delta by name. It holds an edit this client made,
+    /// so no later delta leaves until the document reopens (`SYNC-156`).
+    refused: bool,
+    /// The delta the relay failed to sequence, waiting for its resend, and
+    /// the ticket of the timer armed for it (`SYNC-159`).
+    failed: Option<(Signature, u64)>,
+    /// Sequencing failures since the relay last echoed a delta of this log.
+    failures: u32,
 }
 
 impl Rekey {
@@ -91,6 +99,7 @@ impl Rekey {
             return;
         };
         self.sent.drain(..=at);
+        self.failures = 0;
         if self.refused_from.is_some_and(|c| c <= clock) {
             self.refused_from = None;
         }
@@ -102,11 +111,82 @@ impl Rekey {
     /// behind its fence (`SRV-169`, `SYNC-147`). `None` when no delta here
     /// carries that signature: a refusal of a delta already sent again.
     pub(crate) fn clock_refused(&mut self, signature: &Signature) -> Option<Vec<Vec<u8>>> {
+        self.take_from(signature).map(|(_, bodies)| bodies)
+    }
+
+    /// The relay failed to sequence the delta signed `signature` through a
+    /// fault of its own (`SYNC-159`). It stays in the log, to leave again
+    /// once the timer `ticket` fires. Returns the failures counted since the
+    /// last echo, or `None` when no delta here carries that signature.
+    pub(crate) fn failed(&mut self, signature: &Signature, ticket: u64) -> Option<u32> {
+        self.position(signature)?;
+        self.failed = Some((*signature, ticket));
+        self.failures = self.failures.saturating_add(1);
+        Some(self.failures)
+    }
+
+    /// The timer `ticket` fired. Returns the failed delta's signature and
+    /// clock, with its body and every later body, to send again from that
+    /// clock. `None` when a later failure or a refusal made the timer stale.
+    pub(crate) fn resend_failed(&mut self, ticket: u64) -> Option<(Signature, u64, Vec<Vec<u8>>)> {
+        let (signature, armed) = self.failed?;
+        if armed != ticket {
+            return None;
+        }
+        self.failed = None;
+        let (clock, bodies) = self.take_from(&signature)?;
+        Some((signature, clock, bodies))
+    }
+
+    /// Takes the delta signed `signature` and every later one out of the log.
+    /// Returns its clock and their bodies, in order.
+    fn take_from(&mut self, signature: &Signature) -> Option<(u64, Vec<Vec<u8>>)> {
         let (at, from) = self.position(signature)?;
         if self.refused_from.is_some_and(|c| c >= from) {
             self.refused_from = None;
         }
-        Some(self.sent.drain(at..).map(|f| f.payload).collect())
+        Some((from, self.sent.drain(at..).map(|f| f.payload).collect()))
+    }
+
+    /// The relay refused the delta signed `signature` before sequencing it
+    /// (`SYNC-155`). It and every delta that left after it are dropped: those
+    /// build on it, and the relay took no clock for it. Returns whether this
+    /// is the first refusal, the one to report.
+    pub(crate) fn delta_refused(&mut self, signature: &Signature) -> bool {
+        if let Some((at, _)) = self.position(signature) {
+            self.sent.truncate(at);
+        }
+        self.refused_from = None;
+        self.failed = None;
+        !std::mem::replace(&mut self.refused, true)
+    }
+
+    /// The relay refused the delta signed `signature` for the lock of its
+    /// segment (`SYNC-165`). It and every later delta leave the log, and
+    /// their bodies return in order. Nothing is held: the lock refuses them
+    /// all, and the caller moves what they wrote. `None` for a delta the log
+    /// no longer holds, so a later refusal of the same batch returns nothing.
+    pub(crate) fn delta_locked(&mut self, signature: &Signature) -> Option<Vec<Vec<u8>>> {
+        let (_, bodies) = self.take_from(signature)?;
+        if self
+            .failed
+            .as_ref()
+            .is_some_and(|(failed, _)| self.position(failed).is_none())
+        {
+            self.failed = None;
+        }
+        Some(bodies)
+    }
+
+    /// Whether a delta was refused by name, so nothing more may leave.
+    pub(crate) fn holds_refused(&self) -> bool {
+        self.refused
+    }
+
+    /// How many deltas wait for the relay's echo.
+    #[cfg(test)]
+    pub(crate) fn unconfirmed(&self) -> usize {
+        self.sent.len()
     }
 
     /// The delta at `clock` was sealed again, under a new signature.
@@ -156,9 +236,10 @@ impl Rekey {
     }
 
     /// Whether every frame sent was acknowledged, and no edit waits on a
-    /// payment (`RESID-009`).
+    /// payment (`RESID-009`). A refused delta never settles: the relay lacks
+    /// an edit this client holds.
     pub(crate) fn settled(&self) -> bool {
-        self.sent.is_empty() && self.waiting.is_empty() && !self.in_flight
+        self.sent.is_empty() && self.waiting.is_empty() && !self.in_flight && !self.refused
     }
 
     /// Holds an edit made while the rotation is owed. Returns whether the
@@ -166,6 +247,13 @@ impl Rekey {
     pub(crate) fn hold(&mut self, payload: Vec<u8>) -> bool {
         self.waiting.push(payload);
         self.begin_payment() == Refusal::Settle
+    }
+
+    /// Starts the payment of an owed debt now, without waiting for an edit.
+    /// A space admin pays at once, so the channel keys sealed under the
+    /// space key can follow it. Returns whether the caller starts it.
+    pub(crate) fn pay_now(&mut self) -> bool {
+        self.owed && self.begin_payment() == Refusal::Settle
     }
 
     fn begin_payment(&mut self) -> Refusal {
@@ -288,6 +376,17 @@ mod tests {
         let (resend, waiting) = r.key_installed(key(2));
         assert!(resend.is_empty());
         assert_eq!(waiting, vec![vec![1], vec![2]]);
+    }
+
+    /// A debt paid at once starts one payment, and none without a debt.
+    #[test]
+    fn a_debt_paid_now_starts_one_payment() {
+        let mut r = Rekey::default();
+        assert!(!r.pay_now(), "nothing is owed");
+        r.found_debt();
+        assert!(r.pay_now());
+        assert!(!r.pay_now(), "the payment is running");
+        assert!(!r.hold(vec![1]), "an edit waits for it");
     }
 
     /// The echo of an update clears it and every earlier one, and the log never

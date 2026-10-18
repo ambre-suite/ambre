@@ -39,6 +39,30 @@ pub enum MembershipAct {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EntryDigest(pub [u8; 32]);
 
+/// The acts of a log that leaves every member an editor and no owner, in
+/// order. `creator` creates the document as its owner, invites each of
+/// `members` as an editor, then lowers its own role to editor.
+///
+/// The writer signs these acts and the relay expects them, so both read the
+/// one sequence. Each act is `(member, act, role after it)`, and `creator`
+/// authors them all.
+pub fn ownerless_log(
+    creator: UserId,
+    members: &[UserId],
+) -> impl Iterator<Item = (UserId, MembershipAct, Role)> + '_ {
+    std::iter::once((creator, MembershipAct::Create, Role::Owner))
+        .chain(
+            members
+                .iter()
+                .map(|&member| (member, MembershipAct::Invite, Role::Editor)),
+        )
+        .chain(std::iter::once((
+            creator,
+            MembershipAct::ChangeRole,
+            Role::Editor,
+        )))
+}
+
 /// One signed change of membership.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MembershipEntry {
@@ -198,5 +222,25 @@ mod tests {
             MembershipEntry::decode(&sent.encode().unwrap()).unwrap(),
             sent
         );
+    }
+
+    /// An ownerless log opens with its creation, and leaves the creator and
+    /// every member an editor, with no owner.
+    #[test]
+    fn an_ownerless_log_leaves_every_member_an_editor() {
+        let creator = UserId::new();
+        let members = [UserId::new(), UserId::new()];
+        let acts: Vec<_> = ownerless_log(creator, &members).collect();
+        assert_eq!(
+            acts.first(),
+            Some(&(creator, MembershipAct::Create, Role::Owner))
+        );
+        assert_eq!(acts.len(), members.len() + 2);
+        let mut roles = std::collections::HashMap::new();
+        for (member, _, role) in acts {
+            roles.insert(member, role);
+        }
+        assert_eq!(roles.len(), members.len() + 1);
+        assert!(roles.values().all(|role| *role == Role::Editor));
     }
 }

@@ -1169,12 +1169,12 @@ pub enum ToileCommand {
     ExitPresent,
     /// Toggle whether this viewer broadcasts its active slide index to peers
     /// (`toile-presentation`, "Follow presenter"). Local role only -- no
-    /// CRDT delta. When on, the playback commands additionally emit an ephemeral
-    /// presence frame carrying `present_slide`.
+    /// CRDT delta. When on, the playback commands additionally emit a presence
+    /// sample carrying `present_slide`.
     SetPresentBroadcast(bool),
     /// Follow the given presenter's broadcast playback position, or stop following
     /// with `None` (`toile-presentation`, "Follow presenter"). Local role
-    /// only -- no CRDT delta. While following, an inbound presence frame from that
+    /// only -- no CRDT delta. While following, an inbound presence sample from that
     /// `UserId` moves this viewer's active slide; a manual navigation clears the
     /// follow ("take control").
     FollowPresenter(Option<UserId>),

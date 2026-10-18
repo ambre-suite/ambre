@@ -3,7 +3,7 @@
 //! Presence (cursors, in-flight strokes, laser points, selections) is relayed as
 //! **ephemeral** Sync payloads. It never enters the CRDT, never persists, and is
 //! not an undo item. Outbound, a local `Presence` sample is postcard-encoded
-//! into an ephemeral frame. Inbound, a frame is keyed by the sender's canonical
+//! into an ephemeral. Inbound, a sample is keyed by the sender's canonical
 //! `UserId`. That id is resolved from the authenticated `pub_key` in
 //! `ambre-sync` before it reaches this thread, so a peer cannot spoof another
 //! user's cursor. The render side is `toile-presence`'s overlay pass.
@@ -12,7 +12,7 @@
 //! entry (`PRESENCE-009`), so no departure signal is needed anywhere. This
 //! thread ages its peers and hands the view the set that is still live, which
 //! the view adopts whole (`TOILE-185`, `TOILE-UI-075`). One event per inbound
-//! frame with a receiver-side accumulation is what this used to do, and it
+//! sample with a receiver-side accumulation is what this used to do, and it
 //! painted a peer who left for ever.
 //!
 //! **Why the clock rides the command.** This thread has none. Every local sample
@@ -34,7 +34,7 @@ use super::ToileState;
 pub const PRESENCE_TTL_MS: i64 = 10_000;
 
 impl ToileState {
-    /// Encode the local peer's presence sample into an ephemeral frame to
+    /// Encode the local peer's presence sample into an ephemeral to
     /// broadcast, and age the peers this client knows about against `now_ms`.
     ///
     /// The local display name is stamped on the outbound payload here rather
@@ -60,10 +60,10 @@ impl ToileState {
         sample_outcome(display, &sample)
     }
 
-    /// Apply a decrypted remote ephemeral (presence) frame, keyed by the sender's
+    /// Apply a decrypted remote presence sample, keyed by the sender's
     /// canonical `UserId` (resolved in `ambre-sync`). Records the peer's latest
     /// presence and returns the live set for the overlay to adopt whole. Never
-    /// mutates the CRDT or history; a malformed frame is dropped.
+    /// mutates the CRDT or history; a malformed sample is dropped.
     ///
     /// The sample is stamped with the last clock a local command carried, which
     /// is what later ages it. A client that has never sent one stamps zero, and
@@ -79,9 +79,9 @@ impl ToileState {
         let present_slide = presence.present_slide;
         self.presence.insert(from_user_id, (presence, self.now_ms));
         let mut events = vec![self.live_presence_event()];
-        // "Follow presenter": if we follow this sender and the frame carries
+        // "Follow presenter": if we follow this sender and the sample carries
         // a broadcast slide, adopt it -- clamp to the deck and glide via
-        // `SlideChanged`. A frame from anyone else, or without `present_slide`,
+        // `SlideChanged`. A sample from anyone else, or without `present_slide`,
         // never moves us. Purely local: no CRDT / history mutation.
         if self.following == Some(from_user_id)
             && let Some(idx) = present_slide
@@ -128,7 +128,7 @@ impl ToileState {
     }
 
     /// The whole live peer set, in a stable order, as the event the view adopts
-    /// (`PRESENCE-009`). Sorted by id so two frames of an unchanged set are the
+    /// (`PRESENCE-009`). Sorted by id so two passes over an unchanged set are the
     /// same event, and the overlay's paint order never depends on a hash walk.
     fn live_presence_event(&self) -> ToileEvent {
         let mut peers: Vec<PresenceUpdate> = self

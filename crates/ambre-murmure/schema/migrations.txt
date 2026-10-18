@@ -1,0 +1,14 @@
+# ambre-murmure/schema/migrations.txt  What each migration step writes (`AUTHOR-024`).
+#
+# One section per `SCHEMA_VERSION`, each listing every step that version runs:
+# the version it leaves, the version it reaches, and, as hex, the fingerprint
+# of the operations it writes on the canonical document of the version it
+# leaves. Version 1 is Murmure's first layout and runs no step, so its section
+# is empty.
+#
+# Read by `schema_shape`, which fails when a build's step writes other
+# operations than a section froze for it. Two peers on two builds then migrate
+# one document two ways. A step that must change is a new step under a raised
+# `SCHEMA_VERSION` and a new section below, never an edit to a published section.
+
+== v1

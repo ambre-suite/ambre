@@ -68,7 +68,7 @@ The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).
 | a membership change that reorders a child | one, the clamp included (`TOILE-048`) |
 | ungrouping a selection of three groups | one: the surface sends one command for it (`TOILE-094`) |
 | a copy | none: it writes nothing (`TOILE-067`) |
-| a camera change, a tool change, a presence frame, playback | none: they write nothing |
+| a camera change, a tool change, a presence sample, playback | none: they write nothing |
 
 **Code:**
 
@@ -104,7 +104,7 @@ inverse, the whole reseed, the stack that dies with the document. Toile's own:
 | A freehand stroke is one item, however many samples it holds | one item per sample | the same reason, and worse: a stroke holds hundreds. What the user drew is the stroke |
 | A whole file import is one item | one item per element the file carried | a user who imports a board of two thousand elements means one action, and the only useful undo is the one that takes the file back out |
 | A comment never enters the history | recording it like any other write | undo would retract a message a teammate has already read (`TOILE-FEAT-017`). A message is addressed to someone, and taking it back is not the same act as taking back a drawing |
-| The camera, the tool and the presence frame enter no history | recording what the user is looking at | they write no document, so there is nothing to revert and no peer receives them. An undo that scrolled the board back would spend the user's one chord on their own viewport |
+| The camera, the tool and the presence sample enter no history | recording what the user is looking at | they write no document, so there is nothing to revert and no peer receives them. An undo that scrolled the board back would spend the user's one chord on their own viewport |
 
 ---
 

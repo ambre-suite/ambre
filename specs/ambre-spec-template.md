@@ -314,7 +314,7 @@ cite.
 What makes a row a rule at all, and where it lives.
 
 * **The falsifiability test.** If the way to falsify a statement cannot be stated, it is an intention,
-  not a rule. Rejected: "sync is secure". Accepted: "no frame leaves the client with a plaintext
+  not a rule. Rejected: "sync is secure". Accepted: "no wire message leaves the client with a plaintext
   payload".
 * **One row per falsifiable consequence, never one per theme.** Five guarantees are five rows.
 * **One rule per row is an error, and the kind draws the line.** `FAIL` binds the refusal, the

@@ -116,14 +116,25 @@ impl std::convert::TryFrom<u8> for Role {
     }
 }
 
-/// Parses a role from a string (case-insensitive).
+/// Parses an owned role word, as a database row or a request body holds it.
+impl TryFrom<String> for Role {
+    type Error = RoleError;
+
+    fn try_from(word: String) -> Result<Self, Self::Error> {
+        word.parse()
+    }
+}
+
+/// Parses a role from its lowercase word, exactly as `as_str` writes it.
 ///
-/// Returns `RoleError::InvalidString` if the string does not match any known role.
+/// The match is strict: `"OWNER"` or `" owner"` is refused, so a database row
+/// or a request body holds one spelling. Returns `RoleError::InvalidString`
+/// for any other string.
 impl FromStr for Role {
     type Err = RoleError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_lowercase().as_str() {
+        match s {
             "owner" => Ok(Self::Owner),
             "editor" => Ok(Self::Editor),
             "viewer" => Ok(Self::Viewer),
@@ -169,13 +180,25 @@ mod tests {
     #[test]
     fn test_from_str() {
         assert_eq!(Role::from_str("owner"), Ok(Role::Owner));
-        assert_eq!(Role::from_str("EDITOR"), Ok(Role::Editor));
-        assert_eq!(Role::from_str("Viewer"), Ok(Role::Viewer));
+        assert_eq!(Role::from_str("editor"), Ok(Role::Editor));
+        assert_eq!(Role::from_str("viewer"), Ok(Role::Viewer));
         assert_eq!(Role::from_str("admin"), Ok(Role::Admin));
         assert_eq!(Role::from_str("member"), Ok(Role::Member));
         assert_eq!(
             Role::from_str("guest"),
             Err(RoleError::InvalidString("guest".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_from_str_is_case_sensitive() {
+        assert_eq!(
+            Role::from_str("EDITOR"),
+            Err(RoleError::InvalidString("EDITOR".to_string()))
+        );
+        assert_eq!(
+            Role::from_str("Viewer"),
+            Err(RoleError::InvalidString("Viewer".to_string()))
         );
     }
 

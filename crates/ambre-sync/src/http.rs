@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use ambre_core::RefusalCode;
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -256,65 +257,79 @@ impl Transport for Fetch {
     }
 }
 
-/// The relay's error code for a request refused because the account still owes
-/// its key setup (HTTP 403). An error message ends with it exactly when the
-/// relay refused the request for that reason (`SYNC-134`).
-const SETUP_REQUIRED: &str = "SETUP_REQUIRED";
-
-/// The body the relay sends with a refusal. Only its code is read.
+/// The body the relay sends with a refusal. Only its code is read, a word of
+/// one closed set (`SRV-182`). A code this build does not hold fails the read,
+/// so the refusal reads as its status alone.
 #[derive(Deserialize)]
 struct RefusalBody {
-    error: String,
+    error: RefusalCode,
 }
 
-/// The relay's code for a rotation refused because a member joined after it
-/// read the members (HTTP 409, `SYNC-143`).
-const MEMBERS_CHANGED: &str = "MEMBERS_CHANGED";
-
-/// The relay's code for an invitation refused because a rotation replaced the
-/// key it wraps (HTTP 409, `SYNC-143`).
-const KEY_CHANGED: &str = "KEY_CHANGED";
-
-/// The relay's code for a membership entry refused because another entry
-/// took its place in the log first (HTTP 409, `SRV-104`).
-const LOG_MOVED: &str = "LOG_MOVED";
-
 /// The error a refused request reads as. `code` is the relay's error code,
-/// kept only with the status that may carry it. A 403 carries a setup still
-/// owed, and a 409 a membership or a key that moved under the request.
-fn refusal(method: &str, url: &str, status: u16, code: Option<&str>) -> String {
+/// kept only with the status that may carry it. A 403 carries a want of
+/// access or a setup still owed (`SYNC-134`). A 409 carries a membership, a
+/// key or a log that moved under the request (`SYNC-143`, `SRV-104`).
+fn refusal(method: &str, url: &str, status: u16, code: Option<RefusalCode>) -> String {
+    use RefusalCode::{Forbidden, KeyChanged, LogMoved, MembersChanged, SetupRequired};
     match (status, code) {
-        (403, Some(SETUP_REQUIRED)) => format!("{method} {url}: {SETUP_REQUIRED}"),
-        (409, Some(code @ (MEMBERS_CHANGED | KEY_CHANGED | LOG_MOVED))) => {
+        (403, Some(code @ (SetupRequired | Forbidden)))
+        | (409, Some(code @ (MembersChanged | KeyChanged | LogMoved))) => {
             format!("{method} {url}: {code}")
         }
         _ => format!("{method} {url}: HTTP {status}"),
     }
 }
 
+/// Whether `message` closes with the relay's `code`. The code comes after the
+/// URL, so no URL or other status can end with it.
+fn ends_with_code(message: &str, code: RefusalCode) -> bool {
+    message.ends_with(&format!(": {code}"))
+}
+
 /// Whether `message` is the error of a request the relay refused for a key
-/// setup still owed. The code closes the message, after the URL, so no URL or
-/// other status can end with it.
+/// setup still owed.
 pub(crate) fn is_setup_refusal(message: &str) -> bool {
-    message.ends_with(&format!(": {SETUP_REQUIRED}"))
+    ends_with_code(message, RefusalCode::SetupRequired)
+}
+
+/// Whether `message` is the error of a request the relay refused for want of
+/// access to what it names.
+pub(crate) fn is_forbidden(message: &str) -> bool {
+    ends_with_code(message, RefusalCode::Forbidden)
 }
 
 /// Whether `message` is a rotation the relay refused because the members
 /// changed since it read them.
 pub(crate) fn is_members_changed(message: &str) -> bool {
-    message.ends_with(&format!(": {MEMBERS_CHANGED}"))
+    ends_with_code(message, RefusalCode::MembersChanged)
 }
 
 /// Whether `message` is an invitation the relay refused because the key it
 /// wraps is no longer the document's.
 pub(crate) fn is_key_changed(message: &str) -> bool {
-    message.ends_with(&format!(": {KEY_CHANGED}"))
+    ends_with_code(message, RefusalCode::KeyChanged)
 }
 
 /// Whether `message` is a membership entry the relay refused because the log
 /// moved since the writer read it.
 pub(crate) fn is_log_moved(message: &str) -> bool {
-    message.ends_with(&format!(": {LOG_MOVED}"))
+    ends_with_code(message, RefusalCode::LogMoved)
+}
+
+/// Whether `message` is a request the relay refused with a bare 409: the state
+/// it names moved past what the request expects.
+pub(crate) fn is_conflict(message: &str) -> bool {
+    message.ends_with(": HTTP 409")
+}
+
+/// Closes the error of an answer that names a word of a closed set this build
+/// does not know.
+const UNKNOWN_WORD: &str = "UNKNOWN_WORD";
+
+/// Whether `message` is an answer that names a word of a closed set this
+/// build does not know, which only a newer relay writes (`SYNC-152`).
+pub(crate) fn is_unknown_word(message: &str) -> bool {
+    message.ends_with(&format!(": {UNKNOWN_WORD}"))
 }
 
 /// The error a refused answer reads as, or `Ok` for a success. The relay's
@@ -334,7 +349,7 @@ fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), String> {
         request.method.as_str(),
         &request.url,
         resp.status,
-        code.as_deref(),
+        code,
     ))
 }
 
@@ -345,11 +360,13 @@ fn read_json<R: serde::de::DeserializeOwned>(
 ) -> Result<R, String> {
     expect_ok(request, resp)?;
     serde_json::from_slice(&resp.body).map_err(|e| {
-        format!(
-            "{} {}: parse error: {e}",
-            request.method.as_str(),
-            request.url
-        )
+        let method = request.method.as_str();
+        // A word of a closed set this build does not know means the relay is
+        // newer. The code closes the message, as a refusal's does (`SYNC-152`).
+        if e.is_data() && e.to_string().starts_with("unknown variant `") {
+            return format!("{method} {}: parse error: {e}: {UNKNOWN_WORD}", request.url);
+        }
+        format!("{method} {}: parse error: {e}", request.url)
     })
 }
 
@@ -493,14 +510,12 @@ pub(crate) async fn download_snapshot(
     url_scheme: &str,
     api_base: &str,
     document_id: ambre_core::DocumentId,
-    snapshot_id: &str,
+    snapshot_id: ambre_core::SnapshotId,
     auth: AuthContext,
 ) -> Option<Vec<u8>> {
     let url =
         format!("{url_scheme}://{api_base}/api/documents/{document_id}/snapshot/download-url");
-    let body = SnapshotDownloadUrlRequest {
-        snapshot_id: snapshot_id.to_owned(),
-    };
+    let body = SnapshotDownloadUrlRequest { snapshot_id };
     let resp = post_json_auth::<_, SnapshotDownloadUrlResponse>(&url, &body, auth)
         .await
         .ok()?;
@@ -557,6 +572,24 @@ pub(crate) async fn delete_json_auth<T: Serialize>(
     send_json_auth_via(&Fetch, Method::Delete, url, body, &auth).await
 }
 
+/// HTTP PUT of a JSON body, expecting a success with no body to read.
+pub(crate) async fn put_json_auth<T: Serialize>(
+    url: &str,
+    body: &T,
+    auth: AuthContext,
+) -> Result<(), String> {
+    send_json_auth_via(&Fetch, Method::Put, url, body, &auth).await
+}
+
+/// HTTP POST of a JSON body, expecting a success with no body to read.
+pub(crate) async fn post_json_auth_ok<T: Serialize>(
+    url: &str,
+    body: &T,
+    auth: AuthContext,
+) -> Result<(), String> {
+    send_json_auth_via(&Fetch, Method::Post, url, body, &auth).await
+}
+
 pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
     let request = Outgoing::new(Method::Get, url);
     let resp = exchange(&Fetch, &request).await?;
@@ -581,7 +614,8 @@ pub(crate) struct SetupAccountRequest {
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct SetupAccountResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
     pub access_expires_in: u64,
@@ -596,7 +630,8 @@ pub(crate) struct DevLoginRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct DevLoginResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
@@ -620,7 +655,8 @@ pub(crate) struct ProviderCallbackRequest {
 /// The relay's answer to a provider return: who signed in, and their tokens.
 #[derive(Deserialize)]
 pub(crate) struct ProviderCallbackResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub email: String,
     pub display_name: String,
     pub access_token: SecretToken,
@@ -662,9 +698,103 @@ pub(crate) struct StoreMasterKeysResponse {
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct AuthMeResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
     pub email: String,
+}
+
+/// `GET /api/channels/{id}/documents`: the documents a channel groups.
+#[derive(Deserialize)]
+pub(crate) struct ChannelDocumentsResponse {
+    pub documents: Vec<ChannelDocumentEntry>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ChannelDocumentEntry {
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub document_id: ambre_core::DocumentId,
+    /// `meta`, `segment`, `amendments` or `thread`.
+    #[serde(with = "ambre_core::serde_enums::channel_document_kind")]
+    pub kind: ambre_core::ChannelDocumentKind,
+}
+
+/// `GET /api/spaces/{id}/channels`: the channels the relay holds as public
+/// in a space.
+#[derive(Deserialize)]
+pub(crate) struct SpaceChannelsResponse {
+    #[serde(with = "ambre_core::serde_id::channel_id::vec")]
+    pub channels: Vec<ambre_core::ChannelId>,
+}
+
+/// `GET /api/channels`: every channel the caller is a member of.
+#[derive(Deserialize)]
+pub(crate) struct MemberChannelsResponse {
+    pub channels: Vec<MemberChannelEntry>,
+}
+
+/// One channel of [`MemberChannelsResponse`]: its space, none for a direct
+/// message, and whether the space lists it.
+#[derive(Deserialize)]
+pub(crate) struct MemberChannelEntry {
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::space_id::option")]
+    pub space_id: Option<ambre_core::SpaceId>,
+    pub public: bool,
+}
+
+impl MemberChannelEntry {
+    /// The entry as the bus carries it. A channel in no space is a direct
+    /// message, whatever its flag says.
+    pub(crate) fn into_member_channel(self) -> ambre_bus::MemberChannel {
+        let place = match (self.space_id, self.public) {
+            (Some(space), true) => ambre_bus::ChannelPlace::Public(space),
+            (Some(space), false) => ambre_bus::ChannelPlace::Private(space),
+            (None, _) => ambre_bus::ChannelPlace::Direct,
+        };
+        ambre_bus::MemberChannel {
+            channel_id: self.channel_id,
+            place,
+        }
+    }
+}
+
+/// `GET /api/activity`: per segment and thread of every channel of the
+/// caller, whether it holds something past the caller's cursor.
+#[derive(Deserialize)]
+pub(crate) struct ActivityResponse {
+    pub documents: Vec<ActivityEntry>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ActivityEntry {
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub document_id: ambre_core::DocumentId,
+    pub active: bool,
+    /// The caller's own cursor. A relay that predates it answers none, which
+    /// reads as nothing read.
+    #[serde(default)]
+    pub read: ambre_core::Seq,
+}
+
+/// `PUT /api/documents/{id}/read-cursor`.
+#[derive(Serialize)]
+pub(crate) struct ReadCursorRequest {
+    pub seq: ambre_core::Seq,
+}
+
+/// `POST /api/read-cursors/mark-read`: the documents to move to their last
+/// number, or every one when absent.
+#[derive(Serialize)]
+pub(crate) struct MarkReadRequest {
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "ambre_core::serde_id::document_id::option_vec"
+    )]
+    pub documents: Option<Vec<ambre_core::DocumentId>>,
 }
 
 #[derive(Deserialize)]
@@ -674,11 +804,14 @@ pub(crate) struct DocumentListResponse {
 
 #[derive(Deserialize)]
 pub(crate) struct DocumentEntry {
-    pub id: String,
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
     #[serde(default)]
     pub name_enc: Option<String>,
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     /// The caller's wrapped copy of the DocumentKey (base64). Unwrapped via ECDH
     /// to decrypt `name_enc` for the launcher list.
     #[serde(default)]
@@ -695,22 +828,238 @@ pub(crate) struct DocumentEntry {
 
 #[derive(Serialize)]
 pub(crate) struct CreateDocumentRequest {
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<String>,
     pub doc_key_enc: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub document_id: Option<String>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "ambre_core::serde_id::document_id::option"
+    )]
+    pub document_id: Option<ambre_core::DocumentId>,
     /// The first entry of the membership log, as `membership_log::encode`
     /// writes it (`SYNC-132`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
 }
 
+/// `POST /api/channels`: a channel of a space, with its first two documents.
+#[derive(Serialize)]
+pub(crate) struct CreateChannelRequest {
+    /// A public channel, which its catalogue lists, or a private one.
+    pub public: bool,
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::space_id")]
+    pub space_id: ambre_core::SpaceId,
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub segment_id: ambre_core::SegmentId,
+}
+
+/// `POST /api/channels/{id}/segments`: close the active segment `closing`
+/// into `successor`, a document this user created for it.
+#[derive(Serialize)]
+pub(crate) struct CloseSegmentRequest {
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub closing: ambre_core::SegmentId,
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub successor: ambre_core::SegmentId,
+}
+
+/// The active segment after a close. `created` is false when an earlier
+/// close registered another successor.
+#[derive(Deserialize)]
+pub(crate) struct ClosedSegmentResponse {
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub active: ambre_core::SegmentId,
+    pub created: bool,
+}
+
+/// `POST /api/channels/{id}/segments/{segment}/amendments`: the caller's new
+/// document, to register as the amendments of the locked segment.
+#[derive(Serialize)]
+pub(crate) struct RegisterAmendmentsRequest {
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub amendments: ambre_core::DocumentId,
+}
+
+/// The amendments document of a segment after a registration. `created` is
+/// false when an earlier registration linked another.
+#[derive(Deserialize)]
+pub(crate) struct AmendmentsResponse {
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub amendments: ambre_core::DocumentId,
+    pub created: bool,
+}
+
+/// `POST /api/channels/{id}/threads`: the caller's new document, to register
+/// as the thread of a root message.
+#[derive(Serialize)]
+pub(crate) struct RegisterThreadRequest {
+    #[serde(with = "ambre_core::serde_id::message_id")]
+    pub root: ambre_core::MessageId,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub thread: ambre_core::DocumentId,
+}
+
+/// The thread document of a root after a registration. `created` is false
+/// when an earlier registration linked another.
+#[derive(Deserialize)]
+pub(crate) struct ThreadResponse {
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub thread: ambre_core::DocumentId,
+    pub created: bool,
+}
+
+/// `POST /api/channels/{id}/segments/{segment}/lease`: the lease, or none
+/// and when to ask again.
+#[derive(Deserialize)]
+pub(crate) struct FinalizeLeaseResponse {
+    pub lease: Option<GrantedLeaseResponse>,
+    /// Milliseconds before asking again, `0` with a lease.
+    pub retry_in: u64,
+}
+
+/// A granted finalize lease.
+#[derive(Deserialize)]
+pub(crate) struct GrantedLeaseResponse {
+    #[serde(with = "ambre_core::serde_id::lease_id")]
+    pub lease_id: ambre_core::LeaseId,
+    /// The last delta the final snapshot covers.
+    pub horizon: u64,
+    /// Milliseconds before the lease expires.
+    pub expires_in: u64,
+}
+
+/// `POST /api/channels/{id}/segments/{segment}/finalize`: commit the final
+/// snapshot under the lease.
+#[derive(Serialize)]
+pub(crate) struct FinalizeSegmentRequest {
+    #[serde(with = "ambre_core::serde_id::lease_id")]
+    pub lease_id: ambre_core::LeaseId,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
+}
+
+/// `POST /api/channels/{id}/segments/{segment}/fold-lease`: the fold lease,
+/// or none and when to ask again.
+#[derive(Deserialize)]
+pub(crate) struct FoldLeaseResponse {
+    pub lease: Option<GrantedFoldResponse>,
+    /// Milliseconds before asking again, `0` with a lease.
+    pub retry_in: u64,
+}
+
+/// A granted fold lease.
+#[derive(Deserialize)]
+pub(crate) struct GrantedFoldResponse {
+    #[serde(with = "ambre_core::serde_id::lease_id")]
+    pub lease_id: ambre_core::LeaseId,
+    /// The last delta of the segment the fold snapshot covers.
+    pub horizon: u64,
+    /// The amendments document to fold.
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub amendments: ambre_core::DocumentId,
+    /// The last delta of the amendments the fold holds at least.
+    pub amendments_seq: u64,
+    /// Milliseconds before the lease expires.
+    pub expires_in: u64,
+}
+
+/// `POST /api/channels/{id}/segments/{segment}/fold`: commit the fold
+/// snapshot under the lease.
+#[derive(Serialize)]
+pub(crate) struct FoldSegmentRequest {
+    #[serde(with = "ambre_core::serde_id::lease_id")]
+    pub lease_id: ambre_core::LeaseId,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
+    /// The last delta of the amendments the fold holds.
+    pub amendments_seq: u64,
+}
+
+/// `POST /api/documents/{id}/snapshots/{snapshot}/confirm`: the amendments
+/// document the confirmation erased, when the snapshot folds one in.
+#[derive(Deserialize)]
+pub(crate) struct ConfirmSnapshotResponse {
+    #[serde(with = "ambre_core::serde_id::document_id::option")]
+    pub folded: Option<ambre_core::DocumentId>,
+}
+
+/// One member of a direct message, other than the caller, and the channel
+/// key wrapped for them.
+#[derive(Serialize)]
+pub(crate) struct DirectMemberJson {
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
+    pub doc_key_enc: String,
+}
+
+/// `POST /api/channels/direct`: a direct message of the caller and
+/// `members`, which the relay creates or finds.
+#[derive(Serialize)]
+pub(crate) struct CreateDirectMessageRequest {
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub segment_id: ambre_core::SegmentId,
+    pub members: Vec<DirectMemberJson>,
+    /// The channel key wrapped for the caller.
+    pub doc_key_enc: String,
+    /// The identifier of the channel key, in hex.
+    #[serde(with = "ambre_core::serde_id::key_id")]
+    pub key_id: ambre_core::KeyId,
+    /// The log of `meta`: its `Create`, one editor `Invite` per member in
+    /// the order of `members`, then the caller's own `ChangeRole` to editor.
+    pub entries: Vec<String>,
+}
+
+/// The direct message a request reached: the one it created, or the one that
+/// already held its members.
+#[derive(Deserialize)]
+pub(crate) struct DirectMessageResponse {
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[allow(dead_code)]
+    pub created: bool,
+}
+
+/// `POST /api/channels/{id}/join`: the channel key, wrapped for the caller.
+#[derive(Serialize)]
+pub(crate) struct JoinChannelRequest {
+    pub doc_key_enc: String,
+    /// The signed `SelfJoin` entry that extends meta's log, absent when the
+    /// log is empty (`SYNC-132`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
+}
+
+/// `GET /api/channels/{id}/join`: the end of the log a self-join extends.
+#[derive(Deserialize)]
+pub(crate) struct JoinHeadResponse {
+    /// The document whose log the self-join extends: the channel's meta.
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
+    /// The role the relay grants the self-join, which the entry must name.
+    pub role: ambre_bus::Role,
+    /// The number of entries, the position the self-join takes.
+    pub length: u64,
+    /// The last entry (base64), absent on an empty log.
+    #[serde(default)]
+    pub last: Option<String>,
+}
+
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct CreateDocumentResponse {
-    pub document_id: String,
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub document_id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
 }
 
 #[derive(Serialize)]
@@ -733,11 +1082,13 @@ pub(crate) struct MembersResponse {
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct MemberEntry {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub signing_pub_key: String,
     pub exchange_pub_key: String,
     pub doc_key_enc: String,
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     /// Exchange public key of whoever wrapped `doc_key_enc`. The ECDH unwrap must
     /// use this peer key, not our own `exchange_pub_key`. Optional for resilience
     /// against older servers; the unwrap falls back to `exchange_pub_key`.
@@ -749,15 +1100,15 @@ pub(crate) struct MemberEntry {
 /// its S3 key (mirrors the server's `SnapshotResponse`).
 #[derive(Deserialize)]
 pub(crate) struct SnapshotMetadataResponse {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     #[allow(dead_code)]
     pub s3_key: String,
     /// Highest delta `seq` folded into the snapshot: the open path gates its
     /// `RequestMissing` on this to skip the already-replayed history.
     pub covered_seq: i64,
     /// `confirmed`, or `self` when only its author vouched for it (`SRV-128`).
-    #[serde(default)]
-    pub status: String,
+    pub status: ambre_core::SnapshotStatus,
     /// The author's signing key, hex. A `self` snapshot of this very user opens
     /// as it is.
     #[serde(default)]
@@ -771,7 +1122,8 @@ pub(crate) struct SnapshotMetadataResponse {
 /// The reference snapshot named beside a `self` one (`SRV-131`).
 #[derive(Deserialize)]
 pub(crate) struct ReferenceSnapshot {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     pub covered_seq: i64,
 }
 
@@ -794,7 +1146,8 @@ pub(crate) struct SnapshotUploadUrlResponse {
 /// Mirrors the server's `CreateSnapshotRequest`.
 #[derive(Serialize)]
 pub(crate) struct CreateSnapshotRequest {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     pub author_pubkey: String,
     pub parent_hash: Option<String>,
     pub parent_snapshot_proof: Option<String>,
@@ -806,13 +1159,15 @@ pub(crate) struct CreateSnapshotRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct CreateSnapshotResponse {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
 }
 
 /// Body of `POST /api/documents/{id}/snapshot/download-url`.
 #[derive(Serialize)]
 pub(crate) struct SnapshotDownloadUrlRequest {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
 }
 
 #[derive(Deserialize)]
@@ -827,7 +1182,8 @@ pub(crate) struct UserSearchResult {
 
 #[derive(Deserialize)]
 pub(crate) struct UserInfoEntry {
-    pub id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub id: ambre_core::UserId,
     pub email: String,
     pub display_name: String,
     /// The key an invitation's entry names for the invitee (`SYNC-132`).
@@ -845,10 +1201,12 @@ pub(crate) struct PubkeysResponse {
 #[derive(Serialize)]
 pub(crate) struct InviteRequest {
     pub invitee_email: String,
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     pub doc_key_enc: String,
     /// The key `doc_key_enc` wraps, in hex (`SYNC-143`).
-    pub key_id: String,
+    #[serde(with = "ambre_core::serde_id::key_id")]
+    pub key_id: ambre_core::KeyId,
     /// The entry the inviter signs for this invitation (`SYNC-132`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
@@ -865,14 +1223,16 @@ pub(crate) struct LeaveRequest {
 /// (`SYNC-132`).
 #[derive(Serialize)]
 pub(crate) struct RoleChangeRequest {
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub(crate) struct InviteResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
 }
 
@@ -880,7 +1240,8 @@ pub(crate) struct InviteResponse {
 pub(crate) struct RotateKeyRequest {
     pub keys: Vec<RotateKeyEntry>,
     /// Every member the rotation read, wrapped for or not (`SYNC-143`).
-    pub members: Vec<String>,
+    #[serde(with = "ambre_core::serde_id::user_id::vec")]
+    pub members: Vec<ambre_core::UserId>,
     /// The link to the key this rotation replaces, as [`encode_link`] writes
     /// it (`SYNC-118`).
     pub link: String,
@@ -890,10 +1251,12 @@ pub(crate) struct RotateKeyRequest {
 /// stays, applied by the relay in one transaction (`SYNC-126`).
 #[derive(Serialize)]
 pub(crate) struct RevokeRequest {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub keys: Vec<RotateKeyEntry>,
     /// Every member the revoke read and keeps, wrapped for or not (`SYNC-143`).
-    pub members: Vec<String>,
+    #[serde(with = "ambre_core::serde_id::user_id::vec")]
+    pub members: Vec<ambre_core::UserId>,
     /// The link to the key this revoke replaces (`SYNC-118`).
     pub link: String,
     /// The entry the owner signs for this revoke (`SYNC-132`).
@@ -949,14 +1312,33 @@ pub(crate) async fn fetch_key_links(
 
 #[derive(Serialize)]
 pub(crate) struct RotateKeyEntry {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub doc_key_enc: String,
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub(crate) struct RotateKeyResponse {
-    pub status: String,
+    pub status: ambre_core::RotationStatus,
+}
+
+/// The answer of a relay write that returns its outcome (`SRV-181`). A field
+/// beside the status, such as a confirmed media's hash, is not read.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WriteAnswer {
+    pub status: ambre_core::WriteStatus,
+}
+
+impl WriteAnswer {
+    /// Whether the relay answered the outcome of the write it was asked.
+    /// Another word of the set answers some other write.
+    pub(crate) fn expect(self, asked: ambre_core::WriteStatus) -> Result<(), String> {
+        if self.status == asked {
+            Ok(())
+        } else {
+            Err(format!("answered {:?}, not {asked:?}", self.status))
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -972,14 +1354,18 @@ pub(crate) struct DocumentMembersResponse {
 
 #[derive(Deserialize)]
 pub(crate) struct DocumentMemberEntry {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
     pub email: String,
     /// Ed25519 verifying key: feeds the presence directory (`presence_directory`).
     pub signing_pub_key: String,
     pub exchange_pub_key: String,
     pub doc_key_enc: String,
-    pub role: String,
+    /// The relay's column, which the signed log overrides (`SYNC-110`). An
+    /// unknown word refuses the whole answer when it is read (`SRV-180`).
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     /// Exchange key of whoever wrapped `doc_key_enc`. Our own row unwraps
     /// against it, which yields the log anchor (`SYNC-104`).
     #[serde(default)]
@@ -1233,11 +1619,13 @@ mod tests {
         let url = "https://relay.test/api/documents/d/members";
         let auth = session("access-1", "refresh-1");
         let body = serde_json::json!({});
-        let answer = |status: u16, code: &str| Ok((status, serde_json::json!({ "error": code })));
+        let answer = |status: u16, code: RefusalCode| {
+            Ok((status, serde_json::json!({ "error": code.as_str() })))
+        };
         let transport = Scripted::new([
-            answer(409, MEMBERS_CHANGED),
-            answer(403, SETUP_REQUIRED),
-            answer(500, SETUP_REQUIRED),
+            answer(409, RefusalCode::MembersChanged),
+            answer(403, RefusalCode::SetupRequired),
+            answer(500, RefusalCode::SetupRequired),
             Ok((404, serde_json::json!({}))),
             Err("network down".to_owned()),
         ]);
@@ -1256,69 +1644,184 @@ mod tests {
         assert!(transport.calls().iter().all(|(_, called)| called == url));
     }
 
+    /// Holds `SRV-181`: a write answer reads the relay's typed body, beside
+    /// any other field. Only the outcome of the write asked passes.
+    #[test]
+    fn a_write_answer_passes_the_outcome_asked_alone() {
+        use ambre_core::WriteStatus::{Confirmed, Revoked};
+        let read = |body| serde_json::from_value::<WriteAnswer>(body).unwrap();
+        let confirmed = serde_json::json!({ "status": "confirmed", "content_hash": "ab" });
+        assert_eq!(read(confirmed.clone()).expect(Confirmed), Ok(()));
+        let error = read(confirmed).expect(Revoked).unwrap_err();
+        assert_eq!(error, "answered Confirmed, not Revoked");
+    }
+
+    /// Holds `SYNC-152`: an answer naming a word this build does not know
+    /// reads as one. An adapter or a derived enum may refuse it. A malformed
+    /// identifier or a missing field does not read as one.
+    #[tokio::test]
+    async fn only_an_unknown_word_reads_as_one() {
+        #[derive(Debug, serde::Deserialize)]
+        struct Row {
+            #[serde(with = "ambre_core::serde_id::user_id")]
+            _user_id: ambre_core::UserId,
+            #[serde(with = "ambre_core::serde_enums::role")]
+            _role: ambre_core::Role,
+            _status: ambre_core::SnapshotStatus,
+        }
+        let url = "https://relay.test/api/documents/d/members";
+        let auth = session("access-1", "refresh-1");
+        let user = &ambre_core::UserId::new().to_string();
+        let row = |user: &str, role: &str, status: &str| {
+            Ok((
+                200,
+                serde_json::json!({ "_user_id": user, "_role": role, "_status": status }),
+            ))
+        };
+        let transport = Scripted::new([
+            row(user, "editor", "self"),
+            row(user, "auditor", "self"),
+            row(user, "editor", "vouched"),
+            row("not-an-id", "editor", "self"),
+            Ok((200, serde_json::json!({ "_user_id": user }))),
+        ]);
+        let read = || get_json_auth_via::<Row>(&transport, url, &auth);
+
+        assert!(read().await.is_ok());
+        assert!(is_unknown_word(&read().await.unwrap_err()), "a role");
+        assert!(is_unknown_word(&read().await.unwrap_err()), "a status");
+        assert!(!is_unknown_word(&read().await.unwrap_err()), "an id");
+        assert!(!is_unknown_word(&read().await.unwrap_err()), "a field");
+    }
+
     /// Only a 403 carrying the setup code reads as a setup refusal, and no
     /// URL makes another status read as one (`SYNC-134`).
     #[test]
     fn only_a_setup_refusal_reads_as_one() {
+        use RefusalCode::{Forbidden, SetupRequired};
         let url = "https://relay.example/api/documents";
         assert!(is_setup_refusal(&refusal(
             "GET",
             url,
             403,
-            Some(SETUP_REQUIRED)
+            Some(SetupRequired)
         )));
         assert!(!is_setup_refusal(&refusal(
             "GET",
             url,
             403,
-            Some("FORBIDDEN")
+            Some(Forbidden)
         )));
         assert!(!is_setup_refusal(&refusal("GET", url, 403, None)));
         assert!(!is_setup_refusal(&refusal(
             "GET",
             url,
             500,
-            Some(SETUP_REQUIRED)
+            Some(SetupRequired)
         )));
         let crafted = "https://relay.example/api/users/search?q=: SETUP_REQUIRED";
         assert!(!is_setup_refusal(&refusal("GET", crafted, 500, None)));
+    }
+
+    /// Only a 403 carrying the forbidden code reads as a want of access. A
+    /// setup refusal, a bare 403 and another status do not.
+    #[test]
+    fn only_a_forbidden_refusal_reads_as_one() {
+        use RefusalCode::{Forbidden, SetupRequired};
+        let url = "https://relay.example/api/channels/c/documents";
+        assert!(is_forbidden(&refusal("GET", url, 403, Some(Forbidden))));
+        assert!(!is_forbidden(&refusal(
+            "GET",
+            url,
+            403,
+            Some(SetupRequired)
+        )));
+        assert!(!is_forbidden(&refusal("GET", url, 403, None)));
+        assert!(!is_forbidden(&refusal("GET", url, 404, Some(Forbidden))));
+    }
+
+    /// A 409 with no code of its own reads as a conflict, and no other status
+    /// or code does.
+    #[test]
+    fn a_bare_409_reads_as_a_conflict() {
+        let url = "https://relay.example/api/channels/c/segments/s/lease";
+        assert!(is_conflict(&refusal("POST", url, 409, None)));
+        assert!(is_conflict(&refusal(
+            "POST",
+            url,
+            409,
+            Some(RefusalCode::Conflict)
+        )));
+        assert!(!is_conflict(&refusal(
+            "POST",
+            url,
+            409,
+            Some(RefusalCode::LogMoved)
+        )));
+        assert!(!is_conflict(&refusal("POST", url, 500, None)));
     }
 
     /// A 409 keeps the code of a membership or a key that moved, and no other
     /// status or code reads as either (`SYNC-143`).
     #[test]
     fn a_moved_membership_or_key_reads_as_its_own_refusal() {
+        use RefusalCode::{Conflict, KeyChanged, LogMoved, MembersChanged};
         let url = "https://relay.example/api/documents/d/revoke";
         assert!(is_members_changed(&refusal(
             "POST",
             url,
             409,
-            Some(MEMBERS_CHANGED)
+            Some(MembersChanged)
         )));
-        assert!(is_key_changed(&refusal(
-            "POST",
-            url,
-            409,
-            Some(KEY_CHANGED)
-        )));
+        assert!(is_key_changed(&refusal("POST", url, 409, Some(KeyChanged))));
+        assert!(is_log_moved(&refusal("POST", url, 409, Some(LogMoved))));
         assert!(!is_members_changed(&refusal(
             "POST",
             url,
             409,
-            Some("CONFLICT")
+            Some(Conflict)
         )));
         assert!(!is_members_changed(&refusal(
             "POST",
             url,
             500,
-            Some(MEMBERS_CHANGED)
+            Some(MembersChanged)
         )));
         assert!(!is_key_changed(&refusal(
             "POST",
             url,
             409,
-            Some(MEMBERS_CHANGED)
+            Some(MembersChanged)
         )));
+    }
+
+    /// Holds `SRV-182`: Sync reads the refusal's code from its closed set. A
+    /// code this build does not hold reads as the bare status, never as a
+    /// moved membership.
+    #[tokio::test]
+    async fn a_refusal_code_outside_the_set_reads_as_its_status() {
+        let url = "https://relay.test/api/documents/d/rotate";
+        let auth = session("access-1", "refresh-1");
+        let body = serde_json::json!({});
+        let transport = Scripted::new([
+            Ok((
+                409,
+                serde_json::json!({ "error": "LOG_MOVED", "message": "m" }),
+            )),
+            Ok((
+                409,
+                serde_json::json!({ "error": "QUOTA_EXCEEDED", "message": "m" }),
+            )),
+            Ok((
+                409,
+                serde_json::json!({ "error": "log_moved", "message": "m" }),
+            )),
+        ]);
+        let send = || send_json_auth_via(&transport, Method::Post, url, &body, &auth);
+
+        assert!(is_log_moved(&send().await.unwrap_err()));
+        assert_eq!(send().await.unwrap_err(), format!("POST {url}: HTTP 409"));
+        assert_eq!(send().await.unwrap_err(), format!("POST {url}: HTTP 409"));
     }
 
     /// An unlock finding no master material reads as a setup owed, not as a

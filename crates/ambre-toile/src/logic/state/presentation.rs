@@ -169,7 +169,7 @@ impl ToileState {
     /// Build the outcome for a manual navigation from `old` to the just-updated
     /// `playback.active`. Emit the `SlideChanged` glide, clear any active
     /// follow first ("take control", prepending `FollowingChanged(None)`), and
-    /// attach a broadcast frame when broadcasting.
+    /// attach a broadcast sample when broadcasting.
     fn manual_nav_outcome(&mut self, old: usize) -> ToileOutcome {
         let mut display = Vec::new();
         if self.following.is_some() {
@@ -178,7 +178,7 @@ impl ToileState {
         }
         let change = self.slide_change(Some(old), self.playback.active);
         display.push(ToileEvent::SlideChanged(change));
-        ToileOutcome::display_and_ephemeral(display, self.slide_broadcast_frame())
+        ToileOutcome::display_and_ephemeral(display, self.slide_broadcast_sample())
     }
 
     /// Enter presentation (focus) mode, resetting to the first slide.
@@ -194,17 +194,17 @@ impl ToileState {
                 ToileEvent::PresentModeChanged(PresentMode::Presenting),
                 ToileEvent::SlideChanged(change),
             ],
-            self.slide_broadcast_frame(),
+            self.slide_broadcast_sample(),
         )
     }
 
-    /// Postcard-encode an ephemeral presence frame carrying the current active
-    /// slide index, but only when broadcasting is on ("Follow presenter"). The
-    /// frame carries `present_slide: Some(active)` and no cursor / selection. It
+    /// Postcard-encode a presence sample carrying the current active slide
+    /// index, but only when broadcasting is on ("Follow presenter"). The
+    /// sample carries `present_slide: Some(active)` and no cursor / selection. It
     /// transiently clears this presenter's cursor halo on followers until the
     /// next cursor sample, which is acceptable (presenters emit cursor / laser
     /// continuously). `None` when not broadcasting or on an encode failure.
-    fn slide_broadcast_frame(&self) -> Option<Vec<u8>> {
+    fn slide_broadcast_sample(&self) -> Option<Vec<u8>> {
         if !self.broadcasting {
             return None;
         }
@@ -225,14 +225,14 @@ impl ToileState {
     /// role only, no CRDT delta. When turning on while in present mode, the
     /// current slide is broadcast immediately so followers snap without waiting
     /// for the next navigation.
-    /// Turning it off broadcasts one last frame carrying no slide. The peers
+    /// Turning it off broadcasts one last sample carrying no slide. The peers
     /// then stop offering this viewer to follow at once, rather than at the
     /// presence timeout (`TOILE-UI-315`).
     pub(super) fn set_present_broadcast(&mut self, on: bool) -> ToileOutcome {
         let was = self.broadcasting;
         self.broadcasting = on;
         let ephemeral = if on {
-            self.slide_broadcast_frame()
+            self.slide_broadcast_sample()
         } else if was {
             silent_presence_frame()
         } else {
@@ -251,7 +251,7 @@ impl ToileState {
     /// Follow the presenter `who` (or stop with `None`), a local role only. No CRDT
     /// delta. If `Some(u)` and a broadcast slide from `u` is already known, snap to
     /// it at once (glide via `SlideChanged`). Otherwise the follower snaps on the
-    /// next inbound frame.
+    /// next inbound sample.
     pub(super) fn follow_presenter(&mut self, who: Option<UserId>) -> ToileOutcome {
         self.following = who;
         let mut display = vec![ToileEvent::FollowingChanged(who)];
@@ -549,7 +549,7 @@ impl ToileState {
     }
 }
 
-/// A presence frame carrying no slide: what a viewer sends when it stops
+/// A presence sample carrying no slide: what a viewer sends when it stops
 /// broadcasting (`TOILE-UI-315`). The peers read the whole live set, so a
 /// sample naming no slide is what drops this viewer from the presenters.
 fn silent_presence_frame() -> Option<Vec<u8>> {

@@ -52,13 +52,13 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 | `TOILE-UI-222` | `POST` | An arriving laser point MUST extend that peer's trail. | this spec section 3 | `ambre_toile::ui::presence::tests::laser_accumulates_a_fading_trail_and_clears_on_lift` -- the segment count after three points | none | verified |
 | `TOILE-UI-376` | `POST` | A sample carrying no laser point MUST clear that peer's trail: a lifted highlighter leaves nothing behind. | this spec section 3 | `ambre_toile::ui::presence::tests::laser_accumulates_a_fading_trail_and_clears_on_lift` -- the segment count after the lift | none | verified |
 | `TOILE-180` | `FRAME` | An arriving sample MUST NOT move this viewer's camera, selection or slide -- unless the viewer follows the sender, which is the one exception (`features/ambre-spec-toile-presentation.md`). | this spec section 3 | `ambre_toile::ui::view::view_tests::an_arriving_sample_keeps_the_camera_and_the_selection`; `ambre_toile::logic::convergence_tests::non_follower_ignores_broadcast` -- the slide stays; `ambre_toile::logic::convergence_tests::following_other_peer_ignores_broadcast`; `ambre_toile::logic::convergence_tests::follower_adopts_presenter_slide` -- the one exception | none | verified |
-| `TOILE-181` | `FAIL` | Given a sample it cannot read, the client MUST drop it and MUST NOT announce anything: presence is best effort, and the next sample corrects it. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_drops_a_malformed_frame` -- no event comes out of a malformed frame | none | verified |
+| `TOILE-181` | `FAIL` | Given a sample it cannot read, the client MUST drop it and MUST NOT announce anything: presence is best effort, and the next sample corrects it. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_drops_a_malformed_sample` -- no event comes out of a malformed sample | none | verified |
 
 ### 1.3 Broadcast this peer's gesture
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-182` | `POST` | Broadcasting a gesture MUST produce one ephemeral frame whatever the frame's fate: presence is not acknowledged. | this spec section 3 | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- the frame is there | none | verified |
+| `TOILE-182` | `POST` | Broadcasting a gesture MUST produce one ephemeral whatever its fate: presence is not acknowledged. | this spec section 3 | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- the ephemeral is there | none | verified |
 | `TOILE-183` | `FRAME` | Broadcasting MUST NOT write a delta, MUST NOT push an undo item, and MUST NOT ask for a repaint: the local pointer is the browser's, not the board's. | this spec section 3 | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- the absent delta, the empty display list, and an undo that takes back the edit before the sample | none | verified |
 | `TOILE-184` | `FAIL` | Given a sample it cannot encode, the client MUST drop it silently and MUST NOT surface an error: a lost sample is corrected by the next one. | this spec section 3 | `ambre_toile::logic::state::presence::tests::a_sample_that_will_not_encode_is_dropped_silently` -- the encode is generic, so a value that refuses to serialize reaches the failing arm | none | verified |
 | `TOILE-UI-073` | `POST` | A gesture on the board MUST broadcast the local peer's cursor, selection and in-flight stroke. | this spec section 3 | `ambre_toile::ui::presence::tests::a_sample_is_sent_on_a_change_or_on_the_heartbeat` -- the schedule alone: a changed sample goes at once, an unchanged one waits for the heartbeat; `ambre_toile::ui::view::view_tests::a_gesture_sample_carries_the_cursor_the_selection_and_the_stroke` -- what one sample carries | none | verified |
@@ -68,7 +68,7 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 * **Budget.** the presence overlay under 1 ms per frame (`ambre-spec-budgets.md section 2`), held by no bench.
   It is skipped when no peer is known (`TOILE-UI-218`). A board with peers pays a scan of the visible
   set per ghost, section 6, and an alone board pays nothing.
-* **Boundary.** every presence frame leaves the client, sealed by `ZK-005`: the relay reads
+* **Boundary.** every presence sample leaves the client, sealed by `ZK-005`: the relay reads
   `document_id`, `pub_key` and `counter` alone. `ambre-sync` resolves the author first, so no peer
   paints a cursor under another name (`SYNC-014`).
 * **Verification.** 28 `verified`. What holds is the round trip: a sample leaves on every gesture
@@ -120,7 +120,7 @@ pub struct PresencePayload {
 a world point for the pointer and the laser, and the peer's `ElementId` set for the ghosts. Both
 survive a structural change, which is `PRESENCE-007`.
 
-**Command** (`ambre-bus`): `Presence { payload, now_ms }`, non-mutating, answered by an ephemeral frame: the
+**Command** (`ambre-bus`): `Presence { payload, now_ms }`, non-mutating, answered by an ephemeral: the
 local pointer is the browser's, not the board's. `now_ms` is the UI's wall clock, which the Logic thread does
 not hold. It never travels, and it is what ages the peers this client knows about. A sender's own clock
 decides nothing, so a wrong or hostile one ages nobody.
@@ -136,7 +136,7 @@ exists anywhere in the workspace.
 2. it sends it when it differs from the last one sent, or when the heartbeat is due. That heartbeat keeps this
    client in the others' live set, and it advances the Logic thread's only clock (`TOILE-UI-073`);
 3. the Logic thread stamps the session's display name on it (`TOILE-UI-076`), ages its own peers
-   against the clock, and hands the frame to Sync.
+   against the clock, and hands the sample to Sync.
 
 **Steps, when a peer leaves** (`PRESENCE-014`):
 
@@ -150,15 +150,15 @@ before the message existed. No peer is kept for good either way.
 
 **Steps, when a peer's sample arrives:**
 
-1. the frame is decoded and keyed by the `UserId` the transport resolved, never by anything the
+1. the sample is decoded and keyed by the `UserId` the transport resolved, never by anything the
    payload carries (`TOILE-177`);
 2. it replaces that peer's presence whole and is stamped with the local clock (`TOILE-178`);
 3. the whole live set travels to the view, which replaces its mirror with it, trails included
    (`TOILE-185`).
 
-**Steps, when a frame arrives:**
+**Steps, when an ephemeral arrives:**
 
-1. decode the sample, and drop the frame on a decode failure -- presence is best effort
+1. decode the sample, and drop the ephemeral on a decode failure -- presence is best effort
    (`TOILE-181`);
 2. record it under the sender's `UserId`, replacing that peer's previous sample;
 3. emit the event, and fold it into the render thread's mirror -- where the whole live set should
@@ -173,7 +173,7 @@ overlay accumulates the last 24 into a ring buffer.
 
 * `crates/ambre-toile/src/logic/state/presence.rs` -- the broadcast and the inbound apply;
 * `ui/presence.rs` -- the per-peer mirror and the whole overlay pass;
-* `crates/ambre-logic/src/data.rs` -- the routing of an inbound ephemeral frame to this application.
+* `crates/ambre-logic/src/data.rs` -- the routing of an inbound ephemeral to this application.
 
 ---
 
@@ -206,8 +206,8 @@ nothing hands it the display name the member list already carries (`TOILE-UI-076
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | The anchor is a world point for the pointer and an `ElementId` set for the ghosts | one anchor for both | it either drops the pointer to the nearest element or makes a ghost a rectangle that stops following its shape. The two halves answer two questions: a pointer is between elements as often as on one, so it has no identity to name and a world point is already invariant under everything but a pan, which is the viewer's own; a ghost outlines elements, which do have identities, and those survive a move, a restyle and a regroup (`PRESENCE-007`) |
-| A sample is the peer's whole presence, and a missing field means absent | a per-field patch | it needs one presence-or-absence flag per field and makes the receiver's state depend on the order frames arrive in, so two peers can disagree about which of two samples cleared what. Replacing costs the sender the fields that did not change, and buys a state that is exactly the last sample received |
-| The trail is accumulated by the receiver | streaming the whole trail in each sample | one point per frame is a fixed sample cost whatever the trail length, and a lost frame shortens the trail instead of breaking it |
+| A sample is the peer's whole presence, and a missing field means absent | a per-field patch | it needs one presence-or-absence flag per field and makes the receiver's state depend on the order samples arrive in, so two peers can disagree about which of two samples cleared what. Replacing costs the sender the fields that did not change, and buys a state that is exactly the last sample received |
+| The trail is accumulated by the receiver | streaming the whole trail in each sample | one point per frame is a fixed sample cost whatever the trail length, and a lost sample shortens the trail instead of breaking it |
 | The highlighter never becomes an element | committing the trail as a stroke | it is a pointing gesture during a discussion; an element would enter the history, the undo stack and every export |
 
 ---

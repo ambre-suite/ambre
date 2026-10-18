@@ -21,7 +21,10 @@
 //!   `UpdateRequired`): unsolicited.
 
 use crate::sync_warning::SyncWarningCode;
-use crate::{ChannelId, DocType, DocumentId, MeetingId, RequestId, RestEvent, Role, UserId};
+use crate::{
+    ChannelActivity, ChannelId, ChannelMatches, DirectMessageEvent, DocType, DocumentId, MeetingId,
+    MemberChannel, MurmureEvent, RequestId, RestEvent, Role, SpaceEvent, SpaceId, UserId,
+};
 
 // -----------------------------------------------------------------------------
 // UiEvent -- Logic thread -> UI Thread
@@ -95,25 +98,42 @@ pub enum UiEvent {
     },
 
     // -- Channels (Murmure) -- real-time push -----------------------------------
-    /// Inbound channel message (decrypted by the Sync thread).
-    ///
-    /// `payload` is an opaque application byte blob (schema owned by
-    /// `ambre-murmure`).
-    ChannelMessage {
+    /// What an open channel's engine tells its view (`BUS-027`): typed, never
+    /// an opaque payload (`BUS-028`).
+    Channel {
         channel_id: ChannelId,
-        payload: Vec<u8>,
+        event: MurmureEvent,
     },
 
-    /// Inbound ephemeral channel event (typing indicator, presence, ...).
-    ChannelPresenceUpdate {
-        channel_id: ChannelId,
-        payload: Vec<u8>,
+    /// Which channels hold something new: the relay's answer at start, or a
+    /// channel just read (the Murmure unread spec). A channel absent here keeps the
+    /// mark the view last drew for it.
+    ChannelActivity { channels: Vec<ChannelActivity> },
+
+    /// Every channel this user is a member of, whole. It comes at start, and
+    /// again each time the relay adds the user to one. None of them is open.
+    MemberChannels { channels: Vec<MemberChannel> },
+
+    /// The answer to [`crate::LogicCommand::SearchMessages`]: one entry per
+    /// open channel, each stating the segments it covered. A query with no
+    /// word answers no channel.
+    MessageSearch {
+        query: String,
+        channels: Vec<ChannelMatches>,
     },
 
-    /// WebSocket connection status for a channel.
-    ChannelConnectionStatus {
-        channel_id: ChannelId,
-        connected: bool,
+    /// What an open space tells its view: its catalogue, and the outcome of
+    /// a creation or a join.
+    Space {
+        space_id: SpaceId,
+        event: SpaceEvent,
+    },
+
+    /// The outcome of a direct message request, under the channel id the
+    /// request minted.
+    DirectMessage {
+        requested: ChannelId,
+        event: DirectMessageEvent,
     },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
@@ -130,6 +150,14 @@ pub enum UiEvent {
     },
 
     // -- Errors & warnings -----------------------------------------------------
+    /// A document could not open, and nothing of it is held. The UI ends its
+    /// loading screen and tells the user (`ambre-spec-message-bus.md`,
+    /// `BUS-030`).
+    DocumentOpenFailed {
+        document_id: DocumentId,
+        message: String,
+    },
+
     /// Authentication error (wrong passphrase, corrupted vault, network failure).
     AuthError { message: String },
 
@@ -180,6 +208,7 @@ impl UiEvent {
             | UiEvent::Presence { document_id, .. }
             | UiEvent::ConnectionStatus { document_id, .. }
             | UiEvent::DocumentReady { document_id, .. }
+            | UiEvent::DocumentOpenFailed { document_id, .. }
             | UiEvent::SyncWarning { document_id, .. }
             | UiEvent::MemberRevoked { document_id, .. } => Some(*document_id),
             _ => None,

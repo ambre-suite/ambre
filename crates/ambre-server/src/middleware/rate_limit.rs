@@ -180,10 +180,10 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
                 return (
                     StatusCode::SERVICE_UNAVAILABLE,
                     [("Retry-After", window_secs.to_string())],
-                    axum::Json(serde_json::json!({
-                        "error": "RATE_LIMITER_UNAVAILABLE",
-                        "message": "Service temporarily unavailable, please retry",
-                    })),
+                    crate::error::ErrorBody::json(
+                        ambre_core::RefusalCode::RateLimiterUnavailable,
+                        "Service temporarily unavailable, please retry",
+                    ),
                 )
                     .into_response();
             }
@@ -204,10 +204,10 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
                 ("X-RateLimit-Reset", reset.to_string()),
                 ("Retry-After", window_secs.to_string()),
             ],
-            axum::Json(serde_json::json!({
-                "error": "RATE_LIMITED",
-                "message": "Too many requests, please try again later",
-            })),
+            crate::error::ErrorBody::json(
+                ambre_core::RefusalCode::RateLimited,
+                "Too many requests, please try again later",
+            ),
         )
             .into_response();
     }

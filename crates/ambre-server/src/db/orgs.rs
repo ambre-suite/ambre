@@ -7,7 +7,8 @@ use super::*;
 #[derive(Debug, sqlx::FromRow)]
 #[allow(dead_code)]
 pub struct OrganizationRow {
-    pub id: uuid::Uuid,
+    #[sqlx(try_from = "PgId")]
+    pub id: ambre_core::OrgId,
     pub name: String,
     pub org_pubkey: Vec<u8>,
     pub shamir_threshold: i16,
@@ -19,10 +20,12 @@ pub struct OrganizationRow {
 #[derive(Debug, sqlx::FromRow)]
 #[allow(dead_code)]
 pub struct OrgMemberRow {
-    pub user_id: uuid::Uuid,
+    #[sqlx(try_from = "PgId")]
+    pub user_id: ambre_core::UserId,
     pub email: String,
     pub display_name: String,
-    pub role: String,
+    #[sqlx(try_from = "String")]
+    pub role: ambre_core::Role,
     pub shamir_share_enc: Option<Vec<u8>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -37,7 +40,7 @@ pub async fn create_organization(
     owner_id: &ambre_core::UserId,
     owner_share_enc: Option<&[u8]>,
 ) -> Result<OrganizationRow, AppError> {
-    let org_id = uuid::Uuid::new_v4();
+    let org_id = &ambre_core::OrgId::new();
     let uid = id_to_uuid(*owner_id);
 
     let mut tx = pool.begin().await?;
@@ -47,7 +50,7 @@ pub async fn create_organization(
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, name, org_pubkey, shamir_threshold, shamir_total, created_at",
     )
-    .bind(org_id)
+    .bind(id_to_uuid(*org_id))
     .bind(name)
     .bind(org_pubkey)
     .bind(shamir_threshold)
@@ -59,7 +62,7 @@ pub async fn create_organization(
         "INSERT INTO organization_members (org_id, user_id, role, shamir_share_enc)
          VALUES ($1, $2, 'owner', $3)",
     )
-    .bind(org_id)
+    .bind(id_to_uuid(*org_id))
     .bind(uid)
     .bind(owner_share_enc)
     .execute(&mut *tx)
@@ -72,13 +75,13 @@ pub async fn create_organization(
 /// Fetches an organization by id.
 pub async fn get_organization(
     pool: &PgPool,
-    org_id: uuid::Uuid,
+    org_id: &ambre_core::OrgId,
 ) -> Result<Option<OrganizationRow>, AppError> {
     sqlx::query_as::<_, OrganizationRow>(
         "SELECT id, name, org_pubkey, shamir_threshold, shamir_total, created_at
          FROM organizations WHERE id = $1",
     )
-    .bind(org_id)
+    .bind(id_to_uuid(*org_id))
     .fetch_optional(pool)
     .await
     .map_err(AppError::from)
@@ -106,14 +109,14 @@ pub async fn list_user_organizations(
 /// Updates an organization name (owner only).
 pub async fn update_organization(
     pool: &PgPool,
-    org_id: uuid::Uuid,
+    org_id: &ambre_core::OrgId,
     name: &str,
 ) -> Result<Option<OrganizationRow>, AppError> {
     sqlx::query_as::<_, OrganizationRow>(
         "UPDATE organizations SET name = $2 WHERE id = $1
          RETURNING id, name, org_pubkey, shamir_threshold, shamir_total, created_at",
     )
-    .bind(org_id)
+    .bind(id_to_uuid(*org_id))
     .bind(name)
     .fetch_optional(pool)
     .await
@@ -121,9 +124,12 @@ pub async fn update_organization(
 }
 
 /// Deletes an organization (cascades to members via FK constraint).
-pub async fn delete_organization(pool: &PgPool, org_id: uuid::Uuid) -> Result<bool, AppError> {
+pub async fn delete_organization(
+    pool: &PgPool,
+    org_id: &ambre_core::OrgId,
+) -> Result<bool, AppError> {
     let rows = sqlx::query("DELETE FROM organizations WHERE id = $1")
-        .bind(org_id)
+        .bind(id_to_uuid(*org_id))
         .execute(pool)
         .await?
         .rows_affected();
@@ -156,9 +162,9 @@ fn map_member_user_fk(e: sqlx::Error) -> AppError {
 /// UPDATE`) so concurrent demotions cannot both pass the count.
 pub async fn add_org_member(
     pool: &PgPool,
-    org_id: uuid::Uuid,
-    user_id: uuid::Uuid,
-    role: &str,
+    org_id: &ambre_core::OrgId,
+    user_id: &ambre_core::UserId,
+    role: ambre_core::Role,
     shamir_share_enc: Option<&[u8]>,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
@@ -166,12 +172,13 @@ pub async fn add_org_member(
     let current_role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM organization_members WHERE org_id = $1 AND user_id = $2 FOR UPDATE",
     )
-    .bind(org_id)
-    .bind(user_id)
+    .bind(id_to_uuid(*org_id))
+    .bind(id_to_uuid(*user_id))
     .fetch_optional(&mut *tx)
     .await?;
+    let current_role = decode_role_opt(current_role)?;
 
-    if current_role.as_deref() == Some("owner") && role != "owner" {
+    if current_role == Some(ambre_core::Role::Owner) && role != ambre_core::Role::Owner {
         ensure_not_last_owner(&mut tx, org_id).await?;
     }
 
@@ -180,9 +187,9 @@ pub async fn add_org_member(
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (org_id, user_id) DO UPDATE SET role = $3, shamir_share_enc = COALESCE($4, organization_members.shamir_share_enc)"
     )
-    .bind(org_id)
-    .bind(user_id)
-    .bind(role)
+    .bind(id_to_uuid(*org_id))
+    .bind(id_to_uuid(*user_id))
+    .bind(role.as_str())
     .bind(shamir_share_enc)
     .execute(&mut *tx)
     .await
@@ -196,12 +203,12 @@ pub async fn add_org_member(
 /// the target owner's row locked, so the count is stable for the transaction.
 async fn ensure_not_last_owner(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    org_id: uuid::Uuid,
+    org_id: &ambre_core::OrgId,
 ) -> Result<(), AppError> {
     let owners: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM organization_members WHERE org_id = $1 AND role = 'owner'",
     )
-    .bind(org_id)
+    .bind(id_to_uuid(*org_id))
     .fetch_one(&mut **tx)
     .await?;
     if owners <= 1 {
@@ -215,7 +222,7 @@ async fn ensure_not_last_owner(
 /// Lists members of an organization.
 pub async fn list_org_members(
     pool: &PgPool,
-    org_id: uuid::Uuid,
+    org_id: &ambre_core::OrgId,
 ) -> Result<Vec<OrgMemberRow>, AppError> {
     sqlx::query_as::<_, OrgMemberRow>(
         "SELECT om.user_id, u.email, u.display_name, om.role, om.shamir_share_enc,
@@ -225,7 +232,7 @@ pub async fn list_org_members(
          WHERE om.org_id = $1
          ORDER BY om.created_at",
     )
-    .bind(org_id)
+    .bind(id_to_uuid(*org_id))
     .fetch_all(pool)
     .await
     .map_err(AppError::from)
@@ -234,16 +241,16 @@ pub async fn list_org_members(
 /// Fetches a single org membership row (raw, without user join).
 pub async fn get_org_member(
     pool: &PgPool,
-    org_id: uuid::Uuid,
-    user_id: uuid::Uuid,
+    org_id: &ambre_core::OrgId,
+    user_id: &ambre_core::UserId,
 ) -> Result<Option<OrgMembershipRow>, AppError> {
     sqlx::query_as::<_, OrgMembershipRow>(
         "SELECT org_id, user_id, role, shamir_share_enc, created_at
          FROM organization_members
          WHERE org_id = $1 AND user_id = $2",
     )
-    .bind(org_id)
-    .bind(user_id)
+    .bind(id_to_uuid(*org_id))
+    .bind(id_to_uuid(*user_id))
     .fetch_optional(pool)
     .await
     .map_err(AppError::from)
@@ -254,10 +261,13 @@ pub async fn get_org_member(
 #[allow(dead_code)]
 pub struct OrgMembershipRow {
     #[allow(dead_code)]
-    pub org_id: uuid::Uuid,
+    #[sqlx(try_from = "PgId")]
+    pub org_id: ambre_core::OrgId,
     #[allow(dead_code)]
-    pub user_id: uuid::Uuid,
-    pub role: String,
+    #[sqlx(try_from = "PgId")]
+    pub user_id: ambre_core::UserId,
+    #[sqlx(try_from = "String")]
+    pub role: ambre_core::Role,
     #[allow(dead_code)]
     pub shamir_share_enc: Option<Vec<u8>>,
     #[allow(dead_code)]
@@ -272,29 +282,30 @@ pub struct OrgMembershipRow {
 /// row locked so two concurrent removals cannot both see two owners.
 pub async fn remove_org_member(
     pool: &PgPool,
-    org_id: uuid::Uuid,
-    user_id: uuid::Uuid,
+    org_id: &ambre_core::OrgId,
+    user_id: &ambre_core::UserId,
 ) -> Result<bool, AppError> {
     let mut tx = pool.begin().await?;
 
     let current_role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM organization_members WHERE org_id = $1 AND user_id = $2 FOR UPDATE",
     )
-    .bind(org_id)
-    .bind(user_id)
+    .bind(id_to_uuid(*org_id))
+    .bind(id_to_uuid(*user_id))
     .fetch_optional(&mut *tx)
     .await?;
+    let current_role = decode_role_opt(current_role)?;
 
     let Some(current_role) = current_role else {
         return Ok(false);
     };
-    if current_role == "owner" {
+    if current_role == ambre_core::Role::Owner {
         ensure_not_last_owner(&mut tx, org_id).await?;
     }
 
     let rows = sqlx::query("DELETE FROM organization_members WHERE org_id = $1 AND user_id = $2")
-        .bind(org_id)
-        .bind(user_id)
+        .bind(id_to_uuid(*org_id))
+        .bind(id_to_uuid(*user_id))
         .execute(&mut *tx)
         .await?
         .rows_affected();
@@ -309,28 +320,29 @@ pub async fn remove_org_member(
 /// refused with a 409 (see `remove_org_member`).
 pub async fn update_org_member_role(
     pool: &PgPool,
-    org_id: uuid::Uuid,
-    user_id: uuid::Uuid,
-    role: &str,
+    org_id: &ambre_core::OrgId,
+    user_id: &ambre_core::UserId,
+    role: ambre_core::Role,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
 
     let current_role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM organization_members WHERE org_id = $1 AND user_id = $2 FOR UPDATE",
     )
-    .bind(org_id)
-    .bind(user_id)
+    .bind(id_to_uuid(*org_id))
+    .bind(id_to_uuid(*user_id))
     .fetch_optional(&mut *tx)
     .await?;
+    let current_role = decode_role_opt(current_role)?;
 
-    if current_role.as_deref() == Some("owner") && role != "owner" {
+    if current_role == Some(ambre_core::Role::Owner) && role != ambre_core::Role::Owner {
         ensure_not_last_owner(&mut tx, org_id).await?;
     }
 
     sqlx::query("UPDATE organization_members SET role = $3 WHERE org_id = $1 AND user_id = $2")
-        .bind(org_id)
-        .bind(user_id)
-        .bind(role)
+        .bind(id_to_uuid(*org_id))
+        .bind(id_to_uuid(*user_id))
+        .bind(role.as_str())
         .execute(&mut *tx)
         .await?;
 
@@ -342,36 +354,41 @@ pub async fn update_org_member_role(
 #[allow(dead_code)]
 pub async fn get_org_shamir_shares(
     pool: &PgPool,
-    org_id: uuid::Uuid,
-) -> Result<Vec<(uuid::Uuid, Vec<u8>)>, AppError> {
+    org_id: &ambre_core::OrgId,
+) -> Result<Vec<(ambre_core::UserId, Vec<u8>)>, AppError> {
     let rows = sqlx::query(
         "SELECT user_id, shamir_share_enc FROM organization_members WHERE org_id = $1 AND shamir_share_enc IS NOT NULL"
     )
-    .bind(org_id)
+    .bind(id_to_uuid(*org_id))
     .fetch_all(pool)
     .await?;
     let shares = rows
         .iter()
-        .map(|r| Ok((r.try_get("user_id")?, r.try_get("shamir_share_enc")?)))
-        .collect::<Result<Vec<(uuid::Uuid, Vec<u8>)>, sqlx::Error>>()?;
+        .map(|r| {
+            Ok((
+                r.try_get::<PgId, _>("user_id")?.into(),
+                r.try_get("shamir_share_enc")?,
+            ))
+        })
+        .collect::<Result<Vec<(ambre_core::UserId, Vec<u8>)>, sqlx::Error>>()?;
     Ok(shares)
 }
 
 /// Logs a master key recovery event.
 pub async fn log_org_recovery(
     pool: &PgPool,
-    org_id: uuid::Uuid,
-    target_user_id: uuid::Uuid,
-    recovered_by: uuid::Uuid,
+    org_id: &ambre_core::OrgId,
+    target_user_id: &ambre_core::UserId,
+    recovered_by: &ambre_core::UserId,
     reason: Option<&str>,
 ) -> Result<(), AppError> {
     sqlx::query(
         "INSERT INTO org_recovery_log (org_id, target_user_id, recovered_by, reason)
          VALUES ($1, $2, $3, $4)",
     )
-    .bind(org_id)
-    .bind(target_user_id)
-    .bind(recovered_by)
+    .bind(id_to_uuid(*org_id))
+    .bind(id_to_uuid(*target_user_id))
+    .bind(id_to_uuid(*recovered_by))
     .bind(reason)
     .execute(pool)
     .await?;
@@ -381,10 +398,10 @@ pub async fn log_org_recovery(
 /// Fetches the organization master key for a specific user (encrypted with org pubkey).
 pub async fn get_user_org_master_key_enc(
     pool: &PgPool,
-    user_id: uuid::Uuid,
+    user_id: &ambre_core::UserId,
 ) -> Result<Option<Vec<u8>>, AppError> {
     let row = sqlx::query("SELECT org_master_key_enc FROM users WHERE id = $1")
-        .bind(user_id)
+        .bind(id_to_uuid(*user_id))
         .fetch_optional(pool)
         .await?;
     Ok(row.and_then(|r| {

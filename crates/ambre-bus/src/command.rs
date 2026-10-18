@@ -23,8 +23,9 @@ use ambre_core::SessionNonce;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ChannelId, DocType, DocumentId, RequestId, RestCommand, SnapshotId, SnapshotPurpose,
-    SnapshotVerdict,
+    ActivitySummary, ChannelId, DirectMember, DocType, DocumentId, LeaseId, MessageId, MetaId,
+    RequestId, RestCommand, SealedChannelKey, SegmentId, Seq, SnapshotId, SnapshotPurpose,
+    SnapshotVerdict, SpaceId,
 };
 
 /// Command sent from the Logic thread to the Sync thread.
@@ -69,6 +70,11 @@ pub enum SyncCommand {
     SendUpdate {
         document_id: DocumentId,
         payload: Vec<u8>,
+        /// What the delta holds, when the application wrote a summary
+        /// (`ambre-spec-residency.md`). A Murmure message carries one
+        /// (the Murmure messages spec). The Sync worker seals it inside the ciphertext
+        /// (`SYNC-113`), or drops it while that seal is not built.
+        summary: Option<ActivitySummary>,
     },
 
     /// The operations an earlier session of this user wrote and never sent.
@@ -111,23 +117,177 @@ pub enum SyncCommand {
         document_id: DocumentId,
     },
 
-    // -- Channel sync session (control) ----------------------------------------
+    // -- Channel (control) -----------------------------------------------------
+    /// List the documents a channel groups. Answered by
+    /// [`crate::LogicEvent::ChannelDocuments`], by
+    /// [`crate::LogicEvent::ChannelRefused`], or by
+    /// [`crate::LogicEvent::ChannelOpenFailed`]. Each document then opens
+    /// through [`SyncCommand::OpenDocument`]: a channel has no session of its
+    /// own (`SRV-102`).
     OpenChannel {
         channel_id: ChannelId,
+        /// The open space whose catalogue lists the channel, if one does. Its
+        /// log then admits a self-join (`SYNC-106`), and the log of the space
+        /// verifies its removals and its key links. The Logic thread knows
+        /// the catalogues; the Sync worker does not.
+        listed_in: Option<SpaceId>,
     },
-    CloseChannel {
-        channel_id: ChannelId,
+    /// Rotate what a leave left owed in an open space. The space key goes
+    /// first, when the relay says the space owes it. Then each public
+    /// channel whose sealed key predates the current space key gets a new
+    /// key. `channels` is the catalogue: each entry's channel and its sealed
+    /// key. Each new key is answered by
+    /// [`crate::LogicEvent::ChannelKeyResealed`]; a failure is logged, and
+    /// the next open of the space tries again.
+    RotateSpace {
+        space_id: SpaceId,
+        channels: Vec<(ChannelId, SealedChannelKey)>,
     },
-    /// The Sync thread manages segments internally (creation, sealing, routing);
-    /// the Logic thread sends a raw payload routed into the active segment.
-    SendChannelUpdate {
+    /// Create a channel of a space on the relay: one channel key, its `meta`
+    /// and first segment documents under it, and the channel record.
+    /// Answered by [`crate::LogicEvent::ChannelCreated`] or by
+    /// [`crate::LogicEvent::ChannelRequestFailed`]. A public channel's answer
+    /// carries the key sealed under the key of the space, for the catalogue.
+    /// Its space document must then have an open session, which holds the
+    /// space key. A private channel is listed nowhere, and gets no sealed key.
+    CreateChannel {
         channel_id: ChannelId,
+        space_id: SpaceId,
+        meta: MetaId,
+        segment: SegmentId,
+        public: bool,
+    },
+    /// Close the active segment `closing` of an open channel into
+    /// `successor` (the Murmure segments spec). The Sync worker creates the
+    /// successor on the relay under the current key of `meta`, then asks the
+    /// relay to close. Answered by [`crate::LogicEvent::SegmentClosed`] or
+    /// by [`crate::LogicEvent::SegmentCloseFailed`].
+    CloseSegment {
+        channel_id: ChannelId,
+        meta: MetaId,
+        closing: SegmentId,
+        successor: SegmentId,
+    },
+    /// Create `amendments` on the relay under the current key of `meta`,
+    /// then register it as the amendments of the locked `segment`
+    /// (`SRV-201`). Answered by [`crate::LogicEvent::AmendmentsLinked`] or
+    /// by [`crate::LogicEvent::AmendmentsLinkFailed`].
+    CreateAmendments {
+        channel_id: ChannelId,
+        meta: MetaId,
+        segment: SegmentId,
+        amendments: DocumentId,
+    },
+    /// Create `thread` on the relay under the current key of `meta`, then
+    /// register it as the thread of `root`, a message of `segment`
+    /// (`SRV-213`). Answered by [`crate::LogicEvent::ThreadLinked`] or by
+    /// [`crate::LogicEvent::ThreadLinkFailed`].
+    CreateThread {
+        channel_id: ChannelId,
+        meta: MetaId,
+        segment: SegmentId,
+        root: MessageId,
+        thread: DocumentId,
+    },
+    /// Ask the relay for the finalize lease of the closing segment `segment`
+    /// (the Murmure segments spec). Answered by
+    /// [`crate::LogicEvent::FinalizeLeaseAnswered`] or by
+    /// [`crate::LogicEvent::SegmentFinalizeFailed`].
+    TakeFinalizeLease {
+        channel_id: ChannelId,
+        segment: SegmentId,
+    },
+    /// Upload `payload`, the final snapshot of `segment` up to `horizon`,
+    /// then commit it under `lease`. Answered by
+    /// [`crate::LogicEvent::SegmentFinalized`] or by
+    /// [`crate::LogicEvent::SegmentFinalizeFailed`].
+    FinalizeSegment {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        lease: LeaseId,
+        horizon: u64,
         payload: Vec<u8>,
     },
-    SendChannelEphemeral {
+    /// Ask the relay for the lease that folds the amendments of the final
+    /// segment `segment` into it (`SRV-204`). Answered by
+    /// [`crate::LogicEvent::FoldLeaseAnswered`] or by
+    /// [`crate::LogicEvent::SegmentFoldFailed`].
+    TakeFoldLease {
         channel_id: ChannelId,
+        segment: SegmentId,
+    },
+    /// Upload `payload`, the fold snapshot of `segment` up to `horizon`,
+    /// then commit it under `lease` as reaching the delta `amendments_seq`
+    /// of its amendments (`SRV-207`). Answered by
+    /// [`crate::LogicEvent::SegmentFolded`] or by
+    /// [`crate::LogicEvent::SegmentFoldFailed`].
+    FoldSegment {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        lease: LeaseId,
+        horizon: u64,
+        amendments_seq: u64,
         payload: Vec<u8>,
     },
+    /// Count a segment of a closed channel as a light subscription, from its
+    /// first number. It opens under the key of the light subscription of
+    /// `meta`, as every document of the channel does.
+    WatchSegment {
+        segment: SegmentId,
+        meta: MetaId,
+    },
+    /// Count a thread whose root is not on screen as a light subscription,
+    /// from the number after `after` (the Murmure threads spec). It opens
+    /// under the key of `meta`, and no document is loaded.
+    WatchThread {
+        thread: DocumentId,
+        meta: MetaId,
+        after: Seq,
+    },
+    /// Join a public channel alone. The Sync worker unseals `key` with the
+    /// space key, wraps it for this user alone, and asks for the member row.
+    /// Answered by [`crate::LogicEvent::ChannelJoined`] or
+    /// [`crate::LogicEvent::ChannelRequestFailed`].
+    JoinChannel {
+        channel_id: ChannelId,
+        space_id: SpaceId,
+        key: SealedChannelKey,
+    },
+    /// Delete a channel with every document it groups (`SRV-142`). Answered
+    /// by [`crate::LogicEvent::ChannelDeleted`] or by
+    /// [`crate::LogicEvent::ChannelRequestFailed`].
+    DeleteChannel {
+        channel_id: ChannelId,
+    },
+    /// Remove this user from a channel: a signed `Revoke` of themselves on
+    /// its `meta`, posted with no rotation (`SYNC-127`). Answered by
+    /// [`crate::LogicEvent::ChannelLeft`] or by
+    /// [`crate::LogicEvent::ChannelRequestFailed`].
+    LeaveChannel {
+        channel_id: ChannelId,
+    },
+    /// Open or create the direct message of this user and `members`, in one
+    /// request. It carries one channel key wrapped for each member alone, and
+    /// a log in which nobody stays owner. Answered by
+    /// [`crate::LogicEvent::DirectMessageOpened`] or
+    /// [`crate::LogicEvent::ChannelRequestFailed`] under `channel_id`.
+    CreateDirectMessage {
+        channel_id: ChannelId,
+        meta: MetaId,
+        segment: SegmentId,
+        members: Vec<DirectMember>,
+    },
+    /// List the channels the relay holds as public in a space (`SRV-189`).
+    /// Answered by [`crate::LogicEvent::SpaceChannels`]; a failure is logged
+    /// and answers nothing, since the next open of the space asks again.
+    ListSpaceChannels {
+        space_id: SpaceId,
+    },
+    /// List every channel this user is a member of, private channels and
+    /// direct messages included (`SRV-191`). Answered by
+    /// [`crate::LogicEvent::MemberChannels`]; a failure is logged and answers
+    /// nothing, since the next share of a Murmure document asks again.
+    ListMemberChannels,
 
     // -- Flow control (posted by the Main relay, never by Logic) ---------------
     /// The path back to the Logic thread is full: stop reading the socket
@@ -135,6 +295,36 @@ pub enum SyncCommand {
     HoldInbound,
     /// The path back has room again: reopen the socket and catch up.
     ReleaseInbound,
+
+    // -- Read cursors (Murmure) --------------------------------------------------
+    /// Move the read cursors of one channel to its latest message
+    /// (the Murmure unread spec). Each `live` segment moves to the last sequence number
+    /// this worker delivered, so a message sequenced and not yet shown stays
+    /// unread. Each `finals` segment no longer changes, so the relay moves it
+    /// to its own last number.
+    MarkRead {
+        live: Vec<SegmentId>,
+        finals: Vec<SegmentId>,
+    },
+    /// Move the cursor of each listed segment to the number beside it, back
+    /// as well as forward: marking a message unread (the Murmure unread
+    /// spec). Only the listed segments move.
+    MoveReadCursors {
+        cursors: Vec<(SegmentId, Seq)>,
+    },
+    /// Move the cursor of one thread to the last sequence number this worker
+    /// delivered on it (the Murmure threads spec). A reply sequenced and not
+    /// yet shown stays past it.
+    MarkThreadRead {
+        thread: DocumentId,
+    },
+    /// Move every read cursor of the user to its document's last number
+    /// (the Murmure unread spec), then answer with a fresh
+    /// [`crate::LogicEvent::ChannelActivity`].
+    MarkAllRead,
+    /// Ask the relay which channel documents hold something past the user's
+    /// cursors (`SRV-109`). Answered by [`crate::LogicEvent::ChannelActivity`].
+    FetchActivity,
 
     // -- Lifecycle -------------------------------------------------------------
     Shutdown,

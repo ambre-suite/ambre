@@ -39,6 +39,9 @@ ambre-toile     = { path = "../ambre-toile" }
 # The Prose engine: one `DocState` arm, like Trame and Toile
 # (`features/ambre-spec-prose-engine.md`).
 ambre-prose     = { path = "../ambre-prose" }
+# The Murmure engine: channels, held apart from `docs`
+# (`features/ambre-spec-murmure-engine.md`).
+ambre-murmure   = { path = "../ambre-murmure" }
 
 # Fixture-only, host-only. `ambre-crypto` supplies `hash::chain_hash` for
 # the manifest digest; `serde_json` encodes the sidecar. `serde_json` is a

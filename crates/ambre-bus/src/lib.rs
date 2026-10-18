@@ -22,6 +22,7 @@
 //! `Rest*` payloads it carries, derives `Serialize`/`Deserialize` and is postcard-encoded
 //! on that hop.
 
+pub mod activity;
 pub mod app;
 pub mod command;
 pub mod conduit;
@@ -36,8 +37,20 @@ pub mod sync_warning;
 pub mod ui;
 
 // Re-export the main types for convenient use.
+pub use activity::{ActivityAnchor, ActivityKind, ActivitySummary};
+// The Murmure data plane, addressed to a channel rather than a document.
+pub use app::murmure::{
+    CatalogueEntry, CategoryView, ChannelActivity, ChannelDocument, ChannelMatches, ChannelPlace,
+    DirectMember, DirectMessageDraft, DirectMessageEvent, DocumentActivity, MemberChannel,
+    MemberView, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView,
+    MurmureCommand, MurmureEvent, Notice, Presence, PrivateChannelDraft, PublicChannelDraft,
+    Reaction, SealedChannelKey, SearchMatch, SpaceCommand, SpaceEvent, ThreadHead, Timestamp,
+    Topic, UnreadCount,
+};
 pub use command::SyncCommand;
-pub use event::{LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict};
+pub use event::{
+    FoldAnswer, LeaseAnswer, LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict,
+};
 // Trame data plane (command + event + value types) lives under `app::trame`;
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
 pub use app::trame::{
@@ -52,8 +65,8 @@ pub use logic::{AppCommand, LogicCommand};
 pub use lossy::{LossyOutcome, send_lossy};
 pub use outbox::{Outbox, SendOutcome};
 pub use rest::{
-    ChannelSummary, DocumentSummary, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent,
-    SecretBytes, SecretString, UnreadCount, UserInfo,
+    DocumentSummary, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent, SecretBytes,
+    SecretString, UserInfo,
 };
 pub use sink::CommandSink;
 pub use ui::{AppEvent, UiEvent};
@@ -134,7 +147,8 @@ pub enum CopyOutcome {
 }
 // Re-export core types so that users don't need to depend on ambre-core directly.
 pub use ambre_core::{
-    ChannelId, DocType, DocumentId, MeetingId, PublicKey, Role, SnapshotId, UserId, Uuid,
+    CategoryId, ChannelDocumentKind, ChannelId, DocType, DocumentId, LeaseId, MeetingId, MessageId,
+    MetaId, PublicKey, Role, SegmentId, Seq, SnapshotId, SpaceId, UserId, Uuid,
 };
 
 #[cfg(test)]

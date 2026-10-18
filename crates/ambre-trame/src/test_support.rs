@@ -55,6 +55,7 @@ impl MockSyncHandle {
             self.send(SyncCommand::SendUpdate {
                 document_id,
                 payload: payload.clone(),
+                summary: None,
             });
         }
         if let Some(payload) = &outcome.ephemeral {

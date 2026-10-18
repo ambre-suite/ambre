@@ -349,7 +349,7 @@ fn edit_emits_send_update_through_sink() {
     assert_eq!(sent.len(), 1, "one SendUpdate per mutating command");
     assert!(matches!(
         &sent[0],
-        SyncCommand::SendUpdate { document_id, payload }
+        SyncCommand::SendUpdate { document_id, payload, .. }
             if *document_id == doc && !payload.is_empty()
     ));
 }

@@ -118,7 +118,7 @@ its creation, which it starts (`SYNC-145`).
 identifier of its key (`SYNC-125`), its author key, the signature and the commitment tag. Its
 additional data is a domain string, the document id and the address.
 
-| The envelope gives a frame | A blob has |
+| The envelope gives a delta | A blob has |
 |---|---|
 | an author signature | the same: the open checks it against the key the blob carries |
 | a commitment tag | the same, binding it to the key |
@@ -203,7 +203,7 @@ of the three, and what is painted in the meantime, is the application's own feat
 | What a page does with a picture, and how it lays one out | `4-Prose/features/ambre-spec-prose-images.md` |
 | Which container holds an address | each application's schema document |
 | The presigned link, its lifetime and the access check before it | `ambre-spec-object-store.md`, `SRV-002`, `ZK-008` |
-| What a frame's seal gives that a blob's does not | `ambre-spec-sealed-envelope.md` |
+| What a delta's seal gives that a blob's does not | `ambre-spec-sealed-envelope.md` |
 | Which key seals a blob, and what a rotation does to it | `ambre-spec-key-rotation.md` |
 | What the relay may learn at all | `ambre-spec-zero-knowledge.md`, `ZK-007` |
 | Where the decoded pixels are held, and what evicts them | each application's media feature |

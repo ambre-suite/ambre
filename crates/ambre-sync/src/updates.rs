@@ -2,6 +2,22 @@ use super::*;
 use crate::rekey::SentFrame;
 use ambre_protocol::messages::Signature;
 
+/// The delay before Sync sends again the first delta the relay failed to
+/// sequence. Each later failure doubles it (`ambre-spec-budgets.md` section 8).
+const RESEND_RETRY_BASE_MS: u64 = 1_000;
+
+/// The failures Sync sends again after. One more holds the document
+/// (`ambre-spec-budgets.md` section 8, `SYNC-159`).
+const RESEND_RETRY_LIMIT: u32 = 5;
+
+/// The delay before sending again after the `failure`-th failure since the
+/// last echo, counted from one. Past the budget there is none.
+fn resend_retry_delay_ms(failure: u32) -> Option<u64> {
+    (1..=RESEND_RETRY_LIMIT)
+        .contains(&failure)
+        .then(|| RESEND_RETRY_BASE_MS << (failure - 1))
+}
+
 impl SyncState {
     // -- Causal quarantine (`ambre-spec-delta-order.md`) ------------
 
@@ -192,9 +208,7 @@ impl SyncState {
             let dl_url = format!(
                 "{url_scheme}://{api_base}/api/documents/{document_id}/snapshot/download-url"
             );
-            let body = http::SnapshotDownloadUrlRequest {
-                snapshot_id: snapshot_id.to_string(),
-            };
+            let body = http::SnapshotDownloadUrlRequest { snapshot_id };
             let blob = match http::post_json_auth::<_, http::SnapshotDownloadUrlResponse>(
                 &dl_url, &body, auth,
             )
@@ -344,17 +358,24 @@ impl SyncState {
         snapshot_id: SnapshotId,
         vouch: Vouch,
     ) {
-        if self.event_tx.is_none() {
+        let Some(tx) = self.event_tx.clone() else {
             tracing::info!("Sync: snapshot {snapshot_id:?} vouch, no relay (test path)");
             return;
-        }
+        };
         let base = format!("{}://{}", self.url_scheme, self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let sent =
                 send_vouch(&http::Fetch, &auth, &base, document_id, snapshot_id, &vouch).await;
-            if let Err(e) = sent {
-                tracing::warn!("Sync: snapshot {snapshot_id:?} vouch failed: {e}");
+            match sent {
+                Ok(Some(amendments)) => {
+                    let _ = tx.send(SyncEvent::AmendmentsFolded {
+                        document_id,
+                        amendments,
+                    });
+                }
+                Ok(None) => {}
+                Err(e) => tracing::warn!("Sync: snapshot {snapshot_id:?} vouch failed: {e}"),
             }
         });
     }
@@ -477,6 +498,7 @@ impl SyncState {
             // response. `None` only before the session is ready, which the guard
             // above already excluded on the wasm path.
             let my_user_id = self.user_id;
+            let rule = self.log_rule(document_id);
             // A snapshot this user confirmed alone is this user's own work, and
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self
@@ -490,6 +512,7 @@ impl SyncState {
                 // generate a fresh key and defer creation to the first update.
                 let mut signers = None;
                 let mut named_key = None;
+                let mut word = None;
                 let answer = MembersAnswer::classify(
                     http::get_json_opt_auth::<http::MembersResponse>(&members_url, auth.clone())
                         .await,
@@ -497,10 +520,11 @@ impl SyncState {
                 let (doc_key, server_created, signing_keys, role, rotation_owed) = match answer {
                     MembersAnswer::Exists(resp) => match &exchange_key {
                         Some(ek) => {
-                            match Self::opened_from_members(&resp, doc_id, ek, my_user_id) {
+                            match Self::opened_from_members(&resp, doc_id, ek, my_user_id, &rule) {
                                 Ok(o) => {
                                     signers = o.signers;
                                     named_key = o.named_key;
+                                    word = Some(o.word);
                                     (o.doc_key, true, o.signing_keys, o.role, o.rotation_owed)
                                 }
                                 Err(_) => {
@@ -582,10 +606,11 @@ impl SyncState {
                     .await
                     {
                         Ok(Some(meta)) => {
-                            let others = meta.status == "self" && meta.author_pubkey != own_key;
+                            let others = meta.status == ambre_core::SnapshotStatus::SelfConfirmed
+                                && meta.author_pubkey != own_key;
                             let (start_id, start_covered) = match (others, &meta.reference) {
-                                (false, _) => (Some(meta.snapshot_id.clone()), meta.covered_seq),
-                                (true, Some(r)) => (Some(r.snapshot_id.clone()), r.covered_seq),
+                                (false, _) => (Some(meta.snapshot_id), meta.covered_seq),
+                                (true, Some(r)) => (Some(r.snapshot_id), r.covered_seq),
                                 (true, None) => (None, 0),
                             };
                             if others {
@@ -593,20 +618,15 @@ impl SyncState {
                                     url_scheme,
                                     &api_base,
                                     doc_id,
-                                    &meta.snapshot_id,
+                                    meta.snapshot_id,
                                     auth.clone(),
                                 )
                                 .await;
-                                held_snapshot = SnapshotId::parse_str(&meta.snapshot_id)
-                                    .ok()
-                                    .zip(blob)
-                                    .map(|(snapshot_id, blob)| HeldSnapshot {
-                                        snapshot_id,
-                                        covered_seq: Seq(
-                                            u64::try_from(meta.covered_seq).unwrap_or(0)
-                                        ),
-                                        blob,
-                                    });
+                                held_snapshot = blob.map(|blob| HeldSnapshot {
+                                    snapshot_id: meta.snapshot_id,
+                                    covered_seq: Seq(u64::try_from(meta.covered_seq).unwrap_or(0)),
+                                    blob,
+                                });
                             }
                             // The local copy already folds in the relay's
                             // snapshot: no download, and the replay starts
@@ -614,14 +634,14 @@ impl SyncState {
                             let resumed = resume.filter(|horizon| {
                                 light::resumes(*horizon, u64::try_from(start_covered).unwrap_or(0))
                             });
-                            let payload = match (&start_id, resumed) {
+                            let payload = match (start_id, resumed) {
                                 (Some(id), None) => {
                                     http::download_snapshot(url_scheme, &api_base, doc_id, id, auth)
                                         .await
                                 }
                                 _ => None,
                             };
-                            let snap_id = start_id.and_then(|id| SnapshotId::parse_str(&id).ok());
+                            let snap_id = start_id;
                             // Only gate on the covered seq if the blob actually
                             // downloaded; otherwise a failed fetch would skip
                             // history that was never applied (data loss).
@@ -669,6 +689,13 @@ impl SyncState {
                     rotation_owed,
                     links,
                 });
+                // After the open, which made the session the word lands on.
+                if let Some(word) = word {
+                    let _ = tx.send(SyncEvent::LogWalked {
+                        document_id: doc_id,
+                        word,
+                    });
+                }
             });
         } else {
             let doc_key = DocumentKey::generate();
@@ -725,25 +752,23 @@ impl SyncState {
     /// the safe direction for a gate the server enforces anyway.
     ///
     /// The log walks from the anchor sealed with our copy (`SYNC-104`). A log
-    /// that does not verify leaves the open as it is (`SYNC-111`).
+    /// that does not verify leaves the open as it is (`SYNC-111`). It walks
+    /// under `rule`, the rule of the document's log (`SYNC-106`).
     pub(crate) fn opened_from_members(
         resp: &http::MembersResponse,
         document_id: DocumentId,
         exchange_key: &x25519_dalek::StaticSecret,
         my_user_id: Option<UserId>,
+        rule: &membership_log::LogRule,
     ) -> Result<OpenedMembers, String> {
         let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)?;
-        let log = crate::sharing::walk_served(document_id, anchor, &resp.log);
-        let role = crate::sharing::own_role(
-            resp.members
-                .iter()
-                .map(|m| (m.user_id.as_str(), m.role.as_str())),
-            my_user_id,
-        );
+        let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, rule);
+        let role =
+            crate::sharing::own_role(resp.members.iter().map(|m| (m.user_id, m.role)), my_user_id);
         let signing_keys = crate::sharing::presence_directory(
             resp.members
                 .iter()
-                .map(|m| (m.user_id.as_str(), m.signing_pub_key.as_str())),
+                .map(|m| (m.user_id, m.signing_pub_key.as_str())),
         );
         Ok(OpenedMembers {
             doc_key,
@@ -752,6 +777,7 @@ impl SyncState {
             rotation_owed: resp.rotation_owed,
             signers: log.signers().cloned(),
             named_key: my_user_id.and_then(|me| log.wraps(me)),
+            word: membership_log::SpaceWord::of(&log),
         })
     }
 
@@ -848,50 +874,74 @@ impl SyncState {
         if self.signing_key.is_none() || self.pending_pre_session_updates.is_empty() {
             return;
         }
-        let mut drained = Vec::new();
-        self.pending_pre_session_updates.retain(|(doc, payload)| {
-            if *doc == document_id {
-                drained.push(payload.clone());
-                false
-            } else {
-                true
-            }
-        });
+        let (drained, kept) = std::mem::take(&mut self.pending_pre_session_updates)
+            .into_iter()
+            .partition::<Vec<_>, _>(|(doc, ..)| *doc == document_id);
+        self.pending_pre_session_updates = kept;
         if !drained.is_empty() {
             tracing::info!(
                 "[Sync] flushing {} buffered pre-session update(s) doc={document_id}",
                 drained.len()
             );
         }
-        for payload in drained {
-            self.handle_send_update(document_id, payload);
+        for (_, payload, summary) in drained {
+            self.send_summarized_update(document_id, payload, summary);
         }
     }
 
+    /// An update with no summary, as most tests send one.
+    #[cfg(test)]
     pub(crate) fn handle_send_update(&mut self, document_id: DocumentId, payload: Vec<u8>) {
+        self.send_summarized_update(document_id, payload, None);
+    }
+
+    /// Sends a delta the Logic thread wrote, with the summary of what it
+    /// holds sealed beside it (`SYNC-113`).
+    pub(crate) fn send_summarized_update(
+        &mut self,
+        document_id: DocumentId,
+        payload: Vec<u8>,
+        summary: Option<ActivitySummary>,
+    ) {
         if self.signing_key.is_none() {
             // Session not established yet (for example an edit landed in the gap between
             // an F5 and DevLogin completing). Buffer instead of dropping; flushed
             // once the document opens (see `pending_pre_session_updates`).
             tracing::info!("[Sync] SendUpdate before session ready, buffering doc={document_id}");
             self.pending_pre_session_updates
-                .push((document_id, payload));
+                .push((document_id, payload, summary));
             return;
         }
         // The nonce rides inside the ciphertext, ahead of the delta
         // (`SYNC-112`). A document opened with no identity has written nothing
         // the Logic thread would send.
         let Some(nonce) = self.session_nonces.get(&document_id) else {
+            if !self.documents.contains_key(&document_id) {
+                // No session of this document: the update cannot reach the
+                // relay, so the refusal is said aloud (`SYNC-069`).
+                self.send_to_logic(LogicEvent::SyncWarning {
+                    document_id,
+                    code: SyncWarningCode::UpdateRefused,
+                    message: "update for a document with no open session".into(),
+                });
+                return;
+            }
             tracing::warn!("[Sync] SendUpdate with no session nonce doc={document_id}, dropped");
             return;
         };
-        self.send_update_body(document_id, *nonce, &payload);
+        let summary = summary.as_ref().map(ActivitySummary::to_sealed);
+        self.send_update_body(document_id, *nonce, summary.as_ref(), &payload);
     }
 
-    /// Builds the body of a delta this client writes and sends it. No
-    /// application of this build writes a summary yet, so none rides along.
-    fn send_update_body(&mut self, document_id: DocumentId, nonce: SessionNonce, delta: &[u8]) {
-        match pipeline::update_body(&nonce, None, delta) {
+    /// Builds the body of a delta this client writes and sends it.
+    fn send_update_body(
+        &mut self,
+        document_id: DocumentId,
+        nonce: SessionNonce,
+        summary: Option<&ambre_core::activity::ActivitySummary>,
+        delta: &[u8],
+    ) {
+        match pipeline::update_body(&nonce, summary, delta) {
             Ok(body) => self.send_body(document_id, body),
             Err(error) => tracing::warn!("[Sync] update body refused doc={document_id}: {error}"),
         }
@@ -911,7 +961,9 @@ impl SyncState {
             tracing::warn!("[Sync] SendUnsent before session ready doc={document_id}, dropped");
             return;
         }
-        self.send_update_body(document_id, nonce, &payload);
+        // What an earlier session left unsent is replayed with no summary:
+        // the Logic thread no longer knows what it held.
+        self.send_update_body(document_id, nonce, None, &payload);
     }
 
     /// Seals an update body and sends it, or holds it while the document is
@@ -937,9 +989,22 @@ impl SyncState {
             return;
         }
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            // No session of this document: the update cannot reach the relay,
+            // so the refusal is said aloud (`SYNC-069`).
             tracing::warn!("[Sync] SendUpdate for unknown doc {document_id:?}");
+            self.send_to_logic(LogicEvent::SyncWarning {
+                document_id,
+                code: SyncWarningCode::UpdateRefused,
+                message: "update for a document with no open session".into(),
+            });
             return;
         };
+        // A delta refused by name holds the document: a later one would build
+        // on an edit the relay lacks (`SYNC-156`).
+        if doc_state.rekey.holds_refused() {
+            tracing::debug!("[Sync] edit held: doc={document_id} has a refused delta");
+            return;
+        }
         // An owed rotation is paid before any frame: the edit waits unsealed,
         // and takes its clock once the new key lands (`SYNC-128`).
         if doc_state.rekey.owes() {
@@ -976,6 +1041,9 @@ impl SyncState {
         pub_key: PublicKey,
     ) -> Option<(KeyId, Signature)> {
         let doc_state = self.documents.get(&document_id)?;
+        if doc_state.rekey.holds_refused() {
+            return None;
+        }
         let key_id = doc_state.doc_key.id();
         let public_data = UpdatePublicData {
             document_id,
@@ -1058,6 +1126,127 @@ impl SyncState {
         }
     }
 
+    /// The relay refused our delta signed `signature` before sequencing it
+    /// (`SRV-185`). It leaves the unconfirmed log with every later delta, and
+    /// the document holds every edit from here until it reopens. The first
+    /// refusal is reported, so the user learns the relay lacks an edit
+    /// (`SYNC-155`, `SYNC-156`).
+    pub(crate) fn handle_delta_refused(
+        &mut self,
+        document_id: DocumentId,
+        signature: Signature,
+        code: ambre_core::RefusalCode,
+    ) {
+        match code {
+            ambre_core::RefusalCode::InternalError => {
+                self.handle_delta_failed(document_id, signature);
+            }
+            ambre_core::RefusalCode::SegmentLocked => {
+                self.handle_delta_locked(document_id, &signature);
+            }
+            _ => self.hold_refused(document_id, &signature, &code.to_string()),
+        }
+    }
+
+    /// The relay refused our delta signed `signature` for the lock of its
+    /// segment (`SRV-115`). It and every later delta of the document return
+    /// to the Logic thread, which moves their new messages to the active
+    /// segment (`SYNC-165`). The document is not held.
+    fn handle_delta_locked(&mut self, document_id: DocumentId, signature: &Signature) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let Some(bodies) = doc_state.rekey.delta_locked(signature) else {
+            return;
+        };
+        let deltas = bodies
+            .into_iter()
+            .filter_map(|body| pipeline::split_update_body(body).ok())
+            .map(|body| body.delta)
+            .collect();
+        tracing::warn!("[Sync] delta refused for a locked segment doc={document_id}");
+        self.send_to_logic(LogicEvent::DeltasLocked {
+            document_id,
+            deltas,
+        });
+    }
+
+    /// Drops the delta signed `signature` and every later one, and holds the
+    /// document. The first hold is reported (`SYNC-155`, `SYNC-156`).
+    fn hold_refused(&mut self, document_id: DocumentId, signature: &Signature, cause: &str) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        if !doc_state.rekey.delta_refused(signature) {
+            return;
+        }
+        tracing::warn!("[Sync] delta refused doc={document_id}: {cause}");
+        self.send_to_logic(LogicEvent::SyncWarning {
+            document_id,
+            code: SyncWarningCode::EditRefused,
+            message: format!("the relay refused an edit: {cause}"),
+        });
+    }
+
+    /// The relay failed to sequence our delta signed `signature` through a
+    /// fault of its own (`SRV-186`). It leaves again after a delay that
+    /// doubles at each failure since the last echo. Past the budget the
+    /// document holds it, as for a refusal (`SYNC-159`).
+    fn handle_delta_failed(&mut self, document_id: DocumentId, signature: Signature) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let ticket = self.resend_ticket + 1;
+        let Some(failure) = doc_state.rekey.failed(&signature, ticket) else {
+            // A delta this log forgot: answer, so the fence never stands.
+            self.ws_send(&WsClientMsg::ClockResync {
+                document_id,
+                signature,
+            });
+            return;
+        };
+        self.resend_ticket = ticket;
+        match resend_retry_delay_ms(failure) {
+            Some(delay_ms) => {
+                tracing::warn!("[Sync] delta failed doc={document_id} (failure {failure})");
+                let retry = SyncEvent::ResendRetry {
+                    document_id,
+                    ticket,
+                };
+                self.arm_event_timer(retry, delay_ms);
+            }
+            None => {
+                let cause = format!("sequencing failed {failure} times");
+                self.hold_refused(document_id, &signature, &cause);
+            }
+        }
+    }
+
+    /// A resend timer fired. Unless a later failure or a refusal made it
+    /// stale, the answer lifts the relay's fence (`SRV-169`). Then the failed
+    /// delta and every later one leave again from its own clock, which the
+    /// relay never took (`SYNC-159`).
+    pub(crate) fn resend_failed(&mut self, document_id: DocumentId, ticket: u64) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let Some((signature, clock, bodies)) = doc_state.rekey.resend_failed(ticket) else {
+            return;
+        };
+        doc_state.local_clock = clock.saturating_sub(1);
+        tracing::info!(
+            "[Sync] resend doc={document_id}, {} delta(s) leave again from {clock}",
+            bodies.len()
+        );
+        self.ws_send(&WsClientMsg::ClockResync {
+            document_id,
+            signature,
+        });
+        for body in bodies {
+            self.send_body(document_id, body);
+        }
+    }
+
     /// Installs `new_key` as the document's current key, then sends what the
     /// owed rotation held back. A key this client already holds as current is
     /// not pushed into the cache a second time. `links` join the chain, so a
@@ -1080,6 +1269,8 @@ impl SyncState {
         let current = doc_state.doc_key.id();
         let (refused, waiting) = doc_state.rekey.key_installed(current);
         self.resend_refused(document_id, refused, waiting);
+        // A new space key leaves each catalogue entry under the old one stale.
+        self.drive_space_rotation(document_id);
     }
 
     /// Pays the rotation a document owes, in a spawned task (`SYNC-128`).
@@ -1160,10 +1351,10 @@ impl SyncState {
 
             let url = format!("{url_scheme}://{api_base}/api/documents");
             let body = http::CreateDocumentRequest {
-                doc_type: doc_type_to_api_string(doc_type),
+                doc_type,
                 name_enc: None,
                 doc_key_enc,
-                document_id: Some(document_id.to_string()),
+                document_id: Some(document_id),
                 entry: Some(entry),
             };
             match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth).await {
@@ -1191,18 +1382,56 @@ impl SyncState {
         payload: Vec<u8>,
         covered_seq: Seq,
     ) {
-        let Some(signing_key) = self.signing_key.clone() else {
-            tracing::warn!("Sync: SendSnapshot before session keys ready, dropping");
+        let upload = match self.snapshot_upload(document_id, &payload, covered_seq) {
+            Ok(upload) => upload,
+            Err(e) => {
+                tracing::warn!("Sync: SendSnapshot for {document_id:?} dropped: {e}");
+                return;
+            }
+        };
+        // Off the wasm path (host tests / mock relay) there is no event queue
+        // and no real S3: sealing is the observable behavior, stop here.
+        let Some(tx) = self.event_tx.clone() else {
+            tracing::info!(
+                "Sync: SendSnapshot {document_id:?} sealed ({} bytes), no event channel (test path)",
+                upload.blob.len()
+            );
             return;
         };
-        let Some(pub_key) = self.author_pub_key() else {
-            return;
-        };
+        let base = format!("{}://{}", self.url_scheme, self.api_base);
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            match upload_snapshot(&http::Fetch, &auth, &base, upload).await {
+                Ok(snapshot_id) => {
+                    let _ = tx.send(SyncEvent::SnapshotUploaded {
+                        document_id,
+                        snapshot_id,
+                    });
+                }
+                Err(e) => tracing::error!("Sync: SendSnapshot failed for {document_id:?}: {e}"),
+            }
+        });
+    }
+
+    /// Seal `payload` as a snapshot of `document_id` that folds in every delta
+    /// up to `covered_seq`, ready to upload.
+    ///
+    /// # Errors
+    /// Before the session keys, for a document this worker does not hold, or
+    /// when the seal fails.
+    pub(crate) fn snapshot_upload(
+        &self,
+        document_id: DocumentId,
+        payload: &[u8],
+        covered_seq: Seq,
+    ) -> Result<SnapshotUpload, String> {
+        let signing_key = self.signing_key.as_ref().ok_or("session keys not ready")?;
+        let pub_key = self.author_pub_key().ok_or("session keys not ready")?;
         let author_pubkey = hex::encode(pub_key.as_array());
-        let Some(doc_state) = self.documents.get(&document_id) else {
-            tracing::warn!("Sync: SendSnapshot for unknown doc {document_id:?}");
-            return;
-        };
+        let doc_state = self
+            .documents
+            .get(&document_id)
+            .ok_or("the document is not open")?;
         let public_data = SnapshotPublicData {
             document_id,
             pub_key,
@@ -1216,51 +1445,17 @@ impl SyncState {
         };
         // The full sealed `Snapshot`, serialized as the S3 blob (the inverse of
         // `decode_snapshot_blob` + `open_snapshot`).
-        let blob = match pipeline::snapshot_blob(
-            &payload,
-            public_data,
-            &doc_state.doc_key,
-            &signing_key,
-        ) {
-            Ok(blob) => blob,
-            Err(e) => {
-                tracing::error!("Sync: SendSnapshot seal failed for {document_id:?}: {e}");
-                return;
-            }
-        };
-
-        // Off the wasm path (host tests / mock relay) there is no event queue
-        // and no real S3: sealing is the observable behavior, stop here.
-        let Some(tx) = self.event_tx.clone() else {
-            tracing::info!(
-                "Sync: SendSnapshot {document_id:?} sealed ({} bytes), no event channel (test path)",
-                blob.len()
-            );
-            return;
-        };
+        let blob = pipeline::snapshot_blob(payload, public_data, &doc_state.doc_key, signing_key)
+            .map_err(|e| format!("seal failed: {e}"))?;
         // The Logic thread names the last delta it holds with no gap below it,
         // not the high-water `last_seq`. A snapshot claims every delta up to
         // its horizon, and a checker holds it to that claim (`AUTHOR-016`).
-        let covered_seq = i64::try_from(covered_seq.0).unwrap_or(i64::MAX);
-        let base = format!("{}://{}", self.url_scheme, self.api_base);
-        let auth = self.auth_context();
-        let upload = SnapshotUpload {
+        Ok(SnapshotUpload {
             document_id,
             author_pubkey,
-            covered_seq,
+            covered_seq: i64::try_from(covered_seq.0).unwrap_or(i64::MAX),
             blob,
-        };
-        wasm_bindgen_futures::spawn_local(async move {
-            match upload_snapshot(&http::Fetch, &auth, &base, upload).await {
-                Ok(snapshot_id) => {
-                    let _ = tx.send(SyncEvent::SnapshotUploaded {
-                        document_id,
-                        snapshot_id,
-                    });
-                }
-                Err(e) => tracing::error!("Sync: SendSnapshot failed for {document_id:?}: {e}"),
-            }
-        });
+        })
     }
 
     pub(crate) fn handle_send_ephemeral(&mut self, document_id: DocumentId, payload: Vec<u8>) {
@@ -1299,7 +1494,8 @@ pub(crate) enum Vouch {
 }
 
 /// Posts `vouch` on `snapshot_id` to the relay at `base`, under the
-/// session's token.
+/// session's token. A confirmation that settled a fold names the amendments
+/// the relay erased (`SRV-211`).
 pub(crate) async fn send_vouch(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
@@ -1307,19 +1503,23 @@ pub(crate) async fn send_vouch(
     document_id: DocumentId,
     snapshot_id: SnapshotId,
     vouch: &Vouch,
-) -> Result<(), String> {
+) -> Result<Option<DocumentId>, String> {
     let url = format!("{base}/api/documents/{document_id}/snapshots/{snapshot_id}");
     let post = http::Method::Post;
     match vouch {
         Vouch::Confirm => {
             let body = serde_json::json!({});
-            http::send_json_auth_via(transport, post, &format!("{url}/confirm"), &body, auth).await
+            let confirmed: http::ConfirmSnapshotResponse =
+                http::post_json_auth_via(transport, &format!("{url}/confirm"), &body, auth).await?;
+            Ok(confirmed.folded)
         }
         Vouch::Report(signature) => {
             let body = http::ReportSnapshotRequest {
                 signature: signature.clone(),
             };
-            http::send_json_auth_via(transport, post, &format!("{url}/report"), &body, auth).await
+            http::send_json_auth_via(transport, post, &format!("{url}/report"), &body, auth)
+                .await
+                .map(|()| None)
         }
     }
 }
@@ -1363,7 +1563,7 @@ pub(crate) async fn upload_snapshot(
     // The presigned link is its own credential: no session token goes there.
     http::put_sealed_via(transport, &link.upload_url, &blob).await?;
     let metadata = http::CreateSnapshotRequest {
-        snapshot_id: SnapshotId::new().to_string(),
+        snapshot_id: SnapshotId::new(),
         author_pubkey,
         parent_hash: None,
         parent_snapshot_proof: None,
@@ -1378,8 +1578,7 @@ pub(crate) async fn upload_snapshot(
         auth,
     )
     .await?;
-    let snapshot_id =
-        SnapshotId::parse_str(&created.snapshot_id).map_err(|e| format!("bad snapshot_id: {e}"))?;
+    let snapshot_id = created.snapshot_id;
     // The author's own confirmation makes it `self` (`AUTHOR-021`).
     if let Err(e) = send_vouch(
         transport,
@@ -1408,6 +1607,8 @@ pub(crate) struct OpenedMembers {
     /// The key the entry that added us names, when the log verifies our row
     /// (`SYNC-123`).
     pub named_key: Option<ambre_core::KeyId>,
+    /// What the log says a channel listed in this space must heed.
+    pub word: membership_log::SpaceWord,
 }
 
 /// What the members request says about a document being opened (`SYNC-040`).
@@ -1463,17 +1664,17 @@ mod tests {
         holder: &x25519_dalek::StaticSecret,
         wrapper: &x25519_dalek::StaticSecret,
         doc_key: &DocumentKey,
-        role: &str,
+        role: ambre_core::Role,
     ) -> http::MemberEntry {
         let holder_pub = x25519_dalek::PublicKey::from(holder).to_bytes();
         let wrapper_pub = x25519_dalek::PublicKey::from(wrapper).to_bytes();
         http::MemberEntry {
-            user_id: uid.to_string(),
+            user_id: uid,
             signing_pub_key: hex::encode([uid.as_bytes()[0]; 32]),
             exchange_pub_key: hex::encode(holder_pub),
             doc_key_enc: crate::sharing::wrap_anchored_b64(wrapper, &holder_pub, doc_key, None)
                 .unwrap(),
-            role: role.into(),
+            role,
             wrapper_exchange_pub_key: hex::encode(wrapper_pub),
         }
     }
@@ -1489,14 +1690,20 @@ mod tests {
         let doc_key = DocumentKey::generate();
         let resp = http::MembersResponse {
             members: vec![
-                member_row(me, &my_xk, &peer_xk, &doc_key, "editor"),
-                member_row(peer, &peer_xk, &peer_xk, &doc_key, "owner"),
+                member_row(me, &my_xk, &peer_xk, &doc_key, ambre_core::Role::Editor),
+                member_row(peer, &peer_xk, &peer_xk, &doc_key, ambre_core::Role::Owner),
             ],
             rotation_owed: true,
             log: Vec::new(),
         };
-        let opened =
-            SyncState::opened_from_members(&resp, DocumentId::new(), &my_xk, Some(me)).unwrap();
+        let opened = SyncState::opened_from_members(
+            &resp,
+            DocumentId::new(),
+            &my_xk,
+            Some(me),
+            &membership_log::LogRule::document(),
+        )
+        .unwrap();
         assert!(opened.doc_key.id() == doc_key.id());
         assert_eq!(opened.role, Role::Editor);
         let ids: Vec<UserId> = opened.signing_keys.iter().map(|(_, id)| *id).collect();
@@ -1511,7 +1718,13 @@ mod tests {
         let me = UserId::new();
         let my_xk = ambre_crypto::MasterSeed::from_array([3; 32]).derive_exchange_key();
         let peer_xk = ambre_crypto::MasterSeed::from_array([4; 32]).derive_exchange_key();
-        let mut row = member_row(me, &my_xk, &peer_xk, &DocumentKey::generate(), "editor");
+        let mut row = member_row(
+            me,
+            &my_xk,
+            &peer_xk,
+            &DocumentKey::generate(),
+            ambre_core::Role::Editor,
+        );
         let mut raw = base64::engine::general_purpose::URL_SAFE
             .decode(&row.doc_key_enc)
             .unwrap();
@@ -1524,7 +1737,14 @@ mod tests {
             log: Vec::new(),
         };
         assert!(
-            SyncState::opened_from_members(&resp, DocumentId::new(), &my_xk, Some(me)).is_err()
+            SyncState::opened_from_members(
+                &resp,
+                DocumentId::new(),
+                &my_xk,
+                Some(me),
+                &membership_log::LogRule::document(),
+            )
+            .is_err()
         );
     }
 
@@ -1714,6 +1934,45 @@ mod tests {
         assert_eq!(state.documents[&doc].quarantine_len(), 0);
     }
 
+    /// Holds `SYNC-144`: an opened update hands the Logic thread the summary
+    /// its body carried, beside the delta. One with none hands none.
+    #[test]
+    fn an_opened_update_hands_logic_its_summary_beside_the_delta() {
+        use ambre_core::activity::{ActivityKind, ActivitySummary};
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let summary = ActivitySummary {
+            kind: ActivityKind::Reaction,
+            mentions: Vec::new(),
+            mentions_all: true,
+            anchor: None,
+        };
+        let public_data = UpdatePublicData {
+            document_id: doc,
+            pub_key: PublicKey::from_array(sk.verifying_key().to_bytes()),
+            key_id: key.id(),
+            snapshot_id: snap,
+            clock: Clock(1),
+        };
+        let body = pipeline::update_body(&TEST_NONCE, Some(&summary), b"liked").expect("bounds");
+        let sealed = pipeline::seal_update(&body, public_data, &key, &sk).expect("seal");
+        state.receive_update(Seq(1), sealed);
+        state.receive_update(Seq(2), make_update(doc, snap, 2, b"plain", &key, &sk));
+        let handed: Vec<_> = drain(&rx)
+            .into_iter()
+            .filter_map(|e| match e {
+                LogicEvent::RemoteUpdate { delta, .. } => Some((delta.payload, delta.summary)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            handed,
+            vec![
+                (b"liked".to_vec(), Some(summary.into())),
+                (b"plain".to_vec(), None)
+            ]
+        );
+    }
+
     /// An opened update reaches the Logic thread with the nonce its body
     /// carried and the PeerID its signer and that nonce derive. It also names
     /// the member the directory holds for its signer (`SYNC-114`, `AUTHOR-013`). A signer the
@@ -1745,6 +2004,7 @@ mod tests {
             nonce: TEST_NONCE,
             peer: ambre_crypto::peer::derive_peer_id(&signer, &TEST_NONCE),
             user: Some(alice),
+            summary: None,
         };
         assert_eq!(deltas.first(), Some(&expected));
         let unknown = deltas.get(1).unwrap();
@@ -1832,6 +2092,34 @@ mod tests {
             .map(|e| match e {
                 LogicEvent::RemoteUpdate { delta, .. } => delta.payload,
                 other => panic!("expected RemoteUpdate, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(payloads, vec![b"two".to_vec(), b"five".to_vec()]);
+        assert_eq!(state.documents[&doc].quarantine_len(), 0);
+    }
+
+    /// A Murmure document takes the quarantine and the delta order of the
+    /// document plane (the Murmure segments spec).
+    #[test]
+    fn a_murmure_document_takes_the_quarantine_and_the_delta_order() {
+        let (mut state, rx, _doc, key, sk, _snap) = setup();
+        let doc = DocumentId::new();
+        state.documents.insert(
+            doc,
+            SyncDocumentState::new(doc, key.clone(), DocType::Murmure, true),
+        );
+        let parent = SnapshotId::new();
+        state.receive_update(Seq(1), make_update(doc, parent, 5, b"five", &key, &sk));
+        state.receive_update(Seq(2), make_update(doc, parent, 2, b"two", &key, &sk));
+        assert!(drain(&rx).is_empty(), "an unknown parent holds both");
+        assert_eq!(state.documents[&doc].quarantine_len(), 2);
+
+        state.snapshot_known(doc, parent);
+        let payloads: Vec<Vec<u8>> = drain(&rx)
+            .into_iter()
+            .filter_map(|e| match e {
+                LogicEvent::RemoteUpdate { delta, .. } => Some(delta.payload),
+                _ => None,
             })
             .collect();
         assert_eq!(payloads, vec![b"two".to_vec(), b"five".to_vec()]);
@@ -2017,6 +2305,227 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, LogicEvent::PeerLeft { .. })),
             "an unattributable departure is dropped"
+        );
+    }
+
+    /// A dropped snapshot names its author and its reporter as users. Each
+    /// member but the author finalizes the segment again when the relay asks.
+    #[test]
+    fn a_dropped_snapshot_names_its_author_and_reporter() {
+        let (mut state, rx, doc, _key, signing_key, snapshot) = setup();
+        let author = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let reporter = PublicKey::from_array([7u8; 32]);
+        let (alice, bob) = (UserId::new(), UserId::new());
+        let keys = &mut state
+            .documents
+            .get_mut(&doc)
+            .expect("document")
+            .signing_keys;
+        keys.insert(*author.as_array(), alice);
+        keys.insert(*reporter.as_array(), bob);
+        let dropped = |state: &mut SyncState| {
+            state.handle_ws_message(WsServerMsg::SnapshotDropped {
+                document_id: doc,
+                snapshot_id: snapshot,
+                author: author.clone(),
+                reporter: reporter.clone(),
+                refinalize: true,
+            });
+        };
+        dropped(&mut state);
+        assert!(
+            drain(&rx).iter().any(|e| matches!(
+                e,
+                LogicEvent::SnapshotDropped { document_id, author: Some(a), reporter: Some(r), refinalize: true }
+                    if *document_id == doc && *a == alice && *r == bob
+            )),
+            "both keys resolve, and this member finalizes again"
+        );
+        state.signing_key = Some(signing_key);
+        dropped(&mut state);
+        assert!(
+            drain(&rx).iter().any(|e| matches!(
+                e,
+                LogicEvent::SnapshotDropped {
+                    refinalize: false,
+                    ..
+                }
+            )),
+            "the author leaves the segment to another member"
+        );
+    }
+
+    /// The rows a `MembersChanged` event hands Logic, if one was sent.
+    fn rows_handed(events: &[LogicEvent]) -> Option<Vec<UserId>> {
+        events.iter().find_map(|e| match e {
+            LogicEvent::MembersChanged { members, .. } => {
+                Some(members.iter().map(|m| m.user_id).collect())
+            }
+            _ => None,
+        })
+    }
+
+    fn listed(user_id: UserId) -> MemberInfo {
+        MemberInfo {
+            user_id,
+            display_name: "Carol".into(),
+            email: "carol@example.org".into(),
+            role: Role::Editor,
+            standing: ambre_bus::MemberStanding::Verified,
+        }
+    }
+
+    /// Holds `SYNC-151`: the relay's word that the members changed costs one
+    /// listing. Its answer reaches Logic with the rows, so a view asks for
+    /// nothing more. A crossed older answer hands nothing on, and a document
+    /// not open here lists nothing.
+    #[test]
+    fn a_change_of_members_costs_one_listing_whose_rows_reach_logic() {
+        let (mut state, rx, doc, _key, _signing_key, _snap) = setup();
+        state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
+        assert_eq!(state.documents[&doc].directory_asked, 1, "one listing");
+        assert_eq!(rows_handed(&drain(&rx)), None, "nothing before the answer");
+
+        let carol = UserId::new();
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: 1,
+            document_id: doc,
+            word: Default::default(),
+            rotation_owed: false,
+            members: vec![listed(carol)],
+            signing_keys: vec![([2u8; 32], carol)],
+        });
+        let events = drain(&rx);
+        assert_eq!(
+            rows_handed(&events),
+            Some(vec![carol]),
+            "the rows reach Logic"
+        );
+        assert!(!events.iter().any(|e| matches!(e, LogicEvent::Rest { .. })));
+
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: 1,
+            document_id: doc,
+            word: Default::default(),
+            rotation_owed: false,
+            members: Vec::new(),
+            signing_keys: Vec::new(),
+        });
+        assert_eq!(
+            rows_handed(&drain(&rx)),
+            None,
+            "a crossed answer hands nothing"
+        );
+
+        let elsewhere = DocumentId::new();
+        state.handle_ws_message(WsServerMsg::MembersChanged {
+            document_id: elsewhere,
+        });
+        assert_eq!(state.documents[&doc].directory_asked, 1);
+        assert_eq!(rows_handed(&drain(&rx)), None, "a document not open here");
+    }
+
+    /// Closing a document ends its session here. Its state goes, with the
+    /// document key and every older key, so nothing of it is read again.
+    #[test]
+    fn closing_a_document_forgets_its_keys() {
+        let (mut state, _rx, doc, _key, _signing_key, _snap) = setup();
+        state.handle_close_document(doc);
+        assert!(!state.documents.contains_key(&doc));
+    }
+
+    /// The relay's word that the members changed makes Sync list them again,
+    /// so a newcomer's key resolves without a view asking (`SYNC-037`). Two
+    /// listings may cross: the answer to the older one changes nothing.
+    #[test]
+    fn a_change_of_members_reads_the_directory_again_and_a_crossed_answer_changes_nothing() {
+        let (mut state, rx, doc, _key, _signing_key, _snap) = setup();
+        state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
+        state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
+        assert_eq!(
+            state.documents[&doc].directory_asked, 2,
+            "each word lists again"
+        );
+        drain(&rx);
+
+        let carol = UserId::new();
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: 2,
+            document_id: doc,
+            word: Default::default(),
+            rotation_owed: false,
+            members: Vec::new(),
+            signing_keys: vec![([2u8; 32], carol)],
+        });
+        let bob = UserId::new();
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: 1,
+            document_id: doc,
+            word: Default::default(),
+            rotation_owed: false,
+            members: Vec::new(),
+            signing_keys: vec![([1u8; 32], bob)],
+        });
+
+        let keys = &state.documents[&doc].signing_keys;
+        assert_eq!(keys.get(&[2u8; 32]), Some(&carol), "the newer answer holds");
+        assert!(
+            !keys.contains_key(&[1u8; 32]),
+            "the crossed answer changes nothing"
+        );
+        assert!(
+            !drain(&rx)
+                .iter()
+                .any(|e| matches!(e, LogicEvent::Rest { .. })),
+            "a refresh of the directory alone answers no request"
+        );
+    }
+
+    /// Holds `SYNC-150`: the relay's acknowledgement of a subscription lists
+    /// the members again. A newcomer committed after the open read its members,
+    /// and before the relay sent this client any word, resolves. A document not
+    /// open here, or not yet on the relay, lists nothing.
+    #[test]
+    fn a_subscription_reads_the_members_a_change_during_the_open_left_out() {
+        let (mut state, rx, doc, _key, _signing_key, _snap) = setup();
+        let carol = UserId::new();
+        assert!(!state.documents[&doc].signing_keys.contains_key(&[3u8; 32]));
+
+        state.handle_ws_message(WsServerMsg::Subscribed { document_id: doc });
+        assert_eq!(state.documents[&doc].directory_asked, 1, "one listing");
+        drain(&rx);
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: 1,
+            document_id: doc,
+            word: Default::default(),
+            rotation_owed: false,
+            members: vec![listed(carol)],
+            signing_keys: vec![([3u8; 32], carol)],
+        });
+        let keys = &state.documents[&doc].signing_keys;
+        assert_eq!(keys.get(&[3u8; 32]), Some(&carol), "the newcomer resolves");
+        let handed = rows_handed(&drain(&rx));
+        assert_eq!(handed, Some(vec![carol]), "an open view gets the rows too");
+
+        let local = DocumentId::new();
+        state.documents.insert(
+            local,
+            SyncDocumentState::new(local, DocumentKey::generate(), DocType::Trame, false),
+        );
+        for document_id in [local, DocumentId::new()] {
+            state.handle_ws_message(WsServerMsg::Subscribed { document_id });
+        }
+        assert_eq!(state.documents[&local].directory_asked, 0);
+        assert!(
+            !drain(&rx)
+                .iter()
+                .any(|e| matches!(e, LogicEvent::MembersChanged { .. })),
+            "nothing to list for a document the relay does not serve here"
         );
     }
 
@@ -2406,11 +2915,16 @@ mod tests {
                 continue;
             };
             let vouch = vouch.expect("a checked snapshot is answered");
-            let transport = Scripted::new([Ok((204, serde_json::Value::Null))]);
+            let answer = match vouch {
+                Vouch::Confirm => (200, serde_json::json!({ "folded": null })),
+                Vouch::Report(_) => (204, serde_json::Value::Null),
+            };
+            let transport = Scripted::new([Ok(answer)]);
             let auth = session("access-1", "refresh-1");
-            send_vouch(&transport, &auth, base, doc, pending, &vouch)
+            let folded = send_vouch(&transport, &auth, base, doc, pending, &vouch)
                 .await
                 .expect("posted");
+            assert_eq!(folded, None, "no fold settles here");
             let url = format!("{base}/api/documents/{doc}/snapshots/{pending}/{route}");
             assert_eq!(transport.calls(), [(http::Method::Post, url)]);
             if let Vouch::Report(signature) = vouch {
@@ -2488,7 +3002,7 @@ mod tests {
                     stored,
                     serde_json::json!({ "snapshot_id": given.to_string() }),
                 )),
-                Ok((204, serde_json::Value::Null)),
+                Ok((200, serde_json::json!({ "folded": null }))),
             ]);
             let auth = session("access-1", "refresh-1");
 
@@ -2638,6 +3152,253 @@ mod tests {
         assert!(
             matches!(late.as_slice(), [WsClientMsg::ClockResync { signature, .. }] if *signature == first[1]),
             "a late refusal sends its answer alone: {late:?}"
+        );
+    }
+
+    /// The relay refuses the delta signed `signature`, naming it.
+    fn refuse_by_name(state: &mut SyncState, doc: DocumentId, signature: Signature) {
+        state.handle_ws_message(WsServerMsg::DeltaRefused {
+            document_id: doc,
+            signature,
+            code: ambre_core::RefusalCode::PayloadTooLarge,
+        });
+    }
+
+    /// `SYNC-165`: a delta refused for a locked segment returns to the Logic
+    /// thread with the delta sent behind it, once, in order. The document is
+    /// not held: its next delta leaves.
+    #[test]
+    fn a_delta_refused_for_the_lock_returns_to_logic_with_every_later_one() {
+        let (mut state, rx, doc, _key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        state.handle_send_update(doc, b"b".to_vec());
+        let sent = signatures(&drain_ws(&ws_rx));
+        let _ = drain(&rx);
+
+        for signature in [sent[0], sent[1]] {
+            state.handle_ws_message(WsServerMsg::DeltaRefused {
+                document_id: doc,
+                signature,
+                code: ambre_core::RefusalCode::SegmentLocked,
+            });
+        }
+        let told = drain(&rx);
+        assert!(
+            matches!(
+                told.as_slice(),
+                [LogicEvent::DeltasLocked { document_id, deltas }]
+                    if *document_id == doc && *deltas == [b"a".to_vec(), b"b".to_vec()]
+            ),
+            "the refusal was told as {told:?}"
+        );
+        let rekey = &state.documents[&doc].rekey;
+        assert_eq!(rekey.unconfirmed(), 0);
+        assert!(!rekey.holds_refused(), "a locked segment held its document");
+        state.handle_send_update(doc, b"c".to_vec());
+        assert_eq!(
+            signatures(&drain_ws(&ws_rx)).len(),
+            1,
+            "the next delta left"
+        );
+    }
+
+    /// `SYNC-155`: a delta refused by name leaves the unconfirmed log with the
+    /// delta sent behind it. The document is reported once as holding an edit
+    /// the relay lacks, and it no longer reads as settled.
+    #[test]
+    fn a_delta_refused_by_name_leaves_the_log_and_is_reported_once() {
+        let (mut state, rx, doc, _key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        state.handle_send_update(doc, b"b".to_vec());
+        let sent = signatures(&drain_ws(&ws_rx));
+        let _ = drain(&rx);
+
+        refuse_by_name(&mut state, doc, sent[0]);
+        refuse_by_name(&mut state, doc, sent[1]);
+        let rekey = &state.documents[&doc].rekey;
+        assert_eq!(rekey.unconfirmed(), 0, "a refused delta stayed unconfirmed");
+        assert!(
+            !rekey.settled(),
+            "a document missing an edit read as settled"
+        );
+        let told = drain(&rx);
+        assert!(
+            matches!(
+                told.as_slice(),
+                [LogicEvent::SyncWarning { document_id, code: SyncWarningCode::EditRefused, .. }]
+                    if *document_id == doc
+            ),
+            "the refusal was told as {told:?}"
+        );
+    }
+
+    /// A copy whose edit is unanswered waits to finalize, and one the relay
+    /// refused an edit of withdraws (the Murmure segments spec). Neither
+    /// seals a snapshot.
+    #[test]
+    fn a_copy_the_relay_lacks_an_edit_of_never_finalizes() {
+        let (mut state, rx, doc, _key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let (channel, segment) = (ChannelId::new(), ambre_bus::SegmentId::from_document(doc));
+        let finalize = |state: &SyncState| {
+            state.handle_finalize_segment(channel, segment, ambre_bus::LeaseId::new(), 3, b"s");
+        };
+        let withdrawn = |events: &[LogicEvent]| -> Vec<bool> {
+            events
+                .iter()
+                .filter_map(|e| match e {
+                    LogicEvent::SegmentFinalizeFailed { withdrawn, .. } => Some(*withdrawn),
+                    _ => None,
+                })
+                .collect()
+        };
+
+        state.handle_send_update(doc, b"a".to_vec());
+        let sent = signatures(&drain_ws(&ws_rx));
+        let _ = drain(&rx);
+        finalize(&state);
+        assert_eq!(withdrawn(&drain(&rx)), vec![false], "it waits for the echo");
+
+        refuse_by_name(&mut state, doc, sent[0]);
+        let _ = drain(&rx);
+        finalize(&state);
+        assert_eq!(withdrawn(&drain(&rx)), vec![true], "it withdraws");
+    }
+
+    /// `SYNC-156`: once a delta is refused by name, no later delta of its
+    /// document leaves. Neither a new edit nor one a refused clock sends again
+    /// gets out. The document opened afresh sends once more.
+    #[test]
+    fn a_document_with_a_refused_delta_sends_no_further_delta() {
+        let (mut state, _rx, doc, key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        state.handle_send_update(doc, b"b".to_vec());
+        let sent = signatures(&drain_ws(&ws_rx));
+
+        refuse_by_name(&mut state, doc, sent[0]);
+        state.handle_send_update(doc, b"c".to_vec());
+        state.handle_ws_message(WsServerMsg::ClockRefused {
+            document_id: doc,
+            clock: Clock(2),
+            expected: Clock(1),
+            signature: sent[1],
+        });
+        assert!(
+            signatures(&drain_ws(&ws_rx)).is_empty(),
+            "a delta left a document holding a refused one"
+        );
+
+        let reopened = SyncDocumentState::new(doc, key, DocType::Trame, true);
+        state.documents.insert(doc, reopened);
+        state.handle_send_update(doc, b"d".to_vec());
+        assert_eq!(signatures(&drain_ws(&ws_rx)).len(), 1);
+    }
+
+    /// The relay failed to sequence the delta signed `signature`.
+    fn fail_sequencing(state: &mut SyncState, doc: DocumentId, signature: Signature) -> u64 {
+        state.handle_ws_message(WsServerMsg::DeltaRefused {
+            document_id: doc,
+            signature,
+            code: ambre_core::RefusalCode::InternalError,
+        });
+        state.resend_ticket
+    }
+
+    /// `SYNC-159`: a delta the relay failed to sequence waits for its timer.
+    /// Then the answer lifts the fence, and the delta leaves again at its own
+    /// clock with the one sent behind it. A stale timer sends nothing.
+    #[test]
+    fn a_delta_the_relay_failed_to_sequence_leaves_again_with_every_later_one() {
+        let (mut state, rx, doc, key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        state.handle_send_update(doc, b"b".to_vec());
+        let sent = signatures(&drain_ws(&ws_rx));
+        let _ = drain(&rx);
+
+        let ticket = fail_sequencing(&mut state, doc, sent[0]);
+        assert!(
+            drain_ws(&ws_rx).is_empty(),
+            "a failed delta left before its timer"
+        );
+        state.handle_sync_event(SyncEvent::ResendRetry {
+            document_id: doc,
+            ticket: ticket + 1,
+        });
+        assert!(drain_ws(&ws_rx).is_empty(), "a stale timer sent a delta");
+
+        state.handle_sync_event(SyncEvent::ResendRetry {
+            document_id: doc,
+            ticket,
+        });
+        let mut msgs = drain_ws(&ws_rx);
+        assert!(
+            matches!(msgs.first(), Some(WsClientMsg::ClockResync { signature, .. }) if *signature == sent[0]),
+            "the answer leaves first: {msgs:?}"
+        );
+        let resent = opened_updates(msgs.split_off(1), &[&key]);
+        assert_eq!(
+            resent,
+            vec![(1, key.id(), b"a".to_vec()), (2, key.id(), b"b".to_vec())]
+        );
+        assert_eq!(state.documents[&doc].rekey.unconfirmed(), 2);
+        assert!(
+            drain(&rx).is_empty(),
+            "a failure within the budget was reported"
+        );
+    }
+
+    /// `SYNC-159`: a delta that keeps failing waits longer each time, and past
+    /// the budget the document holds it, reported once as a refused edit.
+    #[test]
+    fn a_delta_failing_past_the_budget_holds_its_document() {
+        assert_eq!(resend_retry_delay_ms(1), Some(RESEND_RETRY_BASE_MS));
+        assert_eq!(resend_retry_delay_ms(2), Some(2 * RESEND_RETRY_BASE_MS));
+        assert_eq!(resend_retry_delay_ms(RESEND_RETRY_LIMIT + 1), None);
+
+        let (mut state, rx, doc, _key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        let mut signature = signatures(&drain_ws(&ws_rx))[0];
+        let _ = drain(&rx);
+        for _ in 0..RESEND_RETRY_LIMIT {
+            let ticket = fail_sequencing(&mut state, doc, signature);
+            state.handle_sync_event(SyncEvent::ResendRetry {
+                document_id: doc,
+                ticket,
+            });
+            signature = signatures(&drain_ws(&ws_rx))[0];
+        }
+        assert!(drain(&rx).is_empty());
+
+        fail_sequencing(&mut state, doc, signature);
+        let rekey = &state.documents[&doc].rekey;
+        assert!(rekey.holds_refused() && rekey.unconfirmed() == 0);
+        let told = drain(&rx);
+        assert!(
+            matches!(
+                told.as_slice(),
+                [LogicEvent::SyncWarning {
+                    code: SyncWarningCode::EditRefused,
+                    ..
+                }]
+            ),
+            "the held delta was told as {told:?}"
         );
     }
 
@@ -2811,7 +3572,7 @@ mod tests {
         let doc_key = DocumentKey::generate();
         // The row `wrapper` wrapped, its wrapper field rewritten to `named`.
         let unwrapped = |wrapper: &x25519_dalek::StaticSecret, named: Option<String>| {
-            let mut row = member_row(me, &my_xk, wrapper, &doc_key, "editor");
+            let mut row = member_row(me, &my_xk, wrapper, &doc_key, ambre_core::Role::Editor);
             if let Some(named) = named {
                 row.wrapper_exchange_pub_key = named;
             }
@@ -3044,6 +3805,7 @@ mod tests {
         state.handle_command(SyncCommand::SendUpdate {
             document_id: doc,
             payload: b"next".to_vec(),
+            summary: None,
         });
         let clocks: Vec<u64> = drain_ws(&ws_rx)
             .into_iter()
@@ -3112,6 +3874,39 @@ mod tests {
                 .payload,
             b"hello"
         );
+    }
+
+    /// `SYNC-168`: each rotation this client makes reaches Logic, a revoke
+    /// as well as an owed rotation it paid.
+    #[test]
+    fn each_rotation_this_client_makes_reaches_logic() {
+        let (mut state, rx, doc, k1, sk, _snap) = setup();
+        state.signing_key = Some(sk.clone());
+        let rotated = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| {
+            drain(rx)
+                .into_iter()
+                .filter(
+                    |e| matches!(e, LogicEvent::KeyRotated { document_id } if *document_id == doc),
+                )
+                .count()
+        };
+
+        let k2 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::RevocationComplete {
+            id: RequestId::next(),
+            document_id: doc,
+            new_doc_key: k2.clone(),
+            link: pipeline::seal_link(doc, &k1, &k2, &sk).unwrap(),
+        });
+        assert_eq!(rotated(&rx), 1, "a revoke");
+
+        let k3 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::DebtSettled {
+            document_id: doc,
+            new_doc_key: k3.clone(),
+            link: pipeline::seal_link(doc, &k2, &k3, &sk).unwrap(),
+        });
+        assert_eq!(rotated(&rx), 1, "an owed rotation paid");
     }
 
     /// Holds `SYNC-097`: what the start held is released in the order it
@@ -3283,5 +4078,43 @@ mod tests {
         }
         assert_eq!(payloads, [b"one".to_vec(), b"four".to_vec()]);
         assert_eq!(refused, 2);
+    }
+
+    /// `SYNC-069`: an update for a document with no open session cannot reach
+    /// the relay, so it is refused aloud rather than dropped in silence.
+    #[test]
+    fn an_update_for_a_document_with_no_session_is_refused_aloud() {
+        let (mut state, rx, _doc, _key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let unknown = DocumentId::new();
+
+        state.handle_send_update(unknown, b"a channel message".to_vec());
+
+        let events = drain(&rx);
+        assert!(
+            matches!(
+                events.as_slice(),
+                [LogicEvent::SyncWarning { document_id, code: SyncWarningCode::UpdateRefused, .. }]
+                    if *document_id == unknown
+            ),
+            "one refusal naming the document, got {events:?}"
+        );
+    }
+
+    /// A read reaches the last update delivered to the Logic thread. It stops
+    /// short of an update held in quarantine: past it, the cursor would mark
+    /// read a message never shown (the Murmure unread spec).
+    #[test]
+    fn a_read_reaches_the_last_update_delivered_and_no_further() {
+        let (mut state, _rx, doc, key, sk, snap) = setup();
+        assert_eq!(state.read_up_to(doc), None, "nothing delivered yet");
+        assert_eq!(state.read_up_to(DocumentId::new()), None, "not open");
+
+        state.receive_update(Seq(4), make_update(doc, snap, 1, b"shown", &key, &sk));
+        assert_eq!(state.read_up_to(doc), Some(Seq(4)));
+
+        let held = make_update(doc, SnapshotId::new(), 2, b"held", &key, &sk);
+        state.receive_update(Seq(5), held);
+        assert_eq!(state.read_up_to(doc), None, "a held update stays unread");
     }
 }

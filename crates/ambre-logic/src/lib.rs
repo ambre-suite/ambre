@@ -32,17 +32,25 @@ pub mod persistence;
 // The `impl LogicState` block is spread across sibling modules:
 //   - `data`:     application data plane (app commands, remote deltas, snapshots)
 //   - `dispatch`: the two inbound dispatchers (+ their host-side tests)
+//   - `channels`: Murmure channels, each a set of documents (the Murmure engine spec)
+//   - `direct`:   Murmure direct messages, found or created by their members
+mod channels;
 mod data;
+mod direct;
 mod dispatch;
 /// A history replay imported in slices (`SYNC-131`).
 mod replay;
 /// Which documents this thread holds, and the reopen of one that left
 /// (`ambre-spec-residency.md`).
 mod residency;
+mod segments;
 /// The snapshot check against the signed deltas (`AUTHOR-016`).
 mod snapshot_check;
+mod spaces;
 /// What the local store holds, and which copies leave it (`RESID-002`).
 pub mod store_ledger;
+/// The threads of a channel: a reply, and the link of its thread.
+mod threads;
 /// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
 mod waiting;
 
@@ -57,13 +65,14 @@ pub mod fixtures;
 use ambre_bus::conduit::{Doorbell, Receiver, WorkerSender};
 use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RequestId, RestCommand,
-    RestEvent, Role, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict, SyncCommand,
+    RestEvent, Role, Seq, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict, SyncCommand,
     UiEvent, UserId,
 };
 
 use ambre_core::SessionNonce;
 use ambre_core::schema::SchemaError;
 
+use ambre_murmure::Order;
 use ambre_prose::ProseState;
 use ambre_toile::{ToileRequest, ToileState};
 use ambre_trame::TrameState;
@@ -426,6 +435,16 @@ fn authored_by(payload: &[u8], peer: u64) -> bool {
     }
 }
 
+/// [`authored_by`] for a payload of either form: a binary update, or the JSON
+/// update a segment delta travels as (the Murmure messages spec).
+#[cfg(test)]
+fn sent_by(payload: &[u8], peer: u64) -> bool {
+    authored_by(payload, peer)
+        || serde_json::from_slice::<loro::json::JsonSchema>(payload).is_ok_and(|update| {
+            !update.changes.is_empty() && update.changes.iter().all(|c| c.id.peer == peer)
+        })
+}
+
 // -----------------------------------------------------------------------------
 // LiveDoc -- an open document and the caller's role on it
 // -----------------------------------------------------------------------------
@@ -557,8 +576,7 @@ impl LogicState {
     /// The session identity Sync would issue for `document_id`, under a PeerID
     /// no other call of this test binary hands out.
     pub(crate) fn grant_identity(&mut self, document_id: DocumentId) -> u64 {
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x1000);
-        let peer = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let peer = test_peer();
         self.handle_logic_event(LogicEvent::SessionIdentity {
             document_id,
             peer,
@@ -567,6 +585,26 @@ impl LogicState {
         });
         peer
     }
+}
+
+/// A PeerID no other call of this test binary hands out.
+#[cfg(test)]
+fn test_peer() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x1000);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// `channel` with every document under a session identity of its own, as
+/// another client writing it would hold it.
+#[cfg(test)]
+fn identified(mut channel: ambre_murmure::ChannelState) -> ambre_murmure::ChannelState {
+    for document_id in channel.document_ids() {
+        let peer = test_peer();
+        channel
+            .adopt_session(document_id, peer, peer.to_le_bytes().to_vec())
+            .expect("adopt");
+    }
+    channel
 }
 
 /// How many deltas a document's local log holds before the next save folds
@@ -645,6 +683,91 @@ struct LogicState {
     /// route immediately, before any snapshot/delta arrives. Removed on
     /// `CloseDocument` / `DeleteDocument` / `Logout`.
     docs: HashMap<DocumentId, LiveDoc>,
+    /// Open Murmure channels, keyed by `channel_id`. Apart from `docs`: a
+    /// channel is several documents, and a remote delta finds its channel by
+    /// the document it names (the Murmure engine spec). Removed on `CloseChannel` and
+    /// `Logout`.
+    channels: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
+    /// Channels on their way to open (the Murmure engine spec). `None` while
+    /// the relay has not listed the documents yet. Moved to `channels` once
+    /// every live document is in, and removed on a failure, `CloseChannel` or
+    /// `Logout`.
+    opening: HashMap<ambre_bus::ChannelId, Option<ambre_murmure::OpeningChannel>>,
+    /// The relay's number of each delta a channel document took in, so its
+    /// snapshot names the last delta it folds in (`SRV-083`). Keyed by
+    /// document, dropped with its channel.
+    channel_ledgers: HashMap<DocumentId, snapshot_check::SeqLedger>,
+    /// This user's read cursor on each channel document (the Murmure unread
+    /// spec). The relay's activity answer sets it, and this client's own
+    /// marks move it. Cleared on `Logout`.
+    read_cursors: HashMap<DocumentId, channels::ReadCursor>,
+    /// Channels whose view closed: their documents left memory, and Sync
+    /// counts them from their summaries alone (`RESID-004`). Removed on a
+    /// reopen, a delete, a leave or `Logout`.
+    closed_channels: HashMap<ambre_bus::ChannelId, channels::ClosedChannel>,
+    /// The channel of each segment and thread the relay's activity answer
+    /// listed, so a thread's signal finds its channel (the Murmure threads
+    /// spec). Cleared on `Logout`.
+    document_channels: HashMap<DocumentId, ambre_bus::ChannelId>,
+    /// The threads this client does not hold, counted from their summaries
+    /// as light subscriptions. Removed when the thread opens, or with its
+    /// channel.
+    watched_threads: HashMap<DocumentId, threads::WatchedThread>,
+    /// The signalled threads whose channel the next activity answer names.
+    unplaced_threads: HashSet<DocumentId>,
+    /// The close each open channel asked of the Sync worker, with the time
+    /// of the send that filled its segment (the Murmure segments spec).
+    /// Removed on the answer, and with the channel.
+    closing_segments: HashMap<ambre_bus::ChannelId, ambre_bus::Timestamp>,
+    /// The successor each channel's close names, kept across a failed close
+    /// so the next ask registers the one already created. Removed once the
+    /// relay answers, and with the channel.
+    close_successors: HashMap<ambre_bus::ChannelId, ambre_bus::SegmentId>,
+    /// The edits and deletes a segment's lock refused, owed again as
+    /// amendments. They leave at the channel's next tick, which stamps them.
+    /// Removed with the channel.
+    owed_replays: HashMap<ambre_bus::ChannelId, Vec<ambre_murmure::Replay>>,
+    /// Who watches each open channel and who types in it, with this client's
+    /// own samples (the Murmure typing and presence spec). Taken on the
+    /// first tick, removed with the channel and on `Logout`.
+    channel_watchers: HashMap<ambre_bus::ChannelId, ambre_murmure::Watchers>,
+    /// The members of each open or opening channel, as Sync lists them for
+    /// its `meta` (`SYNC-150`). The `@` list offers them, and a mention of
+    /// anyone else notifies no one (the Murmure mentions spec). Removed with
+    /// the channel and on `Logout`.
+    channel_members: HashMap<ambre_bus::ChannelId, Vec<ambre_bus::MemberInfo>>,
+    /// Open Murmure spaces, keyed by `space_id`: one document each, apart
+    /// from `docs` (the Murmure spaces spec). Removed on `CloseSpace` and
+    /// `Logout`.
+    spaces: HashMap<ambre_bus::SpaceId, spaces::OpenSpace>,
+    /// Spaces on their way to open, with the payloads and the member rows
+    /// that arrived before their document was ready.
+    space_opening: HashMap<ambre_bus::SpaceId, spaces::Opening>,
+    /// Public channels the relay is creating, until it answers.
+    creating: HashMap<ambre_bus::ChannelId, spaces::Creating>,
+    /// Self-joins the relay has not answered yet, with their space.
+    joining: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
+    /// Channel deletes the relay has not answered yet, with their space.
+    deleting: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
+    /// Channel leaves the relay has not answered yet, with their space.
+    leaving: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
+    /// Leaves of a space held while its owner role passes on (the Murmure
+    /// spaces spec). Each is keyed by the role change this thread asked for,
+    /// and holds the leave the view asked for.
+    handing_off: HashMap<ambre_bus::RequestId, (ambre_bus::RequestId, DocumentId)>,
+    /// Direct message requests the relay has not answered yet, keyed by the
+    /// channel id each minted, with the channel it would create.
+    direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
+    /// The whole content of a document this client created, sent as its first
+    /// update once the Sync worker holds its session.
+    unsent: HashMap<DocumentId, Vec<u8>>,
+    /// The session identity Sync issued for a channel or a space document
+    /// that no open channel or space holds yet, adopted once one does
+    /// (`AUTHOR-002`).
+    murmure_identities: HashMap<DocumentId, (u64, Vec<u8>)>,
+    /// The channel and space commands that write a document whose session
+    /// identity has not landed, in the order they came (`AUTHOR-026`).
+    murmure_waiting: HashMap<DocumentId, Vec<channels::HeldCommand>>,
     /// Canonical per-user identifier, captured from `LogicEvent::SessionReady`
     /// `None` until the session is authenticated. Seeded into every open
     /// `DocState` on arrival, and into any document opened afterwards. An app
@@ -723,6 +846,30 @@ impl LogicState {
             to_sync,
             to_persist,
             docs: HashMap::new(),
+            channels: HashMap::new(),
+            opening: HashMap::new(),
+            channel_ledgers: HashMap::new(),
+            read_cursors: HashMap::new(),
+            closed_channels: HashMap::new(),
+            document_channels: HashMap::new(),
+            watched_threads: HashMap::new(),
+            unplaced_threads: HashSet::new(),
+            closing_segments: HashMap::new(),
+            close_successors: HashMap::new(),
+            owed_replays: HashMap::new(),
+            channel_watchers: HashMap::new(),
+            channel_members: HashMap::new(),
+            spaces: HashMap::new(),
+            space_opening: HashMap::new(),
+            creating: HashMap::new(),
+            joining: HashMap::new(),
+            deleting: HashMap::new(),
+            leaving: HashMap::new(),
+            handing_off: HashMap::new(),
+            direct: HashMap::new(),
+            unsent: HashMap::new(),
+            murmure_identities: HashMap::new(),
+            murmure_waiting: HashMap::new(),
             my_user_id: None,
             my_display_name: None,
             rest_routes: HashMap::new(),
@@ -957,6 +1104,24 @@ pub fn run(
 #[cfg(test)]
 fn test_link<T>() -> (WorkerSender<T>, Receiver<T>) {
     ambre_bus::conduit::to_main(4096, &Doorbell::new())
+}
+
+/// A delta the relay delivers at `seq`, signed under the one PeerID its
+/// operations carry, as Sync would hand it over.
+#[cfg(test)]
+fn remote_delta(seq: u64, payload: Vec<u8>) -> ambre_bus::SignedDelta {
+    let peer = loro::LoroDoc::decode_import_blob_meta(&payload, false)
+        .ok()
+        .and_then(|meta| meta.partial_end_vv.keys().next().copied())
+        .unwrap_or_default();
+    ambre_bus::SignedDelta {
+        seq,
+        payload,
+        nonce: ambre_core::SessionNonce([0; 16]),
+        peer,
+        user: None,
+        summary: None,
+    }
 }
 
 /// `ARCH-009`: a Logic thread that cannot bind its doorbell says so to the
@@ -1355,7 +1520,9 @@ mod pass_tests {
             .last()
             .expect("the close saves a snapshot");
         let mut reopened = board();
-        reopened.state.apply_remote(reopened.document_id, &snapshot);
+        reopened
+            .state
+            .apply_remote(reopened.document_id, Order::Snapshot(Seq::ZERO), &snapshot);
         assert_eq!(elements(&reopened.state, reopened.document_id), 1_000);
     }
 
@@ -1385,7 +1552,7 @@ mod pass_tests {
             })
             .update
             .expect("the peer's delta");
-        state.apply_remote(document_id, &delta);
+        state.apply_remote(document_id, Order::Update(Seq(1)), &delta);
         assert!(!state.has_pending_work(), "the import landed first");
         assert_eq!(elements(&state, document_id), 1_001);
         state.handle_logic_command(LogicCommand::App {
@@ -1479,6 +1646,7 @@ mod authorship_tests {
             nonce: SessionNonce([0; 16]),
             peer,
             user: None,
+            summary: None,
         }
     }
 

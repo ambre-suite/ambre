@@ -3,8 +3,10 @@
 //! Each Ambre document belongs to one of these four types.
 //! The numeric values are stable across serialization (postcard, network).
 
+use crate::error::DocTypeError;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::str::FromStr;
 
 /// Type of an Ambre document.
 ///
@@ -38,6 +40,17 @@ impl DocType {
     /// Returns the `u8` discriminant of this document type.
     pub const fn as_u8(self) -> u8 {
         self as u8
+    }
+
+    /// The lowercase word the relay stores, the JSON wire carries and a route
+    /// path names, which [`DocType::from_str`] reads back.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Prose => "prose",
+            Self::Trame => "trame",
+            Self::Toile => "toile",
+            Self::Murmure => "murmure",
+        }
     }
 
     /// Returns a human-readable name (English) for the document type.
@@ -105,6 +118,32 @@ impl fmt::Display for DocType {
     }
 }
 
+/// Parses an owned document type word, as a database row holds it.
+impl TryFrom<String> for DocType {
+    type Error = DocTypeError;
+
+    fn try_from(word: String) -> Result<Self, Self::Error> {
+        word.parse()
+    }
+}
+
+/// Parses a document type from its lowercase word, exactly as `as_str` writes
+/// it. The match is strict, so `"Prose"` is refused and each set holds one
+/// spelling.
+impl FromStr for DocType {
+    type Err = DocTypeError;
+
+    fn from_str(word: &str) -> Result<Self, Self::Err> {
+        match word {
+            "prose" => Ok(Self::Prose),
+            "trame" => Ok(Self::Trame),
+            "toile" => Ok(Self::Toile),
+            "murmure" => Ok(Self::Murmure),
+            _ => Err(DocTypeError::InvalidString(word.to_string())),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,6 +191,24 @@ mod tests {
             &[DocType::Trame, DocType::Toile, DocType::Prose]
         );
         assert!(!DocType::creatable().contains(&DocType::Murmure));
+    }
+
+    /// Every document type reads back from its word, and only from it.
+    #[test]
+    fn each_type_reads_back_from_its_word_only() {
+        for doc_type in [
+            DocType::Prose,
+            DocType::Trame,
+            DocType::Toile,
+            DocType::Murmure,
+        ] {
+            assert_eq!(doc_type.as_str().parse(), Ok(doc_type));
+            assert!(doc_type.name().parse::<DocType>().is_err());
+        }
+        assert_eq!(
+            DocType::try_from("spreadsheet".to_string()),
+            Err(DocTypeError::InvalidString("spreadsheet".to_string()))
+        );
     }
 
     #[test]

@@ -1,10 +1,11 @@
-use axum::extract::{Json, Path, State};
+use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
+use crate::extract::Json;
 use crate::s3;
 use crate::state::AppState;
 
@@ -45,7 +46,7 @@ pub async fn media_upload_url(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !["owner", "editor"].contains(&m.role.as_str()) {
+    if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
     if !s3::is_valid_content_hash(&req.content_hash) {
@@ -139,7 +140,7 @@ pub async fn media_confirm_upload(
     // (owner/editor). A viewer cannot obtain an upload URL, so it must not be
     // able to register a media row either. Otherwise the two halves of the
     // upload flow would disagree on who may add media.
-    if !["owner", "editor"].contains(&m.role.as_str()) {
+    if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
     if !s3::is_valid_content_hash(&req.content_hash) {
@@ -163,7 +164,15 @@ pub async fn media_confirm_upload(
         &key,
     )
     .await?;
-    Ok(axum::Json(
-        serde_json::json!({"status":"confirmed","content_hash":req.content_hash}),
-    ))
+    Ok(axum::Json(MediaConfirmed {
+        status: ambre_core::WriteStatus::Confirmed,
+        content_hash: req.content_hash,
+    }))
+}
+
+/// The answer of a media confirmation, naming the media it recorded.
+#[derive(serde::Serialize)]
+pub struct MediaConfirmed {
+    pub status: ambre_core::WriteStatus,
+    pub content_hash: String,
 }

@@ -1,11 +1,14 @@
-use axum::extract::{Json, Path, Query, State};
+use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ambre_core::Role;
+
 use crate::auth::{self};
 use crate::db;
 use crate::error::AppError;
+use crate::extract::Json;
 use crate::redis_ops;
 use crate::state::AppState;
 
@@ -65,7 +68,8 @@ fn validate_identity(email: &str, display_name: &str) -> Result<(), AppError> {
 /// pair (kept in client memory) and the newly assigned user ID.
 #[derive(serde::Serialize)]
 pub struct SetupAccountResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub access_token: String,
     pub refresh_token: String,
     pub access_expires_in: u64,
@@ -104,7 +108,7 @@ pub async fn setup_account(
         &epk,
     )
     .await?;
-    let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
+    let user_id = user.id;
     let signing_pubkey =
         ambre_core::PublicKey::from_slice(&spk).map_err(|e| AppError::Conflict {
             detail: e.to_string(),
@@ -114,7 +118,7 @@ pub async fn setup_account(
     tracing::debug!(user_id = %user_id, provider = "setup", "login");
 
     Ok(axum::Json(SetupAccountResponse {
-        user_id: user_id.to_string(),
+        user_id,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         access_expires_in: tokens.access_expires_in,
@@ -126,7 +130,8 @@ pub async fn setup_account(
 /// Authenticated user profile returned by GET /auth/me.
 #[derive(serde::Serialize)]
 pub struct MeResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub email: String,
     pub display_name: String,
 }
@@ -139,9 +144,9 @@ pub async fn me(
     let u = db::get_user(&state.db, &s.user_id)
         .await?
         .ok_or(AppError::NotFound { resource: "user" })?;
-    let uid = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*u.id.as_bytes()));
+    let uid = u.id;
     Ok(axum::Json(MeResponse {
-        user_id: uid.to_string(),
+        user_id: uid,
         email: u.email,
         display_name: u.display_name,
     }))
@@ -176,7 +181,7 @@ pub async fn logout(
         }
     }
     tracing::debug!(user_id = %auth.user_id, "logout");
-    Ok(axum::Json(serde_json::json!({ "status": "logged_out" })))
+    Ok(super::Done::json(ambre_core::WriteStatus::LoggedOut))
 }
 
 // -- List Documents ------------------------------------------------
@@ -186,11 +191,15 @@ pub async fn logout(
 /// copy of the document key.
 #[derive(serde::Serialize)]
 pub struct DocumentSummaryJson {
-    pub id: String,
-    pub owner_id: String,
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub owner_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<String>,
-    pub role: String,
+    /// Serialized as its lowercase word.
+    pub role: Role,
     pub doc_key_enc: String,
     /// Exchange public key (hex) of whoever wrapped `doc_key_enc`. The client
     /// ECDH-unwraps the doc key with it to decrypt the name for the launcher.
@@ -216,21 +225,25 @@ pub async fn list_documents(
     let docs = db::list_documents_for_user(&state.db, &s.user_id).await?;
     let json: Vec<_> = docs
         .into_iter()
-        .map(|d| DocumentSummaryJson {
-            id: d.id.to_string(),
-            owner_id: d.owner_id.to_string(),
-            doc_type: d.doc_type,
-            name_enc: d
-                .name_enc
-                .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
-            role: d.role,
-            doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&d.doc_key_enc),
-            wrapper_exchange_pub_key: d
-                .wrapper_exchange_pubkey
-                .map(hex::encode)
-                .unwrap_or_default(),
-            member_count: d.member_count.max(0) as u32,
-            updated_at: d.updated_at.to_rfc3339(),
+        .map(|d| {
+            let doc_id = d.id;
+            let owner_id = d.owner_id;
+            DocumentSummaryJson {
+                id: doc_id,
+                owner_id,
+                doc_type: d.doc_type,
+                name_enc: d
+                    .name_enc
+                    .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
+                role: d.role,
+                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&d.doc_key_enc),
+                wrapper_exchange_pub_key: d
+                    .wrapper_exchange_pubkey
+                    .map(hex::encode)
+                    .unwrap_or_default(),
+                member_count: d.member_count.max(0) as u32,
+                updated_at: d.updated_at.to_rfc3339(),
+            }
         })
         .collect();
     Ok(axum::Json(DocumentListResponse { documents: json }))
@@ -243,13 +256,14 @@ pub async fn list_documents(
 /// exchange key, stored server-side for sharing.
 #[derive(serde::Deserialize)]
 pub struct CreateDocumentRequest {
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<String>,
     pub doc_key_enc: String,
     /// Optional client-generated document id (lazy creation). When present the
     /// server materializes the row under this id idempotently.
-    #[serde(default)]
-    pub document_id: Option<String>,
+    #[serde(default, with = "ambre_core::serde_id::document_id::option")]
+    pub document_id: Option<ambre_core::DocumentId>,
     /// The first entry of the membership log, signed by the creator
     /// (`SYNC-132`).
     #[serde(default)]
@@ -257,8 +271,10 @@ pub struct CreateDocumentRequest {
 }
 #[derive(serde::Serialize)]
 pub struct CreateDocumentResponse {
-    pub document_id: String,
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub document_id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
 }
 
 pub async fn create_document(
@@ -268,11 +284,6 @@ pub async fn create_document(
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
     let s = auth;
-    if !["prose", "trame", "toile", "murmure"].contains(&req.doc_type.as_str()) {
-        return Err(AppError::Conflict {
-            detail: "invalid doc_type".into(),
-        });
-    }
 
     let name_enc = req
         .name_enc
@@ -284,22 +295,20 @@ pub async fn create_document(
                 })
         })
         .transpose()?;
-    let client_id = req.document_id.as_deref().map(parse_doc_id).transpose()?;
+    let client_id = req.document_id;
     let (doc, created) = db::create_document(
         &state.db,
         &s.user_id,
-        &req.doc_type,
+        req.doc_type,
         name_enc.as_deref(),
         client_id.as_ref(),
     )
     .await?;
-    let doc_id =
-        ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));
+    let doc_id = doc.id;
     // Only the call that actually created the row (or an idempotent retry by the
     // same owner) registers the owner membership. A foreign caller hitting an
     // existing id never gains ownership.
-    let owner_uuid =
-        ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes()));
+    let owner_uuid = doc.owner_id;
     // A foreign caller who supplied an id that already exists and belongs to
     // someone else must not learn it exists, nor its `doc_type`. Answer 404 as if
     // the id were free-but-unowned-by-them, instead of echoing back the row. The
@@ -321,7 +330,7 @@ pub async fn create_document(
         let expected = super::share::Expected {
             act: ambre_protocol::MembershipAct::Create,
             member: s.user_id,
-            role: Some("owner"),
+            role: Some(ambre_core::Role::Owner),
             key: None,
         };
         let entry = super::share::checked_entry(&state, &s, doc_id, text, expected).await?;
@@ -329,7 +338,7 @@ pub async fn create_document(
             &state.db,
             &doc_id,
             &s.user_id,
-            "owner",
+            Role::Owner,
             &doc_key_enc,
             &s.user_id,
             entry.as_ref(),
@@ -338,7 +347,7 @@ pub async fn create_document(
     }
     tracing::info!(document_id = %doc_id, owner_id = %s.user_id, doc_type = %req.doc_type, created, "document create");
     Ok(axum::Json(CreateDocumentResponse {
-        document_id: doc_id.to_string(),
+        document_id: doc_id,
         doc_type: req.doc_type,
     }))
 }
@@ -348,11 +357,15 @@ pub async fn create_document(
 /// Full document details including the calling user's membership info.
 #[derive(serde::Serialize)]
 pub struct GetDocumentResponse {
-    pub id: String,
-    pub owner_id: String,
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub owner_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<String>,
-    pub role: Option<String>,
+    /// Serialized as its lowercase word.
+    pub role: Option<Role>,
     pub doc_key_enc: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -377,20 +390,20 @@ pub async fn get_document(
     // document's existence) to an arbitrary caller who holds only the UUID is an
     // unnecessary metadata disclosure. The owner keeps access even without a
     // `document_members` row (they may have been the creator pre-membership).
-    let is_owner = auth.user_id.as_uuid().as_bytes() == doc.owner_id.as_bytes();
+    let is_owner = auth.user_id == doc.owner_id;
     if mem.is_none() && !is_owner {
         return Err(AppError::NotFound {
             resource: "document",
         });
     }
     Ok(axum::Json(GetDocumentResponse {
-        id: doc.id.to_string(),
-        owner_id: doc.owner_id.to_string(),
+        id: doc.id,
+        owner_id: doc.owner_id,
         doc_type: doc.doc_type,
         name_enc: doc
             .name_enc
             .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
-        role: mem.as_ref().map(|m| m.role.clone()),
+        role: mem.as_ref().map(|m| m.role),
         doc_key_enc: mem.map(|m| base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc)),
         created_at: doc.created_at.to_rfc3339(),
         updated_at: doc.updated_at.to_rfc3339(),
@@ -417,7 +430,7 @@ pub async fn rename_document(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !["owner", "editor"].contains(&m.role.as_str()) {
+    if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
     let name_enc = base64::engine::general_purpose::URL_SAFE
@@ -427,7 +440,7 @@ pub async fn rename_document(
         })?;
     db::rename_document(&state.db, &doc_id, &name_enc).await?;
     tracing::debug!(document_id = %doc_id, by = %s.user_id, "document renamed");
-    Ok(axum::Json(serde_json::json!({"status":"renamed"})))
+    Ok(super::Done::json(ambre_core::WriteStatus::Renamed))
 }
 
 pub async fn delete_document(
@@ -440,14 +453,14 @@ pub async fn delete_document(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if m.role != "owner" {
+    if m.role != Role::Owner {
         return Err(AppError::Forbidden);
     }
     // A delete that fails past its mark still completes: the flusher's pass
     // finishes it (`SRV-165`).
     crate::deletion::delete_document(&state, &doc_id).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, "document deleted");
-    Ok(axum::Json(serde_json::json!({"status":"deleted"})))
+    Ok(super::Done::json(ambre_core::WriteStatus::Deleted))
 }
 
 // -- Users ---------------------------------------------------------
@@ -455,7 +468,8 @@ pub async fn delete_document(
 /// User info returned by search.
 #[derive(serde::Serialize)]
 pub struct UserInfoJson {
-    pub id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub id: ambre_core::UserId,
     pub email: String,
     /// Whether the email was provider-verified (OIDC) vs self-asserted at
     /// `/auth/setup` (#3). The share UI should flag an unverified recipient for
@@ -492,13 +506,16 @@ pub async fn search_users(
     let users = db::search_users(&state.db, q).await?;
     let json: Vec<_> = users
         .into_iter()
-        .map(|u| UserInfoJson {
-            id: u.id.to_string(),
-            email: u.email,
-            email_verified: u.email_verified,
-            display_name: u.display_name,
-            signing_pubkey: hex::encode(&u.signing_pubkey),
-            exchange_pubkey: hex::encode(&u.exchange_pubkey),
+        .map(|u| {
+            let user_id = u.id;
+            UserInfoJson {
+                id: user_id,
+                email: u.email,
+                email_verified: u.email_verified,
+                display_name: u.display_name,
+                signing_pubkey: hex::encode(&u.signing_pubkey),
+                exchange_pubkey: hex::encode(&u.exchange_pubkey),
+            }
         })
         .collect();
     Ok(axum::Json(UserSearchResult { users: json }))
@@ -535,13 +552,15 @@ pub async fn get_pubkeys(
 /// its own entry by `exchange_pub_key` and unwraps `doc_key_enc` via ECDH.
 #[derive(serde::Serialize)]
 pub struct MemberInfoJson {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub email: String,
     /// Whether the member's email was provider-verified (#3). Additive field;
     /// older clients ignore it.
     pub email_verified: bool,
     pub display_name: String,
-    pub role: String,
+    /// Serialized as its lowercase word.
+    pub role: Role,
     pub signing_pub_key: String,
     pub exchange_pub_key: String,
     pub doc_key_enc: String,
@@ -561,28 +580,37 @@ pub async fn list_document_members(
     let doc_id = parse_doc_id(&document_id)?;
     // A non-member and an absent document draw the same 404 (`SRV-005`). The
     // client reads that 404 as a document not created yet, and opens it locally.
-    let _m = db::get_document_member(&state.db, &doc_id, &s.user_id)
+    // The admin who re-keys a public channel reads whom it wraps for
+    // (`SRV-146`).
+    if db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
-        .ok_or(AppError::NotFound {
+        .is_none()
+        && !super::space_admin_of_public_meta(&state, &doc_id, &s.user_id).await?
+    {
+        return Err(AppError::NotFound {
             resource: "document",
-        })?;
+        });
+    }
     let members = db::list_document_members(&state.db, &doc_id).await?;
     let json: Vec<_> = members
         .into_iter()
-        .map(|m| MemberInfoJson {
-            user_id: m.user_id.to_string(),
-            email: m.email,
-            email_verified: m.email_verified,
-            display_name: m.display_name,
-            role: m.role,
-            signing_pub_key: hex::encode(&m.signing_pubkey),
-            exchange_pub_key: hex::encode(&m.exchange_pubkey),
-            doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
-            wrapper_exchange_pub_key: hex::encode(
-                m.wrapper_exchange_pubkey
-                    .as_ref()
-                    .unwrap_or(&m.exchange_pubkey),
-            ),
+        .map(|m| {
+            let user_id = m.user_id;
+            MemberInfoJson {
+                user_id,
+                email: m.email,
+                email_verified: m.email_verified,
+                display_name: m.display_name,
+                role: m.role,
+                signing_pub_key: hex::encode(&m.signing_pubkey),
+                exchange_pub_key: hex::encode(&m.exchange_pubkey),
+                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
+                wrapper_exchange_pub_key: hex::encode(
+                    m.wrapper_exchange_pubkey
+                        .as_ref()
+                        .unwrap_or(&m.exchange_pubkey),
+                ),
+            }
         })
         .collect();
     // A member with write access that reads a debt rotates before it sends a
@@ -595,15 +623,29 @@ pub async fn list_document_members(
         .iter()
         .map(|bytes| base64::engine::general_purpose::URL_SAFE.encode(bytes))
         .collect();
-    Ok(axum::Json(
-        serde_json::json!({"members":json,"rotation_owed":rotation_owed,"log":log}),
-    ))
+    Ok(axum::Json(MembersResponse {
+        members: json,
+        rotation_owed,
+        log,
+    }))
+}
+
+/// The members of a document, with what a client checks them against.
+#[derive(serde::Serialize)]
+pub struct MembersResponse {
+    pub members: Vec<MemberInfoJson>,
+    /// Whether a member with write access must rotate before it sends.
+    pub rotation_owed: bool,
+    /// The signed membership entries, each in URL-safe base64.
+    pub log: Vec<String>,
 }
 
 /// Request body for changing a member's role.
 #[derive(serde::Deserialize)]
 pub struct UpdateMemberRoleRequest {
-    pub role: String,
+    /// A role word, parsed by the handler: an unknown word answers 409.
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     /// The signed entry that gives the role (`SYNC-132`).
     #[serde(default)]
     pub entry: Option<String>,
@@ -621,25 +663,27 @@ pub async fn update_document_member_role(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if m.role != "owner" {
+    if m.role != Role::Owner {
         return Err(AppError::Forbidden);
     }
-    if !["owner", "editor", "viewer"].contains(&req.role.as_str()) {
+    if !req.role.is_valid_for_document() {
         return Err(AppError::Conflict {
             detail: "invalid role".into(),
         });
     }
+    let role = req.role;
     let expected = super::share::Expected {
         act: ambre_protocol::MembershipAct::ChangeRole,
         member: target,
-        role: Some(&req.role),
+        role: Some(role),
         key: Some(None),
     };
     let entry =
         super::share::checked_entry(&state, &s, doc_id, req.entry.as_deref(), expected).await?;
-    db::update_document_member_role(&state.db, &doc_id, &target, &req.role, entry.as_ref()).await?;
-    tracing::info!(document_id = %doc_id, target_user = %target, role = %req.role, by = %s.user_id, "member role updated");
-    Ok(axum::Json(serde_json::json!({"status":"role_updated"})))
+    db::update_document_member_role(&state.db, &doc_id, &target, role, entry.as_ref()).await?;
+    tracing::info!(document_id = %doc_id, target_user = %target, role = %role, by = %s.user_id, "member role updated");
+    crate::redis_ops::members_changed(&state.redis, &doc_id).await;
+    Ok(super::Done::json(ambre_core::WriteStatus::RoleUpdated))
 }
 
 #[cfg(test)]

@@ -173,7 +173,7 @@ pub struct ToileState {
     my_name: Option<String>,
     /// Remote peers' latest presence (cursors, live strokes, lasers, selections)
     /// and the local clock each was last seen at, keyed by canonical `UserId`.
-    /// Ephemeral: never in Loro, never persisted, rebuilt from inbound frames.
+    /// Ephemeral: never in Loro, never persisted, rebuilt from inbound samples.
     /// The local peer's own presence is not stored here (the UI draws its own
     /// cursor). The map drops a peer whose last sample is older than the TTL,
     /// which is how a departure travels with no departure signal
@@ -191,11 +191,11 @@ pub struct ToileState {
     /// `SetSlideOrder`.
     playback: PlaybackState,
     /// "Follow presenter" broadcast toggle: when set, the playback commands
-    /// additionally emit an ephemeral frame carrying the active slide index so
+    /// additionally emit a presence sample carrying the active slide index so
     /// followers glide along. Local role, never in Loro and never synced.
     broadcasting: bool,
     /// The presenter this viewer is following, or `None`. When `Some(u)`,
-    /// an inbound presence frame from `u` that carries a `present_slide` moves this
+    /// an inbound presence sample from `u` that carries a `present_slide` moves this
     /// viewer's active slide; a manual navigation clears it ("take control").
     /// Local role, never in Loro and never synced.
     following: Option<UserId>,

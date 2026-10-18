@@ -1,0 +1,597 @@
+//! The fold of the amendments of a final segment against its contract rows.
+//! They hold when the fold lease is asked, the fold snapshot the holder
+//! builds, the check another member runs, and the fold every member settles.
+
+use std::collections::HashMap;
+
+use ambre_bus::{FoldAnswer, MessageDraft, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
+use ambre_core::{ChannelId, DocumentId, LeaseId, MessageId, SegmentId, Seq, UserId};
+use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
+
+use crate::error::MurmureError;
+use crate::schema::{MESSAGE_CONTENT, MESSAGES};
+use crate::sequence::loro_part;
+use crate::session::next_peer;
+use crate::{
+    ChangeTarget, ChannelState, ChannelType, FINALIZE_RETRY_MS, FOLD_DELAY_MS, Replay, Signer,
+};
+
+const NOW: Timestamp = Timestamp(1_700_000_000_000);
+const LEASE_MS: u64 = 30_000;
+
+fn at(ms: u64) -> Timestamp {
+    Timestamp(NOW.0 + ms)
+}
+
+fn draft(text: &str) -> MessageDraft {
+    MessageDraft {
+        text: text.to_owned(),
+        mentions: Vec::new(),
+    }
+}
+
+/// A second member's copy of `state`, opened from its live segments.
+fn peer_of(state: &ChannelState) -> ChannelState {
+    let segments: HashMap<SegmentId, Vec<u8>> = state
+        .held_segments()
+        .into_iter()
+        .map(|segment| {
+            let bytes = state.snapshot(segment.document_id()).expect("segment");
+            (segment, bytes)
+        })
+        .collect();
+    let meta = state.snapshot(state.meta_id().document_id()).expect("meta");
+    ChannelState::open(state.channel_id(), state.meta_id(), &meta, &segments)
+        .expect("peer")
+        .identify()
+}
+
+/// Alice's channel with a final segment holding "one", "two" and "three".
+/// Its amendments edit the first and delete the second, and the relay
+/// numbered their three deltas, header first.
+struct Amended {
+    alice: ChannelState,
+    author: UserId,
+    segment: SegmentId,
+    amendments: DocumentId,
+    ids: Vec<MessageId>,
+    /// The `meta` delta that names the amendments.
+    meta: Vec<u8>,
+    /// The three amendment deltas, in the relay's order.
+    deltas: Vec<Vec<u8>>,
+    /// The final snapshot of the segment, as the relay holds it.
+    sealed: Vec<u8>,
+}
+
+fn amended() -> Amended {
+    let author = UserId::new();
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .with_segment_size(3)
+        .identify();
+    for text in ["one", "two", "three"] {
+        alice.send(&draft(text), author, NOW).expect("send");
+    }
+    let segment = alice.wants_close().expect("full");
+    let successor = SegmentId::new();
+    alice
+        .close_into(segment, successor, true, NOW)
+        .expect("close");
+    let peer = next_peer();
+    alice
+        .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+        .expect("adopt");
+    assert_eq!(alice.lease_to_ask(NOW), Some(segment));
+    alice.lease_granted(segment, LeaseId::new(), 0, LEASE_MS);
+    let sealed = alice.final_snapshot(NOW, 0).expect("export").expect("in");
+    alice.mark_final(segment).expect("mark");
+    assert_eq!(alice.final_segments(), vec![segment]);
+
+    let ChangeTarget::Create(amendments) = alice.change_target(segment, NOW).expect("target")
+    else {
+        panic!("a final segment with no amendments creates them");
+    };
+    let peer = next_peer();
+    let first = alice
+        .adopt_session(amendments, peer, peer.to_le_bytes().to_vec())
+        .expect("adopt")
+        .expect("the header travels");
+    let meta = alice
+        .amendments_linked(segment, amendments)
+        .expect("link")
+        .meta
+        .expect("meta names them");
+    let ids: Vec<MessageId> = alice
+        .messages(segment)
+        .expect("held")
+        .iter()
+        .map(|m| m.id)
+        .collect();
+    let edited = alice
+        .edit(segment, ids[0], &draft("uno"), author)
+        .expect("edit")
+        .expect("a change");
+    let deleted = alice.delete(segment, ids[1], author).expect("delete");
+    let deltas = vec![first, edited.delta, deleted.delta];
+    let mut amended = Amended {
+        alice,
+        author,
+        segment,
+        amendments,
+        ids,
+        meta,
+        deltas,
+        sealed: sealed.payload,
+    };
+    // The relay echoes each delta to its author.
+    let alice_signer = amended.signer();
+    for (seq, delta) in (1..).zip(amended.deltas.clone()) {
+        amended
+            .alice
+            .apply_signed(amendments, Seq(seq), &delta, alice_signer)
+            .expect("echo");
+    }
+    amended
+}
+
+impl Amended {
+    fn signer(&self) -> Signer {
+        Signer {
+            peer: self.alice.peer(self.amendments).expect("a session"),
+            user: Some(self.author),
+        }
+    }
+
+    /// A member's copy holding the final segment, whose `meta` names the
+    /// amendments.
+    fn loading(&self) -> ChannelState {
+        let mut copy = peer_of(&self.alice);
+        copy.apply_remote(copy.meta_id().document_id(), &self.meta)
+            .expect("meta");
+        copy.load_older(self.segment, &self.sealed)
+            .expect("the final snapshot loads");
+        copy
+    }
+
+    /// Bob's copy, holding the first `received` amendment deltas.
+    fn bob(&self, received: usize) -> ChannelState {
+        let mut bob = self.loading();
+        assert_eq!(bob.amendments_to_open(), [self.amendments]);
+        let signer = self.signer();
+        for (seq, delta) in (1..).zip(&self.deltas).take(received) {
+            bob.apply_signed(self.amendments, Seq(seq), delta, signer)
+                .expect("waits");
+        }
+        bob.older_ready(self.amendments).expect("admitted");
+        assert_eq!(bob.amendments_id(self.segment), Some(self.amendments));
+        bob
+    }
+
+    /// Alice takes the fold lease and builds the fold snapshot.
+    fn fold(&mut self) -> crate::FoldSnapshot {
+        assert_eq!(self.alice.fold_lease_to_ask(NOW), Some(self.segment));
+        self.alice.fold_answered(
+            self.segment,
+            FoldAnswer::Granted {
+                lease: LeaseId::new(),
+                horizon: 0,
+                amendments: self.amendments,
+                amendments_seq: 3,
+                expires_in: LEASE_MS,
+            },
+        );
+        self.alice
+            .fold_snapshot(NOW)
+            .expect("fold")
+            .expect("every amendment is in")
+    }
+}
+
+fn messages_of(event: &MurmureEvent) -> &[MessageView] {
+    let MurmureEvent::Messages { messages, .. } = event else {
+        panic!("messages");
+    };
+    messages
+}
+
+fn holds(bytes: &[u8], word: &str) -> bool {
+    bytes.windows(word.len()).any(|w| w == word.as_bytes())
+}
+
+// --- MURMURE-075 ---
+
+/// The fold lease is asked at the first tick past the link of the
+/// amendments, then as late as the relay says. A failure waits a delay that
+/// doubles, and an accepted fold waits out the fold delay.
+#[test]
+fn the_fold_lease_is_asked_as_the_relay_says() {
+    let Amended {
+        mut alice, segment, ..
+    } = amended();
+    assert_eq!(
+        alice.fold_lease_to_ask(NOW),
+        Some(segment),
+        "the first tick"
+    );
+    assert_eq!(alice.fold_lease_to_ask(NOW), None, "asked once");
+
+    alice.fold_answered(segment, FoldAnswer::Deferred { retry_in: 5_000 });
+    assert_eq!(alice.fold_lease_to_ask(NOW), None, "the tick dates it");
+    assert_eq!(alice.fold_lease_to_ask(at(4_999)), None);
+    assert_eq!(alice.fold_lease_to_ask(at(5_000)), Some(segment));
+
+    alice.fold_failed(segment);
+    let base = 5_000;
+    assert_eq!(alice.fold_lease_to_ask(at(base)), None, "the tick dates it");
+    assert_eq!(
+        alice.fold_lease_to_ask(at(base + FINALIZE_RETRY_MS)),
+        Some(segment)
+    );
+    alice.fold_failed(segment);
+    let base = base + FINALIZE_RETRY_MS;
+    assert_eq!(alice.fold_lease_to_ask(at(base)), None);
+    assert_eq!(
+        alice.fold_lease_to_ask(at(base + FINALIZE_RETRY_MS)),
+        None,
+        "the delay doubled"
+    );
+    assert_eq!(
+        alice.fold_lease_to_ask(at(base + 2 * FINALIZE_RETRY_MS)),
+        Some(segment)
+    );
+
+    alice.fold_committed(segment);
+    let base = base + 2 * FINALIZE_RETRY_MS;
+    assert_eq!(alice.fold_lease_to_ask(at(base)), None, "the tick dates it");
+    assert_eq!(alice.fold_lease_to_ask(at(base + FOLD_DELAY_MS - 1)), None);
+    assert_eq!(
+        alice.fold_lease_to_ask(at(base + FOLD_DELAY_MS)),
+        Some(segment)
+    );
+}
+
+/// A channel with no amendments asks for no fold lease.
+#[test]
+fn a_segment_without_amendments_asks_for_no_fold_lease() {
+    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
+    assert_eq!(state.fold_lease_to_ask(NOW), None);
+    assert!(state.fold_snapshot(NOW).expect("fold").is_none());
+}
+
+/// The lease holder folds the amendments into a shallow snapshot of the
+/// segment, once it holds them up to the number the relay returned. A new
+/// copy loading it reads the folded messages, and fetches no amendments.
+#[test]
+fn the_lease_holder_folds_the_amendments_into_the_segment() {
+    let mut amended = amended();
+    let (segment, amendments) = (amended.segment, amended.amendments);
+    let before = amended.alice.messages(segment).expect("held");
+    assert_eq!(amended.alice.fold_lease_to_ask(NOW), Some(segment));
+    let lease = LeaseId::new();
+    amended.alice.fold_answered(
+        segment,
+        FoldAnswer::Granted {
+            lease,
+            horizon: 0,
+            amendments,
+            amendments_seq: 4,
+            expires_in: LEASE_MS,
+        },
+    );
+    assert!(
+        amended.alice.fold_snapshot(NOW).expect("fold").is_none(),
+        "an amendment the relay numbered is missing"
+    );
+    amended.alice.fold_answered(
+        segment,
+        FoldAnswer::Granted {
+            lease,
+            horizon: 0,
+            amendments,
+            amendments_seq: 3,
+            expires_in: LEASE_MS,
+        },
+    );
+    let fold = amended
+        .alice
+        .fold_snapshot(at(1))
+        .expect("fold")
+        .expect("in");
+    assert_eq!((fold.segment, fold.lease), (segment, lease));
+    assert_eq!((fold.horizon, fold.amendments), (0, amendments));
+    assert_eq!(fold.amendments_seq, 3);
+    assert!(holds(&fold.payload, "uno"));
+    assert!(
+        !holds(&fold.payload, "two"),
+        "shallow: the deleted body is gone"
+    );
+    assert!(
+        amended.alice.fold_snapshot(at(2)).expect("fold").is_none(),
+        "built once"
+    );
+    assert_eq!(
+        amended.alice.messages(segment).expect("held"),
+        before,
+        "this copy stays as it is"
+    );
+
+    // Carol opens the channel once `meta` marks the amendments folded.
+    let mut bob = amended.bob(3);
+    let marked = bob
+        .mark_folded(segment, amendments)
+        .expect("mark")
+        .expect("a delta");
+    let mut carol = peer_of(&bob);
+    carol
+        .apply_remote(carol.meta_id().document_id(), &marked)
+        .expect("meta");
+    let loaded = carol
+        .load_older(segment, &fold.payload)
+        .expect("the fold loads");
+    assert_eq!(carol.amendments_to_open(), [], "the fold holds them");
+    let read = messages_of(&loaded).to_vec();
+    assert_eq!(
+        read.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+        ["uno", "", "three"]
+    );
+    assert!(read[0].edited && read[1].deleted);
+    assert_eq!(read, before, "the fold reads as the amendments did");
+}
+
+/// A lease naming other amendments than this copy holds fails, and is asked
+/// again past the retry delay. One that runs out is asked again.
+#[test]
+fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
+    let Amended {
+        mut alice,
+        segment,
+        amendments,
+        ..
+    } = amended();
+    assert_eq!(alice.fold_lease_to_ask(NOW), Some(segment));
+    alice.fold_answered(
+        segment,
+        FoldAnswer::Granted {
+            lease: LeaseId::new(),
+            horizon: 0,
+            amendments: DocumentId::new(),
+            amendments_seq: 1,
+            expires_in: LEASE_MS,
+        },
+    );
+    assert!(alice.fold_snapshot(NOW).expect("fold").is_none());
+    assert_eq!(alice.fold_lease_to_ask(NOW), None, "the tick dates it");
+    assert_eq!(
+        alice.fold_lease_to_ask(at(FINALIZE_RETRY_MS)),
+        Some(segment)
+    );
+
+    alice.fold_answered(
+        segment,
+        FoldAnswer::Granted {
+            lease: LeaseId::new(),
+            horizon: 0,
+            amendments,
+            amendments_seq: 9,
+            expires_in: LEASE_MS,
+        },
+    );
+    let base = FINALIZE_RETRY_MS;
+    assert!(alice.fold_snapshot(at(base)).expect("fold").is_none());
+    assert_eq!(alice.fold_lease_to_ask(at(base + LEASE_MS - 1)), None);
+    assert_eq!(
+        alice.fold_lease_to_ask(at(base + LEASE_MS)),
+        Some(segment),
+        "the lease ran out"
+    );
+}
+
+/// Bob holds the amendments up to the number the fold names: he folds his
+/// own copy and finds the same. A forged fold is a mismatch, and a copy
+/// holding another number of amendments leaves it unchecked.
+#[test]
+fn another_member_checks_the_fold_by_folding_its_own_copy() {
+    let mut amended = amended();
+    let segment = amended.segment;
+    let fold = amended.fold();
+    let bob = amended.bob(3);
+    let document_id = segment.document_id();
+    let before = bob.messages(segment).expect("held");
+    assert_eq!(
+        bob.check_snapshot(document_id, 0, &fold.payload)
+            .expect("check"),
+        SnapshotVerdict::Match { extras: Vec::new() }
+    );
+    assert_eq!(bob.messages(segment).expect("held"), before, "only read");
+
+    let forged = LoroDoc::new();
+    forged.import(loro_part(&fold.payload)).expect("import");
+    let Some(ValueOrContainer::Container(Container::Map(message))) =
+        forged.get_list(MESSAGES).get(2)
+    else {
+        panic!("a message");
+    };
+    let Some(ValueOrContainer::Container(Container::Text(body))) = message.get(MESSAGE_CONTENT)
+    else {
+        panic!("a body");
+    };
+    body.insert(0, "planted ").expect("forge");
+    forged.commit();
+    let forged = forged
+        .export(ExportMode::shallow_snapshot(&forged.oplog_frontiers()))
+        .expect("export");
+    assert_eq!(
+        bob.check_snapshot(document_id, 0, &forged).expect("check"),
+        SnapshotVerdict::Mismatch
+    );
+
+    let short = amended.bob(2);
+    assert_eq!(
+        short
+            .check_snapshot(document_id, 0, &fold.payload)
+            .expect("check"),
+        SnapshotVerdict::Unchecked,
+        "he misses an amendment the fold holds"
+    );
+}
+
+/// A change written after the fold began reaches Bob before his check. His
+/// copy holds more than the fold, so the check leaves it unchecked, and the
+/// relay keeps the amendments.
+#[test]
+fn a_change_past_the_fold_leaves_it_unchecked() {
+    let mut amended = amended();
+    let (segment, amendments) = (amended.segment, amended.amendments);
+    let fold = amended.fold();
+    let mut bob = amended.bob(3);
+    let later = amended
+        .alice
+        .edit(segment, amended.ids[2], &draft("tres"), amended.author)
+        .expect("edit")
+        .expect("a change");
+    bob.apply_signed(amendments, Seq(4), &later.delta, amended.signer())
+        .expect("applies");
+    assert_eq!(
+        bob.check_snapshot(segment.document_id(), 0, &fold.payload)
+            .expect("check"),
+        SnapshotVerdict::Unchecked
+    );
+    assert_eq!(bob.amendments_id(segment), Some(amendments));
+}
+
+// --- MURMURE-076, MURMURE-077 ---
+
+/// `meta` marks the amendments folded, and every member folds its own copy
+/// and drops them. A change of Alice's the relay never sequenced comes back
+/// as a replay, and the next change creates new amendments.
+#[test]
+fn a_marked_fold_settles_every_copy_and_replays_what_never_left() {
+    let mut amended = amended();
+    let (segment, amendments) = (amended.segment, amended.amendments);
+    amended.fold();
+    let mut bob = amended.bob(3);
+    // Alice edits the third message; the relay never sequences it.
+    amended
+        .alice
+        .edit(segment, amended.ids[2], &draft("tres"), amended.author)
+        .expect("edit")
+        .expect("a change");
+    assert_eq!(
+        bob.settle_folds().expect("settle").len(),
+        0,
+        "not marked yet"
+    );
+
+    let meta = bob
+        .mark_folded(segment, amendments)
+        .expect("mark")
+        .expect("a delta");
+    assert_eq!(bob.mark_folded(segment, amendments).expect("mark"), None);
+    let settled = bob.settle_folds().expect("settle");
+    assert_eq!(settled.len(), 1);
+    assert_eq!(
+        (settled[0].segment, settled[0].amendments),
+        (segment, amendments)
+    );
+    assert!(settled[0].replay.is_empty(), "Bob changed nothing");
+    assert_eq!(bob.amendments_id(segment), None, "dropped");
+    let read = messages_of(&settled[0].event);
+    assert_eq!(
+        read.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+        ["uno", "", "three"]
+    );
+
+    amended
+        .alice
+        .apply_remote(amended.alice.meta_id().document_id(), &meta)
+        .expect("meta");
+    let settled = amended.alice.settle_folds().expect("settle");
+    assert_eq!(settled.len(), 1);
+    assert_eq!(
+        settled[0].replay,
+        [Replay {
+            segment,
+            message: amended.ids[2],
+            draft: Some(draft("tres")),
+        }]
+    );
+    assert_eq!(messages_of(&settled[0].event), read, "the fold, as Bob's");
+    assert_eq!(amended.alice.amendments_id(segment), None);
+    assert_eq!(
+        amended.alice.fold_lease_to_ask(NOW),
+        None,
+        "nothing to fold"
+    );
+    assert!(
+        amended.alice.settle_folds().expect("settle").is_empty(),
+        "once"
+    );
+    assert!(matches!(
+        amended.alice.change_target(segment, NOW),
+        Ok(ChangeTarget::Create(other)) if other != amendments
+    ));
+}
+
+// --- MURMURE-483 ---
+
+/// Amendments the relay reports gone are marked folded, once. The change
+/// it refused is replayed, and only linked amendments are marked so.
+#[test]
+fn amendments_reported_gone_are_marked_folded_and_replay_the_refused_change() {
+    let mut amended = amended();
+    let (segment, amendments) = (amended.segment, amended.amendments);
+    let mut bob = amended.bob(3);
+    assert!(matches!(
+        amended.alice.amendments_gone(DocumentId::new()),
+        Err(MurmureError::NotHeld(_))
+    ));
+    // The relay refuses this edit: it erased the amendments meanwhile.
+    amended
+        .alice
+        .edit(segment, amended.ids[2], &draft("tres"), amended.author)
+        .expect("edit")
+        .expect("a change");
+
+    let meta = amended
+        .alice
+        .amendments_gone(amendments)
+        .expect("gone")
+        .expect("a delta");
+    assert_eq!(
+        amended.alice.amendments_gone(amendments).expect("gone"),
+        None
+    );
+    let settled = amended.alice.settle_folds().expect("settle");
+    assert_eq!(
+        settled[0].replay,
+        [Replay {
+            segment,
+            message: amended.ids[2],
+            draft: Some(draft("tres")),
+        }]
+    );
+    bob.apply_remote(bob.meta_id().document_id(), &meta)
+        .expect("meta");
+    assert_eq!(bob.settle_folds().expect("settle").len(), 1, "every copy");
+}
+
+/// Amendments `meta` marks folded while they still arrive are dropped
+/// unopened.
+#[test]
+fn amendments_still_arriving_are_dropped_once_folded() {
+    let amended = amended();
+    let (segment, amendments) = (amended.segment, amended.amendments);
+    let mut bob = amended.loading();
+    assert_eq!(bob.amendments_to_open(), [amendments]);
+    let mut carol = amended.bob(3);
+    let meta = carol
+        .mark_folded(segment, amendments)
+        .expect("mark")
+        .expect("a delta");
+    bob.apply_remote(bob.meta_id().document_id(), &meta)
+        .expect("meta");
+    assert!(bob.settle_folds().expect("settle").is_empty());
+    assert!(bob.older_ready(amendments).is_err(), "no longer arriving");
+}

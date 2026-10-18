@@ -34,7 +34,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | `TOILE-FEAT-098` | `OBS` | A deck that changed under this viewer -- by a peer, a history step or a deleted frame -- MUST reach the open panel. | this spec section 3 | `ambre_toile::logic::convergence_tests::every_path_that_moves_the_deck_says_so` -- `DeckChanged` on a local reorder, a peer's delta, an undo and a deleted frame; `ambre_toile::ui::view::view_tests::a_changed_deck_is_read_again_while_the_panel_is_open` -- the view asks for the deck again while the panel is open, and not while it is closed | none | verified |
 | `TOILE-UI-086` | `OBS` | The presenter panel MUST show the active slide's rank, the deck's length and that slide's notes. | this spec section 4 | `ambre_toile::ui::presenter::tests::counter_label_is_one_based`; `ambre_toile::ui::presenter::tests::counter_label_empty_deck`; `ambre_toile::tests::chrome_ui::presenter_panel_counter_is_one_based`; `ambre_toile::tests::chrome_ui::presenter_panel_hidden_when_closed` | none | verified |
 | `TOILE-UI-089` | `OBS` | The panel MUST show the follow affordance exactly when the presenter signal names a peer. | this spec section 4 | `ambre_toile::tests::chrome_ui::presenter_follow_button_hidden_without_presenter` -- the signal naming no peer; `ambre_toile::tests::chrome_ui::presenter_follow_button_fires_with_peer` -- the signal naming one (both mount the panel with that signal set by hand, so they hold the component and never the relay that feeds it, which is `TOILE-UI-315`) | none | verified |
-| `TOILE-UI-315` | `OBS` | The presenter signal MUST name a peer only while that peer is broadcasting a slide. | this spec section 4 | `ambre_toile::logic::convergence_tests::stopping_a_broadcast_sends_a_frame_naming_no_slide` -- the frame a presenter sends when it stops, and the silence of a viewer that was not broadcasting; `ambre_toile::tests::chrome_ui::the_presenter_is_named_only_while_it_broadcasts` -- the relay names the peer on a frame carrying a slide, and nobody once its frame carries none or it leaves the live set | none | verified |
+| `TOILE-UI-315` | `OBS` | The presenter signal MUST name a peer only while that peer is broadcasting a slide. | this spec section 4 | `ambre_toile::logic::convergence_tests::stopping_a_broadcast_sends_a_sample_naming_no_slide` -- the sample a presenter sends when it stops, and the silence of a viewer that was not broadcasting; `ambre_toile::tests::chrome_ui::the_presenter_is_named_only_while_it_broadcasts` -- the relay names the peer on a sample carrying a slide, and nobody once its sample carries none or it leaves the live set | none | verified |
 | `TOILE-UI-316` | `OBS` | The notes area MUST show a peer's edit to the note on screen. | this spec section 4 | `ambre_toile::logic::convergence_tests::a_peers_note_edit_reaches_the_slide_on_screen` -- the event a remote splice raises, and the silence of a remote change that leaves the note alone; `ambre_toile::tests::chrome_effects::a_peer_note_write_keeps_the_caret` -- the area shows the write, the caret shifted past the peer's prefix | none | verified |
 | `TOILE-UI-083` | `OBS` | Presentation mode MUST hide every editing surface. | this spec section 4 | `ambre_toile::ui::render::tests::overlay_paints_no_editing_surface_while_presenting` -- a selection and a find hit that draw nothing while the mode holds; `ambre_toile::ui::view::view_tests::a_presentation_takes_no_edit` -- a click, a delete, an undo chord and a double click send nothing; `ambre_toile::ui::view::view_tests::a_presentation_closes_the_open_editor` -- the open editor closes and keeps its text; `ambre_toile::tests::chrome_ui::the_editing_chrome_leaves_while_the_board_presents` -- the editing chrome leaves the DOM and comes back | none | verified |
 | `TOILE-UI-085` | `OBS` | An element the next slide drops MUST fade out over the whole transition. | this spec section 4 | `ambre_toile::ui::present::tests::the_covering_cull_holds_both_ends_of_the_glide` -- the cull a transition asks for covers the camera it starts on and the one it lands on, so neither slide's elements leave the visible set while the fade runs | none | verified |
@@ -70,8 +70,8 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-FEAT-086` | `POST` | While this viewer broadcasts, each slide change MUST attach an ephemeral presence frame carrying the active index. | this spec section 3 | `ambre_toile::logic::convergence_tests::broadcast_frame_carries_active_slide` | none | verified |
-| `TOILE-FEAT-087` | `FRAME` | While this viewer does not broadcast, a slide change MUST attach no frame. | this spec section 3 | `ambre_toile::logic::convergence_tests::no_broadcast_frame_when_not_broadcasting` | none | verified |
+| `TOILE-FEAT-086` | `POST` | While this viewer broadcasts, each slide change MUST attach a presence sample carrying the active index. | this spec section 3 | `ambre_toile::logic::convergence_tests::broadcast_sample_carries_active_slide` | none | verified |
+| `TOILE-FEAT-087` | `FRAME` | While this viewer does not broadcast, a slide change MUST attach no sample. | this spec section 3 | `ambre_toile::logic::convergence_tests::no_broadcast_sample_when_not_broadcasting` | none | verified |
 
 ### 1.6 Write a speaker note
 
@@ -101,14 +101,14 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 |---|---|---|---|---|---|---|
 | `TOILE-UI-087` | `POST` | The Present menu entry MUST enter presentation mode on the first slide. | this spec section 4 | `ambre_toile::ui::menu_bar::tests::present_entry_emits_enter_present` | none | verified |
 | `TOILE-UI-319` | `POST` | Every panel control MUST resolve to the local command it names. | this spec section 4 | `ambre_toile::tests::chrome_ui::presenter_nav_buttons_fire_intents`; `ambre_toile::tests::chrome_ui::presenter_broadcast_button_fires_toggle`; `ambre_toile::tests::chrome_ui::presenter_follow_button_fires_with_peer` | none | verified |
-| `TOILE-FEAT-094` | `POST` | Leaving presentation mode MUST stop this viewer's broadcast. | this spec section 3 | `ambre_toile::logic::convergence_tests::leaving_the_presentation_stops_the_broadcast` -- after the exit the viewer is not broadcasting, says so, and its presence frame names no slide | none | verified |
+| `TOILE-FEAT-094` | `POST` | Leaving presentation mode MUST stop this viewer's broadcast. | this spec section 3 | `ambre_toile::logic::convergence_tests::leaving_the_presentation_stops_the_broadcast` -- after the exit the viewer is not broadcasting, says so, and its presence sample names no slide | none | verified |
 | `TOILE-FEAT-095` | `FRAME` | Entering or leaving presentation mode MUST NOT write to the document. | this spec section 3 | `ambre_toile::logic::convergence_tests::present_mode_toggle_is_local`; `ambre_toile::logic::convergence_tests::present_broadcast_toggle_is_local` | none | verified |
 
 * **Budget.** the transition frame under 4 ms at 500 elements, the slide-transition row of
   `ambre-spec-budgets.md section 1`. A transition frame is a full repaint and a fresh cull. It costs a frame
   of the board plus one pass over the two slides.
-* **Boundary.** one outbound flow, and only while the presenter broadcasts: the slide index rides an
-  ephemeral presence frame, which `ZK-005` seals with the `DocumentKey`. The deck and the notes are
+* **Boundary.** one outbound flow, and only while the presenter broadcasts: the slide index rides a
+  presence sample, which `ZK-005` seals with the `DocumentKey`. The deck and the notes are
   document data like any other, sealed by `ZK-001`.
 * **Verification.** 45 `verified`, 0 `failing`, 0 `untested`. What holds is the
   machinery, the best-covered subject of the application: convergence, playback, follow, the solver
@@ -190,7 +190,7 @@ holds no order of its own (`TOILE-FEAT-098`, `TOILE-UI-343`).
 1. clear any follow, so a manual navigation takes control (`TOILE-FEAT-003`);
 2. clamp the index to the deck, capture the two frame snapshots and the target frame's rect, and
    emit them as one event;
-3. attach an ephemeral frame carrying the index when this viewer broadcasts, and nothing otherwise.
+3. attach a presence sample carrying the index when this viewer broadcasts, and nothing otherwise.
 
 **Steps, when a transition frame is drawn:**
 
@@ -272,7 +272,7 @@ editing chrome stays mounted and the board stays live: a key that deletes still 
 | :--- | :--- | :--- |
 | A slide is a frame of the same board | a linear deck of its own | it duplicates every element that appears twice and animates nothing. A path through the work needs no second document, no copy and no export step, and it is what makes the transition free: two slides that share an element share its id |
 | The order is shared and the playback is not | broadcasting the position as document history | it writes a delta per keystroke of navigation and cannot be left. The group agrees on the story, but each viewer looks where they want, and a reader who scrolls back must not drag everyone with them; follow-the-presenter is the opt-in that puts them together again |
-| The presenter's position rides the presence frames | a shared register naming the active slide | it persists a fact nobody wants back. The position is a gesture, not a decision: momentary, per viewer, meaningless an hour later, and the frame that carries a cursor carries it for nothing |
+| The presenter's position rides the presence samples | a shared register naming the active slide | it persists a fact nobody wants back. The position is a gesture, not a decision: momentary, per viewer, meaningless an hour later, and the sample that carries a cursor carries it for nothing |
 | A transition matches elements by their minted id | matching by position, size or shape | it guesses, and guesses differently on each board. The id match is exact and costs nothing: the author moved the element, so the two snapshots hold the same id and the tween writes itself |
 | The deck names frames, never positions | an index into the paint order | the first reorder invalidates it, while an id survives a move, a reorder and a regroup, so editing the board never rewrites the deck |
 | The solved transition is derived per frame, never stored | writing the interpolated geometry back | it puts a frame of animation in everyone's history. Derived, the animation is a view of two states the document already holds, so a peer that joins mid-transition sees the board and not a half-played artefact |

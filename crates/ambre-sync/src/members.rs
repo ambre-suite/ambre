@@ -55,6 +55,7 @@ impl SyncState {
         id: RequestId,
         document_id: DocumentId,
         invitee_email: String,
+        invitee: UserId,
         role: Role,
         expect_exchange_pub_key: [u8; 32],
     ) {
@@ -108,6 +109,7 @@ impl SyncState {
             url_scheme,
             api_base,
             invitee_email,
+            invitee,
             role,
             exchange_key,
             doc_key,
@@ -235,8 +237,19 @@ impl SyncState {
 
     /// Fetches the member list for a document via `GET /api/documents/{id}/members`,
     /// maps the server response into [`MemberInfo`] values (plaintext names,
-    /// decoded roles), and replies with [`RestEvent::DocumentMembers`].
-    pub(crate) fn handle_list_document_members(&self, id: RequestId, document_id: DocumentId) {
+    /// decoded roles), and replies with [`RestEvent::DocumentMembers`]. With no
+    /// request id it refreshes the member directory alone, and replies nothing.
+    pub(crate) fn handle_list_document_members(
+        &mut self,
+        id: Option<RequestId>,
+        document_id: DocumentId,
+    ) {
+        // Number the listing, so an answer older than the directory held
+        // changes nothing (`SYNC-037`). A document not open holds no directory.
+        let asked = self.documents.get_mut(&document_id).map_or(0, |doc| {
+            doc.directory_asked += 1;
+            doc.directory_asked
+        });
         let event_tx = self.event_tx.clone();
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
@@ -245,16 +258,18 @@ impl SyncState {
         if let (Some(tx), Some(exchange_key)) = (event_tx, self.exchange_key.clone()) {
             let params = sharing::ListMembersParams {
                 id,
+                asked,
                 document_id,
                 url_scheme,
                 api_base,
                 exchange_key,
+                rule: self.log_rule(document_id),
             };
             let http = sharing::GlooHttp { auth };
             wasm_bindgen_futures::spawn_local(async move {
                 sharing::list_members_task(&http, params, &tx).await;
             });
-        } else {
+        } else if let Some(id) = id {
             self.reply(
                 id,
                 RestEvent::DocumentMembers {
@@ -334,17 +349,15 @@ impl SyncState {
                 );
                 match http::get_json_auth::<http::UserSearchResult>(&url, auth).await {
                     Ok(resp) => {
-                        // A result whose id does not parse is left out, never
-                        // given an invented one (`SYNC-038`).
+                        // Each id was parsed when the answer was read, so none
+                        // is invented here (`SYNC-038`).
                         let users: Vec<UserInfo> = resp
                             .users
                             .into_iter()
-                            .filter_map(|u| {
-                                Some(UserInfo {
-                                    user_id: UserId::parse_str(&u.id).ok()?,
-                                    display_name: u.display_name,
-                                    email: u.email,
-                                })
+                            .map(|u| UserInfo {
+                                user_id: u.id,
+                                display_name: u.display_name,
+                                email: u.email,
                             })
                             .collect();
                         let _ = tx.send(SyncEvent::UserSearchReady { id, users });

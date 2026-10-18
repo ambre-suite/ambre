@@ -1,10 +1,11 @@
-use axum::extract::{Json, State};
+use axum::extract::State;
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
+use crate::extract::Json;
 use crate::state::AppState;
 
 /// Request body for first-time master key upload.
@@ -57,7 +58,7 @@ pub async fn store_master_keys(
     // re-store here is always a mistake, and is rejected.
     let uid = uuid::Uuid::from_bytes(*s.user_id.as_uuid().as_bytes());
     let result = sqlx::query(
-        "UPDATE users SET master_key_enc = $2, master_key_salt = $3, signing_pubkey = $4, exchange_pubkey = $5, updated_at = now() WHERE id = $1 AND master_key_enc IS NULL"
+        "UPDATE users SET master_key_enc = $2, master_key_salt = $3, signing_pubkey = $4, exchange_pubkey = $5 WHERE id = $1 AND master_key_enc IS NULL"
     )
     .bind(uid)
     .bind(&mk_enc)
@@ -85,12 +86,23 @@ pub async fn store_master_keys(
     let tokens = auth::issue_session(&state, s.user_id, Some(new_signing_pubkey)).await?;
     tracing::info!(user_id = %s.user_id, "master key stored");
 
-    Ok(axum::Json(serde_json::json!({
-        "status": "stored",
-        "access_token": tokens.access_token,
-        "refresh_token": tokens.refresh_token,
-        "access_expires_in": tokens.access_expires_in,
-    })))
+    Ok(axum::Json(KeysStoredResponse {
+        status: ambre_core::WriteStatus::Stored,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        access_expires_in: tokens.access_expires_in,
+    }))
+}
+
+/// The answer of a first key store: the fresh token pair, bound to the new
+/// signing key.
+#[derive(serde::Serialize)]
+pub struct KeysStoredResponse {
+    pub status: ambre_core::WriteStatus,
+    pub access_token: String,
+    pub refresh_token: String,
+    /// Access-token lifetime in seconds.
+    pub access_expires_in: u64,
 }
 
 /// Response containing the full key material for the authenticated user.
@@ -129,6 +141,21 @@ pub async fn get_master_keys(
     }))
 }
 
+/// What a key rotation answers, the master key's or a document's (`SRV-180`).
+#[derive(serde::Serialize)]
+pub struct RotatedResponse {
+    pub status: ambre_core::RotationStatus,
+}
+
+impl RotatedResponse {
+    /// The answer of a rotation that landed.
+    pub(crate) fn rotated() -> axum::Json<Self> {
+        axum::Json(Self {
+            status: ambre_core::RotationStatus::Rotated,
+        })
+    }
+}
+
 /// Request to rotate the master key after a passphrase change.
 /// Only `master_key_enc` and `master_key_salt` change; the seed is unchanged.
 #[derive(serde::Deserialize)]
@@ -156,5 +183,5 @@ pub async fn rotate_master_keys(
         })?;
     db::update_master_key(&state.db, &s.user_id, &mk_enc, &mk_salt).await?;
     tracing::info!(user_id = %s.user_id, "master key rotated");
-    Ok(axum::Json(serde_json::json!({"status":"rotated"})))
+    Ok(RotatedResponse::rotated())
 }

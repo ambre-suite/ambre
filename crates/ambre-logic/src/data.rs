@@ -393,9 +393,12 @@ impl LogicState {
             if persist {
                 self.owe_delta(document_id, payload.clone());
             }
+            // A document command carries no activity summary: only Murmure
+            // writes one today (the Murmure messages spec).
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id,
                 payload,
+                summary: None,
             });
         }
         if let Some(payload) = ephemeral {
@@ -591,7 +594,8 @@ impl LogicState {
         nonce: SessionNonce,
     ) {
         let Some(doc) = self.docs.get(&document_id) else {
-            return;
+            // A channel or a space document is no entry of `docs`.
+            return self.adopt_murmure_session(document_id, peer, entry);
         };
         if doc.identity == Some(peer) {
             return;
@@ -699,6 +703,13 @@ impl LogicState {
     /// nothing (`AUTHOR-014`). The log names the document and the signer and
     /// never a byte of the payload (`ZK-001`).
     pub(crate) fn apply_signed(&mut self, document_id: DocumentId, delta: &SignedDelta) {
+        // A channel document runs the engine's own check, which reads what
+        // each operation writes (the Murmure engine spec).
+        if !self.docs.contains_key(&document_id)
+            && self.apply_channel_signed(document_id, std::slice::from_ref(delta))
+        {
+            return;
+        }
         let accepted = authored_by(&delta.payload, delta.peer);
         self.record_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
         if !accepted {
@@ -709,7 +720,7 @@ impl LogicState {
             );
             return;
         }
-        self.apply_remote(document_id, &delta.payload);
+        self.apply_remote(document_id, Order::Update(Seq(delta.seq)), &delta.payload);
         self.track_waiting(document_id, &[(delta.seq, delta.payload.as_slice())]);
     }
 
@@ -756,12 +767,18 @@ impl LogicState {
             if let Some(payload) = payload {
                 doc.relay_saw(payload);
             }
+        } else {
+            self.record_channel_seq(document_id, seq, payload.map(Vec::as_slice));
         }
     }
 
     /// The batch form of [`apply_signed`](Self::apply_signed): each delta is
     /// checked on its own, and only the refused ones are left out.
     pub(crate) fn apply_signed_batch(&mut self, document_id: DocumentId, deltas: Vec<SignedDelta>) {
+        if !self.docs.contains_key(&document_id) && self.apply_channel_signed(document_id, &deltas)
+        {
+            return;
+        }
         let accepted: Vec<(u64, Vec<u8>)> = deltas
             .into_iter()
             .filter_map(|delta| {
@@ -782,13 +799,33 @@ impl LogicState {
         if accepted.is_empty() {
             return;
         }
+        // A replay queues on an open document only. A space document takes
+        // the whole batch now. A channel's never reaches here.
+        if !self.docs.contains_key(&document_id) {
+            let borrowed: Vec<&[u8]> = accepted.iter().map(|(_, p)| p.as_slice()).collect();
+            if !self.apply_space_remote(document_id, &borrowed) {
+                tracing::warn!(
+                    "Logic: replay for unopened doc {document_id} ({} delta(s)), dropping",
+                    accepted.len()
+                );
+            }
+            return;
+        }
         // One slice now, the rest one a pass (`SYNC-131`).
         self.replay(document_id, accepted);
     }
 
     /// Apply a remote CRDT delta to a document and forward viewport events.
-    pub(crate) fn apply_remote(&mut self, document_id: DocumentId, payload: &[u8]) {
+    /// `order` is where the relay placed it, which only a channel reads.
+    pub(crate) fn apply_remote(&mut self, document_id: DocumentId, order: Order, payload: &[u8]) {
         self.settle_import(document_id);
+        // A document no entry of `docs` names may belong to an open channel.
+        if !self.docs.contains_key(&document_id)
+            && (self.apply_channel_remote(document_id, &[(Some(order), payload)])
+                || self.apply_space_remote(document_id, &[payload]))
+        {
+            return;
+        }
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             tracing::warn!(
                 "Logic: apply_remote for unopened doc {document_id} ({} bytes), dropping",
@@ -831,7 +868,8 @@ impl LogicState {
     /// merge+reseed, so the UI repaints once instead of once per delta. Mirrors
     /// [`apply_remote`] for the local-persist and viewport-forward tail.
     ///
-    /// It settles a board's import, never the replay it is a slice of.
+    /// It settles a board's import, never the replay it is a slice of. A
+    /// channel or space document never queues a replay, so it never comes here.
     pub(crate) fn merge_batch(&mut self, document_id: DocumentId, payloads: &[Vec<u8>]) {
         self.settle_board_import(document_id);
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
@@ -988,11 +1026,13 @@ impl LogicState {
     /// Import a snapshot whose contents are trusted, and count the deltas a
     /// later snapshot must hold from its horizon on (`AUTHOR-015`).
     pub(crate) fn adopt_snapshot(&mut self, document_id: DocumentId, payload: &[u8], covered: u64) {
-        self.apply_remote(document_id, payload);
+        self.apply_remote(document_id, Order::Snapshot(Seq(covered)), payload);
         if let Some(doc) = self.docs.get_mut(&document_id) {
             let base = doc.state.crdt().oplog_vv();
             doc.ledger.reset(covered, base);
             doc.relay_saw(payload);
+        } else {
+            self.note_murmure_snapshot(document_id, covered);
         }
         self.track_waiting(document_id, &[]);
     }
@@ -1010,6 +1050,7 @@ impl LogicState {
         purpose: SnapshotPurpose,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
+            self.check_channel_snapshot(document_id, snapshot_id, covered, payload, purpose);
             return;
         };
         let verdict = snapshot_check::check_snapshot(

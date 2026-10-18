@@ -43,6 +43,26 @@ impl Version {
     /// Version 6 - a refused clock names its delta, and the author answers it.
     pub const V6: Self = Self(6);
 
+    /// Version 7 - a channel travels as its documents, and a change of
+    /// members is announced.
+    pub const V7: Self = Self(7);
+
+    /// Version 8 - a socket refusal names its code from a closed set, and a
+    /// stopped replay names the last delta it delivered.
+    pub const V8: Self = Self(8);
+
+    /// Version 9 - a delta refused before it is sequenced is named by its
+    /// signature.
+    pub const V9: Self = Self(9);
+
+    /// Version 10 - a snapshot a report dropped is announced, with its
+    /// author and its reporter.
+    pub const V10: Self = Self(10);
+
+    /// Version 11 - a delta on a thread document is signalled on the topic
+    /// of its channel.
+    pub const V11: Self = Self(11);
+
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.
     ///
     /// # Errors

@@ -1,3 +1,4 @@
+use ambre_core::RefusalCode;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 #[allow(clippy::single_component_path_imports)]
@@ -44,6 +45,11 @@ pub enum AppError {
     /// refused (`SRV-123`).
     #[error("Rotation owed")]
     RotationOwed,
+
+    /// A finalize lease locked the segment against deltas for good
+    /// (`SRV-115`).
+    #[error("Segment locked")]
+    SegmentLocked,
 
     /// A member joined after the rotation read the members, so it would hold
     /// no copy of the new key (`SRV-167`). The client reads them again.
@@ -110,6 +116,36 @@ impl AppError {
         )
     }
 
+    /// The code a refusal of this error names, on the request path and on the
+    /// socket alike (`SRV-182`, `SRV-183`). Every variant chooses one.
+    pub(crate) fn code(&self) -> RefusalCode {
+        match self {
+            AppError::Unauthorized | AppError::SessionExpired => RefusalCode::Unauthorized,
+            AppError::Forbidden => RefusalCode::Forbidden,
+            AppError::SetupRequired => RefusalCode::SetupRequired,
+            AppError::NotFound { .. } => RefusalCode::NotFound,
+            AppError::Conflict { .. } => RefusalCode::Conflict,
+            AppError::ClockMismatch { .. } => RefusalCode::ClockMismatch,
+            AppError::RotationOwed => RefusalCode::RotationOwed,
+            AppError::SegmentLocked => RefusalCode::SegmentLocked,
+            AppError::MembersChanged => RefusalCode::MembersChanged,
+            AppError::KeyChanged => RefusalCode::KeyChanged,
+            AppError::LogMoved => RefusalCode::LogMoved,
+            AppError::InvalidSignature => RefusalCode::InvalidSignature,
+            AppError::SnapshotRequired => RefusalCode::SnapshotRequired,
+            AppError::CompactionLockHeld => RefusalCode::CompactionLockHeld,
+            AppError::UnknownProvider(_) => RefusalCode::UnknownProvider,
+            AppError::BadRequest(_) => RefusalCode::BadRequest,
+            AppError::PayloadTooLarge(_) => RefusalCode::PayloadTooLarge,
+            AppError::Database(_)
+            | AppError::Redis(_)
+            | AppError::S3(_)
+            | AppError::Internal(_)
+            | AppError::Decode(_)
+            | AppError::Oidc(_) => RefusalCode::InternalError,
+        }
+    }
+
     /// The text a caller reads, on the request path and on the socket alike.
     /// An infrastructure error says only that the server failed, and its cause
     /// stays in the log (`SRV-096`).
@@ -124,47 +160,40 @@ impl AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, code) = match &self {
-            AppError::Unauthorized | AppError::SessionExpired => {
-                (StatusCode::UNAUTHORIZED, "UNAUTHORIZED")
-            }
-            AppError::Forbidden => (StatusCode::FORBIDDEN, "FORBIDDEN"),
-            AppError::SetupRequired => (StatusCode::FORBIDDEN, "SETUP_REQUIRED"),
-            AppError::NotFound { .. } => (StatusCode::NOT_FOUND, "NOT_FOUND"),
-            AppError::Conflict { .. } => (StatusCode::CONFLICT, "CONFLICT"),
-            AppError::ClockMismatch { .. } => (StatusCode::CONFLICT, "CLOCK_MISMATCH"),
-            AppError::RotationOwed => (StatusCode::CONFLICT, "ROTATION_OWED"),
-            AppError::MembersChanged => (StatusCode::CONFLICT, "MEMBERS_CHANGED"),
-            AppError::KeyChanged => (StatusCode::CONFLICT, "KEY_CHANGED"),
-            AppError::LogMoved => (StatusCode::CONFLICT, "LOG_MOVED"),
-            AppError::InvalidSignature => (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_SIGNATURE"),
-            AppError::SnapshotRequired => (StatusCode::CONFLICT, "SNAPSHOT_REQUIRED"),
-            AppError::CompactionLockHeld => (StatusCode::CONFLICT, "COMPACTION_LOCK_HELD"),
-            AppError::UnknownProvider(_) => (StatusCode::BAD_REQUEST, "UNKNOWN_PROVIDER"),
-            AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "BAD_REQUEST"),
-            AppError::PayloadTooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE"),
-            _ => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
-        };
+        let code = self.code();
+        let status =
+            StatusCode::from_u16(code.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
         // Log by severity. A 5xx is a genuine server fault (Redis/DB/S3/...) and
         // must be loud. A 4xx is client-caused (bad auth, not found, conflict)
         // and is routine, so it stays at debug to keep `error` meaningful.
         if status.is_server_error() {
-            tracing::error!(error = %self, code = code);
+            tracing::error!(error = %self, code = %code);
         } else {
-            tracing::debug!(error = %self, code = code);
+            tracing::debug!(error = %self, code = %code);
         }
 
         let message = self.caller_message();
 
-        (
-            status,
-            axum::Json(serde_json::json!({
-                "error": code,
-                "message": message,
-            })),
-        )
-            .into_response()
+        (status, ErrorBody::json(code, message)).into_response()
+    }
+}
+
+/// The body of every refusal: the code a client matches, and a message for
+/// a person (`SRV-181`). The code is a word of one closed set (`SRV-182`).
+#[derive(serde::Serialize)]
+pub(crate) struct ErrorBody {
+    pub error: RefusalCode,
+    pub message: String,
+}
+
+impl ErrorBody {
+    /// The refusal under `code`.
+    pub(crate) fn json(code: RefusalCode, message: impl Into<String>) -> axum::Json<Self> {
+        axum::Json(Self {
+            error: code,
+            message: message.into(),
+        })
     }
 }
 

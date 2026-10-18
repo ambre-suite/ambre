@@ -259,6 +259,8 @@ mod tests {
         )
     }
 
+    // `proptest` is a host-only dev-dependency (see `Cargo.toml`).
+    #[cfg(not(target_arch = "wasm32"))]
     proptest::proptest! {
         #![proptest_config(proptest::prelude::ProptestConfig::with_cases(32))]
 

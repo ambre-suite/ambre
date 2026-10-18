@@ -17,8 +17,7 @@ impl SyncState {
                     Ok(resp) => {
                         let mut docs = Vec::with_capacity(resp.documents.len());
                         for e in resp.documents {
-                            let document_id =
-                                DocumentId::parse_str(&e.id).unwrap_or_else(|_| DocumentId::new());
+                            let document_id = e.id;
                             // E2EE: the name arrives as `name_enc`. Decrypt it
                             // here (Sync) so the Logic/UI threads only ever see
                             // plaintext (`ambre-spec-launcher.md`, CHROME-044). A
@@ -37,18 +36,9 @@ impl SyncState {
                             };
                             docs.push(DocumentSummary {
                                 document_id,
-                                doc_type: match e.doc_type.as_str() {
-                                    "prose" => DocType::Prose,
-                                    "toile" => DocType::Toile,
-                                    "murmure" => DocType::Murmure,
-                                    _ => DocType::Trame,
-                                },
+                                doc_type: e.doc_type,
                                 name,
-                                role: match e.role.as_str() {
-                                    "editor" => Role::Editor,
-                                    "viewer" => Role::Viewer,
-                                    _ => Role::Owner,
-                                },
+                                role: e.role,
                                 // RFC3339 -> epoch ms via the JS Date parser
                                 // (NaN -> 0 when the server timestamp is absent).
                                 updated_at: {
@@ -106,13 +96,15 @@ impl SyncState {
 
     /// The document a create answer names, refused unless the client minted
     /// it. The name is sealed under that id, and no other id opens it
-    /// (`SYNC-136`).
-    fn created_document(minted: DocumentId, answered: &str) -> Result<DocumentId, String> {
-        match DocumentId::parse_str(answered) {
-            Ok(answered) if answered == minted => Ok(minted),
-            _ => Err(format!(
+    /// (`SYNC-136`). A malformed id never reaches here: the answer is refused
+    /// when it is read.
+    fn created_document(minted: DocumentId, answered: DocumentId) -> Result<DocumentId, String> {
+        if answered == minted {
+            Ok(minted)
+        } else {
+            Err(format!(
                 "CreateDocument: the relay answered {answered}, not the minted {minted}"
-            )),
+            ))
         }
     }
 
@@ -172,16 +164,16 @@ impl SyncState {
 
                 let url = format!("{url_scheme}://{api_base}/api/documents");
                 let body = http::CreateDocumentRequest {
-                    doc_type: doc_type_to_api_string(doc_type),
+                    doc_type,
                     name_enc,
                     doc_key_enc,
-                    document_id: Some(document_id.to_string()),
+                    document_id: Some(document_id),
                     entry: Some(entry),
                 };
                 match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth)
                     .await
                 {
-                    Ok(resp) => match Self::created_document(document_id, &resp.document_id) {
+                    Ok(resp) => match Self::created_document(document_id, resp.document_id) {
                         Ok(document_id) => {
                             let _ = tx.send(SyncEvent::DocumentCreated {
                                 id,
@@ -480,10 +472,17 @@ mod tests {
     #[test]
     fn a_create_fails_on_a_foreign_answer() {
         let minted = DocumentId::new();
-        let answer = SyncState::created_document(minted, &minted.to_string());
+        let answer = SyncState::created_document(minted, minted);
         assert_eq!(answer, Ok(minted));
-        let foreign = DocumentId::new().to_string();
-        assert!(SyncState::created_document(minted, &foreign).is_err());
-        assert!(SyncState::created_document(minted, "not an id").is_err());
+        assert!(SyncState::created_document(minted, DocumentId::new()).is_err());
+        let read = |id: String| {
+            let body = serde_json::json!({ "document_id": id, "doc_type": "prose" });
+            serde_json::from_value::<crate::http::CreateDocumentResponse>(body)
+        };
+        assert_eq!(
+            read(minted.to_string()).map(|r| r.document_id).ok(),
+            Some(minted)
+        );
+        assert!(read("not an id".into()).is_err());
     }
 }

@@ -546,6 +546,39 @@ def numbering_issues(text: str):
         expected = number + 1
 
 
+def declared_containers(text: str) -> set[str]:
+    """The container names a schema's table declares, as their leaves.
+
+    Only the container table counts. A mention in the hierarchy or in a note is
+    not a declaration, and letting one satisfy the check is how the table drifts
+    from the code while every name still appears somewhere in the file.
+
+    The table is the one whose header names a `Container` column, and only that
+    column is read. Murmure puts a `Document` column first, so the position of
+    the column varies. A document name in the other cells declares nothing.
+
+    A nested container is declared by its path (`elements/{id}/children`); the
+    leaf is what the code names, so the leaf is what is compared. A cell holds
+    one backticked name and nothing else.
+    """
+    declared = set()
+    column = None
+    for line in text.splitlines():
+        if not line.startswith("|"):
+            column = None
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if column is None:
+            column = cells.index("Container") if "Container" in cells else -1
+            continue
+        if column < 0 or column >= len(cells):
+            continue
+        match = re.fullmatch(r"`[a-z_{}/]*?([a-z_]+)(?:_\{sheet\})?`", cells[column])
+        if match:
+            declared.add(match.group(1))
+    return declared
+
+
 def schema_issues(text: str, source: Path):
     """Yield (kind, detail) for every schema-document defect."""
     words = classify(text).prose_words
@@ -570,15 +603,7 @@ def schema_issues(text: str, source: Path):
     built = set(CONTAINER_FMT.findall(code)) | set(CONTAINER_CONST.findall(code))
     names = dict(CONST_DEF.findall(code))
     built |= {names[c] for c in CONTAINER_CALL.findall(code) if c in names}
-    # Only the container table counts. A mention in the hierarchy or in a note is
-    # not a declaration, and letting one satisfy the check is how the table drifts
-    # from the code while every name still appears somewhere in the file.
-    #
-    # A nested container is declared by its path (`elements/{id}/children`); the
-    # leaf is what the code names, so the leaf is what is compared.
-    declared = set()
-    for row in re.findall(r"^\| `[a-z_{}/]*?([a-z_]+)(?:_\{sheet\})?` \|", text, flags=re.M):
-        declared.add(row)
+    declared = declared_containers(text)
     for name in sorted(built - declared):
         where = source.name if source.is_file() else f"{source.parent.name}/{source.name}"
         yield "container-missing", f"`{name}` is built in {where} and absent from the table"

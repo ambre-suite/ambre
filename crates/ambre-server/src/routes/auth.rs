@@ -1,10 +1,11 @@
-use axum::extract::{Json, Path, State};
+use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
+use crate::extract::Json;
 use crate::oidc::{self, CallbackRequest, CallbackResponse};
 use crate::redis_ops;
 use crate::state::AppState;
@@ -46,7 +47,8 @@ pub struct DevLoginRequest {
 /// Response for `POST /api/auth/dev/login`.
 #[derive(serde::Serialize)]
 pub struct DevLoginResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
     /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
     pub access_token: String,
@@ -82,7 +84,7 @@ pub async fn dev_login(
     let user =
         db::dev_upsert_user(&state.db, &req.username, &signing_pubkey, &exchange_pubkey).await?;
 
-    let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
+    let user_id = user.id;
     // The upsert above writes both keys, so a dev account always holds one.
     let signing_pubkey = account_session_key(&user)?
         .ok_or_else(|| AppError::Internal("dev account stored no signing key".into()))?;
@@ -91,7 +93,7 @@ pub async fn dev_login(
     tracing::debug!(user_id = %user_id, provider = "dev", "login");
 
     Ok(axum::Json(DevLoginResponse {
-        user_id: user_id.to_string(),
+        user_id,
         display_name: user.display_name,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
@@ -244,14 +246,14 @@ pub async fn oidc_callback(
         db::upsert_user_from_oidc(&state.db, &provider, &oidc_subject, &email, &display_name)
             .await?;
 
-    let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
+    let user_id = user.id;
     let signing_pubkey = account_session_key(&user)?;
 
     let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
     tracing::debug!(user_id = %user_id, provider = %provider, "login");
 
     Ok(axum::Json(CallbackResponse {
-        user_id: user_id.to_string(),
+        user_id,
         email,
         display_name,
         is_new_user: user.master_key_enc.is_none(),
@@ -280,7 +282,7 @@ mod tests {
 
     fn provider_row(signing_pubkey: Option<Vec<u8>>) -> db::UserRow {
         db::UserRow {
-            id: uuid::Uuid::new_v4(),
+            id: ambre_core::UserId::new(),
             oidc_provider: Some("google".into()),
             oidc_subject: Some("subject".into()),
             email: "a@example.com".into(),
@@ -290,7 +292,6 @@ mod tests {
             master_key_salt: None,
             exchange_pubkey: signing_pubkey.as_ref().map(|_| vec![4u8; 32]),
             signing_pubkey,
-            org_id: None,
         }
     }
 

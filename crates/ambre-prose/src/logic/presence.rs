@@ -54,13 +54,13 @@ impl ProseState {
                 ProseOutcome::ephemeral_only(bytes)
             }
             Err(e) => {
-                tracing::warn!("Prose: the presence frame could not be encoded: {e}");
+                tracing::warn!("Prose: the presence sample could not be encoded: {e}");
                 ProseOutcome::nothing()
             }
         }
     }
 
-    /// The frame that tells the other sessions this one is open: the last one
+    /// The sample that tells the other sessions this one is open: the last one
     /// sent, or a caret at the start of the first block. Sent once the document
     /// is ready, so a session that never moves its caret still counts as
     /// running (`PROSE-121`).
@@ -93,7 +93,7 @@ impl ProseState {
         self.live.contains(user_id)
     }
 
-    /// Apply a remote presence frame.
+    /// Apply a remote presence sample.
     ///
     /// The author is the Sync-resolved `from_user_id`, never read from the
     /// payload. Nothing here touches the document, its history or the export
@@ -105,7 +105,7 @@ impl ProseState {
         let frame: PresencePayload = match postcard::from_bytes(payload) {
             Ok(frame) => frame,
             Err(e) => {
-                tracing::warn!("Prose: a presence frame was malformed: {e}");
+                tracing::warn!("Prose: a presence sample was malformed: {e}");
                 return Vec::new();
             }
         };
@@ -280,7 +280,7 @@ mod tests {
     }
 
     #[test]
-    fn a_frame_naming_a_block_this_peer_does_not_hold_is_dropped() {
+    fn a_sample_naming_a_block_this_peer_does_not_hold_is_dropped() {
         let mut alice = ProseState::new().expect("a document is built");
         // A block Alice mints: the root paragraph is shared scaffolding, which
         // every peer holds (`PROSE-129`).
@@ -311,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn a_malformed_frame_is_dropped_rather_than_raised() {
+    fn a_malformed_sample_is_dropped_rather_than_raised() {
         let mut state = ProseState::new().expect("a document is built");
         let events = state.apply_ephemeral(a_user(3), &[0xFF, 0x00]);
         assert!(events.is_empty());

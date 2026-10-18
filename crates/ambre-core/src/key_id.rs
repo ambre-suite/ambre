@@ -25,7 +25,30 @@ impl KeyId {
     pub const fn as_array(&self) -> &[u8; KEY_ID_LEN] {
         &self.0
     }
+
+    /// The identifier as lowercase hex, its form in a JSON body.
+    pub fn to_hex(&self) -> String {
+        hex::encode(self.0)
+    }
+
+    /// Reads an identifier from its hex form.
+    ///
+    /// # Errors
+    ///
+    /// [`KeyIdError`] when `text` is not hex, or not [`KEY_ID_LEN`] bytes long.
+    pub fn parse_hex(text: &str) -> Result<Self, KeyIdError> {
+        hex::decode(text)
+            .ok()
+            .and_then(|bytes| bytes.try_into().ok())
+            .map(Self)
+            .ok_or(KeyIdError)
+    }
 }
+
+/// A text that is not the hex form of a key identifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("not a key identifier: {KEY_ID_LEN} bytes in hex")]
+pub struct KeyIdError;
 
 impl fmt::Debug for KeyId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

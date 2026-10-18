@@ -43,7 +43,7 @@ status values are normative in `ambre-spec-template.md`.
   again at every derivation, so its real budget is the frame. It is inside the visible-set walk of
   `features/ambre-spec-toile-board-rendering.md`, and no bench measures either.
 * **Boundary.** none of its own: the samples enter the document and leave as bytes the Sync worker
-  seals (`ZK-001`). What streams during the gesture is an ephemeral frame, sealed the same way
+  seals (`ZK-001`). What streams during the gesture is an ephemeral, sealed the same way
   (`ZK-005`).
 * **Verification.** 12 `verified`. What holds is the committed stroke and the stroke in flight. The
   tests read the samples, the box a stroke spans, the minimum area of a dot, and the abandoned
@@ -122,8 +122,8 @@ zoom, so the same samples give a coarse curve far out and a fine one close in.
 taken, so it never waits for a round trip. On release the same line is repainted from the document,
 smoothed the same way, so there is no visible change at the seam.
 
-**What the others see.** A polyline in the drawer's presence colour, rebuilt from every frame that
-arrives and replaced by the real stroke when the commit lands. The frame carries the tail of the
+**What the others see.** A polyline in the drawer's presence colour, rebuilt from every sample that
+arrives and replaced by the real stroke when the commit lands. The sample carries the tail of the
 gesture, never its whole history: what a peer needs is where the pen is now (`TOILE-106`,
 `features/ambre-spec-toile-presence.md`).
 

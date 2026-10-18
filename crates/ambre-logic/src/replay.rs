@@ -152,6 +152,7 @@ mod tests {
             nonce: SessionNonce([0; 16]),
             peer,
             user: None,
+            summary: None,
         }
     }
 

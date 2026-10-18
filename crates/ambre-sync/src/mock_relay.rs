@@ -148,10 +148,6 @@ impl MockBlindRelay {
                     }
                 }
             }
-            WsClientMsg::SubscribeChannel { channel_id: _ } => {}
-            WsClientMsg::UnsubscribeChannel { channel_id: _ } => {}
-            WsClientMsg::ChannelUpdate { .. } => {}
-            WsClientMsg::ChannelEphemeral { .. } => {}
         }
         true
     }

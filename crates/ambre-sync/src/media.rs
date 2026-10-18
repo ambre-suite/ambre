@@ -354,7 +354,7 @@ async fn upload_leg(
     http.put_sealed(&link.upload_url, blob)
         .await
         .map_err(|e| format!("S3 PUT: {e}"))?;
-    http.post_json::<_, serde_json::Value>(
+    http.post_json::<_, http::WriteAnswer>(
         &format!("{base}/media"),
         &http::ConfirmUploadRequest {
             content_hash: content_hash.to_owned(),
@@ -362,8 +362,8 @@ async fn upload_leg(
         },
     )
     .await
-    .map_err(|e| format!("confirm: {e}"))?;
-    Ok(())
+    .and_then(|answer| answer.expect(ambre_core::WriteStatus::Confirmed))
+    .map_err(|e| format!("confirm: {e}"))
 }
 
 /// Asks for a link, fetches the blob, then opens it whole (`SYNC-055`). A
@@ -507,7 +507,7 @@ mod tests {
             };
             self.step(name)?;
             let answer = serde_json::json!({
-                "upload_url": "put", "download_url": "get", "s3_key": "k", "status": "ok",
+                "upload_url": "put", "download_url": "get", "s3_key": "k", "status": "confirmed",
             });
             serde_json::from_value(answer).map_err(|e| e.to_string())
         }

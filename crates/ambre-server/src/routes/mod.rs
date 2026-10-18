@@ -1,19 +1,25 @@
+mod answers;
 mod auth;
+mod channels;
 mod documents;
 mod keys;
 mod media;
 mod orgs;
+mod read_cursors;
 mod share;
 mod sync;
 
 #[cfg(test)]
 mod tests;
 
+pub use answers::*;
 pub use auth::*;
+pub use channels::*;
 pub use documents::*;
 pub use keys::*;
 pub use media::*;
 pub use orgs::*;
+pub use read_cursors::*;
 pub use share::*;
 pub use sync::*;
 
@@ -120,6 +126,61 @@ pub fn api_router(
             "/documents/{id}/media",
             axum::routing::post(media_confirm_upload),
         )
+        .route(
+            "/channels",
+            axum::routing::post(create_channel).get(list_member_channels),
+        )
+        .route(
+            "/channels/direct",
+            axum::routing::post(create_direct_message),
+        )
+        .route("/channels/{id}", axum::routing::delete(delete_channel))
+        .route(
+            "/channels/{id}/documents",
+            axum::routing::get(list_channel_documents),
+        )
+        .route(
+            "/channels/{id}/segments",
+            axum::routing::post(close_segment),
+        )
+        .route(
+            "/channels/{id}/segments/{segment}/lease",
+            axum::routing::post(take_finalize_lease),
+        )
+        .route(
+            "/channels/{id}/segments/{segment}/finalize",
+            axum::routing::post(finalize_segment),
+        )
+        .route(
+            "/channels/{id}/segments/{segment}/amendments",
+            axum::routing::post(register_amendments),
+        )
+        .route(
+            "/channels/{id}/threads",
+            axum::routing::post(register_thread),
+        )
+        .route(
+            "/channels/{id}/segments/{segment}/fold-lease",
+            axum::routing::post(take_fold_lease),
+        )
+        .route(
+            "/channels/{id}/segments/{segment}/fold",
+            axum::routing::post(fold_segment),
+        )
+        .route(
+            "/spaces/{id}/channels",
+            axum::routing::get(list_space_channels),
+        )
+        .route(
+            "/channels/{id}/join",
+            axum::routing::post(join_channel).get(join_channel_head),
+        )
+        .route(
+            "/documents/{id}/read-cursor",
+            axum::routing::put(set_read_cursor),
+        )
+        .route("/activity", axum::routing::get(get_activity))
+        .route("/read-cursors/mark-read", axum::routing::post(mark_read))
         .route(
             "/organizations",
             axum::routing::get(list_orgs).post(create_org),

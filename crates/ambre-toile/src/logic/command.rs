@@ -62,7 +62,7 @@ impl ToileOutcome {
         }
     }
 
-    /// An outcome that only broadcasts an ephemeral (presence) frame: no display
+    /// An outcome that only broadcasts a presence sample: no display
     /// event and no CRDT delta. The local cursor is drawn by the UI itself, so a
     /// `Presence` command produces nothing for the local UI to repaint.
     pub fn ephemeral_only(ephemeral: Vec<u8>) -> Self {
@@ -74,10 +74,10 @@ impl ToileOutcome {
         }
     }
 
-    /// An outcome with local display events plus an optional ephemeral frame and
-    /// no CRDT delta. Used by the playback commands when "Follow presenter"
+    /// An outcome with local display events plus an optional ephemeral and no
+    /// CRDT delta. Used by the playback commands when "Follow presenter"
     /// broadcasting is on. The local `SlideChanged` repaints this viewer, while
-    /// the ephemeral frame carries the active index to followers.
+    /// the ephemeral carries the active index to followers.
     pub fn display_and_ephemeral(display: Vec<ToileEvent>, ephemeral: Option<Vec<u8>>) -> Self {
         Self {
             display,

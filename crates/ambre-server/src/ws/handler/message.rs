@@ -1,8 +1,53 @@
 // ambre-server/src/ws/handler/message.rs
-// Per-message WebSocket handlers (subscribe/update/ephemeral/request-missing +
-// channel variants), access/signature verification, and their unit tests.
+// Per-message WebSocket handlers (subscribe/update/ephemeral/request-missing),
+// access/signature verification, and their unit tests.
 
 use super::*;
+
+/// The answer to a refused wire message: its code and its document alone
+/// (`SRV-183`). The detail reaches the log at debug, never the wire.
+pub(crate) fn refusal(document_id: Option<DocumentId>, code: RefusalCode) -> WsServerMsg {
+    WsServerMsg::Error { document_id, code }
+}
+
+/// Sends [`refusal`] and logs `detail`, which holds no content (`SRV-170`).
+pub(crate) async fn refuse(
+    outbound_tx: &mpsc::Sender<Payload>,
+    document_id: Option<DocumentId>,
+    code: RefusalCode,
+    detail: &str,
+) {
+    tracing::debug!(?document_id, %code, detail, "wire message refused");
+    let _ = outbound_tx
+        .send(Payload::server_msg(&refusal(document_id, code)))
+        .await;
+}
+
+/// The answer to a delta refused before it took a sequence number: its
+/// document, its signature and its code (`SRV-185`). The author learns which
+/// edit the relay lacks.
+pub(crate) fn delta_refusal(update: &ambre_protocol::Update, code: RefusalCode) -> WsServerMsg {
+    WsServerMsg::DeltaRefused {
+        document_id: update.public_data.document_id,
+        signature: update.signature,
+        code,
+    }
+}
+
+/// Sends [`delta_refusal`] and logs `detail`, which holds no content
+/// (`SRV-170`).
+async fn refuse_delta(
+    outbound_tx: &mpsc::Sender<Payload>,
+    update: &ambre_protocol::Update,
+    code: RefusalCode,
+    detail: &str,
+) {
+    let document_id = update.public_data.document_id;
+    tracing::debug!(%document_id, %code, detail, "delta refused");
+    let _ = outbound_tx
+        .send(Payload::server_msg(&delta_refusal(update, code)))
+        .await;
+}
 
 /// Orders a replay page and keeps the run of deltas before the first one that
 /// could not be read. Returns that run and the unreadable seq, if any, so the
@@ -41,6 +86,25 @@ impl ClockFences {
         self.0.insert(document_id, signature);
     }
 
+    /// Raises the fence when `answer` names a delta that took no clock: one
+    /// refused for its clock, or one the relay failed to sequence. The deltas
+    /// behind it would land ahead of it once sent again (`SRV-169`, `SRV-186`).
+    pub(crate) fn raise_for(&mut self, answer: &WsServerMsg) {
+        match answer {
+            WsServerMsg::ClockRefused {
+                document_id,
+                signature,
+                ..
+            }
+            | WsServerMsg::DeltaRefused {
+                document_id,
+                signature,
+                ..
+            } => self.raise(*document_id, *signature),
+            _ => {}
+        }
+    }
+
     /// Whether the socket drops this document's deltas.
     pub(crate) fn holds(&self, document_id: &DocumentId) -> bool {
         self.0.contains_key(document_id)
@@ -69,8 +133,9 @@ impl ClockFences {
 ///
 /// The client acts on a refused clock. So the refusal names the delta by its
 /// signature, and carries the expected and the received clock (`SRV-037`).
-/// A store failure reaches the client as one generic message, and its name and
-/// text stay in the log (`SRV-081`, `SRV-020`).
+/// A store failure names the delta with a bare internal code, so the author
+/// sends it again (`SRV-186`). The store's name and text stay in the log
+/// (`SRV-081`, `SRV-020`).
 ///
 /// A document that owes a rotation refuses the frame for its key. The refusal
 /// names the key and the clock, so the author seals that frame again under the
@@ -90,16 +155,13 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
             signature: update.signature,
         },
         // The document is being deleted (`SRV-017`).
-        AppError::NotFound { .. } => WsServerMsg::Error {
-            code: 404,
-            message: e.to_string(),
-        },
+        AppError::NotFound { .. } => refusal(Some(*doc_id), RefusalCode::NotFound),
+        // A finalize lease locked the segment: the refusal names the lock
+        // and the delta, so the author sends it elsewhere (`SRV-115`).
+        AppError::SegmentLocked => delta_refusal(update, RefusalCode::SegmentLocked),
         _ => {
             tracing::error!("clock validation failed doc={doc_id}: {e}");
-            WsServerMsg::Error {
-                code: 500,
-                message: "Internal server error".into(),
-            }
+            delta_refusal(update, RefusalCode::InternalError)
         }
     }
 }
@@ -109,15 +171,12 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
 pub(crate) fn subscribe_refusal(document_id: DocumentId, e: &AppError) -> WsServerMsg {
     if e.is_infrastructure() {
         tracing::error!("subscribe access check failed doc={document_id}: {e}");
-        return WsServerMsg::Error {
-            code: 500,
-            message: e.caller_message(),
-        };
+        return refusal(Some(document_id), RefusalCode::InternalError);
     }
-    WsServerMsg::Error {
-        code: 403,
-        message: e.caller_message(),
-    }
+    // One answer whatever the cause, so a refusal never tells a stranger the
+    // document exists (`SRV-005`).
+    tracing::debug!("subscribe refused doc={document_id}: {e}");
+    refusal(Some(document_id), RefusalCode::Forbidden)
 }
 
 pub(crate) async fn handle_subscribe(
@@ -174,6 +233,17 @@ pub(crate) async fn handle_subscribe(
     if let Err(e) = mirrored {
         tracing::error!(error = %e, "subscribe: rotation debt mirror failed");
     }
+    // The same for the lock of a segment: a reset of the ephemeral store
+    // lets deltas in only until the next subscribe (`SRV-114`). A lock holds
+    // for good, so the mirror is only ever set.
+    let locked = match db::segment_locked(&state.db, &document_id).await {
+        Ok(true) => redis_ops::mirror_segment_lock(&state.redis, &document_id).await,
+        Ok(false) => Ok(()),
+        Err(e) => Err(e),
+    };
+    if let Err(e) = locked {
+        tracing::error!(error = %e, "subscribe: segment lock mirror failed");
+    }
 
     // Count this session once, however often it re-subscribes: its departure
     // is announced only when no other session of the same key still watches
@@ -187,10 +257,21 @@ pub(crate) async fn handle_subscribe(
     }
     conn.doc_access_verified_at
         .insert(document_id, Instant::now());
+    // Where the document sits in a channel is read once. The socket then hears
+    // the activity of the channel's threads, and a thread's delta signals it
+    // (`SRV-161`). A failed read leaves the document outside every
+    // channel, so it signals nothing.
+    match db::channel_place(&state.db, &document_id).await {
+        Ok(Some(place)) => {
+            conn.doc_channels.insert(document_id, place);
+        }
+        Ok(None) => {}
+        Err(e) => tracing::error!(error = %e, "subscribe: channel place read failed"),
+    }
     // Cache the write capability so `handle_update` can reject a read-only
     // (`viewer`) member's delta without re-hitting the database per message.
     conn.doc_write_allowed
-        .insert(document_id, role_can_write(&role));
+        .insert(document_id, role.can_write_document());
     let ack = Payload::server_msg(&WsServerMsg::Subscribed { document_id });
     let _ = outbound_tx.send(ack).await;
 }
@@ -200,6 +281,7 @@ pub(crate) fn handle_unsubscribe(conn: &mut WsConnectionState, document_id: Docu
     conn.doc_access_verified_at.remove(&document_id);
     conn.doc_write_allowed.remove(&document_id);
     conn.clock_fences.forget(&document_id);
+    conn.doc_channels.remove(&document_id);
 }
 
 /// Tell everyone still watching `document_id` that this connection's peer
@@ -245,11 +327,13 @@ pub(crate) async fn handle_update(
 ) {
     let doc_id = update.public_data.document_id;
     if !conn.doc_subscriptions.contains(&doc_id) {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 403,
-            message: "not subscribed".into(),
-        });
-        let _ = outbound_tx.send(err).await;
+        refuse_delta(
+            outbound_tx,
+            &update,
+            RefusalCode::Forbidden,
+            "not subscribed",
+        )
+        .await;
         return;
     }
 
@@ -261,14 +345,11 @@ pub(crate) async fn handle_update(
     // the hot path.
     let cipher_len = update.ciphertext.len();
     if cipher_len > state.config.delta_max_bytes {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 413,
-            message: format!(
-                "delta ciphertext {} bytes exceeds max {}",
-                cipher_len, state.config.delta_max_bytes
-            ),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = format!(
+            "delta ciphertext {} bytes exceeds max {}",
+            cipher_len, state.config.delta_max_bytes
+        );
+        refuse_delta(outbound_tx, &update, RefusalCode::PayloadTooLarge, &detail).await;
         return;
     }
 
@@ -276,11 +357,8 @@ pub(crate) async fn handle_update(
     // ciphertext, zero clock) before any DB/Redis work. Cheap, and it keeps the
     // durable index and the per-author clock hash free of no-op entries.
     if let Err(e) = update.validate() {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 400,
-            message: format!("invalid update: {e}"),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = format!("invalid update: {e}");
+        refuse_delta(outbound_tx, &update, RefusalCode::BadRequest, &detail).await;
         return;
     }
 
@@ -290,11 +368,8 @@ pub(crate) async fn handle_update(
     // helper drops the subscription so subsequent messages are rejected without a
     // DB hit; tell this client its access was revoked.
     if !membership_still_valid(state, conn, doc_id).await {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 403,
-            message: "document access revoked".into(),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = "document access revoked";
+        refuse_delta(outbound_tx, &update, RefusalCode::Forbidden, detail).await;
         return;
     }
 
@@ -305,11 +380,8 @@ pub(crate) async fn handle_update(
     // capability is cached at Subscribe and refreshed by `membership_still_valid`
     // above, so this is a map lookup, not a DB hit.
     if conn.doc_write_allowed.get(&doc_id) != Some(&true) {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 403,
-            message: "read-only role cannot write to this document".into(),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = "read-only role cannot write to this document";
+        refuse_delta(outbound_tx, &update, RefusalCode::Forbidden, detail).await;
         return;
     }
 
@@ -323,19 +395,13 @@ pub(crate) async fn handle_update(
     // forged identity. Reject the mismatch before the signature check so the
     // clock hash only ever sees known keys.
     if author_pubkey != conn.signing_pubkey {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 403,
-            message: "author key does not match session identity".into(),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = "author key does not match session identity";
+        refuse_delta(outbound_tx, &update, RefusalCode::Forbidden, detail).await;
         return;
     }
     if let Err(e) = verify_update_signature(&author_pubkey, &update) {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 401,
-            message: format!("invalid signature: {e}"),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = format!("invalid signature: {e}");
+        refuse_delta(outbound_tx, &update, RefusalCode::InvalidSignature, &detail).await;
         return;
     }
 
@@ -361,12 +427,9 @@ pub(crate) async fn handle_update(
                 s
             }
             Err(e) => {
-                if matches!(e, AppError::ClockMismatch { .. }) {
-                    conn.clock_fences.raise(doc_id, update.signature);
-                }
-                let _ = outbound_tx
-                    .send(Payload::server_msg(&update_refusal(&update, &e)))
-                    .await;
+                let answer = update_refusal(&update, &e);
+                conn.clock_fences.raise_for(&answer);
+                let _ = outbound_tx.send(Payload::server_msg(&answer)).await;
                 return;
             }
         };
@@ -468,13 +531,21 @@ pub(crate) async fn handle_update(
         // persisted above. Still surface it rather than swallowing (H1).
         tracing::error!("doc_broadcast failed doc={doc_id} seq={seq}: {e}");
     }
+    // A thread is subscribed only by those who hold it open. Every other
+    // socket on its channel hears one signal that names the thread alone
+    // (`SRV-161`, `SRV-162`).
+    if let Some((channel, ambre_core::ChannelDocumentKind::Thread)) = conn.doc_channels.get(&doc_id)
+        && let Err(e) = redis_ops::thread_activity(&state.redis, channel, &doc_id).await
+    {
+        tracing::error!(error = %e, "thread activity publish failed");
+    }
     // The writer has the document open and holds every delta it covers, so it
     // is the one asked once the history passes the threshold (`SRV-038`).
     crate::compaction::ask_when_due(state, doc_id, seq, outbound_tx);
 }
 
 /// The pauses between the attempts of an index write: three retries, a third
-/// of a second in all. That bounds how long one frame holds its connection.
+/// of a second in all. That bounds how long one delta holds its connection.
 const INDEX_WRITE_BACKOFF: [Duration; 3] = [
     Duration::from_millis(20),
     Duration::from_millis(80),
@@ -484,7 +555,7 @@ const INDEX_WRITE_BACKOFF: [Duration; 3] = [
 /// Writes the index row of delta `seq`. A small delta lives in its row, in the
 /// same write as the row, and takes no other path (`SRV-148`). A large one, or
 /// one that meets a full inline tail, keeps an object of its own (`SRV-149`,
-/// `SRV-150`). Returns whether the row holds the frame. Both inserts ignore a
+/// `SRV-150`). Returns whether the row holds the delta. Both inserts ignore a
 /// row already written, so a retry never doubles one.
 async fn store_index_row(
     state: &Arc<AppState>,
@@ -655,12 +726,12 @@ pub(crate) async fn handle_request_missing(
             Ok(u) => u,
             Err(e) => {
                 // An accepted request is always answered (`SRV-040`). The pages
-                // already sent stand, and a retryable refusal names where the
-                // replay stopped, so the client asks again from there.
+                // already sent stand, and the stop names the last delta they
+                // delivered, so the client asks again from there (`SRV-184`).
                 tracing::error!(error = %e, "failed to get updates after seq");
-                let msg = Payload::server_msg(&WsServerMsg::Error {
-                    code: 503,
-                    message: format!("replay incomplete after delta {cursor}, retry later"),
+                let msg = Payload::server_msg(&WsServerMsg::ReplayStopped {
+                    document_id,
+                    after_seq: ambre_protocol::messages::Seq(cursor as u64),
                 });
                 let _ = outbound_tx.send(msg).await;
                 return;
@@ -748,6 +819,10 @@ pub(crate) async fn handle_request_missing(
 
         let fetched = futures_util::future::join_all(fetches).await;
         let (seq_updates, unreadable) = contiguous_prefix(fetched);
+        // The last delta this page delivers, or the cursor it started past.
+        let delivered = seq_updates
+            .last()
+            .map_or(ambre_protocol::messages::Seq(cursor as u64), |u| u.seq);
 
         let msg = Payload::server_msg(&WsServerMsg::MissingUpdates {
             document_id,
@@ -757,9 +832,10 @@ pub(crate) async fn handle_request_missing(
             return;
         }
         if let Some(seq) = unreadable {
-            let msg = Payload::server_msg(&WsServerMsg::Error {
-                code: 503,
-                message: format!("replay incomplete: delta {seq} could not be read, retry later"),
+            tracing::warn!(seq, "replay stopped at a delta it could not read");
+            let msg = Payload::server_msg(&WsServerMsg::ReplayStopped {
+                document_id,
+                after_seq: delivered,
             });
             let _ = outbound_tx.send(msg).await;
             return;
@@ -772,58 +848,6 @@ pub(crate) async fn handle_request_missing(
         cursor = next_cursor;
         batches.forget_through(cursor);
     }
-}
-
-// NOTE (Murmure not implemented): the channel handlers below deliberately skip
-// the subscription ACL, signature verification, and clock/seq path that the
-// document handlers enforce. Murmure is unstarted and no channel path is wired
-// to real data. This is intentional, NOT an oversight: do not re-flag it in
-// audits. The MANDATORY hardening before Murmure lands is `SRV-047` and `SRV-048`
-// in `ambre-spec-broadcast.md`. A channel is a set of documents, so its frames take
-// the document gates: the channel_members ACL, the signature check and the clock/seq
-// path. The channel design is in `ambre-spec-murmure-engine.md`.
-pub(crate) async fn handle_subscribe_channel(
-    _state: &Arc<AppState>,
-    conn: &mut WsConnectionState,
-    channel_id: ChannelId,
-    outbound_tx: &mpsc::Sender<Payload>,
-) {
-    // TODO(murmure): enforce the channel_members subscription ACL here, mirroring
-    // `handle_subscribe`/`verify_document_access`. `SRV-047`.
-    conn.channel_subscriptions.insert(channel_id);
-    let ack = Payload::server_msg(&WsServerMsg::ChannelSubscribed { channel_id });
-    let _ = outbound_tx.send(ack).await;
-}
-
-pub(crate) async fn handle_channel_update(
-    state: &Arc<AppState>,
-    channel_id: ChannelId,
-    update: ambre_protocol::Update,
-) {
-    // TODO(murmure): before Murmure lands, gate this on `verify_update_signature`
-    // and the `verify_clock_and_assign_seq` path exactly like `handle_update`, and
-    // persist the delta. Rebroadcasting unsigned, unsequenced updates is only safe
-    // while no channel is wired to real data. `SRV-048`.
-    let broadcast = Payload::server_msg(&WsServerMsg::ChannelUpdate {
-        channel_id,
-        seq: ambre_protocol::messages::Seq(0),
-        update,
-    });
-    let _ = redis_ops::chan_broadcast(&state.redis, &channel_id, &broadcast).await;
-}
-
-pub(crate) async fn handle_channel_ephemeral(
-    state: &Arc<AppState>,
-    channel_id: ChannelId,
-    ephemeral: ambre_protocol::Ephemeral,
-) {
-    // TODO(murmure): signature-check the ephemeral (typing/presence carries the
-    // anti-replay counter) once channel ACLs exist. `SRV-048`.
-    let broadcast = Payload::server_msg(&WsServerMsg::ChannelEphemeral {
-        channel_id,
-        ephemeral,
-    });
-    let _ = redis_ops::chan_broadcast(&state.redis, &channel_id, &broadcast).await;
 }
 
 // -- ACL ----------------------------------------------------------
@@ -853,7 +877,8 @@ async fn membership_still_valid(
             conn.doc_access_verified_at.insert(doc_id, Instant::now());
             // Refresh the cached write capability too: a mid-session role change
             // (for example editor demoted to viewer) takes effect within the TTL.
-            conn.doc_write_allowed.insert(doc_id, role_can_write(&role));
+            conn.doc_write_allowed
+                .insert(doc_id, role.can_write_document());
             true
         }
         Err(_) => {
@@ -865,15 +890,11 @@ async fn membership_still_valid(
             }
             conn.doc_access_verified_at.remove(&doc_id);
             conn.doc_write_allowed.remove(&doc_id);
+            // The channel stays known until the unsubscribe, which leaves its
+            // topic as it leaves the document's.
             false
         }
     }
-}
-
-/// Whether a document role may author content. Mirrors the `["owner","editor"]`
-/// gate every REST write path enforces; a `viewer` (or unknown role) is read-only.
-fn role_can_write(role: &str) -> bool {
-    matches!(role, "owner" | "editor")
 }
 
 /// Verifies the caller has a membership row for the document and returns their
@@ -882,7 +903,7 @@ pub(crate) async fn verify_document_access(
     pool: &sqlx::PgPool,
     document_id: DocumentId,
     user_id: UserId,
-) -> Result<String, AppError> {
+) -> Result<ambre_core::Role, AppError> {
     let m = db::get_document_member(pool, &document_id, &user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -891,7 +912,8 @@ pub(crate) async fn verify_document_access(
 
 #[cfg(test)]
 mod postcard_tests {
-    use ambre_core::{DocumentId, PublicKey, SnapshotId};
+    use super::refusal;
+    use ambre_core::{DocumentId, PublicKey, RefusalCode, SnapshotId};
     use ambre_protocol::messages::{
         Ciphertext, Clock, CommitmentTag, Counter, Ephemeral, Nonce, Seq, SeqUpdate, Signature,
         Update,
@@ -1058,15 +1080,13 @@ mod postcard_tests {
 
     #[test]
     fn roundtrip_server_error() {
-        let msg = WsServerMsg::Error {
-            code: 409,
-            message: "conflict".into(),
-        };
+        let doc = DocumentId::from_bytes([3u8; 16]);
+        let msg = refusal(Some(doc), RefusalCode::Conflict);
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         match decoded {
-            WsServerMsg::Error { code, message } => {
-                assert_eq!(code, 409);
-                assert_eq!(message, "conflict");
+            WsServerMsg::Error { document_id, code } => {
+                assert_eq!(document_id, Some(doc));
+                assert_eq!(code, RefusalCode::Conflict);
             }
             _ => panic!("expected Error variant"),
         }
@@ -1078,7 +1098,7 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x06);
+        assert_eq!(bytes[0], 0x0B);
     }
 
     #[test]
@@ -1150,11 +1170,11 @@ mod ephemeral_binding_tests {
             // concern rather than tripping the read-only gate.
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            channel_subscriptions: HashSet::new(),
             // A wide bucket so these tests exercise their own concern, not the
             // rate limit (which the loop enforces, covered by its own test).
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
         }
     }
 
@@ -1449,11 +1469,11 @@ mod delta_size_cap_tests {
             // concern rather than tripping the read-only gate.
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            channel_subscriptions: HashSet::new(),
             // A wide bucket so these tests exercise their own concern, not the
             // rate limit (which the loop enforces, covered by its own test).
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
         }
     }
 
@@ -1470,6 +1490,48 @@ mod delta_size_cap_tests {
             },
             commitment_tag: CommitmentTag([0u8; 32]),
             signature: Signature([0u8; 64]),
+        }
+    }
+
+    /// `SRV-183`, `SRV-185`: each refusal of the write path answers its code,
+    /// its document and the delta it refused, and carries nothing else to leak.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn each_write_refusal_names_its_delta_and_its_code() {
+        let Some(state) = test_state(1024).await else {
+            return;
+        };
+        let doc_id = DocumentId::new();
+        let session_key = PublicKey::from_array([1u8; 32]);
+        let mut empty = update_with(session_key.clone(), doc_id, 16);
+        empty.ciphertext = Ciphertext(Vec::new());
+        let cases = [
+            (empty, RefusalCode::BadRequest),
+            (
+                update_with(PublicKey::from_array([2u8; 32]), doc_id, 16),
+                RefusalCode::Forbidden,
+            ),
+            (
+                update_with(session_key.clone(), doc_id, 16),
+                RefusalCode::InvalidSignature,
+            ),
+        ];
+        for (fill, (mut update, expected)) in (1u8..).zip(cases) {
+            update.signature = Signature([fill; 64]);
+            let mut conn = conn_with(session_key.clone(), doc_id);
+            let (tx, mut rx) = mpsc::channel::<Payload>(8);
+            handle_update(&state, &mut conn, update, &tx).await;
+            let reply = rx.try_recv().expect("a refusal");
+            let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
+            assert!(
+                matches!(
+                    decoded,
+                    WsServerMsg::DeltaRefused { document_id, signature, code }
+                        if document_id == doc_id && signature == Signature([fill; 64]) && code == expected
+                ),
+                "expected {expected}, got {decoded:?}"
+            );
+            assert!(rx.try_recv().is_err(), "one answer per refusal");
         }
     }
 
@@ -1500,7 +1562,11 @@ mod delta_size_cap_tests {
         let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
         assert!(matches!(
             decoded,
-            ambre_protocol::ws::WsServerMsg::Error { code: 413, .. }
+            ambre_protocol::ws::WsServerMsg::DeltaRefused {
+                code: RefusalCode::PayloadTooLarge,
+                document_id: d,
+                ..
+            } if d == doc_id
         ));
 
         let _ = state.redis.del([&pending_key]).await;
@@ -1540,7 +1606,10 @@ mod delta_size_cap_tests {
         let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
         assert!(matches!(
             decoded,
-            ambre_protocol::ws::WsServerMsg::Error { code: 403, .. }
+            ambre_protocol::ws::WsServerMsg::DeltaRefused {
+                code: RefusalCode::Forbidden,
+                ..
+            }
         ));
 
         let _ = state.redis.del([&pending_key]).await;
@@ -1651,9 +1720,9 @@ mod access_tests {
             doc_access_verified_at: HashMap::from([(doc_id, verified)]),
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            channel_subscriptions: HashSet::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
         }
     }
 
@@ -1684,9 +1753,17 @@ mod access_tests {
         let owner = create_test_user(pool, "owner@ambre.app").await;
         let editor = create_test_user(pool, "editor@ambre.app").await;
         let doc_id = create_test_document(pool, owner, "toile").await;
-        db::add_document_member(pool, &doc_id, &editor, "editor", &[5u8; 32], &owner, None)
-            .await
-            .unwrap();
+        db::add_document_member(
+            pool,
+            &doc_id,
+            &editor,
+            ambre_core::Role::Editor,
+            &[5u8; 32],
+            &owner,
+            None,
+        )
+        .await
+        .unwrap();
         (doc_id, editor)
     }
 
@@ -1709,7 +1786,10 @@ mod access_tests {
         handle_update(&state, &mut conn, update_for(key.clone(), doc_id), &tx).await;
         assert!(matches!(
             replies(&mut rx).as_slice(),
-            [WsServerMsg::Error { code: 403, .. }]
+            [WsServerMsg::DeltaRefused {
+                code: RefusalCode::Forbidden,
+                ..
+            }]
         ));
         let eph =
             super::ephemeral_binding_tests::signed_ephemeral(&signing_key, &key, doc_id, vec![1]);
@@ -1749,7 +1829,7 @@ mod access_tests {
         let state = state_on(pool.clone()).await;
         let (doc_id, editor) = shared_document(&pool).await;
         let key = PublicKey::from_array([32u8; 32]);
-        db::remove_document_member(&pool, &doc_id, &editor, None)
+        db::remove_document_member(&pool, &doc_id, &editor, None, 0)
             .await
             .unwrap();
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
@@ -1757,8 +1837,14 @@ mod access_tests {
         let mut conn = conn_of(editor, key.clone(), doc_id, MEMBERSHIP_RECHECK_TTL);
         handle_update(&state, &mut conn, update_for(key, doc_id), &tx).await;
         match replies(&mut rx).as_slice() {
-            [WsServerMsg::Error { code: 403, message }] => {
-                assert_eq!(message, "document access revoked");
+            [
+                WsServerMsg::DeltaRefused {
+                    code: RefusalCode::Forbidden,
+                    document_id: d,
+                    ..
+                },
+            ] => {
+                assert_eq!(*d, doc_id);
             }
             other => panic!("expected a revocation, got {other:?}"),
         }
@@ -1804,7 +1890,7 @@ mod access_tests {
             "a member is answered"
         );
 
-        db::remove_document_member(&pool, &doc_id, &editor, None)
+        db::remove_document_member(&pool, &doc_id, &editor, None, 0)
             .await
             .unwrap();
         let mut removed = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);
@@ -1820,7 +1906,7 @@ mod access_tests {
         assert!(!removed.doc_subscriptions.contains(&doc_id));
     }
 
-    /// `SRV-089`: a presence frame is recorded, and takes no sequence number,
+    /// `SRV-089`: a presence sample is recorded, and takes no sequence number,
     /// no clock and no place in the pending list or the delta index.
     #[sqlx::test]
     #[cfg_attr(
@@ -2183,15 +2269,57 @@ mod refusal_tests {
     #[test]
     fn a_store_failure_reaches_the_client_without_its_name_or_text() {
         let cause = AppError::Redis("clock validation failed: ERR connection refused".into());
-        let WsServerMsg::Error { code, message } = update_refusal(&seq_update(1).update, &cause)
-        else {
-            panic!("expected an error frame");
+        let update = seq_update(1).update;
+        let doc = update.public_data.document_id;
+        assert!(matches!(
+            update_refusal(&update, &cause),
+            WsServerMsg::DeltaRefused {
+                document_id,
+                signature,
+                code: RefusalCode::InternalError,
+            } if document_id == doc && signature == update.signature
+        ));
+    }
+
+    /// `SRV-115`: a delta for a locked segment is refused with the lock's
+    /// code, and the refusal names the delta.
+    #[test]
+    fn a_delta_for_a_locked_segment_is_refused_with_the_lock() {
+        let update = seq_update(2).update;
+        let doc = update.public_data.document_id;
+        assert!(matches!(
+            update_refusal(&update, &AppError::SegmentLocked),
+            WsServerMsg::DeltaRefused {
+                document_id,
+                signature,
+                code: RefusalCode::SegmentLocked,
+            } if document_id == doc && signature == update.signature
+        ));
+    }
+
+    /// `SRV-186`: a delta the relay failed to sequence is named, and fences
+    /// the socket like a refused clock. A refusal that took a clock's place
+    /// for another cause raises nothing.
+    #[test]
+    fn a_delta_the_relay_failed_to_sequence_is_named_and_fences_the_socket() {
+        let update = seq_update(3).update;
+        let doc = update.public_data.document_id;
+        let failed = update_refusal(&update, &AppError::Redis("down".into()));
+        let mut fences = ClockFences::default();
+        fences.raise_for(&failed);
+        assert!(fences.holds(&doc), "the failed delta fences its document");
+        fences.answer(doc, &update.signature);
+        assert!(!fences.holds(&doc), "the author's answer lifts it");
+
+        let deleted = AppError::NotFound {
+            resource: "document",
         };
-        assert_eq!(code, 500);
-        assert_eq!(message, "Internal server error");
-        for leaked in ["Redis", "redis", "refused", "clock validation"] {
-            assert!(!message.contains(leaked), "{message}");
-        }
+        fences.raise_for(&update_refusal(&update, &deleted));
+        fences.raise_for(&update_refusal(&update, &AppError::RotationOwed));
+        assert!(
+            !fences.holds(&doc),
+            "a deleted document or an owed key fences nothing"
+        );
     }
 
     /// `SRV-096`: a subscription refused on a store failure answers without the
@@ -2202,15 +2330,29 @@ mod refusal_tests {
         let cause = AppError::Database(sqlx::Error::Protocol(
             "relation \"document_members\" does not exist".into(),
         ));
-        let WsServerMsg::Error { code, message } = subscribe_refusal(doc, &cause) else {
-            panic!("expected an error frame");
+        let code_of = |answer: WsServerMsg| match answer {
+            WsServerMsg::Error {
+                document_id: Some(d),
+                code,
+            } if d == doc => Some(code),
+            _ => None,
         };
-        assert_eq!((code, message.as_str()), (500, "Internal server error"));
-
-        let WsServerMsg::Error { code, .. } = subscribe_refusal(doc, &AppError::Forbidden) else {
-            panic!("expected an error frame");
+        assert_eq!(
+            code_of(subscribe_refusal(doc, &cause)),
+            Some(RefusalCode::InternalError)
+        );
+        assert_eq!(
+            code_of(subscribe_refusal(doc, &AppError::Forbidden)),
+            Some(RefusalCode::Forbidden)
+        );
+        let unseen = AppError::NotFound {
+            resource: "document",
         };
-        assert_eq!(code, 403);
+        assert_eq!(
+            code_of(subscribe_refusal(doc, &unseen)),
+            Some(RefusalCode::Forbidden),
+            "a document the caller cannot see answers as one it may not join"
+        );
     }
 
     /// `SRV-123`: a frame refused while a rotation is owed is answered by name.
@@ -2269,9 +2411,9 @@ mod hot_tail_tests {
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            channel_subscriptions: HashSet::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
         };
         (state, conn, doc_id)
     }
@@ -2382,9 +2524,9 @@ mod hot_tail_tests {
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            channel_subscriptions: HashSet::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
         };
         let (tx, _rx) = mpsc::channel::<Payload>(8);
         let (second_tx, mut second_rx) = mpsc::channel::<Payload>(8);
@@ -2467,5 +2609,249 @@ mod hot_tail_tests {
             1,
             "the batch is read once for its four deltas"
         );
+    }
+}
+
+// The gates of a channel document are the gates of any document (`SRV-047`,
+// `SRV-048`). The access check resolves a segment to the member rows of its
+// channel's `meta` document, so the handlers need no channel branch.
+#[cfg(test)]
+mod channel_gate_tests {
+    use super::*;
+    use crate::test_helpers::test_app_state;
+    use ambre_core::{ChannelId, DocumentId, PublicKey, SnapshotId};
+    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
+    use ambre_protocol::public_data::UpdatePublicData;
+    use rustis::commands::{GenericCommands, ListCommands};
+
+    fn uuid_of(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
+        uuid::Uuid::from_bytes(*id.into().as_bytes())
+    }
+
+    fn conn_of(user_id: UserId, session_key: PublicKey) -> WsConnectionState {
+        WsConnectionState {
+            user_id,
+            signing_pubkey: session_key,
+            doc_subscriptions: HashSet::new(),
+            doc_access_verified_at: HashMap::new(),
+            doc_write_allowed: HashMap::new(),
+            last_replay_at: HashMap::new(),
+            msg_bucket: TokenBucket::new(1000, 1000),
+            clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
+        }
+    }
+
+    /// A channel of `owner` with its `meta` and one segment, and `member`
+    /// granted `role` on `meta`. Returns the segment.
+    async fn segment_of_channel(
+        pool: &sqlx::PgPool,
+        owner: UserId,
+        member: Option<(UserId, ambre_core::Role)>,
+    ) -> DocumentId {
+        let channel = ChannelId::new();
+        sqlx::query("INSERT INTO channels (id) VALUES ($1)")
+            .bind(uuid_of(channel))
+            .execute(pool)
+            .await
+            .expect("channel");
+        let meta = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
+        let segment = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
+        for (document, kind, segment_state) in [
+            (meta, ambre_core::ChannelDocumentKind::Meta, None),
+            (
+                segment,
+                ambre_core::ChannelDocumentKind::Segment,
+                Some("active"),
+            ),
+        ] {
+            sqlx::query(
+                "INSERT INTO channel_documents (document_id, channel_id, kind, state) \
+                 VALUES ($1, $2, $3, $4)",
+            )
+            .bind(uuid_of(document))
+            .bind(uuid_of(channel))
+            .bind(kind.as_str())
+            .bind(segment_state)
+            .execute(pool)
+            .await
+            .expect("group");
+        }
+        if let Some((member, role)) = member {
+            db::add_document_member(pool, &meta, &member, role, &[6u8; 32], &owner, None)
+                .await
+                .expect("member");
+        }
+        segment
+    }
+
+    fn update_on(pub_key: PublicKey, doc_id: DocumentId) -> Update {
+        Update {
+            ciphertext: Ciphertext(vec![0u8; 16]),
+            nonce: Nonce([0u8; 24]),
+            public_data: UpdatePublicData {
+                document_id: doc_id,
+                pub_key,
+                key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+                clock: Clock(1),
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        }
+    }
+
+    /// The code of a refusal, of a wire message or of a delta.
+    fn error_code(frame: &Payload) -> Option<RefusalCode> {
+        match ambre_protocol::ws::decode_server_msg(frame.expose_bytes()).ok()? {
+            WsServerMsg::Error { code, .. } | WsServerMsg::DeltaRefused { code, .. } => Some(code),
+            _ => None,
+        }
+    }
+
+    /// `SRV-047`: a caller who is no member of the channel is refused a
+    /// subscription to its segment, and holds none.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_segment_refuses_a_caller_outside_its_channel(pool: sqlx::PgPool) {
+        let owner = crate::test_helpers::create_test_user(&pool, "owner@test.dev").await;
+        let eve = crate::test_helpers::create_test_user(&pool, "eve@test.dev").await;
+        let segment = segment_of_channel(&pool, owner, None).await;
+        let state = test_app_state(pool).await;
+        let mut conn = conn_of(eve, PublicKey::from_array([2u8; 32]));
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+
+        handle_subscribe(&state, &mut conn, segment, &tx).await;
+
+        assert_eq!(
+            error_code(&rx.try_recv().expect("a reply")),
+            Some(RefusalCode::Forbidden)
+        );
+        assert!(!conn.doc_subscriptions.contains(&segment));
+    }
+
+    /// `SRV-047`: a member of the channel subscribes to its segment through
+    /// the member row of `meta`, with the write capability of that row.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_member_of_the_channel_subscribes_to_its_segment(pool: sqlx::PgPool) {
+        let owner = crate::test_helpers::create_test_user(&pool, "owner@test.dev").await;
+        let bob = crate::test_helpers::create_test_user(&pool, "bob@test.dev").await;
+        let segment = segment_of_channel(&pool, owner, Some((bob, ambre_core::Role::Editor))).await;
+        let state = test_app_state(pool).await;
+        let mut conn = conn_of(bob, PublicKey::from_array([3u8; 32]));
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+
+        handle_subscribe(&state, &mut conn, segment, &tx).await;
+
+        let reply = rx.try_recv().expect("a reply");
+        let ack = ambre_protocol::ws::decode_server_msg(reply.expose_bytes());
+        assert!(
+            matches!(ack, Ok(WsServerMsg::Subscribed { document_id }) if document_id == segment)
+        );
+        assert_eq!(conn.doc_write_allowed.get(&segment), Some(&true));
+    }
+
+    /// `SRV-048`: a wire message on a segment passes the write gate of any document.
+    /// A viewer of the channel is refused a delta before any durable write.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_viewer_of_the_channel_writes_no_delta_on_its_segment(pool: sqlx::PgPool) {
+        let owner = crate::test_helpers::create_test_user(&pool, "owner@test.dev").await;
+        let bob = crate::test_helpers::create_test_user(&pool, "bob@test.dev").await;
+        let segment = segment_of_channel(&pool, owner, Some((bob, ambre_core::Role::Viewer))).await;
+        let state = test_app_state(pool).await;
+        let session_key = PublicKey::from_array([4u8; 32]);
+        let mut conn = conn_of(bob, session_key.clone());
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        handle_subscribe(&state, &mut conn, segment, &tx).await;
+        let _ = rx.try_recv();
+        let pending_key = format!("doc:{segment}:pending");
+
+        handle_update(&state, &mut conn, update_on(session_key, segment), &tx).await;
+
+        assert_eq!(
+            error_code(&rx.try_recv().expect("a reply")),
+            Some(RefusalCode::Forbidden)
+        );
+        let pending: usize = state.redis.llen(&pending_key).await.expect("llen");
+        assert_eq!(pending, 0, "a viewer's delta must not be pushed");
+        let _ = state.redis.del([&pending_key]).await;
+    }
+
+    /// `SRV-161`, `SRV-162`: a delta on a thread document publishes one
+    /// signal on the topic of its channel. The signal is the thread's
+    /// identifier and nothing else. A delta on a segment publishes none.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_delta_on_a_thread_signals_its_channel_and_names_it_alone(pool: sqlx::PgPool) {
+        use futures_util::StreamExt;
+        use rustis::commands::PubSubCommands;
+        let owner = crate::test_helpers::create_test_user(&pool, "owner@test.dev").await;
+        let segment = segment_of_channel(&pool, owner, None).await;
+        let channel = db::channel_of_document(&pool, &segment)
+            .await
+            .expect("read")
+            .expect("a channel");
+        let thread = crate::test_helpers::create_test_document(&pool, owner, "murmure").await;
+        db::register_thread(&pool, &channel, ambre_core::MessageId::new(), thread)
+            .await
+            .expect("registered");
+        let state = test_app_state(pool).await;
+        let key = ed25519_dalek::SigningKey::from_bytes(&[61u8; 32]);
+        let mut conn = conn_of(owner, PublicKey::from_array(key.verifying_key().to_bytes()));
+        let (tx, mut rx) = mpsc::channel::<Payload>(16);
+        for document in [thread, segment] {
+            handle_subscribe(&state, &mut conn, document, &tx).await;
+        }
+        while rx.try_recv().is_ok() {}
+        // A connection of its own: a subscriber sharing the relay's client
+        // would desynchronise its replies (see `PubSubHub`).
+        let subscriber = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .expect("redis");
+        let mut stream = subscriber
+            .subscribe(format!("channel:{channel}"))
+            .await
+            .expect("a subscription");
+        let wait = std::time::Duration::from_millis(500);
+
+        let update = super::hot_tail_tests::signed_update(&key, thread, 1, 16);
+        handle_update(&state, &mut conn, update, &tx).await;
+
+        let msg = tokio::time::timeout(wait, stream.next())
+            .await
+            .expect("a signal")
+            .expect("an open stream")
+            .expect("a message");
+        let alone = ambre_protocol::ws::encode_server_msg(&WsServerMsg::ThreadActivity {
+            document_id: thread,
+        });
+        assert_eq!(msg.payload(), alone.as_slice());
+
+        let update = super::hot_tail_tests::signed_update(&key, segment, 1, 16);
+        handle_update(&state, &mut conn, update, &tx).await;
+        assert!(
+            tokio::time::timeout(wait, stream.next()).await.is_err(),
+            "a segment delta signals nothing"
+        );
+        for document in [thread, segment] {
+            let _: Result<usize, _> = state
+                .redis
+                .del(crate::redis_ops::document_state_keys(&document))
+                .await;
+        }
     }
 }

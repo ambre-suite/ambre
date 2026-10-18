@@ -8,7 +8,7 @@ use crate::error::AppError;
 use crate::payload::Payload;
 use crate::state::AppState;
 
-/// A delta whose sealed frame is under this size lives in its index row
+/// A delta whose sealed envelope is under this size lives in its index row
 /// (`ambre-spec-budgets.md`, the inline delta size row).
 pub const INLINE_DELTA_MAX_BYTES: usize = 64 * 1024;
 
@@ -60,7 +60,7 @@ pub fn batch_key(
     format!("{env_prefix}/documents/{document_id}/batches/{first:010}-{last:010}")
 }
 
-/// Encodes a batch: each delta's number and its sealed frame, unchanged
+/// Encodes a batch: each delta's number and its sealed envelope, unchanged
 /// (`SRV-153`).
 fn encode_batch(frames: &[(i64, Payload)]) -> Result<Payload, AppError> {
     Payload::batch(frames).map_err(|e| AppError::Internal(format!("batch encode: {e}")))

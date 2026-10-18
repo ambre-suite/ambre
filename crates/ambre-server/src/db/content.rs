@@ -7,9 +7,9 @@ use crate::payload::Payload;
 /// Row from `snapshots`.
 #[derive(Debug)]
 pub struct SnapshotRow {
-    pub id: uuid::Uuid,
+    pub id: ambre_core::SnapshotId,
     #[allow(dead_code)]
-    pub document_id: uuid::Uuid,
+    pub document_id: ambre_core::DocumentId,
     #[allow(dead_code)]
     pub author_pubkey: Vec<u8>,
     #[allow(dead_code)]
@@ -28,29 +28,12 @@ pub struct SnapshotRow {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Who vouched for a snapshot (`SRV-126`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SnapshotStatus {
-    /// Nobody yet. Never served, and never moves a trim.
-    Pending,
-    /// Its own author. Served beside the reference snapshot.
-    #[serde(rename = "self")]
-    SelfConfirmed,
-    /// Another member. Moves the trim.
-    Confirmed,
-}
+pub use ambre_core::SnapshotStatus;
 
-impl SnapshotStatus {
-    /// The stored spelling, which the migration checks.
-    fn parse(text: &str) -> Result<Self, AppError> {
-        match text {
-            "pending" => Ok(Self::Pending),
-            "self" => Ok(Self::SelfConfirmed),
-            "confirmed" => Ok(Self::Confirmed),
-            other => Err(AppError::Internal(format!("snapshot status {other}"))),
-        }
-    }
+/// The stored spelling, which the migration checks (`SRV-180`).
+fn parse_status(text: &str) -> Result<SnapshotStatus, AppError> {
+    text.parse()
+        .map_err(|error| AppError::Internal(format!("snapshot {error}")))
 }
 
 /// The columns [`snapshot_row`] reads, in one place for every query.
@@ -61,15 +44,15 @@ const SNAPSHOT_COLUMNS: &str = "id, document_id, author_pubkey, parent_hash, \
 fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
     let status: String = r.try_get("status")?;
     Ok(SnapshotRow {
-        id: r.try_get("id")?,
-        document_id: r.try_get("document_id")?,
+        id: r.try_get::<PgId, _>("id")?.into(),
+        document_id: r.try_get::<PgId, _>("document_id")?.into(),
         author_pubkey: r.try_get("author_pubkey")?,
         parent_hash: r.try_get("parent_hash")?,
         parent_snapshot_proof: r.try_get("parent_snapshot_proof")?,
         update_clocks: r.try_get("update_clocks")?,
         s3_key: r.try_get("s3_key")?,
         covered_seq: r.try_get("covered_seq")?,
-        status: SnapshotStatus::parse(&status)?,
+        status: parse_status(&status)?,
         created_at: r.try_get("created_at")?,
     })
 }
@@ -78,17 +61,15 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
 /// hold a frame (`ZK-006`).
 pub struct UpdateRow {
     #[allow(dead_code)]
-    pub id: uuid::Uuid,
-    #[allow(dead_code)]
-    pub document_id: uuid::Uuid,
+    pub document_id: ambre_core::DocumentId,
     pub author_pubkey: Vec<u8>,
     #[allow(dead_code)]
-    pub snapshot_id: uuid::Uuid,
+    pub snapshot_id: ambre_core::SnapshotId,
     pub clock: i64,
     pub seq: i64,
     /// The object of its own, for a delta over the inline size (`SRV-149`).
     pub s3_key: Option<String>,
-    /// The sealed frame itself, for a delta in the hot tail (`SRV-148`).
+    /// The sealed envelope itself, for a delta in the hot tail (`SRV-148`).
     pub wire: Option<Payload>,
     /// The batch object that holds the frame (`SRV-151`).
     pub batch_key: Option<String>,
@@ -195,6 +176,9 @@ pub async fn get_reference_snapshot(
 /// pending one `self`, unless a snapshot another author confirmed alone
 /// already stands past the reference. The trim past the reference then drops
 /// one author's deltas only, the ones that author's snapshot holds.
+///
+/// A snapshot of a locked segment is the final one, and only another member
+/// confirms it (`SRV-118`). Its author's confirmation leaves it pending.
 pub async fn confirm_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -209,6 +193,9 @@ pub async fn confirm_snapshot(
          WHERE s.id = $1 AND s.document_id = $2 AND (
              (s.author_pubkey <> $3 AND s.status <> 'confirmed')
              OR (s.author_pubkey = $3 AND s.status = 'pending' AND NOT EXISTS (
+                 SELECT 1 FROM channel_documents c
+                 WHERE c.document_id = s.document_id AND c.horizon IS NOT NULL
+             ) AND NOT EXISTS (
                  SELECT 1 FROM snapshots o
                  WHERE o.document_id = s.document_id AND o.status = 'self'
                    AND o.author_pubkey <> s.author_pubkey
@@ -228,26 +215,55 @@ pub async fn confirm_snapshot(
             .bind(did)
             .fetch_optional(pool)
             .await?;
-    status.as_deref().map(SnapshotStatus::parse).transpose()
+    status.as_deref().map(parse_status).transpose()
 }
 
-/// Drops a snapshot nobody confirmed yet, and returns its object key for the
-/// caller to delete (`SRV-133`). A confirmed one stays, and so does every
-/// delta (`SRV-135`).
+/// A snapshot a report dropped.
+#[derive(Debug, PartialEq, Eq)]
+pub struct DroppedSnapshot {
+    /// Its object key, for the caller to delete.
+    pub s3_key: String,
+    /// Whether it was the final snapshot of a segment, which is then to be
+    /// finalized again.
+    pub refinalize: bool,
+}
+
+/// Drops a snapshot nobody confirmed yet (`SRV-133`). A confirmed one stays,
+/// and so does every delta (`SRV-135`).
+///
+/// A final snapshot takes its finalization with it, in the same transaction.
+/// The segment stays `final` and locked, and a new lease finalizes it again
+/// at the same horizon (the Murmure segments spec).
 pub async fn drop_pending_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     snapshot_id: &ambre_core::SnapshotId,
-) -> Result<Option<String>, AppError> {
+) -> Result<Option<DroppedSnapshot>, AppError> {
+    let (sid, did) = (id_to_uuid(*snapshot_id), id_to_uuid(*document_id));
+    let mut tx = pool.begin().await?;
     let key: Option<String> = sqlx::query_scalar(
         "DELETE FROM snapshots WHERE id = $1 AND document_id = $2 AND status = 'pending' \
          RETURNING s3_key",
     )
-    .bind(id_to_uuid(*snapshot_id))
-    .bind(id_to_uuid(*document_id))
-    .fetch_optional(pool)
+    .bind(sid)
+    .bind(did)
+    .fetch_optional(&mut *tx)
     .await?;
-    Ok(key)
+    let Some(s3_key) = key else {
+        return Ok(None);
+    };
+    let refinalize = sqlx::query(
+        "UPDATE channel_documents SET final_snapshot = NULL, finalized_at = NULL \
+         WHERE document_id = $1 AND final_snapshot = $2",
+    )
+    .bind(did)
+    .bind(sid)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected()
+        == 1;
+    tx.commit().await?;
+    Ok(Some(DroppedSnapshot { s3_key, refinalize }))
 }
 
 /// The highest delta a served snapshot of the document folds in, 0 with none.
@@ -314,7 +330,7 @@ pub async fn insert_update(
     Ok(())
 }
 
-/// Inserts a delta with its sealed frame in the row, unless the document's
+/// Inserts a delta with its sealed envelope in the row, unless the document's
 /// inline tail is at `cap` (`SRV-148`, `SRV-150`). The count and the insert
 /// are one statement. Two writers racing at the cap may each see room, so the
 /// tail can pass it by the writers in flight at once.
@@ -362,7 +378,7 @@ pub async fn insert_inline_update(
     })
 }
 
-/// Puts the sealed frame of delta `seq` in its index row, the fallback when
+/// Puts the sealed envelope of delta `seq` in its index row, the fallback when
 /// its object can never be queued (`SRV-034`). The row drops the object key it
 /// pointed at, since a delta has one home. A row already holding its frame or
 /// pointing at a batch is left as it is. Returns whether a row took it.
@@ -456,7 +472,7 @@ pub async fn get_updates_after(
 ) -> Result<Vec<UpdateRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
-        "SELECT id, document_id, author_pubkey, snapshot_id, clock, seq, s3_key, wire, batch_key, created_at FROM updates WHERE document_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3"
+        "SELECT document_id, author_pubkey, snapshot_id, clock, seq, s3_key, wire, batch_key, created_at FROM updates WHERE document_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3"
     )
     .bind(did)
     .bind(after_seq)
@@ -467,10 +483,9 @@ pub async fn get_updates_after(
     rows.into_iter()
         .map(|r| {
             Ok(UpdateRow {
-                id: r.try_get("id")?,
-                document_id: r.try_get("document_id")?,
+                document_id: r.try_get::<PgId, _>("document_id")?.into(),
                 author_pubkey: r.try_get("author_pubkey")?,
-                snapshot_id: r.try_get("snapshot_id")?,
+                snapshot_id: r.try_get::<PgId, _>("snapshot_id")?.into(),
                 clock: r.try_get("clock")?,
                 seq: r.try_get("seq")?,
                 s3_key: r.try_get("s3_key")?,
@@ -536,6 +551,10 @@ pub async fn get_clock_state(
 /// author's own deltas between the two (`SRV-130`). An open checks that
 /// snapshot against the deltas of every other user, which stay.
 ///
+/// A final segment whose final snapshot another member confirmed drops every
+/// delta that snapshot covers (`SRV-118`). No delta lies past it: the lock
+/// refused them all.
+///
 /// This is the delta index's only garbage collector for a long-lived document. The
 /// `updates.snapshot_id -> snapshots(id)` FK was dropped (see the
 /// `drop_updates_snapshot_fk` migration), so deleting an old snapshot no longer
@@ -572,6 +591,11 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
                 SELECT 1 FROM author_span a
                 WHERE a.document_id = u.document_id AND a.author_pubkey = u.author_pubkey
                   AND u.seq > a.from_seq AND u.seq <= a.to_seq
+            ) OR EXISTS (
+                SELECT 1 FROM channel_documents c
+                JOIN snapshots f ON f.id = c.final_snapshot AND f.document_id = c.document_id
+                WHERE c.document_id = u.document_id AND c.state = 'final'
+                  AND f.status = 'confirmed' AND u.seq <= f.covered_seq
             )
             RETURNING u.batch_key
         )
@@ -644,7 +668,8 @@ pub async fn document_holds_media(
 /// Snapshot compacted to be deleted (id + S3 key for cleanup).
 #[derive(Debug, sqlx::FromRow)]
 pub struct CompactSnapshot {
-    pub id: uuid::Uuid,
+    #[sqlx(try_from = "PgId")]
+    pub id: ambre_core::SnapshotId,
     pub s3_key: String,
 }
 
@@ -685,9 +710,12 @@ pub async fn find_compactable_snapshots(
 /// the `drop_updates_snapshot_fk` migration), so `snapshot_id` is now an opaque
 /// client-side correlation tag with no cascade. Superseded deltas are trimmed
 /// separately by [`purge_superseded_updates`]; the caller removes the S3 blob.
-pub async fn delete_snapshot(pool: &PgPool, snapshot_id: uuid::Uuid) -> Result<(), AppError> {
+pub async fn delete_snapshot(
+    pool: &PgPool,
+    snapshot_id: &ambre_core::SnapshotId,
+) -> Result<(), AppError> {
     sqlx::query("DELETE FROM snapshots WHERE id = $1")
-        .bind(snapshot_id)
+        .bind(id_to_uuid(*snapshot_id))
         .execute(pool)
         .await?;
     Ok(())

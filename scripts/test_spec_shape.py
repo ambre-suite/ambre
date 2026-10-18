@@ -328,11 +328,11 @@ class Schema(unittest.TestCase):
 
     def test_a_declared_container_with_no_code_is_normal(self):
         """Asymmetric on purpose: that is spec-driven development working."""
-        text = doc("## 1. CONTAINERS", "| `sheets` | a map |")
+        text = doc("## 1. CONTAINERS", "| Container | Value |", "|---|---|", "| `sheets` | a map |")
         self.assertEqual([], list(spec_shape.schema_issues(text, self.source(""))))
 
     def test_a_nested_container_is_compared_on_its_leaf(self):
-        text = doc("## 1. CONTAINERS", "| `elements/{id}/children` | a list |")
+        text = doc("## 1. CONTAINERS", "| Container | Value |", "|---|---|", "| `elements/{id}/children` | a list |")
         code = 'const CHILDREN: &str = "children";\nlet c = doc.get_list(CHILDREN);'
         self.assertEqual([], list(spec_shape.schema_issues(text, self.source(code))))
 
@@ -352,6 +352,48 @@ class Schema(unittest.TestCase):
             "* **sheets.** " + "word " * (spec_shape.SCHEMA_NOTE_WORDS_MAX + 1),
         )
         self.assertIn("note-budget", kinds(spec_shape.schema_issues(text, self.source(""))))
+
+    def test_a_container_behind_a_document_column_is_declared(self):
+        """Murmure's table puts the kind of document first. Reading the first
+        cell alone reported every built container as absent."""
+        text = doc(
+            "| Document | Container | Loro type |",
+            "|---|---|---|",
+            "| every | `header` | Map |",
+            "| segment, thread | `messages/{n}/content` | Text |",
+        )
+        self.assertEqual({"header", "content"}, spec_shape.declared_containers(text))
+
+    def test_a_container_in_the_first_cell_is_still_declared(self):
+        text = doc(
+            "| Container | Loro type |",
+            "|---|---|",
+            "| `elements/{id}/children` | List |",
+            "| `cells_{sheet}` | Map |",
+        )
+        self.assertEqual({"children", "cells"}, spec_shape.declared_containers(text))
+
+    def test_a_name_outside_the_container_column_declares_nothing(self):
+        text = doc(
+            "| Document | Container | Note |",
+            "|---|---|---|",
+            "| `space` | -- | see `header` |",
+        )
+        self.assertEqual(set(), spec_shape.declared_containers(text))
+
+    def test_a_table_with_no_container_column_declares_nothing(self):
+        """The decisions table mentions containers in prose. A mention is not
+        a declaration."""
+        text = doc(
+            "| Decision | Rejected alternative |",
+            "|---|---|",
+            "| `header` | inferring the kind |",
+        )
+        self.assertEqual(set(), spec_shape.declared_containers(text))
+
+    def test_a_cell_holding_more_than_one_name_declares_nothing(self):
+        text = doc("| Container | Loro type |", "|---|---|", "| `a`, `b` | Map |")
+        self.assertEqual(set(), spec_shape.declared_containers(text))
 
     def test_a_missing_source_is_reported_rather_than_crashed_on(self):
         issues = list(spec_shape.schema_issues(doc("## 1. CONTAINERS"), Path("/nonexistent/schema.rs")))

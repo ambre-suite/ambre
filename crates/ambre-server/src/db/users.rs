@@ -6,7 +6,7 @@ use super::*;
 /// Row returned by `SELECT * FROM users`.
 #[derive(Debug)]
 pub struct UserRow {
-    pub id: uuid::Uuid,
+    pub id: ambre_core::UserId,
     #[allow(dead_code)]
     pub oidc_provider: Option<String>,
     #[allow(dead_code)]
@@ -23,14 +23,12 @@ pub struct UserRow {
     /// the account first (`SRV-027`). Both keys are set or neither is.
     pub signing_pubkey: Option<Vec<u8>>,
     pub exchange_pubkey: Option<Vec<u8>>,
-    #[allow(dead_code)]
-    pub org_id: Option<uuid::Uuid>,
 }
 
 /// Projection of `users` for search results (no key material).
 #[derive(Debug)]
 pub struct UserInfoRow {
-    pub id: uuid::Uuid,
+    pub id: ambre_core::UserId,
     pub email: String,
     /// Whether the email was provider-verified (see [`UserRow::email_verified`]).
     /// Surfaced in search so the sharer sees the TOFU signal for an unverified,
@@ -48,7 +46,7 @@ pub async fn get_user(
 ) -> Result<Option<UserRow>, AppError> {
     let uid = id_to_uuid(*user_id);
     let row = sqlx::query(
-        "SELECT id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE id = $1"
+        "SELECT id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey FROM users WHERE id = $1"
     )
     .bind(uid)
     .fetch_optional(pool)
@@ -56,7 +54,7 @@ pub async fn get_user(
 
     match row {
         Some(r) => Ok(Some(UserRow {
-            id: r.try_get("id")?,
+            id: r.try_get::<PgId, _>("id")?.into(),
             oidc_provider: r.try_get("oidc_provider")?,
             oidc_subject: r.try_get("oidc_subject")?,
             email: r.try_get("email")?,
@@ -66,7 +64,6 @@ pub async fn get_user(
             master_key_salt: r.try_get("master_key_salt")?,
             signing_pubkey: r.try_get("signing_pubkey")?,
             exchange_pubkey: r.try_get("exchange_pubkey")?,
-            org_id: r.try_get("org_id")?,
         })),
         None => Ok(None),
     }
@@ -92,7 +89,7 @@ fn map_email_conflict(e: sqlx::Error) -> AppError {
 /// `users_email_lower_unique` index, so at most one row can match.
 pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<UserRow>, AppError> {
     let row = sqlx::query(
-        "SELECT id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE lower(email) = lower($1)"
+        "SELECT id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey FROM users WHERE lower(email) = lower($1)"
     )
     .bind(email)
     .fetch_optional(pool)
@@ -100,7 +97,7 @@ pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User
 
     match row {
         Some(r) => Ok(Some(UserRow {
-            id: r.try_get("id")?,
+            id: r.try_get::<PgId, _>("id")?.into(),
             oidc_provider: r.try_get("oidc_provider")?,
             oidc_subject: r.try_get("oidc_subject")?,
             email: r.try_get("email")?,
@@ -110,7 +107,6 @@ pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User
             master_key_salt: r.try_get("master_key_salt")?,
             signing_pubkey: r.try_get("signing_pubkey")?,
             exchange_pubkey: r.try_get("exchange_pubkey")?,
-            org_id: r.try_get("org_id")?,
         })),
         None => Ok(None),
     }
@@ -130,7 +126,7 @@ pub async fn create_user(
     exchange_pubkey: &[u8],
 ) -> Result<UserRow, AppError> {
     let row = sqlx::query(
-        "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id"
+        "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey"
     )
     .bind(email)
     .bind(display_name)
@@ -145,7 +141,7 @@ pub async fn create_user(
     tracing::info!(user_id = %row.try_get::<uuid::Uuid, _>("id")?, provider = "setup", "user created");
 
     Ok(UserRow {
-        id: row.try_get("id")?,
+        id: row.try_get::<PgId, _>("id")?.into(),
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: row.try_get("email")?,
@@ -155,7 +151,6 @@ pub async fn create_user(
         master_key_salt: row.try_get("master_key_salt")?,
         signing_pubkey: row.try_get("signing_pubkey")?,
         exchange_pubkey: row.try_get("exchange_pubkey")?,
-        org_id: row.try_get("org_id")?,
     })
 }
 
@@ -205,7 +200,7 @@ pub async fn upsert_user_from_oidc(
     .await?;
 
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name) VALUES ($1, $2, $3, true, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, email_verified = true, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id, (xmax = 0) AS inserted"
+        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name) VALUES ($1, $2, $3, true, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, email_verified = true, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
     )
     .bind(oidc_provider)
     .bind(oidc_subject)
@@ -217,7 +212,7 @@ pub async fn upsert_user_from_oidc(
 
     let inserted: bool = row.try_get("inserted")?;
     let user = UserRow {
-        id: row.try_get("id")?,
+        id: row.try_get::<PgId, _>("id")?.into(),
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: row.try_get("email")?,
@@ -227,7 +222,6 @@ pub async fn upsert_user_from_oidc(
         master_key_salt: row.try_get("master_key_salt")?,
         signing_pubkey: row.try_get("signing_pubkey")?,
         exchange_pubkey: row.try_get("exchange_pubkey")?,
-        org_id: row.try_get("org_id")?,
     };
 
     tx.commit().await?;
@@ -257,7 +251,7 @@ pub async fn dev_upsert_user(
     // `(xmax = 0)` is true only for a freshly INSERTed row (vs an ON CONFLICT
     // UPDATE), so we can log creation without a prior existence check.
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = $3, exchange_pubkey = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id, (xmax = 0) AS inserted"
+        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = $3, exchange_pubkey = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
     )
     .bind(username)
     .bind(&email)
@@ -273,7 +267,7 @@ pub async fn dev_upsert_user(
     }
 
     Ok(UserRow {
-        id: row.try_get("id")?,
+        id: row.try_get::<PgId, _>("id")?.into(),
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: row.try_get("email")?,
@@ -283,7 +277,6 @@ pub async fn dev_upsert_user(
         master_key_salt: row.try_get("master_key_salt")?,
         signing_pubkey: row.try_get("signing_pubkey")?,
         exchange_pubkey: row.try_get("exchange_pubkey")?,
-        org_id: row.try_get("org_id")?,
     })
 }
 
@@ -311,7 +304,7 @@ pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>
     rows.into_iter()
         .map(|r| {
             Ok(UserInfoRow {
-                id: r.try_get("id")?,
+                id: r.try_get::<PgId, _>("id")?.into(),
                 email: r.try_get("email")?,
                 email_verified: r.try_get("email_verified")?,
                 display_name: r.try_get("display_name")?,
@@ -330,20 +323,55 @@ pub async fn update_master_key(
     master_key_salt: &[u8],
 ) -> Result<(), AppError> {
     let uid = id_to_uuid(*user_id);
-    sqlx::query(
-        "UPDATE users SET master_key_enc = $2, master_key_salt = $3, updated_at = now() WHERE id = $1"
-    )
-    .bind(uid)
-    .bind(master_key_enc)
-    .bind(master_key_salt)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE users SET master_key_enc = $2, master_key_salt = $3 WHERE id = $1")
+        .bind(uid)
+        .bind(master_key_enc)
+        .bind(master_key_salt)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `ZK-018`: the account row holds what the relay may learn of a user in
+    /// the clear. Beside it sit the identifier it mints and the sealed keys.
+    /// A column added here widens what the relay learns, so it fails this test
+    /// before it ships.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_account_table_holds_only_what_the_relay_may_learn(pool: PgPool) {
+        let columns: Vec<String> = sqlx::query_scalar(
+            "SELECT column_name::text FROM information_schema.columns \
+             WHERE table_schema = current_schema() AND table_name = 'users'",
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("query");
+        let got: std::collections::BTreeSet<&str> = columns.iter().map(String::as_str).collect();
+        assert_eq!(
+            got,
+            [
+                // What the rule allows in the clear.
+                "display_name",
+                "email",
+                "email_verified",
+                "exchange_pubkey",
+                "oidc_provider",
+                "oidc_subject",
+                "signing_pubkey",
+                // The identifier the relay mints, and the sealed key material.
+                "id",
+                "master_key_enc",
+                "master_key_salt",
+                "org_master_key_enc",
+            ]
+            .into_iter()
+            .collect()
+        );
+    }
 
     /// #3: a provider-verified OIDC login RECLAIMS an email squatted by an
     /// unverified `/auth/setup` account. The login succeeds (closing the
@@ -379,13 +407,10 @@ mod tests {
         assert_eq!(resolved.id, oidc.id);
 
         // The squatter row survives but its email was unbound to a sentinel.
-        let squatter_now = get_user(
-            &pool,
-            &ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*squatter.id.as_bytes())),
-        )
-        .await
-        .expect("query")
-        .expect("squatter row still exists");
+        let squatter_now = get_user(&pool, &squatter.id)
+            .await
+            .expect("query")
+            .expect("squatter row still exists");
         assert_ne!(
             squatter_now.email.to_lowercase(),
             "alice@example.com",

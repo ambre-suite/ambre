@@ -41,11 +41,12 @@ use web_sys::WebSocket;
 #[cfg(target_arch = "wasm32")]
 use web_sys::{CloseEvent, MessageEvent};
 
+use ambre_bus::ActivitySummary;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, RequestId,
     RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotId,
-    SnapshotPurpose, SnapshotVerdict, SyncCommand, UserId, UserInfo,
+    SnapshotPurpose, SnapshotVerdict, SpaceId, SyncCommand, UserId, UserInfo,
 };
 use ambre_core::{KeyId, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
@@ -103,21 +104,27 @@ impl LogicSink {
     /// Never today. The sink owns a closure that swallows a closed queue, and
     /// the signature keeps the `Result` for a sink that can refuse.
     pub fn send(&self, event: LogicEvent) -> Result<(), SendError> {
-        (self.0)(as_setup_owed(event));
+        (self.0)(as_step_owed(event));
         Ok(())
     }
 }
 
-/// Tells a failure the relay raised for a key setup still owed as the setup it
-/// is, never as a generic error (`ambre-spec-sync.md`, `SYNC-134`). Every error
-/// leaves the worker through [`LogicSink::send`], so this one mapping covers
-/// every request, whichever handler raised it.
-fn as_setup_owed(event: LogicEvent) -> LogicEvent {
+/// Tells a failure that asks the user for a step as that step, never as a
+/// generic error. A key setup still owed reads as the setup (`SYNC-134`). An
+/// answer naming a word this build does not know reads as an update to
+/// install (`SYNC-152`). Every error leaves the worker through
+/// [`LogicSink::send`], so this one mapping covers every request.
+fn as_step_owed(event: LogicEvent) -> LogicEvent {
     match &event {
         LogicEvent::ApiError { message, .. } | LogicEvent::AuthError { message }
             if http::is_setup_refusal(message) =>
         {
             LogicEvent::SetupRequired
+        }
+        LogicEvent::ApiError { message, .. } | LogicEvent::AuthError { message }
+            if http::is_unknown_word(message) =>
+        {
+            LogicEvent::UpdateRequired
         }
         _ => event,
     }
@@ -128,6 +135,8 @@ mod chain;
 mod channels;
 mod docfile;
 mod documents;
+mod finalize;
+mod fold;
 #[cfg(feature = "fuzz")]
 pub mod fuzz;
 mod http;
@@ -141,6 +150,7 @@ pub mod mock_relay;
 mod pipeline;
 mod rekey;
 mod sharing;
+mod space_rotation;
 mod updates;
 mod websocket;
 /// Web Worker entry point (`#[wasm_bindgen(start)]`): the postMessage bridge to
@@ -204,6 +214,20 @@ enum SyncEvent {
     /// Fired by a backoff timer scheduled after a disconnect: time to attempt a
     /// fresh WebSocket connection (see [`schedule_reconnect`](SyncState::schedule_reconnect)).
     ReconnectNow,
+    /// Fired by the timer armed when the relay stopped a replay: ask again
+    /// from the document's cursor (`SYNC-153`). A later stop or a reconnect
+    /// makes the timer stale.
+    ReplayRetry {
+        document_id: DocumentId,
+        ticket: u64,
+    },
+    /// Fired by the timer armed when the relay failed to sequence a delta:
+    /// send it again with every later one (`SYNC-159`). A later failure or
+    /// refusal makes the timer stale.
+    ResendRetry {
+        document_id: DocumentId,
+        ticket: u64,
+    },
     /// The WebSocket `onopen` fired: the socket is now OPEN, so (re)subscriptions
     /// can be sent (they would be dropped if sent while still CONNECTING).
     WsOpened,
@@ -295,6 +319,129 @@ enum SyncEvent {
         /// Empty for a local-only open.
         links: Vec<ambre_protocol::KeyLink>,
     },
+    /// The answer to a channel listing (`SyncCommand::OpenChannel`): its
+    /// documents, or why the relay refused it.
+    ChannelListed {
+        channel_id: ChannelId,
+        /// The space whose catalogue the Logic thread said lists the channel.
+        listed_in: Option<SpaceId>,
+        result: Result<Vec<ambre_bus::ChannelDocument>, String>,
+    },
+    /// The open walked the document's log. What it says lands on the session
+    /// the open made, for the channels a space lists (the Murmure spaces
+    /// spec).
+    LogWalked {
+        document_id: DocumentId,
+        word: membership_log::SpaceWord,
+    },
+    /// The answer to the rotation of one public channel of a space
+    /// (`SyncCommand::RotateSpace`): its new key, sealed for the catalogue.
+    ChannelRotated {
+        space_id: SpaceId,
+        channel_id: ChannelId,
+        result: Result<ambre_bus::SealedChannelKey, String>,
+    },
+    /// The answer to a channel creation (`SyncCommand::CreateChannel`): the
+    /// sealed key for the catalogue of a public channel.
+    ChannelCreated {
+        channel_id: ChannelId,
+        result: Result<Option<ambre_bus::SealedChannelKey>, String>,
+    },
+    /// The answer to a self-join (`SyncCommand::JoinChannel`).
+    ChannelJoined {
+        channel_id: ChannelId,
+        result: Result<(), String>,
+    },
+    /// The answer to a channel delete (`SyncCommand::DeleteChannel`).
+    ChannelDeleted {
+        channel_id: ChannelId,
+        result: Result<(), String>,
+    },
+    /// The answer to a channel leave (`SyncCommand::LeaveChannel`).
+    ChannelLeft {
+        channel_id: ChannelId,
+        result: Result<(), String>,
+    },
+    /// The answer to a segment close (`SyncCommand::CloseSegment`): the
+    /// active segment after it, and whether it is the successor asked for.
+    SegmentClosed {
+        channel_id: ChannelId,
+        closing: ambre_bus::SegmentId,
+        result: Result<(ambre_bus::SegmentId, bool), String>,
+    },
+    /// The answer to an amendments creation (`SyncCommand::CreateAmendments`):
+    /// the document the relay holds for the segment.
+    AmendmentsLinked {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        amendments: DocumentId,
+        result: Result<DocumentId, String>,
+    },
+    /// The answer to a thread creation (`SyncCommand::CreateThread`): the
+    /// document the relay holds for the root.
+    ThreadLinked {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        root: ambre_bus::MessageId,
+        thread: DocumentId,
+        result: Result<DocumentId, String>,
+    },
+    /// The answer to a finalize lease request
+    /// (`SyncCommand::TakeFinalizeLease`).
+    FinalizeLeaseAnswered {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        result: Result<ambre_bus::LeaseAnswer, String>,
+    },
+    /// The answer to a finalize commit (`SyncCommand::FinalizeSegment`).
+    SegmentFinalized {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        result: Result<(), String>,
+    },
+    /// The answer to a fold lease request (`SyncCommand::TakeFoldLease`).
+    FoldLeaseAnswered {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        result: Result<ambre_bus::FoldAnswer, String>,
+    },
+    /// The answer to a fold commit (`SyncCommand::FoldSegment`).
+    SegmentFolded {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        result: Result<(), String>,
+    },
+    /// A confirmation of this client settled the fold of the segment
+    /// `document_id`, and the relay erased `amendments` (`SRV-211`).
+    AmendmentsFolded {
+        document_id: DocumentId,
+        amendments: DocumentId,
+    },
+    /// The answer to a direct message request
+    /// (`SyncCommand::CreateDirectMessage`): the channel the relay created
+    /// under the requested id, or the one that already held its members.
+    DirectMessageOpened {
+        requested: ChannelId,
+        result: Result<ChannelId, String>,
+    },
+    /// The answer to a listing of a space's public channels
+    /// (`SyncCommand::ListSpaceChannels`).
+    SpaceChannelsListed {
+        space_id: ambre_bus::SpaceId,
+        result: Result<Vec<ChannelId>, String>,
+    },
+    /// The answer to a listing of the user's channels
+    /// (`SyncCommand::ListMemberChannels`).
+    MemberChannelsListed {
+        /// The listing this answers, as `member_channels_asked` counted it.
+        asked: u32,
+        result: Result<Vec<ambre_bus::MemberChannel>, String>,
+    },
+    /// The relay's activity answer (`SyncCommand::FetchActivity`,
+    /// `SyncCommand::MarkAllRead`).
+    ActivityFetched {
+        result: Result<Vec<ambre_bus::DocumentActivity>, String>,
+    },
     /// Opening a server-side document failed because its wrapped DocumentKey
     /// could not be unwrapped (wrong exchange key, tampered server row, or a
     /// genuine authorization failure). Surfaced as an `AuthError` instead of
@@ -351,8 +498,15 @@ enum SyncEvent {
     /// Member list for a document has been fetched from the server (decoded,
     /// plaintext names/emails).
     DocumentMembersReady {
-        id: RequestId,
+        /// The request to answer, `None` for a refresh of the directory alone.
+        id: Option<RequestId>,
+        /// Which listing of this document answered (`SYNC-037`).
+        asked: u64,
         document_id: DocumentId,
+        /// What the walked log says a channel listed in this space must heed.
+        word: membership_log::SpaceWord,
+        /// Whether the relay says the document owes a rotation (`SYNC-128`).
+        rotation_owed: bool,
         members: Vec<MemberInfo>,
         /// Refreshed presence directory (`ambre-spec-membership.md`), harvested from
         /// the same response. Membership just changed often enough for someone to
@@ -513,12 +667,21 @@ struct SyncDocumentState {
     /// ephemeral author's verifying key to their canonical `UserId`
     /// (`ambre-spec-membership.md`). Built from the members response already fetched at open and
     /// rebuilt when membership changes. A key absent here is not resolved, so the
-    /// frame is dropped rather than attributed to a guessed identity.
+    /// sample is dropped rather than attributed to a guessed identity.
     ///
     /// This is a *membership* directory, not a *trust* store: it trusts the
     /// server's key mapping. Detecting a server that substitutes a member's keys
     /// is the TOFU trusted-keys store's job (architecture) and is orthogonal.
     signing_keys: HashMap<[u8; 32], UserId>,
+    /// How many member listings of this document were asked, and which one
+    /// the directory holds. Two listings can cross on the way, and the answer
+    /// to the older one changes nothing. It cannot bring back the key of a
+    /// member the newer one dropped (`SYNC-037`, `SYNC-094`).
+    directory_asked: u64,
+    directory_held: u64,
+    /// When the document is a space: what a channel it lists must heed, from
+    /// the latest walk of its log (the Murmure spaces spec).
+    word: membership_log::SpaceWord,
     /// This client's own role on this document, resolved from the members
     /// response at open. Carried here rather than emitted straight through
     /// because `DocumentReady` fires from two places: immediately for a
@@ -547,7 +710,7 @@ struct SyncDocumentState {
     /// every delta the relay kept. It is checked then (`AUTHOR-022`).
     held_snapshot: Option<HeldSnapshot>,
     /// The Logic thread evicted the document at this horizon. The session
-    /// becomes a light subscription once every frame sent is acknowledged
+    /// becomes a light subscription once every delta sent is acknowledged
     /// (`RESID-009`).
     released: Option<Seq>,
 }
@@ -602,6 +765,9 @@ impl SyncDocumentState {
             chain: chain::Chain::default(),
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
+            directory_asked: 0,
+            directory_held: 0,
+            word: membership_log::SpaceWord::default(),
             role: Role::Owner,
             awaiting_initial_hydration: false,
             rekey: rekey::Rekey::default(),
@@ -717,7 +883,7 @@ impl SyncDocumentState {
     /// members directory, on this trusted side.
     ///
     /// `None` means the author is not a known member of this document (or the
-    /// directory has not been filled yet). The caller drops the frame: presence
+    /// directory has not been filled yet). The caller drops the sample: presence
     /// is best-effort, so showing nothing is preferable to attributing a cursor
     /// to a guessed identity.
     fn resolve_ephemeral_author(&self, author_pk: [u8; 32]) -> Option<UserId> {
@@ -772,6 +938,7 @@ impl SyncDocumentState {
             peer: ambre_crypto::peer::derive_peer_id(&signer, &body.nonce),
             nonce: body.nonce,
             user: self.signing_keys.get(&signer).copied(),
+            summary: body.summary.map(Into::into),
             payload: body.delta,
         })
     }
@@ -793,26 +960,10 @@ impl SyncDocumentState {
 // SyncState
 // -----------------------------------------------------------------------------
 
-fn doc_type_to_api_string(doc_type: DocType) -> String {
-    match doc_type {
-        DocType::Prose => "prose",
-        DocType::Trame => "trame",
-        DocType::Toile => "toile",
-        DocType::Murmure => "murmure",
-    }
-    .into()
-}
-
 /// Whether a client frame carries a sealed payload, which only the seal may
 /// build (`SYNC-001`).
 fn carries_payload(msg: &WsClientMsg) -> bool {
-    matches!(
-        msg,
-        WsClientMsg::Update(_)
-            | WsClientMsg::Ephemeral(_)
-            | WsClientMsg::ChannelUpdate { .. }
-            | WsClientMsg::ChannelEphemeral { .. }
-    )
+    matches!(msg, WsClientMsg::Update(_) | WsClientMsg::Ephemeral(_))
 }
 
 pub struct SyncState {
@@ -838,6 +989,14 @@ pub struct SyncState {
     /// X25519 exchange key, derived from the master seed. Used to wrap/unwrap
     /// document keys when sharing (invite + key rotation on revoke).
     exchange_key: Option<StaticSecret>,
+    /// The `meta` documents of the public channels a catalogue lists, with
+    /// that space, as the Logic thread reports them on each open. Their logs
+    /// admit a self-join (`SYNC-106`) and heed their space; no other log
+    /// does either.
+    self_join_logs: HashMap<DocumentId, SpaceId>,
+    /// The rotations this admin client drives after a leave, per space
+    /// document (the Murmure spaces spec).
+    space_rotations: HashMap<DocumentId, space_rotation::SpaceRotation>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
@@ -873,10 +1032,23 @@ pub struct SyncState {
     /// Updates sealed while the socket is held closed, as wire frames in order.
     /// Sent once it reopens, so a hold loses no edit of this user.
     held_outbox: RefCell<Vec<Vec<u8>>>,
+    /// The stops of each document's replay since the socket last opened.
+    /// Cleared on every open (`SYNC-153`, `SYNC-154`).
+    replay_stops: HashMap<DocumentId, websocket::ReplayStops>,
+    /// The ticket of the last replay timer armed. It only grows, so a timer
+    /// armed before a reset never matches one armed after it.
+    replay_ticket: u64,
+    /// The ticket of the last resend timer armed. It only grows, like
+    /// `replay_ticket` (`SYNC-159`).
+    resend_ticket: u64,
     /// Sockets opened on the native mock transport, which has no socket to
     /// inspect: a host test reads it to tell a retry from none.
     #[cfg(not(target_arch = "wasm32"))]
     socket_opens: u32,
+    /// The listings of the user's channels asked so far. Each answer is
+    /// whole, so only the latest one is handed on: an older one that
+    /// crossed it would drop a channel just added.
+    member_channels_asked: u32,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Vec<u8>>>,
@@ -904,7 +1076,8 @@ pub struct SyncState {
     /// once the document is open. A server-side doc flushes after its
     /// `RequestMissing` replay, so `local_clock` has caught up to the server and
     /// no CLOCK_MISMATCH occurs. A local-only doc flushes right when it opens.
-    pending_pre_session_updates: Vec<(DocumentId, Vec<u8>)>,
+    /// Each keeps the summary it was sent with.
+    pending_pre_session_updates: Vec<(DocumentId, Vec<u8>, Option<ActivitySummary>)>,
 
     /// The session nonce of each open document, drawn when it opens and dropped
     /// when it closes (`AUTHOR-002`). Every update this session seals for the
@@ -949,6 +1122,8 @@ impl SyncState {
             master_seed: None,
             signing_key: None,
             exchange_key: None,
+            self_join_logs: HashMap::new(),
+            space_rotations: HashMap::new(),
             ws: None,
             _onmessage: None,
             _onclose: None,
@@ -961,8 +1136,12 @@ impl SyncState {
             update_owed: false,
             inbound_held: false,
             held_outbox: RefCell::new(Vec::new()),
+            replay_stops: HashMap::new(),
+            replay_ticket: 0,
+            resend_ticket: 0,
             #[cfg(not(target_arch = "wasm32"))]
             socket_opens: 0,
+            member_channels_asked: 0,
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),
@@ -1085,12 +1264,7 @@ impl SyncState {
                 let _ = tx.send(wire);
                 return;
             }
-            if self.inbound_held
-                && matches!(
-                    msg,
-                    WsClientMsg::Update(_) | WsClientMsg::ChannelUpdate { .. }
-                )
-            {
+            if self.inbound_held && matches!(msg, WsClientMsg::Update(_)) {
                 // A hold is ours, not the network's: keep the edit for the
                 // reopen rather than lose it (`SYNC-059`).
                 self.held_outbox.borrow_mut().push(wire);
@@ -1163,12 +1337,13 @@ impl SyncState {
             SyncCommand::SendUpdate {
                 document_id,
                 payload,
+                summary,
             } => {
                 tracing::info!(
                     "[Sync] received SendUpdate doc={document_id} delta_size={}",
                     payload.len()
                 );
-                self.handle_send_update(document_id, payload);
+                self.send_summarized_update(document_id, payload, summary);
             }
             SyncCommand::SendUnsent {
                 document_id,
@@ -1203,20 +1378,96 @@ impl SyncState {
             SyncCommand::Reconnect { document_id } => self.handle_reconnect(document_id),
 
             // -- Channel sync session (control) --------------------------------
-            SyncCommand::OpenChannel { channel_id } => self.handle_open_channel(channel_id),
-            SyncCommand::CloseChannel { channel_id } => self.handle_close_channel(channel_id),
-            SyncCommand::SendChannelUpdate {
+            SyncCommand::OpenChannel {
                 channel_id,
+                listed_in,
+            } => self.handle_open_channel(channel_id, listed_in),
+            SyncCommand::RotateSpace { space_id, channels } => {
+                self.handle_rotate_space(space_id, channels);
+            }
+            SyncCommand::MarkRead { live, finals } => self.handle_mark_read(&live, finals),
+            SyncCommand::MoveReadCursors { cursors } => self.handle_move_read_cursors(cursors),
+            SyncCommand::MarkThreadRead { thread } => self.handle_mark_thread_read(thread),
+            SyncCommand::MarkAllRead => self.handle_mark_all_read(),
+            SyncCommand::FetchActivity => self.handle_fetch_activity(),
+            SyncCommand::CreateChannel {
+                channel_id,
+                space_id,
+                meta,
+                segment,
+                public,
+            } => self.handle_create_channel(channel_id, space_id, (meta, segment), public),
+            SyncCommand::JoinChannel {
+                channel_id,
+                space_id,
+                key,
+            } => self.handle_join_channel(channel_id, space_id, &key),
+            SyncCommand::CloseSegment {
+                channel_id,
+                meta,
+                closing,
+                successor,
+            } => self.handle_close_segment(channel_id, meta, closing, successor),
+            SyncCommand::CreateAmendments {
+                channel_id,
+                meta,
+                segment,
+                amendments,
+            } => self.handle_create_amendments(channel_id, meta, segment, amendments),
+            SyncCommand::CreateThread {
+                channel_id,
+                meta,
+                segment,
+                root,
+                thread,
+            } => self.handle_create_thread(channel_id, meta, segment, root, thread),
+            SyncCommand::TakeFinalizeLease {
+                channel_id,
+                segment,
+            } => self.handle_take_finalize_lease(channel_id, segment),
+            SyncCommand::FinalizeSegment {
+                channel_id,
+                segment,
+                lease,
+                horizon,
+                payload,
+            } => self.handle_finalize_segment(channel_id, segment, lease, horizon, &payload),
+            SyncCommand::TakeFoldLease {
+                channel_id,
+                segment,
+            } => self.handle_take_fold_lease(channel_id, segment),
+            SyncCommand::FoldSegment {
+                channel_id,
+                segment,
+                lease,
+                horizon,
+                amendments_seq,
                 payload,
             } => {
-                self.handle_send_channel_update(channel_id, payload);
+                let reach = fold::FoldReach {
+                    lease,
+                    amendments_seq,
+                };
+                self.handle_fold_segment(channel_id, segment, reach, horizon, &payload);
             }
-            SyncCommand::SendChannelEphemeral {
+            SyncCommand::WatchSegment { segment, meta } => self.handle_watch_segment(segment, meta),
+            SyncCommand::WatchThread {
+                thread,
+                meta,
+                after,
+            } => self.handle_watch_thread(thread, meta, after),
+            SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
+            SyncCommand::LeaveChannel { channel_id } => self.handle_leave_channel(channel_id),
+            SyncCommand::CreateDirectMessage {
                 channel_id,
-                payload,
-            } => {
-                self.handle_send_channel_ephemeral(channel_id, payload);
+                meta,
+                segment,
+                members,
+            } => self.handle_create_direct_message(channel_id, (meta, segment), members),
+            SyncCommand::ListSpaceChannels { space_id } => {
+                self.handle_list_space_channels(space_id)
             }
+            SyncCommand::ListMemberChannels => self.handle_list_member_channels(),
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),
@@ -1286,16 +1537,21 @@ impl SyncState {
             } => {
                 self.handle_fetch_invitee_key(id, document_id, invitee_email);
             }
+            // The instant stamps a notice Logic already wrote; Sync has no
+            // use for it.
             RestCommand::InviteToDocument {
                 document_id,
                 invitee_email,
+                invitee,
                 role,
                 expect_exchange_pub_key,
+                now: _,
             } => {
                 self.handle_invite_to_document(
                     id,
                     document_id,
                     invitee_email,
+                    invitee,
                     role,
                     expect_exchange_pub_key,
                 );
@@ -1310,7 +1566,7 @@ impl SyncState {
                 self.handle_leave_document(id, document_id);
             }
             RestCommand::ListDocumentMembers { document_id } => {
-                self.handle_list_document_members(id, document_id);
+                self.handle_list_document_members(Some(id), document_id);
             }
             RestCommand::UpdateDocumentMemberRole {
                 document_id,
@@ -1333,43 +1589,6 @@ impl SyncState {
             } => {
                 self.handle_download_media(id, document_id, content_hash);
             }
-
-            // -- Channels (CRUD & sharing) -------------------------------------
-            RestCommand::ListChannels => tracing::info!("Sync: ListChannels"),
-            RestCommand::CreateChannel { name } => tracing::info!("Sync: CreateChannel '{name}'"),
-            RestCommand::DeleteChannel { channel_id } => {
-                tracing::info!("Sync: DeleteChannel {channel_id:?}");
-            }
-            RestCommand::InviteToChannel {
-                channel_id,
-                invitee_email,
-                role,
-            } => {
-                tracing::info!("Sync: InviteToChannel {channel_id:?} {invitee_email} {role:?}");
-            }
-            RestCommand::RevokeFromChannel {
-                channel_id,
-                user_id,
-            } => {
-                tracing::info!("Sync: RevokeFromChannel {channel_id:?} {user_id:?}");
-            }
-            RestCommand::ListChannelMembers { channel_id } => {
-                tracing::info!("Sync: ListChannelMembers {channel_id:?}");
-            }
-            RestCommand::UpdateChannelMemberRole {
-                channel_id,
-                user_id,
-                role,
-            } => {
-                tracing::info!("Sync: UpdateChannelMemberRole {channel_id:?} {user_id:?} {role:?}");
-            }
-            RestCommand::UpdateReadCursor {
-                channel_id,
-                last_seq,
-            } => {
-                tracing::debug!("Sync: UpdateReadCursor {channel_id:?} seq={last_seq}");
-            }
-            RestCommand::GetUnreadCounts => tracing::info!("Sync: GetUnreadCounts"),
 
             // -- The native file (`.ambre`) ------------------------------------
             RestCommand::SealDocFile {
@@ -1516,6 +1735,34 @@ mod setup_tests {
         assert!(matches!(told[1], LogicEvent::SetupRequired));
         assert!(matches!(told[2], LogicEvent::ApiError { code: 403, .. }));
     }
+
+    /// Holds `SYNC-152`: an answer naming a word this build does not know
+    /// reaches Logic as an update to install, under either error variant.
+    /// Any other parse error passes through unchanged.
+    #[test]
+    fn an_answer_with_an_unknown_word_reaches_logic_as_an_update() {
+        let (sink, rx) = LogicSink::channel();
+        let url = "GET https://relay.example/api/documents/d/members";
+        let unknown = format!("{url}: parse error: unknown variant `auditor`: UNKNOWN_WORD");
+        assert!(http::is_unknown_word(&unknown));
+        let _ = sink.send(LogicEvent::ApiError {
+            id: None,
+            request: "ListDocumentMembers".into(),
+            code: 500,
+            message: unknown.clone(),
+        });
+        let _ = sink.send(LogicEvent::AuthError { message: unknown });
+        let _ = sink.send(LogicEvent::ApiError {
+            id: None,
+            request: "ListDocumentMembers".into(),
+            code: 500,
+            message: format!("{url}: parse error: missing field `role`"),
+        });
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(matches!(told[0], LogicEvent::UpdateRequired));
+        assert!(matches!(told[1], LogicEvent::UpdateRequired));
+        assert!(matches!(told[2], LogicEvent::ApiError { code: 500, .. }));
+    }
 }
 
 #[cfg(test)]
@@ -1573,7 +1820,7 @@ mod ephemeral_tests {
         d.set_signing_keys([([7u8; 32], UserId::new())]);
 
         // A non-member (or a document whose directory is not filled yet) must not
-        // be attributed to anyone. The caller drops the frame rather than showing
+        // be attributed to anyone. The caller drops the sample rather than showing
         // a cursor under a guessed identity.
         assert_eq!(d.resolve_ephemeral_author([9u8; 32]), None);
         assert_eq!(doc_state().resolve_ephemeral_author([7u8; 32]), None);
@@ -1627,6 +1874,37 @@ mod seal_tests {
             .collect()
     }
 
+    /// A summary the Logic thread hands with a delta leaves sealed beside it
+    /// (`SYNC-113`). One handed before the session holds survives the wait.
+    #[test]
+    fn a_summary_handed_with_a_delta_leaves_sealed_beside_it() {
+        use ambre_bus::ActivityKind;
+        let (mut state, id, wire) = with_socket();
+        let summary = ActivitySummary {
+            kind: ActivityKind::Content,
+            mentions: vec![UserId::from_bytes([5; 16])],
+            mentions_all: false,
+            anchor: None,
+        };
+        let signing_key = state.signing_key.take();
+        state.handle_command(SyncCommand::SendUpdate {
+            document_id: id,
+            payload: b"a message".to_vec(),
+            summary: Some(summary.clone()),
+        });
+        assert!(sent(&wire).is_empty(), "sent before the session held");
+        state.signing_key = signing_key;
+        state.flush_pre_session_updates(id);
+        let frames = sent(&wire);
+        let [WsClientMsg::Update(update)] = frames.as_slice() else {
+            panic!("expected one update, got {frames:?}");
+        };
+        let body = pipeline::open_update(update, &state.documents[&id].doc_key).expect("opens");
+        let body = pipeline::split_update_body(body).expect("splits");
+        assert_eq!(body.summary, Some(summary.to_sealed()));
+        assert_eq!(body.delta, b"a message");
+    }
+
     /// A payload frame built by hand, its plaintext in the ciphertext field,
     /// never reaches the socket. The same edit through the seal does, and the
     /// socket never sees its plaintext (`SYNC-001`, `ZK-001`).
@@ -1670,6 +1948,7 @@ mod seal_tests {
         state.handle_command(SyncCommand::SendUpdate {
             document_id: id,
             payload: typed.clone(),
+            summary: None,
         });
         state.handle_command(SyncCommand::SendEphemeral {
             document_id: id,

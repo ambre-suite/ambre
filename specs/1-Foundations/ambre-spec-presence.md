@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PRESENCE-002` | `INV` | A presence payload MUST NOT carry a user identifier. | this spec section 3; `SYNC-014` | type-level -- no payload in the suite declares the field, so an impersonated sample has no shape to travel in | none | verified |
-| `PRESENCE-003` | `INV` | The author of a presence frame MUST be the `UserId` the Sync thread resolves from the signing key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-014` | `ambre_sync::pipeline::tests::roundtrip_ephemeral`; `ambre_server::ws::handler::message::tests::forged_author_key_writes_no_presence` | none | verified |
+| `PRESENCE-003` | `INV` | The author of a presence sample MUST be the `UserId` the Sync thread resolves from the signing key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-014` | `ambre_sync::pipeline::tests::roundtrip_ephemeral`; `ambre_server::ws::handler::message::tests::forged_author_key_writes_no_presence` | none | verified |
 | `PRESENCE-005` | `INV` | The peer set MUST be keyed by `UserId`: one collaborator on two devices MUST NOT render as two. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- on the assertions that a second peer is tracked under its own identity and neither displaces the other | none | verified |
 | `PRESENCE-006` | `INV` | A peer's colour MUST be derived from that `UserId` by the shared cross-app helper. | this spec section 3; this spec section 5 | `ambre_draw::peer::tests::stable_and_pure`; `::distinct_seeds_usually_differ`; `::opaque` | none | verified |
 | `PRESENCE-004` | `INV` | A peer's display name MUST be cosmetic: it MUST NOT decide identity, colour or permission. | this spec section 3 | `ambre_toile::ui::presence::tests::a_peer_name_decides_neither_identity_nor_colour` -- two peers under one name paint two cursors in their own colours, and a renamed peer keeps its colour | none | verified |
@@ -33,23 +33,23 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Send a presence sample
 
-The local peer moves. What leaves is one ephemeral frame and nothing else.
+The local peer moves. What leaves is one ephemeral and nothing else.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PRESENCE-001` | `POST` | A presence sample MUST travel as an ephemeral frame. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- on the assertion that the command produced an ephemeral frame | none | verified |
+| `PRESENCE-001` | `POST` | A presence sample MUST travel as an ephemeral. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- on the assertion that the command produced an ephemeral | none | verified |
 | `PRESENCE-011` | `FRAME` | Sending a presence sample MUST NOT write to the document or its history. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- on its two other assertions, that the command produced no CRDT delta and no display event, so a sample that reached the document fails | none | verified |
 
 ### 1.3 Receive a presence sample
 
-An inbound frame is opened, its author resolved, and the peer set updated for the view.
+An inbound sample is opened, its author resolved, and the peer set updated for the view.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PRESENCE-009` | `POST` | The event delivered to the view MUST carry the whole live peer set, so a departed peer is an absent entry. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_peer_who_stops_sending_leaves_the_live_set` -- it reads the set an event carries after a peer ages out; `ambre_toile::ui::presence::tests::a_peer_absent_from_the_set_stops_being_painted` -- the view that adopts it | none | verified |
 | `PRESENCE-010` | `POST` | A remote position MUST snap when its new sample is not adjacent to the previous one. | this spec section 4 | `ambre_toile::ui::presence::tests::a_remote_pointer_that_jumps_snaps_to_its_new_sample` -- a pointer that jumps is painted exactly as one first seen at its new sample | none | verified |
 | `PRESENCE-012` | `FRAME` | Applying a presence sample MUST NOT change the document or its history. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- on the assertions that the snapshot and the element count are identical either side of the apply | none | verified |
-| `PRESENCE-013` | `FAIL` | A presence frame that does not decode MUST be dropped without an error. | this spec section 3; derived | `ambre_toile::logic::convergence_tests::apply_ephemeral_drops_a_malformed_frame` -- it feeds four arbitrary bytes and asserts the apply answers with nothing rather than raising | none | verified |
+| `PRESENCE-013` | `FAIL` | A presence sample that does not decode MUST be dropped without an error. | this spec section 3; derived | `ambre_toile::logic::convergence_tests::apply_ephemeral_drops_a_malformed_sample` -- it feeds four arbitrary bytes and asserts the apply answers with nothing rather than raising | none | verified |
 | `PRESENCE-014` | `POST` | A peer who stops watching a document MUST leave the live set on the relay's word, not on a timeout, on both the close path and the dropped-connection path. | this spec section 3; `ambre-spec-broadcast.md`, `SRV-097` | `ambre_sync::updates::tests::peer_left_resolves_the_key_the_relay_named` -- the attribution; `ambre_toile::logic::convergence_tests::a_departure_message_drops_the_peer_at_once` -- the set the view is handed; `ambre_server::redis_ops::redis_integration_tests::presence_field_is_dropped_on_departure` -- the relay's store drops the sample at once; `ambre_server::routes::tests::handler_tests::the_live_set_crosses_instances_and_a_close_leaves_nothing` -- the relay announces a clean close and a dropped connection, database tier | none | verified |
 | `PRESENCE-015` | `POST` | A peer MUST leave the live set only when the last of its sessions on the document stops watching it. | this spec section 3; `PRESENCE-005`, `PRESENCE-014` | `ambre_server::ws::handler::message::ephemeral_binding_tests::a_departure_waits_for_the_last_session_of_its_key` -- two sessions of one key, the first close keeps the entry and says nothing, the last drops it and says it once | none | verified |
 | `PRESENCE-008` | `FAIL` | An anchor that resolves to no live target MUST be dropped without an error. | this spec section 3 | `ambre_toile::ui::presence::tests::selection_ghosts_outline_visible_elements_only` -- its peer selects an element the frame does not carry, so one ghost is painted, the other is dropped, and nothing is raised | none | verified |
@@ -58,7 +58,7 @@ An inbound frame is opened, its author resolved, and the peer set updated for th
   `ambre-spec-budgets.md section 2`. It is written against Toile's twenty cursors and their trails,
   the heaviest of the three overlays. A Trame border or a Prose caret is one quad and a label, drawn
   in a frame pass already charged.
-* **Boundary.** every presence frame leaves the client, and `ZK-005` seals it with the
+* **Boundary.** every presence sample leaves the client, and `ZK-005` seals it with the
   `DocumentKey`: the relay reads `document_id`, `pub_key` and `counter`. The author is resolved to a
   `UserId` in `ambre-sync` first, so no peer paints under another name.
 * **Verification.** 15 `verified`. A departure travels twice: the relay says it, and the client
@@ -96,20 +96,20 @@ identity rule: what a peer may assert about itself, and what the receiver has es
 | the payload | this peer to the relay, and back from every other | an anchor, and a self-asserted display name |
 | the resolved sample | the Logic thread to the view | the resolved `UserId`, the name, the colour, the anchor resolved to a position |
 
-The payload is postcard bytes inside an `Ephemeral` frame, so it is one of the few types in the
+The payload is postcard bytes inside an `Ephemeral` wire message, so it is one of the few types in the
 suite that keeps `serde`. The resolved sample never leaves the process: it moves by value on
 an `ambre_bus::conduit` queue, and carries none.
 
 **The identity rule, stated once.** The payload carries no `user_id` (`PRESENCE-002`). The canonical
 one arrives out of band, on `LogicEvent::RemoteEphemeral { from_user_id }`, resolved by `ambre-sync`
-from the key that signed the frame (`PRESENCE-003`). The name inside the payload labels a position
+from the key that signed the envelope (`PRESENCE-003`). The name inside the payload labels a position
 and decides nothing (`PRESENCE-004`). So a peer who writes another member's name into the payload
 relabels their own cursor, and nothing else.
 
-**The four steps of an inbound frame:**
+**The four steps of an inbound sample:**
 
-1. `ambre-sync` decrypts the frame and resolves the author to a `UserId`, dropping a frame whose key
-   matches no member (`SYNC-014`, `SYNC-015`);
+1. `ambre-sync` decrypts the sample and resolves the author to a `UserId`, dropping a sample whose
+   key matches no member (`SYNC-014`, `SYNC-015`);
 2. the Logic thread records the sample under that `UserId`, replacing that peer's previous one, so
    one collaborator on two devices is one entry (`PRESENCE-005`);
 3. the anchor is resolved against the current document. An anchor naming no live target is dropped,
@@ -117,7 +117,7 @@ relabels their own cursor, and nothing else.
 4. the whole live set travels to the view, which replaces its own (`PRESENCE-009`).
 
 **Why the set travels whole.** Presence is a stream of samples, not a stream of changes. A lost
-frame must cost one late position, never a position that stays on the screen for good. A full set
+sample must cost one late position, never a position that stays on the screen for good. A full set
 makes the departure of a peer the absence of an entry, which no dropped message can corrupt.
 
 **How a departure travels** (`PRESENCE-014`). The relay is the one party that knows a peer stopped
@@ -178,7 +178,7 @@ one exception to its dependency rule (`CANVAS-025`), and its manifest records it
 
 **Code:** `crates/ambre-draw/src/peer.rs` holds the colour.
 `crates/ambre-toile/src/logic/state/presence.rs` and `ui/presence.rs` are the only implementation of
-the rest. `crates/ambre-logic/src/data.rs` routes an inbound ephemeral frame to its application, for
+the rest. `crates/ambre-logic/src/data.rs` routes an inbound ephemeral to its application, for
 all three.
 
 ---
@@ -210,7 +210,7 @@ must not draw a cursor sliding through thirty-nine pages they never visited.
 | The payload carries no user identifier | an author field in the sample | it lets any member paint a cursor under any other member's name. Anything a peer writes about itself is something it can write about anyone else; leaving the field out means there is nothing to forge, and the only identity is the one resolved from the key that signed the frame (`PRESENCE-002`). |
 | Keyed by `UserId`, never by peer or device | keying by the sending peer | it doubles a collaborator every time they open a second tab. A peer identifier is per session and per device, so one collaborator on a laptop and a phone appears as two people in two colours; the `UserId` is the person (`PRESENCE-005`). |
 | The colour is hashed from the `UserId` by the shared helper | a per-application palette assigned in join order | it gives one user a different colour per document and swaps two users' colours on a reconnect. One person with three colours is three people to the reader; the helper is pure, so the colour is the same on every device and in every application (`PRESENCE-006`). |
-| The anchor is move-invariant | raw coordinates | it is what Trame carried until the review named it X30. A remote position must follow its target through the inserts, deletes and sorts a collaborator makes while the frame is in flight, and a row number, a screen point or a text offset is exactly what those edits invalidate, so a positional anchor makes remote cursors jump on every structural change (`PRESENCE-007`). |
+| The anchor is move-invariant | raw coordinates | it is what Trame carried until the review named it X30. A remote position must follow its target through the inserts, deletes and sorts a collaborator makes while the sample is in flight, and a row number, a screen point or a text offset is exactly what those edits invalidate, so a positional anchor makes remote cursors jump on every structural change (`PRESENCE-007`). |
 | An unresolvable anchor is dropped, silently | queueing the sample until the target resolves | it holds a cursor at a position the peer has already left. The sample is one of a stream whose next one is on its way, and the target is missing because a delta is in flight: there is nothing for the user to do and nothing for the log to say (`PRESENCE-008`). |
 | The event carries the whole live set | one event per peer with a receiver-side accumulation | it needs a removal path, a timeout or a leave message, and leaves a ghost until whichever one is written. It is what Toile built, and `TOILE-UI-075` is the ghost cursor it produces. The whole live set makes a departure the absence of an entry, so no application needs a departure signal, and none of the three has one (`PRESENCE-009`). |
 | A non-adjacent move snaps | interpolating every move | it is one rule fewer and shows a false path. The interpolation exists to hide 100 ms of latency on a cursor that moved one step; applied to a jump, it draws a path through content the peer never visited, which is a lie the reader cannot detect (`PRESENCE-010`). |
@@ -227,8 +227,8 @@ must not draw a cursor sliding through thirty-nine pages they never visited.
   socket closed. A peer whose network stalls without dropping the socket is named by nobody. They
   leave on the client's own timeout, ten seconds after their last sample, and blink back on the
   next one.
-* **Nothing bounds the sample rate.** No document says how often a move broadcasts, and the frame
-  budget above is the paint cost alone. Toile sends at most one sample per rendered frame, which is
+* **Nothing bounds the sample rate.** No document says how often a move broadcasts, and the
+  per-frame budget above is the paint cost alone. Toile sends at most one sample per rendered frame, which is
   a coalescing rule and not a rate.
 * **Nothing rules on a viewer against an editor.** Every peer paints the same overlay whatever their
   role (`ambre-spec-membership.md`).
@@ -246,8 +246,8 @@ must not draw a cursor sliding through thirty-nine pages they never visited.
 
 | Question | Owner |
 |---|---|
-| How an ephemeral frame is sealed and replay-guarded | `ambre-spec-sealed-envelope.md`; `ZK-005`, `SYNC-008` |
-| Which member an ephemeral frame is delivered under | `ambre-spec-membership.md`; `SYNC-014`, `SYNC-015` |
+| How an ephemeral is sealed and replay-guarded | `ambre-spec-sealed-envelope.md`; `ZK-005`, `SYNC-008` |
+| Which member an ephemeral is delivered under | `ambre-spec-membership.md`; `SYNC-014`, `SYNC-015` |
 | What the drawing calls that paint an overlay are, and which crate declares them | `ambre-spec-drawing-surface.md` |
 | What each application's anchor names, and how it resolves | the three documents named in section 3 |
 | What the overlay paints, and in what order | the three rows named in section 3 |

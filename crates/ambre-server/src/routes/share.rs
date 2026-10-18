@@ -1,21 +1,24 @@
-use axum::extract::{Json, Path, State};
+use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use std::sync::Arc;
+
+use ambre_core::Role;
 
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
+use crate::extract::Json;
 use crate::state::AppState;
 
 /// Privilege rank of a document role. Higher binds more capability.
-/// `owner` (2) > `editor` (1) > `viewer` (0). An unknown role ranks below
-/// everything so it can never be granted.
-fn doc_role_rank(role: &str) -> Option<u8> {
+/// `owner` (2) > `editor` (1) > `viewer` (0). A role no document holds ranks
+/// below everything so it can never be granted.
+fn doc_role_rank(role: Role) -> Option<u8> {
     match role {
-        "viewer" => Some(0),
-        "editor" => Some(1),
-        "owner" => Some(2),
-        _ => None,
+        Role::Viewer => Some(0),
+        Role::Editor => Some(1),
+        Role::Owner => Some(2),
+        Role::Admin | Role::Member => None,
     }
 }
 
@@ -32,26 +35,13 @@ fn parse_user_id(s: &str) -> Result<ambre_core::UserId, AppError> {
         .map_err(|_| AppError::NotFound { resource: "user" })
 }
 
-/// Maps the stored lowercase `doc_type` string to the typed enum the WS protocol
-/// carries. Returns `None` for an unknown value (the share still succeeds; only
-/// the live push is skipped).
-fn doc_type_from_str(s: &str) -> Option<ambre_core::DocType> {
-    match s {
-        "prose" => Some(ambre_core::DocType::Prose),
-        "trame" => Some(ambre_core::DocType::Trame),
-        "toile" => Some(ambre_core::DocType::Toile),
-        "murmure" => Some(ambre_core::DocType::Murmure),
-        _ => None,
-    }
-}
-
 /// What a route expects of the membership entry its request carries.
-pub(crate) struct Expected<'a> {
+pub(crate) struct Expected {
     pub act: ambre_protocol::MembershipAct,
     /// The member the change adds, removes or changes.
     pub member: ambre_core::UserId,
     /// The role the entry gives, `None` for a removal.
-    pub role: Option<&'a str>,
+    pub role: Option<Role>,
     /// The key the entry names, when the route knows it. That is the key an
     /// invite wraps, the key a revoke installs, or none for a role change.
     pub key: Option<Option<ambre_core::KeyId>>,
@@ -67,7 +57,7 @@ pub(crate) async fn checked_entry(
     auth: &auth::AuthSession,
     doc_id: ambre_core::DocumentId,
     text: Option<&str>,
-    expected: Expected<'_>,
+    expected: Expected,
 ) -> Result<Option<db::LogEntry>, AppError> {
     use base64::Engine;
     use ed25519_dalek::{Signature, VerifyingKey};
@@ -88,9 +78,7 @@ pub(crate) async fn checked_entry(
         && entry.author == auth.user_id
         && entry.member == expected.member
         && entry.act == expected.act
-        && expected
-            .role
-            .is_none_or(|role| entry.role.to_string() == role)
+        && expected.role.is_none_or(|role| entry.role == role)
         && expected.key.is_none_or(|key| entry.key == key)
         && first == (entry.position == 0)
         && member_key.as_deref() == Some(entry.member_key.as_slice());
@@ -118,18 +106,23 @@ pub(crate) async fn checked_entry(
 #[derive(serde::Deserialize)]
 pub struct InviteRequest {
     pub invitee_email: String,
-    pub role: String,
+    /// A role word, parsed by the handler: an unknown word answers 409, as it
+    /// always has, rather than the extractor's 422.
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     pub doc_key_enc: String,
     /// The key `doc_key_enc` wraps, in hex. A rotation that replaced it
     /// refuses the invitation (`SRV-168`).
-    pub key_id: String,
+    #[serde(with = "ambre_core::serde_id::key_id")]
+    pub key_id: ambre_core::KeyId,
     /// The signed entry the invite appends to the log (`SYNC-105`).
     #[serde(default)]
     pub entry: Option<String>,
 }
 #[derive(serde::Serialize)]
 pub struct InviteResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
     /// Whether the invitee's email was provider-verified (OIDC) rather than
     /// self-asserted at `/auth/setup` (#3). The document key is wrapped to the
@@ -155,13 +148,27 @@ pub async fn invite_to_document(
     // at or below their own rank (N2). Without this clamp an `editor` could mint an
     // `owner`, who could then revoke/rotate -- a privilege escalation. Only an owner
     // may grant `owner`.
-    let caller_rank = doc_role_rank(&m.role).ok_or(AppError::Forbidden)?;
-    if doc_role_rank("editor").is_none_or(|editor| caller_rank < editor) {
+    let caller_rank = doc_role_rank(m.role).ok_or(AppError::Forbidden)?;
+    if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
-    let granted_rank = doc_role_rank(&req.role).ok_or(AppError::Conflict {
+    // The rows of a channel's `meta` grant every document of it, so an
+    // invite into a channel goes there and nowhere else (`SRV-190`).
+    if let Some(channel_id) = db::channel_of_document(&state.db, &doc_id).await? {
+        let meta = db::get_channel(&state.db, &channel_id)
+            .await?
+            .and_then(|channel| channel.meta_id);
+        if meta.map(|meta| meta.document_id()) != Some(doc_id) {
+            return Err(AppError::Conflict {
+                detail: "a channel takes its invites on its meta document".into(),
+            });
+        }
+    }
+    let invalid_role = || AppError::Conflict {
         detail: "invalid role".into(),
-    })?;
+    };
+    let role = req.role;
+    let granted_rank = doc_role_rank(role).ok_or_else(invalid_role)?;
     if granted_rank > caller_rank {
         return Err(AppError::Forbidden);
     }
@@ -172,8 +179,7 @@ pub async fn invite_to_document(
         .await?
         .filter(|u| u.exchange_pubkey.is_some())
         .ok_or(AppError::NotFound { resource: "user" })?;
-    let invitee_id =
-        ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*invitee.id.as_bytes()));
+    let invitee_id = invitee.id;
     // `add_document_member` upserts (ON CONFLICT DO UPDATE), so invite is also
     // the role-change path for an EXISTING member. Clamp the target too: a caller
     // may only touch a member currently at or below their own rank. Without this
@@ -181,7 +187,7 @@ pub async fn invite_to_document(
     // holds the document key, so it could supply a valid wrap. That demotes an
     // owner and overwrites their key entry, despite never being an owner.
     if let Some(existing) = db::get_document_member(&state.db, &doc_id, &invitee_id).await? {
-        let target_rank = doc_role_rank(&existing.role).ok_or(AppError::Forbidden)?;
+        let target_rank = doc_role_rank(existing.role).ok_or(AppError::Forbidden)?;
         if target_rank > caller_rank {
             return Err(AppError::Forbidden);
         }
@@ -191,11 +197,11 @@ pub async fn invite_to_document(
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
-    let key_id = parse_key_id(&req.key_id)?;
+    let key_id = req.key_id;
     let expected = Expected {
         act: ambre_protocol::MembershipAct::Invite,
         member: invitee_id,
-        role: Some(&req.role),
+        role: Some(role),
         // The entry names the key the copy wraps (`SYNC-123`).
         key: Some(Some(key_id)),
     };
@@ -204,7 +210,7 @@ pub async fn invite_to_document(
         &state.db,
         &doc_id,
         &invitee_id,
-        &req.role,
+        role,
         &doc_key_enc,
         &s.user_id,
         &key_id,
@@ -212,14 +218,14 @@ pub async fn invite_to_document(
     )
     .await?;
     // Log the resolved invitee_id (UUID), never the email passed in the request.
-    tracing::info!(document_id = %doc_id, invitee = %invitee_id, role = %req.role, by = %s.user_id, "member invited");
+    tracing::info!(document_id = %doc_id, invitee = %invitee_id, role = %role, by = %s.user_id, "member invited");
 
     // Live push: tell the invitee's connections a document was shared so their
     // list refreshes without a manual reload. Best-effort -- the membership row
     // is the source of truth; a missed push self-heals on the next list fetch.
     if let Some(doc_type) = db::get_document(&state.db, &doc_id)
         .await?
-        .and_then(|d| doc_type_from_str(&d.doc_type))
+        .map(|d| d.doc_type)
     {
         let msg =
             crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::DocumentShared {
@@ -228,8 +234,10 @@ pub async fn invite_to_document(
             });
         let _ = crate::redis_ops::user_broadcast(&state.redis, &invitee_id, &msg).await;
     }
+    // The members who hold the document open read the rows again (`SRV-177`).
+    crate::redis_ops::members_changed(&state.redis, &doc_id).await;
     Ok(axum::Json(InviteResponse {
-        user_id: invitee_id.to_string(),
+        user_id: invitee_id,
         display_name: invitee.display_name,
         email_verified: invitee.email_verified,
     }))
@@ -256,7 +264,7 @@ pub async fn revoke_from_document(
         .ok_or(AppError::Forbidden)?;
     // A member may always remove themselves (`SRV-145`). Removing anyone else
     // is the owner's alone (`SRV-015`).
-    if target != s.user_id && m.role != "owner" {
+    if target != s.user_id && m.role != Role::Owner {
         return Err(AppError::Forbidden);
     }
     let expected = Expected {
@@ -268,29 +276,77 @@ pub async fn revoke_from_document(
     let text = body.as_ref().and_then(|Json(body)| body.entry.as_deref());
     let entry = checked_entry(&state, &s, doc_id, text, expected).await?;
     // The removal posts no rotation, so the document owes one (`SRV-122`). The
-    // mirror is raised first: no frame slips in between the commit and it.
-    crate::redis_ops::mirror_rotation_owed(&state.redis, &doc_id, true).await?;
-    if let Err(e) = db::remove_document_member(&state.db, &doc_id, &target, entry.as_ref()).await {
-        restore_debt_mirror(&state, &doc_id).await;
-        return Err(e);
+    // mirror is raised first: no delta slips in between the commit and it.
+    // A leave of a space raises it on each private channel it leaves too.
+    let mut owing = vec![doc_id];
+    owing.extend(db::private_channels_of_member(&state.db, &doc_id, &target).await?);
+    let sweep_due = crate::deletion::sweep_due_stored(&state);
+    let removed = match raise_debt_mirrors(&state, &owing).await {
+        Ok(()) => {
+            db::remove_document_member(&state.db, &doc_id, &target, entry.as_ref(), sweep_due).await
+        }
+        Err(e) => Err(e),
+    };
+    let removed = match removed {
+        Ok(removed) => removed,
+        Err(e) => {
+            restore_debt_mirrors(&state, &owing).await;
+            return Err(e);
+        }
+    };
+    tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, removed = ?removed, "member removed");
+    // The members who stay read the rows again (`SRV-177`), unless no one stays.
+    if !matches!(removed, db::Removed::ChannelDeleted(_)) {
+        crate::redis_ops::members_changed(&state.redis, &doc_id).await;
     }
-    tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, "member removed, rotation owed");
+    match removed {
+        db::Removed::Owed => {}
+        db::Removed::SpaceLeft(leave) => {
+            // A channel the mirror was raised on and the leave did not leave
+            // owing, as one deleted with it, goes back to the register.
+            let unowed: Vec<_> = owing
+                .iter()
+                .skip(1)
+                .filter(|meta| !leave.owed.contains(meta))
+                .copied()
+                .collect();
+            restore_debt_mirrors(&state, &unowed).await;
+            announce_space_leave(&state, &leave, &target, sweep_due).await;
+        }
+        // A public channel owes nothing (`SRV-122`): the mirror goes back to
+        // what the register says.
+        db::Removed::Kept => {
+            restore_debt_mirror(&state, &doc_id).await;
+            notify_removed(&state, &doc_id, &target).await;
+            return Ok(super::Done::json(ambre_core::WriteStatus::Revoked));
+        }
+        // No member is left (`SRV-142`), but the other clients of the one who
+        // left still hold the channel (`SRV-187`).
+        db::Removed::ChannelDeleted(documents) => {
+            tracing::info!(document_id = %doc_id, "last member left, channel deleted");
+            crate::deletion::empty_marked(&state, &documents, sweep_due).await;
+            notify_removed(&state, &doc_id, &target).await;
+            return Ok(super::Done::json(ambre_core::WriteStatus::Revoked));
+        }
+    }
 
     notify_removed(&state, &doc_id, &target).await;
     // Every member who stays learns of the debt as it learns of a new key. It
     // re-reads the member list, which now says a rotation is owed.
     notify_rotation(&state, &doc_id).await;
-    Ok(axum::Json(serde_json::json!({"status":"revoked"})))
+    Ok(super::Done::json(ambre_core::WriteStatus::Revoked))
 }
 
 /// Request to remove a member and rotate the key in one step
 /// (`ambre-spec-key-rotation.md`, `SYNC-126`).
 #[derive(serde::Deserialize)]
 pub struct RevokeRequest {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub keys: Vec<RotateKeyEntry>,
     /// Every member the revoke read and keeps, wrapped for or not (`SRV-167`).
-    pub members: Vec<String>,
+    #[serde(with = "ambre_core::serde_id::user_id::vec")]
+    pub members: Vec<ambre_core::UserId>,
     /// The link back to the key the revoke replaces (`SYNC-118`).
     pub link: String,
     /// The signed entry that records the removal (`SYNC-132`).
@@ -308,15 +364,15 @@ pub async fn revoke_and_rotate(
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
-    let target = parse_user_id(&req.user_id)?;
+    let target = req.user_id;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if m.role != "owner" {
+    if m.role != Role::Owner {
         return Err(AppError::Forbidden);
     }
     let keys = decode_keys(&req.keys)?;
-    let members = decode_members(&req.members)?;
+    let members = req.members;
     let link = decode_link(&req.link, doc_id)?;
     let expected = Expected {
         act: ambre_protocol::MembershipAct::Revoke,
@@ -326,31 +382,123 @@ pub async fn revoke_and_rotate(
         key: Some(Some(link.key)),
     };
     let entry = checked_entry(&state, &s, doc_id, req.entry.as_deref(), expected).await?;
-    db::revoke_and_rotate(
-        &state.db,
-        &doc_id,
-        &target,
-        &s.user_id,
-        &keys,
-        &members,
-        &link,
-        entry.as_ref(),
-    )
-    .await?;
+    // A removal from a space leaves each of its private channels owing a
+    // rotation (`SRV-136`), so their mirrors are raised first.
+    let owing = db::private_channels_of_member(&state.db, &doc_id, &target).await?;
+    let sweep_due = crate::deletion::sweep_due_stored(&state);
+    let revoked = match raise_debt_mirrors(&state, &owing).await {
+        Ok(()) => {
+            db::revoke_and_rotate(
+                &state.db,
+                &doc_id,
+                &target,
+                &s.user_id,
+                &keys,
+                &members,
+                &link,
+                entry.as_ref(),
+                sweep_due,
+            )
+            .await
+        }
+        Err(e) => Err(e),
+    };
+    let left = match revoked {
+        Ok(left) => left,
+        Err(e) => {
+            restore_debt_mirrors(&state, &owing).await;
+            return Err(e);
+        }
+    };
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, members = keys.len(), "member revoked, key rotated");
     // The rotation landed with the removal, so no debt stands (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;
+    super::channels::lock_retired_segments(&state, &doc_id).await;
+    if let Some(leave) = left {
+        let unowed: Vec<_> = owing
+            .iter()
+            .filter(|meta| !leave.owed.contains(meta))
+            .copied()
+            .collect();
+        restore_debt_mirrors(&state, &unowed).await;
+        announce_space_leave(&state, &leave, &target, sweep_due).await;
+    }
 
     notify_removed(&state, &doc_id, &target).await;
     notify_rotation(&state, &doc_id).await;
-    Ok(axum::Json(serde_json::json!({"status":"revoked"})))
+    Ok(super::Done::json(ambre_core::WriteStatus::Revoked))
+}
+
+/// Whether `user` is an admin, an owner or an editor, of the space of the
+/// public channel whose `meta` is `document_id` (`SRV-146`). The link that
+/// admin signs is checked by its role in the space (the Murmure spaces
+/// spec).
+pub(crate) async fn space_admin_of_public_meta(
+    state: &AppState,
+    document_id: &ambre_core::DocumentId,
+    user: &ambre_core::UserId,
+) -> Result<bool, AppError> {
+    let Some(channel_id) = db::channel_of_document(&state.db, document_id).await? else {
+        return Ok(false);
+    };
+    let Some(channel) = db::get_channel(&state.db, &channel_id).await? else {
+        return Ok(false);
+    };
+    let is_meta = channel.meta_id.map(|m| m.document_id()) == Some(*document_id);
+    let (true, true, Some(space)) = (channel.is_public, is_meta, channel.space_id) else {
+        return Ok(false);
+    };
+    let role = db::member_role(&state.db, &space.document_id(), user).await?;
+    Ok(matches!(role, Some(Role::Owner | Role::Editor)))
+}
+
+/// Raises the debt mirror of each of `documents`, in order. The first that
+/// fails stops the rest.
+async fn raise_debt_mirrors(
+    state: &AppState,
+    documents: &[ambre_core::DocumentId],
+) -> Result<(), AppError> {
+    for doc_id in documents {
+        crate::redis_ops::mirror_rotation_owed(&state.redis, doc_id, true).await?;
+    }
+    Ok(())
+}
+
+/// [`restore_debt_mirror`] for each of `documents`.
+async fn restore_debt_mirrors(state: &AppState, documents: &[ambre_core::DocumentId]) {
+    for doc_id in documents {
+        restore_debt_mirror(state, doc_id).await;
+    }
+}
+
+/// Tells each channel a leave of its space touched (`SRV-136`). The members
+/// who stay re-read the rows, and those of a private channel learn its debt.
+/// The member who left drops each channel, a deleted one included
+/// (`SRV-187`), whose documents are emptied (`SRV-165`).
+async fn announce_space_leave(
+    state: &AppState,
+    leave: &db::SpaceLeave,
+    target: &ambre_core::UserId,
+    sweep_due: i64,
+) {
+    for meta in &leave.left {
+        crate::redis_ops::members_changed(&state.redis, meta).await;
+        notify_removed(state, meta, target).await;
+    }
+    for meta in &leave.owed {
+        notify_rotation(state, meta).await;
+    }
+    for (meta, documents) in &leave.deleted {
+        crate::deletion::empty_marked(state, documents, sweep_due).await;
+        notify_removed(state, meta, target).await;
+    }
 }
 
 /// Notifies the removed user directly on their personal topic so their client
 /// closes the document. Targeted (not a doc broadcast): only the removed user
 /// learns they were removed, and no remaining member can mistake this for their
 /// own removal. Best-effort -- the membership row is the source of truth.
-async fn notify_removed(
+pub(crate) async fn notify_removed(
     state: &AppState,
     doc_id: &ambre_core::DocumentId,
     target: &ambre_core::UserId,
@@ -391,7 +539,7 @@ fn decode_keys(entries: &[RotateKeyEntry]) -> Result<Vec<(ambre_core::UserId, Ve
     entries
         .iter()
         .map(|e| {
-            let uid = parse_user_id(&e.user_id)?;
+            let uid = e.user_id;
             let enc = base64::engine::general_purpose::URL_SAFE
                 .decode(&e.doc_key_enc)
                 .map_err(|er| AppError::Conflict {
@@ -400,20 +548,6 @@ fn decode_keys(entries: &[RotateKeyEntry]) -> Result<Vec<(ambre_core::UserId, Ve
             Ok((uid, enc))
         })
         .collect()
-}
-
-/// Decodes the members a rotation read.
-fn decode_members(ids: &[String]) -> Result<Vec<ambre_core::UserId>, AppError> {
-    ids.iter().map(|id| parse_user_id(id)).collect()
-}
-
-/// Decodes the hex identifier of the key an invitation wraps.
-fn parse_key_id(text: &str) -> Result<ambre_core::KeyId, AppError> {
-    let bytes: [u8; ambre_core::KEY_ID_LEN] = hex::decode(text)
-        .ok()
-        .and_then(|b| b.try_into().ok())
-        .ok_or_else(|| AppError::BadRequest("key_id: not a key identifier".into()))?;
-    Ok(ambre_core::KeyId::from_array(bytes))
 }
 
 /// Decodes a rotation's link and refuses one the relay must not store: a
@@ -445,15 +579,27 @@ pub async fn list_key_links(
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
     let doc_id = parse_doc_id(&document_id)?;
-    db::get_document_member(&state.db, &doc_id, &auth.user_id)
+    // The admin who re-keys a public channel reads the chain it extends
+    // (`SRV-146`).
+    if db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
-        .ok_or(AppError::Forbidden)?;
+        .is_none()
+        && !space_admin_of_public_meta(&state, &doc_id, &auth.user_id).await?
+    {
+        return Err(AppError::Forbidden);
+    }
     let links: Vec<String> = db::document_key_links(&state.db, &doc_id)
         .await?
         .iter()
         .map(|bytes| base64::engine::general_purpose::URL_SAFE.encode(bytes))
         .collect();
-    Ok(axum::Json(serde_json::json!({ "links": links })))
+    Ok(axum::Json(KeyLinksResponse { links }))
+}
+
+/// Every link of a document, each in URL-safe base64, oldest first.
+#[derive(serde::Serialize)]
+pub struct KeyLinksResponse {
+    pub links: Vec<String>,
 }
 
 /// Request to rotate the Document Key after revoking a member.
@@ -462,14 +608,16 @@ pub async fn list_key_links(
 pub struct RotateKeyRequest {
     pub keys: Vec<RotateKeyEntry>,
     /// Every member the rotation read, wrapped for or not (`SRV-167`).
-    pub members: Vec<String>,
+    #[serde(with = "ambre_core::serde_id::user_id::vec")]
+    pub members: Vec<ambre_core::UserId>,
     /// The link back to the key the rotation replaces (`SYNC-118`).
     pub link: String,
 }
 /// One entry in the rotation payload: a user and their re-encrypted DocumentKey.
 #[derive(serde::Deserialize)]
 pub struct RotateKeyEntry {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub doc_key_enc: String,
 }
 
@@ -481,35 +629,36 @@ pub async fn rotate_document_key(
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
-    let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
-        .await?
-        .ok_or(AppError::Forbidden)?;
+    let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?;
     // Owner-only outside a debt. Rotating the document key rewraps EVERY
     // member's `doc_key_enc`, and makes the caller the wrapper of record. An
     // editor allowed here could omit members from the payload, leaving their
     // key stale after rotation -> lockout. While a rotation is owed, every
     // frame is refused until one lands. So any member with write access may
-    // settle it (`SRV-144`), and that risk is the price of not stalling.
-    let may_rotate = match m.role.as_str() {
-        "owner" => true,
-        "editor" => db::rotation_owed(&state.db, &doc_id).await?,
-        _ => false,
+    // settle it (`SRV-144`), and that risk is the price of not stalling. An
+    // admin of a space re-keys a public channel of it, member or not
+    // (`SRV-146`).
+    let may_rotate = match m.map(|m| m.role) {
+        Some(Role::Owner) => true,
+        Some(Role::Editor) if db::rotation_owed(&state.db, &doc_id).await? => true,
+        _ => space_admin_of_public_meta(&state, &doc_id, &s.user_id).await?,
     };
     if !may_rotate {
         return Err(AppError::Forbidden);
     }
 
     let keys = decode_keys(&req.keys)?;
-    let members = decode_members(&req.members)?;
+    let members = req.members;
     let link = decode_link(&req.link, doc_id)?;
     db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys, &members, &link).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
     // The rotation landed, so the debt is cleared (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;
+    super::channels::lock_retired_segments(&state, &doc_id).await;
     // Tell every REMAINING member to re-fetch its freshly wrapped key. This is
     // a re-key signal, not a revocation.
     notify_rotation(&state, &doc_id).await;
-    Ok(axum::Json(serde_json::json!({"status":"rotated"})))
+    Ok(super::keys::RotatedResponse::rotated())
 }
 
 #[cfg(test)]
@@ -518,24 +667,25 @@ mod tests {
 
     #[test]
     fn doc_role_rank_ordering() {
-        assert!(doc_role_rank("owner") > doc_role_rank("editor"));
-        assert!(doc_role_rank("editor") > doc_role_rank("viewer"));
-        assert_eq!(doc_role_rank("nonsense"), None);
+        assert!(doc_role_rank(Role::Owner) > doc_role_rank(Role::Editor));
+        assert!(doc_role_rank(Role::Editor) > doc_role_rank(Role::Viewer));
+        assert_eq!(doc_role_rank(Role::Admin), None);
+        assert_eq!(doc_role_rank(Role::Member), None);
     }
 
     /// N2: an editor may grant editor/viewer but never owner.
     #[test]
     fn editor_cannot_grant_owner() {
-        let caller = doc_role_rank("editor").unwrap();
-        assert!(doc_role_rank("owner").unwrap() > caller); // owner grant blocked
-        assert!(doc_role_rank("editor").unwrap() <= caller);
-        assert!(doc_role_rank("viewer").unwrap() <= caller);
+        let caller = doc_role_rank(Role::Editor).unwrap();
+        assert!(doc_role_rank(Role::Owner).unwrap() > caller); // owner grant blocked
+        assert!(doc_role_rank(Role::Editor).unwrap() <= caller);
+        assert!(doc_role_rank(Role::Viewer).unwrap() <= caller);
     }
 
     #[test]
     fn owner_can_grant_any_valid_role() {
-        let caller = doc_role_rank("owner").unwrap();
-        for role in ["owner", "editor", "viewer"] {
+        let caller = doc_role_rank(Role::Owner).unwrap();
+        for role in [Role::Owner, Role::Editor, Role::Viewer] {
             assert!(doc_role_rank(role).unwrap() <= caller);
         }
     }

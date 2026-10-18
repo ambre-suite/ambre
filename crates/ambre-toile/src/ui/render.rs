@@ -2361,11 +2361,7 @@ mod tests {
             Rect::from_points(from, to),
             1.5,
         );
-        stroked(
-            &paint(&Preview::Pen(pen.clone())),
-            kurbo::Shape::bounding_box(&pen),
-            1.5,
-        );
+        stroked(&paint(&Preview::Pen(pen.clone())), pen.control_box(), 1.5);
         stroked(
             &paint(&Preview::Stroke(pts)),
             Rect::new(5.0, 5.0, 85.0, 25.0),

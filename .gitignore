@@ -22,3 +22,6 @@ fixtures/bench/
 fuzz/corpus/
 fuzz/artifacts/
 fuzz/coverage/
+# Snapshot a local redis-server writes into its working directory. The db
+# tier's data lives in the compose container, never in the tree.
+*.rdb

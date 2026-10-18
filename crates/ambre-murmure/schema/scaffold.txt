@@ -1,0 +1,19 @@
+# ambre-murmure/schema/scaffold.txt  The frozen scaffolding identities (`AUTHOR-024`).
+#
+# One section per `SCHEMA_VERSION`, one line per document kind, naming the
+# identities its operations are written under. Murmure writes no scaffolding
+# under a shared identity: a document is written once, by the peer that
+# creates it, under its session, so every line reads "its session alone". A
+# scaffolding written under another identity moves the line.
+#
+# Read by `schema_shape`, which fails when a build writes a document under
+# other identities than the section frozen for its version. That needs a
+# raised `SCHEMA_VERSION` and a new section below, never an edit to the
+# section above.
+
+== v1
+meta: its session alone
+segment: its session alone
+amendments: its session alone
+thread: its session alone
+space: its session alone

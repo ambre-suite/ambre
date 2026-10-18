@@ -202,6 +202,7 @@ dependencies = [
  "ambre-core",
  "ambre-crypto",
  "ambre-draw",
+ "ambre-murmure",
  "ambre-prose",
  "ambre-toile",
  "ambre-trame",
@@ -236,6 +237,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tracing",
+ "unicode-segmentation",
 ]
 
 [[package]]

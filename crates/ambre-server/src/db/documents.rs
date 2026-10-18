@@ -6,9 +6,9 @@ use super::*;
 /// Row returned by `SELECT * FROM documents`.
 #[derive(Debug)]
 pub struct DocumentRow {
-    pub id: uuid::Uuid,
-    pub owner_id: uuid::Uuid,
-    pub doc_type: String,
+    pub id: ambre_core::DocumentId,
+    pub owner_id: ambre_core::UserId,
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<Vec<u8>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -17,12 +17,12 @@ pub struct DocumentRow {
 /// Document joined with the caller's membership row.
 #[derive(Debug)]
 pub struct DocumentSummaryRow {
-    pub id: uuid::Uuid,
-    pub owner_id: uuid::Uuid,
-    pub doc_type: String,
+    pub id: ambre_core::DocumentId,
+    pub owner_id: ambre_core::UserId,
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<Vec<u8>>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-    pub role: String,
+    pub role: ambre_core::Role,
     pub doc_key_enc: Vec<u8>,
     /// Exchange public key of the member who wrapped the caller's `doc_key_enc`
     /// (the inviter, or the owner at creation). `None` for a self-wrapped owner
@@ -48,9 +48,9 @@ pub async fn get_document(
 
     match row {
         Some(r) => Ok(Some(DocumentRow {
-            id: r.try_get("id")?,
-            owner_id: r.try_get("owner_id")?,
-            doc_type: r.try_get("doc_type")?,
+            id: r.try_get::<PgId, _>("id")?.into(),
+            owner_id: r.try_get::<PgId, _>("owner_id")?.into(),
+            doc_type: decode_doc_type(r.try_get("doc_type")?)?,
             name_enc: r.try_get("name_enc")?,
             created_at: r.try_get("created_at")?,
             updated_at: r.try_get("updated_at")?,
@@ -84,12 +84,12 @@ pub async fn list_documents_for_user(
     rows.into_iter()
         .map(|r| {
             Ok(DocumentSummaryRow {
-                id: r.try_get("id")?,
-                owner_id: r.try_get("owner_id")?,
-                doc_type: r.try_get("doc_type")?,
+                id: r.try_get::<PgId, _>("id")?.into(),
+                owner_id: r.try_get::<PgId, _>("owner_id")?.into(),
+                doc_type: decode_doc_type(r.try_get("doc_type")?)?,
                 name_enc: r.try_get("name_enc")?,
                 updated_at: r.try_get("updated_at")?,
-                role: r.try_get("role")?,
+                role: decode_role(r.try_get("role")?)?,
                 doc_key_enc: r.try_get("doc_key_enc")?,
                 wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
                 member_count: r.try_get("member_count")?,
@@ -111,17 +111,18 @@ pub async fn list_documents_for_user(
 pub async fn create_document(
     pool: &PgPool,
     owner_id: &ambre_core::UserId,
-    doc_type: &str,
+    doc_type: ambre_core::DocType,
     name_enc: Option<&[u8]>,
     document_id: Option<&ambre_core::DocumentId>,
 ) -> Result<(DocumentRow, bool), AppError> {
     let owner_uid = id_to_uuid(*owner_id);
+    let doc_type = doc_type.as_str();
 
     let row_to_doc = |row: sqlx::postgres::PgRow| -> Result<DocumentRow, AppError> {
         Ok(DocumentRow {
-            id: row.try_get("id")?,
-            owner_id: row.try_get("owner_id")?,
-            doc_type: row.try_get("doc_type")?,
+            id: row.try_get::<PgId, _>("id")?.into(),
+            owner_id: row.try_get::<PgId, _>("owner_id")?.into(),
+            doc_type: decode_doc_type(row.try_get("doc_type")?)?,
             name_enc: row.try_get("name_enc")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
@@ -199,19 +200,41 @@ pub struct PendingDeletion {
 /// Marks a document as being deleted, before anything of it goes (`SRV-165`).
 /// A second mark keeps the later of the two sweeps, so a delete begun again
 /// never sweeps before a link it handed out has expired.
+///
+/// A space goes with every channel of it, in the same transaction
+/// (`SRV-143`). Each channel is deleted and its documents marked, then the
+/// space is marked. Those channels are answered, empty for any other
+/// document. A direct message belongs to no space, so none is touched.
 pub async fn begin_deletion(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     sweep_due: i64,
+) -> Result<Vec<super::DeletedChannel>, AppError> {
+    let did = id_to_uuid(*document_id);
+    let mut tx = pool.begin().await?;
+    let channels = super::channels::delete_space_channels_in(&mut tx, did, sweep_due).await?;
+    begin_deletions_in(&mut tx, &[did], sweep_due).await?;
+    tx.commit().await?;
+    Ok(channels)
+}
+
+/// Marks the delete of each of `documents` inside `tx`, as [`begin_deletion`]
+/// marks one. The rows stay: the pass empties a marked document whose rows
+/// are left, and forgets them last (`SRV-165`).
+pub(super) async fn begin_deletions_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    documents: &[uuid::Uuid],
+    sweep_due: i64,
 ) -> Result<(), AppError> {
     sqlx::query(
-        "INSERT INTO document_deletions (document_id, sweep_due) VALUES ($1, $2) \
+        "INSERT INTO document_deletions (document_id, sweep_due) \
+         SELECT unnest($1::uuid[]), $2 \
          ON CONFLICT (document_id) DO UPDATE \
          SET sweep_due = GREATEST(document_deletions.sweep_due, EXCLUDED.sweep_due)",
     )
-    .bind(id_to_uuid(*document_id))
+    .bind(documents)
     .bind(sweep_due)
-    .execute(pool)
+    .execute(&mut **tx)
     .await?;
     Ok(())
 }

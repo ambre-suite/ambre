@@ -8,6 +8,7 @@
 
 use super::*;
 
+use ambre_bus::{MetaId, SegmentId};
 use ambre_core::activity::ActivityCounters;
 
 /// What the Sync worker keeps of a document the Logic thread evicted.
@@ -44,12 +45,22 @@ impl LightSubscription {
 
     /// Counts one update from its summary alone (`RESID-014`, `RESID-015`).
     /// An update that does not open, or carries no summary, marks activity
-    /// and counts nothing. A number already read returns `None`.
-    fn count(&mut self, seq: Seq, update: &Update, me: Option<UserId>) -> Option<ActivityCounters> {
+    /// and counts nothing. A number already read returns `None`, and so does
+    /// an update `mine` signed, which is nothing new to this user (`RESID-021`).
+    fn count(
+        &mut self,
+        seq: Seq,
+        update: &Update,
+        me: Option<UserId>,
+        mine: Option<&PublicKey>,
+    ) -> Option<ActivityCounters> {
         if seq.0 <= self.seen.0 {
             return None;
         }
         self.seen = seq;
+        if mine == Some(&update.public_data.pub_key) {
+            return None;
+        }
         let summary = pipeline::open_update(update, &self.doc_key)
             .ok()
             .and_then(|body| pipeline::split_update_body(body).ok())
@@ -84,7 +95,7 @@ impl SyncState {
         let unsent_here = self
             .pending_pre_session_updates
             .iter()
-            .any(|(doc, _)| *doc == document_id);
+            .any(|(doc, ..)| *doc == document_id);
         let Some(doc) = self.documents.get(&document_id) else {
             return;
         };
@@ -111,16 +122,77 @@ impl SyncState {
     pub(crate) fn count_light(&mut self, seq: Seq, update: &Update) -> bool {
         let document_id = update.public_data.document_id;
         let me = self.user_id;
+        let mine = self.author_pub_key();
         let Some(light) = self.light.get_mut(&document_id) else {
             return false;
         };
-        if let Some(counters) = light.count(seq, update, me) {
+        if let Some(counters) = light.count(seq, update, me, mine.as_ref()) {
             self.send_to_logic(LogicEvent::Activity {
                 document_id,
                 counters,
             });
         }
         true
+    }
+
+    /// Counts a segment of a closed channel from its first number, as a
+    /// light subscription under the key of `meta` (`SYNC-162`). A segment
+    /// already held, in full or light, is left as it is. A `meta` this
+    /// worker holds no key for watches nothing.
+    pub(crate) fn handle_watch_segment(&mut self, segment: SegmentId, meta: MetaId) {
+        self.watch_light(segment.document_id(), meta, Seq(0));
+    }
+
+    /// Counts a thread whose root is not on screen from the number after
+    /// `after`, its read cursor (the Murmure threads spec). Its summaries are
+    /// read, and no document is loaded.
+    pub(crate) fn handle_watch_thread(&mut self, thread: DocumentId, meta: MetaId, after: Seq) {
+        self.watch_light(thread, meta, after);
+    }
+
+    /// Holds `document_id` as a light subscription under the key of `meta`,
+    /// and asks the relay for what follows `after`. A document already held,
+    /// in full or light, is left as it is.
+    fn watch_light(&mut self, document_id: DocumentId, meta: MetaId, after: Seq) {
+        if self.documents.contains_key(&document_id) || self.light.contains_key(&document_id) {
+            return;
+        }
+        let meta = meta.document_id();
+        let Some(doc_key) = self
+            .light
+            .get(&meta)
+            .map(|light| light.doc_key.clone())
+            .or_else(|| self.documents.get(&meta).map(|doc| doc.doc_key.clone()))
+        else {
+            tracing::warn!("[Sync] no key to watch document {document_id}");
+            return;
+        };
+        self.light.insert(
+            document_id,
+            LightSubscription {
+                doc_key,
+                doc_type: DocType::Murmure,
+                on_relay: true,
+                horizon: after,
+                seen: after,
+                counters: ActivityCounters::default(),
+            },
+        );
+        self.ws_send(&WsClientMsg::Subscribe { document_id });
+        self.ws_send(&WsClientMsg::RequestMissing {
+            document_id,
+            after_seq: after,
+        });
+    }
+
+    /// A thread took a delta (the Murmure threads spec). A thread held in
+    /// full or light hears it on its own topic. Any other is named to the
+    /// Logic thread, which decides what to load.
+    pub(crate) fn thread_activity(&mut self, document_id: DocumentId) {
+        if self.documents.contains_key(&document_id) || self.light.contains_key(&document_id) {
+            return;
+        }
+        self.send_to_logic(LogicEvent::ThreadActivity { document_id });
     }
 
     /// Takes the light subscription of a document being reopened: its kind
@@ -137,6 +209,14 @@ impl SyncState {
             .filter(|(_, light)| light.on_relay)
             .map(|(id, light)| (*id, light.seen))
             .collect()
+    }
+
+    /// The cursor one light subscription resumes after, if the relay holds it.
+    pub(crate) fn light_cursor(&self, document_id: DocumentId) -> Option<Seq> {
+        self.light
+            .get(&document_id)
+            .filter(|light| light.on_relay)
+            .map(|light| light.seen)
     }
 
     /// The kind of a document held as a light subscription.
@@ -273,6 +353,30 @@ mod tests {
         assert_eq!(counters, vec![active, active]);
     }
 
+    /// Holds `RESID-021`: an update this user signed, from this device or
+    /// another, moves no counter and marks nothing.
+    #[test]
+    fn an_update_this_user_signed_counts_nothing() {
+        let (mut state, rx, document_id, doc_key, snapshot) = released(9);
+        drain(&rx);
+        state.signing_key = Some(MasterSeed::from_array([2; 32]).derive_signing_key());
+        state.receive_update(
+            Seq(10),
+            update(document_id, snapshot, &doc_key, Some(&mention())),
+        );
+        assert!(drain(&rx).is_empty(), "the user's own update counted");
+        state.signing_key = Some(MasterSeed::from_array([3; 32]).derive_signing_key());
+        state.receive_update(
+            Seq(11),
+            update(document_id, snapshot, &doc_key, Some(&mention())),
+        );
+        assert_eq!(
+            drain(&rx).len(),
+            1,
+            "another member's update counted nothing"
+        );
+    }
+
     /// Holds `RESID-009`: a release waits while a frame this client sent is
     /// unacknowledged, and lands with its echo. Only then does the local
     /// store hear that the relay holds every change (`RESID-019`).
@@ -333,5 +437,129 @@ mod tests {
     fn the_horizon_never_passes_what_the_session_received() {
         let (mut state, _rx, document_id, _, _) = released(40);
         assert_eq!(state.take_light(document_id), Some(Seq(9)));
+    }
+
+    /// Holds `SYNC-162`: a segment of a closed channel is watched under the
+    /// key of its `meta`, and asked from its first number. Its updates count
+    /// as any light document's.
+    #[test]
+    fn a_watched_segment_counts_from_its_first_number() {
+        let (mut state, rx, meta, doc_key, _) = released(9);
+        drain(&rx);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let segment = SegmentId::new();
+        let meta = MetaId::from_document(meta);
+        state.handle_command(SyncCommand::WatchSegment { segment, meta });
+        let document_id = segment.document_id();
+        let sent: Vec<WsClientMsg> = ws_rx
+            .try_iter()
+            .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
+            .collect();
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [
+                    WsClientMsg::Subscribe { document_id: a },
+                    WsClientMsg::RequestMissing {
+                        document_id: b,
+                        after_seq: Seq(0),
+                    },
+                ] if *a == document_id && *b == document_id
+            ),
+            "expected a subscribe and a request from 0, got {sent:?}"
+        );
+        assert_eq!(state.light_cursor(document_id), Some(Seq(0)));
+        state.receive_update(
+            Seq(1),
+            update(document_id, SnapshotId::new(), &doc_key, Some(&mention())),
+        );
+        let events = drain(&rx);
+        let [LogicEvent::Activity { counters, .. }] = events.as_slice() else {
+            panic!("expected the segment's counters, got {events:?}");
+        };
+        assert_eq!(counters.mentions, 1);
+
+        state.handle_command(SyncCommand::WatchSegment { segment, meta });
+        assert!(ws_rx.try_recv().is_err(), "a held segment is watched again");
+        assert_eq!(state.light_cursor(document_id), Some(Seq(1)));
+    }
+
+    /// A watched thread is asked from its read cursor, under the key of its
+    /// `meta`, and counts from its summaries alone (the Murmure threads
+    /// spec). Nothing past the cursor is counted twice, and no document loads.
+    #[test]
+    fn a_watched_thread_counts_after_its_read_cursor() {
+        let (mut state, rx, meta, doc_key, _) = released(9);
+        drain(&rx);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let thread = DocumentId::new();
+        let meta = MetaId::from_document(meta);
+        state.handle_command(SyncCommand::WatchThread {
+            thread,
+            meta,
+            after: Seq(4),
+        });
+        let sent: Vec<WsClientMsg> = ws_rx
+            .try_iter()
+            .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
+            .collect();
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [
+                    WsClientMsg::Subscribe { document_id: a },
+                    WsClientMsg::RequestMissing {
+                        document_id: b,
+                        after_seq: Seq(4),
+                    },
+                ] if *a == thread && *b == thread
+            ),
+            "expected a subscribe and a request after the cursor, got {sent:?}"
+        );
+        let reply = || update(thread, SnapshotId::new(), &doc_key, Some(&mention()));
+        state.receive_update(Seq(4), reply());
+        assert!(drain(&rx).is_empty(), "a reply already read counted");
+        state.receive_update(Seq(5), reply());
+        let events = drain(&rx);
+        let [
+            LogicEvent::Activity {
+                document_id,
+                counters,
+            },
+        ] = events.as_slice()
+        else {
+            panic!("expected the thread's counters, got {events:?}");
+        };
+        assert_eq!((*document_id, counters.mentions), (thread, 1));
+        assert_eq!(state.documents_len(), 0, "a watched thread loads nothing");
+    }
+
+    /// A thread held in full or light hears its deltas on its own topic, so
+    /// its signal goes no further. Any other thread is named to the Logic
+    /// thread (the Murmure threads spec).
+    #[test]
+    fn a_thread_signal_reaches_logic_only_for_a_thread_not_held() {
+        let (mut state, rx, held, _, _) = released(9);
+        drain(&rx);
+        let open = DocumentId::new();
+        let doc = SyncDocumentState::new(open, DocumentKey::generate(), DocType::Murmure, true);
+        state.documents.insert(open, doc);
+        for document_id in [held, open] {
+            state.handle_ws_message(WsServerMsg::ThreadActivity { document_id });
+        }
+        assert!(drain(&rx).is_empty(), "a held thread was signalled");
+
+        let thread = DocumentId::new();
+        state.handle_ws_message(WsServerMsg::ThreadActivity {
+            document_id: thread,
+        });
+        let events = drain(&rx);
+        assert!(
+            matches!(events.as_slice(),
+                [LogicEvent::ThreadActivity { document_id }] if *document_id == thread),
+            "got {events:?}"
+        );
     }
 }

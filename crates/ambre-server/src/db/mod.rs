@@ -4,27 +4,88 @@ use sqlx::{PgPool, Row};
 // Query functions are split by domain into sibling modules; each reaches the
 // shared imports and the private uuid bridges below via `use super::*`. All
 // items are re-globbed so every `db::*` path stays valid.
+mod channels;
 mod content;
 mod documents;
 mod members;
 mod orgs;
+mod read_cursors;
 mod users;
 
+pub use channels::*;
 pub use content::*;
 pub use documents::*;
 pub use members::*;
 pub use orgs::*;
+pub use read_cursors::*;
 pub use users::*;
 
-#[allow(dead_code)]
+/// A stored role word, as a [`Role`](ambre_core::Role).
+///
+/// A word no build wrote is a decode error: the column's check constraint
+/// admits none, so it can only mean a corrupt row.
+fn decode_role(word: &str) -> Result<ambre_core::Role, sqlx::Error> {
+    word.parse()
+        .map_err(|e: ambre_core::error::RoleError| sqlx::Error::Decode(Box::new(e)))
+}
+
+/// A stored role column that may hold no row, as a [`Role`](ambre_core::Role).
+fn decode_role_opt(word: Option<String>) -> Result<Option<ambre_core::Role>, sqlx::Error> {
+    word.as_deref().map(decode_role).transpose()
+}
+
+/// A stored document type word, as a [`DocType`](ambre_core::DocType).
+///
+/// A word no build wrote is a decode error, as for [`decode_role`]
+/// (`SRV-180`).
+fn decode_doc_type(word: &str) -> Result<ambre_core::DocType, sqlx::Error> {
+    word.parse()
+        .map_err(|e: ambre_core::error::DocTypeError| sqlx::Error::Decode(Box::new(e)))
+}
+
 fn uuid_to_core(u: uuid::Uuid) -> ambre_core::Uuid {
     ambre_core::Uuid::from_bytes(*u.as_bytes())
 }
 
-#[allow(dead_code)]
 fn uuid_row_to_id<T: From<ambre_core::Uuid>>(u: uuid::Uuid) -> T {
     T::from(uuid_to_core(u))
 }
+
+/// A stored identifier column. A row field reads it with
+/// `#[sqlx(try_from = "PgId")]`, so the row holds the core identifier itself.
+#[derive(sqlx::Type)]
+#[sqlx(transparent)]
+pub(crate) struct PgId(uuid::Uuid);
+
+/// A stored identifier column that may be `NULL`, read with
+/// `#[sqlx(try_from = "PgOptId")]`.
+#[derive(sqlx::Type)]
+#[sqlx(transparent)]
+pub(crate) struct PgOptId(Option<uuid::Uuid>);
+
+macro_rules! pg_id {
+    ($($id:ty),* $(,)?) => {$(
+        impl From<PgId> for $id {
+            fn from(PgId(u): PgId) -> Self {
+                uuid_row_to_id(u)
+            }
+        }
+
+        impl From<PgOptId> for Option<$id> {
+            fn from(PgOptId(u): PgOptId) -> Self {
+                u.map(uuid_row_to_id)
+            }
+        }
+    )*};
+}
+
+pg_id!(
+    ambre_core::DocumentId,
+    ambre_core::UserId,
+    ambre_core::ChannelId,
+    ambre_core::SnapshotId,
+    ambre_core::OrgId,
+);
 
 pub(crate) fn id_to_uuid(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
     let core_uuid: ambre_core::Uuid = id.into();
@@ -34,11 +95,6 @@ pub(crate) fn id_to_uuid(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Bridge a stored `uuid::Uuid` (FK columns) back to a typed core id.
-    fn core_id<T: From<ambre_core::Uuid>>(id: uuid::Uuid) -> T {
-        ambre_core::Uuid::from_bytes(*id.as_bytes()).into()
-    }
 
     /// `covered_seq` survives the insert and both read paths. This is the value a
     /// client gates its post-open `RequestMissing` on, so a silent reset to 0
@@ -58,12 +114,12 @@ mod tests {
         )
         .await
         .expect("create user");
-        let owner: ambre_core::UserId = core_id(user.id);
-        let (doc, created) = create_document(&pool, &owner, "trame", None, None)
+        let owner = user.id;
+        let (doc, created) = create_document(&pool, &owner, ambre_core::DocType::Trame, None, None)
             .await
             .expect("create document");
         assert!(created);
-        let document_id: ambre_core::DocumentId = core_id(doc.id);
+        let document_id = doc.id;
 
         let author = [5u8; 32];
         let clocks = serde_json::json!({});
@@ -88,7 +144,7 @@ mod tests {
             .await
             .expect("query latest")
             .expect("snapshot exists");
-        assert_eq!(latest.id, id_to_uuid(sid));
+        assert_eq!(latest.id, sid);
         assert_eq!(latest.s3_key, "s3/key/snap");
         assert_eq!(latest.covered_seq, 1500);
 
@@ -126,11 +182,11 @@ mod tests {
         )
         .await
         .expect("create user");
-        let owner: ambre_core::UserId = core_id(user.id);
-        let (doc, _) = create_document(&pool, &owner, "prose", None, None)
+        let owner = user.id;
+        let (doc, _) = create_document(&pool, &owner, ambre_core::DocType::Prose, None, None)
             .await
             .expect("create document");
-        let document_id: ambre_core::DocumentId = core_id(doc.id);
+        let document_id = doc.id;
         let author = [5u8; 32];
         let snap = ambre_core::SnapshotId::new();
 
@@ -196,11 +252,11 @@ mod tests {
         )
         .await
         .expect("create user");
-        let owner: ambre_core::UserId = core_id(user.id);
-        let (doc, _) = create_document(&pool, &owner, "prose", None, None)
+        let owner = user.id;
+        let (doc, _) = create_document(&pool, &owner, ambre_core::DocType::Prose, None, None)
             .await
             .expect("create document");
-        let document_id: ambre_core::DocumentId = core_id(doc.id);
+        let document_id = doc.id;
         let author = [5u8; 32];
         let snap = ambre_core::SnapshotId::new();
 

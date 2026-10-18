@@ -21,11 +21,13 @@
 //! one `RestEvent` variant, edited in one place.
 //!
 //! # What is *not* here
-//! - **Content plane** (`AppCommand` / `AppEvent`): document edits and viewport
-//!   data, routed by `DocumentId` inside the Logic thread -- see [`crate::logic`].
-//! - **Control & content-send** (`OpenDocument`, `CloseDocument`, `OpenChannel`,
-//!   `CloseChannel`, `SendChannelMessage`): fire-and-forget, no single response
-//!   to correlate -- kept as explicit envelope variants.
+//! - **Content plane** (`AppCommand` / `AppEvent`, `MurmureCommand` /
+//!   `MurmureEvent`): document edits and viewport data, routed by `DocumentId`.
+//!   Channel commands are routed by `ChannelId` inside the Logic thread. See
+//!   [`crate::logic`].
+//! - **Control** (`OpenDocument`, `CloseDocument`, `OpenChannel`,
+//!   `CloseChannel`): fire-and-forget, no single response to correlate -- kept
+//!   as explicit envelope variants.
 //! - **Server push** (`Remote*`, `ConnectionStatus`, `SyncWarning`,
 //!   `MemberRevoked`, `*ParticipantJoined/Left`): unsolicited, no originating
 //!   request -- kept explicit.
@@ -40,7 +42,7 @@ use std::ops::Deref;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use zeroize::Zeroizing;
 
-use crate::{ChannelId, DocType, DocumentId, MeetingId, Role, UserId};
+use crate::{DocType, DocumentId, MeetingId, Role, Timestamp, UserId};
 
 // -----------------------------------------------------------------------------
 // Secret-carrying IPC fields (H5)
@@ -194,7 +196,7 @@ pub struct DocumentSummary {
 }
 
 /// Member of a document or channel.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemberInfo {
     pub user_id: UserId,
     pub display_name: String,
@@ -224,22 +226,6 @@ pub struct UserInfo {
     pub user_id: UserId,
     pub display_name: String,
     pub email: String,
-}
-
-/// Summary of a Murmure channel.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChannelSummary {
-    pub channel_id: ChannelId,
-    /// Decrypted from `name_enc`.
-    pub name: Option<String>,
-    pub role: Role,
-}
-
-/// Unread message count per channel.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UnreadCount {
-    pub channel_id: ChannelId,
-    pub count: u64,
 }
 
 // -----------------------------------------------------------------------------
@@ -317,11 +303,18 @@ pub enum RestCommand {
     /// **only if it still matches**. That closes the TOCTOU hole a compromised server holds
     /// between the two phases. On mismatch the invite fails with an explicit error. ->
     /// `InviteSent`.
+    ///
+    /// `invitee` is the user phase 1 answered, whom Sync finds again or
+    /// refuses the invite. `now` is the instant the user confirmed, since
+    /// Logic has no clock. A direct message of two stamps its notice of
+    /// the third member with it (the Murmure channels spec).
     InviteToDocument {
         document_id: DocumentId,
         invitee_email: String,
+        invitee: UserId,
         role: Role,
         expect_exchange_pub_key: [u8; 32],
+        now: Timestamp,
     },
     /// Revoke a member (triggers the full key-rotation sequence). -> `RevocationComplete`.
     RevokeFromDocument {
@@ -383,40 +376,6 @@ pub enum RestCommand {
         sealed: Vec<u8>,
         passphrase: SecretBytes,
     },
-
-    // -- Channels (Murmure) -- CRUD & sharing -------------------------------------
-    /// List channels. -> `ChannelList`.
-    ListChannels,
-    /// Create a channel. -> `ChannelCreated`.
-    CreateChannel { name: String },
-    /// Delete a channel. -> `ChannelDeleted`.
-    DeleteChannel { channel_id: ChannelId },
-    /// Invite a user to a channel. -> `ChannelInviteSent`.
-    InviteToChannel {
-        channel_id: ChannelId,
-        invitee_email: String,
-        role: Role,
-    },
-    /// Revoke a channel member. -> `ChannelRevocationComplete`.
-    RevokeFromChannel {
-        channel_id: ChannelId,
-        user_id: UserId,
-    },
-    /// List channel members. -> `ChannelMembers`.
-    ListChannelMembers { channel_id: ChannelId },
-    /// Update a channel member's role. -> `ChannelMemberRoleUpdated`.
-    UpdateChannelMemberRole {
-        channel_id: ChannelId,
-        user_id: UserId,
-        role: Role,
-    },
-    /// Advance the read cursor for unread tracking. (Acknowledged implicitly.)
-    UpdateReadCursor {
-        channel_id: ChannelId,
-        last_seq: u64,
-    },
-    /// Request unread counts for all subscribed channels. -> `UnreadCounts`.
-    GetUnreadCounts,
 
     // -- Meetings (Rendez-Vous) --------------------------------------------------
     /// Create an ephemeral meeting room. -> `MeetingCreated`.
@@ -560,36 +519,6 @@ pub enum RestEvent {
     /// tag cannot tell a wrong passphrase from a modified file, so naming one
     /// would be a guess. The surface says both (`DOCFILE-016`).
     DocFileOpenFailed,
-
-    // -- Channels (Murmure) -- CRUD & sharing -------------------------------------
-    ChannelList {
-        channels: Vec<ChannelSummary>,
-    },
-    ChannelCreated {
-        channel_id: ChannelId,
-    },
-    ChannelDeleted {
-        channel_id: ChannelId,
-    },
-    ChannelInviteSent {
-        channel_id: ChannelId,
-        user_id: UserId,
-    },
-    ChannelRevocationComplete {
-        channel_id: ChannelId,
-    },
-    ChannelMembers {
-        channel_id: ChannelId,
-        members: Vec<MemberInfo>,
-    },
-    ChannelMemberRoleUpdated {
-        channel_id: ChannelId,
-        user_id: UserId,
-        role: Role,
-    },
-    UnreadCounts {
-        counts: Vec<UnreadCount>,
-    },
 
     // -- Meetings (Rendez-Vous) --------------------------------------------------
     MeetingCreated {

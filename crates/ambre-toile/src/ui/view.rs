@@ -171,7 +171,7 @@ const DUPLICATE_NUDGE: f64 = 10.0;
 const CARET_BLINK_MS: f64 = 530.0;
 
 /// How many trailing samples of an in-flight freehand stroke ride a presence
-/// frame (`TOILE-UI-217`). The relay forwards presence and forgets it, and a
+/// sample (`TOILE-UI-217`). The relay forwards presence and forgets it, and a
 /// stroke can run to thousands of samples. A peer needs to see where the pen
 /// is, and the finished stroke reaches them as a CRDT delta when it commits.
 const LIVE_STROKE_TAIL: usize = 64;
@@ -544,7 +544,7 @@ pub struct ToileView {
     /// cursors, selection ghosts, live strokes and laser trails, keyed by
     /// canonical `UserId`. Fed by `ToileEvent::PeerPresence` and painted in the
     /// overlay pass. SYNC P4 gates end-to-end multi-user, because it resolves
-    /// the `pub_key` -> `UserId` that keys an inbound frame. Synthetic events
+    /// the `pub_key` -> `UserId` that keys an inbound sample. Synthetic events
     /// exercise the render pass meanwhile.
     presence: PeerCursors,
     /// The broadcast schedule for this peer's own presence
@@ -2219,7 +2219,7 @@ impl ToileView {
                     .collect()
             }),
             laser: self.machine.laser(),
-            // The presentation broadcast rides its own frame, emitted by the
+            // The presentation broadcast rides its own sample, emitted by the
             // Logic thread on a slide change (`toile-presentation`).
             present_slide: None,
         }

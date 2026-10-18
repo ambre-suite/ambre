@@ -243,6 +243,10 @@ pub(crate) fn sync_warning_message(code: SyncWarningCode) -> &'static str {
         SyncWarningCode::LocalStoreFull => {
             "This device is out of storage. Editing is paused until your changes are saved."
         }
+        SyncWarningCode::UpdateRefused => "A change could not be sent: its document is not open.",
+        SyncWarningCode::EditRefused => {
+            "The server refused a change. Reopen the document before editing it again."
+        }
     }
 }
 

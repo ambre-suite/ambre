@@ -2,14 +2,15 @@
 // WebSocket protocol -- single multiplexed connection per client session.
 //
 // Endpoint: GET /api/ws -> upgrade WebSocket
-// One connection carries messages for ALL open documents + channels.
-// Demux by document_id / channel_id in each message.
+// One connection carries messages for ALL open documents. Demux by
+// document_id in each message. A Murmure channel travels as its documents and
+// has no wire message of its own (`SRV-102`).
 // ============================================================================
 
 use crate::messages::{Clock, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
-use ambre_core::{ChannelId, DocType, DocumentId, KeyId, PublicKey, SnapshotId};
+use ambre_core::{DocType, DocumentId, KeyId, PublicKey, RefusalCode, SnapshotId};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -37,24 +38,6 @@ pub enum WsClientMsg {
     RequestMissing {
         document_id: DocumentId,
         after_seq: Seq,
-    },
-
-    /// Subscribe to a channel (Murmure). Same WS, different subscription set.
-    SubscribeChannel { channel_id: ChannelId },
-
-    /// Unsubscribe from a channel.
-    UnsubscribeChannel { channel_id: ChannelId },
-
-    /// Encrypted channel update. Routed to the active segment by the server.
-    ChannelUpdate {
-        channel_id: ChannelId,
-        update: Update,
-    },
-
-    /// Encrypted channel ephemeral (typing indicator).
-    ChannelEphemeral {
-        channel_id: ChannelId,
-        ephemeral: Ephemeral,
     },
 
     /// The access token, as the first frame of the socket. The socket address
@@ -170,28 +153,17 @@ pub enum WsServerMsg {
         doc_type: DocType,
     },
 
-    /// Channel subscription confirmed.
-    ChannelSubscribed { channel_id: ChannelId },
-
-    /// Channel update with server-assigned seq.
-    ChannelUpdate {
-        channel_id: ChannelId,
-        seq: Seq,
-        update: Update,
+    /// A refused wire message, named by its code alone (`SRV-183`). It names
+    /// the document it concerns, and none for a frame that does not decode or
+    /// a connection over its rate. The detail stays in the relay's log.
+    Error {
+        document_id: Option<DocumentId>,
+        code: RefusalCode,
     },
-
-    /// Channel ephemeral.
-    ChannelEphemeral {
-        channel_id: ChannelId,
-        ephemeral: Ephemeral,
-    },
-
-    /// Error (may be global or scoped to a document/channel).
-    Error { code: u16, message: String },
 
     /// A delta refused for its key: the document owes a rotation, and every key
     /// it held is one a departed member holds too (`ambre-spec-server.md`,
-    /// `SRV-123`). Sent to the author alone. The frame took no sequence number
+    /// `SRV-123`). Sent to the author alone. The delta took no sequence number
     /// and consumed no clock (`SRV-125`). So the author seals it again under
     /// the next key, at the same clock, and sends it again (`SYNC-129`).
     KeyRefused {
@@ -210,6 +182,52 @@ pub enum WsServerMsg {
         expected: Clock,
         signature: Signature,
     },
+    /// The members of this document changed: someone joined, left, or took
+    /// another role (`SRV-177`). It names the document alone; a client that
+    /// shows the members asks the relay for the rows again.
+    ///
+    /// Appended last, so the wire tags of the variants above do not move.
+    MembersChanged { document_id: DocumentId },
+
+    /// A replay ended before its end: the relay could not read its index or
+    /// a delta (`ambre-spec-sequencer.md`, `SRV-184`). The pages sent before
+    /// it stand, and `after_seq` is the last delta they delivered. The client
+    /// asks again from there (`SYNC-153`).
+    ReplayStopped {
+        document_id: DocumentId,
+        after_seq: Seq,
+    },
+
+    /// A delta refused before it took a sequence number, for its size, its
+    /// shape, its signature or the sender's role (`ambre-spec-broadcast.md`,
+    /// `SRV-185`). Sent to the author alone, naming the delta by its signature.
+    /// The relay holds nothing of it, so the author holds an edit the relay
+    /// lacks (`SYNC-155`).
+    DeltaRefused {
+        document_id: DocumentId,
+        signature: Signature,
+        code: RefusalCode,
+    },
+
+    /// A pending snapshot a member reported, which the relay dropped
+    /// (`ambre-spec-sequencer.md`, `SRV-133`). Broadcast on the document
+    /// topic. It names the keys of its author and of its reporter, which the
+    /// client resolves as it does for a cursor. `refinalize` says it was the
+    /// final snapshot of a segment, which a member then finalizes again.
+    SnapshotDropped {
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+        author: PublicKey,
+        reporter: PublicKey,
+        refinalize: bool,
+    },
+
+    /// A thread document took a delta (`ambre-spec-broadcast.md`,
+    /// `SRV-161`). Published on the topic of its channel, so it reaches every
+    /// socket watching a document of that channel. It names the thread alone
+    /// (`SRV-162`): a client that holds the thread hears the delta on its own
+    /// topic, and any other fetches the summaries.
+    ThreadActivity { document_id: DocumentId },
 }
 
 // ---------------------------------------------------------------------------

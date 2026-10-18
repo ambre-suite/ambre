@@ -49,11 +49,17 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-063` | `POST` | A socket the relay refuses on authentication MUST be renewed, not merely retried. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-046` | `ambre_sync::lifecycle::tests::an_authentication_refusal_renews_and_reopens` -- the refusal's code renews, and the renewal reopens with the wait reset | none | verified |
 | `SYNC-133` | `POST` | A socket the relay refuses for a key setup still owed MUST be neither renewed nor retried until the keys are stored. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-164` | `ambre_sync::websocket::tests::a_socket_refused_for_a_setup_owed_is_neither_renewed_nor_retried` -- on the native transport, the refusal opens no socket through a timer or a renewal, and the stored session of a setup opens one, as the authentication code does | none | verified |
 | `SYNC-134` | `POST` | A key setup still owed MUST reach the rest of the client as a setup to complete, never as a generic error. | this spec section 2; `ambre-spec-session.md`, `SRV-027` | `ambre_sync::websocket::tests::a_socket_refused_for_a_setup_owed_reaches_logic_as_a_setup` -- the refused socket; `ambre_sync::setup_tests::a_request_refused_for_a_setup_owed_reaches_logic_as_a_setup` -- the sink turns a setup refusal into the setup, under either error variant; `ambre_sync::http::tests::only_a_setup_refusal_reads_as_one` -- only a 403 with the setup code reads as one; `ambre_sync::http::tests::an_account_without_master_material_owes_its_setup` -- the test an unlock branches on; `ambre_logic::dispatch::tests::a_setup_owed_reaches_the_ui_as_a_setup` -- the logic thread relays it | none | verified |
-| `SYNC-137` | `POST` | A frame of a newer wire version MUST reach the rest of the client once as an update to install, and the socket MUST NOT reopen in that session. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-166` | `ambre_protocol::tests::only_a_newer_wire_version_calls_for_an_update` -- an older version and an empty frame do not; `ambre_sync::websocket::tests::a_newer_wire_version_reaches_logic_as_an_update_and_closes_for_good` -- once, with no error, and no close, timer or renewal reopens; `ambre_logic::dispatch::tests::a_newer_relay_reaches_the_ui_as_an_update` -- the logic thread relays it | none | verified |
+| `SYNC-137` | `POST` | A wire message of a newer version MUST reach the rest of the client once as an update to install, and the socket MUST NOT reopen in that session. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-166` | `ambre_protocol::tests::only_a_newer_wire_version_calls_for_an_update` -- an older version and an empty frame do not; `ambre_sync::websocket::tests::a_newer_wire_version_reaches_logic_as_an_update_and_closes_for_good` -- once, with no error, and no close, timer or renewal reopens; `ambre_logic::dispatch::tests::a_newer_relay_reaches_the_ui_as_an_update` -- the logic thread relays it | none | verified |
 | `SYNC-070` | `POST` | A socket error MUST tear the connection down and schedule a reconnect, exactly as a close does. | audit `M10`; this spec section 2 | `ambre_sync::lifecycle::tests::an_error_backs_off_as_a_close_does` -- an error reads as a close with no code, and arms the same wait | none | verified |
-| `SYNC-064` | `POST` | The reconnect delay MUST grow while no frame arrives. | this spec section 2 | `ambre_sync::lifecycle::tests::the_wait_grows_while_no_frame_arrives` -- each close doubles the wait up to its cap; `ambre_sync::websocket::tests::a_dropped_socket_reopens_on_the_clock_and_a_frame_resets_the_wait` -- the worker reopens only once its clock reaches the wait | none | verified |
-| `SYNC-098` | `POST` | The reconnect delay MUST reset on an inbound frame, and never on a bare open. | this spec section 2 | `ambre_sync::lifecycle::tests::the_wait_resets_on_a_frame_alone` -- a reopen with no frame keeps the wait growing, and a frame resets it; `ambre_sync::websocket::tests::a_dropped_socket_reopens_on_the_clock_and_a_frame_resets_the_wait` -- the same through the worker, after an open with no frame | none | verified |
+| `SYNC-064` | `POST` | The reconnect delay MUST grow while no wire message arrives. | this spec section 2 | `ambre_sync::lifecycle::tests::the_wait_grows_while_no_frame_arrives` -- each close doubles the wait up to its cap; `ambre_sync::websocket::tests::a_dropped_socket_reopens_on_the_clock_and_a_frame_resets_the_wait` -- the worker reopens only once its clock reaches the wait | none | verified |
+| `SYNC-098` | `POST` | The reconnect delay MUST reset on an inbound wire message, and never on a bare open. | this spec section 2 | `ambre_sync::lifecycle::tests::the_wait_resets_on_a_frame_alone` -- a reopen with no frame keeps the wait growing, and a frame resets it; `ambre_sync::websocket::tests::a_dropped_socket_reopens_on_the_clock_and_a_frame_resets_the_wait` -- the same through the worker, after an open with no frame | none | verified |
 | `SYNC-059` | `FRAME` | The worker MUST stop reading the socket while the path back to the rest of the client is full. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-026` | `ambre_bus::conduit::tests::a_backlog_holds_its_source_at_the_high_mark_and_releases_it_at_the_low` -- the Main side asks once at each mark, never in between; `ambre_sync::websocket::tests::a_held_inbound_reopens_only_on_release_and_catches_up` -- no close, timer or renewal reopens a held socket, and the release pulls from the last sequence then sends the edit kept | none | verified |
+| `SYNC-153` | `POST` | Given a replay the relay stopped, the worker MUST ask again from its own cursor, and no sooner than the relay's throttle serves it. | this spec section 2; `ambre-spec-sequencer.md`, `SRV-184`, `SRV-086`; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_stopped_replay_is_asked_again_from_the_cursor_when_its_timer_fires` -- nothing is sent before the timer, a stale timer asks nothing, and the live one asks from the document's cursor; `ambre_sync::websocket::tests::the_replay_retry_delay_doubles_up_to_its_budget` -- the first delay is the throttle window, and each later one doubles it | none | verified |
+| `SYNC-154` | `FAIL` | A replay stopped more times than its budget MUST reach the rest of the client as one error, and no retry MUST follow before the next reconnect. | this spec section 2; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_replay_stopped_past_its_budget_reaches_logic_once` -- eight stops give one error and no retry, and a reopened socket counts from zero | none | verified |
+| `SYNC-157` | `FAIL` | A document whose first replay stops past its budget MUST reach the rest of the client as an open that failed, never as one still loading. | this spec section 2; `SYNC-154` | `ambre_sync::websocket::tests::a_first_replay_given_up_fails_the_open` -- six stops of a first replay give one failed open and no generic error, and the document is unsubscribed and let go | none | verified |
+| `SYNC-160` | `POST` | Given a resubscription the relay refuses for want of access, the worker MUST close the document and report its user removed from it. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-047` | `ambre_sync::websocket::tests::a_refused_resubscription_closes_its_document` -- the forbidden code on a document held closes it and reports the removal, where another code or a document not held stays a refusal | none | verified |
+| `SYNC-167` | `POST` | Given a held document the relay refuses as not found, the worker MUST drop it and report it gone. | this spec section 2; `5-Murmure/features/ambre-spec-murmure-segments.md`, `MURMURE-483` | `ambre_sync::websocket::tests::a_not_found_refusal_for_a_held_document_reports_it_gone` -- the document held is dropped and reported gone, where a document not held stays a refusal | none | verified |
+| `SYNC-158` | `POST` | A stop that names a later delta than the stop before it MUST start its document's budget again. | this spec section 2; `SYNC-154`; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_replay_that_moves_on_keeps_its_budget` -- twelve stops each past the last count one apiece, a stop at or before the last still counts, and a timer armed before a reset asks nothing | none | verified |
 
 ### 1.4 A request is made
 
@@ -61,6 +67,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-062` | `POST` | A request refused for an expired token MUST be retried once, after a silent renewal. | `ambre-spec-session.md`, `SRV-025` | `ambre_sync::http::tests::a_refused_token_is_renewed_and_the_request_replayed_once` -- the replay carries the renewed token; `ambre_sync::http::tests::a_request_is_replayed_at_most_once` -- a second refusal or a refused renewal ends it | none | verified |
 | `SYNC-071` | `FAIL` | A request that receives no answer MUST be abandoned, never awaited without end. | audit `M9`; this spec section 2 | `ambre_sync::http::tests::a_request_with_no_answer_is_abandoned_at_its_deadline` -- a transport that never answers ends the request with an error at its thirty-second deadline, sent once | none | verified |
+| `SYNC-152` | `POST` | An answer naming a word of a closed set this build does not know MUST reach the rest of the client as an update to install, never as a generic error. | this spec section 2; `ambre-spec-server.md`, `SRV-180` | `ambre_core::serde_enums::tests::an_unknown_word_reads_as_an_unknown_variant_in_every_set` -- each adapter refuses the word as a derived enum does; `ambre_sync::http::tests::only_an_unknown_word_reads_as_one` -- a role or a status no member carries reads as one, a malformed identifier or a missing field does not; `ambre_sync::setup_tests::an_answer_with_an_unknown_word_reaches_logic_as_an_update` -- the sink turns it into the update, under either error variant; `ambre_logic::dispatch::tests::a_newer_relay_reaches_the_ui_as_an_update` -- the logic thread relays it | none | verified |
 | `SYNC-099` | `FRAME` | A renewal MUST NOT replay a request refused for anything but an expired token. | `ambre-spec-session.md`, `SRV-025` | `ambre_sync::http::tests::each_answer_maps_to_its_error` -- a 403, a 409, a 500, a 404 and no answer each send one request, with no renewal | none | verified |
 
 ### 1.5 Content leaves for the relay
@@ -70,7 +77,18 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-067` | `POST` | A document name MUST reach the relay sealed under the document key. | `ZK-001`; this spec section 2 | `ambre_sync::documents::tests::a_document_name_reaches_the_relay_sealed_under_the_document_key` -- the one seal create and rename send carries no plaintext, names the document key, and opens under it alone. `CHROME-036` holds what a card shows | none | verified |
 | `SYNC-068` | `FRAME` | A sealed document name MUST NOT open under any document but its own. | `ambre-spec-sealed-envelope.md`, `SYNC-018` | `ambre_sync::pipeline::tests::a_name_opens_under_its_own_document_only` -- a name sealed for one document refuses to open under another holding the same key, because its additional data holds the document id | none | verified |
 | `SYNC-136` | `FAIL` | A create whose answer names another document than the one the client minted MUST fail. | this spec section 2; `SYNC-068` | `ambre_sync::documents::tests::a_create_fails_on_a_foreign_answer` -- a foreign id and a malformed one each answer an error, and only the minted id is reported | none | verified |
-| `SYNC-069` | `FAIL` | A channel message MUST reach the relay or be refused: it MUST NOT be dropped in silence. | this spec section 2 | `ambre_sync::channels::tests::a_channel_message_is_refused_not_dropped` -- both send paths answer the caller with a refusal until the relay carries channels | none | verified |
+| `SYNC-069` | `FAIL` | A channel message sent with no open session of its document MUST be refused aloud, never dropped in silence. | this spec section 2 | `ambre_sync::updates::tests::an_update_for_a_document_with_no_session_is_refused_aloud` -- the update answers the Logic thread with an `UpdateRefused` warning, and reaches no socket | none | verified |
+| `SYNC-149` | `FAIL` | A channel message sent while the socket is down MUST reach the relay once it is back, or be refused aloud. | this spec section 2; `SYNC-069` | not built | unbuilt -- lands with the `ARCH P4` -- offline durability Story (`ambre-roadmap.md` E6) | unimplemented |
+| `SYNC-155` | `POST` | Given a delta the relay refused by name, the worker MUST drop it from the unconfirmed log and report its document as holding an edit the relay lacks. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-185` | `ambre_sync::updates::tests::a_delta_refused_by_name_leaves_the_log_and_is_reported_once` -- the refused delta and the one behind it leave the log, one warning names the document, and it no longer reads as settled | none | verified |
+| `SYNC-156` | `FAIL` | After a delta refused by name, for any cause but a locked segment, the worker MUST send no further delta of its document before that document reopens. | this spec section 2; `SYNC-155`; `ambre-spec-delta-order.md` | `ambre_sync::updates::tests::a_document_with_a_refused_delta_sends_no_further_delta` -- neither a new edit nor a delta a refused clock resends leaves, and the document opened afresh sends again | none | verified |
+| `SYNC-159` | `POST` | Given a delta the relay failed to sequence through a fault of its own, the worker MUST send it again, with every delta that left after it, within the resend budget. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-186`; `SYNC-155`; `ambre-spec-budgets.md` section 8 | `ambre_sync::updates::tests::a_delta_the_relay_failed_to_sequence_leaves_again_with_every_later_one` -- once its timer fires, the answer leaves first, then the delta at its own clock with the one behind it, and a stale timer sends nothing; `ambre_sync::updates::tests::a_delta_failing_past_the_budget_holds_its_document` -- the delay doubles per failure, and past the budget the document holds the delta and reports it once | none | verified |
+| `SYNC-162` | `POST` | A segment a closed channel watches MUST be counted from its first number, under the key of its `meta`. | `5-Murmure/features/ambre-spec-murmure-unread.md`, `MURMURE-477`; this spec section 2 | `ambre_sync::light::tests::a_watched_segment_counts_from_its_first_number` -- the watch subscribes the segment and asks for everything after number zero, a delta sealed under the `meta` key is counted, and a second watch sends nothing | none | verified |
+| `SYNC-163` | `FAIL` | A close that lost its race MUST delete the successor it created, and a close that failed MUST delete nothing. | `ambre-spec-sequencer.md`, `SRV-195`, `SRV-196` | `ambre_sync::sharing::tests::a_lost_close_deletes_the_successor_it_created` -- a won close creates then closes, a `created: false` answer deletes the minted successor, and a failed close sends no delete | none | verified |
+| `SYNC-164` | `FAIL` | Given a close that failed, the client MUST ask it again with the successor it already created, so no successor stays unregistered. | `SYNC-163`; `ambre-spec-sequencer.md`, `SRV-198` | `ambre_logic::channels::tests::a_failed_close_is_asked_again` -- the next send asks the same close into the same successor, and the answer makes it active; `ambre_sync::sharing::tests::a_close_asked_again_keeps_its_successor` -- the worker creates and closes into that successor again, and deletes nothing | none | verified |
+| `SYNC-165` | `POST` | Given a delta the relay refused for a locked segment, the worker MUST hand it and every later delta of its document to the Logic thread, and hold none. | this spec section 2; `ambre-spec-sequencer.md`, `SRV-115`; `SYNC-156` | `ambre_sync::updates::tests::a_delta_refused_for_the_lock_returns_to_logic_with_every_later_one` -- both deltas return once, in order, and the next delta leaves | none | verified |
+
+| `SYNC-166` | `FAIL` | A registration of amendments that lost its race MUST delete the document it created, and a failed one MUST delete nothing. | `ambre-spec-sequencer.md`, `SRV-201`, `SRV-202`; `SYNC-163` | `ambre_sync::sharing::tests::a_lost_registration_deletes_the_amendments_it_created` -- a won registration creates then registers, a `created: false` answer deletes the minted document and names the winner, and a failed one sends no delete | none | verified |
+| `SYNC-169` | `FAIL` | A thread registration that lost its race MUST delete the document it created, and a failed one MUST delete nothing. | `ambre-spec-sequencer.md`, `SRV-213`, `SRV-214`; `SYNC-166` | `ambre_sync::sharing::tests::a_lost_registration_deletes_the_thread_it_created` -- a won registration creates then registers, a `created: false` answer deletes the minted document and names the winner, and a failed one sends no delete | none | verified |
 
 ### 1.6 The session ends
 
@@ -85,16 +103,16 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 29 `verified`. The crate graph holds the keys and the CRDT apart. Unit tests
-  hold the token redaction and wipe, the refused channel send and the name bound to its document. A
-  gate refuses browser storage in the worker. Each gap left is a browser property the wasm tier
-  cannot boot, `ambre-spec-testing.md section 9`.
+* **Verification.** 45 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+  apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
+  to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
+  the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
 ---
 
 ## 2. MODEL
 
 **CRDT containers.** none. This worker compiles no CRDT at all (`SYNC-011`). What it carries across
-the boundary is opaque bytes in one direction and sealed frames in the other.
+the boundary is opaque bytes in one direction and sealed envelopes in the other.
 
 **Where it runs.** Two instances, two heaps. The rest of the client -- the screen and the document
 logic -- shares one. This worker has its own, and the two meet only over posted messages
@@ -143,7 +161,11 @@ first frame and never in the address (`SRV-031`, `SYNC-061`).
 | the Main side asks for a hold | close, and keep each edit sealed meanwhile; reopen on the release alone (`SYNC-059`) |
 | any other close, or a socket error | back off and reopen (`SYNC-064`) |
 | the socket opens | resubscribe every document, and pull what was missed (`SYNC-033`) |
-| a frame arrives | reset the delay: only a frame proves the connection is live (`SYNC-064`) |
+| the relay refuses a resubscription for want of access | close the document, and report the user removed from it: the notice went while the socket was down (`SYNC-160`) |
+| the relay refuses a held document as not found | drop it, and report it gone: a fold erased it (`SYNC-167`) |
+| the relay stops a replay | ask again from the document's cursor after a growing delay, and report it once past the budget (`SYNC-153`, `SYNC-154`) |
+| the relay refuses a delta for a locked segment | hand it and every later one to the Logic thread, and hold nothing (`SYNC-165`) |
+| a wire message arrives | reset the delay: only a wire message proves the connection is live (`SYNC-064`) |
 
 **Why a bare open is not proof.** A refused upgrade still completes, then closes immediately. A
 delay reset on the open alone would reset on every refusal. The reconnection would then become a
@@ -162,6 +184,11 @@ is kept and sent after the reopen (`SYNC-059`). The two marks are a row of
 replayed; a second refusal reaches the screen as an authentication error (`SYNC-062`). A refusal
 for a key setup still owed reaches it as the setup to complete. So does an unlock that finds no
 master material (`SYNC-134`).
+
+**A word this build does not know.** Each closed set on the JSON wire is read strictly, so a new
+role or status refuses the whole answer (`SRV-180`). Only a newer relay writes such a word, and no
+retry cures it. The answer therefore reaches the screen as an update to install (`SYNC-152`). A
+relay that adds a word must ship after the client that reads it.
 
 **The document register.** The list, the create, the rename and the delete are ordinary requests,
 and one field of them is content rather than routing: the name.
@@ -184,7 +211,7 @@ the name is bound to it before the relay sees either.
 * `crates/ambre-sync/src/auth.rs` -- sign-in, sign-out and the derived keys;
 * `crates/ambre-sync/src/http.rs` -- the request helpers, and the renew-and-replay;
 * `crates/ambre-sync/src/documents.rs` -- the register, and the sealed name;
-* `crates/ambre-sync/src/channels.rs` -- the channel subscription, and the two dropped sends;
+* `crates/ambre-sync/src/channels.rs` -- the channel listing, which names the documents to open;
 * `crates/ambre-app/src/platform.rs` -- the Main side of the pair, and the readiness gate.
 
 ---
@@ -208,11 +235,11 @@ The worker has no surface of its own. What a user sees of it is five things.
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | One separate instance, reached by posted messages | a thread inside the Main instance sharing its memory | it is what the screen and the document logic still use and what this worker must not: that instance runs to completion, so an asynchronous loop returns after its first step and the runtime collects it -- the freeze this project spent weeks on. An instance with its own event loop cannot have that failure, and it buys key isolation as a side effect: the heap that holds the keys is not addressable from the screen |
-| One socket per session, multiplexed | a socket per open document | it costs five connections for one board with four embedded documents, against a browser limit of about six per origin, and every one of them keeps alive on a mobile battery. Every frame already names its document, so the relay demultiplexes |
+| One socket per session, multiplexed | a socket per open document | it costs five connections for one board with four embedded documents, against a browser limit of about six per origin, and every one of them keeps alive on a mobile battery. Every wire message already names its document, so the relay demultiplexes |
 | One worker for every document | a Sync worker per open document | it means a copy of the cryptography per document, and the memory that goes with it, which is unacceptable on a mobile device. One worker holds a map |
 | The readiness announcement, rather than delaying the first command | delaying the first command | the console being open was enough to hide it. The race is between an asynchronous boot and a command posted from a frame loop, so a delay only narrows it, and the failure it leaves is a document stuck behind a loading overlay for ever. Holding on the sending side makes the delivery independent of timing |
 | A refused upgrade has its own close code | one close code for every refusal, and a backoff over all of them | when a token expires or the relay rotates its signing key, every token is invalid at once, so a plain backoff never recovers: each new connection is refused too. A distinct code lets the client renew and reconnect with no action from the user |
-| The delay resets on a frame | resetting when the socket opens | a refused upgrade opens before it closes -- see section 2 -- so a reset on the open turns a refusal into a loop |
+| The delay resets on a wire message | resetting when the socket opens | a refused upgrade opens before it closes -- see section 2 -- so a reset on the open turns a refusal into a loop |
 | An early edit is held, not dropped | dropping an edit made before the session, and letting the user retype it | the first edit after a reload lands in the milliseconds while sign-in is still in flight. Dropping it lost that edit permanently and produced a clock the relay then refused on the next one |
 | A setup refusal is told at the one sink every event leaves by | a check in each request handler | about forty handlers turn a failed request into an error, each in its own words. One that missed the check would show a setup still owed as a generic failure. The sink sees every event, so one mapping covers each (`SYNC-134`) |
 | The tokens live in memory alone | browser storage | a token there survives the tab and is readable by any script that reaches the page. Memory dies with the worker, which is the lifetime a session should have |
@@ -231,9 +258,8 @@ The worker has no surface of its own. What a user sees of it is five things.
 * **A rotation leaves the name unreadable.** Nothing re-seals it, so the first revoke on a document
   makes its name unopenable for every member who stayed
   (`ambre-spec-key-rotation.md`, `SYNC-042`).
-* **A channel message is refused, never carried.** The subscribe and unsubscribe reach the relay.
-  Both send paths answer the caller with a refusal until the relay carries channel messages, and
-  both inbound channel frames are dropped (`SYNC-069`).
+* **An update sent while the socket is down is dropped.** It is logged, and nothing tells the view.
+  A channel message shares the fate of any document update (`SYNC-149`).
 * **Meetings are a log line each.** Four commands reach this worker and none does anything.
 * **A pending reconnect timer is not cancelled.** A second disconnect replaces the callback the
   timer will call, and the timer itself is not cleared. The first one then fires against a callback
@@ -259,7 +285,7 @@ The worker has no surface of its own. What a user sees of it is five things.
 | What a revoke rotates | `ambre-spec-key-rotation.md` |
 | How a file is addressed and transferred | `ambre-spec-media.md` |
 | The three planes that cross the boundary, and their shapes | `ambre-spec-message-bus.md` |
-| What the relay does with a request or a frame | `ambre-spec-server.md`, `ambre-spec-broadcast.md` |
+| What the relay does with a request or a wire message | `ambre-spec-server.md`, `ambre-spec-broadcast.md` |
 | What the relay does with a token, and what mints one | `ambre-spec-session.md` |
 | Why this worker is a separate instance rather than a thread | `ambre-spec-architecture.md section 4` |
 | What the home screen shows of a document list | `ambre-spec-launcher.md` |

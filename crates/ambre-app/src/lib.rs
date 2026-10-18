@@ -437,6 +437,21 @@ impl ChromeStatus {
             (false, false) => "dot offline",
         }
     }
+
+    /// A failed open of the active document lowers its loading screen, and
+    /// answers the notice to raise (`CHROME-104`). A failure of a document
+    /// already left changes nothing.
+    fn open_failed(
+        &mut self,
+        current: Option<DocumentId>,
+        failed: DocumentId,
+    ) -> Option<&'static str> {
+        if current != Some(failed) {
+            return None;
+        }
+        self.hydrating = false;
+        Some("The document could not open.")
+    }
 }
 
 // Gated out under `cfg(test)`: the wasm-bindgen-test harness generates its own
@@ -1492,6 +1507,17 @@ pub fn main() {
                 {
                     chrome_status.update(|s| s.hydrating = false);
                 }
+                // The open failed: lower the loading overlay and say why the
+                // canvas stays empty (`CHROME-104`).
+                UiEvent::DocumentOpenFailed { document_id, .. } => {
+                    let mut status = chrome_status.get_untracked();
+                    if let Some(notice) =
+                        status.open_failed(current_doc.get_untracked(), *document_id)
+                    {
+                        chrome_status.set(status);
+                        toasts.warning(notice);
+                    }
+                }
                 // A document was shared with us: refresh the landing list so it
                 // appears without a manual reload, and notify the user.
                 UiEvent::DocumentShared { .. } => {
@@ -1793,6 +1819,35 @@ mod shell;
 
 use platform::*;
 use shell::mount_shell;
+
+#[cfg(test)]
+mod chrome_status_tests {
+    use super::ChromeStatus;
+    use ambre_bus::DocumentId;
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// `CHROME-104`: a failed open of the active document lowers its loading
+    /// screen and raises a notice. A document already left keeps both down.
+    #[wasm_bindgen_test]
+    fn a_failed_open_ends_the_loading_screen() {
+        let active = DocumentId::new();
+        let loading = ChromeStatus {
+            hydrating: true,
+            connected: true,
+        };
+
+        let mut left = loading;
+        assert_eq!(left.open_failed(Some(active), DocumentId::new()), None);
+        assert!(
+            left.hydrating,
+            "another document's failure lowered the screen"
+        );
+
+        let mut failed = loading;
+        assert!(failed.open_failed(Some(active), active).is_some());
+        assert!(!failed.hydrating, "the loading screen stayed up");
+    }
+}
 
 #[cfg(test)]
 mod fan_out_tests {

@@ -37,6 +37,11 @@ impl LogicState {
                 deltas,
                 sessions,
             } => {
+                // The local copy a reopening channel asked for.
+                if doc_type == DocType::Murmure && self.reads_channel_copy(document_id) {
+                    self.channel_copy_landed(document_id, snapshot, &deltas);
+                    return;
+                }
                 // The local copy a reopen asked for (`RESID-010`).
                 if let Some(horizon) = self
                     .docs
@@ -99,6 +104,28 @@ impl LogicState {
                         self.docs.clear();
                         self.evicted.clear();
                         self.store_full.clear();
+                        self.channels.clear();
+                        self.channel_ledgers.clear();
+                        self.opening.clear();
+                        self.read_cursors.clear();
+                        self.closed_channels.clear();
+                        self.document_channels.clear();
+                        self.watched_threads.clear();
+                        self.unplaced_threads.clear();
+                        self.closing_segments.clear();
+                        self.close_successors.clear();
+                        self.owed_replays.clear();
+                        self.channel_watchers.clear();
+                        self.channel_members.clear();
+                        self.spaces.clear();
+                        self.space_opening.clear();
+                        self.creating.clear();
+                        self.joining.clear();
+                        self.handing_off.clear();
+                        self.direct.clear();
+                        self.unsent.clear();
+                        self.murmure_identities.clear();
+                        self.murmure_waiting.clear();
                         self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);
@@ -109,6 +136,16 @@ impl LogicState {
                         self.owed.remove(document_id);
                         self.rest_routes.retain(|_, d| d != document_id);
                         self.forget_pending_seals(Some(*document_id));
+                    }
+                    RestCommand::LeaveDocument { document_id }
+                        if self.hand_off_before_leave(id, *document_id) =>
+                    {
+                        return;
+                    }
+                    RestCommand::InviteToDocument { .. }
+                        if self.announce_before_invite(id, &cmd) =>
+                    {
+                        return;
                     }
                     _ => {}
                 }
@@ -149,21 +186,30 @@ impl LogicState {
                 // leaves memory, and Sync keeps it light (`RESID-001`).
                 self.evict(document_id);
             }
-            LogicCommand::OpenChannel { channel_id } => {
-                self.send_to_sync(SyncCommand::OpenChannel { channel_id });
+            LogicCommand::OpenChannel { channel_id } => self.open_channel(channel_id),
+            LogicCommand::CloseChannel { channel_id } => self.close_channel(channel_id),
+            LogicCommand::OpenDirectMessage { draft, now } => self.open_direct_message(draft, now),
+            LogicCommand::FetchActivity => self.send_to_sync(SyncCommand::FetchActivity),
+            LogicCommand::ListMemberChannels => {
+                self.send_to_sync(SyncCommand::ListMemberChannels);
             }
-            LogicCommand::CloseChannel { channel_id } => {
-                self.send_to_sync(SyncCommand::CloseChannel { channel_id });
+            LogicCommand::MarkAllRead => self.send_to_sync(SyncCommand::MarkAllRead),
+            LogicCommand::SearchMessages { query } => self.search_messages(query),
+            LogicCommand::CreateSpace {
+                space_id,
+                name,
+                now,
+            } => self.create_space(space_id, &name, now),
+            LogicCommand::OpenSpace { space_id } => self.open_space(space_id),
+            LogicCommand::CloseSpace { space_id } => self.close_space(space_id),
+            LogicCommand::Space { space_id, command } => {
+                self.handle_space_command(space_id, command);
             }
-            LogicCommand::SendChannelMessage {
+            // -- Content plane: a Murmure command, addressed to its channel ---
+            LogicCommand::Channel {
                 channel_id,
-                payload,
-            } => {
-                self.send_to_sync(SyncCommand::SendChannelUpdate {
-                    channel_id,
-                    payload,
-                });
-            }
+                command,
+            } => self.handle_channel_command(channel_id, command),
             LogicCommand::LoadFonts { faces } => {
                 // The Logic thread cannot fetch, so this is the only way a face
                 // reaches it (`CANVAS-067`). Local-only: nothing is sent to
@@ -216,6 +262,10 @@ impl LogicState {
                 if self.resolve_pending_seal(id, &evt) {
                     return;
                 }
+                // The owner role passed on: the leave it held goes now.
+                if self.handed_off(id, &evt) {
+                    return;
+                }
                 // A response to a request this Logic thread issued on behalf of a
                 // document (`toile-media`) is fed back into the owning engine. It
                 // is not forwarded to the UI. UI-issued requests are absent from
@@ -239,6 +289,7 @@ impl LogicState {
                         doc.state.set_user_id(*user_id);
                         doc.state.set_display_name(display_name);
                     }
+                    self.spaces_know_me(*user_id);
                 }
                 self.send_to_ui(UiEvent::Rest { id, evt });
             }
@@ -246,6 +297,8 @@ impl LogicState {
             // -- Real-time sync (server push) ----------------------------------
             // The document is already live (pre-seeded on `OpenDocument`); a
             // snapshot for an unopened doc is dropped by `apply_remote`.
+            // The relay's numbers also give each message of a channel segment
+            // its place in the relay's order (the Murmure unread spec).
             LogicEvent::RemoteSnapshot {
                 document_id,
                 payload,
@@ -270,6 +323,17 @@ impl LogicState {
                     purpose,
                 );
             }
+
+            // A report dropped a snapshot (the Murmure segments spec).
+            LogicEvent::SnapshotDropped {
+                document_id,
+                author,
+                reporter,
+                refinalize,
+            } => {
+                self.snapshot_dropped(document_id, author, reporter, refinalize);
+            }
+            LogicEvent::ThreadActivity { document_id } => self.thread_activity(document_id),
 
             // Sync derived the PeerID from the signer; Logic compares it with
             // every operation the delta carries (`AUTHOR-012`).
@@ -298,18 +362,41 @@ impl LogicState {
                 from_user_id,
                 payload,
             } => {
-                self.apply_ephemeral(document_id, from_user_id, &payload);
+                if !self.space_presence_heard(document_id, from_user_id, &payload)
+                    && !self.channel_sample_heard(document_id, from_user_id, &payload)
+                {
+                    self.apply_ephemeral(document_id, from_user_id, &payload);
+                }
             }
 
             LogicEvent::PeerLeft {
                 document_id,
                 user_id,
             } => {
-                self.peer_left(document_id, user_id);
+                if !self.space_peer_left(document_id, user_id)
+                    && !self.channel_peer_left(document_id, user_id)
+                {
+                    self.peer_left(document_id, user_id);
+                }
+            }
+
+            LogicEvent::MembersChanged {
+                document_id,
+                members,
+            } => {
+                // A channel and a space show their members live; any other
+                // document reads them when its view asks.
+                if let Some(members) = self.channel_members_changed(document_id, members) {
+                    self.space_members_changed(document_id, members);
+                }
             }
 
             LogicEvent::SnapshotNeeded { document_id } => {
-                if let Some((payload, covered_seq)) = self.export_covered_snapshot(document_id) {
+                let covered = self
+                    .export_covered_snapshot(document_id)
+                    .or_else(|| self.channel_snapshot(document_id))
+                    .or_else(|| self.space_snapshot(document_id));
+                if let Some((payload, covered_seq)) = covered {
                     self.send_to_sync(SyncCommand::SendSnapshot {
                         document_id,
                         payload,
@@ -338,10 +425,16 @@ impl LogicState {
                 document_id,
                 counters,
             } => {
-                self.send_to_ui(UiEvent::Activity {
-                    document_id,
-                    counters,
-                });
+                // A channel's document counts for its channel, not alone.
+                if !self.count_thread(document_id, counters)
+                    && !self.count_closed(document_id, counters)
+                {
+                    self.send_to_ui(UiEvent::Activity {
+                        document_id,
+                        counters,
+                    });
+                }
+                self.closed_meta_moved(document_id);
             }
             LogicEvent::Released { document_id } => {
                 self.store_sent(document_id);
@@ -358,6 +451,16 @@ impl LogicState {
                 if let Some(doc) = self.docs.get_mut(&document_id) {
                     doc.role = role;
                     doc.ready = true;
+                } else {
+                    // A document this client created goes up whole first.
+                    self.flush_unsent(document_id);
+                    if self.channel_document_ready(document_id)
+                        || self.space_document_ready(document_id, role)
+                    {
+                        // A channel or a space document is no document of
+                        // the view: its channel or space answers for it.
+                        return;
+                    }
                 }
                 self.send_to_ui(UiEvent::DocumentReady { document_id, role });
                 // The other sessions learn this one is open, though its caret
@@ -385,6 +488,9 @@ impl LogicState {
                 document_id,
                 revoked_user_id,
             } => {
+                if Some(revoked_user_id) == self.my_user_id {
+                    self.channel_revoked(document_id);
+                }
                 self.send_to_ui(UiEvent::MemberRevoked {
                     document_id,
                     revoked_user_id,
@@ -404,36 +510,127 @@ impl LogicState {
                 });
             }
 
-            // -- Channels (server push) ----------------------------------------
-            LogicEvent::ChannelRemoteUpdate {
+            // -- Channels (Murmure) --------------------------------------------
+            LogicEvent::ChannelDocuments {
                 channel_id,
-                payload,
-            } => {
-                self.send_to_ui(UiEvent::ChannelMessage {
-                    channel_id,
-                    payload,
-                });
-            }
-            LogicEvent::ChannelRemoteEphemeral {
+                documents,
+            } => self.channel_listed(channel_id, &documents),
+            LogicEvent::ChannelOpenFailed {
                 channel_id,
-                payload,
+                message,
             } => {
-                self.send_to_ui(UiEvent::ChannelPresenceUpdate {
-                    channel_id,
-                    payload,
-                });
+                if self.opening.remove(&channel_id).is_some() {
+                    self.end_light_channel(channel_id);
+                    self.channel_open_failed(channel_id, message);
+                }
             }
-            LogicEvent::ChannelConnectionStatus {
+            LogicEvent::ChannelRefused { channel_id } => self.channel_refused(channel_id),
+            LogicEvent::ChannelActivity { documents } => self.channel_activity(&documents),
+            LogicEvent::ChannelCreated { channel_id, key } => {
+                self.channel_created(channel_id, key);
+            }
+            LogicEvent::ChannelKeyResealed {
+                space_id,
                 channel_id,
-                connected,
+                key,
             } => {
-                self.send_to_ui(UiEvent::ChannelConnectionStatus {
-                    channel_id,
-                    connected,
-                });
+                self.channel_resealed(space_id, channel_id, &key);
+                if let Some(channel) = self.channels.get_mut(&channel_id) {
+                    channel.key_rotated();
+                }
             }
-            LogicEvent::ChannelSnapshotNeeded { channel_id: _ } => {
-                tracing::warn!("Logic: ChannelSnapshotNeeded is not yet implemented");
+            LogicEvent::SegmentClosed {
+                channel_id,
+                closing,
+                active,
+                created,
+            } => self.segment_closed(channel_id, closing, active, created),
+            LogicEvent::SegmentCloseFailed {
+                channel_id,
+                closing,
+                message,
+            } => self.segment_close_failed(channel_id, closing, &message),
+            LogicEvent::AmendmentsLinked {
+                channel_id,
+                segment,
+                amendments,
+            } => self.amendments_linked(channel_id, segment, amendments),
+            LogicEvent::AmendmentsLinkFailed {
+                channel_id,
+                segment,
+                amendments,
+                message,
+            } => self.amendments_link_failed(channel_id, segment, amendments, &message),
+            LogicEvent::ThreadLinked {
+                channel_id,
+                segment,
+                root,
+                thread,
+            } => self.thread_linked(channel_id, segment, root, thread),
+            LogicEvent::ThreadLinkFailed {
+                channel_id,
+                segment: _,
+                root,
+                thread,
+                message,
+            } => self.thread_link_failed(channel_id, root, thread, &message),
+            LogicEvent::FinalizeLeaseAnswered {
+                channel_id,
+                segment,
+                answer,
+            } => self.finalize_lease_answered(channel_id, segment, answer),
+            LogicEvent::SegmentFinalized {
+                channel_id,
+                segment,
+            } => self.segment_finalized(channel_id, segment),
+            LogicEvent::SegmentFinalizeFailed {
+                channel_id,
+                segment,
+                withdrawn,
+                message,
+            } => self.segment_finalize_failed(channel_id, segment, withdrawn, &message),
+            LogicEvent::FoldLeaseAnswered {
+                channel_id,
+                segment,
+                answer,
+            } => self.fold_lease_answered(channel_id, segment, answer),
+            LogicEvent::SegmentFolded {
+                channel_id,
+                segment,
+            } => self.segment_folded(channel_id, segment),
+            LogicEvent::SegmentFoldFailed {
+                channel_id,
+                segment,
+                message,
+            } => self.segment_fold_failed(channel_id, segment, &message),
+            LogicEvent::AmendmentsFolded {
+                document_id,
+                amendments,
+            } => self.amendments_folded(document_id, amendments),
+            LogicEvent::DocumentGone { document_id } => self.document_gone(document_id),
+            LogicEvent::KeyRotated { document_id } => self.key_rotated(document_id),
+            LogicEvent::DeltasLocked {
+                document_id,
+                deltas,
+            } => self.deltas_locked(document_id, &deltas),
+            LogicEvent::ChannelJoined { channel_id } => self.channel_joined(channel_id),
+            LogicEvent::ChannelDeleted { channel_id } => self.channel_deleted(channel_id),
+            LogicEvent::ChannelLeft { channel_id } => self.channel_left(channel_id),
+            LogicEvent::DirectMessageOpened {
+                requested,
+                channel_id,
+            } => self.direct_message_opened(requested, channel_id),
+            LogicEvent::ChannelRequestFailed {
+                channel_id,
+                message,
+            } => self.channel_request_failed(channel_id, message),
+            LogicEvent::SpaceChannels { space_id, channels } => {
+                self.space_channels(space_id, &channels);
+            }
+            // The sidebar learns of the channels, and none of them opens
+            // (the Murmure channels spec).
+            LogicEvent::MemberChannels { channels } => {
+                self.send_to_ui(UiEvent::MemberChannels { channels });
             }
 
             // -- Meetings (participant push) -----------------------------------
@@ -457,6 +654,19 @@ impl LogicState {
             }
 
             // -- Errors --------------------------------------------------------
+            LogicEvent::DocumentOpenFailed {
+                document_id,
+                message,
+            } => {
+                if !self.channel_document_failed(document_id, &message)
+                    && !self.space_document_failed(document_id, &message)
+                {
+                    self.send_to_ui(UiEvent::DocumentOpenFailed {
+                        document_id,
+                        message,
+                    });
+                }
+            }
             LogicEvent::AuthError { message } => {
                 self.send_to_ui(UiEvent::AuthError { message });
             }
@@ -478,6 +688,12 @@ impl LogicState {
                     self.route_service_error(document_id, id, message);
                     return;
                 }
+                // A hand-off the relay refused fails the leave it held, which
+                // never left (the Murmure spaces spec).
+                let id = match id.map(|id| self.handing_off.remove(&id)) {
+                    Some(Some((leave, _))) => Some(leave),
+                    _ => id,
+                };
                 self.send_to_ui(UiEvent::ApiError {
                     id,
                     request,
@@ -594,10 +810,10 @@ mod tests {
     /// `PROSE-062`: one outcome, three destinations.
     ///
     /// The display events reach the UI thread. The delta reaches the Sync
-    /// worker under the document id the registry keyed, and the presence frame
-    /// reaches it as an ephemeral. An engine answers a value and sends nothing,
-    /// so this fan-out is the dispatcher's whole job and no engine-side test
-    /// can reach it.
+    /// worker under the document id the registry keyed, and the presence
+    /// sample reaches it as an ephemeral. An engine answers a value and sends
+    /// nothing, so this fan-out is the dispatcher's whole job and no
+    /// engine-side test can reach it.
     #[test]
     fn a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker() {
         let (mut state, ui, sync) = harness();
@@ -630,6 +846,7 @@ mod tests {
                 SyncCommand::SendUpdate {
                     document_id: id,
                     payload,
+                    ..
                 } if id == document_id => Some(payload),
                 _ => None,
             })
@@ -710,7 +927,7 @@ mod tests {
         );
     }
 
-    /// The other half of `PROSE-062`: the presence frame leaves as an
+    /// The other half of `PROSE-062`: the presence sample leaves as an
     /// ephemeral, and a caret produces no CRDT delta.
     #[test]
     fn a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta() {
@@ -735,7 +952,7 @@ mod tests {
         assert!(
             sent.iter()
                 .any(|cmd| matches!(cmd, SyncCommand::SendEphemeral { document_id: id, .. } if *id == document_id)),
-            "the presence frame reached the Sync worker"
+            "the presence sample reached the Sync worker"
         );
         assert!(
             !sent
@@ -1305,6 +1522,7 @@ mod tests {
         let forwarded = SyncCommand::SendUpdate {
             document_id: doc_id,
             payload: file.clone(),
+            summary: None,
         };
         assert!(
             format!("{forwarded:?}").contains(run),
@@ -1688,9 +1906,9 @@ mod tests {
     /// fails the build here until it is listed.
     fn relayed_requests(doc: DocumentId) -> Vec<RestCommand> {
         use ambre_bus::rest::{SecretBytes, SecretString};
-        use ambre_bus::{ChannelId, MeetingId, Role, UserId};
+        use ambre_bus::{MeetingId, Role, UserId};
         let secret = || SecretBytes::new(b"pass".to_vec());
-        let (user, channel, meeting) = (UserId::new(), ChannelId::new(), MeetingId::new());
+        let (user, meeting) = (UserId::new(), MeetingId::new());
         let all = vec![
             RestCommand::Unlock {
                 passphrase: secret(),
@@ -1727,8 +1945,10 @@ mod tests {
             RestCommand::InviteToDocument {
                 document_id: doc,
                 invitee_email: "a@b.c".to_owned(),
+                invitee: user,
                 role: Role::Editor,
                 expect_exchange_pub_key: [0; 32],
+                now: ambre_bus::Timestamp(0),
             },
             RestCommand::RevokeFromDocument {
                 document_id: doc,
@@ -1760,35 +1980,6 @@ mod tests {
                 sealed: vec![1],
                 passphrase: secret(),
             },
-            RestCommand::ListChannels,
-            RestCommand::CreateChannel {
-                name: "c".to_owned(),
-            },
-            RestCommand::DeleteChannel {
-                channel_id: channel,
-            },
-            RestCommand::InviteToChannel {
-                channel_id: channel,
-                invitee_email: "a@b.c".to_owned(),
-                role: Role::Editor,
-            },
-            RestCommand::RevokeFromChannel {
-                channel_id: channel,
-                user_id: user,
-            },
-            RestCommand::ListChannelMembers {
-                channel_id: channel,
-            },
-            RestCommand::UpdateChannelMemberRole {
-                channel_id: channel,
-                user_id: user,
-                role: Role::Viewer,
-            },
-            RestCommand::UpdateReadCursor {
-                channel_id: channel,
-                last_seq: 1,
-            },
-            RestCommand::GetUnreadCounts,
             RestCommand::CreateMeeting {
                 name: "m".to_owned(),
             },
@@ -1832,15 +2023,6 @@ mod tests {
                 | RestCommand::DownloadMedia { .. }
                 | RestCommand::SealDocFile { .. }
                 | RestCommand::OpenDocFile { .. }
-                | RestCommand::ListChannels
-                | RestCommand::CreateChannel { .. }
-                | RestCommand::DeleteChannel { .. }
-                | RestCommand::InviteToChannel { .. }
-                | RestCommand::RevokeFromChannel { .. }
-                | RestCommand::ListChannelMembers { .. }
-                | RestCommand::UpdateChannelMemberRole { .. }
-                | RestCommand::UpdateReadCursor { .. }
-                | RestCommand::GetUnreadCounts
                 | RestCommand::CreateMeeting { .. }
                 | RestCommand::JoinMeeting { .. }
                 | RestCommand::LeaveMeeting { .. }
@@ -2114,5 +2296,25 @@ mod tests {
         state.handle_logic_event(LogicEvent::UpdateRequired);
         let told: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
         assert!(matches!(told.as_slice(), [UiEvent::UpdateRequired]));
+    }
+
+    /// A plain document that could not open reaches the UI as a failed open
+    /// naming it, and as no authentication error (`BUS-030`).
+    #[test]
+    fn a_failed_open_reaches_the_ui_naming_its_document() {
+        let (mut state, ui, _sync) = harness();
+        let failed = DocumentId::new();
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: failed,
+            message: "replay stopped".to_owned(),
+        });
+        let told: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
+        assert!(
+            matches!(
+                told.as_slice(),
+                [UiEvent::DocumentOpenFailed { document_id, .. }] if *document_id == failed
+            ),
+            "the failed open was told as {told:?}"
+        );
     }
 }

@@ -24,6 +24,61 @@ pub(crate) fn no_self_join(_: &MembershipEntry) -> bool {
     false
 }
 
+/// The rule the `meta` of a public channel applies once a catalogue this
+/// client holds lists the channel. A member joins alone, at no role above
+/// editor (the Murmure spaces spec, `SRV-108`). The catalogue is the
+/// admission; the relay checks the space membership behind it.
+pub(crate) fn public_channel_self_join(entry: &MembershipEntry) -> bool {
+    matches!(entry.role, Role::Editor | Role::Viewer)
+}
+
+/// What the log of a space says that a channel of it must heed (the Murmure
+/// spaces spec). A space admin re-keys a public channel without being a
+/// member of it. A space leave removes a member from each channel, with no
+/// entry in the channel's own log.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SpaceWord {
+    /// Every key the space log granted a writing role, at any point.
+    pub(crate) writers: HashSet<[u8; 32]>,
+    /// The members a valid entry of the space log removed, and no later one
+    /// added back.
+    pub(crate) removed: HashSet<UserId>,
+}
+
+impl SpaceWord {
+    /// What the walked log of a space says. An unanchored log verifies
+    /// nobody, so it grants no writer.
+    pub(crate) fn of(log: &Log) -> Self {
+        Self {
+            writers: log.signers().cloned().unwrap_or_default(),
+            removed: log
+                .held
+                .iter()
+                .filter(|(_, held)| !held.present)
+                .map(|(member, _)| *member)
+                .collect(),
+        }
+    }
+}
+
+/// The rule one document's log walks under (`SYNC-106`): its self-join rule,
+/// and the word of the space a catalogue lists it in.
+#[derive(Clone)]
+pub(crate) struct LogRule {
+    pub(crate) self_join: SelfJoinRule,
+    pub(crate) space: Option<SpaceWord>,
+}
+
+impl LogRule {
+    /// The rule of a document no catalogue lists: no self-join, no space.
+    pub(crate) fn document() -> Self {
+        Self {
+            self_join: no_self_join,
+            space: None,
+        }
+    }
+}
+
 /// The rank of a document role, the order the relay grants them in.
 fn rank(role: Role) -> Option<u8> {
     match role {
@@ -99,6 +154,28 @@ impl Log {
             }
             log.apply(entry);
             previous = this;
+        }
+        log
+    }
+
+    /// [`Log::walk`] under `rule`, then what the space says. A space writer
+    /// may sign a key link of the channel (the Murmure spaces spec). A member
+    /// the space removed reads as removed here too, though no entry of this
+    /// log says so.
+    pub(crate) fn walk_under(
+        document: DocumentId,
+        anchor: Option<EntryDigest>,
+        entries: &[MembershipEntry],
+        rule: &LogRule,
+    ) -> Self {
+        let mut log = Self::walk(document, anchor, entries, rule.self_join);
+        if let Some(space) = &rule.space {
+            log.signers.extend(&space.writers);
+            for member in &space.removed {
+                if let Some(held) = log.held.get_mut(member) {
+                    held.present = false;
+                }
+            }
         }
         log
     }
@@ -420,6 +497,30 @@ pub(crate) mod tests {
         assert_eq!(view.standing(dave.id).0, MemberStanding::Verified);
     }
 
+    /// The owner leaves last and the log holds no member. A newcomer's
+    /// self-join then extends it and counts, where the application allows
+    /// one.
+    #[test]
+    fn a_log_its_last_member_left_admits_the_next_self_join() {
+        let (alice, dave) = (Person::new(1), Person::new(4));
+        let mut log = Vec::new();
+        append(&mut log, &alice, &alice, MembershipAct::Create, Role::Owner);
+        append(&mut log, &alice, &alice, MembershipAct::Revoke, Role::Owner);
+        append(
+            &mut log,
+            &dave,
+            &dave,
+            MembershipAct::SelfJoin,
+            Role::Editor,
+        );
+        let view = Log::walk(DOC, anchor(&log), &log, |_| true);
+        assert_eq!(
+            view.standing(dave.id),
+            (MemberStanding::Verified, Some(Role::Editor))
+        );
+        assert_eq!(view.standing(alice.id).0, MemberStanding::Revoked);
+    }
+
     /// Holds `SYNC-109`: an invite served again after a revoke of the same
     /// member changes nothing. Appended at the end, it does not link, and the
     /// member stays revoked.
@@ -481,5 +582,85 @@ pub(crate) mod tests {
         // The entries travel through their request form.
         let texts: Vec<String> = log.iter().map(|e| encode(e).unwrap()).collect();
         assert_eq!(decode(&texts), log);
+    }
+
+    /// A channel's log heeds its space (the Murmure spaces spec). A writer of
+    /// the space signs a link of the channel without an entry in it. A member
+    /// the space removed reads as removed in the channel.
+    #[test]
+    fn a_channel_log_heeds_the_word_of_its_space() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut space = created(&alice, &bob);
+        append(&mut space, &bob, &bob, MembershipAct::Revoke, Role::Editor);
+        let word = SpaceWord::of(&walk(&space));
+        assert!(word.writers.contains(&alice.public()));
+        assert_eq!(word.removed, HashSet::from([bob.id]));
+        let unanchored = Log::walk(DOC, None, &space, no_self_join);
+        assert_eq!(
+            SpaceWord::of(&unanchored),
+            SpaceWord::default(),
+            "it says nothing"
+        );
+
+        let channel = created(&carol, &bob);
+        let rule = LogRule {
+            self_join: public_channel_self_join,
+            space: Some(word),
+        };
+        let view = Log::walk_under(DOC, anchor(&channel), &channel, &rule);
+        assert_eq!(view.standing(bob.id).0, MemberStanding::Revoked);
+        assert_eq!(view.standing(carol.id).0, MemberStanding::Verified);
+        assert!(view.signers().unwrap().contains(&alice.public()));
+        let alone = Log::walk_under(DOC, anchor(&channel), &channel, &LogRule::document());
+        assert_eq!(alone.standing(bob.id).0, MemberStanding::Verified);
+        assert!(!alone.signers().unwrap().contains(&alice.public()));
+    }
+
+    /// The space speaks from its latest entries (the Murmure spaces spec). A
+    /// removal a later join undid removes no one from a channel. A member of
+    /// the space alone stays unverified in a channel that holds no entry of
+    /// theirs.
+    #[test]
+    fn a_space_word_follows_its_latest_entries_and_adds_no_member() {
+        let (alice, bob, carol, dave) = (
+            Person::new(1),
+            Person::new(2),
+            Person::new(3),
+            Person::new(4),
+        );
+        let mut space = created(&alice, &bob);
+        append(
+            &mut space,
+            &alice,
+            &bob,
+            MembershipAct::Revoke,
+            Role::Editor,
+        );
+        append(
+            &mut space,
+            &alice,
+            &bob,
+            MembershipAct::Invite,
+            Role::Viewer,
+        );
+        append(
+            &mut space,
+            &alice,
+            &dave,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        let word = SpaceWord::of(&walk(&space));
+        assert!(word.removed.is_empty(), "the join undid the removal");
+
+        let channel = created(&carol, &bob);
+        let rule = LogRule {
+            self_join: public_channel_self_join,
+            space: Some(word),
+        };
+        let view = Log::walk_under(DOC, anchor(&channel), &channel, &rule);
+        assert_eq!(view.standing(bob.id).0, MemberStanding::Verified);
+        assert_eq!(view.standing(alice.id).0, MemberStanding::Unverified);
+        assert_eq!(view.standing(dave.id), (MemberStanding::Unverified, None));
     }
 }

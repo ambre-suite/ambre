@@ -24,7 +24,7 @@ that component's prefix instead.
 | `ZK-002` | `INV` | No symmetric key material MUST be nameable in a wire type. | README pillar "Zero-Knowledge" | crate-graph -- `ambre-protocol` depends on `ambre-core` alone; cargo-deny -- `deny.toml` refuses any dependant of `ambre-crypto` outside `ambre-sync` and `ambre-logic`, so the edit that would make a key type nameable fails CI | none | verified |
 | `ZK-003` | `INV` | Passphrase-to-key derivation (Argon2id) MUST run client-side only. | `ambre-spec-session.md`, `SRV-030`; this spec section 2 | cargo-deny -- `deny.toml` bans `argon2` outside `ambre-crypto`, and the CI `deny` job fails the manifest that declares it | none | verified |
 | `ZK-004` | `INV` | The server process MUST NOT link a crate able to decrypt a document payload, derive a shared secret, or reconstruct a split secret. | this spec section 2; `ambre-spec-server.md`, `SRV-012` | cargo-deny -- the capability bans on `chacha20poly1305`, `x25519-dalek`, `argon2`, `ambre-crypto` and `loro`, run by the CI `deny` job. The three unused declarations that violated this were dropped from `ambre-server` | none | verified |
-| `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral frame and opens it, so an unsealed one fails the assertion | none | verified |
+| `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral and opens it, so an unsealed one fails the assertion | none | verified |
 | `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | type-level -- the relay holds every payload in a `Payload`, which has no `Debug` and no `Display` (`ambre-spec-server.md`, `SRV-001`); `ambre_protocol::messages::validate_tests::a_message_debug_form_prints_no_byte_of_its_ciphertext` -- a wire message prints each ciphertext as its length; ci-gate -- `scripts/crate_boundaries.py` refuses a log line in a relay file that reads a payload's or a ciphertext's bytes | none | verified |
 | `ZK-017` | `INV` | The debug form of a sealed envelope MUST print its ciphertext length and none of its bytes. | `ZK-006`; audit `C1` | `ambre_crypto::tests::an_envelope_debug_form_prints_no_byte_of_it` | none | verified |
 | `ZK-007` | `INV` | What a sealed envelope shows the relay MUST be limited to `{document_id, pub_key, key_id, snapshot_id, clock, counter, nonce, commitment tag, signature, parent snapshot proof, parent clocks}`. Beyond it, the relay learns only `{seq, blob size, timestamp, source IP}`. | this spec section 2, the boundary table and its accepted leak | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- it destructures every envelope without `..`, so a new field fails to compile until a writer weighs it here | none | verified |
@@ -33,23 +33,23 @@ that component's prefix instead.
 | `ZK-010` | `INV` | A passphrase MUST cross the client bus in a type that wipes its own bytes when it is dropped. | README pillar "Zero-Knowledge"; audit `H4`, `H5` | type-level -- `RestCommand::Unlock`, `SetupAccount`, `ChangePassphrase` and `RecoverAccount` carry `SecretBytes`, a `Zeroizing` newtype, so a plain `Vec<u8>` on that path does not compile | none | verified |
 | `ZK-011` | `INV` | The Master Seed MUST be moved and never copied: a path MUST NOT leave a second copy behind. | this spec section 2; derived | type-level -- `MasterSeed` derives no `Clone`, so a duplicate is a compile error rather than a review finding | none | verified |
 | `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a serialized struct of the worker crates that names a passphrase field or carries a `Secret` type | none | verified |
-| `ZK-013` | `INV` | The relay MUST see no field of an ephemeral frame beyond `document_id`, `pub_key`, `key_id` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- the ephemeral public data destructures to exactly these four fields | none | verified |
+| `ZK-013` | `INV` | The relay MUST see no field of an ephemeral beyond `document_id`, `pub_key`, `key_id` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- the ephemeral public data destructures to exactly these four fields | none | verified |
 | `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- a configured lifetime of one day signs both URLs for 900 s | none | verified |
-| `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, the space of the channel, its public flag, the state and finalization time of each segment, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, the space of the channel, its public flag, the state of each segment with its close time, its finalization time, its finalize lease and the horizon and identifier of its final snapshot, whether a rotation retired its key, the segment each amendments document amends, the identifier of the root message of each thread, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::the_channel_tables_hold_only_what_the_relay_may_learn` -- database tier | none | verified |
 | `ZK-016` | `INV` | What the relay learns for a push notification MUST be limited to `{the push subscription of each device, the notification level of each member per channel, the members or the channel a message names}`. | this spec section 2; `5-Murmure/features/ambre-spec-murmure-notifications.md` | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `ZK-018` | `INV` | What the relay learns of a user in the clear MUST be limited to `{the address and whether a provider verified it, the display name, the avatar picture, the provider and its subject, the two public keys}`. | this spec section 2; `ambre-spec-session.md section 3`; `ambre-spec-profile.md section 3` | `ambre_server::db::users::tests::the_account_table_holds_only_what_the_relay_may_learn` -- database tier, and beside these fields it finds only the identifier the relay mints and the sealed key material | none | verified |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 15 `verified`, 2 `unimplemented`. Every row is an `INV`. This
-  document owns no gesture, so it declares no operation table, and each rule binds the boundary at
-  every instant.
+* **Verification.** 17 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
+  gesture, so it declares no operation table, and each rule binds the boundary at every instant.
 
   Six rows hold, and they hold because the crate graph, `deny.toml` and the type system can refuse
   them. No key type is nameable on the wire, no `argon2` sits outside `ambre-crypto`, no decrypting
-  crate is linked into the relay. No presence frame leaves unsealed, no passphrase sits in a type
+  crate is linked into the relay. No presence sample leaves unsealed, no passphrase sits in a type
   that does not wipe itself, and no seed is copied.
 
   What is loose is every rule stated as an absence. `ZK-001` covers the nominal path and forbids no
@@ -94,7 +94,7 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
   a given instant. That is the metadata of the table above, read as a pattern.
 * **Accepted:** the membership graph. The relay knows which public keys are members of which
   document, readers included. For a Murmure channel, that graph shows who talks with whom.
-  * The relay needs the graph to route a frame and to refuse a non-member.
+  * The relay needs the graph to route a wire message and to refuse a non-member.
   * A subscription reveals the graph anyway, so a sealed membership list would hide nothing.
   * The leak stops at the graph. A document identifier is a UUID v7 minted on the client: a
     timestamp and random bits, never derived from a name.
@@ -105,8 +105,13 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
   * The signed membership log repeats that graph with a signature on each act, so a client can check
     it (`SYNC-132`). It teaches the relay nothing it did not hold.
 * **Accepted, for a Murmure channel only:** the grouping of its documents and the few facts the
-  relay needs to finalize and to expire them (`ZK-015`). The relay never learns the kind of an
-  update: the activity summary is sealed (`SYNC-113`).
+  relay needs to finalize and to expire them (`ZK-015`). It also learns which locked segment was
+  amended, since it keeps one amendments document per segment (`SRV-202`). It flags the segments
+  a rotation of `meta` left open, a fact its key links already hold (`SRV-147`). The relay never learns
+  the kind of an update: the activity summary is sealed (`SYNC-113`).
+* **Accepted, for an account:** the address, the display name and the avatar picture, in the clear
+  (`ZK-018`). The relay shows a member list to its members, and the picture is one the user chose
+  to show. It serves a picture only to a user who shares a document with its owner (`PROFILE-009`).
 * **Accepted, for a push notification only:** the level of each member per channel, and who a
   message names. Web Push requires a visible notification for every push, so the relay must choose
   who to wake (`ZK-016`).
@@ -126,7 +131,7 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
 * The Logic to Sync `postMessage` hop carries **decrypted** deltas. That internal boundary is accepted,
   because a structured clone stays inside the user's own browser process. The Main instance compiles
   no cryptography, so the keys live only in the Sync worker's own memory.
-* Presence and cursor frames are sealed before they leave, exactly like a delta (`ZK-005`).
+* Presence and cursor samples are sealed before they leave, exactly like a delta (`ZK-005`).
 
 **The primitives** all execute in the Sync worker, the sole consumer of `ambre-crypto`.
 XChaCha20-Poly1305 for AEAD, Ed25519 for signatures, X25519 for key agreement. BLAKE2b for
@@ -201,7 +206,7 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | The membership graph is an accepted leak | hiding membership from the relay, through a fan-out by the sender or anonymous credentials | the relay then has no subscription check and no targeted push, and each message costs one send per member. A document suite gains too little for that cost, so the graph is written down instead |
 | The media address is a defect, not a second accepted leak | widening the whitelist of `ZK-007` to cover the address | the address is a hash of plaintext, so it answers "does this document contain this file" for any file the relay already holds. That is a capability, not metadata, and accepting it would put a capability inside a list that bounds metadata |
 | The escrow is opt-in and organization-scoped | a platform-wide key escrow for account recovery | a recovery path an owner can use without the member's consent is a second key holder, so it may exist only where an organization already claims that authority, and never for a personal account |
-| A key identifier is accepted in the `ZK-007` set | keeping every key identifier sealed | the relay could then neither refuse a frame under a stale key nor keep the links of a key chain in order |
+| A key identifier is accepted in the `ZK-007` set | keeping every key identifier sealed | the relay could then neither refuse an envelope under a stale key nor keep the links of a key chain in order |
 
 ---
 

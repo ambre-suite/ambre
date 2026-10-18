@@ -40,7 +40,7 @@ pub fn block_id(id: TreeID) -> BlockId {
 /// What one command answers with (`PROSE-046`).
 ///
 /// One value carries every display event the command produced, the delta it
-/// exported and the presence frame it built. A handler sends on no channel: the
+/// exported and the presence sample it built. A handler sends on no channel: the
 /// dispatcher fans this out (`PROSE-024`, `PROSE-062`).
 #[derive(Debug, Default)]
 pub struct ProseOutcome {
@@ -48,7 +48,7 @@ pub struct ProseOutcome {
     /// The CRDT delta to seal and broadcast. `None` when the command wrote
     /// nothing (`PROSE-047`).
     pub update: Option<Vec<u8>>,
-    /// The presence frame to seal and broadcast.
+    /// The presence sample to seal and broadcast.
     pub ephemeral: Option<Vec<u8>>,
 }
 
@@ -59,7 +59,7 @@ impl ProseOutcome {
         Self::default()
     }
 
-    /// An outcome that repaints the local view alone: no delta, no frame.
+    /// An outcome that repaints the local view alone: no delta, no sample.
     #[must_use]
     pub fn display_only(display: Vec<ProseEvent>) -> Self {
         Self {
@@ -69,7 +69,7 @@ impl ProseOutcome {
         }
     }
 
-    /// An outcome that broadcasts a presence frame alone. The local caret is
+    /// An outcome that broadcasts a presence sample alone. The local caret is
     /// drawn by the view itself, so nothing repaints here.
     #[must_use]
     pub fn ephemeral_only(ephemeral: Vec<u8>) -> Self {

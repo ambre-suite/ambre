@@ -1584,9 +1584,7 @@ mod handler_tests {
         .unwrap();
         assert!(user.master_key_enc.is_none());
         assert!(user.signing_pubkey.is_none() && user.exchange_pubkey.is_none());
-        let user_id =
-            ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
-        let tokens = crate::auth::issue_session(&state, user_id, None)
+        let tokens = crate::auth::issue_session(&state, user.id, None)
             .await
             .unwrap();
         let setup = format!("Bearer {}", tokens.access_token);
@@ -1699,7 +1697,7 @@ mod handler_tests {
              VALUES ($1, $2, 'viewer', $3)",
         )
         .bind(uuid::Uuid::parse_str(&doc_id).unwrap())
-        .bind(keyless.id)
+        .bind(crate::db::id_to_uuid(keyless.id))
         .bind(vec![9u8; 32])
         .execute(&state.db)
         .await
@@ -1710,7 +1708,7 @@ mod handler_tests {
             "UPDATE users SET master_key_enc = $2, master_key_salt = $3, \
              signing_pubkey = $4, exchange_pubkey = $5 WHERE id = $1",
         )
-        .bind(keyless.id)
+        .bind(crate::db::id_to_uuid(keyless.id))
         .bind(vec![1u8; 56])
         .bind(vec![2u8; 16])
         .bind(vec![5u8; 32])
@@ -1745,7 +1743,7 @@ mod handler_tests {
             .await
             .unwrap();
         let half = sqlx::query("UPDATE users SET signing_pubkey = $2 WHERE id = $1")
-            .bind(user.id)
+            .bind(crate::db::id_to_uuid(user.id))
             .bind(vec![5u8; 32])
             .execute(&pool)
             .await;
@@ -1763,9 +1761,7 @@ mod handler_tests {
             crate::db::upsert_user_from_oidc(&state.db, "google", "sub-4", "d@example.com", "D")
                 .await
                 .unwrap();
-        let user_id =
-            ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
-        let tokens = crate::auth::issue_session(&state, user_id, None)
+        let tokens = crate::auth::issue_session(&state, user.id, None)
             .await
             .unwrap();
         assert_eq!(first_close_code(state, &tokens.access_token).await, 4403);
@@ -1836,7 +1832,48 @@ mod handler_tests {
         };
         let answer = ambre_protocol::ws::decode_server_msg(&bytes).unwrap();
         assert!(
-            matches!(answer, WsServerMsg::Error { code: 403, .. }),
+            matches!(
+                answer,
+                WsServerMsg::Error {
+                    code: ambre_core::RefusalCode::Forbidden,
+                    ..
+                }
+            ),
+            "{answer:?}"
+        );
+    }
+
+    /// `SRV-183`: a frame that does not decode concerns no document, and its
+    /// refusal names none. The socket stays open.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_frame_that_does_not_decode_is_refused_for_no_document(pool: sqlx::PgPool) {
+        use futures_util::SinkExt;
+        use tokio_tungstenite::tungstenite::Message;
+
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let token = auth.trim_start_matches("Bearer ");
+        let mut socket = open_socket(state, "").await;
+        socket
+            .send(Message::Binary(authenticate(token).into()))
+            .await
+            .unwrap();
+        let mut garbage = encode_client_msg(&WsClientMsg::Subscribe {
+            document_id: ambre_core::DocumentId::new(),
+        });
+        garbage[1] = 0xff;
+        socket.send(Message::Binary(garbage.into())).await.unwrap();
+        let answer = next_server_msg(&mut socket).await;
+        assert!(
+            matches!(
+                answer,
+                Some(WsServerMsg::Error {
+                    document_id: None,
+                    code: ambre_core::RefusalCode::BadRequest,
+                })
+            ),
             "{answer:?}"
         );
     }
@@ -1866,8 +1903,8 @@ mod handler_tests {
         let mut victim = subscribed_socket(&url, &owner, document_id).await;
         let mut watcher = subscribed_socket(&url, &peer, document_id).await;
 
-        let panic_frame = WsClientMsg::UnsubscribeChannel {
-            channel_id: crate::ws::PANIC_CHANNEL,
+        let panic_frame = WsClientMsg::Unsubscribe {
+            document_id: crate::ws::PANIC_DOCUMENT,
         };
         victim
             .send(Message::Binary(encode_client_msg(&panic_frame).into()))
@@ -2046,7 +2083,11 @@ mod handler_tests {
                 None => break None,
             }
         };
-        assert_eq!(answer, Some(403), "the socket is still answered");
+        assert_eq!(
+            answer,
+            Some(ambre_core::RefusalCode::Forbidden),
+            "the socket is still answered"
+        );
     }
 
     /// The next message the server sends on `socket`, or `None` once the
@@ -2849,14 +2890,14 @@ mod handler_tests {
 
         let confirm = format!("/api/documents/{doc_id}/snapshots/{snap}/confirm");
         let status = post_json(&app, &owner, confirm.clone(), serde_json::json!({})).await;
-        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(status, StatusCode::OK);
         let served = served_snapshot(&app, &owner, &doc_id).await.unwrap();
         assert_eq!(served["status"], "self");
         assert_eq!(served["snapshot_id"], snap.as_str());
         assert!(served["reference"].is_null());
 
         let status = post_json(&app, &checker, confirm, serde_json::json!({})).await;
-        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(status, StatusCode::OK);
         let served = served_snapshot(&app, &checker, &doc_id).await.unwrap();
         assert_eq!(served["status"], "confirmed");
 
@@ -3015,8 +3056,8 @@ mod handler_tests {
     }
 
     /// `SRV-088`: a removal tells the person removed, on their own topic. The
-    /// document's topic and the member who stays learn only that a key is
-    /// owed, which names nobody.
+    /// document's topic and the member who stays learn only that the members
+    /// changed and that a key is owed. Neither names anybody.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_removal_reaches_the_person_removed_alone(pool: sqlx::PgPool) {
@@ -3084,7 +3125,10 @@ mod handler_tests {
         ));
         assert!(matches!(
             heard.remove(&topics[0]).unwrap_or_default().as_slice(),
-            [WsServerMsg::KeyRotationRequired { .. }]
+            [
+                WsServerMsg::MembersChanged { .. },
+                WsServerMsg::KeyRotationRequired { .. }
+            ]
         ));
         assert!(
             heard.is_empty(),
@@ -3573,6 +3617,63 @@ mod handler_tests {
         );
     }
 
+    /// The next message the relay published on `stream`, decoded. Panics past
+    /// a second, so a missing broadcast fails the test rather than hanging it.
+    async fn next_broadcast(
+        stream: &mut rustis::client::PubSubStream,
+    ) -> ambre_protocol::ws::WsServerMsg {
+        use futures_util::StreamExt;
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(1), stream.next())
+            .await
+            .expect("a broadcast within a second")
+            .expect("an open stream")
+            .expect("a message");
+        ambre_protocol::ws::decode_server_msg(msg.payload()).expect("a server message")
+    }
+
+    /// SRV-177: an invitation, a change of role and a removal each tell the
+    /// connections subscribed to the document that its members changed. The
+    /// message names the document alone.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_change_of_members_reaches_the_subscribers_of_the_document(pool: sqlx::PgPool) {
+        use ambre_protocol::ws::WsServerMsg;
+        use rustis::commands::PubSubCommands;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let document_id = ambre_core::DocumentId::parse_str(&doc_id).expect("a document id");
+        // A connection of its own: a subscriber sharing the relay's client
+        // would desynchronise its replies (see `PubSubHub`).
+        let subscriber = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .expect("redis");
+        let mut stream = subscriber
+            .subscribe(format!("doc:{doc_id}"))
+            .await
+            .expect("a subscription");
+        let changed =
+            |msg| matches!(msg, WsServerMsg::MembersChanged { document_id: d } if d == document_id);
+
+        setup_named(&app, "joiner@test.com", 93).await;
+        invite(&app, &owner, &doc_id, "joiner@test.com", "viewer").await;
+        assert!(changed(next_broadcast(&mut stream).await));
+
+        let joiner_id = doc_user_id(&state, "joiner@test.com").await;
+        assert_eq!(
+            patch_role_status(&app, &owner, &doc_id, &joiner_id, "editor").await,
+            StatusCode::OK
+        );
+        assert!(changed(next_broadcast(&mut stream).await));
+
+        assert_eq!(
+            revoke_status(&app, &owner, &doc_id, &joiner_id).await,
+            StatusCode::OK
+        );
+        assert!(changed(next_broadcast(&mut stream).await));
+    }
+
     /// The links a member reads back, oldest first.
     async fn key_links(app: &Router, auth: &str, doc_id: &str) -> Vec<String> {
         let resp = app
@@ -3600,8 +3701,9 @@ mod handler_tests {
 
     /// `SYNC-117`, `SYNC-118`: every rotation's link is kept, in the order
     /// the rotations landed. Three rotations are refused whole, with no copy
-    /// changed. One link does not chain from the last key, one belongs to
-    /// another document, and one is missing. A non-member reads no link.
+    /// changed. One link does not chain from the last key (`SRV-193`), one
+    /// belongs to another document, and one is missing. A non-member reads
+    /// no link.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn the_relay_keeps_every_link_in_rotation_order(pool: sqlx::PgPool) {

@@ -62,6 +62,25 @@ pub async fn second_instance(base: &AppState) -> Arc<AppState> {
     })
 }
 
+/// Whether the register of deletes still marks `document`.
+pub async fn deletion_marked(pool: &PgPool, document: ambre_core::DocumentId) -> bool {
+    sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (SELECT 1 FROM document_deletions WHERE document_id = $1)",
+    )
+    .bind(uuid::Uuid::from_bytes(*document.as_bytes()))
+    .fetch_one(pool)
+    .await
+    .expect("deletion register")
+}
+
+/// Makes the second sweep of every marked delete due now.
+pub async fn make_sweeps_due(pool: &PgPool) {
+    sqlx::query("UPDATE document_deletions SET sweep_due = 0")
+        .execute(pool)
+        .await
+        .expect("sweep due");
+}
+
 /// Creates a test user directly in the database (bypasses OIDC flow).
 pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId {
     let user = db::create_user(
@@ -75,7 +94,7 @@ pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId 
     )
     .await
     .expect("failed to create test user");
-    ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()))
+    user.id
 }
 
 /// Like the state given, with another S3 client.
@@ -326,13 +345,19 @@ pub async fn create_test_document(
     owner_id: ambre_core::UserId,
     doc_type: &str,
 ) -> ambre_core::DocumentId {
+    let doc_type = doc_type.parse().expect("a document type word");
     let (doc, _created) = db::create_document(pool, &owner_id, doc_type, None, None)
         .await
         .expect("failed to create test document");
-    let doc_id =
-        ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));
+    let doc_id = doc.id;
     db::add_document_member(
-        pool, &doc_id, &owner_id, "owner", &[5u8; 32], &owner_id, None,
+        pool,
+        &doc_id,
+        &owner_id,
+        ambre_core::Role::Owner,
+        &[5u8; 32],
+        &owner_id,
+        None,
     )
     .await
     .expect("failed to add owner member");

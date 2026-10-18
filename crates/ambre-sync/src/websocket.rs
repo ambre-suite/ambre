@@ -1,6 +1,34 @@
 use super::*;
 use crate::rekey::Refusal;
+use ambre_core::RefusalCode;
 use ambre_protocol::ws::AccessToken;
+
+/// The delay before Sync asks again for the first stopped replay of a
+/// document. Each later stop doubles it (`ambre-spec-budgets.md` section 8).
+const REPLAY_RETRY_BASE_MS: u64 = 1_000;
+
+/// The stops Sync asks again after. One more reaches Logic as an error
+/// (`ambre-spec-budgets.md` section 8, `SYNC-154`).
+const REPLAY_RETRY_LIMIT: u32 = 5;
+
+/// The delay before asking again after the `stop`-th stop of one replay,
+/// counted from one. Past the budget there is none (`SYNC-154`).
+fn replay_retry_delay_ms(stop: u32) -> Option<u64> {
+    (1..=REPLAY_RETRY_LIMIT)
+        .contains(&stop)
+        .then(|| REPLAY_RETRY_BASE_MS << (stop - 1))
+}
+
+/// The stops of one document's replay since its budget last started.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ReplayStops {
+    /// The stops counted against the budget, from one.
+    count: u32,
+    /// The last delta the latest stop named.
+    after: Seq,
+    /// The ticket of the timer armed for the latest stop, if any.
+    ticket: u64,
+}
 
 /// The socket address. It carries no credential: the token travels in the
 /// socket's first frame, so no log line, proxy record or URL holds it
@@ -82,6 +110,9 @@ impl SyncState {
     /// (after a network drop or a silent reauth). Local-only documents are not
     /// subscribed here -- they subscribe after lazy creation materializes them.
     pub(crate) fn resubscribe_all(&mut self) {
+        // Each replay below starts afresh, so its stops count from zero
+        // (`SYNC-154`).
+        self.replay_stops.clear();
         for (doc_id, last_seq) in self
             .documents
             .iter()
@@ -244,6 +275,109 @@ impl SyncState {
     #[cfg(not(target_arch = "wasm32"))]
     fn arm_reconnect_timer(&mut self, _delay_ms: u64) {}
 
+    /// Asks the worker's timers for `event` in `delay_ms`, such as a
+    /// [`SyncEvent::ReplayRetry`]. The closure runs once and frees itself, so
+    /// several documents can wait at once.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn arm_event_timer(&self, event: SyncEvent, delay_ms: u64) {
+        use wasm_bindgen::JsCast;
+
+        let Some(tx) = self.event_tx.clone() else {
+            return;
+        };
+        let cb = Closure::once_into_js(move || {
+            let _ = tx.send(event);
+        });
+        if let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() {
+            let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
+                cb.unchecked_ref(),
+                i32::try_from(delay_ms).unwrap_or(i32::MAX),
+            );
+        }
+    }
+
+    /// Native: no timer. A host test sends the event itself.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn arm_event_timer(&self, _event: SyncEvent, _delay_ms: u64) {}
+
+    /// The relay stopped a replay. Ask again after a delay that doubles at
+    /// each stop (`SYNC-153`). A stop past the one before starts the budget
+    /// again (`SYNC-158`). Past the budget, report it once and wait for the
+    /// next reconnect (`SYNC-154`).
+    fn replay_stopped(&mut self, document_id: DocumentId, after_seq: Seq) {
+        let stop = match self.replay_stops.get(&document_id) {
+            Some(last) if after_seq <= last.after => last.count.saturating_add(1),
+            _ => 1,
+        };
+        tracing::warn!("Sync: replay of {document_id:?} stopped after {after_seq:?} (stop {stop})");
+        let delay = replay_retry_delay_ms(stop);
+        if delay.is_some() {
+            self.replay_ticket += 1;
+        }
+        self.replay_stops.insert(
+            document_id,
+            ReplayStops {
+                count: stop,
+                after: after_seq,
+                ticket: self.replay_ticket,
+            },
+        );
+        if let Some(delay_ms) = delay {
+            let retry = SyncEvent::ReplayRetry {
+                document_id,
+                ticket: self.replay_ticket,
+            };
+            self.arm_event_timer(retry, delay_ms);
+        } else if stop == REPLAY_RETRY_LIMIT + 1 {
+            let message = format!("replay of {document_id:?} stopped {stop} times");
+            // A first replay given up is an open that failed: no ready would
+            // ever follow it, and nothing of the document is kept (`SYNC-157`).
+            let opening = self
+                .documents
+                .get(&document_id)
+                .is_some_and(|doc| doc.awaiting_initial_hydration);
+            if opening {
+                self.handle_close_document(document_id);
+                self.replay_stops.remove(&document_id);
+                self.send_to_logic(LogicEvent::DocumentOpenFailed {
+                    document_id,
+                    message,
+                });
+            } else {
+                self.send_to_logic(LogicEvent::ApiError {
+                    id: None,
+                    request: "websocket".into(),
+                    code: RefusalCode::InternalError.status(),
+                    message,
+                });
+            }
+        }
+    }
+
+    /// A replay timer fired. A later stop or a reconnect since it was armed
+    /// makes it stale. Otherwise ask again from the document's own cursor,
+    /// which the delivered part of the replay already advanced (`SYNC-153`).
+    fn retry_replay(&mut self, document_id: DocumentId, ticket: u64) {
+        let live = self
+            .replay_stops
+            .get(&document_id)
+            .is_some_and(|stops| stops.ticket == ticket && stops.count <= REPLAY_RETRY_LIMIT);
+        if !live {
+            return;
+        }
+        let cursor = match self.documents.get(&document_id) {
+            Some(doc) if doc.server_created => Some(doc.last_seq),
+            Some(_) => None,
+            None => self.light_cursor(document_id),
+        };
+        if let Some(after_seq) = cursor {
+            self.ws_send(&WsClientMsg::RequestMissing {
+                document_id,
+                after_seq,
+            });
+        }
+    }
+
     /// Silently renews the access token after a WS auth rejection (close
     /// [`WS_CLOSE_UNAUTHORIZED`]) and signals the outcome via
     /// [`SyncEvent::Reauthenticated`]. Runs the refresh off the select loop so it
@@ -401,6 +535,14 @@ impl SyncState {
                 let next = self.lifecycle.poll((self.clock)());
                 self.follow(next);
             }
+            SyncEvent::ReplayRetry {
+                document_id,
+                ticket,
+            } => self.retry_replay(document_id, ticket),
+            SyncEvent::ResendRetry {
+                document_id,
+                ticket,
+            } => self.resend_failed(document_id, ticket),
             SyncEvent::SessionReady {
                 id,
                 user_id,
@@ -621,7 +763,187 @@ impl SyncState {
                 message,
             } => {
                 tracing::error!("Sync: open document {document_id:?} failed: {message}");
-                self.send_to_logic(LogicEvent::AuthError { message });
+                self.send_to_logic(LogicEvent::DocumentOpenFailed {
+                    document_id,
+                    message,
+                });
+            }
+            SyncEvent::ChannelListed {
+                channel_id,
+                listed_in,
+                result,
+            } => {
+                self.channel_listed(channel_id, listed_in, result);
+            }
+            SyncEvent::LogWalked { document_id, word } => {
+                if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                    doc_state.word = word;
+                }
+            }
+            SyncEvent::ChannelRotated {
+                space_id,
+                channel_id,
+                result,
+            } => self.channel_rotated(space_id, channel_id, result),
+            SyncEvent::ActivityFetched { result } => self.activity_fetched(result),
+            SyncEvent::SpaceChannelsListed { space_id, result } => {
+                self.space_channels_listed(space_id, result);
+            }
+            SyncEvent::MemberChannelsListed { asked, result } => {
+                self.member_channels_listed(asked, result);
+            }
+            SyncEvent::ChannelCreated { channel_id, result } => {
+                self.channel_answered(
+                    channel_id,
+                    result.map(|key| LogicEvent::ChannelCreated { channel_id, key }),
+                );
+            }
+            SyncEvent::ChannelJoined { channel_id, result } => {
+                self.channel_answered(
+                    channel_id,
+                    result.map(|()| LogicEvent::ChannelJoined { channel_id }),
+                );
+            }
+            SyncEvent::ChannelDeleted { channel_id, result } => {
+                self.channel_answered(
+                    channel_id,
+                    result.map(|()| LogicEvent::ChannelDeleted { channel_id }),
+                );
+            }
+            SyncEvent::ChannelLeft { channel_id, result } => {
+                self.channel_answered(
+                    channel_id,
+                    result.map(|()| LogicEvent::ChannelLeft { channel_id }),
+                );
+            }
+            SyncEvent::SegmentClosed {
+                channel_id,
+                closing,
+                result,
+            } => {
+                self.send_to_logic(match result {
+                    Ok((active, created)) => LogicEvent::SegmentClosed {
+                        channel_id,
+                        closing,
+                        active,
+                        created,
+                    },
+                    Err(message) => LogicEvent::SegmentCloseFailed {
+                        channel_id,
+                        closing,
+                        message,
+                    },
+                });
+            }
+            SyncEvent::AmendmentsLinked {
+                channel_id,
+                segment,
+                amendments,
+                result,
+            } => {
+                self.send_to_logic(match result {
+                    Ok(held) => LogicEvent::AmendmentsLinked {
+                        channel_id,
+                        segment,
+                        amendments: held,
+                    },
+                    Err(message) => LogicEvent::AmendmentsLinkFailed {
+                        channel_id,
+                        segment,
+                        amendments,
+                        message,
+                    },
+                });
+            }
+            SyncEvent::ThreadLinked {
+                channel_id,
+                segment,
+                root,
+                thread,
+                result,
+            } => {
+                self.send_to_logic(match result {
+                    Ok(held) => LogicEvent::ThreadLinked {
+                        channel_id,
+                        segment,
+                        root,
+                        thread: held,
+                    },
+                    Err(message) => LogicEvent::ThreadLinkFailed {
+                        channel_id,
+                        segment,
+                        root,
+                        thread,
+                        message,
+                    },
+                });
+            }
+            SyncEvent::FinalizeLeaseAnswered {
+                channel_id,
+                segment,
+                result,
+            } => match result {
+                Ok(answer) => self.send_to_logic(LogicEvent::FinalizeLeaseAnswered {
+                    channel_id,
+                    segment,
+                    answer,
+                }),
+                // A segment no longer closing, or whose snapshot another
+                // member sealed again, needs no lease from this client.
+                Err(message) => {
+                    let withdrawn = crate::http::is_conflict(&message);
+                    self.finalize_failed(channel_id, segment, withdrawn, &message);
+                }
+            },
+            SyncEvent::SegmentFinalized {
+                channel_id,
+                segment,
+                result,
+            } => match result {
+                Ok(()) => self.send_to_logic(LogicEvent::SegmentFinalized {
+                    channel_id,
+                    segment,
+                }),
+                Err(message) => self.finalize_failed(channel_id, segment, false, &message),
+            },
+            SyncEvent::FoldLeaseAnswered {
+                channel_id,
+                segment,
+                result,
+            } => match result {
+                Ok(answer) => self.send_to_logic(LogicEvent::FoldLeaseAnswered {
+                    channel_id,
+                    segment,
+                    answer,
+                }),
+                Err(message) => self.fold_failed(channel_id, segment, &message),
+            },
+            SyncEvent::SegmentFolded {
+                channel_id,
+                segment,
+                result,
+            } => match result {
+                Ok(()) => self.send_to_logic(LogicEvent::SegmentFolded {
+                    channel_id,
+                    segment,
+                }),
+                Err(message) => self.fold_failed(channel_id, segment, &message),
+            },
+            SyncEvent::AmendmentsFolded {
+                document_id,
+                amendments,
+            } => self.send_to_logic(LogicEvent::AmendmentsFolded {
+                document_id,
+                amendments,
+            }),
+            SyncEvent::DirectMessageOpened { requested, result } => {
+                self.channel_answered(
+                    requested,
+                    result.map(|channel_id| LogicEvent::DirectMessageOpened {
+                        requested,
+                        channel_id,
+                    }),
+                );
             }
             SyncEvent::DocumentMaterialized { document_id } => {
                 let pending = match self.documents.get_mut(&document_id) {
@@ -705,6 +1027,7 @@ impl SyncState {
                 link,
             } => {
                 self.install_key(document_id, new_doc_key, [link]);
+                self.send_to_logic(LogicEvent::KeyRotated { document_id });
                 self.reply(id, RestEvent::RevocationComplete { document_id });
             }
             SyncEvent::DocumentLeft { id, document_id } => {
@@ -719,12 +1042,16 @@ impl SyncState {
                 {
                     doc_state.rekey.found_debt();
                 }
+                self.drive_space_rotation(document_id);
             }
             SyncEvent::DebtSettled {
                 document_id,
                 new_doc_key,
                 link,
-            } => self.install_key(document_id, new_doc_key, [link]),
+            } => {
+                self.install_key(document_id, new_doc_key, [link]);
+                self.send_to_logic(LogicEvent::KeyRotated { document_id });
+            }
             SyncEvent::DebtGone { document_id } => self.fetch_rotated_key(document_id),
             SyncEvent::DebtUnsettled {
                 document_id,
@@ -737,23 +1064,49 @@ impl SyncState {
             }
             SyncEvent::DocumentMembersReady {
                 id,
+                asked,
                 document_id,
+                word,
+                rotation_owed,
                 members,
                 signing_keys,
             } => {
                 // Keep presence resolvable as membership evolves. A document that
                 // is not open locally has no session to refresh -- the next open
-                // rebuilds the directory from scratch.
-                if let Some(doc_state) = self.documents.get_mut(&document_id) {
-                    doc_state.set_signing_keys(signing_keys);
+                // rebuilds the directory from scratch. An answer older than the
+                // directory held changes nothing (`SYNC-037`).
+                let fresh = match self.documents.get_mut(&document_id) {
+                    Some(doc_state) if asked > doc_state.directory_held => {
+                        doc_state.directory_held = asked;
+                        doc_state.set_signing_keys(signing_keys);
+                        doc_state.word = word;
+                        // A leave owes a rotation the writer pays (`SYNC-128`).
+                        if rotation_owed && doc_state.role.can_write_document() {
+                            doc_state.rekey.found_debt();
+                        }
+                        true
+                    }
+                    _ => false,
+                };
+                if fresh {
+                    self.drive_space_rotation(document_id);
                 }
-                self.reply(
-                    id,
-                    RestEvent::DocumentMembers {
+                match id {
+                    Some(id) => self.reply(
+                        id,
+                        RestEvent::DocumentMembers {
+                            document_id,
+                            members,
+                        },
+                    ),
+                    // A refresh no view asked for: the view takes its rows
+                    // from this answer rather than asking again (`SYNC-151`).
+                    None if fresh => self.send_to_logic(LogicEvent::MembersChanged {
                         document_id,
                         members,
-                    },
-                );
+                    }),
+                    None => {}
+                }
             }
             SyncEvent::UserSearchReady { id, users } => {
                 self.reply(id, RestEvent::UserSearchResults { users });
@@ -831,20 +1184,44 @@ impl SyncState {
 
     // -- Inbound: Server -> Sync (WebSocket demux) -----------------------------
 
+    /// This user no longer reaches `document_id`. Close it here, and tell the
+    /// Logic thread they were removed from it, so the view reacts.
+    fn document_removed(&mut self, document_id: DocumentId) {
+        self.documents.remove(&document_id);
+        self.light.remove(&document_id);
+        if let Some(uid) = self.user_id {
+            self.send_to_logic(LogicEvent::MemberRevoked {
+                document_id,
+                revoked_user_id: uid,
+            });
+        }
+    }
+
     /// Demultiplex an inbound [`WsServerMsg`] received from the WebSocket.
     /// Decoding from wire bytes is done in the `onmessage` callback;
     /// this method receives the already-decoded message.
     #[allow(dead_code)]
     pub(crate) fn handle_ws_message(&mut self, server_msg: WsServerMsg) {
-        // Any frame from the server proves the connection is authenticated and
+        // Any wire message from the server proves the connection is authenticated and
         // live, so the reconnect backoff resets. A bare `onopen` is NOT enough:
         // an auth-rejected upgrade still returns 101 (then the server drops it),
-        // firing `onopen` without ever sending a frame. Resetting on `onopen`
+        // firing `onopen` without ever sending a message. Resetting on `onopen`
         // there would spin a tight reconnect loop (storm). A rejected connection
         // never reaches this point, so its backoff keeps growing as intended.
         self.lifecycle.frame();
         match server_msg {
             WsServerMsg::Subscribed { document_id } => {
+                // The relay's word that the members changed reaches this
+                // client only from here on. A change committed before it,
+                // after the open read its members or while the socket was
+                // down, is read now (`SYNC-150`).
+                if self
+                    .documents
+                    .get(&document_id)
+                    .is_some_and(|doc| doc.server_created)
+                {
+                    self.handle_list_document_members(None, document_id);
+                }
                 self.send_to_logic(LogicEvent::ConnectionStatus {
                     document_id,
                     connected: true,
@@ -885,8 +1262,8 @@ impl SyncState {
                 // Ed25519 key before delivery so a peer cannot spoof another
                 // user's cursor. The client-side key directory (member signing
                 // keys / trusted-keys) is not wired yet. An unattributable
-                // frame is dropped rather than shown under a guessed identity.
-                // Presence is best-effort; a dropped frame is corrected by the
+                // sample is dropped rather than shown under a guessed identity.
+                // Presence is best-effort; a dropped sample is corrected by the
                 // next one.
                 let Some(from_user_id) = doc_state.resolve_ephemeral_author(author_pk) else {
                     tracing::debug!(
@@ -923,6 +1300,32 @@ impl SyncState {
                 self.send_to_logic(LogicEvent::PeerLeft {
                     document_id,
                     user_id,
+                });
+            }
+
+            WsServerMsg::SnapshotDropped {
+                document_id,
+                author,
+                reporter,
+                refinalize,
+                ..
+            } => {
+                // Both keys resolve as a cursor's does: the member list names
+                // the user.
+                let Some(doc_state) = self.documents.get(&document_id) else {
+                    return;
+                };
+                // The author of the dropped snapshot would seal it again, so
+                // it leaves the segment to another member.
+                let own = self
+                    .signing_key
+                    .as_ref()
+                    .is_some_and(|key| key.verifying_key().to_bytes() == *author.as_array());
+                self.send_to_logic(LogicEvent::SnapshotDropped {
+                    document_id,
+                    author: doc_state.resolve_ephemeral_author(*author.as_array()),
+                    reporter: doc_state.resolve_ephemeral_author(*reporter.as_array()),
+                    refinalize: refinalize && !own,
                 });
             }
 
@@ -1023,19 +1426,30 @@ impl SyncState {
                 self.handle_clock_refused(document_id, expected.0, signature);
             }
 
+            WsServerMsg::DeltaRefused {
+                document_id,
+                signature,
+                code,
+            } => self.handle_delta_refused(document_id, signature, code),
+
+            WsServerMsg::MembersChanged { document_id } => {
+                // Only an open document holds a directory and a view; the next
+                // open reads the rows from scratch. The directory is read
+                // again here, whatever application holds the document, so a
+                // newcomer's samples resolve (`SYNC-037`). Its answer reaches
+                // the view too, which asks for nothing more (`SYNC-151`).
+                if self.documents.contains_key(&document_id) {
+                    self.handle_list_document_members(None, document_id);
+                }
+            }
+
+            WsServerMsg::ThreadActivity { document_id } => self.thread_activity(document_id),
+
             WsServerMsg::DocumentRevoked { document_id } => {
                 // The server removed us from this document (targeted push on our
-                // personal topic). Close it locally and tell the Logic thread we
-                // were revoked so the UI can react.
+                // personal topic).
                 tracing::info!("Sync: DocumentRevoked {document_id:?}");
-                self.documents.remove(&document_id);
-                self.light.remove(&document_id);
-                if let Some(uid) = self.user_id {
-                    self.send_to_logic(LogicEvent::MemberRevoked {
-                        document_id,
-                        revoked_user_id: uid,
-                    });
-                }
+                self.document_removed(document_id);
             }
 
             WsServerMsg::DocumentShared {
@@ -1047,39 +1461,47 @@ impl SyncState {
                     document_id,
                     doc_type,
                 });
+                // A channel reaches a new member as the share of its meta
+                // (`SRV-192`): the listing says which channel it is.
+                if doc_type == DocType::Murmure {
+                    self.handle_list_member_channels();
+                }
             }
 
-            WsServerMsg::ChannelSubscribed { channel_id } => {
-                self.send_to_logic(LogicEvent::ChannelConnectionStatus {
-                    channel_id,
-                    connected: true,
-                });
+            // Only a subscription is refused so: a removal missed while the
+            // socket was down (`SYNC-160`).
+            WsServerMsg::Error {
+                document_id: Some(document_id),
+                code: RefusalCode::Forbidden,
+            } if self.documents.contains_key(&document_id) => {
+                tracing::info!("Sync: subscription refused for {document_id}");
+                self.document_removed(document_id);
             }
-
-            WsServerMsg::ChannelUpdate {
-                channel_id,
-                seq: _,
-                update,
-            } => {
-                let _ = (channel_id, update);
+            // The relay erased a document still held here, as a fold erases
+            // its amendments: it is dropped and Logic settles it (`SYNC-167`).
+            WsServerMsg::Error {
+                document_id: Some(document_id),
+                code: RefusalCode::NotFound,
+            } if self.documents.contains_key(&document_id) => {
+                tracing::info!("Sync: {document_id} is gone from the relay");
+                self.documents.remove(&document_id);
+                self.light.remove(&document_id);
+                self.send_to_logic(LogicEvent::DocumentGone { document_id });
             }
-
-            WsServerMsg::ChannelEphemeral {
-                channel_id,
-                ephemeral,
-            } => {
-                let _ = (channel_id, ephemeral);
-            }
-
-            WsServerMsg::Error { code, message } => {
-                tracing::error!("Sync: server error {code}: {message}");
+            WsServerMsg::Error { document_id, code } => {
+                tracing::error!("Sync: socket refusal {code} for {document_id:?}");
                 self.send_to_logic(LogicEvent::ApiError {
                     id: None,
                     request: "websocket".into(),
-                    code,
-                    message,
+                    code: code.status(),
+                    message: format!("socket refusal {code} for {document_id:?}"),
                 });
             }
+
+            WsServerMsg::ReplayStopped {
+                document_id,
+                after_seq,
+            } => self.replay_stopped(document_id, after_seq),
         }
     }
 }
@@ -1095,6 +1517,7 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
+        let rule = self.log_rule(document_id);
         wasm_bindgen_futures::spawn_local(async move {
             let members_url =
                 format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
@@ -1129,7 +1552,7 @@ impl SyncState {
             // (`SYNC-117`). It counts only when a writer the log names
             // signed it (`SYNC-121`).
             let links = http::fetch_key_links(url_scheme, &api_base, document_id, auth).await;
-            let log = crate::sharing::walk_served(document_id, anchor, &resp.log);
+            let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, &rule);
             let links = crate::chain::signed_by_writers(links, log.signers());
             let _ = tx.send(SyncEvent::KeyRotated {
                 document_id,
@@ -1166,15 +1589,16 @@ impl SyncState {
 
 #[cfg(test)]
 mod tests {
-    use super::socket_address;
+    use super::{REPLAY_RETRY_LIMIT, replay_retry_delay_ms, socket_address};
     use crate::http::{SecretToken, TokenPair};
     use crate::{
         LogicEvent, LogicSink, SyncDocumentState, SyncEvent, SyncState, WS_CLOSE_SETUP_REQUIRED,
         WS_CLOSE_UNAUTHORIZED,
     };
     use ambre_bus::DocType;
-    use ambre_core::DocumentId;
+    use ambre_core::{DocumentId, RefusalCode, Seq};
     use ambre_crypto::{DocumentKey, MasterSeed};
+    use ambre_protocol::ws::{WsClientMsg, WsServerMsg, decode_client_msg};
 
     /// A worker holding one open document, and the queue of what it tells Logic.
     fn with_open_document() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
@@ -1376,6 +1800,7 @@ mod tests {
         state.handle_command(SyncCommand::SendUpdate {
             document_id: id,
             payload: b"typed during the hold".to_vec(),
+            summary: None,
         });
         assert_eq!(state.held_outbox.borrow().len(), 1, "the edit is kept");
 
@@ -1515,5 +1940,255 @@ mod tests {
     fn session_tokens_wipe_on_drop() {
         fn wipes_on_drop<T: zeroize::ZeroizeOnDrop>() {}
         wipes_on_drop::<SecretToken>();
+    }
+
+    /// A worker holding one relay document at seq 7, and its socket's wire.
+    fn with_relay_document() -> (
+        SyncState,
+        ambre_bus::conduit::Receiver<LogicEvent>,
+        ambre_bus::conduit::Receiver<Vec<u8>>,
+        DocumentId,
+    ) {
+        let (mut state, rx) = with_open_document();
+        let id = *state.documents.keys().next().unwrap();
+        let doc = state.documents.get_mut(&id).unwrap();
+        doc.server_created = true;
+        doc.last_seq = Seq(7);
+        let (tx, wire) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(tx);
+        (state, rx, wire, id)
+    }
+
+    fn stopped(document_id: DocumentId) -> SyncEvent {
+        stopped_after(document_id, 3)
+    }
+
+    fn stopped_after(document_id: DocumentId, after: u64) -> SyncEvent {
+        SyncEvent::WsMessage(WsServerMsg::ReplayStopped {
+            document_id,
+            after_seq: Seq(after),
+        })
+    }
+
+    fn retry(document_id: DocumentId, ticket: u64) -> SyncEvent {
+        SyncEvent::ReplayRetry {
+            document_id,
+            ticket,
+        }
+    }
+
+    /// The ticket of the timer armed for the latest stop of `id`.
+    fn armed(state: &SyncState, id: DocumentId) -> u64 {
+        state.replay_stops[&id].ticket
+    }
+
+    /// The stops counted against the budget of `id`.
+    fn counted(state: &SyncState, id: DocumentId) -> u32 {
+        state.replay_stops[&id].count
+    }
+
+    fn sent(wire: &ambre_bus::conduit::Receiver<Vec<u8>>) -> Vec<WsClientMsg> {
+        wire.try_iter()
+            .map(|bytes| decode_client_msg(&bytes).expect("decode"))
+            .collect()
+    }
+
+    /// `SYNC-153`: a stopped replay is asked again from the document's own
+    /// cursor once its timer fires, and not before. A timer a later stop
+    /// replaced asks nothing.
+    #[test]
+    fn a_stopped_replay_is_asked_again_from_the_cursor_when_its_timer_fires() {
+        let (mut state, _rx, wire, id) = with_relay_document();
+        state.handle_sync_event(stopped(id));
+        let first = armed(&state, id);
+        assert!(sent(&wire).is_empty(), "no retry before the timer");
+        state.handle_sync_event(stopped(id));
+        state.handle_sync_event(retry(id, first));
+        assert!(sent(&wire).is_empty(), "a stale timer asks nothing");
+        state.handle_sync_event(retry(id, armed(&state, id)));
+        let asked = sent(&wire);
+        assert_eq!(asked.len(), 1);
+        assert!(matches!(
+            asked[0],
+            WsClientMsg::RequestMissing { document_id, after_seq: Seq(7) } if document_id == id
+        ));
+    }
+
+    /// `SYNC-153`: the delay starts at 1 s and doubles. Five stops wait 31 s
+    /// in all, and a sixth arms no timer (`ambre-spec-budgets.md` section 8).
+    #[test]
+    fn the_replay_retry_delay_doubles_up_to_its_budget() {
+        let delays: Vec<Option<u64>> = (0..=6).map(replay_retry_delay_ms).collect();
+        assert_eq!(
+            delays,
+            [
+                None,
+                Some(1_000),
+                Some(2_000),
+                Some(4_000),
+                Some(8_000),
+                Some(16_000),
+                None
+            ]
+        );
+        assert_eq!(delays.iter().flatten().sum::<u64>(), 31_000);
+    }
+
+    /// `SYNC-154`: past its budget a stopped replay reaches Logic as one
+    /// error, and its timer asks nothing. A reopened socket counts afresh.
+    #[test]
+    fn a_replay_stopped_past_its_budget_reaches_logic_once() {
+        let (mut state, rx, wire, id) = with_relay_document();
+        for _ in 0..8 {
+            state.handle_sync_event(stopped(id));
+        }
+        let errors = rx
+            .try_iter()
+            .filter(|e| matches!(e, LogicEvent::ApiError { code: 500, .. }))
+            .count();
+        assert_eq!(errors, 1);
+        state.handle_sync_event(retry(id, armed(&state, id)));
+        assert!(sent(&wire).is_empty(), "no retry past the budget");
+
+        state.handle_sync_event(SyncEvent::WsOpened);
+        let _ = sent(&wire);
+        state.handle_sync_event(stopped(id));
+        assert_eq!(counted(&state, id), 1);
+        state.handle_sync_event(retry(id, armed(&state, id)));
+        assert!(matches!(
+            sent(&wire)[..],
+            [WsClientMsg::RequestMissing {
+                after_seq: Seq(7),
+                ..
+            }]
+        ));
+    }
+
+    /// `SYNC-157`: a first replay given up is an open that failed. The
+    /// document is let go, and neither a ready nor a generic error follows.
+    #[test]
+    fn a_first_replay_given_up_fails_the_open() {
+        let (mut state, rx, wire, id) = with_relay_document();
+        state
+            .documents
+            .get_mut(&id)
+            .unwrap()
+            .awaiting_initial_hydration = true;
+        for _ in 0..=REPLAY_RETRY_LIMIT {
+            state.handle_sync_event(stopped(id));
+        }
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(told[..], [LogicEvent::DocumentOpenFailed { document_id, .. }] if document_id == id),
+            "{told:?}"
+        );
+        assert!(!state.documents.contains_key(&id), "nothing of it is kept");
+        assert!(matches!(
+            sent(&wire)[..],
+            [WsClientMsg::Unsubscribe { document_id }] if document_id == id
+        ));
+    }
+
+    /// `SYNC-158`: a stop past the one before starts the budget again, so a
+    /// replay that keeps moving on is never given up. A stop at the same
+    /// delta, or before it, still counts. A timer armed before the reset
+    /// asks nothing after it.
+    #[test]
+    fn a_replay_that_moves_on_keeps_its_budget() {
+        let (mut state, rx, wire, id) = with_relay_document();
+        for after in 1..=12 {
+            state.handle_sync_event(stopped_after(id, after));
+            assert_eq!(counted(&state, id), 1, "stop after {after}");
+        }
+        assert_eq!(rx.try_iter().count(), 0, "a moving replay reports nothing");
+
+        let before_reset = armed(&state, id);
+        state.handle_sync_event(stopped_after(id, 12));
+        state.handle_sync_event(stopped_after(id, 11));
+        assert_eq!(counted(&state, id), 3);
+        state.handle_sync_event(stopped_after(id, 20));
+        assert_eq!(counted(&state, id), 1);
+        state.handle_sync_event(retry(id, before_reset));
+        assert!(sent(&wire).is_empty(), "a timer from before the reset");
+        state.handle_sync_event(retry(id, armed(&state, id)));
+        assert_eq!(sent(&wire).len(), 1);
+    }
+
+    /// `SYNC-160`: a subscription refused for want of access closes its
+    /// document and reports this user removed from it. Another code, or a
+    /// document not held here, stays a refusal.
+    #[test]
+    fn a_refused_resubscription_closes_its_document() {
+        let (mut state, rx, _wire, id) = with_relay_document();
+        let me = ambre_core::UserId::new();
+        state.user_id = Some(me);
+        let refused = |document_id, code| {
+            SyncEvent::WsMessage(WsServerMsg::Error {
+                document_id: Some(document_id),
+                code,
+            })
+        };
+
+        state.handle_sync_event(refused(id, RefusalCode::RateLimited));
+        state.handle_sync_event(refused(DocumentId::new(), RefusalCode::Forbidden));
+        assert!(state.documents.contains_key(&id));
+        state.handle_sync_event(refused(id, RefusalCode::Forbidden));
+        assert!(!state.documents.contains_key(&id));
+
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(
+                told[..],
+                [
+                    LogicEvent::ApiError { code: 429, .. },
+                    LogicEvent::ApiError { code: 403, .. },
+                    LogicEvent::MemberRevoked { document_id, revoked_user_id },
+                ] if document_id == id && revoked_user_id == me
+            ),
+            "{told:?}"
+        );
+    }
+
+    /// `SYNC-167`: a document the relay no longer holds is dropped and
+    /// reported gone. The same refusal for a document not held stays one.
+    #[test]
+    fn a_not_found_refusal_for_a_held_document_reports_it_gone() {
+        let (mut state, rx, _wire, id) = with_relay_document();
+        let refused = |document_id| {
+            SyncEvent::WsMessage(WsServerMsg::Error {
+                document_id: Some(document_id),
+                code: RefusalCode::NotFound,
+            })
+        };
+
+        state.handle_sync_event(refused(DocumentId::new()));
+        assert!(state.documents.contains_key(&id));
+        state.handle_sync_event(refused(id));
+        assert!(!state.documents.contains_key(&id));
+
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(
+                told[..],
+                [
+                    LogicEvent::ApiError { code: 404, .. },
+                    LogicEvent::DocumentGone { document_id },
+                ] if document_id == id
+            ),
+            "{told:?}"
+        );
+    }
+
+    /// `SRV-183`: a socket refusal reaches Logic with the status its code
+    /// answers.
+    #[test]
+    fn a_socket_refusal_reaches_logic_with_its_status() {
+        let (mut state, rx, _wire, id) = with_relay_document();
+        state.handle_sync_event(SyncEvent::WsMessage(WsServerMsg::Error {
+            document_id: Some(id),
+            code: RefusalCode::PayloadTooLarge,
+        }));
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(matches!(told[..], [LogicEvent::ApiError { code: 413, .. }]));
     }
 }

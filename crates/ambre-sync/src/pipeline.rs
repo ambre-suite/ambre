@@ -37,7 +37,7 @@ const COMPRESS_THRESHOLD: usize = 256;
 /// allocates.
 const MAX_DECOMPRESS_RATIO: usize = 200;
 
-/// Floor for the per-message decompression ceiling. Tiny legitimate frames (a
+/// Floor for the per-message decompression ceiling. Tiny legitimate messages (a
 /// few compressed bytes expanding to a normal delta) are never rejected by
 /// the ratio bound alone.
 const MIN_DECOMPRESS_CEILING: usize = 1 << 20; // 1 MiB
@@ -502,7 +502,7 @@ pub fn update_frame(
         .map(|update| SealedFrame(WsClientMsg::Update(update)))
 }
 
-/// Seals `payload` into an ephemeral frame, through [`seal_ephemeral`].
+/// Seals `payload` into an ephemeral, through [`seal_ephemeral`].
 ///
 /// # Errors
 ///
