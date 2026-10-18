@@ -5,8 +5,8 @@
 
 use super::app_root::MurmureShell;
 use ambre_bus::{
-    CatalogueEntry, CategoryView, ChannelActivity, ChannelPlace, LogicCommand, MemberChannel,
-    MentionCount, SpaceCommand, SpaceEvent, UiEvent, UnreadCount,
+    CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace, LogicCommand,
+    MemberChannel, MentionCount, SpaceCommand, SpaceEvent, UiEvent, UnreadCount,
 };
 use ambre_core::{CategoryId, ChannelId, MessageId, SegmentId, SpaceId};
 use ambre_murmure::chrome::MurmureRelay;
@@ -187,6 +187,7 @@ impl Acme {
         UiEvent::MemberChannels {
             channels,
             spaces: vec![self.space],
+            names: Vec::new(),
         }
     }
 
@@ -473,12 +474,33 @@ async fn the_sidebar_draws_its_sections_in_order() {
             "Direct message",
             "random"
         ],
-        "a private channel or a direct message not open shows no name yet"
+        "a private channel or a direct message the relay names nothing for"
     );
     let groups = frame.inner.query_selector_all(".murmure-section").unwrap();
     let last = groups.item(groups.length() - 1).unwrap();
     let last: web_sys::Element = last.dyn_into().unwrap();
     assert_eq!(last.get_attribute("data-group").as_deref(), Some("to-join"));
+}
+
+/// A private channel and a named direct message show their names before
+/// either opens, as the relay's listing carried them (`MURMURE-490`).
+#[wasm_bindgen_test]
+async fn a_named_channel_not_open_shows_its_name() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let mut listing = acme.members(&[]);
+    if let UiEvent::MemberChannels { names, .. } = &mut listing {
+        let named = |channel_id, name: &str| ChannelName {
+            channel_id,
+            name: name.to_owned(),
+        };
+        *names = vec![named(acme.board, "board"), named(acme.direct, "trip")];
+    }
+    assert!(frame.absorb(listing).await.is_empty());
+    assert_eq!(
+        frame.texts(".murmure-entry-name"),
+        ["general", "sales", "board", "trip", "random"]
+    );
 }
 
 /// A channel with activity shows the relay's mark before any count, then
@@ -608,6 +630,7 @@ async fn a_space_with_no_channel_of_the_user_shows_its_channels_to_join() {
     let alone = UiEvent::MemberChannels {
         channels: Vec::new(),
         spaces: vec![acme.space],
+        names: Vec::new(),
     };
     let opened = frame.absorb(alone.clone()).await;
     assert!(

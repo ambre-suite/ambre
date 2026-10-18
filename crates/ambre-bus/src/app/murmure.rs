@@ -108,6 +108,14 @@ pub struct MemberChannel {
     pub place: ChannelPlace,
 }
 
+/// The name a channel not yet open shows, read from the name sealed beside
+/// its `meta`. The name its `meta` holds replaces it once the channel opens.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelName {
+    pub channel_id: ChannelId,
+    pub name: String,
+}
+
 /// How many messages of a channel are past the reader's cursor. A distinct
 /// type, so a count of mentions never takes its place.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]

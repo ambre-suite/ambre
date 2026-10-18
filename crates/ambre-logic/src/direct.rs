@@ -446,7 +446,8 @@ mod tests {
     }
 
     /// A name leaves as a delta on `meta`, and the view gets it. Clearing it
-    /// leaves the view with no name.
+    /// leaves the view with no name. Each name is also sealed beside meta, so
+    /// it shows before the channel opens (the Murmure layout spec).
     #[test]
     fn a_name_leaves_on_meta_and_reaches_the_view() {
         let (mut state, ui_rx, sync_rx) = harness();
@@ -470,12 +471,14 @@ mod tests {
                     name: name.map(str::to_owned),
                 },
             });
+            let shown = shown.map(str::to_owned);
             assert!(matches!(
                 drain(&sync_rx).as_slice(),
-                [SyncCommand::SendUpdate { document_id, summary: None, .. }]
-                    if *document_id == meta.document_id()
+                [
+                    SyncCommand::SendUpdate { document_id, summary: None, .. },
+                    SyncCommand::NameChannel { meta: sealed, name: sealed_name },
+                ] if *document_id == meta.document_id() && *sealed == meta && *sealed_name == shown
             ));
-            let shown = shown.map(str::to_owned);
             assert!(matches!(
                 drain(&ui_rx).as_slice(),
                 [UiEvent::Channel {

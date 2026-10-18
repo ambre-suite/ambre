@@ -8,8 +8,8 @@
 use std::collections::HashMap;
 
 use ambre_bus::{
-    CatalogueEntry, CategoryView, ChannelActivity, ChannelPlace, MemberChannel, MentionCount,
-    UnreadCount,
+    CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace, MemberChannel,
+    MentionCount, UnreadCount,
 };
 use ambre_core::{CategoryId, ChannelId, SpaceId};
 
@@ -99,7 +99,11 @@ pub struct Sidebar {
     spaces: Vec<SpaceId>,
     catalogues: HashMap<SpaceId, Catalogue>,
     activity: HashMap<ChannelId, Activity>,
-    names: HashMap<ChannelId, String>,
+    /// What each open channel read in its meta, none when it holds no name.
+    names: HashMap<ChannelId, Option<String>>,
+    /// The names the relay's listing carried sealed, for channels not open
+    /// (`MURMURE-490`). What meta reads always wins over them.
+    hints: HashMap<ChannelId, String>,
 }
 
 impl Sidebar {
@@ -157,10 +161,15 @@ impl Sidebar {
 
     /// Take the name an open channel read.
     pub fn set_name(&mut self, channel: ChannelId, name: Option<String>) {
-        match name {
-            Some(name) => self.names.insert(channel, name),
-            None => self.names.remove(&channel),
-        };
+        self.names.insert(channel, name);
+    }
+
+    /// Take the names the relay's listing carried, whole.
+    pub fn set_hints(&mut self, hints: &[ChannelName]) {
+        self.hints = hints
+            .iter()
+            .map(|hint| (hint.channel_id, hint.name.clone()))
+            .collect();
     }
 
     /// Drop a channel the user left, or the relay deleted.
@@ -168,6 +177,7 @@ impl Sidebar {
         self.members.retain(|m| m.channel_id != channel);
         self.activity.remove(&channel);
         self.names.remove(&channel);
+        self.hints.remove(&channel);
     }
 
     /// Drop a space the user lost, with its catalogue and every channel of
@@ -200,9 +210,15 @@ impl Sidebar {
         self.members.iter().any(|m| m.channel_id == channel)
     }
 
-    /// The name the sidebar shows for a channel, if it knows one.
+    /// The name the sidebar shows for a channel, if it knows one. That is
+    /// what its meta read once open, else the relay's hint, else its
+    /// catalogue entry. A channel whose meta reads no name drops its hint.
     pub fn name_of(&self, channel: ChannelId) -> Option<String> {
-        self.names.get(&channel).cloned().or_else(|| {
+        let read = match self.names.get(&channel) {
+            Some(read) => read.clone(),
+            None => self.hints.get(&channel).cloned(),
+        };
+        read.or_else(|| {
             self.catalogues
                 .values()
                 .flat_map(|c| &c.channels)
@@ -566,6 +582,42 @@ mod tests {
         assert_eq!(sidebar.listed_in(random), None);
         assert_eq!(sidebar.name_of(private), None);
         assert!(sidebar.forget_space(space).is_empty(), "already gone");
+    }
+
+    /// The relay's hint names a channel not open, and a later listing
+    /// replaces the hints whole. What meta reads once open wins, even no
+    /// name. A forgotten channel keeps no hint (`MURMURE-490`).
+    #[test]
+    fn a_hint_names_a_channel_until_its_meta_reads_one() {
+        let space = SpaceId::new();
+        let (board, other) = (ChannelId::new(), ChannelId::new());
+        let hint = |channel_id, name: &str| ChannelName {
+            channel_id,
+            name: name.to_owned(),
+        };
+        let mut sidebar = Sidebar::default();
+        let place = |channel_id, place| MemberChannel { channel_id, place };
+        sidebar.set_member_channels(
+            vec![
+                place(board, ChannelPlace::Private(space)),
+                place(other, ChannelPlace::Direct),
+            ],
+            &[space],
+        );
+        sidebar.set_hints(&[hint(board, "board"), hint(other, "trip")]);
+        assert_eq!(sidebar.name_of(board).as_deref(), Some("board"));
+        sidebar.set_hints(&[hint(board, "plans")]);
+        assert_eq!(sidebar.name_of(board).as_deref(), Some("plans"));
+        assert_eq!(sidebar.name_of(other), None, "replaced whole");
+
+        sidebar.set_name(board, Some("roadmap".to_owned()));
+        assert_eq!(sidebar.name_of(board).as_deref(), Some("roadmap"));
+        sidebar.set_name(board, None);
+        assert_eq!(sidebar.name_of(board), None, "meta reads no name");
+
+        sidebar.set_hints(&[hint(other, "trip")]);
+        sidebar.forget(other);
+        assert_eq!(sidebar.name_of(other), None);
     }
 
     /// A channel absent from a later listing leaves the sidebar, never

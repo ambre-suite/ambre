@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-486` | `OBS` | A space the user joined no channel of MUST show its channels to join. | this spec section 3; `MURMURE-164`; `ambre-spec-server.md`, `SRV-216` | `ambre_murmure::sidebar::tests::a_space_with_no_channel_of_the_user_shows_its_channels_to_join` -- a listed space with no channel is opened once, and its catalogue fills the section to join; `ambre_app::shell::murmure_regions::a_space_with_no_channel_of_the_user_shows_its_channels_to_join` -- the shell opens the space once and draws its channels to join alone | none | verified |
 | `MURMURE-488` | `OBS` | A space the user lost MUST leave the sidebar with every channel of it, and a pane showing one MUST go back to the channel list. | this spec section 3; `features/ambre-spec-murmure-spaces.md`, `MURMURE-487` | `ambre_murmure::sidebar::tests::a_space_lost_leaves_the_sidebar_with_every_channel_of_it` -- its joined, private and listed channels go, where another space and the direct messages stay; `ambre_app::shell::murmure_regions::a_space_lost_leaves_the_sidebar_with_its_channels` -- the shell leaves the channel shown and draws the direct messages alone, and a later listing shows the space again | none | verified |
 | `MURMURE-489` | `OBS` | A channel the user lost, opened or not, MUST leave the sidebar of every open client, and a pane showing it MUST go back to the channel list. | this spec section 3; `features/ambre-spec-murmure-channels.md`, `MURMURE-474` | `ambre_sync::channels::tests::the_loss_of_a_document_not_held_as_another_kind_lists_the_users_channels` -- the loss of a held channel document or of one not held lists the channels again, and the loss of a held Prose document does not; `ambre_murmure::sidebar::tests::a_channel_absent_from_a_listing_leaves_the_sidebar` -- the listing replaces the channels whole; `ambre_murmure::tests::chrome_relay::a_channel_lost_while_open_leaves_the_sidebar_and_the_pane` -- the notice of an open channel resets the pane and drops the channel, and a later listing opens it again | none | verified |
-
+| `MURMURE-490` | `OBS` | A private channel or a named direct message MUST show its name in the sidebar before it opens. | this spec section 3; `ambre-spec-server.md`, `SRV-219`; `MURMURE-475` | `ambre_murmure::sidebar::tests::a_hint_names_a_channel_until_its_meta_reads_one` -- the listing's names show and are replaced whole, what meta reads wins, even no name, and a forgotten channel keeps none; `ambre_app::shell::murmure_regions::a_named_channel_not_open_shows_its_name` -- the shell draws the private channel and the direct message under their names | none | verified |
 ### 1.2 Select a channel
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
@@ -59,7 +59,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 16 `verified`, 6 `unimplemented`. The regions, the back control, the rows of
+* **Verification.** 17 `verified`, 6 `unimplemented`. The regions, the back control, the rows of
   the shell and the sidebar entries are built. The message list and the split view are not.
 
 ---
@@ -165,9 +165,12 @@ in a cell of its own (`MURMURE-421`).
 
 * **The canvas paints its backdrop alone.** The messages land with the
   `The message list and the composer` Story (`ambre-roadmap.md` E5).
-* **A private channel or a direct message not open shows no name.** Its name is in its `meta`
-  document, which learning of it never fetches (`MURMURE-475`). It lands with the
-  `The names of channels not open` Story (`ambre-roadmap.md` E5).
+* **An unnamed direct message shows no name, open or not.** A composed name needs the display
+  names of its members. It lands with the
+  `The composed name of a direct message` Story (`ambre-roadmap.md` E5).
+* **The name a closed channel shows can be stale.** A seal that failed to reach the relay, or two
+  renames racing, leave an older name until the channel opens. It lands with the
+  `A stale channel name` Story (`ambre-roadmap.md` E5).
 * **A space made before the relay knew spaces, and with no channel, is not listed.** Only dev data
   holds one: the relay learns a space at its creation, or from its channels.
 * **The id of a Murmure route names nothing yet.** A page opens on the channel list. A link to a

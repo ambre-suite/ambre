@@ -435,7 +435,7 @@ enum SyncEvent {
     MemberChannelsListed {
         /// The listing this answers, as `member_channels_asked` counted it.
         asked: u32,
-        result: Result<(Vec<ambre_bus::MemberChannel>, Vec<ambre_bus::SpaceId>), String>,
+        result: Result<channels::MemberListing, String>,
     },
     /// The relay's activity answer (`SyncCommand::FetchActivity`,
     /// `SyncCommand::MarkAllRead`).
@@ -1400,7 +1400,9 @@ impl SyncState {
                 meta,
                 segment,
                 public,
-            } => self.handle_create_channel(channel_id, space_id, (meta, segment), public),
+                name,
+            } => self.handle_create_channel(channel_id, space_id, (meta, segment), public, name),
+            SyncCommand::NameChannel { meta, name } => self.handle_name_channel(meta, name),
             SyncCommand::JoinChannel {
                 channel_id,
                 space_id,

@@ -150,12 +150,24 @@ pub enum SyncCommand {
     /// carries the key sealed under the key of the space, for the catalogue.
     /// Its space document must then have an open session, which holds the
     /// space key. A private channel is listed nowhere, and gets no sealed key.
+    ///
+    /// A private channel's `name` is sealed beside `meta`, so it shows before
+    /// the channel opens. A public channel's name is in the catalogue, so it
+    /// has none.
     CreateChannel {
         channel_id: ChannelId,
         space_id: SpaceId,
         meta: MetaId,
         segment: SegmentId,
         public: bool,
+        name: Option<String>,
+    },
+    /// Seal the name just written into the `meta` of an open channel beside
+    /// it on the relay, under the channel key. `None` seals an empty name: the
+    /// channel is unnamed. A failure is logged, and the next name replaces it.
+    NameChannel {
+        meta: MetaId,
+        name: Option<String>,
     },
     /// Close the active segment `closing` of an open channel into
     /// `successor` (the Murmure segments spec). The Sync worker creates the

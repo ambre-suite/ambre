@@ -40,6 +40,13 @@ pub(crate) struct Opening {
     members: Option<Vec<MemberInfo>>,
 }
 
+/// What a new channel comes with: a public one its catalogue entry, a
+/// private one its name.
+enum NewChannel {
+    Public(PublicChannelDraft),
+    Private(String),
+}
+
 /// A channel the relay is creating, until it answers.
 pub(crate) struct Creating {
     space_id: SpaceId,
@@ -380,13 +387,15 @@ impl LogicState {
                         return self.channel_failed(space_id, channel_id, error.to_string());
                     }
                 };
-                self.create_channel(space_id, channel, Some(draft));
+                self.create_channel(space_id, channel, NewChannel::Public(draft));
             }
             SpaceCommand::CreatePrivateChannel { draft, now } => {
                 // Any member of the space may: the channel is listed nowhere.
                 let PrivateChannelDraft { channel_id, name } = draft;
                 match ChannelState::create(channel_id, ChannelType::Private, Some(&name), now) {
-                    Ok(channel) => self.create_channel(space_id, channel, None),
+                    Ok(channel) => {
+                        self.create_channel(space_id, channel, NewChannel::Private(name));
+                    }
                     Err(error) => self.channel_failed(space_id, channel_id, error.to_string()),
                 }
             }
@@ -670,19 +679,21 @@ impl LogicState {
     }
 
     /// Ask the relay for a new channel, and hold it until the relay answers.
-    fn create_channel(
-        &mut self,
-        space_id: SpaceId,
-        channel: ChannelState,
-        listing: Option<PublicChannelDraft>,
-    ) {
+    /// A public channel comes with its catalogue entry. A private one comes
+    /// with its name, sealed beside meta so it shows before the channel opens.
+    fn create_channel(&mut self, space_id: SpaceId, channel: ChannelState, kind: NewChannel) {
         let channel_id = channel.channel_id();
+        let (listing, name) = match kind {
+            NewChannel::Public(draft) => (Some(draft), None),
+            NewChannel::Private(name) => (None, Some(name)),
+        };
         self.send_to_sync(SyncCommand::CreateChannel {
             channel_id,
             space_id,
             meta: channel.meta_id(),
             segment: channel.active_id(),
             public: listing.is_some(),
+            name,
         });
         self.creating.insert(
             channel_id,
@@ -1131,6 +1142,7 @@ mod tests {
                 meta,
                 segment,
                 public: true,
+                name: None,
             },
         ] = sent.as_slice()
         else {
@@ -1287,12 +1299,14 @@ mod tests {
                 meta,
                 segment,
                 public: false,
+                name,
             },
         ] = sent.as_slice()
         else {
             panic!("one private creation, got {sent:?}");
         };
         assert_eq!((*asked, *of), (channel_id, space_id));
+        assert_eq!(name.as_deref(), Some("board"), "sealed beside meta");
         let (meta, segment) = (meta.document_id(), segment.document_id());
 
         state.handle_logic_event(LogicEvent::ChannelCreated {

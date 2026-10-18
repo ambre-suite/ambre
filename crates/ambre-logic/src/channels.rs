@@ -1141,6 +1141,12 @@ impl LogicState {
                         payload: named.delta,
                         summary: None,
                     });
+                    // Sealed beside meta too, so the name shows before the
+                    // channel opens (the Murmure layout spec).
+                    self.send_to_sync(SyncCommand::NameChannel {
+                        meta: named.meta,
+                        name,
+                    });
                     self.send_to_ui(UiEvent::Channel {
                         channel_id,
                         event: named.event,
@@ -2619,15 +2625,21 @@ mod tests {
             },
         ];
         let spaces = vec![ambre_bus::SpaceId::new()];
+        let names = vec![ambre_bus::ChannelName {
+            channel_id: channels[0].channel_id,
+            name: "board".into(),
+        }];
         state.handle_logic_event(LogicEvent::MemberChannels {
             channels: channels.clone(),
             spaces: spaces.clone(),
+            names: names.clone(),
         });
         let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
         assert!(
             matches!(
                 shown.as_slice(),
-                [UiEvent::MemberChannels { channels: c, spaces: s }] if *c == channels && *s == spaces
+                [UiEvent::MemberChannels { channels: c, spaces: s, names: n }]
+                    if *c == channels && *s == spaces && *n == names
             ),
             "got {shown:?}"
         );

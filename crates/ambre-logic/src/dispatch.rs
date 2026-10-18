@@ -630,8 +630,16 @@ impl LogicState {
             }
             // The sidebar learns of the channels, and none of them opens
             // (the Murmure channels spec).
-            LogicEvent::MemberChannels { channels, spaces } => {
-                self.send_to_ui(UiEvent::MemberChannels { channels, spaces });
+            LogicEvent::MemberChannels {
+                channels,
+                spaces,
+                names,
+            } => {
+                self.send_to_ui(UiEvent::MemberChannels {
+                    channels,
+                    spaces,
+                    names,
+                });
             }
 
             // -- Meetings (participant push) -----------------------------------

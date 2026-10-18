@@ -89,6 +89,16 @@ pub struct MemberChannelJson {
     #[serde(with = "ambre_core::serde_id::space_id::option")]
     pub space_id: Option<ambre_core::SpaceId>,
     pub public: bool,
+    /// The channel's `meta`, which the sealed name binds.
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
+    /// The name sealed beside the channel's `meta`, base64, as the document
+    /// list carries one (`SRV-219`). The relay never reads it.
+    pub name_enc: Option<String>,
+    /// The caller's copy of the channel key, base64, and the hex exchange key
+    /// of whoever wrapped it, empty for a self-wrapped row.
+    pub doc_key_enc: String,
+    pub wrapper_exchange_pub_key: String,
 }
 
 /// The channels of the caller.
@@ -111,10 +121,21 @@ pub async fn list_member_channels(
     let channels = db::list_member_channels(&state.db, &auth.user_id)
         .await?
         .into_iter()
-        .map(|row| MemberChannelJson {
-            channel_id: row.id,
-            space_id: row.space_id,
-            public: row.is_public,
+        .map(|row| {
+            use base64::Engine;
+            let base64 = base64::engine::general_purpose::URL_SAFE;
+            MemberChannelJson {
+                channel_id: row.id,
+                space_id: row.space_id,
+                public: row.is_public,
+                meta_id: row.meta_id,
+                name_enc: row.name_enc.map(|n| base64.encode(n)),
+                doc_key_enc: base64.encode(&row.doc_key_enc),
+                wrapper_exchange_pub_key: row
+                    .wrapper_exchange_pubkey
+                    .map(hex::encode)
+                    .unwrap_or_default(),
+            }
         })
         .collect();
     Ok(axum::Json(MemberChannelsJson { channels, spaces }))
@@ -2576,6 +2597,46 @@ mod tests {
             .map(|c| (c.channel_id, c.space_id, c.public))
             .collect();
         assert_eq!(bobs, vec![(direct, None, false)]);
+    }
+
+    /// `SRV-219`: the listing carries the name sealed beside each channel's
+    /// `meta`, untouched, and the caller's own copy of the key. The exchange
+    /// key of whoever wrapped it comes too. A channel never named has none.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_listed_channel_carries_its_sealed_name_and_the_callers_key(pool: sqlx::PgPool) {
+        use base64::Engine;
+        let base64 = base64::engine::general_purpose::URL_SAFE;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let req = direct_request(alice, &[bob]);
+        let meta = req.meta_id.document_id();
+        open_direct(&state, alice, req).await.expect("create");
+        let listed = |who: UserId| list_member_channels(State(state.clone()), session(who));
+        let first = listed(bob).await.expect("listed").0.channels;
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].meta_id.document_id(), meta);
+        assert_eq!(first[0].name_enc, None, "never named");
+
+        let sealed = base64.encode([9u8; 40]);
+        let renamed = crate::routes::rename_document(
+            State(state.clone()),
+            session(bob),
+            Path(meta.to_string()),
+            Json(crate::routes::RenameDocumentRequest {
+                name_enc: sealed.clone(),
+            }),
+        )
+        .await;
+        assert_eq!(status(renamed), StatusCode::OK);
+        let bobs = listed(bob).await.expect("listed").0.channels;
+        assert_eq!(bobs[0].name_enc.as_deref(), Some(sealed.as_str()));
+        assert_eq!(bobs[0].doc_key_enc, base64.encode([2u8; 48]));
+        assert_eq!(bobs[0].wrapper_exchange_pub_key, hex::encode([4u8; 32]));
+        let alices = listed(alice).await.expect("listed").0.channels;
+        assert_eq!(alices[0].name_enc.as_deref(), Some(sealed.as_str()));
+        assert_eq!(alices[0].doc_key_enc, base64.encode([1u8; 48]));
     }
 
     /// The next message on `stream`, decoded, or `None` after `millis`.

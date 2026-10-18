@@ -156,18 +156,28 @@ pub struct MemberChannelRow {
     /// `None` for a direct message.
     pub space_id: Option<ambre_core::SpaceId>,
     pub is_public: bool,
+    pub meta_id: ambre_core::MetaId,
+    /// The name sealed beside `meta`, if any (`SRV-219`).
+    pub name_enc: Option<Vec<u8>>,
+    /// The caller's copy of the channel key, and the exchange key of whoever
+    /// wrapped it, `None` for a self-wrapped row.
+    pub doc_key_enc: Vec<u8>,
+    pub wrapper_exchange_pubkey: Option<Vec<u8>>,
 }
 
 /// Every channel whose `meta` holds a row of `user`, by identifier
-/// (`SRV-191`).
+/// (`SRV-191`), with the name sealed beside its `meta` (`SRV-219`).
 pub async fn list_member_channels(
     pool: &PgPool,
     user: &ambre_core::UserId,
 ) -> Result<Vec<MemberChannelRow>, AppError> {
     let rows = sqlx::query(
-        "SELECT c.id, c.space_id, c.is_public FROM channels c \
+        "SELECT c.id, c.space_id, c.is_public, d.document_id, doc.name_enc, m.doc_key_enc, \
+         inv.exchange_pubkey AS wrapper_exchange_pubkey FROM channels c \
          JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
+         JOIN documents doc ON doc.id = d.document_id \
          JOIN document_members m ON m.document_id = d.document_id \
+         LEFT JOIN users inv ON inv.id = m.invited_by \
          WHERE m.user_id = $1 ORDER BY c.id",
     )
     .bind(id_to_uuid(*user))
@@ -180,6 +190,12 @@ pub async fn list_member_channels(
                 id: uuid_row_to_id(r.try_get("id")?),
                 space_id: space_id.map(uuid_row_to_id),
                 is_public: r.try_get("is_public")?,
+                meta_id: ambre_core::MetaId::from_document(uuid_row_to_id(
+                    r.try_get("document_id")?,
+                )),
+                name_enc: r.try_get("name_enc")?,
+                doc_key_enc: r.try_get("doc_key_enc")?,
+                wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
             })
         })
         .collect()
