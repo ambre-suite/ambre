@@ -512,8 +512,8 @@ pub async fn rotation_owed(
 /// target row is locked so two concurrent removals cannot both see two owners.
 ///
 /// `channel` is the channel whose `meta` the document is, with its public
-/// flag. When the member is the last of a channel, the last-owner check does
-/// not hold. A channel that is not public is answered for its delete
+/// flag. The last-owner check holds for neither the last member of a channel
+/// nor a public channel. A channel that is not public is answered for its delete
 /// (`SRV-142`); a public one stays with its documents (`SRV-173`).
 async fn delete_member(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -547,8 +547,11 @@ async fn delete_member(
         _ => None,
     };
     // A public channel outlives its last member: the space reads its key in
-    // the catalogue, so the next member joins it alone (`SRV-173`).
-    if current_role == Some(ambre_core::Role::Owner) && !empties_channel {
+    // the catalogue, so the next member joins it alone (`SRV-173`). It
+    // outlives its last owner too: an owner of the space stands in for one
+    // (`SRV-174`).
+    let public = matches!(channel, Some((_, true)));
+    if current_role == Some(ambre_core::Role::Owner) && !empties_channel && !public {
         ensure_not_last_owner(tx, document_id).await?;
     }
 

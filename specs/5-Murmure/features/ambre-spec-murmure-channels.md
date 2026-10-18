@@ -78,7 +78,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-243` | `POST` | Deleting a channel MUST delete every document it groups, with their objects. | this spec section 3; `SRV-142`, `SRV-057` | `ambre_server::routes::channels::tests::deleting_a_channel_deletes_its_documents_and_their_objects` -- no document and no object of the channel is left after the purge | none | verified |
-| `MURMURE-244` | `FAIL` | Given a delete from a member who owns neither the channel nor, for a public channel, its space, the relay MUST refuse it. | this spec section 3; `SRV-015`, `SRV-174` | `ambre_server::routes::channels::tests::a_delete_from_anyone_but_an_owner_is_refused` -- an editor of the space, a stranger and an unknown channel get a 403, and nothing goes | none | verified |
+| `MURMURE-244` | `FAIL` | Given a delete from a member who owns neither the channel nor, for a public channel, its space, the relay MUST refuse it. | this spec section 3; `SRV-015`, `SRV-174` | `ambre_server::routes::channels::tests::a_delete_from_anyone_but_an_owner_is_refused` -- an editor of the space, a stranger and an unknown channel get a 403, and nothing goes; `ambre_server::routes::channels::tests::an_owner_of_the_space_deletes_a_public_channel_its_last_owner_left` -- an owner of the space is refused a private channel, database tier | none | verified |
 | `MURMURE-245` | `POST` | A private channel or a direct message whose last member leaves MUST be deleted. | this spec section 3 | `ambre_server::routes::channels::tests::the_last_member_leaving_a_private_channel_deletes_it` -- the channel and its documents go with the last leave | none | verified |
 | `MURMURE-462` | `POST` | Deleting a channel MUST drop it from the client of its owner, with its documents and its keys. | this spec section 3; `MURMURE-243` | `ambre_logic::spaces::tests::a_deleted_channel_leaves_the_client_and_the_catalogue_once_the_relay_answers` -- once the relay answers, the channel goes and the session of each of its documents ends; `ambre_sync::updates::tests::closing_a_document_forgets_its_keys` -- an ended session takes its keys with it | none | verified |
 | `MURMURE-463` | `FAIL` | Given a delete the relay refuses, the client MUST keep the channel as it was. | this spec section 3; `MURMURE-244` | `ambre_logic::spaces::tests::a_refused_delete_keeps_the_channel_whole` -- the view is told, and the channel, its sessions and its catalogue entry stay; `ambre_sync::channels::tests::a_delete_answers_logic_and_leaves_the_sessions_to_it` -- the worker closes no session of its own | none | verified |
@@ -206,8 +206,8 @@ or not, as every author does. A relay that serves a false head can only make the
 it could do by refusing it outright.
 
 **A delete is final.** The owner deletes a channel, and every document, file, member row and cursor
-goes with it (`MURMURE-243`). An owner who leaves hands the role on first, and the relay refuses
-the leave of the last one while other members stay (`MURMURE-257`). The last member of a private
+goes with it (`MURMURE-243`). The last owner of a private channel hands the role on before leaving
+while other members stay (`MURMURE-257`). The last member of a private
 channel leaves in the same transaction that deletes it, so no channel is left without a member.
 
 **Each client drops a deleted channel.** The owner's client drops the channel, its documents and
@@ -217,9 +217,8 @@ on the relay's word to each member (`ambre-spec-server.md`, `SRV-188`, `MURMURE-
 
 **A direct message has no owner.** Every member is an editor (`MURMURE-252`), so nobody deletes it
 for the others. It goes once its last member leaves, as a private channel does (`MURMURE-245`). A
-public channel stays listed with no member, for the next one to join (`MURMURE-461`). The space
-reads its key in the catalogue, so nobody needs to stay to hand it on. Its last owner leaves even
-while others stay, and an owner of the space deletes it from then on (`SRV-174`).
+public channel needs no owner either: the space reads its key in the catalogue. Its last owner
+leaves while others stay, and an owner of the space deletes it (`SRV-174`).
 
 **An archive closes a channel and keeps it.** The owner archives it: every member still reads it,
 and the relay refuses every write (`MURMURE-330`, `SRV-160`). Unarchiving opens it again.
@@ -290,10 +289,4 @@ who writes its key into the catalogue.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No invite exists.** Inviting into a private channel or a direct message lands with the
-  `Invites into a channel` Story (`ambre-roadmap.md` E5). So does the notice a direct message of
-  two shows first. The notice needs a message kind the
-  schema does not hold yet.
-* **The last owner of a public channel that keeps other members cannot leave yet.** The relay
-  refuses it as it does for any document, until `SRV-174` lands with the
-  `A public channel without an owner` Story (`ambre-roadmap.md` E5).
+* **No invite exists.** It lands with the `Invites into a channel` Story (`ambre-roadmap.md` E5).

@@ -329,7 +329,8 @@ pub async fn create_direct_message(
 }
 
 /// `DELETE /api/channels/{id}`: delete a channel with every document it
-/// groups, to an owner of its `meta` alone (`SRV-142`, `SRV-015`).
+/// groups, to an owner of its `meta` alone (`SRV-142`, `SRV-015`). An owner
+/// of its space stands in for one on a public channel (`SRV-174`).
 ///
 /// Every refusal is the same 403, so a stranger learns nothing of which
 /// channels exist. Each document is marked in the same transaction, then
@@ -341,12 +342,19 @@ pub async fn delete_channel(
     Path(channel_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
     let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
-    let meta_id = db::get_channel(&state.db, &channel_id)
+    let channel = db::get_channel(&state.db, &channel_id)
         .await?
-        .and_then(|c| c.meta_id)
         .ok_or(AppError::Forbidden)?;
-    let role = db::member_role(&state.db, &meta_id.document_id(), &auth.user_id).await?;
-    if role != Some(Role::Owner) {
+    let meta_id = channel.meta_id.ok_or(AppError::Forbidden)?;
+    let space_owner = match channel.space_id.filter(|_| channel.is_public) {
+        Some(space_id) => {
+            db::member_role(&state.db, &space_id.document_id(), &auth.user_id).await?
+                == Some(Role::Owner)
+        }
+        None => false,
+    };
+    let meta_role = db::member_role(&state.db, &meta_id.document_id(), &auth.user_id).await?;
+    if !space_owner && meta_role != Some(Role::Owner) {
         return Err(AppError::Forbidden);
     }
     let sweep_due = crate::deletion::sweep_due_stored(&state);
@@ -1429,6 +1437,53 @@ mod tests {
         );
         assert!(exists(&state, channel.meta.document_id()).await);
         assert!(exists(&state, channel.segment.document_id()).await);
+    }
+
+    /// The last owner of a public channel leaves it while a member stays.
+    /// From then on an owner of the space deletes it, and an editor of the
+    /// space does not. An owner of the space deletes no private channel.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_owner_of_the_space_deletes_a_public_channel_its_last_owner_left(
+        pool: sqlx::PgPool,
+    ) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor), (carol, Role::Editor)]).await;
+        let channel = public_channel(&state, bob, space).await;
+        let meta = channel.meta.document_id();
+        assert_eq!(
+            join(&state, carol, channel.id, 9).await,
+            StatusCode::NO_CONTENT
+        );
+
+        assert_eq!(
+            leave(&state, bob, &channel).await.expect("leave"),
+            db::Removed::Kept
+        );
+        assert_eq!(member_ids(&state, meta).await, [carol]);
+        assert_eq!(
+            delete(&state, carol, channel.id).await,
+            StatusCode::FORBIDDEN
+        );
+        let private = private_channel(&state, bob, space).await;
+        assert_eq!(
+            delete(&state, alice, private.id).await,
+            StatusCode::FORBIDDEN
+        );
+        assert!(exists(&state, private.meta.document_id()).await);
+
+        assert_eq!(
+            delete(&state, alice, channel.id).await,
+            StatusCode::NO_CONTENT
+        );
+        let held = db::get_channel(&state.db, &channel.id)
+            .await
+            .expect("query");
+        assert!(held.is_none());
+        assert!(crate::test_helpers::deletion_marked(&state.db, meta).await);
     }
 
     /// A member who leaves a private channel leaves its key owed. A member
