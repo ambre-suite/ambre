@@ -44,8 +44,8 @@ use ambre_bus::{
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
-    AppShell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header, Panel, Sidebar,
-    StatusBar, Tabs, ToastHost, Toasts, Toolbar, ZoomFactor,
+    AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
+    Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar, ZoomFactor,
 };
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
@@ -1768,7 +1768,7 @@ pub fn main() {
             // navigation is out of Phase 0: the `DocSwitcher` only swaps the id
             // within one `AppView`, so a Trame<->Toile hop reloads via the route.
             if boot_is_murmure {
-                AppView::Murmure(host::MurmureView::new(view_rx, w, h, theme_ctl))
+                AppView::Murmure(host::MurmureView::new(Some(view_rx), w, h, theme_ctl))
             } else if boot_is_prose {
                 AppView::Prose(host::ProseView::new(
                     initial_doc,

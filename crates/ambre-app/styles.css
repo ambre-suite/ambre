@@ -631,6 +631,15 @@ input[type="radio"] {
     overflow: hidden;
 }
 
+/* A canvas cell beside the content, such as a Murmure thread: the rest of
+   the region that holds it, sized by it alone. */
+.ambre-canvas-cell {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .ambre-canvas {
     display: block;
     width: 100%;

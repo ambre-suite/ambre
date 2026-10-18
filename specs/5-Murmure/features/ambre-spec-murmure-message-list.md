@@ -1,6 +1,7 @@
 # AMBRE -- FEATURE: THE MURMURE MESSAGE LIST
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the channel and the thread are each a canvas of their own. No
+message paints yet.
 
 > The conversation of a channel, newest at the bottom. It scrolls through years of history without
 > a pause, and shows where the unread messages start.
@@ -30,7 +31,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-418` | `OBS` | The time of a message MUST show in the reader's own language and time zone. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-419` | `INV` | Every action on a message MUST be a command of the command table. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-420` | `INV` | A thread MUST show its messages through the same list as a channel. | this spec section 3; `features/ambre-spec-murmure-threads.md` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-421` | `INV` | Each region that shows messages MUST be a canvas of its own, one cell of the chrome layout. | this spec section 3; `CHROME-009`; `CANVAS-070` | not built | unbuilt -- lands with the `One canvas per message region` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-421` | `INV` | Each region that shows messages MUST be a canvas of its own, one cell of the chrome layout. | this spec section 3; `CHROME-009`; `CANVAS-070` | `ambre_app::shell::murmure_regions::tests::the_channel_and_the_thread_are_each_a_canvas_of_their_cell` -- the channel and the thread each hold a canvas of their cell's width; `ambre_app::host::cell::tests::the_thread_is_a_canvas_of_its_own_sized_by_its_cell` -- the thread's canvas takes its own size, input and resize, in the browser tier | none | verified |
 
 ### 1.2 A message arrives
 
@@ -86,7 +87,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
   only what `meta` already tells every member: the span and the count of a segment.
-* **Verification.** 31 `unimplemented`: no Murmure view exists.
+* **Verification.** 1 `verified`, 30 `unimplemented`. The browser tier holds the channel and the
+  thread each in a canvas of its own. No message paints yet.
 
 ---
 

@@ -53,6 +53,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 
 // FrameHost and `run_with` live in sibling modules; both reach the shared types
 // (AppView, DocSwitcher, helpers) via `use super::*`.
+mod cell;
 mod frame;
 mod pipe;
 mod probe;
@@ -65,7 +66,7 @@ mod web_embed;
 
 pub(crate) use frame::send_faces;
 pub use frame::{FrameHost, MakeChild};
-pub use murmure::MurmureView;
+pub use murmure::{MurmureView, THREAD_CANVAS};
 pub use prose::{ProseSignals, ProseView};
 
 /// Where a finger is in its gesture.
@@ -432,6 +433,26 @@ impl AppView {
         match self {
             AppView::Toile(v) => v.child_route(),
             AppView::Trame(_) | AppView::Prose(_) | AppView::Murmure(_) => None,
+        }
+    }
+
+    /// The ids of the canvases this view shows beside the content canvas, each
+    /// in a cell of its own (`CANVAS-070`). Only Murmure shows one: its thread.
+    fn cell_ids(&self) -> &'static [&'static str] {
+        match self {
+            AppView::Murmure(_) => &[murmure::THREAD_CANVAS],
+            AppView::Trame(_) | AppView::Toile(_) | AppView::Prose(_) => &[],
+        }
+    }
+
+    /// The view of the cell named `id`, at `width` x `height` logical pixels.
+    /// `None` for an id this view does not show.
+    fn cell_view(&self, id: &str, width: f64, height: f64) -> Option<AppView> {
+        match self {
+            AppView::Murmure(v) if id == murmure::THREAD_CANVAS => {
+                Some(AppView::Murmure(v.region(width, height)))
+            }
+            _ => None,
         }
     }
 

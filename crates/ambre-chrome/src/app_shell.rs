@@ -94,6 +94,21 @@ impl ShellRegion {
     }
 }
 
+/// A canvas of its own beside the central one, filling the rest of the region
+/// that holds it. The canvas host binds it by `id` while it is in the page
+/// (`CANVAS-070`), so a view can show a second region on a canvas.
+#[component]
+pub fn CanvasCell(
+    /// Id of the canvas element, the one the canvas host looks up.
+    id: &'static str,
+) -> impl IntoView {
+    view! {
+        <div class="ambre-canvas-cell">
+            <canvas id=id class="ambre-canvas" tabindex="0"></canvas>
+        </div>
+    }
+}
+
 /// The application shell. Renders the chrome grid around a central `<canvas>`
 /// whose `id` defaults to `"ambre-canvas"` (the id the canvas host looks up).
 #[component]

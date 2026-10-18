@@ -309,6 +309,37 @@ async fn a_desktop_shows_the_sidebar_the_channel_and_the_thread_side_by_side() {
     assert_eq!(frame.regions().await.shown(), (true, false, true));
 }
 
+/// The channel and the thread are two canvases, one in each cell, and each
+/// is as wide as its own cell (`MURMURE-421`). The member list in the panel
+/// holds no canvas.
+#[wasm_bindgen_test]
+async fn the_channel_and_the_thread_are_each_a_canvas_of_their_cell() {
+    let frame = Frame::new(1100, thread()).await;
+    let regions = frame.regions().await;
+    let canvases = frame.inner.query_selector_all("canvas").unwrap();
+    assert_eq!(canvases.length(), 2);
+    let panel = format!(".ambre-panel #{}", crate::host::THREAD_CANVAS);
+    assert_eq!(
+        frame.width_of(".ambre-content > #ambre-canvas"),
+        regions.content
+    );
+    assert_eq!(
+        frame.width_of(&panel),
+        regions.panel - 1.0,
+        "less its border"
+    );
+    assert_ne!(regions.content, regions.panel);
+
+    let channel = ChannelId::new();
+    frame.pane.set(MurmurePane::Members { channel });
+    leptos::task::tick().await;
+    assert!(frame.query(&panel).is_none());
+    assert_eq!(
+        frame.inner.query_selector_all("canvas").unwrap().length(),
+        1
+    );
+}
+
 /// Between the phone and the desktop widths, an open thread replaces the
 /// channel, and the back control shows the channel again (`MURMURE-159`).
 #[wasm_bindgen_test]

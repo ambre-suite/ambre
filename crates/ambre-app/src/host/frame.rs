@@ -215,6 +215,11 @@ pub struct FrameHost {
     /// web embed costs no DOM lookup per frame.
     web_frames_empty: bool,
 
+    /// The canvases the view shows beside this one, such as a Murmure thread,
+    /// each with a GPU of its own (`CANVAS-070`). Empty for a view of one
+    /// canvas.
+    cells: super::cell::Cells,
+
     render_times: VecDeque<f64>,
     render_fps: f32,
     last_frame_ms: f32,
@@ -255,6 +260,7 @@ impl FrameHost {
             make_child,
             web_frames: web_embed::WebFrames::default(),
             web_frames_empty: true,
+            cells: super::cell::Cells::default(),
             render_times: VecDeque::with_capacity(120),
             render_fps: 0.0,
             last_frame_ms: 0.0,
@@ -395,6 +401,8 @@ impl FrameHost {
     pub fn resize(&mut self, size: SurfaceSize) {
         let (width, height) = size.logical();
         self.view.resize(width, height);
+        // The density watch lands here, and moves no cell box either.
+        self.cells.remeasure();
 
         let Some(gpu) = self.gpu.as_mut() else { return };
         if gpu.size == size {
@@ -448,6 +456,11 @@ impl FrameHost {
             }
             Tick::Idle => return,
         }
+
+        // The canvases beside this one, each under its own plan (`CANVAS-070`).
+        // A view of one canvas names none, and costs no lookup.
+        self.cells.sync(&self.view);
+        self.cells.render(raf_timestamp);
 
         let t_drain = self.perf.now();
         self.view.update();
@@ -612,37 +625,9 @@ impl FrameHost {
             return;
         }
         let t_gpu_start = self.perf.now();
-        let surface_tex = match gpu.surface.get_current_texture() {
-            Ok(t) => t,
-            // A lost/outdated surface is recoverable: the GL context was reset
-            // (tab backgrounded, GPU reset, `webglcontextrestored`) or the
-            // drawable went stale after a resize. Reconfigure with the current
-            // size and skip this frame; the next rAF tick draws fresh. Only a
-            // genuinely unrecoverable error (OOM, removed device) is logged and
-            // dropped.
-            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                tracing::warn!("surface lost/outdated, reconfiguring");
-                gpu.reconfigure_surface();
-                return;
-            }
-            Err(e) => {
-                tracing::error!("get_current_texture: {e:?}");
-                return;
-            }
-        };
-        let target_view = surface_tex.texture.create_view(&Default::default());
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-
-        gpu.quad_renderer.flush_dirty_rect(
-            &gpu.device,
-            &gpu.queue,
-            &mut encoder,
-            &target_view,
-            &plan,
-        );
-
-        gpu.queue.submit(std::iter::once(encoder.finish()));
-        surface_tex.present();
+        if !super::cell::present(gpu, &plan) {
+            return;
+        }
 
         let t2 = self.perf.now();
         self.last_frame_ms = (t2 - t0) as f32;

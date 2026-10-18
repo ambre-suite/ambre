@@ -52,7 +52,9 @@ pub(crate) fn MurmureShell(
             <Panel slot label=Signal::derive(move || ambre_murmure::chrome::panel_label(pane.get()).to_owned())>
                 <Show
                     when=move || matches!(pane.get(), MurmurePane::Members { .. })
-                    fallback=|| view! { <div class="murmure-thread"></div> }
+                    // The thread is a canvas of its own, in the panel's cell
+                    // (the Murmure message list spec). The host binds it by id.
+                    fallback=|| view! { <CanvasCell id=crate::host::THREAD_CANVAS /> }
                 >
                     <MemberList relay=relay />
                 </Show>
