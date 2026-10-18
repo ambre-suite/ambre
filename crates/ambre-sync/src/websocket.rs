@@ -1186,15 +1186,23 @@ impl SyncState {
     // -- Inbound: Server -> Sync (WebSocket demux) -----------------------------
 
     /// This user no longer reaches `document_id`. Close it here, and tell the
-    /// Logic thread they were removed from it, so the view reacts.
+    /// Logic thread they were removed from it, so the view reacts. It can be
+    /// the `meta` of a channel never opened. Unless it is held as another
+    /// kind, the user's channels are listed again (the Murmure layout spec).
     fn document_removed(&mut self, document_id: DocumentId) {
-        self.documents.remove(&document_id);
+        let other_kind = self
+            .documents
+            .remove(&document_id)
+            .is_some_and(|d| d.doc_type != DocType::Murmure);
         self.light.remove(&document_id);
         if let Some(uid) = self.user_id {
             self.send_to_logic(LogicEvent::MemberRevoked {
                 document_id,
                 revoked_user_id: uid,
             });
+        }
+        if !other_kind {
+            self.handle_list_member_channels();
         }
     }
 

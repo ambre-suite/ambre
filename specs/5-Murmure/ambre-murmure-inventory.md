@@ -21,7 +21,7 @@
 | `murmure-reactions` | A member answers a message with an emoji. | implemented | 7 |  |
 | `murmure-segments` | A channel grows for years and still opens fast. | implemented | 26 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 49 |  |
-| `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | partial | 21 |  |
+| `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | partial | 22 |  |
 | `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 21 |  |
 | `murmure-search` | A member finds a message by its words, in the channels they have loaded. | partial | 17 |  |
 | `murmure-spaces` | A team gathers in a space. | partial | 34 |  |
@@ -44,4 +44,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 5 implemented, 8 partial, 15 design-only. 466 contract rows, 0 loose.**
+**28 features: 5 implemented, 8 partial, 15 design-only. 467 contract rows, 0 loose.**

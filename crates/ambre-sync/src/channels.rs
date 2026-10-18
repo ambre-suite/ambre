@@ -1380,6 +1380,35 @@ pub(crate) mod tests {
         assert_eq!(shared, 2, "each share still reaches Logic");
     }
 
+    /// A lost document can be the meta of a channel never opened. Its loss
+    /// lists the user's channels again, unless it is held as another kind.
+    /// The loss of a held Prose document asks nothing.
+    #[test]
+    fn the_loss_of_a_document_not_held_as_another_kind_lists_the_users_channels() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        state.user_id = Some(UserId::new());
+        let (prose, murmure, unheld) = (DocumentId::new(), DocumentId::new(), DocumentId::new());
+        for (id, doc_type) in [(prose, DocType::Prose), (murmure, DocType::Murmure)] {
+            let doc = crate::SyncDocumentState::new(id, DocumentKey::generate(), doc_type, true);
+            state.documents.insert(id, doc);
+        }
+        for document_id in [prose, murmure, unheld] {
+            state.handle_ws_message(ambre_protocol::ws::WsServerMsg::DocumentRevoked {
+                document_id,
+            });
+        }
+        assert_eq!(
+            state.member_channels_asked, 2,
+            "one listing per channel loss"
+        );
+        let revoked = rx
+            .try_iter()
+            .filter(|e| matches!(e, LogicEvent::MemberRevoked { .. }))
+            .count();
+        assert_eq!(revoked, 3, "each loss still reaches Logic");
+    }
+
     /// The relay's listing of the user's channels decodes to their places
     /// and reaches the Logic thread, with every space of the user. A failed
     /// listing answers nothing, nor does one a later listing overtook.

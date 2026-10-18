@@ -29,6 +29,11 @@ leptos       = { workspace = true }
 criterion = { workspace = true }
 serde_json = { workspace = true }
 
+# The relay tests drive the chrome state in headless Chrome
+# (`tests/chrome_relay.rs`, `just test-wasm`), as ambre-prose's do.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+
 [[bench]]
 name = "segment"
 harness = false

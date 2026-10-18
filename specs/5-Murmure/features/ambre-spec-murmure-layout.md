@@ -27,10 +27,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-164` | `OBS` | A channel to join MUST be shown apart from the joined channels. | this spec section 3; `features/ambre-spec-murmure-spaces.md` | `ambre_murmure::sidebar::tests::a_channel_to_join_sits_apart_from_the_joined_ones` -- a section of its own, left once joined; `ambre_app::shell::murmure_regions::the_sidebar_draws_its_sections_in_order` -- the last section drawn is the one to join | none | verified |
 | `MURMURE-165` | `OBS` | A channel with activity MUST show a mark, and its count once the count is known. | this spec section 3; `features/ambre-spec-murmure-unread.md` | `ambre_murmure::sidebar::tests::a_mark_shows_before_the_count_and_the_count_replaces_it` -- the mark, then the counts, kept when absent from an answer; `ambre_app::shell::murmure_regions::a_channel_shows_its_mark_then_its_counts` -- the entry draws the mark, then the message and mention counts | none | verified |
 | `MURMURE-382` | `INV` | A split view MUST exist at the desktop width alone. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-428` | `OBS` | The command bar of the shell MUST hold the header of the current channel. | this spec section 3; `ambre-spec-chrome.md section 2` | `ambre_app::shell::murmure_regions::the_command_bar_holds_the_channel_header_and_no_status_bar_shows` -- the channel name is read inside the channel header, inside the command bar | none | verified |
+| `MURMURE-428` | `OBS` | The command bar of the shell MUST hold the header of the current channel. | this spec section 3; `ambre-spec-chrome.md section 2` | `ambre_app::shell::murmure_regions::the_command_bar_holds_the_channel_header_and_no_status_bar_shows` -- the channel name is read inside the channel header, inside the command bar; `ambre_murmure::tests::chrome_relay::a_channel_named_shows_its_name_in_the_header` -- the name an open channel learns is the one the header reads | none | verified |
 | `MURMURE-429` | `OBS` | Murmure MUST show no status bar. | this spec section 3; `ambre-spec-chrome.md section 2` | `ambre_app::shell::murmure_regions::the_command_bar_holds_the_channel_header_and_no_status_bar_shows` -- the mounted shell holds no status bar, formula bar or tab strip | none | verified |
 | `MURMURE-486` | `OBS` | A space the user joined no channel of MUST show its channels to join. | this spec section 3; `MURMURE-164`; `ambre-spec-server.md`, `SRV-216` | `ambre_murmure::sidebar::tests::a_space_with_no_channel_of_the_user_shows_its_channels_to_join` -- a listed space with no channel is opened once, and its catalogue fills the section to join; `ambre_app::shell::murmure_regions::a_space_with_no_channel_of_the_user_shows_its_channels_to_join` -- the shell opens the space once and draws its channels to join alone | none | verified |
 | `MURMURE-488` | `OBS` | A space the user lost MUST leave the sidebar with every channel of it, and a pane showing one MUST go back to the channel list. | this spec section 3; `features/ambre-spec-murmure-spaces.md`, `MURMURE-487` | `ambre_murmure::sidebar::tests::a_space_lost_leaves_the_sidebar_with_every_channel_of_it` -- its joined, private and listed channels go, where another space and the direct messages stay; `ambre_app::shell::murmure_regions::a_space_lost_leaves_the_sidebar_with_its_channels` -- the shell leaves the channel shown and draws the direct messages alone, and a later listing shows the space again | none | verified |
+| `MURMURE-489` | `OBS` | A channel the user lost, opened or not, MUST leave the sidebar of every open client, and a pane showing it MUST go back to the channel list. | this spec section 3; `features/ambre-spec-murmure-channels.md`, `MURMURE-474` | `ambre_sync::channels::tests::the_loss_of_a_document_not_held_as_another_kind_lists_the_users_channels` -- the loss of a held channel document or of one not held lists the channels again, and the loss of a held Prose document does not; `ambre_murmure::sidebar::tests::a_channel_absent_from_a_listing_leaves_the_sidebar` -- the listing replaces the channels whole; `ambre_murmure::tests::chrome_relay::a_channel_lost_while_open_leaves_the_sidebar_and_the_pane` -- the notice of an open channel resets the pane and drops the channel, and a later listing opens it again | none | verified |
 
 ### 1.2 Select a channel
 
@@ -58,7 +59,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 15 `verified`, 6 `unimplemented`. The regions, the back control, the rows of
+* **Verification.** 16 `verified`, 6 `unimplemented`. The regions, the back control, the rows of
   the shell and the sidebar entries are built. The message list and the split view are not.
 
 ---
@@ -167,9 +168,6 @@ in a cell of its own (`MURMURE-421`).
 * **A private channel or a direct message not open shows no name.** Its name is in its `meta`
   document, which learning of it never fetches (`MURMURE-475`). It lands with the
   `The names of channels not open` Story (`ambre-roadmap.md` E5).
-* **A channel an owner removed the user from stays in the sidebar.** The view ignores the notice of
-  an open channel, and a channel never opened gets none. It lands with the
-  `A channel removed leaves the sidebar` Story (`ambre-roadmap.md` E5).
 * **A space made before the relay knew spaces, and with no channel, is not listed.** Only dev data
   holds one: the relay learns a space at its creation, or from its channels.
 * **The id of a Murmure route names nothing yet.** A page opens on the channel list. A link to a

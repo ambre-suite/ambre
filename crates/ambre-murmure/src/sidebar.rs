@@ -568,6 +568,26 @@ mod tests {
         assert!(sidebar.forget_space(space).is_empty(), "already gone");
     }
 
+    /// A channel absent from a later listing leaves the sidebar, never
+    /// opened or not: the listing is whole (`MURMURE-489`).
+    #[test]
+    fn a_channel_absent_from_a_listing_leaves_the_sidebar() {
+        let space = SpaceId::new();
+        let (general, general_m) = public(space);
+        let board = MemberChannel {
+            channel_id: ChannelId::new(),
+            place: ChannelPlace::Private(space),
+        };
+        let mut sidebar = Sidebar::default();
+        sidebar.set_member_channels(vec![general_m, board], &[space]);
+        assert!(sidebar.is_member(board.channel_id));
+        sidebar.set_member_channels(vec![general_m], &[space]);
+        assert!(!sidebar.is_member(board.channel_id));
+        assert!(sidebar.is_member(general));
+        let shown: Vec<SidebarGroup> = sidebar.sections().iter().map(|s| s.group).collect();
+        assert!(!shown.contains(&SidebarGroup::Private), "{shown:?}");
+    }
+
     /// The relay's mark shows before any count, and a count replaces it once
     /// known (`MURMURE-119`, `MURMURE-165`). A channel absent from a later
     /// answer keeps its own.

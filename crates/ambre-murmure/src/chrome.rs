@@ -129,6 +129,15 @@ impl MurmureRelay {
                     .update(|s| s.set_name(*channel_id, name.clone()));
                 Vec::new()
             }
+            // A channel the user lost while it was open (`MURMURE-489`).
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::Left,
+            } => {
+                self.sidebar.update(|s| s.forget(*channel_id));
+                self.drop_channels(&[*channel_id]);
+                Vec::new()
+            }
             UiEvent::Space { space_id, event } => self.absorb_space(*space_id, event),
             _ => Vec::new(),
         }

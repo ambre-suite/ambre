@@ -32,12 +32,13 @@ lint:
 # canvas host, the workers -- which host clippy never reads. The flags are those
 # of `test-wasm`, so the two share one build. `-Awarnings` silences what is only a
 # warning, so this holds the denied lints alone: the panic lints (`ARCH-028`)
-# and the documentation lints. The Prose unit tests are host-only, so its wasm
-# test file is linted alone.
+# and the documentation lints. The Prose and Murmure unit tests are host-only,
+# so their wasm test files are linted alone.
 lint-wasm:
     RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown --workspace --exclude ambre-server --lib
     RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
     RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel
+    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
 # four `cargo test` lines under four sets compile the workspace four times over
@@ -186,6 +187,8 @@ test-wasm:
     # The Prose unit tests are host-only (proptest, shaped fixtures): the chrome test alone.
     # `wasm-pack` builds the lib test target anyway; the crate root empties it on wasm.
     RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-prose --test chrome_panel
+    # The Murmure unit tests are host-only too: the chrome relay test alone.
+    RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-murmure --test chrome_relay
     RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-logic
     RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-app
 
