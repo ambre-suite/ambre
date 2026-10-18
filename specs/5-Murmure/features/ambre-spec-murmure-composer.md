@@ -17,56 +17,56 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-193` | `INV` | The composer MUST be an instance of the Prose editor, restricted to the Murmure mark set. | this spec section 3; `features/ambre-spec-prose-engine.md` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-194` | `INV` | The Murmure mark set MUST be bold, italic, inline code, code block, link, list, quote, mention and custom emoji. | this spec section 3; `MURMURE-008` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-195` | `INV` | A draft MUST be kept per channel while the user moves between channels. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-196` | `OBS` | The composer MUST show no permanent formatting toolbar. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-210` | `INV` | A draft MUST survive a reload of the page. | this spec section 3; `ambre-spec-launcher.md` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-211` | `INV` | A draft MUST NOT leave the device before it is sent. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-214` | `INV` | Eviction from the local store MUST NOT drop a draft. | this spec section 3; `RESID-009` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-430` | `INV` | The composer MUST be canvas content, fed by the shared input pipe. | this spec section 3; `UI-THREAD-014`; `ambre-spec-text-input.md` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-431` | `INV` | A formatting chord of the composer MUST invoke the Prose command of the same mark. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-432` | `OBS` | A selection in the composer MUST show the Prose format bar, with the Murmure marks alone. | this spec section 3; `MURMURE-194` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-193` | `INV` | The composer MUST be an instance of the Prose editor, restricted to the Murmure mark set. | this spec section 3; `features/ambre-spec-prose-engine.md` | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-194` | `INV` | The Murmure mark set MUST be bold, italic, inline code, code block, link, list, quote, mention and custom emoji. | this spec section 3; `MURMURE-008` | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-195` | `INV` | A draft MUST be kept per channel while the user moves between channels. | this spec section 3 | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-196` | `OBS` | The composer MUST show no permanent formatting toolbar. | this spec section 3 | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-210` | `INV` | A draft MUST survive a reload of the page. | this spec section 3; `ambre-spec-launcher.md` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-211` | `INV` | A draft MUST NOT leave the device before it is sent. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-214` | `INV` | Eviction from the local store MUST NOT drop a draft. | this spec section 3; `RESID-009` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-430` | `INV` | The composer MUST be canvas content, fed by the shared input pipe. | this spec section 3; `UI-THREAD-014`; `ambre-spec-text-input.md` | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-431` | `INV` | A formatting chord of the composer MUST invoke the Prose command of the same mark. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-432` | `OBS` | A selection in the composer MUST show the Prose format bar, with the Murmure marks alone. | this spec section 3; `MURMURE-194` | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Type Markdown
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-197` | `POST` | A Markdown marker MUST become its mark as soon as it closes. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-198` | `FRAME` | A marker typed inside code MUST stay text. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-197` | `POST` | A Markdown marker MUST become its mark as soon as it closes. | this spec section 3 | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-198` | `FRAME` | A marker typed inside code MUST stay text. | this spec section 3 | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Send
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-199` | `POST` | Enter MUST send the draft as a message. | this spec section 3; `features/ambre-spec-murmure-messages.md` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-200` | `POST` | Shift+Enter MUST insert a line break. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-201` | `FAIL` | Given an empty draft, Enter MUST send nothing. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-212` | `POST` | Sending a message MUST delete its stored draft. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-202` | `FRAME` | Sending MUST NOT clear the draft of another channel. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-199` | `POST` | Enter MUST send the draft as a message. | this spec section 3; `features/ambre-spec-murmure-messages.md` | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-200` | `POST` | Shift+Enter MUST insert a line break. | this spec section 3 | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-201` | `FAIL` | Given an empty draft, Enter MUST send nothing. | this spec section 3 | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-212` | `POST` | Sending a message MUST delete its stored draft. | this spec section 3 | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-202` | `FRAME` | Sending MUST NOT clear the draft of another channel. | this spec section 3 | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Edit a message
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-203` | `POST` | Editing MUST load the message into the composer and send an edit, never a new message. | this spec section 3; `MURMURE-084` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-204` | `FRAME` | Cancelling an edit MUST NOT change the message. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-259` | `FRAME` | Editing a message MUST NOT drop the draft of the channel: the draft MUST return once the edit is sent or cancelled. | this spec section 3; `MURMURE-195` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-203` | `POST` | Editing MUST load the message into the composer and send an edit, never a new message. | this spec section 3; `MURMURE-084` | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-204` | `FRAME` | Cancelling an edit MUST NOT change the message. | this spec section 3 | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-259` | `FRAME` | Editing a message MUST NOT drop the draft of the channel: the draft MUST return once the edit is sent or cancelled. | this spec section 3; `MURMURE-195` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Lose access to a channel, or sign out
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-215` | `POST` | Losing access to a channel MUST delete its stored draft. | this spec section 3; `SYNC-109` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-216` | `POST` | Signing out MUST delete every stored draft. | this spec section 3; `ambre-spec-session.md` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-217` | `FRAME` | Deleting the draft of one channel MUST NOT touch the draft of another. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-215` | `POST` | Losing access to a channel MUST delete its stored draft. | this spec section 3; `SYNC-109` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-216` | `POST` | Signing out MUST delete every stored draft. | this spec section 3; `ambre-spec-session.md` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-217` | `FRAME` | Deleting the draft of one channel MUST NOT touch the draft of another. | this spec section 3 | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Undo while writing
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-433` | `POST` | An undo in the composer MUST revert the last edit of the draft. | this spec section 3; `UNDO-010` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-434` | `FRAME` | An undo in the composer MUST NOT reach a message already sent. | this spec section 3; `UNDO-001` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-433` | `POST` | An undo in the composer MUST revert the last edit of the draft. | this spec section 3; `UNDO-010` | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-434` | `FRAME` | An undo in the composer MUST NOT reach a message already sent. | this spec section 3; `UNDO-001` | not built | unbuilt -- lands with the `The composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed

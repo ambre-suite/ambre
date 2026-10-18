@@ -138,7 +138,7 @@ decides in `MurmureRelay::notice` of `ambre-murmure`. The page raises it in `not
 * **Each channel never opened costs a subscription per live segment.** No ceiling bounds them yet.
   It lands with the `A ceiling on the channels watched unopened` Story (`ambre-roadmap.md` E5).
 * **A click opens the channel, not the message.** The list scrolls to it once the message list
-  lands, the `The message list and the composer` Story (`ambre-roadmap.md` E5).
+  lands, the `Scrolling the message list` Story (`ambre-roadmap.md` E5).
 * **A long-hidden tab may lag.** A browser may slow the timers of a tab hidden for minutes, which
   delays a notification. The `Wake a hidden tab from the worker` Story (`ambre-roadmap.md` E5)
   owns it.

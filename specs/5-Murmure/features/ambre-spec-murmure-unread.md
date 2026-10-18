@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-115` | `POST` | Showing the latest message of a channel MUST move the read cursor to it. | this spec section 3; `MURMURE-470` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-115` | `POST` | Showing the latest message of a channel MUST move the read cursor to it. | this spec section 3; `MURMURE-470` | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-470` | `POST` | Marking a channel read MUST move each of its read cursors to its latest message. | this spec section 3 | `ambre_logic::channels::tests::marking_a_channel_read_moves_its_live_segments_and_clears_its_mark`; `ambre_sync::updates::tests::a_read_reaches_the_last_update_delivered_and_no_further`; `ambre_murmure::channel_tests::the_final_segments_are_listed_loaded_or_not` -- the command moves the live segments to the last update delivered and the finals to their last number | none | verified |
 | `MURMURE-116` | `FRAME` | Moving a read cursor MUST NOT move the cursor of another member. | this spec section 3 | `ambre_server::routes::read_cursors::tests::marking_everything_read_moves_the_callers_cursors_alone`; `ambre_server::routes::read_cursors::tests::a_listed_move_touches_the_listed_documents_alone` -- another member's cursors stay where they were | none | verified |
 

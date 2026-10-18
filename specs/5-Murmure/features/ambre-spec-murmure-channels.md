@@ -310,4 +310,4 @@ who writes its key into the catalogue.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **The notice is not drawn.** The list that draws it, and invites only from the open channel, lands
-  with the `The message list and the composer` Story (`ambre-roadmap.md` E5).
+  with the `The message list drawn` Story (`ambre-roadmap.md` E5).

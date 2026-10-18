@@ -113,4 +113,4 @@ The Logic thread folds the counts into the channel mark.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **The `@` panel is not drawn.** The members reach the view, and the composer draws the panel
-  with the `The message list and the composer` Story (`ambre-roadmap.md` E5).
+  with the `The composer` Story (`ambre-roadmap.md` E5).

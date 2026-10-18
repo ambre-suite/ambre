@@ -144,6 +144,6 @@ is `crates/ambre-logic/src/threads.rs`, and the Sync side is `thread_task` in
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **No screen marks a thread read yet.** The command exists, and the thread pane sends it with
-  `The message list and the composer` Story (`ambre-roadmap.md` E5).
+  `The message list drawn` Story (`ambre-roadmap.md` E5).
 * **An open channel holds every thread its loaded segments name.** A root scrolled off screen
   keeps its thread held. Releasing it is not ruled.
