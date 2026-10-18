@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-109` | `POST` | A reply also sent to the channel MUST write a copy in the active segment that names its thread. | this spec section 3 | `ambre_murmure::thread_tests::a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread` -- the copy reads the reply's text and its thread; `ambre_logic::channels::tests::a_first_reply_waits_for_the_thread_it_creates` -- the copy leaves under the active segment | none | verified |
 | `MURMURE-110` | `FRAME` | Replying MUST NOT change the root message beyond its `thread` field. | this spec section 3 | `ambre_murmure::thread_tests::the_link_sets_the_root_thread_field_and_nothing_else` -- the delta of the link holds one operation, on that field | none | verified |
 | `MURMURE-484` | `POST` | The first reply to a message of a locked segment MUST record its thread in the amendments of that segment. | this spec section 3; `MURMURE-013` | not built | unbuilt -- lands with the `A thread on a locked segment` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-485` | `POST` | An edit, a delete or a reaction on a reply MUST write in its thread document. | this spec section 3; `MURMURE-084`, `MURMURE-091` | not built | unbuilt -- lands with the `Edits and reactions in a thread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-485` | `POST` | An edit, a delete or a reaction on a reply MUST write in its thread document. | this spec section 3; `MURMURE-084`, `MURMURE-091` | `ambre_murmure::thread_tests::an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread` -- each change writes the thread, and a delete leaves the count; `::another_member_reacts_to_a_reply_and_never_edits_it` -- the check takes a reaction, and an edit is refused; `ambre_logic::channels::tests::a_change_on_a_reply_leaves_for_its_thread` -- each change leaves under the thread | none | verified |
 
 ### 1.3 Follow a thread that is not open
 
@@ -57,8 +57,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, the identifier of its root, and when it
   changes (`ZK-015`, `SRV-162`).
-* **Verification.** 6 `verified`, 13 `unimplemented`. The engine tests hold the thread document,
-  the link and the count. The Logic tests hold the wait for the thread and the race.
+* **Verification.** 7 `verified`, 12 `unimplemented`. The engine tests hold the thread document,
+  the link, the count and the changes on a reply. The Logic tests hold the wait and the race.
 
 ---
 

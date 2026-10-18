@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{MessageDraft, MessageView, MurmureEvent, Timestamp};
+use ambre_bus::{ActivityKind, MessageAt, MessageDraft, MessageView, MurmureEvent, Timestamp};
 use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId, Seq, UserId};
 use loro::json::{JsonOpContent, MapOp};
 use loro::{Container, LoroDoc, ValueOrContainer, VersionVector};
@@ -424,6 +424,140 @@ fn a_reply_takes_no_thread_field_from_another_member() {
         Err(MurmureError::Refused(Refusal::ForeignMessage))
     );
     drop(named);
+}
+
+// --- MURMURE-485 ---
+
+/// A second member's copy of `alice`, holding `thread` from its updates,
+/// with a session of its own on it.
+fn peer_with_thread(
+    alice: &ChannelState,
+    thread: DocumentId,
+    updates: &[&[u8]],
+    author: UserId,
+) -> ChannelState {
+    let mut bob = peer_of(alice);
+    assert_eq!(bob.threads_to_open(), [thread]);
+    for (seq, update) in (1..).zip(updates) {
+        bob.apply_signed(thread, Seq(seq), update, signer(alice, thread, author))
+            .expect("waits");
+    }
+    bob.older_ready(thread).expect("admitted");
+    let peer = next_peer();
+    bob.adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+        .expect("adopt");
+    bob
+}
+
+/// The replies the thread view of `state` reads.
+fn replies_of(state: &ChannelState, thread: DocumentId) -> Vec<MessageView> {
+    let Some(MurmureEvent::ThreadMessages { messages, .. }) = state.thread_view(thread) else {
+        panic!("the thread reads its replies");
+    };
+    messages
+}
+
+/// The author edits, reacts to and deletes a reply: each change writes in
+/// the thread, and the view reads the replies. A deleted reply leaves the
+/// count of its root.
+#[test]
+fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
+    let alice = UserId::new();
+    let mut state = channel_with(&["root"], alice);
+    let root = message_at(&state, 0).id;
+    let (thread, _, _) = threaded(&mut state, root);
+    state
+        .reply(root, &draft("hi"), alice, NOW, false)
+        .expect("reply");
+    let reply = replies_of(&state, thread)[0].id;
+    let at = MessageAt::Thread(root);
+    let in_thread = |sent: &Sent| {
+        sent.document == thread
+            && matches!(&sent.event, MurmureEvent::ThreadMessages { thread: t, .. } if *t == thread)
+    };
+    let edited = state
+        .edit(at, reply, &draft("hello"), alice)
+        .expect("edit")
+        .expect("a change");
+    assert!(in_thread(&edited));
+    assert_eq!(edited.summary.kind, ActivityKind::Edit);
+    let read = &replies_of(&state, thread)[0];
+    assert_eq!((read.text.as_str(), read.edited), ("hello", true));
+    let reacted = state
+        .react(at, reply, "\u{1F44D}", alice, NOW)
+        .expect("react")
+        .expect("a change");
+    assert!(in_thread(&reacted));
+    assert_eq!(reacted.summary.kind, ActivityKind::Reaction);
+    assert_eq!(replies_of(&state, thread)[0].reactions.len(), 1);
+    let removed = state
+        .unreact(at, reply, "\u{1F44D}", alice)
+        .expect("unreact")
+        .expect("a change");
+    assert!(in_thread(&removed));
+    assert!(replies_of(&state, thread)[0].reactions.is_empty());
+    let deleted = state.delete(at, reply, alice).expect("delete");
+    assert!(in_thread(&deleted));
+    assert!(replies_of(&state, thread)[0].deleted);
+    let Some(MurmureEvent::Messages { messages, .. }) = state.root_view(root) else {
+        panic!("the root's segment");
+    };
+    assert_eq!(messages[0].thread.map(|head| head.replies), Some(0));
+    assert_eq!(state.root_view(MessageId::new()), None);
+    // The root itself still changes in its segment.
+    assert!(
+        state
+            .react(state.active_id(), root, "\u{1F44D}", alice, NOW)
+            .expect("react")
+            .is_some_and(|sent| sent.document == state.active_id().document_id())
+    );
+    assert!(matches!(
+        state.react(
+            MessageAt::Thread(MessageId::new()),
+            reply,
+            "\u{1F44D}",
+            alice,
+            NOW
+        ),
+        Err(MurmureError::NoThread(_))
+    ));
+}
+
+/// Bob reacts to Alice's reply, and her check accepts it. Bob may not edit
+/// or delete her reply.
+#[test]
+fn another_member_reacts_to_a_reply_and_never_edits_it() {
+    let (alice_user, bob_user) = (UserId::new(), UserId::new());
+    let mut alice = channel_with(&["root"], alice_user);
+    let root = message_at(&alice, 0).id;
+    let (thread, first, _) = threaded(&mut alice, root);
+    let replied = alice
+        .reply(root, &draft("hi"), alice_user, NOW, false)
+        .expect("reply");
+    let mut bob = peer_with_thread(&alice, thread, &[&first, &replied.reply.delta], alice_user);
+    let reply = replies_of(&bob, thread)[0].id;
+    let at = MessageAt::Thread(root);
+    let reacted = bob
+        .react(at, reply, "\u{1F389}", bob_user, NOW)
+        .expect("react")
+        .expect("a change");
+    alice
+        .apply_signed(
+            thread,
+            Seq(3),
+            &reacted.delta,
+            signer(&bob, thread, bob_user),
+        )
+        .expect("a reaction of another member passes");
+    assert_eq!(replies_of(&alice, thread)[0].reactions.len(), 1);
+    assert!(matches!(
+        bob.edit(at, reply, &draft("mine"), bob_user),
+        Err(MurmureError::NotAuthor(id)) if id == reply
+    ));
+    assert!(matches!(
+        bob.delete(at, reply, bob_user),
+        Err(MurmureError::NotAuthor(id)) if id == reply
+    ));
 }
 
 // --- MURMURE-009 ---

@@ -42,10 +42,10 @@ pub use activity::{ActivityAnchor, ActivityKind, ActivitySummary};
 pub use app::murmure::{
     CatalogueEntry, CategoryView, ChannelActivity, ChannelDocument, ChannelMatches, ChannelPlace,
     DirectMember, DirectMessageDraft, DirectMessageEvent, DocumentActivity, MemberChannel,
-    MemberView, Mention, MentionCount, MentionTarget, MessageDraft, MessageView, MurmureCommand,
-    MurmureEvent, Notice, Presence, PrivateChannelDraft, PublicChannelDraft, Reaction,
-    SealedChannelKey, SearchMatch, SpaceCommand, SpaceEvent, ThreadHead, Timestamp, Topic,
-    UnreadCount,
+    MemberView, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView,
+    MurmureCommand, MurmureEvent, Notice, Presence, PrivateChannelDraft, PublicChannelDraft,
+    Reaction, SealedChannelKey, SearchMatch, SpaceCommand, SpaceEvent, ThreadHead, Timestamp,
+    Topic, UnreadCount,
 };
 pub use command::SyncCommand;
 pub use event::{

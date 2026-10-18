@@ -8,7 +8,7 @@
 use super::*;
 use ambre_bus::{
     ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, ChannelMatches,
-    DocumentActivity, MetaId, MurmureCommand, MurmureEvent,
+    DocumentActivity, MessageAt, MetaId, MurmureCommand, MurmureEvent,
 };
 use ambre_bus::{MemberInfo, MentionCount, MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
 use ambre_murmure::{
@@ -841,14 +841,51 @@ impl LogicState {
         let target = match &command {
             MurmureCommand::SendMessage { .. } => Some(channel.active_id().document_id()),
             MurmureCommand::Name { .. } => Some(channel.meta_id().document_id()),
-            MurmureCommand::React { segment, .. } | MurmureCommand::Unreact { segment, .. } => {
-                Some(segment.document_id())
+            // A reply changes in its thread, which the channel holds once
+            // its root is on screen (the Murmure threads spec).
+            MurmureCommand::React {
+                at: MessageAt::Thread(root),
+                ..
             }
+            | MurmureCommand::Unreact {
+                at: MessageAt::Thread(root),
+                ..
+            }
+            | MurmureCommand::EditMessage {
+                at: MessageAt::Thread(root),
+                ..
+            }
+            | MurmureCommand::DeleteMessage {
+                at: MessageAt::Thread(root),
+                ..
+            } => {
+                let Some(thread) = channel.thread_id(*root) else {
+                    tracing::warn!("Logic: change in the thread of {root}, not held; refused");
+                    return;
+                };
+                Some(thread)
+            }
+            MurmureCommand::React {
+                at: MessageAt::Segment(segment),
+                ..
+            }
+            | MurmureCommand::Unreact {
+                at: MessageAt::Segment(segment),
+                ..
+            } => Some(segment.document_id()),
             // A locked segment takes the change in its amendments document,
             // which may first have to arrive or to be created
             // (the Murmure messages spec).
-            MurmureCommand::EditMessage { segment, now, .. }
-            | MurmureCommand::DeleteMessage { segment, now, .. } => {
+            MurmureCommand::EditMessage {
+                at: MessageAt::Segment(segment),
+                now,
+                ..
+            }
+            | MurmureCommand::DeleteMessage {
+                at: MessageAt::Segment(segment),
+                now,
+                ..
+            } => {
                 let (segment, now) = (*segment, *now);
                 let meta = channel.meta_id();
                 let (id, ask) = match channel.change_target(segment, now) {
@@ -1058,7 +1095,7 @@ impl LogicState {
                 self.mark_unread(channel_id, segment, message);
             }
             MurmureCommand::React {
-                segment,
+                at,
                 message,
                 emoji,
                 now,
@@ -1067,23 +1104,19 @@ impl LogicState {
                     tracing::warn!("Logic: reaction on {channel_id} before the session; dropped");
                     return;
                 };
-                let reacted = channel.react(segment, message, &emoji, user, now);
+                let reacted = channel.react(at, message, &emoji, user, now);
                 self.send_change(channel_id, reacted);
             }
-            MurmureCommand::Unreact {
-                segment,
-                message,
-                emoji,
-            } => {
+            MurmureCommand::Unreact { at, message, emoji } => {
                 let Some(user) = self.my_user_id else {
                     tracing::warn!("Logic: reaction on {channel_id} before the session; dropped");
                     return;
                 };
-                let removed = channel.unreact(segment, message, &emoji, user);
+                let removed = channel.unreact(at, message, &emoji, user);
                 self.send_change(channel_id, removed);
             }
             MurmureCommand::EditMessage {
-                segment,
+                at,
                 message,
                 draft,
                 now: _,
@@ -1099,11 +1132,11 @@ impl LogicState {
                     .get(&channel_id)
                     .map(|rows| rows.iter().map(|row| row.user_id).collect());
                 let draft = members_only(draft, members.as_deref());
-                let edited = channel.edit(segment, message, &draft, user);
+                let edited = channel.edit(at, message, &draft, user);
                 self.send_change(channel_id, edited);
             }
             MurmureCommand::DeleteMessage {
-                segment,
+                at,
                 message,
                 now: _,
             } => {
@@ -1111,8 +1144,17 @@ impl LogicState {
                     tracing::warn!("Logic: delete on {channel_id} before the session; dropped");
                     return;
                 };
-                let deleted = channel.delete(segment, message, user).map(Some);
-                self.send_change(channel_id, deleted);
+                let deleted = channel.delete(at, message, user);
+                // A deleted reply leaves the count of its root (the Murmure
+                // threads spec).
+                let head = match (&deleted, at) {
+                    (Ok(_), MessageAt::Thread(root)) => channel.root_view(root),
+                    _ => None,
+                };
+                self.send_change(channel_id, deleted.map(Some));
+                if let Some(event) = head {
+                    self.send_to_ui(UiEvent::Channel { channel_id, event });
+                }
             }
             MurmureCommand::Reply {
                 root,
@@ -2873,13 +2915,13 @@ mod tests {
         drain(&ui);
         let message = state.channels[&channel_id].messages(segment).expect("held")[0].id;
         let react = MurmureCommand::React {
-            segment,
+            at: segment.into(),
             message,
             emoji: "\u{1F44D}".to_owned(),
             now: NOW,
         };
         let unreact = MurmureCommand::Unreact {
-            segment,
+            at: segment.into(),
             message,
             emoji: "\u{1F44D}".to_owned(),
         };
@@ -2950,7 +2992,7 @@ mod tests {
         let message = state.channels[&channel_id].messages(segment).expect("held")[0].id;
         let mention = |target, range| Mention { target, range };
         let edit = MurmureCommand::EditMessage {
-            segment,
+            at: segment.into(),
             message,
             draft: MessageDraft {
                 text: "lunch @bob @eve?".to_owned(),
@@ -2962,7 +3004,7 @@ mod tests {
             now: Timestamp(1),
         };
         let delete = MurmureCommand::DeleteMessage {
-            segment,
+            at: segment.into(),
             message,
             now: Timestamp(2),
         };
@@ -3697,7 +3739,7 @@ mod tests {
         now: Timestamp,
     ) -> MurmureCommand {
         MurmureCommand::EditMessage {
-            segment,
+            at: segment.into(),
             message,
             draft: MessageDraft {
                 text: text.to_owned(),
@@ -4399,6 +4441,107 @@ mod tests {
                         && messages[0].thread.is_some_and(|head| head.replies == 1))),
             "the root's head counts the reply, {shown:?}"
         );
+    }
+
+    /// A change on the reply of `root`, in its thread: a react, an edit or a
+    /// delete by `kind`.
+    fn thread_change(root: MessageId, reply: MessageId, kind: &str) -> MurmureCommand {
+        let at = MessageAt::Thread(root);
+        match kind {
+            "react" => MurmureCommand::React {
+                at,
+                message: reply,
+                emoji: "\u{1F44D}".to_owned(),
+                now: NOW,
+            },
+            "unreact" => MurmureCommand::Unreact {
+                at,
+                message: reply,
+                emoji: "\u{1F44D}".to_owned(),
+            },
+            "edit" => MurmureCommand::EditMessage {
+                at,
+                message: reply,
+                draft: MessageDraft {
+                    text: "edited".to_owned(),
+                    mentions: Vec::new(),
+                },
+                now: NOW,
+            },
+            _ => MurmureCommand::DeleteMessage {
+                at,
+                message: reply,
+                now: NOW,
+            },
+        }
+    }
+
+    /// Each change on a reply leaves for its thread, and the view reads the
+    /// replies. A delete moves the root's count too. A thread not held takes
+    /// no change.
+    #[test]
+    fn a_change_on_a_reply_leaves_for_its_thread() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, active, root) = rooted_channel(&mut state, &sync);
+        command(&mut state, channel_id, reply_to(root, "a reply", false));
+        let [(segment, _, thread)] = created_threads(&sync).try_into().expect("one create");
+        state.handle_logic_event(LogicEvent::ThreadLinked {
+            channel_id,
+            segment,
+            root,
+            thread,
+        });
+        state.grant_identity(thread);
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: thread,
+            role: ambre_bus::Role::Owner,
+        });
+        drain(&sync);
+        drain(&ui);
+        let Some(MurmureEvent::ThreadMessages { messages, .. }) =
+            state.channels[&channel_id].thread_view(thread)
+        else {
+            panic!("the thread is held");
+        };
+        let reply = messages[0].id;
+        for kind in ["react", "unreact", "edit", "delete"] {
+            command(&mut state, channel_id, thread_change(root, reply, kind));
+            let sent: Vec<DocumentId> = drain(&sync)
+                .into_iter()
+                .filter_map(|c| match c {
+                    SyncCommand::SendUpdate { document_id, .. } => Some(document_id),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(sent, [thread], "{kind} writes the thread");
+            let shown = channel_events(&ui);
+            assert!(
+                shown.iter().any(|(_, event)| matches!(event,
+                    MurmureEvent::ThreadMessages { thread: t, .. } if *t == thread)),
+                "{kind}: the view was told {shown:?}"
+            );
+            let counted = shown.iter().any(|(_, event)| {
+                matches!(event,
+                MurmureEvent::Messages { segment, messages }
+                    if *segment == active
+                        && messages[0].thread.is_some_and(|head| head.replies == 0))
+            });
+            assert_eq!(counted, kind == "delete", "{kind}: {shown:?}");
+        }
+        let Some(MurmureEvent::ThreadMessages { messages, .. }) =
+            state.channels[&channel_id].thread_view(thread)
+        else {
+            panic!("the thread is held");
+        };
+        assert!(messages[0].deleted);
+        command(
+            &mut state,
+            channel_id,
+            thread_change(MessageId::new(), reply, "edit"),
+        );
+        assert!(drain(&sync).is_empty(), "a thread not held takes nothing");
+        assert!(state.murmure_waiting.is_empty());
     }
 
     /// A link that lost its race names another member's thread. What waited

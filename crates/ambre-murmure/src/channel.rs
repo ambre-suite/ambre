@@ -9,7 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    ActivityKind, ActivitySummary, ChannelMatches, Mention, MentionCount, MentionTarget,
+    ActivityKind, ActivitySummary, ChannelMatches, Mention, MentionCount, MentionTarget, MessageAt,
     MessageDraft, MessageView, MurmureEvent, Notice, SearchMatch, ThreadHead, Timestamp,
     UnreadCount,
 };
@@ -906,23 +906,24 @@ impl ChannelState {
     /// every refusal of [`ChannelState::reactions_of`].
     pub fn react(
         &mut self,
-        segment: SegmentId,
+        at: impl Into<MessageAt>,
         message: MessageId,
         emoji: &str,
         user: UserId,
         now: Timestamp,
     ) -> Result<Option<Sent>, MurmureError> {
+        let at = at.into();
         if !reaction::is_emoji(emoji) {
             return Err(MurmureError::NotEmoji);
         }
         let key = reaction::key(user, emoji);
-        let (doc, session, map) = self.reactions_of(segment, message)?;
+        let (doc, session, map) = self.reactions_of(at, message)?;
         if map.get(&key).is_some() {
             return Ok(None);
         }
         map.insert(&key, schema::ts_value(now.0))?;
         let delta = session.export_json(doc)?;
-        Ok(Some(self.reacted(segment, delta)))
+        self.reacted_at(at, delta).map(Some)
     }
 
     /// Remove the reaction of `user` with `emoji` from `message`: their own
@@ -932,35 +933,33 @@ impl ChannelState {
     /// Every refusal of [`ChannelState::reactions_of`].
     pub fn unreact(
         &mut self,
-        segment: SegmentId,
+        at: impl Into<MessageAt>,
         message: MessageId,
         emoji: &str,
         user: UserId,
     ) -> Result<Option<Sent>, MurmureError> {
+        let at = at.into();
         let key = reaction::key(user, emoji);
-        let (doc, session, map) = self.reactions_of(segment, message)?;
+        let (doc, session, map) = self.reactions_of(at, message)?;
         if map.get(&key).is_none() {
             return Ok(None);
         }
         map.delete(&key)?;
         let delta = session.export_json(doc)?;
-        Ok(Some(self.reacted(segment, delta)))
+        self.reacted_at(at, delta).map(Some)
     }
 
-    /// The `reactions` map of `message` in the live segment `segment`, with
-    /// the session it is written under.
+    /// The `reactions` map of `message` at `at`, with the session it is
+    /// written under.
     ///
     /// # Errors
-    /// [`MurmureError::NotHeld`] for a segment the channel does not hold, and
-    /// [`MurmureError::Final`] for a final one. [`MurmureError::NoSession`]
-    /// before its PeerID landed, and [`MurmureError::NoMessage`] for a
-    /// message it does not hold.
+    /// Every refusal of [`ChannelState::live_message`].
     fn reactions_of(
         &mut self,
-        segment: SegmentId,
+        at: MessageAt,
         message: MessageId,
     ) -> Result<(&LoroDoc, &mut Session, LoroMap), MurmureError> {
-        let (doc, session, map) = self.live_message(segment, message)?;
+        let (doc, session, map) = self.live_message(at, message)?;
         let reactions = match map.get(MESSAGE_REACTIONS) {
             Some(ValueOrContainer::Container(Container::Map(reactions))) => reactions,
             _ => return Err(MurmureError::NoMessage(message)),
@@ -968,26 +967,37 @@ impl ChannelState {
         Ok((doc, session, reactions))
     }
 
-    /// The map of `message` in the live segment `segment`, with the session
-    /// it is written under.
+    /// The map of `message` in the live segment or the held thread `at`,
+    /// with the session it is written under.
     ///
     /// # Errors
     /// [`MurmureError::NotHeld`] for a segment the channel does not hold, and
-    /// [`MurmureError::Final`] for a final one. [`MurmureError::NoSession`]
-    /// before its PeerID landed, and [`MurmureError::NoMessage`] for a
-    /// message it does not hold.
+    /// [`MurmureError::Final`] for a final one. [`MurmureError::NoThread`]
+    /// for a thread it does not hold. [`MurmureError::NoSession`] before its
+    /// PeerID landed, and [`MurmureError::NoMessage`] for a message it does
+    /// not hold.
     fn live_message(
         &mut self,
-        segment: SegmentId,
+        at: MessageAt,
         message: MessageId,
     ) -> Result<(&LoroDoc, &mut Session, LoroMap), MurmureError> {
-        let document_id = segment.document_id();
-        if !self.holds(document_id) {
-            return Err(MurmureError::NotHeld(document_id));
-        }
-        let held = self
-            .held_mut(document_id)
-            .ok_or(MurmureError::Final(document_id))?;
+        let held = match at {
+            MessageAt::Segment(segment) => {
+                let document_id = segment.document_id();
+                if !self.holds(document_id) {
+                    return Err(MurmureError::NotHeld(document_id));
+                }
+                self.held_mut(document_id)
+                    .ok_or(MurmureError::Final(document_id))?
+            }
+            MessageAt::Thread(root) => {
+                &mut self
+                    .threads
+                    .get_mut(&root)
+                    .ok_or(MurmureError::NoThread(root))?
+                    .held
+            }
+        };
         let (doc, session) = held.session()?;
         let map = message_map(doc, message).ok_or(MurmureError::NoMessage(message))?;
         Ok((doc, session, map))
@@ -1002,11 +1012,11 @@ impl ChannelState {
     /// [`MurmureError::Deleted`] for a deleted one.
     fn own_message(
         &mut self,
-        segment: SegmentId,
+        at: MessageAt,
         message: MessageId,
         user: UserId,
     ) -> Result<(&LoroDoc, &mut Session, LoroMap), MurmureError> {
-        let (doc, session, map) = self.live_message(segment, message)?;
+        let (doc, session, map) = self.live_message(at, message)?;
         // The check refuses a foreign change at every receiver, so a local
         // one is refused before it is written (`MURMURE-085`).
         if identity_of(&map).map(|(_, author)| author) != Some(user) {
@@ -1027,7 +1037,7 @@ impl ChannelState {
     /// when the draft is the body already, so nothing travels.
     ///
     /// A message of a locked segment takes its edit as an amendment
-    /// (`MURMURE-073`).
+    /// (`MURMURE-073`). A reply takes it in its thread (`MURMURE-485`).
     ///
     /// # Errors
     /// [`MurmureError::BadMention`] for a mention past the draft, and every
@@ -1035,19 +1045,22 @@ impl ChannelState {
     /// [`ChannelState::amend`] does.
     pub fn edit(
         &mut self,
-        segment: SegmentId,
+        at: impl Into<MessageAt>,
         message: MessageId,
         draft: &MessageDraft,
         user: UserId,
     ) -> Result<Option<Sent>, MurmureError> {
+        let at = at.into();
         if !mention::fits(&draft.mentions, &draft.text) {
             return Err(MurmureError::BadMention);
         }
-        if self.amendable(segment) {
+        if let MessageAt::Segment(segment) = at
+            && self.amendable(segment)
+        {
             return self.amend(segment, message, user, amending::Change::Edit(draft));
         }
         let channel = self.channel_id;
-        let (doc, session, map) = self.own_message(segment, message, user)?;
+        let (doc, session, map) = self.own_message(at, message, user)?;
         let content = content_of(&map).ok_or(MurmureError::NoMessage(message))?;
         if content.to_string() == draft.text && mention::read(&content, channel) == draft.mentions {
             return Ok(None);
@@ -1064,7 +1077,7 @@ impl ChannelState {
         mention::write(doc, &content, &draft.mentions, channel)?;
         map.insert(MESSAGE_EDITED, true)?;
         let delta = session.export_json(doc)?;
-        Ok(Some(self.changed(segment, delta)))
+        self.changed_at(at, delta).map(Some)
     }
 
     /// Delete `message`: mark it deleted and empty its body (`MURMURE-087`).
@@ -1073,7 +1086,8 @@ impl ChannelState {
     /// the reactions stay, and the replies with them (`MURMURE-090`).
     ///
     /// A message of a locked segment takes its delete as an amendment, with
-    /// `by: author` (`MURMURE-088`).
+    /// `by: author` (`MURMURE-088`). A reply takes it in its thread
+    /// (`MURMURE-485`).
     ///
     /// # Errors
     /// Every refusal of [`ChannelState::own_message`]. A deleted message is
@@ -1081,16 +1095,19 @@ impl ChannelState {
     /// segment refuses as [`ChannelState::amend`] does.
     pub fn delete(
         &mut self,
-        segment: SegmentId,
+        at: impl Into<MessageAt>,
         message: MessageId,
         user: UserId,
     ) -> Result<Sent, MurmureError> {
-        if self.amendable(segment) {
+        let at = at.into();
+        if let MessageAt::Segment(segment) = at
+            && self.amendable(segment)
+        {
             return self
                 .amend(segment, message, user, amending::Change::Delete)?
                 .ok_or(MurmureError::Deleted(message));
         }
-        let (doc, session, map) = self.own_message(segment, message, user)?;
+        let (doc, session, map) = self.own_message(at, message, user)?;
         let content = content_of(&map).ok_or(MurmureError::NoMessage(message))?;
         let len = content.len_unicode();
         if len > 0 {
@@ -1098,7 +1115,30 @@ impl ChannelState {
         }
         map.insert(MESSAGE_DELETED, true)?;
         let delta = session.export_json(doc)?;
-        Ok(self.changed(segment, delta))
+        self.changed_at(at, delta)
+    }
+
+    /// What an edit or a delete at `at` produced, as
+    /// [`ChannelState::changed`] or its thread twin.
+    ///
+    /// # Errors
+    /// [`MurmureError::NoThread`] for a thread the channel does not hold.
+    fn changed_at(&self, at: MessageAt, delta: Vec<u8>) -> Result<Sent, MurmureError> {
+        let mut sent = self.reacted_at(at, delta)?;
+        sent.summary.kind = ActivityKind::Edit;
+        Ok(sent)
+    }
+
+    /// What a reaction at `at` produced, as [`ChannelState::reacted`] for a
+    /// segment. A thread answers with its replies for the view.
+    ///
+    /// # Errors
+    /// [`MurmureError::NoThread`] for a thread the channel does not hold.
+    fn reacted_at(&self, at: MessageAt, delta: Vec<u8>) -> Result<Sent, MurmureError> {
+        match at {
+            MessageAt::Segment(segment) => Ok(self.reacted(segment, delta)),
+            MessageAt::Thread(root) => self.thread_reacted(root, delta),
+        }
     }
 
     /// What an edit or a delete produced: the delta, its summary of kind
@@ -1118,12 +1158,7 @@ impl ChannelState {
             segment,
             document: segment.document_id(),
             delta,
-            summary: ActivitySummary {
-                kind: ActivityKind::Reaction,
-                mentions: Vec::new(),
-                mentions_all: false,
-                anchor: None,
-            },
+            summary: reaction_summary(),
             event: MurmureEvent::Messages { segment, messages },
         }
     }
@@ -1699,6 +1734,16 @@ fn message_map(doc: &LoroDoc, id: MessageId) -> Option<LoroMap> {
         }
         _ => None,
     })
+}
+
+/// The activity summary of a reaction (`MURMURE-093`): it names no one.
+fn reaction_summary() -> ActivitySummary {
+    ActivitySummary {
+        kind: ActivityKind::Reaction,
+        mentions: Vec::new(),
+        mentions_all: false,
+        anchor: None,
+    }
 }
 
 /// The activity summary of a new message (`MURMURE-081`). It has kind content,

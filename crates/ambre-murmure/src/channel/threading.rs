@@ -10,7 +10,9 @@ use ambre_bus::{MessageDraft, MessageView, MurmureEvent, ThreadHead, Timestamp};
 use ambre_core::{DocumentId, MessageId, SegmentId, UserId};
 use loro::{Container, LoroDoc, ValueOrContainer};
 
-use super::{ChannelState, Created, Held, Sent, message_map, read_messages, summary_of};
+use super::{
+    ChannelState, Created, Held, Sent, message_map, reaction_summary, read_messages, summary_of,
+};
 use crate::delta::{self, Arrival, Rules};
 use crate::error::MurmureError;
 use crate::mention;
@@ -315,6 +317,43 @@ impl ChannelState {
             thread: document_id,
             messages: read_messages(&thread.held.doc, self.channel_id),
         })
+    }
+
+    /// What a reaction delta in the thread of `root` produced: the delta,
+    /// its summary of kind reaction, and the replies for the view
+    /// (`MURMURE-485`).
+    ///
+    /// # Errors
+    /// [`MurmureError::NoThread`] for a thread the channel does not hold.
+    pub(super) fn thread_reacted(
+        &self,
+        root: MessageId,
+        delta: Vec<u8>,
+    ) -> Result<Sent, MurmureError> {
+        let thread = self
+            .threads
+            .get(&root)
+            .ok_or(MurmureError::NoThread(root))?;
+        let document = thread.held.id;
+        let event = self
+            .thread_view(document)
+            .ok_or(MurmureError::NoThread(root))?;
+        Ok(Sent {
+            segment: thread.segment,
+            document,
+            delta,
+            summary: reaction_summary(),
+            event,
+        })
+    }
+
+    /// The segment that holds `root`, read with its thread heads. A delete
+    /// in its thread moves its count (`MURMURE-106`). `None` when no held
+    /// segment holds it.
+    pub fn root_view(&self, root: MessageId) -> Option<MurmureEvent> {
+        let segment = self.root_segment(root)?;
+        let messages = self.read_segment(segment)?;
+        Some(MurmureEvent::Messages { segment, messages })
     }
 
     /// The root's segment of the held thread document `document_id`, read

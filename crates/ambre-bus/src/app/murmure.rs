@@ -84,6 +84,21 @@ pub enum ChannelPlace {
     Direct,
 }
 
+/// Where a message lies: a segment of the channel, or the thread of a root.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageAt {
+    /// A segment of the channel.
+    Segment(SegmentId),
+    /// The thread document of the root message (the Murmure threads spec).
+    Thread(MessageId),
+}
+
+impl From<SegmentId> for MessageAt {
+    fn from(segment: SegmentId) -> Self {
+        Self::Segment(segment)
+    }
+}
+
 /// One channel the user is a member of, answering
 /// [`LogicCommand::ListMemberChannels`](crate::LogicCommand::ListMemberChannels).
 /// Learning of it opens nothing (`MURMURE-475`).
@@ -187,9 +202,10 @@ pub enum MurmureCommand {
     /// and every member reads it.
     Name { name: Option<String> },
     /// React to `message` with `emoji`, under this session's user
-    /// (`MURMURE-092`). A reaction already there writes nothing.
+    /// (`MURMURE-092`). A reaction already there writes nothing. A reply
+    /// takes it in its thread (`MURMURE-485`).
     React {
-        segment: SegmentId,
+        at: MessageAt,
         message: MessageId,
         emoji: String,
         /// The instant the member reacted, stamped by the view.
@@ -198,15 +214,15 @@ pub enum MurmureCommand {
     /// Remove this session's own reaction `emoji` from `message`
     /// (`MURMURE-096`). The entry of another member stays (`MURMURE-097`).
     Unreact {
-        segment: SegmentId,
+        at: MessageAt,
         message: MessageId,
         emoji: String,
     },
     /// Replace the body of this session's own `message` with `draft`, and
     /// mark it edited (`MURMURE-084`). Its author, identity and reactions
-    /// stay (`MURMURE-086`).
+    /// stay (`MURMURE-086`). A reply takes it in its thread (`MURMURE-485`).
     EditMessage {
-        segment: SegmentId,
+        at: MessageAt,
         message: MessageId,
         draft: MessageDraft,
         /// The instant the author edited, stamped by the view. A locked
@@ -214,9 +230,10 @@ pub enum MurmureCommand {
         now: Timestamp,
     },
     /// Delete this session's own `message`: it reads deleted, with an empty
-    /// body (`MURMURE-087`). Its thread stays (`MURMURE-090`).
+    /// body (`MURMURE-087`). Its thread stays (`MURMURE-090`). A reply
+    /// takes it in its thread (`MURMURE-485`).
     DeleteMessage {
-        segment: SegmentId,
+        at: MessageAt,
         message: MessageId,
         /// The instant the author deleted, stamped by the view.
         now: Timestamp,

@@ -443,13 +443,13 @@ impl LogicState {
         for replay in self.owed_replays.remove(&channel_id).unwrap_or_default() {
             let command = match replay.draft {
                 Some(draft) => MurmureCommand::EditMessage {
-                    segment: replay.segment,
+                    at: replay.segment.into(),
                     message: replay.message,
                     draft,
                     now,
                 },
                 None => MurmureCommand::DeleteMessage {
-                    segment: replay.segment,
+                    at: replay.segment.into(),
                     message: replay.message,
                     now,
                 },
