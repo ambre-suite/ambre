@@ -101,6 +101,11 @@ pub enum LogicEvent {
         refinalize: bool,
     },
 
+    /// A thread this client holds neither in full nor light took a delta
+    /// (the Murmure threads spec). The signal names the thread alone: the
+    /// Logic thread finds its channel and decides what to load.
+    ThreadActivity { document_id: DocumentId },
+
     /// Decrypted ephemeral data (cursor, collaborator presence). `from_user_id` is the
     /// sender's canonical `UserId`, resolved from the authenticated `pub_key` against the
     /// document's member list before delivery. Presence is therefore keyed by a spoof-proof

@@ -20,7 +20,7 @@ use tokio::sync::mpsc;
 #[allow(clippy::single_component_path_imports)]
 use tracing;
 
-use ambre_core::{DocumentId, RefusalCode, UserId};
+use ambre_core::{ChannelId, DocumentId, RefusalCode, UserId};
 use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
 
 use crate::payload::{self, Payload};
@@ -41,6 +41,12 @@ fn doc_pubsub_channel(document_id: &DocumentId) -> String {
 /// the whole session so server-initiated, non-document-scoped pushes reach it.
 pub(crate) fn user_pubsub_channel(user_id: &UserId) -> String {
     format!("user:{user_id}")
+}
+
+/// Redis PubSub topic name for the activity of a channel's threads. Every
+/// socket watching a document of the channel subscribes to it (`SRV-161`).
+pub(crate) fn channel_pubsub_channel(channel_id: &ChannelId) -> String {
+    format!("channel:{channel_id}")
 }
 
 /// HTTP upgrade handler. The socket address carries no credential. The access
@@ -129,6 +135,25 @@ struct WsConnectionState {
     /// The documents whose deltas this socket drops until the author answers
     /// a refused clock (`SRV-169`).
     clock_fences: ClockFences,
+    /// The channel of each subscribed document that belongs to one, with its
+    /// kind there. Read once at `Subscribe`. A socket watching a document of
+    /// a channel hears the activity of its threads, and a delta on a thread
+    /// signals it (`SRV-161`).
+    doc_channels: HashMap<DocumentId, (ChannelId, ambre_core::ChannelDocumentKind)>,
+}
+
+impl WsConnectionState {
+    /// The channel `document_id` belongs to, while this socket watches it.
+    fn channel_of(&self, document_id: &DocumentId) -> Option<ChannelId> {
+        self.doc_channels
+            .get(document_id)
+            .map(|(channel, _)| *channel)
+    }
+
+    /// Whether this socket still watches a document of `channel`.
+    fn watches_channel(&self, channel: &ChannelId) -> bool {
+        self.doc_channels.values().any(|(held, _)| held == channel)
+    }
 }
 
 /// Close code of an upgrade refused on authentication (expired or rotated
@@ -193,6 +218,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         last_replay_at: HashMap::new(),
         msg_bucket: TokenBucket::new(state.config.ws_msg_burst, state.config.ws_msg_rate_per_sec),
         clock_fences: ClockFences::default(),
+        doc_channels: HashMap::new(),
     };
 
     let (mut ws_sink, mut ws_stream) = socket.split();
@@ -281,6 +307,21 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
                     {
                         break;
                     }
+                    // A document of a channel also hears the activity of its
+                    // threads. The hub keeps one route per socket and topic,
+                    // so a second document of the channel adds none.
+                    if let Some(channel) = conn.channel_of(&document_id)
+                        && pubsub
+                            .subscribe(
+                                channel_pubsub_channel(&channel),
+                                connection_id.clone(),
+                                outbound_tx.clone(),
+                            )
+                            .await
+                            .is_err()
+                    {
+                        break;
+                    }
                 }
                 WsClientMsg::Unsubscribe { document_id } => {
                     // Announce the departure to the peers still on the document
@@ -289,10 +330,18 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
                     if conn.doc_subscriptions.contains(&document_id) {
                         announce_departure(&state, &document_id, &conn.signing_pubkey).await;
                     }
+                    let channel = conn.channel_of(&document_id);
                     handle_unsubscribe(&mut conn, document_id);
                     pubsub
                         .unsubscribe(doc_pubsub_channel(&document_id), connection_id.clone())
                         .await;
+                    if let Some(channel) = channel
+                        && !conn.watches_channel(&channel)
+                    {
+                        pubsub
+                            .unsubscribe(channel_pubsub_channel(&channel), connection_id.clone())
+                            .await;
+                    }
                 }
                 WsClientMsg::Update(update) => {
                     tracing::debug!(
@@ -334,6 +383,12 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         announce_departure(&state, doc_id, &conn.signing_pubkey).await;
         pubsub
             .unsubscribe(doc_pubsub_channel(doc_id), connection_id.clone())
+            .await;
+    }
+    let channels: HashSet<ChannelId> = conn.doc_channels.values().map(|(c, _)| *c).collect();
+    for channel in &channels {
+        pubsub
+            .unsubscribe(channel_pubsub_channel(channel), connection_id.clone())
             .await;
     }
     pubsub

@@ -4,7 +4,10 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{ActivityKind, MessageAt, MessageDraft, MessageView, MurmureEvent, Timestamp};
+use ambre_bus::{
+    ActivityKind, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView,
+    MurmureEvent, Timestamp,
+};
 use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId, Seq, UserId};
 use loro::json::{JsonOpContent, MapOp};
 use loro::{Container, LoroDoc, ValueOrContainer, VersionVector};
@@ -627,4 +630,56 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
         Ok(ThreadTarget::Open(foreign))
     );
     assert!(carol.cancel_older(foreign));
+}
+
+// --- MURMURE-261 ---
+
+/// A reply by another member that mentions me counts past my read cursor
+/// on its thread, and only on a thread the channel holds.
+#[test]
+fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
+    let (alice, bob) = (UserId::new(), UserId::new());
+    let mut state = channel_with(&["root"], alice);
+    let root = message_at(&state, 0).id;
+    let (thread, _, _) = threaded(&mut state, root);
+    let mentioning = MessageDraft {
+        text: "@alice".to_owned(),
+        mentions: vec![Mention {
+            target: MentionTarget::User(alice),
+            range: 0..6,
+        }],
+    };
+    let replied = state
+        .reply(root, &mentioning, bob, NOW, false)
+        .expect("reply");
+    state
+        .reply(root, &draft("plain"), bob, NOW, false)
+        .expect("reply");
+    // The relay numbers the mention with its echo.
+    state
+        .apply_signed(
+            thread,
+            Seq(4),
+            &replied.reply.delta,
+            signer(&state, thread, bob),
+        )
+        .expect("echo");
+    assert_eq!(
+        state.thread_mentions(thread, Seq(3), alice),
+        Ok(MentionCount(1))
+    );
+    assert_eq!(
+        state.thread_mentions(thread, Seq(4), alice),
+        Ok(MentionCount(0))
+    );
+    assert_eq!(
+        state.thread_mentions(thread, Seq(3), bob),
+        Ok(MentionCount(0))
+    );
+    assert_eq!(state.held_threads(), [thread]);
+    let segment = state.active_id().document_id();
+    assert_eq!(
+        state.thread_mentions(segment, Seq::ZERO, alice),
+        Err(MurmureError::NotHeld(segment))
+    );
 }

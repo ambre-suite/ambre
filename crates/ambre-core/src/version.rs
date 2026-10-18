@@ -59,6 +59,10 @@ impl Version {
     /// author and its reporter.
     pub const V10: Self = Self(10);
 
+    /// Version 11 - a delta on a thread document is signalled on the topic
+    /// of its channel.
+    pub const V11: Self = Self(11);
+
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.
     ///
     /// # Errors

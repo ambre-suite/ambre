@@ -1443,6 +1443,8 @@ impl SyncState {
                 }
             }
 
+            WsServerMsg::ThreadActivity { document_id } => self.thread_activity(document_id),
+
             WsServerMsg::DocumentRevoked { document_id } => {
                 // The server removed us from this document (targeted push on our
                 // personal topic).

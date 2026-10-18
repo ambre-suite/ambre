@@ -236,6 +236,14 @@ pub enum SyncCommand {
         segment: SegmentId,
         meta: MetaId,
     },
+    /// Count a thread whose root is not on screen as a light subscription,
+    /// from the number after `after` (the Murmure threads spec). It opens
+    /// under the key of `meta`, and no document is loaded.
+    WatchThread {
+        thread: DocumentId,
+        meta: MetaId,
+        after: Seq,
+    },
     /// Join a public channel alone. The Sync worker unseals `key` with the
     /// space key, wraps it for this user alone, and asks for the member row.
     /// Answered by [`crate::LogicEvent::ChannelJoined`] or

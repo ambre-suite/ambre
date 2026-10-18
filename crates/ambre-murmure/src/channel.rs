@@ -647,7 +647,7 @@ impl ChannelState {
         read: Seq,
         me: UserId,
     ) -> Result<UnreadCount, MurmureError> {
-        self.count_past(segment, read, me, |_| true)
+        self.count_in(segment.document_id(), read, me, |_| true)
             .map(UnreadCount)
     }
 
@@ -663,24 +663,52 @@ impl ChannelState {
         read: Seq,
         me: UserId,
     ) -> Result<MentionCount, MurmureError> {
+        self.mentions_in(segment.document_id(), read, me)
+    }
+
+    /// The replies of the held thread `thread` past the cursor `read` that
+    /// mention `me` or the channel (the Murmure threads spec). They count on
+    /// the channel as a message of a segment does.
+    ///
+    /// # Errors
+    /// [`MurmureError::NotHeld`] for a thread the channel does not hold.
+    pub fn thread_mentions(
+        &self,
+        thread: DocumentId,
+        read: Seq,
+        me: UserId,
+    ) -> Result<MentionCount, MurmureError> {
+        if !self.is_thread(thread) {
+            return Err(MurmureError::NotHeld(thread));
+        }
+        self.mentions_in(thread, read, me)
+    }
+
+    /// The messages of `document_id` past `read` that mention `me` or the
+    /// channel, read off their marks.
+    fn mentions_in(
+        &self,
+        document_id: DocumentId,
+        read: Seq,
+        me: UserId,
+    ) -> Result<MentionCount, MurmureError> {
         let channel = self.channel_id;
-        self.count_past(segment, read, me, |message| {
+        self.count_in(document_id, read, me, |message| {
             content_of(message)
                 .is_some_and(|content| mention::names(&mention::read(&content, channel), me))
         })
         .map(MentionCount)
     }
 
-    /// The messages of `segment` past `read`, written by someone other than
-    /// `me`, that `counts` keeps.
-    fn count_past(
+    /// The messages of a held segment or thread past `read`, written by
+    /// someone other than `me`, that `counts` keeps.
+    fn count_in(
         &self,
-        segment: SegmentId,
+        document_id: DocumentId,
         read: Seq,
         me: UserId,
         counts: impl Fn(&LoroMap) -> bool,
     ) -> Result<u32, MurmureError> {
-        let document_id = segment.document_id();
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;

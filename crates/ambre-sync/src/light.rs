@@ -140,7 +140,20 @@ impl SyncState {
     /// already held, in full or light, is left as it is. A `meta` this
     /// worker holds no key for watches nothing.
     pub(crate) fn handle_watch_segment(&mut self, segment: SegmentId, meta: MetaId) {
-        let document_id = segment.document_id();
+        self.watch_light(segment.document_id(), meta, Seq(0));
+    }
+
+    /// Counts a thread whose root is not on screen from the number after
+    /// `after`, its read cursor (the Murmure threads spec). Its summaries are
+    /// read, and no document is loaded.
+    pub(crate) fn handle_watch_thread(&mut self, thread: DocumentId, meta: MetaId, after: Seq) {
+        self.watch_light(thread, meta, after);
+    }
+
+    /// Holds `document_id` as a light subscription under the key of `meta`,
+    /// and asks the relay for what follows `after`. A document already held,
+    /// in full or light, is left as it is.
+    fn watch_light(&mut self, document_id: DocumentId, meta: MetaId, after: Seq) {
         if self.documents.contains_key(&document_id) || self.light.contains_key(&document_id) {
             return;
         }
@@ -151,7 +164,7 @@ impl SyncState {
             .map(|light| light.doc_key.clone())
             .or_else(|| self.documents.get(&meta).map(|doc| doc.doc_key.clone()))
         else {
-            tracing::warn!("[Sync] no key to watch segment {segment}");
+            tracing::warn!("[Sync] no key to watch document {document_id}");
             return;
         };
         self.light.insert(
@@ -160,16 +173,26 @@ impl SyncState {
                 doc_key,
                 doc_type: DocType::Murmure,
                 on_relay: true,
-                horizon: Seq(0),
-                seen: Seq(0),
+                horizon: after,
+                seen: after,
                 counters: ActivityCounters::default(),
             },
         );
         self.ws_send(&WsClientMsg::Subscribe { document_id });
         self.ws_send(&WsClientMsg::RequestMissing {
             document_id,
-            after_seq: Seq(0),
+            after_seq: after,
         });
+    }
+
+    /// A thread took a delta (the Murmure threads spec). A thread held in
+    /// full or light hears it on its own topic. Any other is named to the
+    /// Logic thread, which decides what to load.
+    pub(crate) fn thread_activity(&mut self, document_id: DocumentId) {
+        if self.documents.contains_key(&document_id) || self.light.contains_key(&document_id) {
+            return;
+        }
+        self.send_to_logic(LogicEvent::ThreadActivity { document_id });
     }
 
     /// Takes the light subscription of a document being reopened: its kind
@@ -460,5 +483,83 @@ mod tests {
         state.handle_command(SyncCommand::WatchSegment { segment, meta });
         assert!(ws_rx.try_recv().is_err(), "a held segment is watched again");
         assert_eq!(state.light_cursor(document_id), Some(Seq(1)));
+    }
+
+    /// A watched thread is asked from its read cursor, under the key of its
+    /// `meta`, and counts from its summaries alone (the Murmure threads
+    /// spec). Nothing past the cursor is counted twice, and no document loads.
+    #[test]
+    fn a_watched_thread_counts_after_its_read_cursor() {
+        let (mut state, rx, meta, doc_key, _) = released(9);
+        drain(&rx);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let thread = DocumentId::new();
+        let meta = MetaId::from_document(meta);
+        state.handle_command(SyncCommand::WatchThread {
+            thread,
+            meta,
+            after: Seq(4),
+        });
+        let sent: Vec<WsClientMsg> = ws_rx
+            .try_iter()
+            .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
+            .collect();
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [
+                    WsClientMsg::Subscribe { document_id: a },
+                    WsClientMsg::RequestMissing {
+                        document_id: b,
+                        after_seq: Seq(4),
+                    },
+                ] if *a == thread && *b == thread
+            ),
+            "expected a subscribe and a request after the cursor, got {sent:?}"
+        );
+        let reply = || update(thread, SnapshotId::new(), &doc_key, Some(&mention()));
+        state.receive_update(Seq(4), reply());
+        assert!(drain(&rx).is_empty(), "a reply already read counted");
+        state.receive_update(Seq(5), reply());
+        let events = drain(&rx);
+        let [
+            LogicEvent::Activity {
+                document_id,
+                counters,
+            },
+        ] = events.as_slice()
+        else {
+            panic!("expected the thread's counters, got {events:?}");
+        };
+        assert_eq!((*document_id, counters.mentions), (thread, 1));
+        assert_eq!(state.documents_len(), 0, "a watched thread loads nothing");
+    }
+
+    /// A thread held in full or light hears its deltas on its own topic, so
+    /// its signal goes no further. Any other thread is named to the Logic
+    /// thread (the Murmure threads spec).
+    #[test]
+    fn a_thread_signal_reaches_logic_only_for_a_thread_not_held() {
+        let (mut state, rx, held, _, _) = released(9);
+        drain(&rx);
+        let open = DocumentId::new();
+        let doc = SyncDocumentState::new(open, DocumentKey::generate(), DocType::Murmure, true);
+        state.documents.insert(open, doc);
+        for document_id in [held, open] {
+            state.handle_ws_message(WsServerMsg::ThreadActivity { document_id });
+        }
+        assert!(drain(&rx).is_empty(), "a held thread was signalled");
+
+        let thread = DocumentId::new();
+        state.handle_ws_message(WsServerMsg::ThreadActivity {
+            document_id: thread,
+        });
+        let events = drain(&rx);
+        assert!(
+            matches!(events.as_slice(),
+                [LogicEvent::ThreadActivity { document_id }] if *document_id == thread),
+            "got {events:?}"
+        );
     }
 }

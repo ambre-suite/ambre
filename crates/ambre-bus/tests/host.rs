@@ -277,6 +277,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::TakeFoldLease { .. } => "TakeFoldLease",
         SyncCommand::FoldSegment { .. } => "FoldSegment",
         SyncCommand::WatchSegment { .. } => "WatchSegment",
+        SyncCommand::WatchThread { .. } => "WatchThread",
         SyncCommand::JoinChannel { .. } => "JoinChannel",
         SyncCommand::DeleteChannel { .. } => "DeleteChannel",
         SyncCommand::LeaveChannel { .. } => "LeaveChannel",
@@ -303,6 +304,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::RemoteSnapshot { .. } => "RemoteSnapshot",
         LogicEvent::PendingSnapshot { .. } => "PendingSnapshot",
         LogicEvent::SnapshotDropped { .. } => "SnapshotDropped",
+        LogicEvent::ThreadActivity { .. } => "ThreadActivity",
         LogicEvent::RemoteEphemeral { .. } => "RemoteEphemeral",
         LogicEvent::PeerLeft { .. } => "PeerLeft",
         LogicEvent::MembersChanged { .. } => "MembersChanged",
@@ -354,8 +356,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 34;
-const EVENT_VARIANTS: usize = 54;
+const SYNC_VARIANTS: usize = 35;
+const EVENT_VARIANTS: usize = 55;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -498,6 +500,11 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             payload: vec![5; 3],
         },
         SyncCommand::WatchSegment { segment, meta },
+        SyncCommand::WatchThread {
+            thread: doc,
+            meta,
+            after: Seq(3),
+        },
         SyncCommand::DeleteChannel { channel_id: chan },
         SyncCommand::LeaveChannel { channel_id: chan },
         SyncCommand::ListSpaceChannels { space_id: space },
@@ -564,6 +571,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             reporter: None,
             refinalize: true,
         },
+        LogicEvent::ThreadActivity { document_id: doc },
         LogicEvent::RemoteEphemeral {
             document_id: doc,
             from_user_id: user,

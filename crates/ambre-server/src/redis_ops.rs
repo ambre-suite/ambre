@@ -661,6 +661,26 @@ pub async fn members_changed(redis: &Client, document_id: &ambre_core::DocumentI
     let _ = doc_broadcast(redis, document_id, &msg).await;
 }
 
+/// Tells every socket watching a document of `channel_id` that its thread
+/// `thread` took a delta (`SRV-161`). The signal names the thread alone, which
+/// the relay already routes on (`SRV-162`). Best-effort: a client that missed
+/// it counts the delta at the next one, or reads it when it opens the thread.
+pub async fn thread_activity(
+    redis: &Client,
+    channel_id: &ambre_core::ChannelId,
+    thread: &ambre_core::DocumentId,
+) -> Result<(), AppError> {
+    let msg = Payload::server_msg(&ambre_protocol::ws::WsServerMsg::ThreadActivity {
+        document_id: *thread,
+    });
+    let topic = format!("channel:{channel_id}");
+    redis
+        .publish(&topic, RefBulkString::new(msg.expose_bytes()))
+        .await
+        .map_err(|e| AppError::Redis(format!("thread activity: {e}")))?;
+    Ok(())
+}
+
 /// Stores an opaque presence blob in Redis and sets a TTL.
 ///
 /// The blob is the encrypted ephemeral ciphertext -- the server never

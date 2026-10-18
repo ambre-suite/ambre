@@ -7,8 +7,8 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelId, MessageId, MurmureEvent, SegmentId, Timestamp};
-use ambre_murmure::Replied;
+use ambre_bus::{ChannelId, MentionCount, MessageId, MurmureEvent, SegmentId, Seq, Timestamp};
+use ambre_murmure::{ChannelState, Replied};
 
 impl LogicState {
     /// Hand the Sync worker what a reply wrote, and the view what it shows.
@@ -108,16 +108,129 @@ impl LogicState {
         }
     }
 
-    /// Open each thread a held root names, so its head reads its count.
+    /// Open each thread a held root names, so its head reads its count. A
+    /// thread counted from its summaries until now counts from its marks.
     pub(crate) fn open_threads(&mut self, channel_id: ChannelId) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
         for document_id in channel.threads_to_open() {
+            self.watched_threads.remove(&document_id);
             self.send_to_sync(SyncCommand::OpenDocument {
                 document_id,
                 doc_type: DocType::Murmure,
             });
+        }
+    }
+
+    /// The relay signalled a delta on `thread`, a thread this client does
+    /// not hold in full or light (the Murmure threads spec). A thread its
+    /// channel holds or loads hears the delta on its own topic. Any other is
+    /// watched from its summaries, once the activity answer names its
+    /// channel. Nothing loads it: its root is not on screen.
+    pub(crate) fn thread_activity(&mut self, thread: DocumentId) {
+        if self.follows_thread(thread) {
+            return;
+        }
+        if let Some(&channel_id) = self.document_channels.get(&thread) {
+            return self.watch_thread(channel_id, thread);
+        }
+        // One answer places every thread signalled while it is asked.
+        if self.unplaced_threads.is_empty() {
+            self.send_to_sync(SyncCommand::FetchActivity);
+        }
+        self.unplaced_threads.insert(thread);
+    }
+
+    /// The activity answer named the channels: watch each signalled thread
+    /// it places. A thread it does not name is no longer this user's.
+    pub(crate) fn place_threads(&mut self) {
+        for thread in std::mem::take(&mut self.unplaced_threads) {
+            if let Some(&channel_id) = self.document_channels.get(&thread)
+                && !self.follows_thread(thread)
+            {
+                self.watch_thread(channel_id, thread);
+            }
+        }
+    }
+
+    /// Whether this client holds, loads or watches `thread`.
+    fn follows_thread(&self, thread: DocumentId) -> bool {
+        self.watched_threads.contains_key(&thread)
+            || self.channels.values().any(|channel| channel.holds(thread))
+    }
+
+    /// Count `thread` as a light subscription from its read cursor, under
+    /// the key of its channel's `meta`. A channel this session neither
+    /// opened nor closed shows the relay's mark alone, as its segments do.
+    fn watch_thread(&mut self, channel_id: ChannelId, thread: DocumentId) {
+        let Some(meta) = self
+            .channels
+            .get(&channel_id)
+            .map(ChannelState::meta_id)
+            .or_else(|| self.closed_channels.get(&channel_id).map(|c| c.meta()))
+        else {
+            return;
+        };
+        let after = self
+            .read_cursors
+            .get(&thread)
+            .map_or(Seq(0), |cursor| cursor.read);
+        self.watched_threads.insert(
+            thread,
+            WatchedThread {
+                channel_id,
+                mentions: MentionCount::ZERO,
+            },
+        );
+        self.send_to_sync(SyncCommand::WatchThread {
+            thread,
+            meta,
+            after,
+        });
+    }
+
+    /// Count the activity of a watched thread for its channel: its
+    /// mentions, never its replies, which no unread count holds yet.
+    /// Returns whether `thread` is watched.
+    pub(crate) fn count_thread(
+        &mut self,
+        thread: DocumentId,
+        counters: ambre_core::activity::ActivityCounters,
+    ) -> bool {
+        let Some(watched) = self.watched_threads.get_mut(&thread) else {
+            return false;
+        };
+        watched.mentions = MentionCount(counters.mentions);
+        let channel_id = watched.channel_id;
+        let mark = match self.closed_channels.get(&channel_id) {
+            Some(closed) => closed.mark(channel_id, self.thread_mentions(channel_id)),
+            None => self.counted(channel_id),
+        };
+        if let Some(mark) = mark {
+            self.send_to_ui(UiEvent::ChannelActivity {
+                channels: vec![mark],
+            });
+        }
+        true
+    }
+
+    /// The mentions the watched threads of `channel_id` counted.
+    pub(crate) fn thread_mentions(&self, channel_id: ChannelId) -> MentionCount {
+        mentions_of(&self.watched_threads, channel_id)
+    }
+
+    /// End the light subscription of each thread of `channel_id` watched.
+    pub(crate) fn end_watched_threads(&mut self, channel_id: ChannelId) {
+        let ended: Vec<DocumentId> = self
+            .watched_threads
+            .iter()
+            .filter(|(_, watched)| watched.channel_id == channel_id)
+            .map(|(thread, _)| *thread)
+            .collect();
+        for document_id in ended {
+            self.watched_threads.remove(&document_id);
+            self.send_to_sync(SyncCommand::CloseDocument { document_id });
         }
     }
 
@@ -132,6 +245,27 @@ impl LogicState {
         };
         self.send_to_ui(UiEvent::Channel { channel_id, event });
     }
+}
+
+/// A thread this client does not hold, counted from its summaries for the
+/// mentions of its replies (the Murmure threads spec).
+#[derive(Debug)]
+pub(crate) struct WatchedThread {
+    /// The channel the thread counts on.
+    channel_id: ChannelId,
+    /// The replies past the read cursor that mention this user.
+    mentions: MentionCount,
+}
+
+/// The mentions the watched threads of `channel_id` counted.
+pub(crate) fn mentions_of(
+    watched: &HashMap<DocumentId, WatchedThread>,
+    channel_id: ChannelId,
+) -> MentionCount {
+    watched
+        .values()
+        .filter(|thread| thread.channel_id == channel_id)
+        .fold(MentionCount::ZERO, |sum, thread| sum.plus(thread.mentions))
 }
 
 /// The events of one batch the view still needs. A segment answers with its

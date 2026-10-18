@@ -182,8 +182,9 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Reactions | MVP | emoji reactions on a message, one entry per member and emoji, each member adding and removing their own. Done when `MURMURE-006`, `MURMURE-007`, `MURMURE-091` to `MURMURE-097` and `MURMURE-256` read `verified` |
 | `[x]` Mentions | MVP | `@` mentions of a member or of the whole channel, as marks the summary lists, counted on the channel. Done when `MURMURE-008`, `MURMURE-098`, `MURMURE-100` to `MURMURE-104`, `MURMURE-152`, `MURMURE-229`, `MURMURE-230`, `MURMURE-232` and `MURMURE-233` read `verified` |
 | `[x]` The mention list | MVP | the members of a channel in the Logic thread and the view, which then notify no one for a mention of a non-member and ask before an `@channel` past the member threshold. The panel moves to the `The message list and the composer` Story (`ambre-roadmap.md` E5). Done when `MURMURE-099` and `MURMURE-231` read `verified` |
-| `[x]` Threads | MVP | reply chains in one thread document per root, which the client creates and the relay registers once, with a reply count on the root. The activity signal moves to the `Threads not open` Story (`ambre-roadmap.md` E5). Done when `MURMURE-009`, `MURMURE-105` to `MURMURE-110`, `MURMURE-255`, `SRV-213`, `SRV-214` and `SYNC-169` read `verified` |
-| `[ ]` Threads not open | MVP | a thread the client does not hold signals its activity on the channel, so its replies and mentions count with no document loaded, and its head reloads for a root on screen. Done when `MURMURE-111`, `MURMURE-112`, `MURMURE-260`, `MURMURE-261`, `SRV-161` and `SRV-162` read `verified` |
+| `[x]` Threads | MVP | reply chains in one thread document per root, which the client creates and the relay registers once, with a reply count on the root. Done when `MURMURE-009`, `MURMURE-105` to `MURMURE-110`, `MURMURE-255`, `SRV-213`, `SRV-214` and `SYNC-169` read `verified` |
+| `[x]` Threads not open | MVP | a thread the client does not hold signals its activity on the channel, so its mentions count with no document loaded, and its head reloads for a root on screen. A reply counts no unread message on the channel. Done when `MURMURE-111`, `MURMURE-112`, `MURMURE-260`, `MURMURE-261`, `SRV-161` and `SRV-162` read `verified` |
+| `[ ]` Thread read | MVP | opening a thread moves its read cursor to its last reply, so its mentions stop counting on the channel. Done when `MURMURE-293` reads `verified` |
 | `[x]` A thread on a locked segment | MVP | a first reply to a message of a locked segment records its thread in the amendments of that segment, where no delta may set the root's field. Done when `MURMURE-484` reads `verified` |
 | `[x]` Edits and reactions in a thread | MVP | a reply is edited, deleted and reacted to in its thread document, as a message is in a segment. Done when `MURMURE-485` reads `verified` |
 | `[x]` Typing and presence in a channel | MVP | typing indicators and presence, sealed ephemerals on the documents of a channel. The surface lands with the message list. Done when `MURMURE-121` to `MURMURE-127` read `verified` |
@@ -204,7 +205,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Push notifications | V1 | a notification with every tab closed, a level per channel, and mentions routed by the relay |
 | `[ ]` Mute and hide | V1 | a channel muted or hidden, kept in the user settings |
 | `[ ]` The personal sidebar | V1 | personal groups and order of channels, and bookmarks, kept in the user settings |
-| `[ ]` Followed threads | V1 | one view of every followed thread with unread replies, and marking a thread as read |
+| `[ ]` Followed threads | V1 | one view of every followed thread with unread replies |
 | `[ ]` Search on a new device | V1 | a signed index per final segment, queried before its segment is fetched |
 | `[ ]` Space retention | V1 | one retention duration per space, applied by the relay |
 | `[ ]` Direct message conversion | V1 | a direct message becomes a private channel of a space, with its history or from a fresh start |

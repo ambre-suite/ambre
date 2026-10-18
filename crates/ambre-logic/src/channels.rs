@@ -118,18 +118,29 @@ impl ClosedChannel {
     }
 
     /// The channel's mark: the count at close plus the messages counted
-    /// since. With no count at close, a counted message marks it active, and
-    /// none leaves the mark the view holds: `None`.
-    fn mark(&self, channel_id: ChannelId) -> Option<ChannelActivity> {
-        let since = self.counted.values().fold(Counts::default(), Counts::plus);
+    /// since, and the mentions of its threads not held. With no count at
+    /// close, a counted message or mention marks it active, and none leaves
+    /// the mark the view holds: `None`.
+    pub(crate) fn mark(
+        &self,
+        channel_id: ChannelId,
+        threads: MentionCount,
+    ) -> Option<ChannelActivity> {
+        let since = self
+            .counted
+            .values()
+            .fold(Counts::default(), Counts::plus)
+            .with_mentions(threads);
         match self.base {
             Some(base) => Some(base.plus(&since).activity(channel_id)),
-            None => (!since.unread.is_zero()).then_some(ChannelActivity {
-                channel_id,
-                active: true,
-                unread: None,
-                mentions: None,
-            }),
+            None => (!since.unread.is_zero() || since.mentions != MentionCount::ZERO).then_some(
+                ChannelActivity {
+                    channel_id,
+                    active: true,
+                    unread: None,
+                    mentions: None,
+                },
+            ),
         }
     }
 }
@@ -149,11 +160,20 @@ impl Counts {
         }
     }
 
-    /// The mark these counts give the channel.
+    /// The same counts, with the mentions of the threads not held.
+    fn with_mentions(self, mentions: MentionCount) -> Self {
+        self.plus(&Self {
+            unread: UnreadCount::default(),
+            mentions,
+        })
+    }
+
+    /// The mark these counts give the channel. A mention in a thread marks
+    /// it with no unread message in its segments.
     fn activity(self, channel_id: ChannelId) -> ChannelActivity {
         ChannelActivity {
             channel_id,
-            active: !self.unread.is_zero(),
+            active: !self.unread.is_zero() || self.mentions != MentionCount::ZERO,
             unread: Some(self.unread),
             mentions: Some(self.mentions),
         }
@@ -192,6 +212,12 @@ fn counts_of(
             mentions: channel.mentions(*segment, cursor.read, me).ok()?,
         });
     }
+    // A held thread counts its mentions alone, from its cursor or from its
+    // start (the Murmure threads spec).
+    for thread in channel.held_threads() {
+        let read = cursors.get(&thread).map_or(Seq::ZERO, |cursor| cursor.read);
+        count = count.with_mentions(channel.thread_mentions(thread, read, me).ok()?);
+    }
     let unknown_final = channel
         .final_segments()
         .into_iter()
@@ -203,10 +229,14 @@ fn counts_of(
 impl LogicState {
     /// The mark of an open channel, counted, or `None` when its count is
     /// not known yet.
-    fn counted(&self, channel_id: ChannelId) -> Option<ChannelActivity> {
+    pub(crate) fn counted(&self, channel_id: ChannelId) -> Option<ChannelActivity> {
         let channel = self.channels.get(&channel_id)?;
         let counts = counts_of(channel, &self.read_cursors, self.my_user_id?)?;
-        Some(counts.activity(channel_id))
+        Some(
+            counts
+                .with_mentions(self.thread_mentions(channel_id))
+                .activity(channel_id),
+        )
     }
 
     /// Hand the view the count of an open channel, once it is known.
@@ -527,6 +557,7 @@ impl LogicState {
     /// subscription of each of its documents ends, so Sync forgets its key.
     pub(crate) fn end_channel(&mut self, channel_id: ChannelId) {
         self.end_light_channel(channel_id);
+        self.end_watched_threads(channel_id);
         self.channel_watchers.remove(&channel_id);
         self.closing_segments.remove(&channel_id);
         self.close_successors.remove(&channel_id);
@@ -579,7 +610,10 @@ impl LogicState {
                 mentions: MentionCount(counters.mentions),
             },
         );
-        if let Some(mark) = closed.mark(channel_id) {
+        if let Some(mark) = closed.mark(
+            channel_id,
+            threads::mentions_of(&self.watched_threads, channel_id),
+        ) {
             self.send_to_ui(UiEvent::ChannelActivity {
                 channels: vec![mark],
             });
@@ -1449,6 +1483,8 @@ impl LogicState {
         let mut channels: Vec<ChannelActivity> = Vec::new();
         let mut index: HashMap<ChannelId, usize> = HashMap::new();
         for document in documents {
+            self.document_channels
+                .insert(document.document_id, document.channel_id);
             self.read_cursors.insert(
                 document.document_id,
                 ReadCursor {
@@ -1479,6 +1515,7 @@ impl LogicState {
             }
         }
         self.send_to_ui(UiEvent::ChannelActivity { channels });
+        self.place_threads();
     }
 
     /// Apply remote payloads to the channel that holds `document_id`
@@ -4708,6 +4745,65 @@ mod tests {
         );
     }
 
+    /// A reply that mentions me in a thread the open channel holds counts
+    /// on the channel's mark, as a mention and never as unread.
+    #[test]
+    fn a_mention_in_a_held_thread_counts_on_its_open_channel() {
+        let mut m = members();
+        m.deliver("root", 1);
+        let root = m.alice.messages(m.active).expect("held")[0].id;
+        let ThreadTarget::Create(thread) = m.alice.reply_target(root, NOW).expect("target") else {
+            panic!("a root with no thread creates one");
+        };
+        let peer = crate::test_peer();
+        m.alice
+            .adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+            .expect("adopt");
+        let named = m
+            .alice
+            .thread_linked(m.active, root, thread)
+            .expect("link")
+            .root
+            .expect("the root names it");
+        let bob = m.bob.my_user_id.expect("signed in");
+        let draft = MessageDraft {
+            text: "@bob".to_owned(),
+            mentions: vec![ambre_bus::Mention {
+                target: ambre_bus::MentionTarget::User(bob),
+                range: 0..4,
+            }],
+        };
+        m.alice
+            .reply(root, &draft, m.author, NOW, false)
+            .expect("reply");
+        let document_id = m.active.document_id();
+        m.bob.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id,
+            delta: ambre_bus::SignedDelta {
+                peer: m.alice.peer(document_id).expect("a session"),
+                user: Some(m.author),
+                ..crate::remote_delta(2, named.delta)
+            },
+        });
+        serve(&mut m.bob, &m.alice, thread);
+        m.bob.read_cursors.insert(
+            document_id,
+            ReadCursor {
+                read: Seq(2),
+                active: false,
+            },
+        );
+        assert_eq!(
+            m.bob.counted(m.channel_id),
+            Some(ChannelActivity {
+                channel_id: m.channel_id,
+                active: true,
+                unread: Some(UnreadCount(0)),
+                mentions: Some(MentionCount(1)),
+            })
+        );
+    }
+
     /// One batch answers once per list: the last answer of the segment, and
     /// the last of each thread, in their order.
     #[test]
@@ -4739,5 +4835,189 @@ mod tests {
         assert!(
             matches!(&kept[2], MurmureEvent::ThreadMessages { thread, .. } if *thread == first)
         );
+    }
+
+    // --- A thread not open ---
+
+    /// The relay's activity answer, naming `documents` of `channel_id`.
+    fn answer(state: &mut LogicState, channel_id: ChannelId, documents: &[(DocumentId, Seq)]) {
+        state.handle_logic_event(LogicEvent::ChannelActivity {
+            documents: documents
+                .iter()
+                .map(|&(document_id, read)| DocumentActivity {
+                    channel_id,
+                    document_id,
+                    active: true,
+                    read,
+                })
+                .collect(),
+        });
+    }
+
+    fn watched(sync: &Receiver<SyncCommand>) -> Vec<(DocumentId, MetaId, Seq)> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|c| match c {
+                SyncCommand::WatchThread {
+                    thread,
+                    meta,
+                    after,
+                } => Some((thread, meta, after)),
+                SyncCommand::OpenDocument { document_id, .. } => {
+                    panic!("a signal loaded {document_id}")
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A signal on a thread not held asks the relay once where it lies. The
+    /// answer places it, and it is watched from its read cursor under its
+    /// channel's `meta`, with no document loaded (the Murmure threads spec).
+    /// A thread the answer does not name is dropped, and a watched thread's
+    /// next signal changes nothing.
+    #[test]
+    fn a_signalled_thread_is_watched_from_its_read_cursor() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, _) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id();
+        drain(&sync);
+        let (thread, gone) = (DocumentId::new(), DocumentId::new());
+        for document_id in [thread, gone] {
+            state.handle_logic_event(LogicEvent::ThreadActivity { document_id });
+        }
+        let asked = drain(&sync);
+        assert!(
+            matches!(asked.as_slice(), [SyncCommand::FetchActivity]),
+            "expected one activity request, got {asked:?}"
+        );
+        answer(&mut state, channel_id, &[(thread, Seq(3))]);
+        assert_eq!(watched(&sync), [(thread, meta, Seq(3))]);
+        state.handle_logic_event(LogicEvent::ThreadActivity {
+            document_id: thread,
+        });
+        assert!(drain(&sync).is_empty(), "a watched thread was asked again");
+
+        // A thread the channel already places is watched at once.
+        let placed = DocumentId::new();
+        answer(&mut state, channel_id, &[(placed, Seq(0))]);
+        state.handle_logic_event(LogicEvent::ThreadActivity {
+            document_id: placed,
+        });
+        assert_eq!(watched(&sync), [(placed, meta, Seq(0))]);
+    }
+
+    /// A thread the open channel holds hears its deltas on its own topic.
+    /// A thread of a channel this session never opened shows the relay's
+    /// mark alone. Neither signal watches anything.
+    #[test]
+    fn a_signal_on_a_held_thread_or_an_unopened_channel_watches_nothing() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, active) = open_channel(&mut state);
+        let unopened = ChannelId::new();
+        let thread = DocumentId::new();
+        answer(&mut state, unopened, &[(thread, Seq(0))]);
+        drain(&sync);
+        for document_id in [active.document_id(), thread] {
+            state.handle_logic_event(LogicEvent::ThreadActivity { document_id });
+        }
+        assert!(drain(&sync).is_empty(), "channel {channel_id} watched");
+    }
+
+    /// Holds the mention rule of the Murmure threads spec: a mention in a
+    /// watched thread counts on its channel, open or closed. A reply counts
+    /// no unread message, and the channel is marked by the mention alone.
+    #[test]
+    fn a_mention_in_a_watched_thread_counts_on_its_channel() {
+        let (mut state, ui, sync) = harness();
+        let (closed, _, _) = closed_counted(&mut state);
+        let (open, active) = open_channel(&mut state);
+        state.read_cursors.insert(
+            active.document_id(),
+            ReadCursor {
+                read: Seq(0),
+                active: false,
+            },
+        );
+        let mut threads = Vec::new();
+        for channel_id in [closed, open] {
+            let thread = DocumentId::new();
+            answer(&mut state, channel_id, &[(thread, Seq(0))]);
+            state.handle_logic_event(LogicEvent::ThreadActivity {
+                document_id: thread,
+            });
+            threads.push((channel_id, thread));
+        }
+        assert_eq!(watched(&sync).len(), 2);
+        drain(&ui);
+        for &(channel_id, thread) in &threads {
+            state.handle_logic_event(LogicEvent::Activity {
+                document_id: thread,
+                counters: ambre_core::activity::ActivityCounters {
+                    mentions: 1,
+                    ..activity(2)
+                },
+            });
+            let shown = drain(&ui);
+            let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
+                panic!("expected the mark of {channel_id}, got {shown:?}");
+            };
+            assert_eq!(
+                channels,
+                &[ChannelActivity {
+                    channel_id,
+                    active: true,
+                    unread: Some(UnreadCount(0)),
+                    mentions: Some(MentionCount(1)),
+                }]
+            );
+        }
+    }
+
+    /// A closed channel with no count at close is marked by a mention in
+    /// its thread, with no count. The end of the channel ends the light
+    /// subscription of each thread it watched.
+    #[test]
+    fn a_watched_thread_marks_a_closed_channel_and_ends_with_it() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, _) = open_channel(&mut state);
+        state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
+        let thread = DocumentId::new();
+        answer(&mut state, channel_id, &[(thread, Seq(0))]);
+        state.handle_logic_event(LogicEvent::ThreadActivity {
+            document_id: thread,
+        });
+        drain(&ui);
+        drain(&sync);
+        state.handle_logic_event(LogicEvent::Activity {
+            document_id: thread,
+            counters: ambre_core::activity::ActivityCounters {
+                mentions: 1,
+                ..activity(0)
+            },
+        });
+        let shown = drain(&ui);
+        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
+            panic!("expected the channel's mark, got {shown:?}");
+        };
+        assert_eq!(
+            channels,
+            &[ChannelActivity {
+                channel_id,
+                active: true,
+                unread: None,
+                mentions: None,
+            }]
+        );
+        state.end_channel(channel_id);
+        assert!(
+            drain(&sync).iter().any(|c| matches!(c,
+                SyncCommand::CloseDocument { document_id } if *document_id == thread)),
+            "the watched thread outlived its channel"
+        );
+        assert!(state.watched_threads.is_empty());
     }
 }

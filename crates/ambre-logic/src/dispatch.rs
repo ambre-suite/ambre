@@ -109,6 +109,9 @@ impl LogicState {
                         self.opening.clear();
                         self.read_cursors.clear();
                         self.closed_channels.clear();
+                        self.document_channels.clear();
+                        self.watched_threads.clear();
+                        self.unplaced_threads.clear();
                         self.closing_segments.clear();
                         self.close_successors.clear();
                         self.owed_replays.clear();
@@ -330,6 +333,7 @@ impl LogicState {
             } => {
                 self.snapshot_dropped(document_id, author, reporter, refinalize);
             }
+            LogicEvent::ThreadActivity { document_id } => self.thread_activity(document_id),
 
             // Sync derived the PeerID from the signer; Logic compares it with
             // every operation the delta carries (`AUTHOR-012`).
@@ -422,7 +426,9 @@ impl LogicState {
                 counters,
             } => {
                 // A channel's document counts for its channel, not alone.
-                if !self.count_closed(document_id, counters) {
+                if !self.count_thread(document_id, counters)
+                    && !self.count_closed(document_id, counters)
+                {
                     self.send_to_ui(UiEvent::Activity {
                         document_id,
                         counters,

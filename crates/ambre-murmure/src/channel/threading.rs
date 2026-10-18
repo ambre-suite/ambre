@@ -103,6 +103,11 @@ impl ChannelState {
             .map(|(root, thread)| (*root, thread))
     }
 
+    /// The thread documents the channel holds.
+    pub fn held_threads(&self) -> Vec<DocumentId> {
+        self.threads.values().map(|thread| thread.held.id).collect()
+    }
+
     /// Whether `document_id` is a thread document, held or arriving.
     pub(super) fn is_thread(&self, document_id: DocumentId) -> bool {
         self.threads_pending.contains_key(&document_id) || self.thread_of(document_id).is_some()

@@ -221,6 +221,13 @@ pub enum WsServerMsg {
         reporter: PublicKey,
         refinalize: bool,
     },
+
+    /// A thread document took a delta (`ambre-spec-broadcast.md`,
+    /// `SRV-161`). Published on the topic of its channel, so it reaches every
+    /// socket watching a document of that channel. It names the thread alone
+    /// (`SRV-162`): a client that holds the thread hears the delta on its own
+    /// topic, and any other fetches the summaries.
+    ThreadActivity { document_id: DocumentId },
 }
 
 // ---------------------------------------------------------------------------

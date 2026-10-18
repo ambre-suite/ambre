@@ -1450,6 +1450,11 @@ impl SyncState {
                 self.handle_fold_segment(channel_id, segment, reach, horizon, &payload);
             }
             SyncCommand::WatchSegment { segment, meta } => self.handle_watch_segment(segment, meta),
+            SyncCommand::WatchThread {
+                thread,
+                meta,
+                after,
+            } => self.handle_watch_thread(thread, meta, after),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
             SyncCommand::LeaveChannel { channel_id } => self.handle_leave_channel(channel_id),
             SyncCommand::CreateDirectMessage {

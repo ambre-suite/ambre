@@ -257,6 +257,17 @@ pub(crate) async fn handle_subscribe(
     }
     conn.doc_access_verified_at
         .insert(document_id, Instant::now());
+    // Where the document sits in a channel is read once. The socket then hears
+    // the activity of the channel's threads, and a thread's delta signals it
+    // (`SRV-161`). A failed read leaves the document outside every
+    // channel, so it signals nothing.
+    match db::channel_place(&state.db, &document_id).await {
+        Ok(Some(place)) => {
+            conn.doc_channels.insert(document_id, place);
+        }
+        Ok(None) => {}
+        Err(e) => tracing::error!(error = %e, "subscribe: channel place read failed"),
+    }
     // Cache the write capability so `handle_update` can reject a read-only
     // (`viewer`) member's delta without re-hitting the database per message.
     conn.doc_write_allowed
@@ -270,6 +281,7 @@ pub(crate) fn handle_unsubscribe(conn: &mut WsConnectionState, document_id: Docu
     conn.doc_access_verified_at.remove(&document_id);
     conn.doc_write_allowed.remove(&document_id);
     conn.clock_fences.forget(&document_id);
+    conn.doc_channels.remove(&document_id);
 }
 
 /// Tell everyone still watching `document_id` that this connection's peer
@@ -518,6 +530,14 @@ pub(crate) async fn handle_update(
         // missed seq via RequestMissing on reconnect, and the delta is already
         // persisted above. Still surface it rather than swallowing (H1).
         tracing::error!("doc_broadcast failed doc={doc_id} seq={seq}: {e}");
+    }
+    // A thread is subscribed only by those who hold it open. Every other
+    // socket on its channel hears one signal that names the thread alone
+    // (`SRV-161`, `SRV-162`).
+    if let Some((channel, ambre_core::ChannelDocumentKind::Thread)) = conn.doc_channels.get(&doc_id)
+        && let Err(e) = redis_ops::thread_activity(&state.redis, channel, &doc_id).await
+    {
+        tracing::error!(error = %e, "thread activity publish failed");
     }
     // The writer has the document open and holds every delta it covers, so it
     // is the one asked once the history passes the threshold (`SRV-038`).
@@ -870,6 +890,8 @@ async fn membership_still_valid(
             }
             conn.doc_access_verified_at.remove(&doc_id);
             conn.doc_write_allowed.remove(&doc_id);
+            // The channel stays known until the unsubscribe, which leaves its
+            // topic as it leaves the document's.
             false
         }
     }
@@ -1076,7 +1098,7 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x0A);
+        assert_eq!(bytes[0], 0x0B);
     }
 
     #[test]
@@ -1152,6 +1174,7 @@ mod ephemeral_binding_tests {
             // rate limit (which the loop enforces, covered by its own test).
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
         }
     }
 
@@ -1450,6 +1473,7 @@ mod delta_size_cap_tests {
             // rate limit (which the loop enforces, covered by its own test).
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
         }
     }
 
@@ -1698,6 +1722,7 @@ mod access_tests {
             last_replay_at: HashMap::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
         }
     }
 
@@ -2388,6 +2413,7 @@ mod hot_tail_tests {
             last_replay_at: HashMap::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
         };
         (state, conn, doc_id)
     }
@@ -2500,6 +2526,7 @@ mod hot_tail_tests {
             last_replay_at: HashMap::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
         };
         let (tx, _rx) = mpsc::channel::<Payload>(8);
         let (second_tx, mut second_rx) = mpsc::channel::<Payload>(8);
@@ -2611,6 +2638,7 @@ mod channel_gate_tests {
             last_replay_at: HashMap::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
+            doc_channels: HashMap::new(),
         }
     }
 
@@ -2758,5 +2786,72 @@ mod channel_gate_tests {
         let pending: usize = state.redis.llen(&pending_key).await.expect("llen");
         assert_eq!(pending, 0, "a viewer's delta must not be pushed");
         let _ = state.redis.del([&pending_key]).await;
+    }
+
+    /// `SRV-161`, `SRV-162`: a delta on a thread document publishes one
+    /// signal on the topic of its channel. The signal is the thread's
+    /// identifier and nothing else. A delta on a segment publishes none.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_delta_on_a_thread_signals_its_channel_and_names_it_alone(pool: sqlx::PgPool) {
+        use futures_util::StreamExt;
+        use rustis::commands::PubSubCommands;
+        let owner = crate::test_helpers::create_test_user(&pool, "owner@test.dev").await;
+        let segment = segment_of_channel(&pool, owner, None).await;
+        let channel = db::channel_of_document(&pool, &segment)
+            .await
+            .expect("read")
+            .expect("a channel");
+        let thread = crate::test_helpers::create_test_document(&pool, owner, "murmure").await;
+        db::register_thread(&pool, &channel, ambre_core::MessageId::new(), thread)
+            .await
+            .expect("registered");
+        let state = test_app_state(pool).await;
+        let key = ed25519_dalek::SigningKey::from_bytes(&[61u8; 32]);
+        let mut conn = conn_of(owner, PublicKey::from_array(key.verifying_key().to_bytes()));
+        let (tx, mut rx) = mpsc::channel::<Payload>(16);
+        for document in [thread, segment] {
+            handle_subscribe(&state, &mut conn, document, &tx).await;
+        }
+        while rx.try_recv().is_ok() {}
+        // A connection of its own: a subscriber sharing the relay's client
+        // would desynchronise its replies (see `PubSubHub`).
+        let subscriber = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .expect("redis");
+        let mut stream = subscriber
+            .subscribe(format!("channel:{channel}"))
+            .await
+            .expect("a subscription");
+        let wait = std::time::Duration::from_millis(500);
+
+        let update = super::hot_tail_tests::signed_update(&key, thread, 1, 16);
+        handle_update(&state, &mut conn, update, &tx).await;
+
+        let msg = tokio::time::timeout(wait, stream.next())
+            .await
+            .expect("a signal")
+            .expect("an open stream")
+            .expect("a message");
+        let alone = ambre_protocol::ws::encode_server_msg(&WsServerMsg::ThreadActivity {
+            document_id: thread,
+        });
+        assert_eq!(msg.payload(), alone.as_slice());
+
+        let update = super::hot_tail_tests::signed_update(&key, segment, 1, 16);
+        handle_update(&state, &mut conn, update, &tx).await;
+        assert!(
+            tokio::time::timeout(wait, stream.next()).await.is_err(),
+            "a segment delta signals nothing"
+        );
+        for document in [thread, segment] {
+            let _: Result<usize, _> = state
+                .redis
+                .del(crate::redis_ops::document_state_keys(&document))
+                .await;
+        }
     }
 }

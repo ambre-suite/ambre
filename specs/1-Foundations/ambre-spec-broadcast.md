@@ -74,8 +74,8 @@ Every gate below runs before the wire message is acted on, and each one refuses 
 | `SRV-047` | `FAIL` | A subscription to a document of a channel MUST be refused to a caller who is not a member of that channel. | this spec section 3 | `ambre_server::ws::handler::message::channel_gate_tests::a_segment_refuses_a_caller_outside_its_channel` -- the refusal, database tier; `::a_member_of_the_channel_subscribes_to_its_segment` -- a member still subscribes | none | verified |
 | `SRV-048` | `POST` | A wire message on a document of a channel MUST pass the gates of any other document before it is relayed. | this spec section 3; `SRV-006`, `SRV-007` | `ambre_server::ws::handler::message::channel_gate_tests::a_viewer_of_the_channel_writes_no_delta_on_its_segment` -- the write gate, database tier; structural -- the handlers hold no channel branch, so a wire message on a segment takes the path of any other | none | verified |
 | `SRV-049` | `FRAME` | Signalling for a meeting MUST NOT travel on this plane: it MUST have an endpoint of its own. | this spec section 3 | not built | unbuilt -- lands with the `Rendez-Vous` Story (`ambre-roadmap.md` post-V1). No meeting endpoint exists, so nothing refuses signalling smuggled through a channel's documents either | unimplemented |
-| `SRV-161` | `POST` | A delta on a thread document MUST publish an activity signal on the topic of its channel. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `Threads not open` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-162` | `FRAME` | The activity signal MUST NOT carry any field beyond the thread document it names. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Threads not open` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-161` | `POST` | A delta on a thread document MUST publish an activity signal on the topic of its channel. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::ws::handler::message::channel_gate_tests::a_delta_on_a_thread_signals_its_channel_and_names_it_alone` -- a thread delta reaches the channel topic and a segment delta does not, database tier | none | verified |
+| `SRV-162` | `FRAME` | The activity signal MUST NOT carry any field beyond the thread document it names. | this spec section 3; `ZK-015` | `ambre_server::ws::handler::message::channel_gate_tests::a_delta_on_a_thread_signals_its_channel_and_names_it_alone` -- the published bytes equal the encoding of the signal naming the thread; type-level -- `WsServerMsg::ThreadActivity` holds the document identifier alone | none | verified |
 
 * **Budget.** the live receive and broadcast of `ambre-spec-budgets.md section 3` and the presence
   write of the same table, all three reading **none exists**. The relay's memory per open document
@@ -83,8 +83,8 @@ Every gate below runs before the wire message is acted on, and each one refuses 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 24 `verified`, 3 `unimplemented`. What holds is what a handler test drives: the
-  two caps, the rate bucket, the presence expiry and its removal, and the channel gates. What is
+* **Verification.** 26 `verified`, 1 `unimplemented`. A handler test drives the caps, the rate
+  bucket, the presence expiry and removal, the channel gates and the thread signal. What is
   loose is everything about the connection rather than the message. Each needs a live socket, and
   two tests alone open one, each to see it refused (`ambre-spec-testing.md section 9`).
 ---
@@ -102,7 +102,7 @@ Two peers with one document open, over two connections that may be served by two
 | removes Bob, then re-keys | keeps typing | one member row | Bob's writes stop within thirty seconds, not at his next reload (`SRV-043`) | none -- section 6 |
 | pastes a picture inline instead of on the media path | watches | nothing | Alice is told the delta is too large, and the document is unchanged (`SRV-010`) | `ws::handler::message::delta_size_cap_tests::oversized_delta_writes_no_pending` |
 | writes in a channel | is subscribed to it | one numbered delta on the active segment of the channel | Bob's screen changes within the round trip (`SRV-048`) | none -- the gates hold, and no view draws a channel yet |
-| replies in a thread Bob has not opened | watches the channel | one numbered delta on the thread document, and one activity signal | the reply count on the root moves (`SRV-161`) | none, and it is unbuilt -- section 6 |
+| replies in a thread Bob has not opened | watches the channel | one numbered delta on the thread document, and one activity signal | Bob's channel counts a reply that mentions him (`SRV-161`) | `ws::handler::message::channel_gate_tests::a_delta_on_a_thread_signals_its_channel_and_names_it_alone` |
 
 ---
 
@@ -180,8 +180,12 @@ copies each arriving message to every interested outbound queue in the process (
 **A channel is a set of documents.** The relay keeps which documents form each channel, and the kind
 of each one (`ZK-015`). A subscription to the channel is a subscription to its `meta` document and
 its live segments, each gated by the membership of the channel (`SRV-047`). Every wire message on them is
-an ordinary document message (`SRV-048`). A thread document is subscribed while a client has it open.
-Otherwise a delta on it publishes one activity signal on the topic of the channel (`SRV-161`).
+an ordinary document message (`SRV-048`).
+
+**A thread signals its channel.** A thread document is subscribed while a client has it open. A
+delta on it also publishes one activity signal on the topic of the channel (`SRV-161`). A socket
+joins that topic with its first document of the channel, and leaves it with its last. The signal
+names the thread alone (`SRV-162`). A client that holds the thread drops it.
 
 **Presence.** The relay stores the sealed blob under the author's key and gives that one entry a
 fifteen-second life of its own (`SRV-050`). A person who disappears without a clean exit therefore
@@ -193,7 +197,8 @@ prunes themselves, and the entry never accumulates (`SRV-072`).
 * `crates/ambre-server/src/ws/handler/message.rs` -- one handler per wire message, and the gates;
 * `crates/ambre-server/src/ws/handler/token_bucket.rs` -- the per-connection allowance;
 * `crates/ambre-server/src/ws/pubsub_hub.rs` -- the one stream, the counting and the fan-out;
-* `crates/ambre-server/src/redis_ops.rs` -- the three publishes and the presence entry.
+* `crates/ambre-server/src/redis_ops.rs` -- the publishes, `thread_activity` among them, and the
+  presence entry.
 
 ---
 

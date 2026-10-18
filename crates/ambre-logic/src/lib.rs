@@ -705,6 +705,16 @@ struct LogicState {
     /// counts them from their summaries alone (`RESID-004`). Removed on a
     /// reopen, a delete, a leave or `Logout`.
     closed_channels: HashMap<ambre_bus::ChannelId, channels::ClosedChannel>,
+    /// The channel of each segment and thread the relay's activity answer
+    /// listed, so a thread's signal finds its channel (the Murmure threads
+    /// spec). Cleared on `Logout`.
+    document_channels: HashMap<DocumentId, ambre_bus::ChannelId>,
+    /// The threads this client does not hold, counted from their summaries
+    /// as light subscriptions. Removed when the thread opens, or with its
+    /// channel.
+    watched_threads: HashMap<DocumentId, threads::WatchedThread>,
+    /// The signalled threads whose channel the next activity answer names.
+    unplaced_threads: HashSet<DocumentId>,
     /// The close each open channel asked of the Sync worker, with the time
     /// of the send that filled its segment (the Murmure segments spec).
     /// Removed on the answer, and with the channel.
@@ -841,6 +851,9 @@ impl LogicState {
             channel_ledgers: HashMap::new(),
             read_cursors: HashMap::new(),
             closed_channels: HashMap::new(),
+            document_channels: HashMap::new(),
+            watched_threads: HashMap::new(),
+            unplaced_threads: HashSet::new(),
             closing_segments: HashMap::new(),
             close_successors: HashMap::new(),
             owed_replays: HashMap::new(),

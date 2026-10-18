@@ -999,6 +999,21 @@ pub async fn channel_document_kind(
     kind.as_deref().map(decode_kind).transpose()
 }
 
+/// The channel a document belongs to and its kind there, in one read, or
+/// `None` for a document outside every channel.
+pub async fn channel_place(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Option<(ambre_core::ChannelId, ChannelDocumentKind)>, AppError> {
+    let row: Option<(uuid::Uuid, String)> =
+        sqlx::query_as("SELECT channel_id, kind FROM channel_documents WHERE document_id = $1")
+            .bind(id_to_uuid(*document_id))
+            .fetch_optional(pool)
+            .await?;
+    row.map(|(channel, kind)| Ok((uuid_row_to_id(channel), decode_kind(&kind)?)))
+        .transpose()
+}
+
 /// Delete a channel, and mark the delete of every document it groups
 /// (`SRV-142`). The caller empties them as a deleted document is emptied,
 /// and the pass finishes any it misses (`SRV-165`). Answers the documents
