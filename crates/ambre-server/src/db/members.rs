@@ -28,6 +28,21 @@ pub enum Removed {
     /// every document it grouped (`SRV-142`). Each is marked for its delete,
     /// which the caller runs (`SRV-165`).
     ChannelDeleted(Vec<ambre_core::DocumentId>),
+    /// The document is a space. It owes a rotation, and the member left
+    /// every channel of it too (`SRV-136`).
+    SpaceLeft(SpaceLeave),
+}
+
+/// What leaving a space did to the channels of that space (`SRV-136`).
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct SpaceLeave {
+    /// The `meta` of each channel the member left and that stays.
+    pub left: Vec<ambre_core::DocumentId>,
+    /// Those of them that owe a rotation: every channel that is not public.
+    pub owed: Vec<ambre_core::DocumentId>,
+    /// Each channel the member was the last of, by its `meta`, with every
+    /// document it grouped, marked for its delete (`SRV-142`).
+    pub deleted: Vec<(ambre_core::DocumentId, Vec<ambre_core::DocumentId>)>,
 }
 
 /// `document_members` joined with `users` for display purposes. Carries the
@@ -387,17 +402,32 @@ pub async fn remove_document_member(
         tx.commit().await?;
         return Ok(Removed::Kept);
     }
-    sqlx::query("UPDATE documents SET rotation_owed = true WHERE id = $1")
-        .bind(did)
-        .execute(&mut *tx)
-        .await?;
+    owe_rotation(&mut tx, did).await?;
+    let left =
+        super::channels::leave_space_channels_in(&mut tx, did, id_to_uuid(*user_id), sweep_due)
+            .await?;
     tx.commit().await?;
-    Ok(Removed::Owed)
+    Ok(left.map_or(Removed::Owed, Removed::SpaceLeft))
+}
+
+/// Marks a document as owing a rotation (`SRV-122`).
+pub(super) async fn owe_rotation(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: uuid::Uuid,
+) -> Result<(), AppError> {
+    sqlx::query("UPDATE documents SET rotation_owed = true WHERE id = $1")
+        .bind(document_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 /// Removes a member and re-wraps the new key for every member who stays, in
 /// one transaction (`ambre-spec-key-rotation.md`, `SYNC-126`). Either both
 /// land or neither does: a removal never stands without its rotation.
+///
+/// A removal from a space takes the member out of every channel of it, in
+/// the same transaction (`SRV-136`). Those channels are answered.
 #[allow(clippy::too_many_arguments)]
 pub async fn revoke_and_rotate(
     pool: &PgPool,
@@ -408,17 +438,20 @@ pub async fn revoke_and_rotate(
     members: &[ambre_core::UserId],
     link: &ambre_protocol::KeyLink,
     entry: Option<&LogEntry>,
-) -> Result<(), AppError> {
+    sweep_due: i64,
+) -> Result<Option<SpaceLeave>, AppError> {
     let did = id_to_uuid(*document_id);
+    let uid = id_to_uuid(*user_id);
     let mut tx = pool.begin().await?;
     // The document row first, as every rotation takes it: two rotations of one
     // document queue on it instead of deadlocking on the member rows.
     lock_document(&mut tx, did).await?;
     record_change(&mut tx, did, entry).await?;
-    delete_member(&mut tx, did, id_to_uuid(*user_id), None).await?;
+    delete_member(&mut tx, did, uid, None).await?;
     rewrap_members(&mut tx, did, id_to_uuid(*rotated_by), keys, members, link).await?;
+    let left = super::channels::leave_space_channels_in(&mut tx, did, uid, sweep_due).await?;
     tx.commit().await?;
-    Ok(())
+    Ok(left)
 }
 
 /// Locks the document row for the rest of the transaction. A rotation reads
@@ -555,13 +588,22 @@ async fn delete_member(
         ensure_not_last_owner(tx, document_id).await?;
     }
 
+    drop_member_row(tx, document_id, user_id).await?;
+    Ok(empties_private)
+}
+
+/// Deletes one member row with its read cursors, and checks nothing.
+pub(super) async fn drop_member_row(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+) -> Result<(), AppError> {
     sqlx::query("DELETE FROM document_members WHERE document_id = $1 AND user_id = $2")
         .bind(document_id)
         .bind(user_id)
         .execute(&mut **tx)
         .await?;
-    super::read_cursors::delete_read_cursors_of(tx, document_id, user_id).await?;
-    Ok(empties_private)
+    super::read_cursors::delete_read_cursors_of(tx, document_id, user_id).await
 }
 
 /// Updates the role of a document member.

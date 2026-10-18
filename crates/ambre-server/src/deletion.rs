@@ -11,6 +11,9 @@ const PASS_LIMIT: i64 = 100;
 /// goes first, so a failure at any later step leaves a delete the pass finishes
 /// (`SRV-165`). It also schedules the second sweep of the objects (`SRV-057`).
 ///
+/// A space goes with every channel of it, the channels first (`SRV-143`).
+/// Each member of each channel drops it (`SRV-188`).
+///
 /// # Errors
 ///
 /// The first step that fails. The mark stays, so the delete still completes.
@@ -19,7 +22,14 @@ pub async fn delete_document(
     document_id: &ambre_core::DocumentId,
 ) -> Result<(), AppError> {
     let sweep_due = sweep_due(state);
-    crate::db::begin_deletion(&state.db, document_id, unix_i64(sweep_due)).await?;
+    let channels = crate::db::begin_deletion(&state.db, document_id, unix_i64(sweep_due)).await?;
+    for channel in &channels {
+        empty_marked(state, &channel.documents, unix_i64(sweep_due)).await;
+        let Some(meta) = channel.meta else { continue };
+        for member in &channel.members {
+            crate::routes::notify_removed(state, &meta, member).await;
+        }
+    }
     empty_document(state, document_id, sweep_due).await
 }
 

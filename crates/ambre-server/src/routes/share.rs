@@ -277,18 +277,23 @@ pub async fn revoke_from_document(
     let entry = checked_entry(&state, &s, doc_id, text, expected).await?;
     // The removal posts no rotation, so the document owes one (`SRV-122`). The
     // mirror is raised first: no delta slips in between the commit and it.
-    crate::redis_ops::mirror_rotation_owed(&state.redis, &doc_id, true).await?;
+    // A leave of a space raises it on each private channel it leaves too.
+    let mut owing = vec![doc_id];
+    owing.extend(db::private_channels_of_member(&state.db, &doc_id, &target).await?);
     let sweep_due = crate::deletion::sweep_due_stored(&state);
-    let removed =
-        match db::remove_document_member(&state.db, &doc_id, &target, entry.as_ref(), sweep_due)
-            .await
-        {
-            Ok(removed) => removed,
-            Err(e) => {
-                restore_debt_mirror(&state, &doc_id).await;
-                return Err(e);
-            }
-        };
+    let removed = match raise_debt_mirrors(&state, &owing).await {
+        Ok(()) => {
+            db::remove_document_member(&state.db, &doc_id, &target, entry.as_ref(), sweep_due).await
+        }
+        Err(e) => Err(e),
+    };
+    let removed = match removed {
+        Ok(removed) => removed,
+        Err(e) => {
+            restore_debt_mirrors(&state, &owing).await;
+            return Err(e);
+        }
+    };
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, removed = ?removed, "member removed");
     // The members who stay read the rows again (`SRV-177`), unless no one stays.
     if !matches!(removed, db::Removed::ChannelDeleted(_)) {
@@ -296,6 +301,18 @@ pub async fn revoke_from_document(
     }
     match removed {
         db::Removed::Owed => {}
+        db::Removed::SpaceLeft(leave) => {
+            // A channel the mirror was raised on and the leave did not leave
+            // owing, as one deleted with it, goes back to the register.
+            let unowed: Vec<_> = owing
+                .iter()
+                .skip(1)
+                .filter(|meta| !leave.owed.contains(meta))
+                .copied()
+                .collect();
+            restore_debt_mirrors(&state, &unowed).await;
+            announce_space_leave(&state, &leave, &target, sweep_due).await;
+        }
         // A public channel owes nothing (`SRV-122`): the mirror goes back to
         // what the register says.
         db::Removed::Kept => {
@@ -365,31 +382,122 @@ pub async fn revoke_and_rotate(
         key: Some(Some(link.key)),
     };
     let entry = checked_entry(&state, &s, doc_id, req.entry.as_deref(), expected).await?;
-    db::revoke_and_rotate(
-        &state.db,
-        &doc_id,
-        &target,
-        &s.user_id,
-        &keys,
-        &members,
-        &link,
-        entry.as_ref(),
-    )
-    .await?;
+    // A removal from a space leaves each of its private channels owing a
+    // rotation (`SRV-136`), so their mirrors are raised first.
+    let owing = db::private_channels_of_member(&state.db, &doc_id, &target).await?;
+    let sweep_due = crate::deletion::sweep_due_stored(&state);
+    let revoked = match raise_debt_mirrors(&state, &owing).await {
+        Ok(()) => {
+            db::revoke_and_rotate(
+                &state.db,
+                &doc_id,
+                &target,
+                &s.user_id,
+                &keys,
+                &members,
+                &link,
+                entry.as_ref(),
+                sweep_due,
+            )
+            .await
+        }
+        Err(e) => Err(e),
+    };
+    let left = match revoked {
+        Ok(left) => left,
+        Err(e) => {
+            restore_debt_mirrors(&state, &owing).await;
+            return Err(e);
+        }
+    };
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, members = keys.len(), "member revoked, key rotated");
     // The rotation landed with the removal, so no debt stands (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;
+    if let Some(leave) = left {
+        let unowed: Vec<_> = owing
+            .iter()
+            .filter(|meta| !leave.owed.contains(meta))
+            .copied()
+            .collect();
+        restore_debt_mirrors(&state, &unowed).await;
+        announce_space_leave(&state, &leave, &target, sweep_due).await;
+    }
 
     notify_removed(&state, &doc_id, &target).await;
     notify_rotation(&state, &doc_id).await;
     Ok(super::Done::json(ambre_core::WriteStatus::Revoked))
 }
 
+/// Whether `user` is an admin, an owner or an editor, of the space of the
+/// public channel whose `meta` is `document_id` (`SRV-146`). The link that
+/// admin signs is checked by its role in the space (the Murmure spaces
+/// spec).
+pub(crate) async fn space_admin_of_public_meta(
+    state: &AppState,
+    document_id: &ambre_core::DocumentId,
+    user: &ambre_core::UserId,
+) -> Result<bool, AppError> {
+    let Some(channel_id) = db::channel_of_document(&state.db, document_id).await? else {
+        return Ok(false);
+    };
+    let Some(channel) = db::get_channel(&state.db, &channel_id).await? else {
+        return Ok(false);
+    };
+    let is_meta = channel.meta_id.map(|m| m.document_id()) == Some(*document_id);
+    let (true, true, Some(space)) = (channel.is_public, is_meta, channel.space_id) else {
+        return Ok(false);
+    };
+    let role = db::member_role(&state.db, &space.document_id(), user).await?;
+    Ok(matches!(role, Some(Role::Owner | Role::Editor)))
+}
+
+/// Raises the debt mirror of each of `documents`, in order. The first that
+/// fails stops the rest.
+async fn raise_debt_mirrors(
+    state: &AppState,
+    documents: &[ambre_core::DocumentId],
+) -> Result<(), AppError> {
+    for doc_id in documents {
+        crate::redis_ops::mirror_rotation_owed(&state.redis, doc_id, true).await?;
+    }
+    Ok(())
+}
+
+/// [`restore_debt_mirror`] for each of `documents`.
+async fn restore_debt_mirrors(state: &AppState, documents: &[ambre_core::DocumentId]) {
+    for doc_id in documents {
+        restore_debt_mirror(state, doc_id).await;
+    }
+}
+
+/// Tells each channel a leave of its space touched (`SRV-136`). The members
+/// who stay re-read the rows, and those of a private channel learn its debt.
+/// The member who left drops each channel, a deleted one included
+/// (`SRV-187`), whose documents are emptied (`SRV-165`).
+async fn announce_space_leave(
+    state: &AppState,
+    leave: &db::SpaceLeave,
+    target: &ambre_core::UserId,
+    sweep_due: i64,
+) {
+    for meta in &leave.left {
+        crate::redis_ops::members_changed(&state.redis, meta).await;
+        notify_removed(state, meta, target).await;
+    }
+    for meta in &leave.owed {
+        notify_rotation(state, meta).await;
+    }
+    for (meta, documents) in &leave.deleted {
+        crate::deletion::empty_marked(state, documents, sweep_due).await;
+        notify_removed(state, meta, target).await;
+    }
+}
+
 /// Notifies the removed user directly on their personal topic so their client
 /// closes the document. Targeted (not a doc broadcast): only the removed user
 /// learns they were removed, and no remaining member can mistake this for their
 /// own removal. Best-effort -- the membership row is the source of truth.
-pub(super) async fn notify_removed(
+pub(crate) async fn notify_removed(
     state: &AppState,
     doc_id: &ambre_core::DocumentId,
     target: &ambre_core::UserId,
@@ -470,9 +578,15 @@ pub async fn list_key_links(
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
     let doc_id = parse_doc_id(&document_id)?;
-    db::get_document_member(&state.db, &doc_id, &auth.user_id)
+    // The admin who re-keys a public channel reads the chain it extends
+    // (`SRV-146`).
+    if db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
-        .ok_or(AppError::Forbidden)?;
+        .is_none()
+        && !space_admin_of_public_meta(&state, &doc_id, &auth.user_id).await?
+    {
+        return Err(AppError::Forbidden);
+    }
     let links: Vec<String> = db::document_key_links(&state.db, &doc_id)
         .await?
         .iter()
@@ -514,19 +628,19 @@ pub async fn rotate_document_key(
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
-    let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
-        .await?
-        .ok_or(AppError::Forbidden)?;
+    let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?;
     // Owner-only outside a debt. Rotating the document key rewraps EVERY
     // member's `doc_key_enc`, and makes the caller the wrapper of record. An
     // editor allowed here could omit members from the payload, leaving their
     // key stale after rotation -> lockout. While a rotation is owed, every
     // frame is refused until one lands. So any member with write access may
-    // settle it (`SRV-144`), and that risk is the price of not stalling.
-    let may_rotate = match m.role {
-        Role::Owner => true,
-        Role::Editor => db::rotation_owed(&state.db, &doc_id).await?,
-        _ => false,
+    // settle it (`SRV-144`), and that risk is the price of not stalling. An
+    // admin of a space re-keys a public channel of it, member or not
+    // (`SRV-146`).
+    let may_rotate = match m.map(|m| m.role) {
+        Some(Role::Owner) => true,
+        Some(Role::Editor) if db::rotation_owed(&state.db, &doc_id).await? => true,
+        _ => space_admin_of_public_meta(&state, &doc_id, &s.user_id).await?,
     };
     if !may_rotate {
         return Err(AppError::Forbidden);

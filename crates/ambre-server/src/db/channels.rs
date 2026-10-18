@@ -248,8 +248,8 @@ pub async fn delete_channel(
     let mut tx = pool.begin().await?;
     // `meta` first, as a removal locks it, so a delete racing the last
     // leave waits for it rather than deadlocking.
-    sqlx::query(
-        "SELECT 1 FROM documents WHERE id = (SELECT document_id FROM channel_documents \
+    let meta: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM documents WHERE id = (SELECT document_id FROM channel_documents \
          WHERE channel_id = $1 AND kind = 'meta') FOR NO KEY UPDATE",
     )
     .bind(channel)
@@ -267,13 +267,54 @@ pub async fn delete_channel(
     let documents = delete_channel_in(&mut tx, channel, sweep_due).await?;
     tx.commit().await?;
     Ok(DeletedChannel {
+        meta: meta.map(uuid_row_to_id),
         documents,
         members: members.into_iter().map(uuid_row_to_id).collect(),
     })
 }
 
+/// Deletes every channel of `space` inside `tx`, each as [`delete_channel`]
+/// deletes one, in identifier order (`SRV-143`).
+pub(super) async fn delete_space_channels_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    space: uuid::Uuid,
+    sweep_due: i64,
+) -> Result<Vec<DeletedChannel>, AppError> {
+    let channels: Vec<(uuid::Uuid, Option<uuid::Uuid>)> = sqlx::query_as(
+        "SELECT c.id, d.document_id FROM channels c \
+         LEFT JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
+         WHERE c.space_id = $1 ORDER BY c.id",
+    )
+    .bind(space)
+    .fetch_all(&mut **tx)
+    .await?;
+    let mut deleted = Vec::with_capacity(channels.len());
+    for (channel, meta) in channels {
+        let members: Vec<uuid::Uuid> = match meta {
+            Some(meta) => {
+                super::members::lock_document(tx, meta).await?;
+                sqlx::query_scalar("SELECT user_id FROM document_members WHERE document_id = $1")
+                    .bind(meta)
+                    .fetch_all(&mut **tx)
+                    .await?
+            }
+            None => Vec::new(),
+        };
+        let documents = delete_channel_in(tx, channel, sweep_due).await?;
+        deleted.push(DeletedChannel {
+            meta: meta.map(uuid_row_to_id),
+            documents,
+            members: members.into_iter().map(uuid_row_to_id).collect(),
+        });
+    }
+    Ok(deleted)
+}
+
 /// What [`delete_channel`] removed.
 pub struct DeletedChannel {
+    /// Its `meta`, absent only for a channel whose `meta` was never
+    /// registered.
+    pub meta: Option<ambre_core::DocumentId>,
     /// Every document the channel grouped, marked for deletion.
     pub documents: Vec<ambre_core::DocumentId>,
     /// The members of its `meta`, as the delete found them.
@@ -312,6 +353,84 @@ pub(super) async fn delete_channel_in(
     Ok(documents.into_iter().map(uuid_row_to_id).collect())
 }
 
+/// The `meta` of each private channel of `space` that holds a row of `user`.
+/// A leave of the space would leave each of them owing a rotation.
+pub async fn private_channels_of_member(
+    pool: &PgPool,
+    space: &ambre_core::DocumentId,
+    user: &ambre_core::UserId,
+) -> Result<Vec<ambre_core::DocumentId>, AppError> {
+    let metas: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT d.document_id FROM channels c \
+         JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
+         JOIN document_members m ON m.document_id = d.document_id AND m.user_id = $2 \
+         WHERE c.space_id = $1 AND NOT c.is_public ORDER BY d.document_id",
+    )
+    .bind(id_to_uuid(*space))
+    .bind(id_to_uuid(*user))
+    .fetch_all(pool)
+    .await?;
+    Ok(metas.into_iter().map(uuid_row_to_id).collect())
+}
+
+/// Takes `user` out of every channel of `space` they are a member of, inside
+/// `tx` and under the lock on the space document (`SRV-136`). `None` when
+/// `space` is the space of no channel.
+///
+/// A channel that is not public owes a rotation, and goes with its documents
+/// when its last member leaves (`SRV-142`). A public one owes nothing: the
+/// rotation of the space covers it. The last-owner lockout holds for none of
+/// them. The leave is the member's, and an owner of the space stands in for
+/// the owner of each channel. Each `meta` is locked in identifier order,
+/// after the space, as a self-join takes them.
+pub(super) async fn leave_space_channels_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    space: uuid::Uuid,
+    user: uuid::Uuid,
+    sweep_due: i64,
+) -> Result<Option<super::SpaceLeave>, AppError> {
+    let any: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM channels WHERE space_id = $1)")
+            .bind(space)
+            .fetch_one(&mut **tx)
+            .await?;
+    if !any {
+        return Ok(None);
+    }
+    let channels: Vec<(uuid::Uuid, uuid::Uuid, bool)> = sqlx::query_as(
+        "SELECT c.id, d.document_id, c.is_public FROM channels c \
+         JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
+         JOIN document_members m ON m.document_id = d.document_id AND m.user_id = $2 \
+         WHERE c.space_id = $1 ORDER BY d.document_id",
+    )
+    .bind(space)
+    .bind(user)
+    .fetch_all(&mut **tx)
+    .await?;
+    let mut leave = super::SpaceLeave::default();
+    for (channel, meta, public) in channels {
+        super::members::lock_document(tx, meta).await?;
+        let members: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM document_members WHERE document_id = $1")
+                .bind(meta)
+                .fetch_one(&mut **tx)
+                .await?;
+        super::members::drop_member_row(tx, meta, user).await?;
+        let meta_id = uuid_row_to_id(meta);
+        if members == 1 && !public {
+            let documents = delete_channel_in(tx, channel, sweep_due).await?;
+            leave.deleted.push((meta_id, documents));
+            continue;
+        }
+        if !public {
+            super::members::owe_rotation(tx, meta).await?;
+            leave.owed.push(meta_id);
+        }
+        leave.left.push(meta_id);
+    }
+    Ok(Some(leave))
+}
+
 /// The channel whose `meta` is `document_id`, with its public flag. `None`
 /// for any other document.
 pub(super) async fn channel_of_meta(
@@ -334,8 +453,15 @@ pub(super) async fn channel_of_meta(
 /// self-join never lowers an owner nor swaps the key of a member. The entry
 /// the joining member signed lands with a new row alone, in one transaction
 /// and under the document lock every membership change takes (`SRV-107`).
+///
+/// The membership of `space` is read again under a share lock on the space
+/// document, taken before `meta`'s. A leave of the space holds that lock
+/// while it empties every channel of it, so no join lands behind it
+/// (`SRV-136`). A caller no longer a member is refused with a 403.
+#[allow(clippy::too_many_arguments)]
 pub async fn add_channel_member_if_absent(
     pool: &PgPool,
+    space: &ambre_core::SpaceId,
     meta_id: &ambre_core::MetaId,
     user_id: &ambre_core::UserId,
     role: ambre_core::Role,
@@ -344,7 +470,22 @@ pub async fn add_channel_member_if_absent(
 ) -> Result<bool, AppError> {
     let uid = id_to_uuid(*user_id);
     let did = id_to_uuid(*meta_id);
+    let space = id_to_uuid(space.document_id());
     let mut tx = pool.begin().await?;
+    sqlx::query("SELECT 1 FROM documents WHERE id = $1 FOR SHARE")
+        .bind(space)
+        .fetch_optional(&mut *tx)
+        .await?;
+    let member: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM document_members WHERE document_id = $1 AND user_id = $2)",
+    )
+    .bind(space)
+    .bind(uid)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !member {
+        return Err(AppError::Forbidden);
+    }
     super::members::lock_document(&mut tx, did).await?;
     let done = sqlx::query(
         "INSERT INTO document_members (document_id, user_id, role, doc_key_enc, invited_by) \

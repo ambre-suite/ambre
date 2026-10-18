@@ -200,21 +200,22 @@ pub struct PendingDeletion {
 /// Marks a document as being deleted, before anything of it goes (`SRV-165`).
 /// A second mark keeps the later of the two sweeps, so a delete begun again
 /// never sweeps before a link it handed out has expired.
+///
+/// A space goes with every channel of it, in the same transaction
+/// (`SRV-143`). Each channel is deleted and its documents marked, then the
+/// space is marked. Those channels are answered, empty for any other
+/// document. A direct message belongs to no space, so none is touched.
 pub async fn begin_deletion(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     sweep_due: i64,
-) -> Result<(), AppError> {
-    sqlx::query(
-        "INSERT INTO document_deletions (document_id, sweep_due) VALUES ($1, $2) \
-         ON CONFLICT (document_id) DO UPDATE \
-         SET sweep_due = GREATEST(document_deletions.sweep_due, EXCLUDED.sweep_due)",
-    )
-    .bind(id_to_uuid(*document_id))
-    .bind(sweep_due)
-    .execute(pool)
-    .await?;
-    Ok(())
+) -> Result<Vec<super::DeletedChannel>, AppError> {
+    let did = id_to_uuid(*document_id);
+    let mut tx = pool.begin().await?;
+    let channels = super::channels::delete_space_channels_in(&mut tx, did, sweep_due).await?;
+    begin_deletions_in(&mut tx, &[did], sweep_due).await?;
+    tx.commit().await?;
+    Ok(channels)
 }
 
 /// Marks the delete of each of `documents` inside `tx`, as [`begin_deletion`]

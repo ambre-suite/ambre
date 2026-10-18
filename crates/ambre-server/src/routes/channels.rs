@@ -444,7 +444,11 @@ pub async fn join_channel(
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
     let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
-    let (meta_id, role) = joinable(&state, &auth, &channel_id).await?;
+    let Joinable {
+        space_id,
+        meta_id,
+        role,
+    } = joinable(&state, &auth, &channel_id).await?;
     let doc_key_enc = base64::engine::general_purpose::URL_SAFE
         .decode(&req.doc_key_enc)
         .map_err(|e| AppError::Conflict {
@@ -465,6 +469,7 @@ pub async fn join_channel(
     .await?;
     let joined = db::add_channel_member_if_absent(
         &state.db,
+        &space_id,
         &meta_id,
         &auth.user_id,
         role,
@@ -490,7 +495,7 @@ pub async fn join_channel_head(
 ) -> Result<axum::Json<JoinHeadJson>, AppError> {
     use base64::Engine;
     let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
-    let (meta_id, role) = joinable(&state, &auth, &channel_id).await?;
+    let Joinable { meta_id, role, .. } = joinable(&state, &auth, &channel_id).await?;
     let log = db::membership_log(&state.db, &meta_id.document_id()).await?;
     Ok(axum::Json(JoinHeadJson {
         meta_id,
@@ -502,7 +507,15 @@ pub async fn join_channel_head(
     }))
 }
 
-/// The `meta` of a channel the caller may join alone, and the role it takes.
+/// A channel the caller may join alone: its space, its `meta`, and the role
+/// the join takes.
+struct Joinable {
+    space_id: ambre_core::SpaceId,
+    meta_id: ambre_core::MetaId,
+    role: Role,
+}
+
+/// The channel the caller may join alone.
 ///
 /// The relay holds the channel public and in a space (`SRV-106`), and the
 /// caller a member of that space (`SRV-105`). Every refusal is the same 403.
@@ -510,7 +523,7 @@ async fn joinable(
     state: &AppState,
     auth: &auth::AuthSession,
     channel_id: &ambre_core::ChannelId,
-) -> Result<(ambre_core::MetaId, Role), AppError> {
+) -> Result<Joinable, AppError> {
     let channel = db::get_channel(&state.db, channel_id)
         .await?
         .filter(|c| c.is_public)
@@ -522,7 +535,11 @@ async fn joinable(
         .await?
         .ok_or(AppError::Forbidden)?;
     let role = joined_role(space_role).ok_or(AppError::Forbidden)?;
-    Ok((meta_id, role))
+    Ok(Joinable {
+        space_id,
+        meta_id,
+        role,
+    })
 }
 
 /// The role a self-join grants on `meta`: the caller's role in the space,
@@ -718,7 +735,11 @@ mod tests {
     /// none. A channel the caller may not join gets none either: the route
     /// refuses before it reads one.
     async fn join_entry(state: &AppState, who: UserId, channel: ChannelId) -> Option<String> {
-        let (meta, role) = joinable(state, &session(who), &channel).await.ok()?;
+        let Joinable {
+            meta_id: meta,
+            role,
+            ..
+        } = joinable(state, &session(who), &channel).await.ok()?;
         let position = log_length(state, meta.document_id()).await;
         (position > 0).then(|| {
             signed_entry(
@@ -2237,5 +2258,339 @@ mod tests {
             Err(AppError::BadRequest(_))
         ));
         assert_eq!(direct_messages(&state).await, 0);
+    }
+
+    // --- The Murmure spaces spec: leaving and deleting a space ---
+
+    /// A relay state whose object store is a fake, for a delete to empty.
+    async fn with_store(pool: sqlx::PgPool) -> (Arc<AppState>, crate::test_helpers::S3Stub) {
+        let stub = crate::test_helpers::S3Stub::spawn([]).await;
+        let base = crate::test_helpers::test_app_state(pool).await;
+        let state = crate::test_helpers::with_s3(
+            &base,
+            crate::test_helpers::offline_s3(Some(&stub.endpoint)),
+        );
+        (state, stub)
+    }
+
+    /// `who` leaves `space`, posting no rotation.
+    async fn leave_space(state: &Arc<AppState>, who: UserId, space: SpaceId) -> StatusCode {
+        status(
+            crate::routes::share::revoke_from_document(
+                State(state.clone()),
+                session(who),
+                Path((space.document_id().to_string(), who.to_string())),
+                None,
+            )
+            .await,
+        )
+    }
+
+    /// The documents of `channel`.
+    fn documents_of(channel: &Channel) -> [DocumentId; 2] {
+        [channel.meta.document_id(), channel.segment.document_id()]
+    }
+
+    /// Bob in a public channel, a private one Alice shares with him, and a
+    /// private one he alone holds, all in `space`.
+    async fn bobs_channels(
+        state: &Arc<AppState>,
+        alice: UserId,
+        bob: UserId,
+        space: SpaceId,
+    ) -> [Channel; 3] {
+        let public = public_channel(state, alice, space).await;
+        assert_eq!(join(state, bob, public.id, 3).await, StatusCode::NO_CONTENT);
+        let shared = private_channel(state, alice, space).await;
+        let invited = invite(
+            state,
+            alice,
+            shared.meta.document_id(),
+            "bob@test.dev",
+            [5; 16],
+        );
+        assert!(invited.await.is_success());
+        let own = private_channel(state, bob, space).await;
+        [public, shared, own]
+    }
+
+    /// `SRV-136`: a member who leaves a space leaves every channel of it,
+    /// private ones included. Each private channel that stays owes a
+    /// rotation, and one they were the last member of goes. A join racing
+    /// the leave is refused under the lock on the space.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn leaving_a_space_leaves_every_channel_of_it(pool: sqlx::PgPool) {
+        let (state, _stub) = with_store(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let [public, shared, own] = bobs_channels(&state, alice, bob, space).await;
+
+        assert_eq!(leave_space(&state, bob, space).await, StatusCode::OK);
+
+        assert_eq!(member_ids(&state, public.meta.document_id()).await, [alice]);
+        assert_eq!(member_ids(&state, shared.meta.document_id()).await, [alice]);
+        assert!(owes(&state, &shared).await);
+        assert!(!owes(&state, &public).await);
+        let channel = db::get_channel(&state.db, &own.id).await.expect("query");
+        assert!(channel.is_none());
+        for document in documents_of(&own) {
+            assert!(!exists(&state, document).await);
+        }
+        let space_owes = db::rotation_owed(&state.db, &space.document_id()).await;
+        assert!(space_owes.expect("query"));
+        let late = db::add_channel_member_if_absent(
+            &state.db,
+            &space,
+            &public.meta,
+            &bob,
+            Role::Editor,
+            &[1; 48],
+            None,
+        )
+        .await;
+        assert!(matches!(late, Err(AppError::Forbidden)));
+        assert_eq!(member_ids(&state, public.meta.document_id()).await, [alice]);
+    }
+
+    /// `SRV-136`: the owner who removes a member from a space with its
+    /// rotation takes them out of every channel of it too.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_removal_from_a_space_leaves_every_channel_of_it(pool: sqlx::PgPool) {
+        let (state, _stub) = with_store(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let [public, shared, own] = bobs_channels(&state, alice, bob, space).await;
+        let link = ambre_protocol::KeyLink {
+            document_id: space.document_id(),
+            key: ambre_core::KeyId::from_array([2; 16]),
+            previous: ambre_core::KeyId::from_array([1; 16]),
+            sealed: vec![2; 200],
+        };
+        let revoked = crate::routes::share::revoke_and_rotate(
+            State(state.clone()),
+            session(alice),
+            Path(space.document_id().to_string()),
+            Json(crate::routes::share::RevokeRequest {
+                user_id: bob,
+                keys: vec![crate::routes::share::RotateKeyEntry {
+                    user_id: alice,
+                    doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([4u8; 48]),
+                }],
+                members: vec![alice],
+                link: base64::engine::general_purpose::URL_SAFE
+                    .encode(link.encode().expect("encode")),
+                entry: None,
+            }),
+        )
+        .await;
+
+        assert_eq!(status(revoked), StatusCode::OK);
+        assert_eq!(member_ids(&state, space.document_id()).await, [alice]);
+        assert_eq!(member_ids(&state, public.meta.document_id()).await, [alice]);
+        assert_eq!(member_ids(&state, shared.meta.document_id()).await, [alice]);
+        assert!(owes(&state, &shared).await);
+        let channel = db::get_channel(&state.db, &own.id).await.expect("query");
+        assert!(channel.is_none());
+    }
+
+    /// Leaving a space touches neither a direct message nor a channel of
+    /// another space (the Murmure spaces spec).
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn leaving_a_space_keeps_direct_messages_and_other_spaces(pool: sqlx::PgPool) {
+        let (state, _stub) = with_store(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let left = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let other = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let elsewhere = public_channel(&state, alice, other).await;
+        assert_eq!(
+            join(&state, bob, elsewhere.id, 3).await,
+            StatusCode::NO_CONTENT
+        );
+        let direct = direct_request(alice, &[bob]);
+        let direct_meta = direct.meta_id.document_id();
+        open_direct(&state, alice, direct).await.expect("create");
+
+        assert_eq!(leave_space(&state, bob, left).await, StatusCode::OK);
+
+        let mut both = [alice, bob];
+        both.sort_by_key(|id| *id.as_bytes());
+        assert_eq!(member_ids(&state, elsewhere.meta.document_id()).await, both);
+        assert_eq!(member_ids(&state, direct_meta).await, both);
+        assert!(!owes(&state, &elsewhere).await);
+    }
+
+    async fn delete_space(state: &Arc<AppState>, who: UserId, space: SpaceId) -> StatusCode {
+        status(
+            crate::routes::delete_document(
+                State(state.clone()),
+                session(who),
+                Path(space.document_id().to_string()),
+            )
+            .await,
+        )
+    }
+
+    /// `SRV-143`: deleting a space deletes every channel of it with each of
+    /// their documents, then the space. A direct message of its members
+    /// stays, and so does a channel of another space.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn deleting_a_space_deletes_every_channel_then_the_space(pool: sqlx::PgPool) {
+        let (state, _stub) = with_store(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let gone = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let other = space(&state, alice, &[]).await;
+        let channels = bobs_channels(&state, alice, bob, gone).await;
+        let kept = public_channel(&state, alice, other).await;
+        let direct = direct_request(alice, &[bob]);
+        let direct_meta = direct.meta_id.document_id();
+        open_direct(&state, alice, direct).await.expect("create");
+
+        assert_eq!(delete_space(&state, alice, gone).await, StatusCode::OK);
+
+        assert!(!exists(&state, gone.document_id()).await);
+        for channel in &channels {
+            let row = db::get_channel(&state.db, &channel.id)
+                .await
+                .expect("query");
+            assert!(row.is_none());
+            for document in documents_of(channel) {
+                assert!(!exists(&state, document).await);
+                assert!(crate::test_helpers::deletion_marked(&state.db, document).await);
+            }
+        }
+        for document in documents_of(&kept).into_iter().chain([direct_meta]) {
+            assert!(exists(&state, document).await);
+        }
+    }
+
+    /// A space delete from an editor or a stranger is refused, and every
+    /// channel of the space stays (the Murmure spaces spec).
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_space_delete_from_anyone_but_its_owner_is_refused(pool: sqlx::PgPool) {
+        let (state, _stub) = with_store(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let mallory = user(&state, "mallory@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, alice, space).await;
+
+        for who in [bob, mallory] {
+            assert_eq!(
+                delete_space(&state, who, space).await,
+                StatusCode::FORBIDDEN
+            );
+        }
+        assert!(exists(&state, space.document_id()).await);
+        for document in documents_of(&channel) {
+            assert!(exists(&state, document).await);
+        }
+    }
+
+    /// `who` re-keys `meta` from key 1 to key 2, wrapping for `members`.
+    async fn rekey(
+        state: &Arc<AppState>,
+        who: UserId,
+        meta: DocumentId,
+        members: Vec<UserId>,
+    ) -> StatusCode {
+        let link = ambre_protocol::KeyLink {
+            document_id: meta,
+            key: ambre_core::KeyId::from_array([2; 16]),
+            previous: ambre_core::KeyId::from_array([1; 16]),
+            sealed: vec![2; 200],
+        };
+        let keys = members
+            .iter()
+            .map(|&user_id| crate::routes::share::RotateKeyEntry {
+                user_id,
+                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([4u8; 48]),
+            })
+            .collect();
+        status(
+            crate::routes::share::rotate_document_key(
+                State(state.clone()),
+                session(who),
+                Path(meta.to_string()),
+                Json(crate::routes::share::RotateKeyRequest {
+                    keys,
+                    members,
+                    link: base64::engine::general_purpose::URL_SAFE
+                        .encode(link.encode().expect("encode")),
+                }),
+            )
+            .await,
+        )
+    }
+
+    /// What `who` reads of `meta`: its member list, then its key links.
+    async fn read_access(
+        state: &Arc<AppState>,
+        who: UserId,
+        meta: DocumentId,
+    ) -> (StatusCode, StatusCode) {
+        let members = crate::routes::list_document_members(
+            State(state.clone()),
+            session(who),
+            Path(meta.to_string()),
+        )
+        .await;
+        let links = crate::routes::share::list_key_links(
+            State(state.clone()),
+            session(who),
+            Path(meta.to_string()),
+        )
+        .await;
+        (status(members), status(links))
+    }
+
+    /// `SRV-146`: an admin of a space re-keys a public channel of it, though
+    /// no member of the channel. It reads the members and the links first. A
+    /// viewer of the space is refused, and so is a private channel.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_admin_of_the_space_rekeys_a_public_channel_of_it(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let vera = user(&state, "vera@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor), (vera, Role::Viewer)]).await;
+        let public = public_channel(&state, alice, space).await;
+        let private = private_channel(&state, alice, space).await;
+        let meta = public.meta.document_id();
+
+        assert_eq!(
+            read_access(&state, bob, meta).await,
+            (StatusCode::OK, StatusCode::OK)
+        );
+        assert_eq!(
+            read_access(&state, vera, meta).await,
+            (StatusCode::NOT_FOUND, StatusCode::FORBIDDEN)
+        );
+        assert_eq!(
+            rekey(&state, vera, meta, vec![alice]).await,
+            StatusCode::FORBIDDEN
+        );
+        let private_meta = private.meta.document_id();
+        assert_eq!(
+            rekey(&state, bob, private_meta, vec![alice]).await,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(rekey(&state, bob, meta, vec![alice]).await, StatusCode::OK);
+        assert_eq!(
+            db::document_key_links(&state.db, &meta)
+                .await
+                .expect("links")
+                .len(),
+            1
+        );
     }
 }

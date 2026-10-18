@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: SPACES AND THE CHANNEL CATALOGUE
 **Type:** Vertical (feature)
-**Implementation:** partial -- a space, its catalogue and a self-join with its signed entry ship.
-The guest, the leave, the delete and the retention do not
+**Implementation:** partial -- a space, its catalogue, a signed self-join, the leave and the delete
+ship. The key rotation on a leave, the guest and the retention do not
 
 > A team gathers in a space. The space lists its public channels, and any member joins one with no
 > one else online. A guest reaches only the channels a member invites them into.
@@ -22,8 +22,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-032` | `INV` | A member with the viewer role on the space MUST NOT change the catalogue. | this spec section 3; `SRV-008` | `ambre_logic::spaces::tests::a_viewer_creates_no_channel_and_adds_no_category` -- the client refuses before any write; `ambre_server::routes::channels::tests::a_viewer_or_a_stranger_registers_no_channel` -- database tier | none | verified |
 | `MURMURE-033` | `INV` | The catalogue MUST hold the key of each public channel it lists, sealed under the key of the space. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | `ambre_murmure::space_tests::a_listed_channel_carries_its_name_topic_category_position_and_key`; `ambre_sync::channels::tests::a_sealed_channel_key_opens_for_its_own_channel_and_space_only`; `ambre_logic::spaces::tests::a_public_channel_is_listed_with_its_sealed_key_once_the_relay_holds_it` | none | verified |
 | `MURMURE-034` | `INV` | A guest of a channel MUST NOT be a member of the space document. | this spec section 3 | `ambre_server::routes::channels::tests::a_self_join_from_outside_the_space_is_refused` -- database tier, a guest holds a row on a channel and none on the space; `ambre_server::routes::channels::tests::a_channel_takes_only_free_documents_of_its_creator` -- database tier, the space document never enters a channel | none | verified |
-| `MURMURE-236` | `INV` | A removal from a channel MUST count as verified when the log of its space holds a signed removal of the same member. | this spec section 3; `SYNC-106` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-254` | `INV` | A key link of a public channel MUST count as verified when an admin of its space signed it. | this spec section 3; `SYNC-121`, `SRV-146` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-236` | `INV` | A removal from a channel MUST count as verified when the log of its space holds a signed removal of the same member. | this spec section 3; `SYNC-106` | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-254` | `INV` | A key link of a public channel MUST count as verified when an admin of its space signed it. | this spec section 3; `SYNC-121`, `SRV-146` | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-301` | `INV` | A space with no retention set MUST keep every segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-302` | `OBS` | The interface MUST state the retention as a range: at least its duration, at most that plus the span of a segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -54,13 +54,13 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-043` | `POST` | A member leaving a space MUST cause the rotation of the space key and of the key of each public channel. | this spec section 3; `ambre-spec-key-rotation.md` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-044` | `POST` | The catalogue MUST hold the rotated key of each public channel once the rotation completes. | this spec section 3 | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-045` | `FRAME` | Leaving a space MUST NOT change a channel of the catalogue beyond its key. | this spec section 3 | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-234` | `POST` | Leaving a space, or being removed from it, MUST remove the member from every channel of the space, private channels included. | this spec section 3; `SRV-136` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-235` | `POST` | Each private channel the member leaves that way MUST owe a rotation. | this spec section 3; `SYNC-127` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-237` | `FRAME` | Leaving a space MUST NOT remove the member from a direct message or from a channel of another space. | this spec section 3 | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-258` | `FAIL` | Given the last owner leaving a space that keeps other members, the client MUST first hand the owner role of the space document to one of them. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-043` | `POST` | A member leaving a space MUST cause the rotation of the space key and of the key of each public channel. | this spec section 3; `ambre-spec-key-rotation.md` | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-044` | `POST` | The catalogue MUST hold the rotated key of each public channel once the rotation completes. | this spec section 3 | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-045` | `FRAME` | Leaving a space MUST NOT change a channel of the catalogue beyond its key. | this spec section 3 | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-234` | `POST` | Leaving a space, or being removed from it, MUST remove the member from every channel of the space, private channels included. | this spec section 3; `SRV-136` | `ambre_server::routes::channels::tests::leaving_a_space_leaves_every_channel_of_it`; `::a_removal_from_a_space_leaves_every_channel_of_it` -- a leave and a removal by an owner, over a public, a shared private and a sole-member private channel | none | verified |
+| `MURMURE-235` | `POST` | Each private channel the member leaves that way MUST owe a rotation. | this spec section 3; `SYNC-127` | `ambre_server::routes::channels::tests::leaving_a_space_leaves_every_channel_of_it` -- the shared private channel owes a rotation, the public one owes none | none | verified |
+| `MURMURE-237` | `FRAME` | Leaving a space MUST NOT remove the member from a direct message or from a channel of another space. | this spec section 3 | `ambre_server::routes::channels::tests::leaving_a_space_keeps_direct_messages_and_other_spaces` -- a direct message and a channel of a second space keep the member | none | verified |
+| `MURMURE-258` | `FAIL` | Given the last owner leaving a space that keeps other members, the client MUST first hand the owner role of the space document to one of them. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Delete a public channel or a space
 
@@ -68,9 +68,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-247` | `POST` | Deleting a public channel MUST remove its entry from the catalogue. | this spec section 3; `MURMURE-243` | `ambre_murmure::space_tests::unlisting_a_channel_removes_its_entry_and_leaves_the_others` -- the entry and its sealed key go, a peer replaying the delta lists it no more; `ambre_logic::spaces::tests::a_deleted_channel_leaves_the_client_and_the_catalogue_once_the_relay_answers` -- the owner's client writes that delta once the relay answers | none | verified |
 | `MURMURE-466` | `FAIL` | Given a catalogue entry whose channel the relay no longer holds, the client of a space admin MUST remove the entry. | this spec section 3; `MURMURE-247`, `SRV-189` | `ambre_logic::spaces::tests::an_admin_unlists_an_entry_whose_channel_the_relay_no_longer_holds` -- an entry the answer lacks goes, one listed since the ask stays, and a viewer asks nothing; `ambre_sync::channels::tests::a_listing_of_a_space_forwards_its_channels_and_a_failure_nothing` -- the answer reaches the Logic thread | none | verified |
-| `MURMURE-248` | `POST` | Deleting a space MUST delete every channel of the space, then the space document. | this spec section 3; `SRV-143` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-249` | `FAIL` | Given a space delete from a member who does not own the space document, the relay MUST refuse it. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-250` | `FRAME` | Deleting a space MUST NOT delete a direct message. | this spec section 3; `MURMURE-046` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-248` | `POST` | Deleting a space MUST delete every channel of the space, then the space document. | this spec section 3; `SRV-143` | `ambre_server::routes::channels::tests::deleting_a_space_deletes_every_channel_then_the_space` -- every channel document is gone, then the space document | none | verified |
+| `MURMURE-249` | `FAIL` | Given a space delete from a member who does not own the space document, the relay MUST refuse it. | this spec section 3; `SRV-015` | `ambre_server::routes::channels::tests::a_space_delete_from_anyone_but_its_owner_is_refused` -- an editor and a stranger are refused, and the space and its channels stay | none | verified |
+| `MURMURE-250` | `FRAME` | Deleting a space MUST NOT delete a direct message. | this spec section 3; `MURMURE-046` | `ambre_server::routes::channels::tests::deleting_a_space_deletes_every_channel_then_the_space` -- a direct message between the same members stays | none | verified |
 
 ### 1.7 Set the retention of a space
 
@@ -84,9 +84,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 14 `verified`, 17 `unimplemented`. The engine, the Logic thread, the Sync worker
-  and the relay's database tier hold a new space, the catalogue and a signed self-join. The leave,
-  the delete, the guest and the retention are unbuilt.
+* **Verification.** 20 `verified`, 11 `unimplemented`. The engine, the Logic thread, the Sync worker
+  and the relay's database tier hold a new space, the catalogue and a signed self-join. The relay's
+  database tier holds the leave and the delete. The key rotation on a leave, the guest and the
+  retention are unbuilt.
 
 ---
 
@@ -133,7 +134,14 @@ channels it holds (`SRV-189`). It removes an entry listed at the ask and absent 
 **A leave takes every channel of the space with it** (`MURMURE-234`). The relay removes the member
 from each channel of the space, and each private one owes a rotation (`SRV-136`). The removal from
 the space, signed in its log, is what verifies each channel removal (`MURMURE-236`). A guest is
-never a member of the space, so a guest's channels are not touched.
+never a member of the space, so a guest's channels are not touched. A space leave skips the
+last-owner lockout on each channel: the member leaves the space, so no channel may keep them.
+
+**A self-join re-checks the space.** The join takes a share lock on the space document, then reads
+the membership again. A leave that commits first therefore refuses the join, and never races it.
+
+**A space delete removes its channels first.** Each channel goes with its documents and its members
+are told. The space document goes last, so a failure halfway leaves a space to delete again.
 
 **Retention is one setting of the space.** A space admin sets one duration for every channel of the
 space (`MURMURE-303`). The relay applies it: a policy in a client would erase nothing while no admin
