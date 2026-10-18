@@ -23,6 +23,13 @@ mod sync_badge;
 use app_root::AppRoot;
 pub(crate) use commands::{AppHandler, CommandPath};
 
+/// Each application's relay, read back by the per-frame loop (`ARCH-018`).
+pub(crate) type Relays = (
+    trame_chrome::TrameRelay,
+    toile_chrome::ToileRelay,
+    ambre_murmure::chrome::MurmureRelay,
+);
+
 /// Mount the Leptos shell onto the page body: the persistent AppShell chrome
 /// (which owns the `<canvas>`) plus the landing overlay shown on `/`. All
 /// reactive state is created here (the mount owner) and published via the slots
@@ -43,7 +50,7 @@ pub(crate) fn mount_shell(
     members_slot: Slot<RwSignal<Vec<MemberInfo>>>,
     devmode_slot: Slot<RwSignal<Option<landing::SignInMode>>>,
     current_doc_slot: Slot<RwSignal<Option<DocumentId>>>,
-    relays_slot: Slot<(trame_chrome::TrameRelay, toile_chrome::ToileRelay)>,
+    relays_slot: Slot<Relays>,
     boot_is_toile: bool,
     boot_is_prose: bool,
     boot_is_murmure: bool,
@@ -146,7 +153,8 @@ pub(crate) fn mount_shell(
             following: following_toile,
             presenter_peer: presenter_peer_toile,
         };
-        *relays_slot.borrow_mut() = Some((trame_relay, toile_relay));
+        let murmure_relay = ambre_murmure::chrome::MurmureRelay::new();
+        *relays_slot.borrow_mut() = Some((trame_relay, toile_relay, murmure_relay));
         let style_state = trame_chrome::StyleState::new();
         *style_slot.borrow_mut() = Some(style_state);
         // Boot directly into a document => start hydrating; the landing route
@@ -271,6 +279,7 @@ pub(crate) fn mount_shell(
             toile_dialogs,
             trame_relay,
             toile_relay,
+            murmure_relay,
         });
 
         view! {

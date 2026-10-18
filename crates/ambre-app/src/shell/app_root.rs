@@ -8,8 +8,7 @@ use super::prose_status::ProseFigures;
 use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
-use ambre_murmure::MurmurePane;
-use ambre_murmure::chrome::ChannelHeader;
+use ambre_murmure::chrome::{ChannelHeader, ChannelList, MurmureRelay};
 
 /// The table the command palette searches: the booted application's whole
 /// declaration, never a menu's subset (`CHROME-008`). Murmure declares none
@@ -29,13 +28,14 @@ pub(crate) fn palette_table(kind: DocType) -> &'static [ambre_chrome::commands::
 /// each row is absent.
 #[component]
 pub(crate) fn MurmureShell(
-    /// The pane the user is in.
-    pane: RwSignal<MurmurePane>,
-    /// The name of the current channel, once its engine has read it.
-    channel_name: RwSignal<Option<String>>,
+    /// The pane, the sidebar, and the channels this page opened.
+    relay: MurmureRelay,
+    /// Carries what the channel list asks of the Logic thread.
+    send: Callback<LogicCommand>,
     /// The shared header.
     children: ChildrenFn,
 ) -> impl IntoView {
+    let pane = relay.pane;
     view! {
         <AppShell
             focus=Signal::derive(move || ambre_murmure::chrome::focus_of(pane.get()))
@@ -43,10 +43,10 @@ pub(crate) fn MurmureShell(
         >
             <Header slot>{children()}</Header>
             <Toolbar slot>
-                <ChannelHeader pane=pane name=channel_name />
+                <ChannelHeader pane=pane name=relay.channel_name() />
             </Toolbar>
             <Sidebar slot label="Channels">
-                <ul class="murmure-channel-list"></ul>
+                <ChannelList relay=relay send=send />
             </Sidebar>
             <Panel slot label="Thread">
                 <div class="murmure-thread"></div>
@@ -238,6 +238,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_dialogs,
         trame_relay,
         toile_relay,
+        murmure_relay,
     } = use_context::<Wiring>().expect("Wiring provided by mount_shell");
 
     // The reactive client route, used only to show/hide the landing overlay.
@@ -495,10 +496,16 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // A Murmure page lays out its channel list, its channel and its thread
     // (the Murmure layout spec). It has no formula bar, tabs or status bar.
     let shell = if boot_is_murmure {
-        let pane = RwSignal::new(MurmurePane::default());
-        let channel_name = RwSignal::new(None::<String>);
+        let send = Callback::new({
+            let to_logic = to_logic.clone();
+            move |command: LogicCommand| {
+                if let Err(e) = to_logic.try_send(command) {
+                    tracing::warn!("Murmure command dropped, Logic channel full ({e:?})");
+                }
+            }
+        });
         view! {
-            <MurmureShell pane=pane channel_name=channel_name>{header.clone()}</MurmureShell>
+            <MurmureShell relay=murmure_relay send=send>{header.clone()}</MurmureShell>
         }
         .into_any()
     } else {

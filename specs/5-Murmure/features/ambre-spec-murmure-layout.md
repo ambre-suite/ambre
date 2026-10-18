@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE MURMURE LAYOUT
 **Type:** Vertical (feature)
-**Implementation:** partial -- the regions at each width, the back control and the rows of the
-shell are built. The sidebar lists no channel, and the canvas paints no message.
+**Implementation:** partial -- the regions, the back control, the rows of the shell and the
+channel list are built. The canvas paints no message.
 
 > Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of
 > them at a time on a phone. The layout follows the three widths every application shares.
@@ -23,9 +23,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-160` | `OBS` | Under the phone width, Murmure MUST show one view at a time: the channel list, a channel, or a thread. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | `ambre_app::shell::murmure_regions::a_phone_shows_one_view_at_a_time` -- each pane in a frame of 360 and 599 pixels shows one region, as wide as the frame | none | verified |
 | `MURMURE-161` | `INV` | A region MUST collapse at a narrow width, never disappear. | this spec section 3; `CHROME-033` | `ambre_app::shell::murmure_regions::a_region_collapses_and_never_disappears` -- the folded sidebar of a tablet is a strip that unfolds, and a phone reaches the channel list through the back control | none | verified |
 | `MURMURE-162` | `INV` | The layout MUST read the three widths of the adaptive layout, never a device class. | this spec section 3; `CHROME-034` | `ambre_app::shell::murmure_regions::the_layout_reads_the_three_widths` -- a channel and a thread in frames of 599, 600, 1024 and 1025 pixels, each region flipping at the two thresholds alone | none | verified |
-| `MURMURE-163` | `OBS` | The sidebar MUST group the public channels of each space by category, then list the private channels and the direct messages. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-164` | `OBS` | A channel to join MUST be shown apart from the joined channels. | this spec section 3; `features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-165` | `OBS` | A channel with activity MUST show a mark, and its count once the count is known. | this spec section 3; `features/ambre-spec-murmure-unread.md` | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-163` | `OBS` | The sidebar MUST group the public channels of each space by category, then list the private channels and the direct messages. | this spec section 3 | `ambre_murmure::sidebar::tests::the_sidebar_groups_public_channels_by_category_then_private_then_direct` -- the sections in order, each channel by catalogue rank; `ambre_app::shell::murmure_regions::the_sidebar_draws_its_sections_in_order` -- the shell draws the section titles and entries in that order | none | verified |
+| `MURMURE-164` | `OBS` | A channel to join MUST be shown apart from the joined channels. | this spec section 3; `features/ambre-spec-murmure-spaces.md` | `ambre_murmure::sidebar::tests::a_channel_to_join_sits_apart_from_the_joined_ones` -- a section of its own, left once joined; `ambre_app::shell::murmure_regions::the_sidebar_draws_its_sections_in_order` -- the last section drawn is the one to join | none | verified |
+| `MURMURE-165` | `OBS` | A channel with activity MUST show a mark, and its count once the count is known. | this spec section 3; `features/ambre-spec-murmure-unread.md` | `ambre_murmure::sidebar::tests::a_mark_shows_before_the_count_and_the_count_replaces_it` -- the mark, then the counts, kept when absent from an answer; `ambre_app::shell::murmure_regions::a_channel_shows_its_mark_then_its_counts` -- the entry draws the mark, then the message and mention counts | none | verified |
 | `MURMURE-382` | `INV` | A split view MUST exist at the desktop width alone. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-428` | `OBS` | The command bar of the shell MUST hold the header of the current channel. | this spec section 3; `ambre-spec-chrome.md section 2` | `ambre_app::shell::murmure_regions::the_command_bar_holds_the_channel_header_and_no_status_bar_shows` -- the channel name is read inside the channel header, inside the command bar | none | verified |
 | `MURMURE-429` | `OBS` | Murmure MUST show no status bar. | this spec section 3; `ambre-spec-chrome.md section 2` | `ambre_app::shell::murmure_regions::the_command_bar_holds_the_channel_header_and_no_status_bar_shows` -- the mounted shell holds no status bar, formula bar or tab strip | none | verified |
@@ -34,8 +34,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-166` | `POST` | Selecting a channel MUST show it in the message list and mark it current in the sidebar. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-167` | `FRAME` | Selecting a channel MUST NOT move the read cursor of the channel left behind. | this spec section 3; `MURMURE-116` | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-166` | `POST` | Selecting a channel MUST show it in the message list and mark it current in the sidebar. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5). The sidebar marks the channel current, but no message list draws it | unimplemented |
+| `MURMURE-167` | `FRAME` | Selecting a channel MUST NOT move the read cursor of the channel left behind. | this spec section 3; `MURMURE-116` | `ambre_app::shell::murmure_regions::selecting_a_channel_sends_nothing_for_the_one_left_behind` -- switching channels sends one open per new channel and no other command | none | verified |
 
 ### 1.3 Go back on a phone
 
@@ -56,8 +56,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 9 `verified`, 10 `unimplemented`. The regions, the back control and the rows
-  of the shell are built. The sidebar entries and the split view are not.
+* **Verification.** 13 `verified`, 6 `unimplemented`. The regions, the back control, the rows of
+  the shell and the sidebar entries are built. The message list and the split view are not.
 
 ---
 
@@ -111,18 +111,23 @@ pub enum MurmurePane {
     Thread { channel: ChannelId, root: MessageRef },
 }
 pub struct MessageRef { pub segment: SegmentId, pub message: MessageId }
-pub struct SidebarEntry { pub channel: ChannelId, pub group: SidebarGroup, pub activity: Activity }
-pub enum SidebarGroup { Category(CategoryId), Personal(PersonalGroupId), Private, Direct, ToJoin }
-pub enum Activity { None, Some, Count { messages: MessageCount, mentions: MentionCount } }
-pub struct MessageCount(u32);
-pub struct MentionCount(u32);
+pub struct SidebarSection { pub group: SidebarGroup, pub title: Option<String>, pub entries: Vec<SidebarEntry> }
+pub struct SidebarEntry { pub channel: ChannelId, pub name: Option<String>, pub activity: Activity }
+pub enum SidebarGroup { Category { space: SpaceId, category: Option<CategoryId> }, Private, Direct, ToJoin }
+pub enum Activity { None, Some, Count { messages: UnreadCount, mentions: MentionCount } }
 ```
+
+The sidebar is rebuilt from what the Logic thread hands the view. That is the channels of the user,
+the catalogue of each space they name, the activity answer and the names of open channels. A space
+named for the first time is opened for its catalogue. Drawing the sidebar sends nothing.
+Selecting a joined channel opens it once, and selecting one to join joins it in its space.
 
 A channel keeps the message it shows, so back from a thread lands on its root (`MURMURE-168`).
 The pane names the region in focus, and the stylesheet alone decides which regions sit beside it.
 
-**Code.** `crates/ambre-murmure/src/layout.rs` holds the pane, and `crates/ambre-murmure/src/chrome.rs`
-maps it onto the regions of `crates/ambre-chrome/src/app_shell.rs`. The launcher mounts them in
+**Code.** `crates/ambre-murmure/src/layout.rs` holds the pane, and `crates/ambre-murmure/src/sidebar.rs`
+the sidebar. `crates/ambre-murmure/src/chrome.rs` maps them onto the regions of
+`crates/ambre-chrome/src/app_shell.rs`, and its relay absorbs the events. The launcher mounts them in
 `crates/ambre-app/src/shell/app_root.rs`, and `crates/ambre-app/styles.css` lays them out.
 
 ---
@@ -157,7 +162,12 @@ in a cell of its own (`MURMURE-421`).
 
 * **The canvas paints its backdrop alone.** The messages land with the
   `The message list and the composer` Story (`ambre-roadmap.md` E5).
-* **The sidebar lists no channel.** Its entries, and what the id of a Murmure route names, land with
-  the `The Murmure sidebar` Story (`ambre-roadmap.md` E5).
+* **A private channel or a direct message not open shows no name.** Its name is in its `meta`
+  document, which learning of it never fetches (`MURMURE-475`). It lands with the
+  `The names of channels not open` Story (`ambre-roadmap.md` E5).
+* **A space where the user joined no channel is not shown.** The client learns its spaces from its
+  channels alone. It lands with the `The spaces of a user` Story (`ambre-roadmap.md` E5).
+* **The id of a Murmure route names nothing yet.** A page opens on the channel list. A link to a
+  channel or a message lands with the `A link to a message` Story (`ambre-roadmap.md` E5).
 * **The personal order of the sidebar is not here.** Groups, order, mute, hide and bookmarks are
   `features/ambre-spec-murmure-sidebar.md`.

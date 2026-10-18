@@ -403,6 +403,8 @@ struct Wiring {
     trame_relay: trame_chrome::TrameRelay,
     /// Toile's panels' state, and the commands their intents become.
     toile_relay: toile_chrome::ToileRelay,
+    /// Murmure's pane and sidebar, and the commands its events call for.
+    murmure_relay: ambre_murmure::chrome::MurmureRelay,
 }
 
 /// Header status + loading state, derived from two independent signals carried
@@ -857,8 +859,7 @@ pub fn main() {
     let members_slot: Slot<RwSignal<Vec<MemberInfo>>> = Rc::new(RefCell::new(None));
     let devmode_slot: Slot<RwSignal<Option<landing::SignInMode>>> = Rc::new(RefCell::new(None));
     let current_doc_slot: Slot<RwSignal<Option<DocumentId>>> = Rc::new(RefCell::new(None));
-    let relays_slot: Slot<(trame_chrome::TrameRelay, toile_chrome::ToileRelay)> =
-        Rc::new(RefCell::new(None));
+    let relays_slot: Slot<shell::Relays> = Rc::new(RefCell::new(None));
     let style_slot: Slot<trame_chrome::StyleState> = Rc::new(RefCell::new(None));
     let chrome_status_slot: Slot<RwSignal<ChromeStatus>> = Rc::new(RefCell::new(None));
 
@@ -965,7 +966,8 @@ pub fn main() {
         .expect("current_doc signal created during mount");
     // Each application's relay, read back for the per-frame relay, which hands
     // it every event (`ARCH-018`).
-    let (trame_relay, toile_relay) = relays_slot.borrow().expect("relays created during mount");
+    let (trame_relay, toile_relay, murmure_relay) =
+        relays_slot.borrow().expect("relays created during mount");
     // Formatting-toolbar style state (`trame-cell-styles`), read back for the
     // per-frame relay, which hands it every event.
     let style_state = style_slot
@@ -1285,6 +1287,9 @@ pub fn main() {
             // (`ARCH-018`). The launcher names no variant.
             trame_relay.absorb(&ev);
             toile_relay.absorb(&ev);
+            for command in murmure_relay.absorb(&ev) {
+                let _ = relay_tx.try_send(command);
+            }
             match &ev {
                 // Non-fatal sync warnings surface as a transient warning toast.
                 // They never reach the fatal path. The session keeps running and
@@ -1315,6 +1320,12 @@ pub fn main() {
                             id: RequestId::next(),
                             cmd: RestCommand::ListDocuments,
                         });
+                        // A Murmure page lists its channels and their activity.
+                        if boot_is_murmure {
+                            for command in ambre_murmure::chrome::MurmureRelay::boot() {
+                                let _ = relay_tx.try_send(command);
+                            }
+                        }
                     }
                 }
                 // The provider's address: send the browser there (`CHROME-095`).

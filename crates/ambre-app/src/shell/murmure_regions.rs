@@ -4,7 +4,12 @@
 // test mounts the shell into an iframe of the width it reads.
 
 use super::app_root::MurmureShell;
-use ambre_core::{ChannelId, MessageId, SegmentId};
+use ambre_bus::{
+    CatalogueEntry, CategoryView, ChannelActivity, ChannelPlace, LogicCommand, MemberChannel,
+    MentionCount, SpaceCommand, SpaceEvent, UiEvent, UnreadCount,
+};
+use ambre_core::{CategoryId, ChannelId, MessageId, SegmentId, SpaceId};
+use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::{MessageRef, MurmurePane};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -37,12 +42,27 @@ struct Frame {
     frame: web_sys::HtmlIFrameElement,
     inner: web_sys::Document,
     pane: RwSignal<MurmurePane>,
+    relay: MurmureRelay,
+    /// What the channel list sent the Logic thread, in order.
+    sent: RwSignal<Vec<LogicCommand>>,
     /// Unmounts the shell on drop.
     _handle: Box<dyn std::any::Any>,
 }
 
 impl Frame {
+    /// The shell on `pane`, its channel named `general`.
     async fn new(width: u32, pane: MurmurePane) -> Self {
+        let relay = MurmureRelay::new();
+        relay.pane.set(pane);
+        if let Some(channel) = pane.shown_channel() {
+            relay
+                .sidebar
+                .update(|s| s.set_name(channel, Some("general".to_owned())));
+        }
+        Self::with(width, relay).await
+    }
+
+    async fn with(width: u32, relay: MurmureRelay) -> Self {
         let frame: web_sys::HtmlIFrameElement = document()
             .create_element("iframe")
             .unwrap()
@@ -59,11 +79,11 @@ impl Frame {
         fill.set_text_content(Some("html,body{margin:0;height:100%}"));
         inner.head().unwrap().append_child(&fill).unwrap();
 
-        let pane = RwSignal::new(pane);
-        let name = RwSignal::new(Some("general".to_owned()));
+        let sent = RwSignal::new(Vec::new());
+        let send = Callback::new(move |command| sent.update(|s| s.push(command)));
         let handle = mount_to(inner.body().unwrap(), move || {
             view! {
-                <MurmureShell pane=pane channel_name=name>
+                <MurmureShell relay=relay send=send>
                     <span class="title">"Ambre"</span>
                 </MurmureShell>
             }
@@ -72,11 +92,153 @@ impl Frame {
         Self {
             frame,
             inner,
-            pane,
+            pane: relay.pane,
+            relay,
+            sent,
             _handle: Box::new(handle),
         }
     }
 
+    /// Hand the relay one event, as the per-frame loop does, and return the
+    /// commands it answers.
+    async fn absorb(&self, ev: UiEvent) -> Vec<LogicCommand> {
+        let commands = self.relay.absorb(&ev);
+        leptos::task::tick().await;
+        commands
+    }
+
+    /// The text of every element `selector` names, in order.
+    fn texts(&self, selector: &str) -> Vec<String> {
+        let list = self.inner.query_selector_all(selector).unwrap();
+        (0..list.length())
+            .filter_map(|i| list.item(i)?.text_content())
+            .collect()
+    }
+
+    /// The sidebar entry of the channel named `name`.
+    fn entry(&self, name: &str) -> web_sys::HtmlElement {
+        let list = self.inner.query_selector_all(".murmure-entry").unwrap();
+        (0..list.length())
+            .filter_map(|i| list.item(i)?.dyn_into::<web_sys::HtmlElement>().ok())
+            .find(|el| {
+                el.query_selector(".murmure-entry-name")
+                    .unwrap()
+                    .and_then(|n| n.text_content())
+                    .as_deref()
+                    == Some(name)
+            })
+            .unwrap_or_else(|| panic!("{name} is in the sidebar"))
+    }
+
+    async fn select(&self, name: &str) {
+        self.entry(name).click();
+        leptos::task::tick().await;
+    }
+}
+
+/// A space of one category, `general` outside it and `sales` in it, with
+/// `random` to join; a private `board` and a direct message. The user
+/// belongs to all but `random`.
+struct Acme {
+    space: SpaceId,
+    general: ChannelId,
+    sales: ChannelId,
+    random: ChannelId,
+    board: ChannelId,
+    direct: ChannelId,
+}
+
+impl Acme {
+    fn new() -> Self {
+        Self {
+            space: SpaceId::new(),
+            general: ChannelId::new(),
+            sales: ChannelId::new(),
+            random: ChannelId::new(),
+            board: ChannelId::new(),
+            direct: ChannelId::new(),
+        }
+    }
+
+    fn members(&self, also: &[ChannelId]) -> UiEvent {
+        let public = ChannelPlace::Public(self.space);
+        let mut channels = vec![
+            MemberChannel {
+                channel_id: self.direct,
+                place: ChannelPlace::Direct,
+            },
+            MemberChannel {
+                channel_id: self.sales,
+                place: public,
+            },
+            MemberChannel {
+                channel_id: self.board,
+                place: ChannelPlace::Private(self.space),
+            },
+            MemberChannel {
+                channel_id: self.general,
+                place: public,
+            },
+        ];
+        channels.extend(also.iter().map(|&channel_id| MemberChannel {
+            channel_id,
+            place: public,
+        }));
+        UiEvent::MemberChannels { channels }
+    }
+
+    fn catalogue(&self) -> UiEvent {
+        let team = CategoryId::new();
+        let entry = |channel_id, name: &str, category, position| CatalogueEntry {
+            channel_id,
+            name: name.to_owned(),
+            topic: None,
+            category,
+            position,
+        };
+        UiEvent::Space {
+            space_id: self.space,
+            event: SpaceEvent::Catalogue {
+                name: Some("Acme".to_owned()),
+                categories: vec![CategoryView {
+                    id: team,
+                    name: "Team".to_owned(),
+                    position: 0,
+                }],
+                channels: vec![
+                    entry(self.random, "random", None, 1),
+                    entry(self.sales, "sales", Some(team), 0),
+                    entry(self.general, "general", None, 0),
+                ],
+            },
+        }
+    }
+
+    /// The sidebar of a desktop, filled as at start.
+    async fn frame(&self) -> Frame {
+        let frame = Frame::with(1025, MurmureRelay::new()).await;
+        let opened = frame.absorb(self.members(&[])).await;
+        assert!(
+            matches!(opened[..], [LogicCommand::OpenSpace { space_id }] if space_id == self.space),
+            "the space opens once, for its catalogue: {opened:?}"
+        );
+        assert!(frame.absorb(self.catalogue()).await.is_empty());
+        frame
+    }
+}
+
+fn activity(channel_id: ChannelId, active: bool, counts: Option<(u32, u32)>) -> UiEvent {
+    UiEvent::ChannelActivity {
+        channels: vec![ChannelActivity {
+            channel_id,
+            active,
+            unread: counts.map(|(m, _)| UnreadCount(m)),
+            mentions: counts.map(|(_, n)| MentionCount(n)),
+        }],
+    }
+}
+
+impl Frame {
     /// The element `selector` names, if it is in the frame.
     fn query(&self, selector: &str) -> Option<web_sys::Element> {
         self.inner.query_selector(selector).unwrap()
@@ -269,4 +431,188 @@ async fn the_command_bar_holds_the_channel_header_and_no_status_bar_shows() {
     assert!(frame.query(".ambre-statusbar").is_none());
     assert!(frame.query(".ambre-formulabar").is_none());
     assert!(frame.query(".ambre-tabstrip").is_none());
+}
+
+/// The channel each command opens, `None` for any other command.
+fn opened(commands: &[LogicCommand]) -> Vec<Option<ChannelId>> {
+    commands
+        .iter()
+        .map(|c| match c {
+            LogicCommand::OpenChannel { channel_id } => Some(*channel_id),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The sidebar draws the joined public channels of the space by category,
+/// then the private channels and the direct messages (`MURMURE-163`). The
+/// channel to join is in a section apart (`MURMURE-164`).
+#[wasm_bindgen_test]
+async fn the_sidebar_draws_its_sections_in_order() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    assert_eq!(
+        frame.texts(".murmure-section-title"),
+        [
+            "Acme",
+            "Team",
+            "Private channels",
+            "Direct messages",
+            "Channels to join"
+        ]
+    );
+    assert_eq!(
+        frame.texts(".murmure-entry-name"),
+        [
+            "general",
+            "sales",
+            "Private channel",
+            "Direct message",
+            "random"
+        ],
+        "a private channel or a direct message not open shows no name yet"
+    );
+    let groups = frame.inner.query_selector_all(".murmure-section").unwrap();
+    let last = groups.item(groups.length() - 1).unwrap();
+    let last: web_sys::Element = last.dyn_into().unwrap();
+    assert_eq!(last.get_attribute("data-group").as_deref(), Some("to-join"));
+}
+
+/// A channel with activity shows the relay's mark before any count, then
+/// its counts once known, and a read channel shows nothing (`MURMURE-119`,
+/// `MURMURE-165`).
+#[wasm_bindgen_test]
+async fn a_channel_shows_its_mark_then_its_counts() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let badges = |frame: &Frame| {
+        let entry = frame.entry("sales");
+        let mark = entry.query_selector(".murmure-mark").unwrap().is_some();
+        let text = |selector| {
+            entry
+                .query_selector(selector)
+                .unwrap()
+                .and_then(|el| el.text_content())
+        };
+        (mark, text(".murmure-count"), text(".murmure-mentions"))
+    };
+    assert_eq!(badges(&frame), (false, None, None));
+
+    frame.absorb(activity(acme.sales, true, None)).await;
+    assert_eq!(badges(&frame), (true, None, None), "the mark, no count yet");
+
+    frame.absorb(activity(acme.sales, true, Some((3, 1)))).await;
+    assert_eq!(
+        badges(&frame),
+        (false, Some("3".to_owned()), Some("1".to_owned()))
+    );
+
+    frame.absorb(activity(acme.general, true, None)).await;
+    assert_eq!(
+        badges(&frame),
+        (false, Some("3".to_owned()), Some("1".to_owned())),
+        "a channel absent from an answer keeps its counts"
+    );
+
+    frame
+        .absorb(activity(acme.sales, false, Some((0, 0))))
+        .await;
+    assert_eq!(
+        badges(&frame),
+        (false, None, None),
+        "read, it shows nothing"
+    );
+}
+
+/// Selecting a channel shows it in the content and marks it current. It
+/// opens the first time only, and nothing is sent for the channel left
+/// behind, so its read cursor stays (`MURMURE-167`).
+#[wasm_bindgen_test]
+async fn selecting_a_channel_sends_nothing_for_the_one_left_behind() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let current =
+        |frame: &Frame| frame.texts(".murmure-entry[aria-current=\"page\"] .murmure-entry-name");
+
+    frame.select("general").await;
+    assert_eq!(
+        frame.pane.get_untracked(),
+        MurmurePane::channel(acme.general)
+    );
+    assert_eq!(current(&frame), ["general"]);
+    assert_eq!(frame.texts(".murmure-channel-name"), ["general"]);
+
+    frame.select("sales").await;
+    assert_eq!(current(&frame), ["sales"]);
+    frame.select("general").await;
+    assert_eq!(
+        opened(&frame.sent.get_untracked()),
+        [Some(acme.general), Some(acme.sales)],
+        "each channel opens once, and nothing else is sent"
+    );
+}
+
+/// Selecting a channel to join joins it in its space. The join shows the
+/// channel, opens it, and lists the channels again, so it moves among the
+/// joined ones.
+#[wasm_bindgen_test]
+async fn a_channel_to_join_is_joined_then_shown() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    frame.select("random").await;
+    let sent = frame.sent.get_untracked();
+    assert!(
+        matches!(
+            sent[..],
+            [LogicCommand::Space {
+                space_id,
+                command: SpaceCommand::JoinChannel { channel_id },
+            }] if space_id == acme.space && channel_id == acme.random
+        ),
+        "{sent:?}"
+    );
+    assert_eq!(frame.pane.get_untracked(), MurmurePane::ChannelList);
+
+    let joined = UiEvent::Space {
+        space_id: acme.space,
+        event: SpaceEvent::Joined {
+            channel_id: acme.random,
+        },
+    };
+    let answer = frame.absorb(joined).await;
+    assert!(matches!(answer[0], LogicCommand::ListMemberChannels));
+    assert_eq!(opened(&answer[1..]), [Some(acme.random)]);
+    assert_eq!(
+        frame.pane.get_untracked(),
+        MurmurePane::channel(acme.random)
+    );
+
+    assert!(frame.absorb(acme.members(&[acme.random])).await.is_empty());
+    assert!(
+        !frame
+            .texts(".murmure-section-title")
+            .contains(&"Channels to join".to_owned()),
+        "nothing is left to join"
+    );
+}
+
+/// A public channel the user left moves among those to join, and a pane
+/// showing it goes back to the channel list.
+#[wasm_bindgen_test]
+async fn a_channel_left_leaves_the_sidebar_and_the_pane() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    frame.select("sales").await;
+    let left = UiEvent::Space {
+        space_id: acme.space,
+        event: SpaceEvent::ChannelLeft {
+            channel_id: acme.sales,
+        },
+    };
+    assert!(frame.absorb(left).await.is_empty());
+    assert_eq!(frame.pane.get_untracked(), MurmurePane::ChannelList);
+    assert_eq!(
+        frame.texts(".murmure-section[data-group=\"to-join\"] .murmure-entry-name"),
+        ["sales", "random"]
+    );
 }

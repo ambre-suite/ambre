@@ -491,6 +491,80 @@ input[type="radio"] {
     overflow: auto;
 }
 
+/* The Murmure channel list (the Murmure layout spec): one section per group,
+   one button per channel, its mark or its counts at the end. */
+.murmure-channel-list {
+    padding: var(--space-2) 0;
+}
+
+.murmure-section-title {
+    margin: var(--space-3) var(--space-4) var(--space-1);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+.murmure-section ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.murmure-entry {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-1) var(--space-4);
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-body);
+    text-align: left;
+    cursor: pointer;
+}
+
+.murmure-entry:hover {
+    background: var(--surface-hover);
+}
+
+.murmure-entry[aria-current="page"] {
+    background: var(--surface-2);
+    box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.murmure-entry-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.murmure-mark {
+    width: var(--space-2);
+    height: var(--space-2);
+    border-radius: 50%;
+    background: var(--text);
+}
+
+.murmure-count,
+.murmure-mentions {
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-xs);
+}
+
+.murmure-count {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.murmure-mentions {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
 .ambre-panel {
     flex-direction: column;
     overflow: auto;
