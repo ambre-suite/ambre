@@ -615,4 +615,52 @@ pub(crate) mod tests {
         assert_eq!(alone.standing(bob.id).0, MemberStanding::Verified);
         assert!(!alone.signers().unwrap().contains(&alice.public()));
     }
+
+    /// The space speaks from its latest entries (the Murmure spaces spec). A
+    /// removal a later join undid removes no one from a channel. A member of
+    /// the space alone stays unverified in a channel that holds no entry of
+    /// theirs.
+    #[test]
+    fn a_space_word_follows_its_latest_entries_and_adds_no_member() {
+        let (alice, bob, carol, dave) = (
+            Person::new(1),
+            Person::new(2),
+            Person::new(3),
+            Person::new(4),
+        );
+        let mut space = created(&alice, &bob);
+        append(
+            &mut space,
+            &alice,
+            &bob,
+            MembershipAct::Revoke,
+            Role::Editor,
+        );
+        append(
+            &mut space,
+            &alice,
+            &bob,
+            MembershipAct::Invite,
+            Role::Viewer,
+        );
+        append(
+            &mut space,
+            &alice,
+            &dave,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        let word = SpaceWord::of(&walk(&space));
+        assert!(word.removed.is_empty(), "the join undid the removal");
+
+        let channel = created(&carol, &bob);
+        let rule = LogRule {
+            self_join: public_channel_self_join,
+            space: Some(word),
+        };
+        let view = Log::walk_under(DOC, anchor(&channel), &channel, &rule);
+        assert_eq!(view.standing(bob.id).0, MemberStanding::Verified);
+        assert_eq!(view.standing(alice.id).0, MemberStanding::Unverified);
+        assert_eq!(view.standing(dave.id), (MemberStanding::Unverified, None));
+    }
 }

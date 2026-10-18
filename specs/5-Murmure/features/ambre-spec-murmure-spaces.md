@@ -61,8 +61,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-235` | `POST` | Each private channel the member leaves that way MUST owe a rotation. | this spec section 3; `SYNC-127` | `ambre_server::routes::channels::tests::leaving_a_space_leaves_every_channel_of_it` -- the shared private channel owes a rotation, the public one owes none | none | verified |
 | `MURMURE-237` | `FRAME` | Leaving a space MUST NOT remove the member from a direct message or from a channel of another space. | this spec section 3 | `ambre_server::routes::channels::tests::leaving_a_space_keeps_direct_messages_and_other_spaces` -- a direct message and a channel of a second space keep the member | none | verified |
 | `MURMURE-258` | `FAIL` | Given the last owner leaving a space that keeps other members, the client MUST first hand the owner role of the space document to one of them. | this spec section 3; `SRV-015` | `ambre_logic::spaces::tests::the_last_owner_hands_the_role_on_before_leaving`; `::a_leave_another_owner_covers_goes_at_once` -- the role passes before the leave, and a refusal fails the leave | none | verified |
-| `MURMURE-479` | `FAIL` | Given a member who joined the space again, a removal of the space log signed before that join MUST NOT verify a channel removal. | this spec section 3; `MURMURE-236` | not built | unbuilt -- lands with the `The space log in time` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-480` | `FAIL` | Given a key link of a public channel, a signer the space log removed as admin before it signed MUST NOT verify it. | this spec section 3; `MURMURE-254` | not built | unbuilt -- lands with the `The space log in time` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-479` | `FAIL` | Given a member who joined the space again, a removal of the space log signed before that join MUST NOT verify a channel removal. | this spec section 3; `MURMURE-236` | `ambre_sync::membership_log::tests::a_space_word_follows_its_latest_entries_and_adds_no_member` -- a removal, then a join of the same member, removes no one from the channel | none | verified |
+| `MURMURE-480` | `FRAME` | The log of a space MUST NOT verify a member of one of its channels. | this spec section 3; `MURMURE-254` | `ambre_sync::membership_log::tests::a_space_word_follows_its_latest_entries_and_adds_no_member` -- an owner and an editor of the space stay unverified in a channel that holds no entry of theirs | none | verified |
 
 ### 1.6 Delete a public channel or a space
 
@@ -86,11 +86,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 26 `verified`, 7 `unimplemented`. The engine, the Logic thread, the Sync worker
+* **Verification.** 28 `verified`, 5 `unimplemented`. The engine, the Logic thread, the Sync worker
   and the relay's database tier hold a new space, the catalogue and a signed self-join. The relay's
   database tier holds the leave and the delete. The Sync worker and the Logic thread hold the key
-  rotation on a leave. The order of the space log against a channel log, the guest and the
-  retention are unbuilt.
+  rotation on a leave. The guest and the retention are unbuilt.
 
 ---
 
@@ -158,6 +157,11 @@ interface states that range, never the duration alone (`MURMURE-302`).
 (`MURMURE-254`). The first admin client online after the leave rotates the space key, then the key of
 each public channel. Its Sync worker seals each new key under the new space key, and the catalogue
 takes the sealed value.
+
+**The space log speaks from its latest entries.** A removal counts only while no later entry adds
+the member back (`MURMURE-479`). Its writers count at any point of its history. A link seals a key
+its signer already held, and the relay takes a rotation from a current admin alone. The space log
+adds link signers and removals, and never a member of a channel (`MURMURE-480`).
 
 **A sealed entry names its space key.** It starts with the id of the space key that sealed it. An
 admin therefore re-keys exactly the channels whose entry names an older space key. A last owner who
