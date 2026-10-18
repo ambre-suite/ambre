@@ -39,6 +39,19 @@ impl LogicState {
         });
     }
 
+    /// This client rotated the key of `document_id`. When it is the `meta` of
+    /// a held channel, its active segment closes at the next tick (the
+    /// Murmure channels spec).
+    pub(crate) fn key_rotated(&mut self, document_id: DocumentId) {
+        if let Some(channel) = self
+            .channels
+            .values_mut()
+            .find(|channel| channel.meta_id().document_id() == document_id)
+        {
+            channel.key_rotated();
+        }
+    }
+
     /// The relay closed `closing` into `active`. `meta` records it, and the
     /// successor opens: this client's own when `created`, the winner's
     /// otherwise.

@@ -123,7 +123,7 @@ snapshot, and the relay arbitrates who writes it.
 | `SRV-118` | `POST` | The deltas of a final segment MUST be purged only once a member client other than its author confirms the finalization. | this spec section 3; `SRV-126` | `ambre_server::routes::channels::tests::a_final_segment_keeps_its_deltas_until_another_member_confirms` -- the author's confirmation leaves the final snapshot pending and the deltas in place, and another member's purges them | none | verified |
 | `SRV-119` | `POST` | A lease that expires MUST let another client take the lease of the same segment. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::routes::channels::tests::an_expired_lease_goes_to_another_writer` -- database tier, the second writer takes a new lease at the horizon the lock fixed | none | verified |
 | `SRV-120` | `FRAME` | Finalizing a segment MUST NOT touch a delta of any other document. | this spec section 3 | `ambre_server::routes::channels::tests::a_commit_needs_the_live_lease_and_a_snapshot_of_the_horizon` -- database tier, the deltas of the segment and of `meta` all stay, and `meta` is not finalized | none | verified |
-| `SRV-147` | `POST` | A rotation of a channel key MUST lock every segment of the channel sealed under the previous key. | this spec section 3; `SRV-114`, `SYNC-125` | not built | unbuilt -- lands with the `A key rotation locks the segments it leaves behind` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-147` | `POST` | A rotation of a channel key MUST lock every segment of the channel sealed under the previous key. | this spec section 3; `SRV-114`, `SYNC-125` | `ambre_server::routes::channels::tests::a_rotation_locks_the_closing_segment_at_once` -- database tier, the register and the store hold the lock at the last delta number, and the lease waits out no grace; `::a_rotation_locks_the_active_segment_at_its_close` -- the active segment stays open until its close locks it; `ambre_server::redis_ops::lua_tests::a_rotation_locks_a_segment_with_a_delta_still_pending` -- the lock waits for no pending delta | none | verified |
 | `SRV-199` | `FAIL` | Given a lease asked before the grace period has passed since the segment closed and since its latest delta, the relay MUST refuse it. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::routes::channels::tests::a_lease_waits_out_the_grace_then_goes_to_one_writer_at_a_time` -- database tier, a fresh close and a delta an hour old each answer a wait, and lock nothing | none | verified |
 
 ### 1.9 A locked segment is amended
@@ -165,9 +165,9 @@ who folds, and erases the amendments once another member confirms the fold.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 66 `verified`, 1 `unimplemented`. What holds is the ordering, where each delta
-  lives and the replay. So do the close of a segment, its finalization, the purge, the finalization
-  again, the amendments link and their fold.
+* **Verification.** 67 `verified`. What holds is the ordering, where each delta lives and the
+  replay. So do the close of a segment, its finalization, the purge, the finalization again, the
+  amendments link, their fold and a rotation's lock.
   The recovery
   paths are driven through real failures: a register that refuses inserts, a queue that refuses
   pushes, an index that cannot be read.
@@ -318,6 +318,11 @@ The lease names the segment by its `SegmentId`, and the commit carries the lease
 `SnapshotId`, whose horizon the relay checks. The durations are rows of
 `ambre-spec-budgets.md section 8`.
 
+**A rotation's lock.** A rotation of a channel key flags each open segment of the channel
+(`SRV-147`). The relay locks the closing one at once, and the active one at its close. This lock
+waits for no pending delta, so its horizon may name a delta not yet flushed. Its lease then waits
+out no grace period. A lock the store missed is set again at the next close or lease request.
+
 **An amendments link.** A writer creates a document, then asks the relay to link it to a locked
 segment of the channel. One transaction, under the channel row lock, links it as that segment's
 amendments document (`SRV-201`). Of two racing links one is kept, and the other caller is answered
@@ -445,8 +450,8 @@ sees is how long a document takes to open.
 * **The snapshot chain proof is stored and never checked.** The record carries a parent hash and a
   chain proof, and the relay validates neither -- which it could not, being blind. Whether any
   client checks them is `ambre-spec-delta-order.md`.
-* **A key rotation locks nothing.** A segment sealed under the previous key stays open to its
-  grace period (`SRV-147`).
+* **A rotation's lock may precede a flush.** Its horizon names deltas still pending (`SRV-147`).
+  A confirmation that purges before such a delta is flushed leaves its row behind the purge.
 * **A delta may enter a segment past its grace check.** The grace is read, then the lock is set.
   A delta numbered between the two enters the final segment, before the grace has passed since it.
   The window is one transaction, and the delta is kept, so only the grace is shortened.

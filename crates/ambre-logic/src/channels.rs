@@ -1084,6 +1084,15 @@ impl LogicState {
                 }
                 self.drive_finalization(channel_id, now);
                 self.drive_fold(channel_id, now);
+                // A close a rotation owes waits for no send (the Murmure
+                // channels spec).
+                if self
+                    .channels
+                    .get(&channel_id)
+                    .is_some_and(ChannelState::owes_rotation_close)
+                {
+                    self.close_if_full(channel_id, now);
+                }
                 let watchers = self.channel_watchers.entry(channel_id).or_default();
                 let changed = watchers.tick(now);
                 if watchers.owes_watching(now) {
@@ -3327,6 +3336,27 @@ mod tests {
         });
         assert_eq!(state.channels[&channel_id].active_id(), successor);
         assert!(state.close_successors.is_empty());
+    }
+
+    /// A rotation of the channel's `meta` closes its active segment at the
+    /// next tick, far below its size (the Murmure channels spec). A rotation
+    /// of another document closes nothing.
+    #[test]
+    fn a_rotation_of_meta_closes_the_active_segment_at_the_next_tick() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, old) = small_channel(&mut state, 100);
+        command(&mut state, channel_id, send("one", Vec::new()));
+        state.handle_logic_event(LogicEvent::KeyRotated {
+            document_id: DocumentId::new(),
+        });
+        command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
+        assert!(closes(&sync).is_empty(), "another document rotated");
+
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        state.handle_logic_event(LogicEvent::KeyRotated { document_id: meta });
+        command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
+        let [(closing, _)] = closes(&sync).try_into().expect("one close");
+        assert_eq!(closing, old);
     }
 
     // --- The finalization of a closing segment ---

@@ -313,6 +313,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::SnapshotNeeded { .. } => "SnapshotNeeded",
         LogicEvent::MemberRevoked { .. } => "MemberRevoked",
         LogicEvent::DocumentGone { .. } => "DocumentGone",
+        LogicEvent::KeyRotated { .. } => "KeyRotated",
         LogicEvent::DocumentShared { .. } => "DocumentShared",
         LogicEvent::ChannelDocuments { .. } => "ChannelDocuments",
         LogicEvent::ChannelOpenFailed { .. } => "ChannelOpenFailed",
@@ -351,7 +352,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 
 /// The number of arms of `sync_variant` and of `event_variant`.
 const SYNC_VARIANTS: usize = 33;
-const EVENT_VARIANTS: usize = 51;
+const EVENT_VARIANTS: usize = 52;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -600,6 +601,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             revoked_user_id: user,
         },
         LogicEvent::DocumentGone { document_id: doc },
+        LogicEvent::KeyRotated { document_id: doc },
         LogicEvent::DocumentShared {
             document_id: doc,
             doc_type: DocType::Trame,

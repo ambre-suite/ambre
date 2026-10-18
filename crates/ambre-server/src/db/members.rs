@@ -715,5 +715,16 @@ async fn rewrap_members(
         .bind(document_id)
         .execute(&mut **tx)
         .await?;
+    // A channel's key is its `meta`'s. Every segment still open was sealed
+    // under the key this rotation replaces, so each is locked once it is
+    // closing (`SRV-147`).
+    sqlx::query(
+        "UPDATE channel_documents s SET key_retired = true FROM channel_documents m \
+         WHERE m.document_id = $1 AND m.kind = 'meta' AND s.channel_id = m.channel_id \
+           AND s.kind = 'segment' AND s.state IN ('active', 'closing')",
+    )
+    .bind(document_id)
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }

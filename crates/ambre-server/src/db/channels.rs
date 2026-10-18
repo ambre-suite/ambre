@@ -330,6 +330,41 @@ pub async fn segment_locked(
     Ok(locked.unwrap_or(false))
 }
 
+/// The closing segments of the channel of `document_id` that a rotation
+/// retired the key of, and that no lock holds yet (`SRV-147`).
+pub async fn retired_unlocked_segments(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Vec<ambre_core::DocumentId>, AppError> {
+    let rows: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT s.document_id FROM channel_documents s \
+         JOIN channel_documents d ON d.channel_id = s.channel_id \
+         WHERE d.document_id = $1 AND s.kind = 'segment' AND s.state = 'closing' \
+           AND s.key_retired AND s.horizon IS NULL",
+    )
+    .bind(id_to_uuid(*document_id))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(uuid_row_to_id).collect())
+}
+
+/// Record the lock of `segment` at its delta `horizon`, unless a lock holds
+/// it already: a lock is set once.
+pub async fn record_lock(
+    pool: &PgPool,
+    segment: &ambre_core::DocumentId,
+    horizon: u64,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "UPDATE channel_documents SET horizon = $2 WHERE document_id = $1 AND horizon IS NULL",
+    )
+    .bind(id_to_uuid(*segment))
+    .bind(i64::try_from(horizon).unwrap_or(i64::MAX))
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Register `amendments` as the one amendments document of the locked
 /// segment `segment` (`SRV-201`), and answer the one the segment holds after.
 ///
@@ -1737,7 +1772,8 @@ mod tests {
     /// `ZK-015`: the channel tables hold the channel's space and public flag,
     /// each document's channel and kind, and the state of each segment. A
     /// segment adds its close time, its finalize lease, and the horizon, time
-    /// and snapshot of its finalization. An amendments document names the
+    /// and snapshot of its finalization, and whether a rotation retired its
+    /// key. An amendments document names the
     /// segment it amends, and the snapshot, reach and time of its fold. The
     /// cursor table holds a member, a
     /// document and a number. Nothing else: no name, no member and no key. A
@@ -1771,6 +1807,7 @@ mod tests {
                 ("channel_documents", "folded_by"),
                 ("channel_documents", "folded_seq"),
                 ("channel_documents", "horizon"),
+                ("channel_documents", "key_retired"),
                 ("channel_documents", "kind"),
                 ("channel_documents", "lease_id"),
                 ("channel_documents", "lease_until"),

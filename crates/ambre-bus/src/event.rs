@@ -189,6 +189,11 @@ pub enum LogicEvent {
     /// what the document stood for, such as amendments a fold erased.
     DocumentGone { document_id: DocumentId },
 
+    /// This client rotated the key of a document: a revocation or an owed
+    /// rotation it paid. The Logic thread closes the active segment of the
+    /// channel whose `meta` it is, so the successor opens under the new key.
+    KeyRotated { document_id: DocumentId },
+
     /// A document was shared with this user (server push on `user:{id}`,
     /// translated from `WsServerMsg::DocumentShared`). The Logic thread forwards
     /// it to the UI, which refreshes its document list and notifies the user.

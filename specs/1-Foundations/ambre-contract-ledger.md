@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3546 rows: 2865 shipped, of which 2 loose. 681 unbuilt.**
+**3547 rows: 2869 shipped, of which 2 loose. 678 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 825 | 418 | 816 | 609 | 195 | 2863 |
+| `verified` | 827 | 418 | 816 | 609 | 197 | 2867 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 200 | 55 | 29 | 109 | 288 | 681 |
+| `unimplemented` | 199 | 55 | 29 | 109 | 286 | 678 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -53,7 +53,7 @@
 | `ambre-spec-fixtures.md` | 36 | 36 | 36 |  |  |
 | `ambre-spec-frame.md` | 19 | 17 | 16 | 1 | 2 |
 | `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |
-| `ambre-spec-key-rotation.md` | 28 | 27 | 27 |  | 1 |
+| `ambre-spec-key-rotation.md` | 29 | 28 | 28 |  | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-kinetic-scroll.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-launcher.md` | 25 | 21 | 21 |  | 4 |
@@ -69,7 +69,7 @@
 | `ambre-spec-residency.md` | 21 | 21 | 21 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 23 | 23 |  | 1 |
-| `ambre-spec-sequencer.md` | 67 | 66 | 66 |  | 1 |
+| `ambre-spec-sequencer.md` | 67 | 67 | 67 |  |  |
 | `ambre-spec-server.md` | 71 | 65 | 64 | 1 | 6 |
 | `ambre-spec-session.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-sync.md` | 45 | 44 | 44 |  | 1 |
@@ -160,7 +160,7 @@
 | `ambre-spec-prose-viewport.md` | 21 | 14 | 14 |  | 7 |
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 22 | 20 | 20 |  | 2 |
-| `ambre-spec-murmure-channels.md` | 49 | 33 | 33 |  | 16 |
+| `ambre-spec-murmure-channels.md` | 49 | 35 | 35 |  | 14 |
 | `ambre-spec-murmure-engine.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-murmure-members.md` | 21 | 11 | 11 |  | 10 |
 | `ambre-spec-murmure-mentions.md` | 13 | 13 | 13 |  |  |
@@ -195,7 +195,7 @@
 | `ambre-spec-fixtures.md` | FIXTURE-001..036 |
 | `ambre-spec-frame.md` | CANVAS-001,003..005,008..016,057..060,070,072 |
 | `ambre-spec-high-density.md` | CANVAS-031..035,043..046,071 |
-| `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..143 |
+| `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..143,168 |
 | `ambre-spec-key-verification.md` | CHROME-046..055,071..078 |
 | `ambre-spec-kinetic-scroll.md` | KINETIC-001..013 |
 | `ambre-spec-launcher.md` | CHROME-035..045,079..084,095..101,104 |

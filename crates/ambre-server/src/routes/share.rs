@@ -413,6 +413,7 @@ pub async fn revoke_and_rotate(
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, members = keys.len(), "member revoked, key rotated");
     // The rotation landed with the removal, so no debt stands (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;
+    super::channels::lock_retired_segments(&state, &doc_id).await;
     if let Some(leave) = left {
         let unowed: Vec<_> = owing
             .iter()
@@ -653,6 +654,7 @@ pub async fn rotate_document_key(
     tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
     // The rotation landed, so the debt is cleared (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;
+    super::channels::lock_retired_segments(&state, &doc_id).await;
     // Tell every REMAINING member to re-fetch its freshly wrapped key. This is
     // a re-key signal, not a revocation.
     notify_rotation(&state, &doc_id).await;

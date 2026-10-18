@@ -920,6 +920,26 @@ return tonumber(redis.call('GET', KEYS[3])) or 0
     Ok(u64::try_from(answer).ok())
 }
 
+/// Lock a segment against deltas at once, a delta still unflushed included,
+/// and answer the last delta number it gave. A rotation cannot wait for a
+/// flush, and a delta numbered before it stays under the lock (`SRV-147`).
+pub async fn lock_segment_now(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+) -> Result<u64, AppError> {
+    const LUA: &str = r#"
+redis.call('SET', KEYS[1], '1')
+return tonumber(redis.call('GET', KEYS[2])) or 0
+"#;
+    let locked = segment_locked_key(document_id);
+    let seq = format!("doc:{document_id}:seq");
+    let answer: i64 = redis
+        .eval::<i64>(LUA, [locked.as_str(), seq.as_str()], Vec::<String>::new())
+        .await
+        .map_err(|e| AppError::Redis(format!("lock segment now: {e}")))?;
+    Ok(answer.unsigned_abs())
+}
+
 /// Seal an amendments document a fold holds up to its delta `folded_seq`
 /// (`SRV-211`). The seal is the segment lock, so the clock script refuses
 /// every later delta. Answers `false`, and seals nothing, while a delta waits
@@ -1192,6 +1212,36 @@ mod lua_tests {
             .await
             .unwrap();
         assert_eq!(clock, Some(2), "a refused delta consumes no clock");
+
+        let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
+    }
+
+    /// `SRV-147`: a rotation's lock takes no wait for a pending delta. It
+    /// answers the last delta number, and a later delta is refused.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn a_rotation_locks_a_segment_with_a_delta_still_pending() {
+        let redis = connect_redis().await;
+        let doc_id = ambre_core::DocumentId::new();
+        let pk_hex = "0dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd1";
+        assert_eq!(lock_segment_now(&redis, &doc_id).await.unwrap(), 0);
+        let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
+
+        for clock in 1..=2 {
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, clock)
+                .await
+                .expect("an open segment takes deltas");
+        }
+        let _: usize = redis
+            .rpush(format!("doc:{doc_id}:pending"), "entry")
+            .await
+            .unwrap();
+        assert_eq!(lock_segment_now(&redis, &doc_id).await.unwrap(), 2);
+        let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, 3).await;
+        assert!(
+            matches!(refused, Err(AppError::SegmentLocked)),
+            "{refused:?}"
+        );
 
         let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
     }

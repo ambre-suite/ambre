@@ -86,6 +86,33 @@ fn a_full_segment_asks_to_close_once() {
     assert_eq!(alice.wants_close(), Some(alice.active_id()));
 }
 
+// --- MURMURE-060 ---
+
+/// A rotation closes the active segment far below its size, once. Its
+/// successor asks again only when full.
+#[test]
+fn a_rotation_closes_the_active_segment_whatever_it_holds() {
+    let mut alice = channel(10);
+    let author = UserId::new();
+    alice.send(&draft("one"), author, NOW).expect("send");
+    assert_eq!(alice.wants_close(), None, "below the segment size");
+    alice.key_rotated();
+    assert_eq!(alice.wants_close(), Some(alice.active_id()));
+    alice.close_refused();
+    assert_eq!(alice.wants_close(), Some(alice.active_id()), "asked again");
+    let closing = alice.active_id();
+    close_created(&mut alice);
+    alice.lease_granted(closing, ambre_core::LeaseId::new(), 1, 60_000);
+    alice.mark_final(closing).expect("mark").expect("a delta");
+    assert_eq!(alice.closing_id(), None, "the slot is free");
+    alice.send(&draft("two"), author, NOW).expect("send");
+    assert_eq!(
+        alice.wants_close(),
+        None,
+        "the successor is under the new key"
+    );
+}
+
 // --- MURMURE-481 ---
 
 /// A segment of long messages asks to close at the send that takes its

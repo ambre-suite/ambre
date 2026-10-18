@@ -1004,6 +1004,7 @@ impl SyncState {
                 link,
             } => {
                 self.install_key(document_id, new_doc_key, [link]);
+                self.send_to_logic(LogicEvent::KeyRotated { document_id });
                 self.reply(id, RestEvent::RevocationComplete { document_id });
             }
             SyncEvent::DocumentLeft { id, document_id } => {
@@ -1024,7 +1025,10 @@ impl SyncState {
                 document_id,
                 new_doc_key,
                 link,
-            } => self.install_key(document_id, new_doc_key, [link]),
+            } => {
+                self.install_key(document_id, new_doc_key, [link]);
+                self.send_to_logic(LogicEvent::KeyRotated { document_id });
+            }
             SyncEvent::DebtGone { document_id } => self.fetch_rotated_key(document_id),
             SyncEvent::DebtUnsettled {
                 document_id,

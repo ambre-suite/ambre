@@ -527,7 +527,12 @@ impl LogicState {
                 space_id,
                 channel_id,
                 key,
-            } => self.channel_resealed(space_id, channel_id, &key),
+            } => {
+                self.channel_resealed(space_id, channel_id, &key);
+                if let Some(channel) = self.channels.get_mut(&channel_id) {
+                    channel.key_rotated();
+                }
+            }
             LogicEvent::SegmentClosed {
                 channel_id,
                 closing,
@@ -584,6 +589,7 @@ impl LogicState {
                 amendments,
             } => self.amendments_folded(document_id, amendments),
             LogicEvent::DocumentGone { document_id } => self.document_gone(document_id),
+            LogicEvent::KeyRotated { document_id } => self.key_rotated(document_id),
             LogicEvent::DeltasLocked {
                 document_id,
                 deltas,

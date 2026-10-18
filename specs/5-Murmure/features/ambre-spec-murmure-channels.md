@@ -64,8 +64,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-059` | `POST` | Leaving a private channel or a direct message MUST cause the rotation of its key. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_server::routes::channels::tests::a_leave_owes_a_rotation_on_a_private_channel_only` -- the relay marks the key of the private channel owed | none | verified |
-| `MURMURE-060` | `POST` | A rotation MUST close the active segment, so the successor opens under the new key. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `A key rotation locks the segments it leaves behind` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-262` | `POST` | A rotation MUST lock every segment sealed under the previous key, so a later edit goes to an amendment under the new key. | this spec section 3; `SRV-147` | not built | unbuilt -- lands with the `A key rotation locks the segments it leaves behind` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-060` | `POST` | A rotation MUST close the active segment, so the successor opens under the new key. | this spec section 3; `features/ambre-spec-murmure-segments.md` | `ambre_murmure::closing_tests::a_rotation_closes_the_active_segment_whatever_it_holds` -- one message below the size asks the close, again after a refusal, and the successor asks none; `ambre_logic::channels::tests::a_rotation_of_meta_closes_the_active_segment_at_the_next_tick` -- the close leaves at the tick, and a rotation of another document asks none; `ambre_sync::updates::tests::each_rotation_this_client_makes_reaches_logic` -- a revoke and an owed rotation each reach Logic | none | verified |
+| `MURMURE-262` | `POST` | A rotation MUST lock every segment sealed under the previous key, so a later edit goes to an amendment under the new key. | this spec section 3; `SRV-147` | `ambre_server::routes::channels::tests::a_rotation_locks_the_closing_segment_at_once` -- database tier, the relay locks the closing segment at the rotation; `::a_rotation_locks_the_active_segment_at_its_close` -- and the active one at its close; `ambre_murmure::amending_tests::a_change_of_a_locked_segment_waits_for_its_amendments` -- a later change goes to the amendments | none | verified |
 | `MURMURE-461` | `POST` | The last member leaving a public channel MUST leave it listed, with its history, for the next member to join. | this spec section 3; `SRV-173` | `ambre_server::routes::channels::tests::the_last_member_leaves_a_public_channel_for_the_next_to_join` -- the relay keeps the channel public with its documents, and the next member of the space joins it; `ambre_sync::membership_log::tests::a_log_its_last_member_left_admits_the_next_self_join` -- that member's client verifies the join on a log nobody holds | none | verified |
 | `MURMURE-467` | `POST` | Leaving a channel MUST drop it from the client of the member who leaves, with its documents and its keys. | this spec section 3; `MURMURE-059` | `ambre_logic::spaces::tests::a_left_channel_leaves_the_client_once_the_relay_answers` -- once the relay answers, the channel goes, the session of each of its documents ends, and the catalogue keeps it; `ambre_logic::spaces::tests::a_refused_leave_keeps_the_channel_whole` -- a refusal keeps it; `ambre_sync::sharing::tests::leaving_a_channel_posts_this_users_removal_on_its_meta` -- the leave is a signed removal on `meta`, with no rotation; `ambre_sync::updates::tests::closing_a_document_forgets_its_keys` -- an ended session takes its keys with it | none | verified |
 | `MURMURE-468` | `POST` | Leaving a channel MUST drop it from every other client of the member who leaves. | this spec section 3; `MURMURE-467`; `ambre-spec-server.md`, `SRV-187` | `ambre_logic::spaces::tests::a_leave_from_another_client_drops_the_channel_here` -- the relay's notice to this user ends each session of the channel and tells the view, where a removal of someone else or of a segment drops nothing. A leave asked here ends on the notice, and an answer lost after it shows no failure | none | verified |
@@ -125,10 +125,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 33 `verified`, 16 `unimplemented`. The relay holds a private channel, its leave,
+* **Verification.** 35 `verified`, 14 `unimplemented`. The relay holds a private channel, its leave,
   its delete and its key links. A client creates, deletes and leaves one, and learns its user's
   channels. A direct message opens, is reused and takes a name; an invite opens a channel, and
-  announces a third member. The segment a rotation closes, conversion and archive are not built.
+  announces a third member. A rotation closes the active segment and locks the ones it leaves;
+  conversion and archive are not built.
 
 ---
 
@@ -139,7 +140,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | opens a direct message with Bob | opens a direct message with Alice | one direct message | the same conversation on both screens (`MURMURE-051`) | `ambre_server::routes::channels::tests::the_same_members_reach_the_same_direct_message` |
 | names the direct message "Budget" | -- | the name in `meta` | "Budget" on both screens (`MURMURE-054`) | `ambre_murmure::channel_tests::a_name_one_member_sets_reaches_every_member` |
 | invites Carol into the direct message | -- | a notice, then Carol as a member | both told before Carol joins (`MURMURE-057`) | `ambre_logic::direct::tests::an_invite_into_a_direct_message_of_two_leaves_behind_its_notice` |
-| leaves a private channel | writes a message | a new key, and a new active segment | Bob's message unreadable to Alice (`MURMURE-059`) | `ambre_server::routes::channels::tests::a_leave_owes_a_rotation_on_a_private_channel_only`, the rotation owed; the new segment is not built |
+| leaves a private channel | writes a message | a new key, and a new active segment | Bob's message unreadable to Alice (`MURMURE-059`) | `ambre_server::routes::channels::tests::a_leave_owes_a_rotation_on_a_private_channel_only`, the rotation owed; `ambre_logic::channels::tests::a_rotation_of_meta_closes_the_active_segment_at_the_next_tick`, the new segment |
 
 ---
 

@@ -337,9 +337,29 @@ pub async fn close_segment(
         return Err(AppError::Forbidden);
     }
     let active = db::close_segment(&state.db, &channel_id, req.closing, req.successor).await?;
+    lock_retired_segments(&state, &req.closing.document_id()).await;
     let created = active == req.successor;
     tracing::info!(channel_id = %channel_id, closing = %req.closing, active = %active, created, "segment closed");
     Ok(axum::Json(ClosedSegmentJson { active, created }))
+}
+
+/// Lock every closing segment of the channel of `document_id` whose key a
+/// rotation retired (`SRV-147`), in the store first, then in the register.
+///
+/// It runs once the rotation or the close committed, so a failure is only
+/// logged. The next close or lease request of the channel locks it again.
+pub(crate) async fn lock_retired_segments(state: &AppState, document_id: &ambre_core::DocumentId) {
+    let locked = async {
+        for segment in db::retired_unlocked_segments(&state.db, document_id).await? {
+            let horizon = crate::redis_ops::lock_segment_now(&state.redis, &segment).await?;
+            db::record_lock(&state.db, &segment, horizon).await?;
+            tracing::info!(segment = %segment, horizon, "segment locked by a rotation");
+        }
+        Ok::<(), AppError>(())
+    };
+    if let Err(error) = locked.await {
+        tracing::error!(document_id = %document_id, "a rotation lock failed: {error}");
+    }
 }
 
 /// The grace period of a closed segment before its finalization, since its
@@ -422,6 +442,7 @@ pub async fn take_finalize_lease(
         pending_retry: FINALIZE_PENDING_RETRY,
     };
     let document = segment.document_id();
+    lock_retired_segments(&state, &document).await;
     let lock = async || crate::redis_ops::lock_segment(&state.redis, &document).await;
     let answer = db::take_finalize_lease(&state.db, &channel_id, segment, terms, lock).await?;
     let millis = |d: std::time::Duration| u64::try_from(d.as_millis()).unwrap_or(u64::MAX);
@@ -3248,6 +3269,83 @@ mod tests {
         let second = lease(&state, bob, &channel).await.expect("lease");
         assert!(second.lease.is_none(), "one lease at a time");
         assert!(second.retry_in > 0 && second.retry_in <= FINALIZE_LEASE.as_millis() as u64);
+        forget_store(&state, &channel).await;
+    }
+
+    /// Whether the store mirrors the lock of `segment`.
+    async fn lock_mirrored(state: &AppState, segment: DocumentId) -> bool {
+        use rustis::commands::GenericCommands;
+        let mirrored: usize = state
+            .redis
+            .exists(crate::redis_ops::segment_locked_key(&segment))
+            .await
+            .expect("exists");
+        mirrored == 1
+    }
+
+    /// `SRV-147`: a rotation of `meta` locks the closing segment at once, at
+    /// its last delta number. Its lease then waits out no grace period.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_rotation_locks_the_closing_segment_at_once(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let (alice, bob, channel) = closed_channel(&state, 3).await;
+        let segment = channel.segment.document_id();
+        let meta = channel.meta.document_id();
+        assert_eq!(
+            rekey(&state, alice, meta, vec![alice, bob]).await,
+            StatusCode::OK
+        );
+        assert!(
+            db::segment_locked(&state.db, &segment)
+                .await
+                .expect("query")
+        );
+        assert!(lock_mirrored(&state, segment).await);
+
+        let granted = lease(&state, bob, &channel).await.expect("lease");
+        let held = granted.lease.expect("a rotation lock waits out no grace");
+        assert_eq!(held.horizon, 3);
+        forget_store(&state, &channel).await;
+    }
+
+    /// `SRV-147`: a rotation of `meta` leaves the active segment open, and the
+    /// close of that segment locks it.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_rotation_locks_the_active_segment_at_its_close(pool: sqlx::PgPool) {
+        use rustis::commands::StringCommands;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let channel = public_channel(&state, alice, space).await;
+        let segment = channel.segment.document_id();
+        let key = format!("doc:{segment}:seq");
+        state.redis.set(key, 2).await.expect("seq");
+
+        let meta = channel.meta.document_id();
+        assert_eq!(
+            rekey(&state, alice, meta, vec![alice]).await,
+            StatusCode::OK
+        );
+        assert!(
+            !db::segment_locked(&state.db, &segment)
+                .await
+                .expect("query"),
+            "the active segment stays open"
+        );
+        assert!(!lock_mirrored(&state, segment).await);
+
+        let successor = document(&state, alice).await;
+        close(&state, alice, &channel, successor)
+            .await
+            .expect("close");
+        assert!(
+            db::segment_locked(&state.db, &segment)
+                .await
+                .expect("query")
+        );
+        assert!(lock_mirrored(&state, segment).await);
         forget_store(&state, &channel).await;
     }
 

@@ -72,7 +72,8 @@ impl ChannelState {
 
     /// The active segment to close, once it holds the segment size in
     /// messages (`MURMURE-064`) or in bytes (`MURMURE-481`). It is answered
-    /// once per active segment, until the relay answers or refuses.
+    /// once per active segment, until the relay answers or refuses. After a
+    /// rotation it is answered whatever the segment holds (`MURMURE-060`).
     ///
     /// `None` while a segment is still closing: the relay refuses a second
     /// close then (`SRV-196`), and the finalization frees the slot.
@@ -81,7 +82,7 @@ impl ChannelState {
             return None;
         }
         let messages = self.active.doc.get_list(MESSAGES).len();
-        if messages < self.segment_size && !self.passes_bytes(messages) {
+        if !self.key_rotated && messages < self.segment_size && !self.passes_bytes(messages) {
             return None;
         }
         self.close_asked = true;
@@ -116,6 +117,18 @@ impl ChannelState {
         self.close_asked = false;
     }
 
+    /// A rotation retired the channel key: the active segment closes at the
+    /// next ask, so its successor opens under the new key (`MURMURE-060`).
+    pub fn key_rotated(&mut self) {
+        self.key_rotated = true;
+    }
+
+    /// Whether a rotation still owes the close of the active segment.
+    #[must_use]
+    pub fn owes_rotation_close(&self) -> bool {
+        self.key_rotated
+    }
+
     /// Write the relay's answer to a close of `closing` into `meta`: the
     /// segment is `closing`, and `active` follows it (`MURMURE-065`).
     ///
@@ -148,6 +161,7 @@ impl ChannelState {
         record_close(doc, closing, active, now)?;
         let meta = session.export(doc)?;
         self.close_asked = false;
+        self.key_rotated = false;
         if !created {
             return Ok(Closed {
                 meta,
@@ -284,6 +298,7 @@ impl ChannelState {
         }
         self.closing = Some(std::mem::replace(&mut self.active, held));
         self.close_asked = false;
+        self.key_rotated = false;
         self.successor_retry = None;
         Ok(MurmureEvent::Messages { segment, messages })
     }

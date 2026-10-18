@@ -196,6 +196,9 @@ pub struct ChannelState {
     segment_bytes: usize,
     /// Whether the active segment asked to close and waits for the answer.
     close_asked: bool,
+    /// Whether a rotation retired the key the active segment was opened
+    /// under, so it closes whatever it holds.
+    key_rotated: bool,
     /// The successor another client created, whose bytes are in `pending`.
     successor: Option<SegmentId>,
     /// The identity issued for that successor, adopted once it is admitted.
@@ -368,6 +371,7 @@ impl ChannelState {
             segment_size: SEGMENT_MESSAGES,
             segment_bytes: SEGMENT_BYTES,
             close_asked: false,
+            key_rotated: false,
             successor: None,
             successor_session: None,
             successor_retry: None,

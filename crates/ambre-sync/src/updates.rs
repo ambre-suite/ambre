@@ -3876,6 +3876,39 @@ mod tests {
         );
     }
 
+    /// `SYNC-168`: each rotation this client makes reaches Logic, a revoke
+    /// as well as an owed rotation it paid.
+    #[test]
+    fn each_rotation_this_client_makes_reaches_logic() {
+        let (mut state, rx, doc, k1, sk, _snap) = setup();
+        state.signing_key = Some(sk.clone());
+        let rotated = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| {
+            drain(rx)
+                .into_iter()
+                .filter(
+                    |e| matches!(e, LogicEvent::KeyRotated { document_id } if *document_id == doc),
+                )
+                .count()
+        };
+
+        let k2 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::RevocationComplete {
+            id: RequestId::next(),
+            document_id: doc,
+            new_doc_key: k2.clone(),
+            link: pipeline::seal_link(doc, &k1, &k2, &sk).unwrap(),
+        });
+        assert_eq!(rotated(&rx), 1, "a revoke");
+
+        let k3 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::DebtSettled {
+            document_id: doc,
+            new_doc_key: k3.clone(),
+            link: pipeline::seal_link(doc, &k2, &k3, &sk).unwrap(),
+        });
+        assert_eq!(rotated(&rx), 1, "an owed rotation paid");
+    }
+
     /// Holds `SYNC-097`: what the start held is released in the order it
     /// came. The opens subscribe in order, and the edits leave in order at
     /// rising clocks once the replay has caught the clock up.
