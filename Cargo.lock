@@ -230,6 +230,7 @@ name = "ambre-murmure"
 version = "0.1.0"
 dependencies = [
  "ambre-bus",
+ "ambre-canvas",
  "ambre-chrome",
  "ambre-commands",
  "ambre-core",

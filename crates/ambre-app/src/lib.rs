@@ -1808,7 +1808,13 @@ pub fn main() {
             // navigation is out of Phase 0: the `DocSwitcher` only swaps the id
             // within one `AppView`, so a Trame<->Toile hop reloads via the route.
             if boot_is_murmure {
-                AppView::Murmure(host::MurmureView::new(Some(view_rx), w, h, theme_ctl))
+                AppView::Murmure(host::MurmureView::new(
+                    Some(view_rx),
+                    Some(view_tx_logic),
+                    host::page_reads(murmure_relay),
+                    (w, h),
+                    theme_ctl,
+                ))
             } else if boot_is_prose {
                 AppView::Prose(host::ProseView::new(
                     initial_doc,

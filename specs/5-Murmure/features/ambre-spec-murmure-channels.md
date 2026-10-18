@@ -59,6 +59,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-056` | `POST` | An invite MUST open the history since the latest history boundary to the invitee, through the key chain. | this spec section 3; `SYNC-119`; `ambre-spec-server.md`, `SRV-190` | `ambre_server::routes::channels::tests::an_invite_on_meta_opens_every_document_of_the_channel` -- the invite on `meta` opens the segment to the invitee, with the links kept under `meta`, database tier; `ambre_sync::sharing::tests::an_invite_posts_its_signed_entry_beside_the_copy` -- the copy wraps the current key and the entry names it; `ambre_sync::updates::tests::an_open_walks_the_chain_to_a_snapshot_older_than_the_cache` -- an open walks back from it | none | verified |
 | `MURMURE-057` | `POST` | A third member joining a direct message of two MUST be announced to both members before the invite applies. | this spec section 3; `ambre-spec-membership.md`, `SYNC-161` | `ambre_logic::direct::tests::an_invite_into_a_direct_message_of_two_leaves_behind_its_notice` -- the invite waits for the active segment, then leaves after the notice that names the invitee; `::an_invite_into_a_larger_direct_message_writes_no_notice`; `::an_invite_whose_notice_cannot_be_written_is_refused` -- an invite whose notice cannot be written never leaves; `ambre_murmure::channel_tests::a_notice_names_the_member_who_joins_for_every_member` -- the other member reads it through the authorship check; `::a_notice_of_a_kind_no_build_wrote_is_skipped` | none | verified |
 | `MURMURE-058` | `FRAME` | An invite MUST NOT hand the invitee a key older than the latest history boundary. | this spec section 3 | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-498` | `POST` | A member MUST invite another into a channel from that channel while it is open. | this spec section 3; `MURMURE-057` | not built | unbuilt -- lands with the `Inviting a member from a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Leave a channel
 
@@ -126,7 +127,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 36 `verified`, 14 `unimplemented`. The relay holds a private channel, its leave,
+* **Verification.** 36 `verified`, 15 `unimplemented`. The relay holds a private channel, its leave,
   its delete and its key links. A client creates, deletes and leaves one, and learns its user's
   channels. A direct message opens, is reused and takes a name; an invite opens a channel, and
   announces a third member. A rotation closes the active segment and locks the ones it leaves;
@@ -193,7 +194,8 @@ a leave.
 
 **The notice of a third member.** An empty message naming who joins, written before the invite
 leaves on the same queue. An invite waits while the segment cannot be written. Unlisted members
-are announced too: a notice too many is harmless.
+are announced too: a notice too many is harmless. An invite is asked from the open channel, whose
+active segment takes the notice (`MURMURE-498`).
 
 **A member learns of a channel from the relay.** The membership is the channel list, so the relay
 lists each channel of a user when the client asks (`MURMURE-473`). An invite or a new direct message
@@ -309,5 +311,5 @@ who writes its key into the catalogue.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The notice is not drawn.** The list that draws it, and invites only from the open channel, lands
-  with the `The message list drawn` Story (`ambre-roadmap.md` E5).
+* **No control invites a member.** The message list draws the notice. The invite from the open
+  channel lands with the `Inviting a member from a channel` Story (`ambre-roadmap.md` E5).

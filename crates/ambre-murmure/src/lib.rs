@@ -21,9 +21,11 @@ pub mod commands;
 mod delta;
 mod error;
 mod layout;
+pub mod list;
 mod members;
 mod mention;
 mod opening;
+pub mod paint;
 mod reaction;
 pub mod schema;
 mod search;
@@ -31,6 +33,7 @@ mod sequence;
 mod session;
 mod sidebar;
 mod space;
+pub mod view;
 mod watchers;
 
 #[cfg(test)]

@@ -48,6 +48,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-291` | `POST` | Writing the root, replying, or being mentioned in a thread MUST follow it. | this spec section 3; `SETTINGS-004` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-292` | `POST` | The Threads view MUST list every followed thread with unread replies, newest first. | this spec section 3; `MURMURE-260` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-293` | `POST` | Marking a thread read MUST move its read cursor to its last reply. | this spec section 3; `MURMURE-114` | `ambre_logic::channels::tests::marking_a_thread_read_moves_its_cursor_to_its_last_reply` -- the cursor takes the last reply delivered, the mention stops counting, and a thread not held moves nothing; `ambre_sync::updates::tests::a_read_reaches_the_last_update_delivered_and_no_further` -- the number the worker sends stops at what it delivered | none | verified |
+| `MURMURE-497` | `POST` | Showing the last reply of a thread MUST mark the thread read. | this spec section 3; `MURMURE-293`; `MURMURE-115` | `ambre_murmure::list::tests::a_drawn_last_reply_marks_the_thread_read_once` -- each new last reply drawn marks the thread read once, apart from its channel; `ambre_murmure::view::tests::the_thread_region_shows_the_thread_through_the_same_list` -- the thread's region sends it once its last reply paints, on a recording surface | none | verified |
 | `MURMURE-294` | `POST` | Unfollowing a thread MUST remove it from the Threads view and from the user settings. | this spec section 3 | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-415` | `FAIL` | Given a followed thread whose document expired, the client MUST drop it from the Threads view and from the user settings. | this spec section 3; `SRV-156` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-295` | `FRAME` | Following a thread MUST NOT subscribe the client to it. | this spec section 3; `MURMURE-112` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -57,10 +58,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, the identifier of its root, and when it
   changes (`ZK-015`, `SRV-162`).
-* **Verification.** 13 `verified`, 6 `unimplemented`. The engine tests hold the thread document,
+* **Verification.** 14 `verified`, 6 `unimplemented`. The engine tests hold the thread document,
   the link, the count, the changes on a reply, a locked root and the mentions. The Logic tests
   hold the waits, the race, the watch and the read cursor. The Sync tests hold the signal, the
-  light thread and the number a read reaches.
+  light thread and the number a read reaches. The view's host tests hold the read a thread shown sends.
 
 ---
 
@@ -100,7 +101,8 @@ watches it from its read cursor, and reads the sealed summaries alone (`MURMURE-
 
 **What a reply counts.** A mention in a reply counts on the channel of its thread, and can notify
 (`MURMURE-261`). A reply counts in no unread count of the channel, as in Slack. Its unread
-replies belong to the Threads view.
+replies belong to the Threads view. The thread pane marks its thread read once its last reply
+shows, as the channel does for its latest message (`MURMURE-497`).
 
 **Followed threads.** The `followed` map of the user settings names each thread the user follows
 (`MURMURE-291`). A followed thread is not subscribed: its activity signals and their summaries
@@ -114,7 +116,7 @@ mentions stop counting (`MURMURE-293`).
 **Code.** `ChannelState::reply_target`, `thread_linked`, `thread_failed`, `threads_to_open`,
 `thread_view` and `reply` are in `crates/ambre-murmure/src/channel/threading.rs`. The Logic side
 is `crates/ambre-logic/src/threads.rs`, and the Sync side is `thread_task` in
-`crates/ambre-sync/src/sharing.rs`.
+`crates/ambre-sync/src/sharing.rs`. The thread pane draws through `crates/ambre-murmure/src/view.rs`.
 
 ---
 
@@ -143,7 +145,5 @@ is `crates/ambre-logic/src/threads.rs`, and the Sync side is `thread_task` in
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No screen marks a thread read yet.** The command exists, and the thread pane sends it with
-  `The message list drawn` Story (`ambre-roadmap.md` E5).
 * **An open channel holds every thread its loaded segments name.** A root scrolled off screen
   keeps its thread held. Releasing it is not ruled.

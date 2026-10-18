@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE MURMURE LAYOUT
 **Type:** Vertical (feature)
 **Implementation:** partial -- the regions, the back control, the rows of the shell and the
-channel list are built. The canvas paints no message.
+channel list are built. The canvas paints the messages of the channel it shows.
 
 > Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of
 > them at a time on a phone. The layout follows the three widths every application shares.
@@ -38,7 +38,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-166` | `POST` | Selecting a channel MUST show it in the message list and mark it current in the sidebar. | this spec section 3 | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5). The sidebar marks the channel current, but no message list draws it | unimplemented |
+| `MURMURE-166` | `POST` | Selecting a channel MUST show it in the message list and mark it current in the sidebar. | this spec section 3 | `ambre_murmure::view::tests::the_selected_channel_shows_its_list_and_is_marked_read_once` -- the channel the pane shows paints its own list, and no other, on a recording surface | none | verified |
 | `MURMURE-167` | `FRAME` | Selecting a channel MUST NOT move the read cursor of the channel left behind. | this spec section 3; `MURMURE-116` | `ambre_app::shell::murmure_regions::selecting_a_channel_sends_nothing_for_the_one_left_behind` -- switching channels sends one open per new channel and no other command | none | verified |
 
 ### 1.3 Go back on a phone
@@ -60,8 +60,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 18 `verified`, 6 `unimplemented`. The regions, the back control, the rows of
-  the shell and the sidebar entries are built. The message list and the split view are not.
+* **Verification.** 19 `verified`, 5 `unimplemented`. The regions, the back control, the rows of
+  the shell, the sidebar entries and the list of the shown channel are built. The split view is
+  not.
 
 ---
 
@@ -173,8 +174,6 @@ in a cell of its own (`MURMURE-421`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The canvas paints its backdrop alone.** The messages land with the
-  `The message list drawn` Story (`ambre-roadmap.md` E5).
 * **The members a direct message shows can be stale.** They are read with the listing, so a
   member who leaves or renames shows as before until the next one. A long list is never shortened.
   It lands with the `A composed name that follows its members` Story (`ambre-roadmap.md` E5).

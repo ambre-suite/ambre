@@ -1,138 +1,88 @@
 // ambre-app/src/host/murmure.rs
-// The canvas view of a Murmure message region. The message list paints into
-// this cell (the Murmure message list spec), and until it lands the view paints
-// the backdrop alone. It opens no document: a Murmure page opens channels, and
-// the channel the sidebar selects binds what it shows.
-//
-// The channel is the content canvas. The thread is a canvas of its own in the
-// panel, a cell the host binds by its id (see `cell`).
+// The page's side of a Murmure message region. The view lives in ambre-murmure
+// and reads the page through closures. They give the pane, a member's name,
+// and the time in the reader's language and zone.
 
-use ambre_bus::{DocumentId, UiEvent};
-use ambre_canvas::theme::{Theme, ThemeControl};
-use ambre_canvas::{
-    ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, WgpuSurface,
-};
-use ambre_draw::{DrawSurface, Point, Rect};
-use parley::FontContext;
+use std::rc::Rc;
 
-/// The id of the thread's canvas, in the panel. The shell names it, and the
-/// host binds a cell to it while it is in the page.
-pub const THREAD_CANVAS: &str = "murmure-thread-canvas";
+use ambre_bus::Timestamp;
+use ambre_murmure::chrome::MurmureRelay;
+use ambre_murmure::view::PageReads;
+use leptos::prelude::GetUntracked;
+use wasm_bindgen::JsValue;
 
-/// The canvas view of a Murmure message region.
-pub struct MurmureView {
-    /// The events of the Logic thread. The content canvas holds the page's
-    /// queue; a cell beside it holds none until the message list lands.
-    from_logic: Option<ambre_bus::conduit::Receiver<UiEvent>>,
-    theme_ctl: ThemeControl,
-    theme: Theme,
-    size: (f32, f32),
-    /// Where the pointer last was over this region, in its own pixels. `None`
-    /// before it came. The hover bar of a message reads it.
-    hover: Option<Point>,
-    dirty: bool,
+/// What the page tells a Murmure region, read from the shell's relay.
+pub fn page_reads(relay: MurmureRelay) -> PageReads {
+    let clock = LocalTime::new();
+    PageReads {
+        pane: Rc::new(move || relay.pane.get_untracked()),
+        name_of: Rc::new(move |user| relay.member_name(user)),
+        time_of: Rc::new(move |ts| clock.format(ts)),
+    }
 }
 
-impl MurmureView {
-    pub fn new(
-        from_logic: Option<ambre_bus::conduit::Receiver<UiEvent>>,
-        width: f64,
-        height: f64,
-        theme_ctl: ThemeControl,
-    ) -> Self {
-        let theme = theme_ctl.get();
-        Self {
-            from_logic,
-            theme_ctl,
-            theme,
-            size: (width as f32, height as f32),
-            hover: None,
-            dirty: true,
+/// The time of a message as the reader reads it: hours and minutes, in the
+/// browser's language and time zone (`MURMURE-418`). Built once per page.
+pub struct LocalTime(js_sys::Function);
+
+impl LocalTime {
+    pub fn new() -> Self {
+        let options = js_sys::Object::new();
+        for key in ["hour", "minute"] {
+            let _ = js_sys::Reflect::set(&options, &key.into(), &"2-digit".into());
         }
+        let format = js_sys::Intl::DateTimeFormat::new(&js_sys::Array::new(), &options);
+        Self(format.format())
     }
 
-    /// The view of another region of the page, such as the thread: the same
-    /// theme, and no queue of its own.
-    pub fn region(&self, width: f64, height: f64) -> Self {
-        Self::new(None, width, height, self.theme_ctl.clone())
+    /// `ts`, written for the reader.
+    pub fn format(&self, ts: Timestamp) -> String {
+        let date = js_sys::Date::new(&JsValue::from_f64(ts.0 as f64));
+        self.0
+            .call1(&JsValue::NULL, &date)
+            .ok()
+            .and_then(|written| written.as_string())
+            .unwrap_or_default()
     }
+}
 
-    /// The size this region lays out in, in logical pixels.
-    #[cfg(test)]
-    pub fn size(&self) -> (f32, f32) {
-        self.size
-    }
+#[cfg(test)]
+mod tests {
+    use ambre_murmure::MurmurePane;
+    use leptos::prelude::Set;
+    use wasm_bindgen_test::wasm_bindgen_test;
 
-    /// Where the pointer last was over this region.
-    #[cfg(test)]
-    pub fn hover(&self) -> Option<Point> {
-        self.hover
-    }
+    use super::*;
 
-    /// Drain the inbound queue, so a full queue never stalls the Logic thread.
-    /// The message list reads it once it lands.
-    pub fn update(&mut self) {
-        if let Some(from_logic) = &self.from_logic {
-            while from_logic.try_recv().is_ok() {}
+    /// The time reads in the browser's own language and time zone, hours
+    /// and minutes (`MURMURE-418`).
+    #[wasm_bindgen_test]
+    fn the_time_reads_in_the_readers_language_and_zone() {
+        let ms = 1_700_000_000_000.0;
+        let options = js_sys::Object::new();
+        for key in ["hour", "minute"] {
+            js_sys::Reflect::set(&options, &key.into(), &"2-digit".into()).unwrap();
         }
+        let date = js_sys::Date::new(&JsValue::from_f64(ms));
+        let expected: String = date
+            .to_locale_time_string_with_options("default", &options)
+            .into();
+        let written = LocalTime::new().format(Timestamp(ms as u64));
+        assert_eq!(written, expected);
+        assert!(written.chars().any(|c| c.is_ascii_digit()));
     }
 
-    pub fn plan_repaint(&mut self, _now_ms: f64, _hud_tick: bool) -> RepaintPlan {
-        let theme = self.theme_ctl.get();
-        if theme != self.theme {
-            self.theme = theme;
-            self.dirty = true;
-        }
-        let dirty = std::mem::take(&mut self.dirty);
-        RepaintPlan {
-            content: if dirty {
-                ContentRepaint::Full
-            } else {
-                ContentRepaint::Reuse
-            },
-            content_strip: None,
-            overlay: OverlayRepaint::Reuse,
-            backdrop: self.theme.palette().content_bg,
-        }
+    /// The page reads the pane the shell shows now, and the same clock.
+    #[wasm_bindgen_test]
+    fn the_page_reads_follow_the_relay() {
+        let relay = MurmureRelay::new();
+        let reads = page_reads(relay);
+        assert_eq!((reads.pane)(), MurmurePane::ChannelList);
+        relay.pane.set(MurmurePane::Members {
+            channel: ambre_bus::ChannelId::new(),
+        });
+        assert!(matches!((reads.pane)(), MurmurePane::Members { .. }));
+        let ts = Timestamp(1_700_000_000_000);
+        assert_eq!((reads.time_of)(ts), LocalTime::new().format(ts));
     }
-
-    pub fn paint_content(
-        &mut self,
-        surface: &mut WgpuSurface<'_>,
-        _font_cx: &mut FontContext,
-        _text_cache: &mut TextCache,
-        _strip: Option<Rect>,
-    ) {
-        let backdrop = Rect::new(0.0, 0.0, f64::from(self.size.0), f64::from(self.size.1));
-        surface.fill_rect(backdrop, self.theme.palette().content_bg);
-    }
-
-    pub fn paint_overlay(
-        &mut self,
-        _surface: &mut WgpuSurface<'_>,
-        _font_cx: &mut FontContext,
-        _text_cache: &mut TextCache,
-        _stats: &FrameStats,
-    ) {
-    }
-
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.size = (width as f32, height as f32);
-        self.dirty = true;
-    }
-
-    /// The region follows the pointer. Nothing on it consumes an event before
-    /// the message list lands.
-    pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
-        match *ev {
-            InputEvent::PointerDown { x, y, .. }
-            | InputEvent::PointerMove { x, y }
-            | InputEvent::PointerUp { x, y, .. } => self.hover = Some(Point::new(x, y)),
-            _ => {}
-        }
-        false
-    }
-
-    /// A Murmure page binds no document, so a route swap changes nothing.
-    pub fn set_document(&mut self, _document_id: DocumentId) {}
 }

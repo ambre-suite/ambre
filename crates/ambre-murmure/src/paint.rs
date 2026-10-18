@@ -1,0 +1,275 @@
+//! The painter of the message list (the Murmure message list spec).
+//!
+//! It lays out only the rows a viewport reaches from the bottom, with the
+//! text pipeline every application shares (`MURMURE-187`, `MURMURE-188`).
+//! It paints them on any drawing surface: the page's canvas, or the
+//! recording surface of a host test.
+
+use ambre_bus::{Timestamp, UserId};
+use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
+use ambre_canvas::{Palette, TextCache};
+use ambre_draw::{
+    Affine, Alignment, Brush, Color, DrawSurface, FontContext, Layout, ParleyBrush,
+    PositionedLayoutItem, Rect,
+};
+
+use crate::list::{MessageList, RowWords, from_bottom};
+
+/// What one paint of the list did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Painted {
+    /// The rows laid out: the ones the viewport reaches, never the whole
+    /// list.
+    pub laid_out: usize,
+    /// The latest message is on screen.
+    pub latest_shown: bool,
+}
+
+/// Paint `list` resting on its latest message, in a viewport of `size`.
+///
+/// `name_of` names a member, and `time_of` writes a time in the reader's
+/// language and zone (`MURMURE-418`).
+#[allow(clippy::too_many_arguments)]
+pub fn paint_list<S: DrawSurface>(
+    surface: &mut S,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    list: &MessageList,
+    size: (f32, f32),
+    palette: &Palette,
+    name_of: &dyn Fn(UserId) -> Option<String>,
+    time_of: &dyn Fn(Timestamp) -> String,
+) -> Painted {
+    let (width, height) = size;
+    let backdrop = Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
+    surface.fill_rect(backdrop, palette.content_bg);
+    let rows = list.rows();
+    let text_width = (width - 2.0 * SPACE_8).max(1.0);
+    let mut words: Vec<RowWords> = Vec::new();
+    let shown = from_bottom(rows.len(), height, |i| {
+        let Some(row) = rows.get(i).map(|r| r.words(name_of, time_of)) else {
+            return 0.0;
+        };
+        let tall = measure(font_cx, cache, &row, text_width);
+        words.push(row);
+        tall
+    });
+    for (&(_, top), row) in shown.iter().zip(&words) {
+        draw_row(surface, font_cx, cache, row, top, text_width, palette);
+    }
+    Painted {
+        laid_out: words.len(),
+        latest_shown: !shown.is_empty(),
+    }
+}
+
+/// The layout of one text of a row, shaped once and kept in the cache.
+fn shape<'c>(
+    font_cx: &mut FontContext,
+    cache: &'c mut TextCache,
+    text: &str,
+    size: f32,
+    width: f32,
+    bold: bool,
+) -> &'c Layout<ParleyBrush> {
+    cache.get_or_build(font_cx, text, size, width, Alignment::Start, bold, false)
+}
+
+/// The height of a row, from the same layouts [`draw_row`] paints.
+fn measure(font_cx: &mut FontContext, cache: &mut TextCache, row: &RowWords, width: f32) -> f32 {
+    let mut tall = 2.0 * SPACE_2;
+    if let Some((author, time)) = &row.header {
+        let author = shape(font_cx, cache, author, FONT_UI, width, true).height();
+        let time = shape(font_cx, cache, time, FONT_UI, width, false).height();
+        tall += SPACE_4 + author.max(time);
+    }
+    tall += shape(font_cx, cache, &row.body, FONT_BODY, width, false).height();
+    if let Some(replies) = &row.replies {
+        tall += shape(font_cx, cache, replies, FONT_UI, width, false).height();
+    }
+    tall
+}
+
+/// Paint one row whose top is at `top`.
+fn draw_row<S: DrawSurface>(
+    surface: &mut S,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    row: &RowWords,
+    top: f32,
+    width: f32,
+    palette: &Palette,
+) {
+    let x = SPACE_8;
+    let mut y = top + SPACE_2;
+    if let Some((author, time)) = &row.header {
+        y += SPACE_4;
+        let layout = shape(font_cx, cache, author, FONT_UI, width, true);
+        let (wide, author_tall) = (layout.width(), layout.height());
+        draw(surface, layout, x, y, palette.cell_text);
+        let layout = shape(font_cx, cache, time, FONT_UI, width, false);
+        let time_tall = layout.height();
+        draw(surface, layout, x + wide + SPACE_4, y, palette.header_text);
+        y += author_tall.max(time_tall);
+    }
+    let body = if row.muted {
+        palette.header_text
+    } else {
+        palette.cell_text
+    };
+    let layout = shape(font_cx, cache, &row.body, FONT_BODY, width, false);
+    let body_tall = layout.height();
+    draw(surface, layout, x, y, body);
+    y += body_tall;
+    if let Some(replies) = &row.replies {
+        let layout = shape(font_cx, cache, replies, FONT_UI, width, false);
+        draw(surface, layout, x, y, palette.selection);
+    }
+}
+
+/// Emit every glyph run of `layout`, its top-left at `(x, y)`.
+fn draw<S: DrawSurface>(
+    surface: &mut S,
+    layout: &Layout<ParleyBrush>,
+    x: f32,
+    y: f32,
+    color: Color,
+) {
+    let brush = Brush::Solid(color);
+    for line in layout.lines() {
+        for item in line.items() {
+            let PositionedLayoutItem::GlyphRun(run) = item else {
+                continue;
+            };
+            let at = (f64::from(x + run.offset()), f64::from(y + run.baseline()));
+            surface.draw_glyphs(&run, &brush, Affine::translate(at));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ambre_bus::{DocumentId, SegmentId, ThreadHead};
+    use ambre_canvas::fonts::font_context_from_bytes;
+    use ambre_canvas::theme::LIGHT;
+    use ambre_draw::testing::{DrawOp, RecordingSurface};
+
+    use super::*;
+    use crate::list::tests::message;
+
+    /// The faces the page ships, read from the application's font folder.
+    fn fonts() -> FontContext {
+        const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+        let faces = ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"]
+            .iter()
+            .map(|file| std::fs::read(format!("{DIR}{file}")).expect("a shipped face"));
+        font_context_from_bytes(faces)
+    }
+
+    fn paint(list: &MessageList, height: f32) -> (RecordingSurface, Painted) {
+        let (mut surface, mut font_cx) = (RecordingSurface::new(), fonts());
+        let mut cache = TextCache::new(1.0);
+        let painted = paint_list(
+            &mut surface,
+            &mut font_cx,
+            &mut cache,
+            list,
+            (400.0, height),
+            &LIGHT,
+            &|_| Some("Ada".to_owned()),
+            &|_| "t".to_owned(),
+        );
+        (surface, painted)
+    }
+
+    /// Each glyph run of `color`, as its top and its glyph count, top first.
+    fn runs(surface: &RecordingSurface, color: Color) -> Vec<(f64, usize)> {
+        let mut runs: Vec<(f64, usize)> = surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::Glyphs {
+                    glyph_count,
+                    color: Some(c),
+                    transform,
+                } if *c == color => Some((transform.translation().y, *glyph_count)),
+                _ => None,
+            })
+            .collect();
+        runs.sort_by(|a, b| a.0.total_cmp(&b.0));
+        runs
+    }
+
+    /// Ten thousand messages lay out only the rows of one viewport, and the
+    /// latest of them is on screen (`MURMURE-187`, `MURMURE-188`).
+    #[test]
+    fn ten_thousand_messages_lay_out_only_one_viewport() {
+        let ada = UserId::new();
+        let mut list = MessageList::default();
+        let messages = (0..10_000).map(|i| message(ada, i, "hello")).collect();
+        list.absorb(SegmentId::new(), messages);
+        let (surface, painted) = paint(&list, 200.0);
+        assert!(painted.latest_shown);
+        assert!(painted.laid_out > 1 && painted.laid_out < 20, "{painted:?}");
+        assert_eq!(surface.fill_colors().first(), Some(&LIGHT.content_bg));
+    }
+
+    /// The rows paint top to bottom in the order of the list, under one
+    /// header for the group (`MURMURE-182`, `MURMURE-183`).
+    #[test]
+    fn the_rows_paint_top_to_bottom_under_one_header() {
+        let ada = UserId::new();
+        let mut list = MessageList::default();
+        let bodies = ["a", "abcd", "abcdefgh"];
+        let messages = bodies.iter().map(|b| message(ada, 0, b)).collect();
+        list.absorb(SegmentId::new(), messages);
+        let (surface, painted) = paint(&list, 600.0);
+        assert_eq!(painted.laid_out, 3);
+        let counts: Vec<usize> = runs(&surface, LIGHT.cell_text)
+            .iter()
+            .map(|r| r.1)
+            .collect();
+        assert_eq!(counts, [3, 1, 4, 8]);
+        assert_eq!(runs(&surface, LIGHT.header_text).len(), 1);
+    }
+
+    /// A deleted body paints muted, and a reply count in the accent
+    /// (`MURMURE-185`).
+    #[test]
+    fn a_deleted_body_paints_muted_and_a_reply_count_in_the_accent() {
+        let mut gone = message(UserId::new(), 0, "");
+        gone.deleted = true;
+        gone.thread = Some(ThreadHead {
+            document: DocumentId::new(),
+            replies: 2,
+            last_replier: None,
+        });
+        let mut list = MessageList::default();
+        list.absorb(SegmentId::new(), vec![gone]);
+        let (surface, _) = paint(&list, 600.0);
+        let author: usize = runs(&surface, LIGHT.cell_text).iter().map(|r| r.1).sum();
+        assert_eq!(author, 3);
+        let muted: usize = runs(&surface, LIGHT.header_text).iter().map(|r| r.1).sum();
+        assert_eq!(muted, 1 + crate::list::DELETED.chars().count());
+        assert!(!runs(&surface, LIGHT.selection).is_empty());
+    }
+
+    /// An empty list paints its backdrop and shows no latest message.
+    #[test]
+    fn an_empty_list_paints_only_its_backdrop() {
+        let (surface, painted) = paint(&MessageList::default(), 200.0);
+        assert_eq!(
+            painted,
+            Painted {
+                laid_out: 0,
+                latest_shown: false,
+            }
+        );
+        assert!(
+            surface
+                .ops()
+                .iter()
+                .all(|op| matches!(op, DrawOp::FillRect { .. }))
+        );
+    }
+}

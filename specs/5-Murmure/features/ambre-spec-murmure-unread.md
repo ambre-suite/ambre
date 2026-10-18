@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: MURMURE UNREAD STATE
 **Type:** Vertical (feature)
-**Implementation:** partial -- cursors, marks and the count of every channel are built, and the
-sidebar draws them; no message list
+**Implementation:** partial -- cursors, marks and counts are built, and the sidebar draws them.
+The message list marks a channel read, but nothing marks one unread from it yet.
 
 > The sidebar shows where something new is, and how much. The count follows the user across their
 > devices, and a reaction or an edit never makes a channel unread.
@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-115` | `POST` | Showing the latest message of a channel MUST move the read cursor to it. | this spec section 3; `MURMURE-470` | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-115` | `POST` | Showing the latest message of a channel MUST move the read cursor to it. | this spec section 3; `MURMURE-470` | `ambre_murmure::list::tests::a_drawn_latest_message_marks_the_channel_read_once` -- each new latest message drawn marks the channel read once; `ambre_murmure::view::tests::the_selected_channel_shows_its_list_and_is_marked_read_once` -- the region sends mark read once its latest message paints, on a recording surface | none | verified |
 | `MURMURE-470` | `POST` | Marking a channel read MUST move each of its read cursors to its latest message. | this spec section 3 | `ambre_logic::channels::tests::marking_a_channel_read_moves_its_live_segments_and_clears_its_mark`; `ambre_sync::updates::tests::a_read_reaches_the_last_update_delivered_and_no_further`; `ambre_murmure::channel_tests::the_final_segments_are_listed_loaded_or_not` -- the command moves the live segments to the last update delivered and the finals to their last number | none | verified |
 | `MURMURE-116` | `FRAME` | Moving a read cursor MUST NOT move the cursor of another member. | this spec section 3 | `ambre_server::routes::read_cursors::tests::marking_everything_read_moves_the_callers_cursors_alone`; `ambre_server::routes::read_cursors::tests::a_listed_move_touches_the_listed_documents_alone` -- another member's cursors stay where they were | none | verified |
 
@@ -59,9 +59,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   (`ambre-spec-budgets.md section 6`).
 * **Boundary.** the relay holds the read cursors and answers yes or no, never a count
   (`SRV-110`, `ZK-015`). The kind of each update stays sealed.
-* **Verification.** 15 `verified`, 1 `unimplemented`. The read cursor route tests hold the relay
+* **Verification.** 16 `verified`, 0 `unimplemented`. The read cursor route tests hold the relay
   rows against a real database. The engine, Logic and Sync unit tests hold the client rows. A
   closed channel counts from its summaries, and a segment it opens meanwhile is not counted yet.
+  The view's host tests hold the read cursor the message list moves.
 
 ---
 
@@ -134,6 +135,7 @@ truncated frame never imports.
 | the number per message, the snapshot frame | `crates/ambre-murmure/src/sequence.rs` |
 | the count and the segments after one | `crates/ambre-murmure/src/channel.rs` |
 | the cursors, the count per channel, mark read and mark unread | `crates/ambre-logic/src/channels.rs` |
+| the mark read of a latest message drawn | `crates/ambre-murmure/src/list.rs`, `crates/ambre-murmure/src/view.rs` |
 
 **Mark read.** A live segment still grows. Its cursor moves to the last number the Sync worker
 delivered, so a message sequenced and not yet shown stays unread. A final segment no longer changes,
@@ -165,8 +167,8 @@ so the relay moves its cursor to its own last number, and the client need not lo
 * **A segment that goes live while its channel is closed** counts what its `meta` names. After a
   key rotation, it counts its activity alone. A `meta` write from another device of the same user
   lists nothing new, so its segment counts nothing until the reopen.
-* **No message list.** The sidebar draws the mark and the counts, but no message list sends mark
-  read or mark unread yet.
+* **No mark unread from the list.** The message list sends mark read. Mark unread waits for the
+  actions of a message, the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5).
 * **A snapshot from a member who knows no number.** Its messages read as bounded by its horizon,
   so a cursor below the horizon counts them all. Not yet ruled whether a compaction should wait
   for a member who holds the numbers.

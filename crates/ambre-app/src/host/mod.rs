@@ -64,9 +64,10 @@ mod prose;
 mod run;
 mod web_embed;
 
+pub use ambre_murmure::view::{MurmureView, THREAD_CANVAS};
 pub(crate) use frame::send_faces;
 pub use frame::{FrameHost, MakeChild};
-pub use murmure::{MurmureView, THREAD_CANVAS};
+pub use murmure::page_reads;
 pub use prose::{ProseSignals, ProseView};
 
 /// Where a finger is in its gesture.
@@ -444,7 +445,7 @@ impl AppView {
     /// in a cell of its own (`CANVAS-070`). Only Murmure shows one: its thread.
     fn cell_ids(&self) -> &'static [&'static str] {
         match self {
-            AppView::Murmure(_) => &[murmure::THREAD_CANVAS],
+            AppView::Murmure(_) => &[THREAD_CANVAS],
             AppView::Trame(_) | AppView::Toile(_) | AppView::Prose(_) => &[],
         }
     }
@@ -453,7 +454,7 @@ impl AppView {
     /// `None` for an id this view does not show.
     fn cell_view(&self, id: &str, width: f64, height: f64) -> Option<AppView> {
         match self {
-            AppView::Murmure(v) if id == murmure::THREAD_CANVAS => {
+            AppView::Murmure(v) if id == THREAD_CANVAS => {
                 Some(AppView::Murmure(v.region(width, height)))
             }
             _ => None,

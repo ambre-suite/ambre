@@ -9,6 +9,9 @@ description = "Secure messaging application for Ambre — E2EE channels, segment
 ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }
 ambre-draw = { path = "../ambre-draw" }
+# The text cache and the design tokens the message list paints with, as
+# ambre-trame's grid does (`MURMURE-188`).
+ambre-canvas = { path = "../ambre-canvas" }
 
 # The command registry the shell's palette and keymap read, as ambre-prose's
 # table does. A leaf with an empty dependency table (`UI-THREAD-027`).
@@ -31,6 +34,8 @@ leptos       = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+# Headless paint tests: the RecordingSurface mock of the drawing surface.
+ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 serde_json = { workspace = true }
 
 # The relay tests drive the chrome state in headless Chrome

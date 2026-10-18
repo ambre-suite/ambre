@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE MURMURE MESSAGE LIST
 **Type:** Vertical (feature)
-**Implementation:** partial -- the channel and the thread are each a canvas of their own. No
-message paints yet.
+**Implementation:** partial -- the channel and the thread each paint on a canvas of their own.
+Each list rests on its latest message, and neither scrolls nor takes focus yet.
 
 > The conversation of a channel, newest at the bottom. It scrolls through years of history without
 > a pause, and shows where the unread messages start.
@@ -18,19 +18,19 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-182` | `OBS` | Messages MUST be shown oldest at the top and newest at the bottom. | this spec section 3 | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-183` | `OBS` | Consecutive messages of one author inside the grouping span MUST share one header. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-184` | `OBS` | The first unread message MUST follow a separator that marks it. | this spec section 3; `features/ambre-spec-murmure-unread.md` | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-185` | `OBS` | A deleted message MUST show as deleted, with no text. | this spec section 3; `MURMURE-087` | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-186` | `OBS` | An edited message MUST show that it was edited. | this spec section 3; `MURMURE-084` | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-187` | `INV` | The list MUST paint only the messages near the viewport. | this spec section 3; `ambre-spec-budgets.md section 2` | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-188` | `INV` | The list MUST be canvas content, its text shaped by the shared text pipeline. | this spec section 3; `ambre-spec-ui.md section 2` | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-182` | `OBS` | Messages MUST be shown oldest at the top and newest at the bottom. | this spec section 3 | `ambre_murmure::list::tests::segments_read_oldest_at_the_top_whatever_their_order_of_arrival` -- the closing segment reads above the active one, whichever arrives first; `ambre_murmure::list::tests::a_changed_message_takes_its_place_and_a_moved_one_leaves_its_old_segment` -- a delta replaces in place and never shows a message twice; `ambre_murmure::paint::tests::the_rows_paint_top_to_bottom_under_one_header` -- the rows paint top to bottom in list order | none | verified |
+| `MURMURE-183` | `OBS` | Consecutive messages of one author inside the grouping span MUST share one header. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_murmure::list::tests::one_author_inside_the_span_shares_one_header` -- inside the span one header, past it, another author or a notice a new one; `ambre_murmure::list::tests::a_clock_running_back_keeps_the_group` -- a clock running back keeps the group; `ambre_murmure::paint::tests::the_rows_paint_top_to_bottom_under_one_header` -- one author name paints over three bodies | none | verified |
+| `MURMURE-184` | `OBS` | The first unread message MUST follow a separator that marks it. | this spec section 3; `features/ambre-spec-murmure-unread.md` | not built | unbuilt -- lands with the `The unread line in the message list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-185` | `OBS` | A deleted message MUST show as deleted, with no text. | this spec section 3; `MURMURE-087` | `ambre_murmure::list::tests::a_deleted_message_shows_a_muted_line` -- a deleted message shows a muted stand-in line; `ambre_murmure::paint::tests::a_deleted_body_paints_muted_and_a_reply_count_in_the_accent` -- the stand-in paints in the muted colour, and no body text paints | none | verified |
+| `MURMURE-186` | `OBS` | An edited message MUST show that it was edited. | this spec section 3; `MURMURE-084` | `ambre_murmure::list::tests::an_edited_message_carries_the_marker` -- an edited body ends with the marker, a plain one does not | none | verified |
+| `MURMURE-187` | `INV` | The list MUST paint only the messages near the viewport. | this spec section 3; `ambre-spec-budgets.md section 2` | `ambre_murmure::list::tests::the_walk_from_the_bottom_measures_only_the_rows_it_reaches` -- five rows of ten thousand are measured; `ambre_murmure::paint::tests::ten_thousand_messages_lay_out_only_one_viewport` -- ten thousand messages lay out one viewport of rows | none | verified |
+| `MURMURE-188` | `INV` | The list MUST be canvas content, its text shaped by the shared text pipeline. | this spec section 3; `ambre-spec-ui.md section 2` | `ambre_murmure::paint::tests::ten_thousand_messages_lay_out_only_one_viewport` -- the list paints on a drawing surface, its text shaped by the shared text cache; `ambre_murmure::paint::tests::the_rows_paint_top_to_bottom_under_one_header` -- each text paints as shaped glyph runs | none | verified |
 | `MURMURE-207` | `OBS` | The focused message MUST be announced to a screen reader with its author, its time and its text. | this spec section 3; `ambre-spec-accessibility.md section 2`; `CHROME-023` | not built | unbuilt -- lands with the `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-208` | `OBS` | A new message MUST be announced to a screen reader when the user was at the bottom of the list. | this spec section 3; `ambre-spec-accessibility.md section 2` | not built | unbuilt -- lands with the `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-417` | `INV` | The list MUST scroll through the shared kinetic model, never through a speed or a decay of its own. | this spec section 3; `KINETIC-001` | not built | unbuilt -- lands with the `Scrolling the message list` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-418` | `OBS` | The time of a message MUST show in the reader's own language and time zone. | this spec section 3 | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-418` | `OBS` | The time of a message MUST show in the reader's own language and time zone. | this spec section 3 | `ambre_app::host::murmure::tests::the_time_reads_in_the_readers_language_and_zone` -- the time reads as the browser writes it in its own language and zone, in the browser tier | none | verified |
 | `MURMURE-419` | `INV` | Every action on a message MUST be a command of the command table. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-420` | `INV` | A thread MUST show its messages through the same list as a channel. | this spec section 3; `features/ambre-spec-murmure-threads.md` | not built | unbuilt -- lands with the `The message list drawn` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-420` | `INV` | A thread MUST show its messages through the same list as a channel. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::list::tests::a_thread_fills_its_own_list_and_leaving_drops_the_channel` -- a thread fills a list of the same type as a channel; `ambre_murmure::view::tests::the_thread_region_shows_the_thread_through_the_same_list` -- the thread's region paints the thread through the same painter, on a recording surface | none | verified |
 | `MURMURE-421` | `INV` | Each region that shows messages MUST be a canvas of its own, one cell of the chrome layout. | this spec section 3; `CHROME-009`; `CANVAS-070` | `ambre_app::shell::murmure_regions::tests::the_channel_and_the_thread_are_each_a_canvas_of_their_cell` -- the channel and the thread each hold a canvas of their cell's width; `ambre_app::host::cell::tests::the_thread_is_a_canvas_of_its_own_sized_by_its_cell` -- the thread's canvas takes its own size, input and resize, in the browser tier | none | verified |
 
 ### 1.2 A message arrives
@@ -87,8 +87,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
   only what `meta` already tells every member: the span and the count of a segment.
-* **Verification.** 1 `verified`, 30 `unimplemented`. The browser tier holds the channel and the
-  thread each in a canvas of its own. No message paints yet.
+* **Verification.** 9 `verified`, 22 `unimplemented`. The host tier holds the order, the groups,
+  the words and the paint of the rows, and the thread's list. The browser tier holds each canvas
+  and the local time.
 
 ---
 
@@ -183,7 +184,9 @@ A bare "unable to decrypt" names no cause and no remedy, so no band shows it (`M
 A band is one row of the list, whatever the segment holds, so scrolling goes on past it
 (`MURMURE-221`).
 
-**Code.** not built.
+**Code.** `ambre_murmure::list` folds the events into one list per channel and per thread, and
+`ambre_murmure::paint` lays out and paints the rows a viewport reaches. `ambre_murmure::view` binds
+both to each region, and `ambre_app::host::murmure` hands it the pane, the names and the time.
 
 ---
 
@@ -218,6 +221,6 @@ A band is one row of the list, whatever the segment holds, so scrolling goes on 
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing is built.** No Murmure view exists.
+* **The list rests on its latest message.** No scroll, no focus and no selection exist yet.
 * **Only the focused message reaches a screen reader.** The list is not mirrored whole, by the rule
   of `ambre-spec-accessibility.md section 2`, so a reader moves through it message by message.

@@ -301,7 +301,7 @@ A duration a rule waits on before it acts. Each figure is a first estimate, to m
 | Duration | Target | Why this order of size | Method |
 |---|---|---|---|
 | Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | `FINALIZE_GRACE` in `ambre_server::routes::channels`, counted from the close and from the latest delta (`SRV-199`) |
-| Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | **none exists** |
+| Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | `GROUP_SPAN_MS` in `ambre_murmure::list` (`MURMURE-183`) |
 | Refresh period of the presence in a space or a channel | 60 s | a member list needs a state per minute, and the relay then writes one entry per member per minute (`MURMURE-445`, `MURMURE-126`) | `REFRESH_PERIOD_MS` in `ambre_murmure::members` |
 | Presence expiry in a space or a channel | 180 s | three refresh periods: one for the tick that dates a sample, one for a lost sample, one for two timers drifting apart (`MURMURE-445`, `MURMURE-126`) | `PRESENCE_EXPIRY_MS` in `ambre_murmure::members` |
 | Tick of an open channel | 1 s | a typing indicator lasts seconds, so its expiry needs a clock finer than it (`MURMURE-124`) | `TICK_MS` in `ambre_murmure::watchers` |
