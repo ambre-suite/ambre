@@ -1,6 +1,6 @@
 # AMBRE -- FEATURE: THE USER PROFILE
 **Type:** Horizontal (framework)
-**Implementation:** design-only
+**Implementation:** partial -- the initials are drawn; no picture is held.
 
 > The avatar that stands for a user in every application: a picture the user chooses, or their
 > initials on their identity colour. The relay holds the picture in the clear, and serves it only
@@ -19,7 +19,7 @@ to this document alone.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROFILE-001` | `INV` | A user MUST have one avatar, the same in every application and every space. | this spec section 3 | not built | unbuilt -- lands with the `Avatars` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROFILE-002` | `OBS` | A user with no picture MUST show as their initials on their identity colour. | this spec section 3; `PRESENCE-006` | not built | unbuilt -- lands with the `The member list of a space` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROFILE-002` | `OBS` | A user with no picture MUST show as their initials on their identity colour. | this spec section 3; `PRESENCE-006` | `ambre_chrome::avatar::tests::initials_come_from_the_first_two_words_or_letters` -- two words, one word and a blank name; `ambre_draw::peer::tests::the_css_colour_is_the_canvas_colour_in_hex` -- the avatar takes the cursor colour; `ambre_app::shell::murmure_regions::the_member_list_shows_each_member_by_name_initials_and_presence` -- browser tier, the computed background of a member's avatar is their identity colour | none | verified |
 
 ### 1.2 Set a picture
 
@@ -46,7 +46,7 @@ to this document alone.
 * **Budget.** the avatar row of `ambre-spec-budgets.md section 6`, for each picture a view draws.
 * **Boundary.** the relay holds the picture in the clear, an accepted leak `ZK-018` names. Only the
   users who share a document with the owner read it (`PROFILE-009`).
-* **Verification.** 9 `unimplemented`: nothing is built.
+* **Verification.** 1 `verified`, 8 `unimplemented`. The initials are built, the picture is not.
 
 ---
 
@@ -69,7 +69,7 @@ to this document alone.
 
 | Form | When | Drawn as |
 |---|---|---|
-| initials | the user set no picture | the first letters of the display name, on the colour of `PRESENCE-006` |
+| initials | the user set no picture | the first letter of the first two words of the display name, or the first two letters of a single word, on the colour of `PRESENCE-006` |
 | picture | the user set one | the picture, cropped to a square and masked to a circle |
 
 **The picture.** The client crops and scales it to the square of `ambre-spec-budgets.md section 6`,
@@ -107,7 +107,7 @@ owner. A space is a document (`MURMURE-031`), so every member of a space reads e
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing is built.** The account holds no picture.
+* **No picture is built.** The account holds none, so every avatar shows initials.
 * **A sealed profile is not ruled.** The display name and the picture in the clear are the accepted
   leak of `ZK-018`. Sealing both is the `Sealed profiles` Story (`ambre-roadmap.md` post-V1).
 

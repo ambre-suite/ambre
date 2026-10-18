@@ -9,32 +9,47 @@
 // Wasm-only, like the rest of the chrome stack (leptos CSR + DOM).
 // ============================================================================
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{Activity, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection};
-use ambre_bus::{LogicCommand, MurmureEvent, SpaceCommand, SpaceEvent, UiEvent};
+use ambre_bus::{
+    LogicCommand, MemberView, MurmureEvent, Presence, SpaceCommand, SpaceEvent, Timestamp, UiEvent,
+};
 use ambre_chrome::ShellRegion;
-use ambre_core::ChannelId;
+use ambre_core::{ChannelId, SpaceId};
 use leptos::prelude::*;
 
 /// The region of the shell a pane is in. The channel list is the sidebar,
-/// a channel the content, and a thread the panel.
+/// a channel the content, and a thread or the member list the panel.
 pub fn focus_of(pane: MurmurePane) -> ShellRegion {
     match pane {
         MurmurePane::ChannelList => ShellRegion::Sidebar,
         MurmurePane::Channel { .. } => ShellRegion::Content,
-        MurmurePane::Thread { .. } => ShellRegion::Panel,
+        MurmurePane::Thread { .. } | MurmurePane::Members { .. } => ShellRegion::Panel,
     }
 }
 
-/// Whether the thread panel is open: only while the user is in a thread.
-pub fn thread_open(pane: MurmurePane) -> bool {
-    matches!(pane, MurmurePane::Thread { .. })
+/// Whether the panel is open: only while the user is in a thread or in the
+/// member list.
+pub fn panel_open(pane: MurmurePane) -> bool {
+    matches!(
+        pane,
+        MurmurePane::Thread { .. } | MurmurePane::Members { .. }
+    )
+}
+
+/// The accessible name of the panel: what it holds.
+pub fn panel_label(pane: MurmurePane) -> &'static str {
+    match pane {
+        MurmurePane::Members { .. } => "Members",
+        _ => "Thread",
+    }
 }
 
 /// The header of the current channel, in the command bar of the shell
 /// (`MURMURE-428`). Its back control goes to the pane before, and touches
-/// nothing but the pane (`MURMURE-168`, `MURMURE-169`).
+/// nothing but the pane (`MURMURE-168`, `MURMURE-169`). A public channel of
+/// a space shows a control that opens the member list of that space beside it.
 #[component]
 pub fn ChannelHeader(
     /// The pane the user is in.
@@ -42,7 +57,22 @@ pub fn ChannelHeader(
     /// The name of the current channel, once its engine has read it.
     #[prop(into)]
     name: Signal<Option<String>>,
+    /// Whether the current channel shows the members of its space.
+    #[prop(into)]
+    has_members: Signal<bool>,
 ) -> impl IntoView {
+    let members_open = move || matches!(pane.get(), MurmurePane::Members { .. });
+    let toggle_members = move |_| {
+        pane.update(|p| {
+            *p = match *p {
+                MurmurePane::Members { channel } => MurmurePane::channel(channel),
+                other => match other.shown_channel() {
+                    Some(channel) => MurmurePane::Members { channel },
+                    None => other,
+                },
+            }
+        })
+    };
     view! {
         <div class="murmure-channel-header">
             <Show when=move || pane.get() != MurmurePane::ChannelList>
@@ -55,7 +85,70 @@ pub fn ChannelHeader(
                 </button>
             </Show>
             <span class="murmure-channel-name">{move || name.get().unwrap_or_default()}</span>
+            <Show when=move || has_members.get()>
+                <button
+                    class="murmure-members-toggle"
+                    aria-pressed=move || ambre_chrome::aria_bool(members_open())
+                    on:click=toggle_members
+                >
+                    "Members"
+                </button>
+            </Show>
         </div>
+    }
+}
+
+/// The member list of the space the current channel lies in (the Murmure
+/// members spec). Each row shows the avatar, the display name and the
+/// presence mark of one member (`MURMURE-441`, `MURMURE-442`). The filter
+/// runs on what the page holds, and sends nothing (`MURMURE-454`).
+#[component]
+pub fn MemberList(relay: MurmureRelay) -> impl IntoView {
+    let query = RwSignal::new(String::new());
+    let rows = relay.shown_members();
+    let found = move || {
+        rows.with(|members| {
+            query.with(|q| {
+                crate::find_members(members, q)
+                    .into_iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+        })
+    };
+    view! {
+        <div class="murmure-members">
+            <input
+                class="murmure-members-filter"
+                type="search"
+                aria-label="Find a member"
+                placeholder="Find a member"
+                prop:value=move || query.get()
+                on:input=move |ev| query.set(event_target_value(&ev))
+            />
+            <ul aria-label="Members">
+                {move || found().into_iter().map(member_view).collect_view()}
+            </ul>
+        </div>
+    }
+}
+
+/// One member: the avatar, the name, then the presence mark. The two marks
+/// differ in shape as well as in colour, and each carries its word for a
+/// screen reader (`MURMURE-443`).
+fn member_view(member: MemberView) -> impl IntoView {
+    let (state, word) = match member.presence {
+        Presence::Online => ("online", "Online"),
+        Presence::Offline => ("offline", "Offline"),
+    };
+    let color = ambre_draw::peer_css(&member.user_id);
+    let name = member.display_name;
+    view! {
+        <li class="murmure-member">
+            <ambre_chrome::Avatar name=name.clone() color=color />
+            <span class="murmure-member-name">{name}</span>
+            <span class="murmure-presence" data-presence=state role="img" aria-label=word></span>
+        </li>
     }
 }
 
@@ -70,6 +163,8 @@ pub struct MurmureRelay {
     pub pane: RwSignal<MurmurePane>,
     /// The channels this page asked the Logic thread to open.
     opened: RwSignal<HashSet<ChannelId>>,
+    /// The member list of each open space, as its last event drew it.
+    members: RwSignal<HashMap<SpaceId, Vec<MemberView>>>,
 }
 
 impl Default for MurmureRelay {
@@ -85,7 +180,49 @@ impl MurmureRelay {
             sidebar: RwSignal::new(Sidebar::default()),
             pane: RwSignal::new(MurmurePane::default()),
             opened: RwSignal::new(HashSet::new()),
+            members: RwSignal::new(HashMap::new()),
         }
+    }
+
+    /// Whether the channel the pane shows is a public channel of a space,
+    /// whose members the member list shows.
+    pub fn has_members(&self) -> Signal<bool> {
+        let (sidebar, pane) = (self.sidebar, self.pane);
+        Signal::derive(move || {
+            pane.get()
+                .shown_channel()
+                .is_some_and(|channel| sidebar.with(|s| s.public_space_of(channel).is_some()))
+        })
+    }
+
+    /// The member list of the space of the shown public channel, empty until
+    /// its first event.
+    pub fn shown_members(&self) -> Signal<Vec<MemberView>> {
+        let (sidebar, pane, members) = (self.sidebar, self.pane, self.members);
+        Signal::derive(move || {
+            let space = pane
+                .get()
+                .shown_channel()
+                .and_then(|channel| sidebar.with(|s| s.public_space_of(channel)));
+            space
+                .and_then(|space| members.with(|m| m.get(&space).cloned()))
+                .unwrap_or_default()
+        })
+    }
+
+    /// What the view sends once per refresh period: this user's presence on
+    /// every space of the sidebar. Each one also turns offline the members
+    /// whose presence expired (`MURMURE-445`). `now` is the view's clock.
+    pub fn refresh_presence(&self, now: Timestamp) -> Vec<LogicCommand> {
+        self.sidebar.with_untracked(|s| {
+            s.spaces()
+                .iter()
+                .map(|&space_id| LogicCommand::Space {
+                    space_id,
+                    command: SpaceCommand::RefreshPresence { now },
+                })
+                .collect()
+        })
     }
 
     /// What a Murmure page asks once its session is ready: the channels of
@@ -164,6 +301,12 @@ impl MurmureRelay {
                 });
                 Vec::new()
             }
+            SpaceEvent::Members { members } => {
+                self.members.update(|m| {
+                    m.insert(space, members.clone());
+                });
+                Vec::new()
+            }
             // The join this page asked for: the channel shows at once, and
             // the listing moves it among the joined ones.
             SpaceEvent::Joined { channel_id } => {
@@ -182,6 +325,9 @@ impl MurmureRelay {
                     .sidebar
                     .try_update(|s| s.forget_space(space))
                     .unwrap_or_default();
+                self.members.update(|m| {
+                    m.remove(&space);
+                });
                 self.drop_channels(&dropped);
                 Vec::new()
             }

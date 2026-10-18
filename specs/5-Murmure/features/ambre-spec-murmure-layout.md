@@ -87,6 +87,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | the sidebar | a view of its own | beside the message list, collapsible | persistent |
 | the message list | a view of its own | beside the sidebar | the centre column |
 | the thread | a view of its own | in place of the message list | a right column, opened on demand |
+| the member list | a view of its own | in place of the message list | the right column, in place of a thread |
 
 **Two channels side by side.** Over the desktop width, a second channel opens beside the first,
 with its own list and composer (`MURMURE-383`). The window narrows, and the second pane closes
@@ -113,6 +114,7 @@ pub enum MurmurePane {
     ChannelList,
     Channel { channel: ChannelId, at: Option<MessageRef> },
     Thread { channel: ChannelId, root: MessageRef },
+    Members { channel: ChannelId },
 }
 pub struct MessageRef { pub segment: SegmentId, pub message: MessageId }
 pub struct SidebarSection { pub group: SidebarGroup, pub title: Option<String>, pub entries: Vec<SidebarEntry> }
@@ -132,6 +134,8 @@ names, as the relay lists them (`MURMURE-492`). That name is composed for displa
 
 A channel keeps the message it shows, so back from a thread lands on its root (`MURMURE-168`).
 The pane names the region in focus, and the stylesheet alone decides which regions sit beside it.
+The member list of a space takes the panel a thread takes, beside the public channel it was opened
+from (`ambre-spec-murmure-members.md`). Back from it shows that channel.
 
 **Code.** `crates/ambre-murmure/src/layout.rs` holds the pane, and `crates/ambre-murmure/src/sidebar.rs`
 the sidebar. `crates/ambre-murmure/src/chrome.rs` maps them onto the regions of
@@ -146,6 +150,7 @@ the sidebar. `crates/ambre-murmure/src/chrome.rs` maps them onto the regions of
 |---|---|
 | a channel in the sidebar | the channel opens in the message list |
 | a reply count under a root | the thread opens, in the region its width gives it |
+| the members button of a channel header | the member list of the space opens in the panel, and a second press closes it |
 | the back control on a phone or a tablet | the previous view |
 | the collapse control of the sidebar on a tablet | the sidebar folds to a strip, and stays reachable |
 

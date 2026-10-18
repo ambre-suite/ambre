@@ -38,6 +38,13 @@ pub fn peer_color(user_id: &UserId) -> Color {
     Color::from_rgba8(r, g, b, 255)
 }
 
+/// The colour of [`peer_color`] as a CSS hex colour. The DOM chrome draws a
+/// user with it beside the canvas: an avatar, a member row.
+pub fn peer_css(user_id: &UserId) -> String {
+    let [r, g, b, _] = peer_color(user_id).to_rgba8().to_u8_array();
+    format!("#{r:02x}{g:02x}{b:02x}")
+}
+
 /// HSL (hue in degrees, saturation / lightness in `0.0..=1.0`) to 8-bit sRGB.
 fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
     let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
@@ -59,6 +66,15 @@ fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The CSS colour of a user is their canvas colour, in hex.
+    #[test]
+    fn the_css_colour_is_the_canvas_colour_in_hex() {
+        let user = UserId::from_bytes([7u8; 16]);
+        let [r, g, b, _] = peer_color(&user).to_rgba8().to_u8_array();
+        assert_eq!(peer_css(&user), format!("#{r:02x}{g:02x}{b:02x}"));
+        assert_eq!(peer_css(&user).len(), 7);
+    }
 
     #[test]
     fn stable_and_pure() {

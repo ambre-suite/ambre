@@ -565,6 +565,59 @@ input[type="radio"] {
     color: var(--on-accent);
 }
 
+.murmure-members-toggle {
+    margin-left: auto;
+}
+
+.murmure-members {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+}
+
+.murmure-members-filter {
+    margin: 0 var(--space-4);
+}
+
+.murmure-members ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.murmure-member {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-4);
+}
+
+.murmure-member-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Online is a filled dot, offline a hollow ring: the two differ in shape as
+   well as in colour (`MURMURE-443`). */
+.murmure-presence {
+    box-sizing: border-box;
+    width: var(--space-2);
+    height: var(--space-2);
+    border-radius: 50%;
+}
+
+.murmure-presence[data-presence="online"] {
+    background: var(--success);
+}
+
+.murmure-presence[data-presence="offline"] {
+    border: 2px solid var(--text-dim);
+    background: transparent;
+}
+
 .ambre-panel {
     flex-direction: column;
     overflow: auto;

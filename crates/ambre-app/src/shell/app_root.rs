@@ -8,7 +8,8 @@ use super::prose_status::ProseFigures;
 use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
-use ambre_murmure::chrome::{ChannelHeader, ChannelList, MurmureRelay};
+use ambre_murmure::MurmurePane;
+use ambre_murmure::chrome::{ChannelHeader, ChannelList, MemberList, MurmureRelay};
 
 /// The table the command palette searches: the booted application's whole
 /// declaration, never a menu's subset (`CHROME-008`). Murmure declares none
@@ -39,17 +40,22 @@ pub(crate) fn MurmureShell(
     view! {
         <AppShell
             focus=Signal::derive(move || ambre_murmure::chrome::focus_of(pane.get()))
-            panel_open=Signal::derive(move || ambre_murmure::chrome::thread_open(pane.get()))
+            panel_open=Signal::derive(move || ambre_murmure::chrome::panel_open(pane.get()))
         >
             <Header slot>{children()}</Header>
             <Toolbar slot>
-                <ChannelHeader pane=pane name=relay.channel_name() />
+                <ChannelHeader pane=pane name=relay.channel_name() has_members=relay.has_members() />
             </Toolbar>
             <Sidebar slot label="Channels">
                 <ChannelList relay=relay send=send />
             </Sidebar>
-            <Panel slot label="Thread">
-                <div class="murmure-thread"></div>
+            <Panel slot label=Signal::derive(move || ambre_murmure::chrome::panel_label(pane.get()).to_owned())>
+                <Show
+                    when=move || matches!(pane.get(), MurmurePane::Members { .. })
+                    fallback=|| view! { <div class="murmure-thread"></div> }
+                >
+                    <MemberList relay=relay />
+                </Show>
             </Panel>
         </AppShell>
     }
@@ -67,6 +73,7 @@ fn ShellHeader(
     share_open: RwSignal<bool>,
     about_open: RwSignal<bool>,
     username: RwSignal<Option<String>>,
+    me: RwSignal<Option<UserId>>,
 ) -> impl IntoView {
     view! {
         <span class="title">"Ambre"</span>
@@ -118,11 +125,14 @@ fn ShellHeader(
         >
             "?"
         </button>
+        // The user's initials on their identity colour, the accent until the
+        // session names them (`PROFILE-002`).
         <span
             class="ambre-avatar"
             title=move || username.get().unwrap_or_else(|| "Signed out".to_owned())
+            style:background=move || me.get().map(|user| ambre_draw::peer_css(&user))
         >
-            {move || initials(username.get().as_deref())}
+            {move || ambre_chrome::avatar_initials(username.get().as_deref().unwrap_or_default())}
         </span>
     }
 }
@@ -489,6 +499,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     share_open=share_open
                     about_open=about_open
                     username=username
+                    me=me
                 />
             }
         }

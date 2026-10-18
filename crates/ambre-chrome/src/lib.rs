@@ -16,6 +16,7 @@
 // schedule for it is ambre-roadmap.md; neither belongs here.
 //   - shortcut     -- keybinding presentation (the <Kbd> component)
 //   - app_shell    -- CSS-grid shell: header, command bar, status bar, canvas
+//   - avatar       -- a user's initials on their identity colour
 //   - command      -- command-state store + keybinding manager
 //   - composed     -- a name composed for display, which converts to no `String`
 //   - dialog       -- native <dialog> modal (rAF-suspending)
@@ -32,6 +33,7 @@
 pub use ambre_commands as commands;
 
 mod app_shell;
+mod avatar;
 mod color;
 mod command;
 mod composed;
@@ -51,6 +53,7 @@ mod toast;
 pub use app_shell::{
     AppShell, FormulaBar, Header, Panel, ShellRegion, Sidebar, StatusBar, Tabs, Toolbar,
 };
+pub use avatar::{Avatar, avatar_initials};
 pub use color::{ColorPopover, color_hex, parse_hex_color};
 pub use command::{CommandStates, keybinding_from_event};
 pub use composed::ComposedName;

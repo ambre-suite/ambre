@@ -64,9 +64,10 @@ pub struct Sidebar {
 /// Panel: the region after the content (app-provided), such as an open thread.
 #[slot]
 pub struct Panel {
-    /// The accessible name of the region, such as "Thread".
+    /// The accessible name of the region, such as "Thread". It follows what
+    /// the panel holds.
     #[prop(into)]
-    label: String,
+    label: Signal<String>,
     children: ChildrenFn,
 }
 
@@ -162,7 +163,7 @@ pub fn AppShell(
                     move || {
                         panel_open.get().then(|| {
                             view! {
-                                <aside class="ambre-panel" aria-label=label.clone()>
+                                <aside class="ambre-panel" aria-label=move || label.get()>
                                     {children()}
                                 </aside>
                             }

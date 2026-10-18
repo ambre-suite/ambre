@@ -1070,6 +1070,28 @@ pub fn main() {
     let mut last_perf_push_ms: f64 = 0.0;
     let mut list_requested = false;
     let relay_tx = ui_to_logic_tx.clone();
+    // A Murmure page refreshes this user's presence on each of its spaces once
+    // per refresh period (the Murmure members spec). An interval, not the frame loop: a
+    // hidden tab pauses its frames, yet holds its spaces open. The interval
+    // lives as long as the page.
+    if boot_is_murmure {
+        let presence_tx = ui_to_logic_tx.clone();
+        let refresh = Closure::<dyn FnMut()>::new(move || {
+            let now = ambre_bus::Timestamp(js_sys::Date::now() as u64);
+            for command in murmure_relay.refresh_presence(now) {
+                if let Err(e) = presence_tx.try_send(command) {
+                    tracing::warn!("Presence refresh dropped, Logic channel full ({e:?})");
+                }
+            }
+        });
+        if let Some(window) = web_sys::window() {
+            let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(
+                refresh.as_ref().unchecked_ref(),
+                ambre_murmure::REFRESH_PERIOD_MS as i32,
+            );
+        }
+        refresh.forget();
+    }
     // The relay's view of the child fan-out registry: read to route a
     // nested document's events, pruned when a child receiver has been dropped.
     let child_routes_relay = Rc::clone(&child_routes);

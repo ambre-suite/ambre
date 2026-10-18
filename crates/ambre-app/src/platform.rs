@@ -280,25 +280,6 @@ pub(crate) async fn fetch_dev_mode() -> bool {
     inner().await.unwrap_or(false)
 }
 
-/// Up to two uppercase initials from a display name, for the header avatar.
-/// Empty / missing name falls back to a neutral dash.
-pub(crate) fn initials(name: Option<&str>) -> String {
-    let Some(name) = name else {
-        return "-".to_owned();
-    };
-    let letters: String = name
-        .split_whitespace()
-        .filter_map(|w| w.chars().next())
-        .take(2)
-        .collect::<String>()
-        .to_uppercase();
-    if letters.is_empty() {
-        "-".to_owned()
-    } else {
-        letters
-    }
-}
-
 /// The main side of the Sync -> Logic channel. An event from the Sync worker
 /// is lossless (a CRDT delta, a service answer), and the main thread may not
 /// wait for room (`ARCH-021`). So what the channel cannot take waits in the

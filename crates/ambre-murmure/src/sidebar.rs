@@ -245,6 +245,23 @@ impl Sidebar {
         })
     }
 
+    /// The space whose members a public channel shows: the place the listing
+    /// gave a joined one, else the catalogue that lists it. A private channel
+    /// or a direct message has members of its own, so it shows none.
+    pub fn public_space_of(&self, channel: ChannelId) -> Option<SpaceId> {
+        let joined = self.members.iter().find(|m| m.channel_id == channel);
+        match joined.map(|m| m.place) {
+            Some(ChannelPlace::Public(space)) => Some(space),
+            Some(ChannelPlace::Private(_) | ChannelPlace::Direct) => None,
+            None => self.listed_in(channel),
+        }
+    }
+
+    /// The spaces of the user, in the order the sidebar draws them.
+    pub fn spaces(&self) -> &[SpaceId] {
+        &self.spaces
+    }
+
     /// The open space whose catalogue lists the channel, to join it there.
     pub fn listed_in(&self, channel: ChannelId) -> Option<SpaceId> {
         self.catalogues
@@ -393,6 +410,45 @@ mod tests {
             .iter()
             .map(|e| e.name.as_deref().unwrap_or("?"))
             .collect()
+    }
+
+    /// A joined public channel shows the members of the space of its place,
+    /// one to join those of the space that lists it. A private channel and a
+    /// direct message show none.
+    #[test]
+    fn a_public_channel_shows_the_members_of_its_space_and_no_other_channel_does() {
+        let space = SpaceId::new();
+        let (general, general_m) = public(space);
+        let private = ChannelId::new();
+        let direct = ChannelId::new();
+        let to_join = ChannelId::new();
+        let mut sidebar = Sidebar::default();
+        sidebar.set_member_channels(
+            vec![
+                general_m,
+                MemberChannel {
+                    channel_id: private,
+                    place: ChannelPlace::Private(space),
+                },
+                MemberChannel {
+                    channel_id: direct,
+                    place: ChannelPlace::Direct,
+                },
+            ],
+            &[],
+        );
+        sidebar.set_catalogue(
+            space,
+            None,
+            vec![],
+            vec![listed(to_join, "random", None, 0)],
+        );
+        assert_eq!(sidebar.public_space_of(general), Some(space));
+        assert_eq!(sidebar.public_space_of(to_join), Some(space));
+        assert_eq!(sidebar.public_space_of(private), None);
+        assert_eq!(sidebar.public_space_of(direct), None);
+        assert_eq!(sidebar.public_space_of(ChannelId::new()), None);
+        assert_eq!(sidebar.spaces(), [space]);
     }
 
     /// The joined public channels of a space are grouped by category, in

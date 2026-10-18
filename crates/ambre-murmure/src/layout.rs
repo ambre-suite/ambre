@@ -35,6 +35,12 @@ pub enum MurmurePane {
         /// The root message.
         root: MessageRef,
     },
+    /// The member list of the space a channel lies in, beside that channel
+    /// (the Murmure members spec).
+    Members {
+        /// The channel the list was opened from.
+        channel: ChannelId,
+    },
 }
 
 impl MurmurePane {
@@ -44,9 +50,9 @@ impl MurmurePane {
     }
 
     /// The pane before this one. A thread goes back to its channel at the
-    /// root message, a channel to the channel list (`MURMURE-168`). It is a
-    /// value and sends nothing, so going back moves no read cursor
-    /// (`MURMURE-169`).
+    /// root message, a channel to the channel list (`MURMURE-168`). The
+    /// member list goes back to its channel. It is a value and sends nothing,
+    /// so going back moves no read cursor (`MURMURE-169`).
     pub fn back(self) -> Self {
         match self {
             Self::ChannelList | Self::Channel { .. } => Self::ChannelList,
@@ -54,6 +60,7 @@ impl MurmurePane {
                 channel,
                 at: Some(root),
             },
+            Self::Members { channel } => Self::channel(channel),
         }
     }
 
@@ -61,7 +68,9 @@ impl MurmurePane {
     pub fn shown_channel(self) -> Option<ChannelId> {
         match self {
             Self::ChannelList => None,
-            Self::Channel { channel, .. } | Self::Thread { channel, .. } => Some(channel),
+            Self::Channel { channel, .. }
+            | Self::Thread { channel, .. }
+            | Self::Members { channel } => Some(channel),
         }
     }
 }
@@ -95,5 +104,15 @@ mod tests {
         );
         assert_eq!(MurmurePane::ChannelList.back(), MurmurePane::ChannelList);
         assert_eq!(MurmurePane::default().shown_channel(), None);
+    }
+
+    /// The member list shows beside its channel, and back from it shows that
+    /// channel at its latest message.
+    #[test]
+    fn back_from_the_member_list_shows_its_channel() {
+        let channel = ChannelId::new();
+        let members = MurmurePane::Members { channel };
+        assert_eq!(members.shown_channel(), Some(channel));
+        assert_eq!(members.back(), MurmurePane::channel(channel));
     }
 }

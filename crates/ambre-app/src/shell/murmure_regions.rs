@@ -6,9 +6,10 @@
 use super::app_root::MurmureShell;
 use ambre_bus::{
     CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace, DirectPeers,
-    LogicCommand, MemberChannel, MentionCount, SpaceCommand, SpaceEvent, UiEvent, UnreadCount,
+    LogicCommand, MemberChannel, MemberView, MentionCount, Presence, SpaceCommand, SpaceEvent,
+    Timestamp, UiEvent, UnreadCount,
 };
-use ambre_core::{CategoryId, ChannelId, MessageId, SegmentId, SpaceId};
+use ambre_core::{CategoryId, ChannelId, MessageId, SegmentId, SpaceId, UserId};
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::{MessageRef, MurmurePane};
 use leptos::mount::mount_to;
@@ -72,9 +73,12 @@ impl Frame {
         frame.set_attribute("style", &style).unwrap();
         document().body().unwrap().append_child(&frame).unwrap();
         let inner = frame.content_document().unwrap();
-        let sheet = inner.create_element("style").unwrap();
-        sheet.set_text_content(Some(STYLES));
-        inner.head().unwrap().append_child(&sheet).unwrap();
+        // The colour tokens, then the shell sheet, as the page loads them.
+        for css in [ambre_canvas::theme::THEME_CSS, STYLES] {
+            let sheet = inner.create_element("style").unwrap();
+            sheet.set_text_content(Some(css));
+            inner.head().unwrap().append_child(&sheet).unwrap();
+        }
         let fill = inner.create_element("style").unwrap();
         fill.set_text_content(Some("html,body{margin:0;height:100%}"));
         inner.head().unwrap().append_child(&fill).unwrap();
@@ -727,5 +731,206 @@ async fn a_space_lost_leaves_the_sidebar_with_its_channels() {
                 if a == acme.sales && b == acme.sales
         ),
         "the channel opens again: {sent:?}"
+    );
+}
+
+/// Alice online and Bob offline, as the Logic thread lists the members of
+/// the space.
+fn alice_and_bob(acme: &Acme) -> (UserId, UiEvent) {
+    let alice = UserId::new();
+    let member = |user_id, name: &str, presence| MemberView {
+        user_id,
+        display_name: name.to_owned(),
+        presence,
+    };
+    let event = UiEvent::Space {
+        space_id: acme.space,
+        event: SpaceEvent::Members {
+            members: vec![
+                member(alice, "Alice Martin", Presence::Online),
+                member(UserId::new(), "Bob", Presence::Offline),
+            ],
+        },
+    };
+    (alice, event)
+}
+
+impl Frame {
+    /// The computed value of `property` on the element `selector` names.
+    fn style_of(&self, selector: &str, property: &str) -> String {
+        let el = self
+            .query(selector)
+            .unwrap_or_else(|| panic!("{selector} is on screen"));
+        self.frame
+            .content_window()
+            .unwrap()
+            .get_computed_style(&el)
+            .unwrap()
+            .unwrap()
+            .get_property_value(property)
+            .unwrap()
+    }
+
+    async fn filter(&self, text: &str) {
+        let input: web_sys::HtmlInputElement = self
+            .query(".murmure-members-filter")
+            .expect("the member list has a filter")
+            .dyn_into()
+            .unwrap();
+        input.set_value(text);
+        input
+            .dispatch_event(&web_sys::Event::new("input").unwrap())
+            .unwrap();
+        leptos::task::tick().await;
+    }
+}
+
+/// The header of a channel in a space opens the member list of the space
+/// in the panel. Each member shows by name and initials on their identity
+/// colour (`MURMURE-441`, `PROFILE-002`), with a mark for their presence
+/// (`MURMURE-442`). The filter narrows the list and sends nothing.
+#[wasm_bindgen_test]
+async fn the_member_list_shows_each_member_by_name_initials_and_presence() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let (alice, members) = alice_and_bob(&acme);
+    assert!(frame.absorb(members).await.is_empty());
+    frame.select("sales").await;
+    assert!(frame.query(".murmure-members").is_none(), "closed at first");
+    frame.click(".murmure-members-toggle").await;
+    assert_eq!(
+        frame.pane.get_untracked(),
+        MurmurePane::Members {
+            channel: acme.sales
+        }
+    );
+    assert!(
+        frame.regions().await.panel > 0.0,
+        "the panel holds the list"
+    );
+    let panel = frame.query(".ambre-panel").unwrap();
+    assert_eq!(
+        panel.get_attribute("aria-label").as_deref(),
+        Some("Members")
+    );
+
+    assert_eq!(frame.texts(".murmure-member-name"), ["Alice Martin", "Bob"]);
+    assert_eq!(frame.texts(".murmure-member .ambre-avatar"), ["AM", "BO"]);
+    let avatar = frame.query(".murmure-member .ambre-avatar").unwrap();
+    assert_eq!(
+        avatar.get_attribute("title").as_deref(),
+        Some("Alice Martin")
+    );
+    let [r, g, b, _] = ambre_draw::peer_color(&alice).to_rgba8().to_u8_array();
+    assert_eq!(
+        frame.style_of(".murmure-member .ambre-avatar", "background-color"),
+        format!("rgb({r}, {g}, {b})"),
+        "the avatar takes the identity colour"
+    );
+    let marks = frame.inner.query_selector_all(".murmure-presence").unwrap();
+    let mark = |i| -> (Option<String>, Option<String>) {
+        let el: web_sys::Element = marks.item(i).unwrap().dyn_into().unwrap();
+        (
+            el.get_attribute("data-presence"),
+            el.get_attribute("aria-label"),
+        )
+    };
+    assert_eq!(mark(0), (Some("online".into()), Some("Online".into())));
+    assert_eq!(mark(1), (Some("offline".into()), Some("Offline".into())));
+
+    let sent = frame.sent.get_untracked().len();
+    frame.filter("bo").await;
+    assert_eq!(frame.texts(".murmure-member-name"), ["Bob"]);
+    frame.filter("").await;
+    assert_eq!(frame.texts(".murmure-member-name").len(), 2);
+    assert_eq!(
+        frame.sent.get_untracked().len(),
+        sent,
+        "the filter sends nothing"
+    );
+
+    frame.click(".murmure-members-toggle").await;
+    assert_eq!(frame.pane.get_untracked(), MurmurePane::channel(acme.sales));
+    assert_eq!(frame.regions().await.panel, 0.0, "the list closes");
+}
+
+/// Online is a filled dot and offline a hollow ring: the two marks differ
+/// in shape as well as in colour (`MURMURE-443`).
+#[wasm_bindgen_test]
+async fn the_presence_marks_differ_in_shape_as_well_as_in_colour() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    assert!(frame.absorb(alice_and_bob(&acme).1).await.is_empty());
+    frame.select("general").await;
+    frame.click(".murmure-members-toggle").await;
+    let online = ".murmure-presence[data-presence=\"online\"]";
+    let offline = ".murmure-presence[data-presence=\"offline\"]";
+    assert_eq!(frame.style_of(online, "border-top-width"), "0px");
+    assert_ne!(
+        frame.style_of(online, "background-color"),
+        "rgba(0, 0, 0, 0)",
+        "online is filled"
+    );
+    assert_eq!(frame.style_of(offline, "border-top-width"), "2px");
+    assert_eq!(
+        frame.style_of(offline, "background-color"),
+        "rgba(0, 0, 0, 0)",
+        "offline is hollow"
+    );
+    assert_ne!(
+        frame.style_of(online, "background-color"),
+        frame.style_of(offline, "border-top-color"),
+        "and the colours differ"
+    );
+}
+
+/// A private channel and a direct message have members of their own, so
+/// their header offers no member list of the space.
+#[wasm_bindgen_test]
+async fn a_private_channel_or_a_direct_message_offers_no_member_list() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    for name in ["Direct message", "Private channel"] {
+        frame.select(name).await;
+        assert!(frame.query(".murmure-members-toggle").is_none(), "{name}");
+    }
+    frame.select("general").await;
+    assert!(frame.query(".murmure-members-toggle").is_some());
+}
+
+/// Each refresh asks the Logic thread to send this user's presence on every
+/// space of the sidebar (`MURMURE-445`). A space lost takes its member list
+/// with it.
+#[wasm_bindgen_test]
+async fn a_refresh_reaches_every_space_and_a_space_lost_drops_its_members() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let now = Timestamp(1_700_000_000_000);
+    let refresh = frame.relay.refresh_presence(now);
+    assert!(
+        matches!(
+            refresh[..],
+            [LogicCommand::Space {
+                space_id,
+                command: SpaceCommand::RefreshPresence { now: at },
+            }] if space_id == acme.space && at == now
+        ),
+        "{refresh:?}"
+    );
+    assert!(frame.absorb(alice_and_bob(&acme).1).await.is_empty());
+    frame.select("general").await;
+    assert_eq!(frame.relay.shown_members().get_untracked().len(), 2);
+    let lost = UiEvent::Space {
+        space_id: acme.space,
+        event: SpaceEvent::Left,
+    };
+    assert!(frame.absorb(lost).await.is_empty());
+    assert!(frame.relay.refresh_presence(now).is_empty());
+    assert!(frame.absorb(acme.members(&[])).await.len() == 1);
+    assert!(frame.absorb(acme.catalogue()).await.is_empty());
+    frame.select("general").await;
+    assert!(
+        frame.relay.shown_members().get_untracked().is_empty(),
+        "the old list is gone"
     );
 }
