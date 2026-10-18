@@ -152,10 +152,10 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
     assert_ne!(second, thread);
 }
 
-/// The first reply to a root of a locked segment is refused: no delta may
-/// set its `thread` field. A failed link drops this client's own thread.
+/// A failed link drops this client's own thread. A first reply to a root of
+/// a locked segment waits for its amendments: no delta may set its field.
 #[test]
-fn a_root_of_a_locked_segment_starts_no_thread() {
+fn a_failed_link_drops_the_own_thread_and_a_locked_root_waits() {
     let alice = UserId::new();
     let mut state = channel_with(&["root", "other"], alice);
     let root = message_at(&state, 0).id;
@@ -177,10 +177,10 @@ fn a_root_of_a_locked_segment_starts_no_thread() {
     state
         .relocate_locked(segment.document_id(), &[])
         .expect("lock");
-    assert!(matches!(
+    assert_eq!(
         state.reply_target(root, NOW),
-        Err(MurmureError::RootLocked(id)) if id == root
-    ));
+        Err(MurmureError::NoAmendments(segment))
+    );
 }
 
 // --- MURMURE-106 ---

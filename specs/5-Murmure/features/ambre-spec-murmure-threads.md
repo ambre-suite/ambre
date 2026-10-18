@@ -17,7 +17,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-105` | `INV` | The replies to a message MUST live in one thread document per root message. | this spec section 3; `ambre-spec-murmure-schema.md section 2`; `SRV-213` | `ambre_murmure::thread_tests::every_reply_to_a_root_writes_its_one_thread_document` -- a first reply creates the thread, later ones write it, and another root has its own; `::a_root_of_a_locked_segment_starts_no_thread` -- a root no delta may write starts none; `ambre_logic::channels::tests::a_first_reply_waits_for_the_thread_it_creates` -- the reply leaves for the thread once it went up whole | none | verified |
+| `MURMURE-105` | `INV` | The replies to a message MUST live in one thread document per root message. | this spec section 3; `ambre-spec-murmure-schema.md section 2`; `SRV-213` | `ambre_murmure::thread_tests::every_reply_to_a_root_writes_its_one_thread_document` -- a first reply creates the thread, later ones write it, and another root has its own; `::a_failed_link_drops_the_own_thread_and_a_locked_root_waits` -- a failed link drops the thread, and a locked root waits for its amendments; `ambre_logic::channels::tests::a_first_reply_waits_for_the_thread_it_creates` -- the reply leaves for the thread once it went up whole | none | verified |
 | `MURMURE-106` | `INV` | The reply count and the last replier of a root MUST be read from its thread document. | this spec section 3 | `ambre_murmure::thread_tests::the_root_reads_its_reply_count_and_last_replier_from_its_thread` -- a deleted reply aside, and a peer without the thread reads none; `ambre_logic::channels::tests::a_first_reply_waits_for_the_thread_it_creates` -- the root's head counts the reply; `::a_root_another_member_threaded_opens_its_thread` -- a member who did not link the thread opens it and reads its replies | none | verified |
 | `MURMURE-108` | `CONC` | Two peers sending the first reply at once MUST converge on one thread document. | this spec section 3; `ambre-spec-murmure-schema.md section 6`; `SRV-214` | `ambre_murmure::thread_tests::two_first_replies_converge_on_the_thread_the_relay_linked` -- the loser drops its own, and both roots name one document; `ambre_logic::channels::tests::a_lost_or_failed_thread_link_moves_the_reply_to_another_document` -- the reply waits on the winner, and a failed link creates again | none | verified |
 | `MURMURE-261` | `INV` | A mention in a reply MUST count on the channel of its thread. | this spec section 3; `MURMURE-233` | not built | unbuilt -- lands with the `Threads not open` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-107` | `POST` | The first reply to a message whose `thread` field is absent MUST set it to the thread document. | this spec section 3 | `ambre_murmure::thread_tests::the_link_sets_the_root_thread_field_and_nothing_else` -- the link writes the field, and a second link writes nothing | none | verified |
 | `MURMURE-109` | `POST` | A reply also sent to the channel MUST write a copy in the active segment that names its thread. | this spec section 3 | `ambre_murmure::thread_tests::a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread` -- the copy reads the reply's text and its thread; `ambre_logic::channels::tests::a_first_reply_waits_for_the_thread_it_creates` -- the copy leaves under the active segment | none | verified |
 | `MURMURE-110` | `FRAME` | Replying MUST NOT change the root message beyond its `thread` field. | this spec section 3 | `ambre_murmure::thread_tests::the_link_sets_the_root_thread_field_and_nothing_else` -- the delta of the link holds one operation, on that field | none | verified |
-| `MURMURE-484` | `POST` | The first reply to a message of a locked segment MUST record its thread in the amendments of that segment. | this spec section 3; `MURMURE-013` | not built | unbuilt -- lands with the `A thread on a locked segment` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-484` | `POST` | The first reply to a message of a locked segment MUST record its thread in the amendments of that segment. | this spec section 3; `MURMURE-013` | `ambre_murmure::amending_tests::a_thread_of_a_locked_root_is_recorded_in_its_amendments` -- the reply waits for the amendments, which record the thread; `::another_member_finds_the_thread_of_a_locked_root` -- a second member reads the record and opens the thread; `::a_thread_record_outside_the_rule_is_refused` -- the check refuses a foreign key, a second thread, a bad value and a removal; `::a_fold_carries_the_thread_of_a_locked_root` -- the fold writes the root's field; `ambre_logic::channels::tests::a_reply_to_a_locked_root_waits_for_its_amendments` -- the link leaves under the amendments | none | verified |
 | `MURMURE-485` | `POST` | An edit, a delete or a reaction on a reply MUST write in its thread document. | this spec section 3; `MURMURE-084`, `MURMURE-091` | `ambre_murmure::thread_tests::an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread` -- each change writes the thread, and a delete leaves the count; `::another_member_reacts_to_a_reply_and_never_edits_it` -- the check takes a reaction, and an edit is refused; `ambre_logic::channels::tests::a_change_on_a_reply_leaves_for_its_thread` -- each change leaves under the thread | none | verified |
 
 ### 1.3 Follow a thread that is not open
@@ -57,8 +57,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, the identifier of its root, and when it
   changes (`ZK-015`, `SRV-162`).
-* **Verification.** 7 `verified`, 12 `unimplemented`. The engine tests hold the thread document,
-  the link, the count and the changes on a reply. The Logic tests hold the wait and the race.
+* **Verification.** 8 `verified`, 11 `unimplemented`. The engine tests hold the thread document,
+  the link, the count, the changes on a reply and a locked root. The Logic tests hold the waits
+  and the race.
 
 ---
 
@@ -86,8 +87,9 @@ root (`SRV-213`). The reply waits until the document went up whole. The link set
 field of the root (`MURMURE-107`). Of two first replies, the loser deletes its own (`MURMURE-108`).
 Any other member opens the thread the root names (`MURMURE-106`).
 
-**A locked root.** No delta may set its `thread` field, so a first reply is refused for now
-(`MURMURE-484`).
+**A locked root.** No delta may set its `thread` field. The first reply waits for the amendments
+of its segment, and the link records the thread there, under the root's identifier
+(`MURMURE-484`). Any member writes that entry once. A fold carries it into the root's field.
 
 **A thread not open.** The client is not subscribed to it. A delta on it makes the relay publish a
 signal on the topic of the channel. The client then fetches the new deltas and reads their sealed

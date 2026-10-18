@@ -107,11 +107,6 @@ pub enum MurmureError {
     #[error("message {0} has no thread document held")]
     NoThread(MessageId),
 
-    /// A first reply to a message of a final or locked segment, whose
-    /// `thread` field no delta may set.
-    #[error("message {0} lies in a locked segment, so no thread starts on it")]
-    RootLocked(MessageId),
-
     /// The segment holds no message of that identifier.
     #[error("no message {0} in the segment")]
     NoMessage(MessageId),

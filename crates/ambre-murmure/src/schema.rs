@@ -87,6 +87,9 @@ pub(crate) const AMENDMENT_CONTENT: &str = "content";
 pub(crate) const AMENDMENT_DELETED: &str = "deleted";
 /// Who deleted the message, a [`DeletedBy`] word.
 pub(crate) const AMENDMENT_BY: &str = "by";
+/// The `threads` root of an amendments document: the thread document of
+/// each root of its locked segment, keyed by `MessageId` (`MURMURE-484`).
+pub(crate) const AMENDMENT_THREADS: &str = "threads";
 
 /// The `messages` root of a segment, and the fields of one message.
 pub(crate) const MESSAGES: &str = "messages";

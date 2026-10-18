@@ -11,13 +11,15 @@ use ambre_core::{DocumentId, MessageId, SegmentId, UserId};
 use loro::{Container, LoroDoc, ValueOrContainer};
 
 use super::{
-    ChannelState, Created, Held, Sent, message_map, reaction_summary, read_messages, summary_of,
+    ChannelState, Created, Held, Sent, amending, message_map, reaction_summary, read_messages,
+    summary_of,
 };
 use crate::delta::{self, Arrival, Rules};
 use crate::error::MurmureError;
 use crate::mention;
 use crate::schema::{
-    self, DocumentKind, HEADER, HEADER_ROOT, HEADER_SEGMENT, MESSAGE_ID, MESSAGE_THREAD, MESSAGES,
+    self, AMENDMENT_THREADS, DocumentKind, HEADER, HEADER_ROOT, HEADER_SEGMENT, MESSAGE_ID,
+    MESSAGE_THREAD, MESSAGES,
 };
 use crate::session::Session;
 
@@ -116,12 +118,17 @@ impl ChannelState {
         self.root_slot(root).map(|(segment, _)| segment)
     }
 
-    /// The held segment that holds `root`, with its `thread` field.
+    /// The held segment that holds `root`, with the thread it names: its
+    /// `thread` field, else the one its amendments record (`MURMURE-484`).
     fn root_slot(&self, root: MessageId) -> Option<(SegmentId, Option<DocumentId>)> {
         self.held_segments().into_iter().find_map(|segment| {
             let map = message_map(self.doc(segment.document_id())?, root)?;
-            let named =
-                schema::string(&map, MESSAGE_THREAD).and_then(|s| DocumentId::parse_str(&s).ok());
+            let named = schema::string(&map, MESSAGE_THREAD)
+                .and_then(|s| DocumentId::parse_str(&s).ok())
+                .or_else(|| {
+                    let amendments = self.amendments.get(&segment)?;
+                    amending::recorded_thread(&amendments.doc, root)
+                });
             Some((segment, named))
         })
     }
@@ -132,9 +139,10 @@ impl ChannelState {
     /// client's own thread, not linked yet. Else a new one created at `now`.
     ///
     /// # Errors
-    /// [`MurmureError::NoMessage`] when no held segment holds the root, and
-    /// [`MurmureError::RootLocked`] for a first reply to a root of a final
-    /// or locked segment. [`MurmureError::Crdt`] when Loro refuses the
+    /// [`MurmureError::NoMessage`] when no held segment holds the root.
+    /// [`MurmureError::NoAmendments`] for a first reply to a root of a locked
+    /// segment whose amendments the channel does not hold: they record the
+    /// thread (`MURMURE-484`). [`MurmureError::Crdt`] when Loro refuses the
     /// header of a new document.
     pub fn reply_target(
         &mut self,
@@ -152,8 +160,8 @@ impl ChannelState {
         if let Some(id) = self.thread_id(root) {
             return Ok(ThreadTarget::Write(id));
         }
-        if self.amendable(segment) {
-            return Err(MurmureError::RootLocked(root));
+        if self.amendable(segment) && !self.amendments.contains_key(&segment) {
+            return Err(MurmureError::NoAmendments(segment));
         }
         let id = DocumentId::new();
         let created = Created::Thread { segment, root, now };
@@ -216,8 +224,8 @@ impl ChannelState {
     }
 
     /// Write `thread` into the `thread` field of `root`, and nothing else of
-    /// it (`MURMURE-110`). `None` when the field is set already, or when the
-    /// segment is no longer live: the relay refuses its deltas.
+    /// it (`MURMURE-110`). `None` when the field is set already. A locked
+    /// segment takes no delta, so its amendments record it instead.
     fn name_thread(
         &mut self,
         segment: SegmentId,
@@ -225,7 +233,7 @@ impl ChannelState {
         thread: DocumentId,
     ) -> Result<Option<Sent>, MurmureError> {
         if self.amendable(segment) {
-            return Ok(None);
+            return self.record_thread(segment, root, thread);
         }
         let Some(held) = self.held_mut(segment.document_id()) else {
             return Ok(None);
@@ -242,6 +250,39 @@ impl ChannelState {
         Ok(Some(self.changed(segment, delta)))
     }
 
+    /// Record `thread` for `root` in the amendments of the locked `segment`
+    /// (`MURMURE-484`). `None` when the root names a thread already. `None`
+    /// too when the channel holds no amendments for it: the member who
+    /// replied first holds them and records it.
+    fn record_thread(
+        &mut self,
+        segment: SegmentId,
+        root: MessageId,
+        thread: DocumentId,
+    ) -> Result<Option<Sent>, MurmureError> {
+        let held = self
+            .doc(segment.document_id())
+            .and_then(|doc| message_map(doc, root));
+        if held.is_none_or(|map| schema::string(&map, MESSAGE_THREAD).is_some()) {
+            return Ok(None);
+        }
+        let Some(amendments) = self.amendments.get_mut(&segment) else {
+            return Ok(None);
+        };
+        let document = amendments.id;
+        let (doc, session) = amendments.session()?;
+        let threads = doc.get_map(AMENDMENT_THREADS);
+        let key = root.to_string();
+        if schema::string(&threads, &key).is_some() {
+            return Ok(None);
+        }
+        threads.insert(&key, thread.to_string())?;
+        let delta = session.export_json(doc)?;
+        let mut sent = self.changed(segment, delta);
+        sent.document = document;
+        Ok(Some(sent))
+    }
+
     /// The thread documents a held segment's roots name, and that the
     /// channel neither holds nor loads. Each is asked for now: open it, and
     /// [`ChannelState::older_ready`] admits it.
@@ -251,7 +292,11 @@ impl ChannelState {
             let Some(doc) = self.doc(segment.document_id()) else {
                 continue;
             };
-            for (root, id) in named_threads(doc) {
+            let mut named = named_threads(doc);
+            if let Some(amendments) = self.amendments.get(&segment) {
+                named.extend(amending::recorded_threads(&amendments.doc));
+            }
+            for (root, id) in named {
                 if self.threads.contains_key(&root) || self.threads_pending.contains_key(&id) {
                     continue;
                 }

@@ -4,14 +4,19 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{MessageDraft, MessageView, MurmureEvent, Timestamp};
+use ambre_bus::{ActivityKind, MessageDraft, MessageView, MurmureEvent, Timestamp};
 use ambre_core::{DocumentId, MessageId, SegmentId, Seq, UserId};
 use loro::{Container, LoroDoc, LoroMap, ValueOrContainer, VersionVector};
 
 use crate::channel::read_messages;
-use crate::schema::{AMENDMENT_BY, AMENDMENTS, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT, SEGMENTS};
+use crate::schema::{
+    AMENDMENT_BY, AMENDMENT_THREADS, AMENDMENTS, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT, SEGMENTS,
+};
 use crate::session::next_peer;
-use crate::{ChangeTarget, ChannelState, ChannelType, MurmureError, Refusal, Replay, Signer};
+use crate::{
+    ChangeTarget, ChannelState, ChannelType, MurmureError, Refusal, Replay, Sent, Signer,
+    ThreadTarget,
+};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
@@ -408,6 +413,178 @@ fn an_amendment_outside_its_segment_is_refused() {
         carol.older_ready(amendments),
         Err(MurmureError::ForeignSegment(amendments))
     );
+}
+
+// --- MURMURE-484 ---
+
+/// Start the thread of `root` of the locked `segment` once its amendments
+/// are held, and link it. Returns it and the delta that records it.
+fn locked_thread(
+    state: &mut ChannelState,
+    segment: SegmentId,
+    root: MessageId,
+) -> (DocumentId, Sent) {
+    let ThreadTarget::Create(thread) = state.reply_target(root, NOW).expect("target") else {
+        panic!("a root with no thread creates one");
+    };
+    let peer = next_peer();
+    state
+        .adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+        .expect("adopt");
+    let linked = state.thread_linked(segment, root, thread).expect("link");
+    (thread, linked.root.expect("the amendments record it"))
+}
+
+/// A first reply to a root of a locked segment waits for its amendments,
+/// which record the thread. The segment itself takes no delta.
+#[test]
+fn a_thread_of_a_locked_root_is_recorded_in_its_amendments() {
+    let author = UserId::new();
+    let (mut alice, segment) = locked_with(&["root"], author);
+    let root = alice.messages(segment).expect("held")[0].id;
+    assert_eq!(
+        alice.reply_target(root, NOW),
+        Err(MurmureError::NoAmendments(segment))
+    );
+    let (amendments, _, _) = amended(&mut alice, segment);
+    let (thread, recorded) = locked_thread(&mut alice, segment, root);
+    assert_eq!(recorded.document, amendments);
+    assert_eq!(recorded.summary.kind, ActivityKind::Edit);
+    assert!(
+        alice
+            .thread_linked(segment, root, thread)
+            .expect("again")
+            .root
+            .is_none(),
+        "recorded once"
+    );
+    alice
+        .reply(root, &draft("late"), author, NOW, false)
+        .expect("reply");
+    let head = alice.messages(segment).expect("held")[0]
+        .thread
+        .expect("the root names its thread");
+    assert_eq!((head.document, head.replies), (thread, 1));
+    let raw = read_messages(
+        alice.doc(segment.document_id()).expect("held"),
+        alice.channel_id(),
+    );
+    assert!(raw[0].thread.is_none(), "the segment is left as it was");
+    assert_eq!(
+        alice.reply_target(root, NOW),
+        Ok(ThreadTarget::Write(thread))
+    );
+}
+
+/// Another member reads the thread the amendments record over the root,
+/// and asks for it.
+#[test]
+fn another_member_finds_the_thread_of_a_locked_root() {
+    let author = UserId::new();
+    let (mut alice, segment) = locked_with(&["root"], author);
+    let root = alice.messages(segment).expect("held")[0].id;
+    let (amendments, first, meta) = amended(&mut alice, segment);
+    let (thread, recorded) = locked_thread(&mut alice, segment, root);
+    let mut bob = bob_holding(&alice, segment, amendments, &first, &meta, author);
+    assert_eq!(bob.messages(segment).expect("held")[0].thread, None);
+    let replier = UserId::new();
+    bob.apply_signed(
+        amendments,
+        Seq(2),
+        &recorded.delta,
+        signer(&alice, amendments, replier),
+    )
+    .expect("any member records a thread");
+    let head = bob.messages(segment).expect("held")[0]
+        .thread
+        .expect("read over the root");
+    assert_eq!((head.document, head.replies), (thread, 0));
+    assert_eq!(bob.threads_to_open(), [thread]);
+    assert_eq!(bob.reply_target(root, NOW), Ok(ThreadTarget::Write(thread)));
+}
+
+/// The check refuses a record for a message outside the segment. It refuses
+/// a second thread for a root, a value that names no document, and a removal.
+#[test]
+fn a_thread_record_outside_the_rule_is_refused() {
+    let author = UserId::new();
+    let (mut alice, segment) = locked_with(&["root"], author);
+    let root = alice.messages(segment).expect("held")[0].id;
+    let (amendments, first, meta) = amended(&mut alice, segment);
+    let (_, recorded) = locked_thread(&mut alice, segment, root);
+    let mut bob = bob_holding(&alice, segment, amendments, &first, &meta, author);
+    bob.apply_signed(
+        amendments,
+        Seq(2),
+        &recorded.delta,
+        signer(&alice, amendments, author),
+    )
+    .expect("recorded");
+    let forge = |write: &dyn Fn(&LoroMap)| {
+        let doc = bob.doc(amendments).expect("held");
+        let before = doc.oplog_vv();
+        write(&doc.get_map(AMENDMENT_THREADS));
+        json_since(doc, &before)
+    };
+    type Write<'a> = &'a dyn Fn(&LoroMap);
+    let cases: [(Write<'_>, Refusal); 4] = [
+        (
+            &|map| {
+                map.insert(&MessageId::new().to_string(), DocumentId::new().to_string())
+                    .expect("forge");
+            },
+            Refusal::NotInSegment,
+        ),
+        (
+            &|map| {
+                map.insert(&root.to_string(), DocumentId::new().to_string())
+                    .expect("forge");
+            },
+            Refusal::ForeignMessage,
+        ),
+        (
+            &|map| {
+                map.insert(&root.to_string(), "not a document")
+                    .expect("forge");
+            },
+            Refusal::ForeignMessage,
+        ),
+        (
+            &|map| {
+                map.delete(&root.to_string()).expect("forge");
+            },
+            Refusal::Removed,
+        ),
+    ];
+    let user = UserId::new();
+    for (seq, (write, refusal)) in (3..).zip(cases) {
+        let forged = forge(write);
+        assert_eq!(
+            alice.apply_signed(
+                amendments,
+                Seq(seq),
+                &forged,
+                signer(&bob, amendments, user)
+            ),
+            Err(MurmureError::Refused(refusal))
+        );
+    }
+}
+
+/// A fold carries the recorded thread into the root's empty `thread` field.
+#[test]
+fn a_fold_carries_the_thread_of_a_locked_root() {
+    let author = UserId::new();
+    let (mut alice, segment) = locked_with(&["root"], author);
+    let root = alice.messages(segment).expect("held")[0].id;
+    amended(&mut alice, segment);
+    let (thread, _) = locked_thread(&mut alice, segment, root);
+    alice.fold_in_place(segment).expect("fold");
+    let raw = read_messages(
+        alice.doc(segment.document_id()).expect("held"),
+        alice.channel_id(),
+    );
+    assert_eq!(raw[0].thread.map(|head| head.document), Some(thread));
 }
 
 /// An edit and a delete the lock refused come back as replays. The segment

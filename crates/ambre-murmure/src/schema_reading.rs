@@ -40,14 +40,14 @@ use loro::{Container, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::channel::{folded_amendments, header_fold, read_messages};
 use crate::schema::{
-    AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENTS, CATALOGUE, CATEGORIES,
-    CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, DocumentKind,
-    ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER, HEADER_CHANNEL,
-    HEADER_FOLDED, HEADER_FOLDED_SEQ, HEADER_KIND, HEADER_ROOT, HEADER_SEGMENT, HEADER_SPACE,
-    MENTION, MESSAGE_ALSO_IN_THREAD, MESSAGE_AUTHOR, MESSAGE_CONTENT, MESSAGE_DELETED,
-    MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS, MESSAGE_THREAD,
-    MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT, SEGMENT_FOLDED,
-    SEGMENT_STATE, SEGMENTS, SPACE, SPACE_NAME, SegmentState,
+    AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS, CATALOGUE,
+    CATEGORIES, CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE,
+    DocumentKind, ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER,
+    HEADER_CHANNEL, HEADER_FOLDED, HEADER_FOLDED_SEQ, HEADER_KIND, HEADER_ROOT, HEADER_SEGMENT,
+    HEADER_SPACE, MENTION, MESSAGE_ALSO_IN_THREAD, MESSAGE_AUTHOR, MESSAGE_CONTENT,
+    MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS,
+    MESSAGE_THREAD, MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT,
+    SEGMENT_FOLDED, SEGMENT_STATE, SEGMENTS, SPACE, SPACE_NAME, SegmentState,
 };
 use crate::schema_shape::{
     ANY, AUTHOR, ID, KEYED_BY_ID, MEMBER, SCHEMA_SOURCE, amended, channel_of_every_key,
@@ -316,6 +316,7 @@ fn reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         (SEGMENTS, DocumentKind::Meta) => segment_reading(reader, stored),
         (MESSAGES, DocumentKind::Segment | DocumentKind::Thread) => message_reading(reader, stored),
         (AMENDMENTS, DocumentKind::Amendments) => amendment_reading(reader, stored),
+        (AMENDMENT_THREADS, DocumentKind::Amendments) => recorded_thread_reading(reader, stored),
         (SPACE, DocumentKind::Space) if key == Some(SPACE_NAME) => {
             Some(format!("named {:?}", reader.space.name()?))
         }
@@ -410,6 +411,13 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         MESSAGE_THREAD if message.thread.is_some_and(|head| head.document == thread) => {
             Some(format!("message {n} names its thread"))
         }
+        MESSAGE_THREAD
+            if message.thread.is_some_and(|head| {
+                stored.string() == Some(head.document.to_string().as_str())
+            }) =>
+        {
+            Some(format!("message {n} names the thread a fold carried"))
+        }
         MESSAGE_ALSO_IN_THREAD if message.also_in_thread == Some(thread) => {
             Some(format!("message {n} is a copy of a reply in its thread"))
         }
@@ -487,6 +495,18 @@ fn amendment_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// The reading of one thread the amendments record, through the head its
+/// root shows.
+fn recorded_thread_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
+    let (segment, _) = amended(reader.channel);
+    let messages = reader.channel.messages(segment).ok()?;
+    let id = stored.key(0)?;
+    let at = messages.iter().position(|m| m.id.to_string() == id)?;
+    let head = messages[at].thread.as_ref()?;
+    (head.document.to_string() == stored.string()?)
+        .then(|| format!("message {} names its thread by amendment", at + 1))
 }
 
 /// The reading of one category field, through the list the view is given.
@@ -569,7 +589,8 @@ fn reopened_channel(channel: &ChannelState) -> ChannelState {
         .older_ready(amendments)
         .expect("amendments this build wrote are admitted");
     let thread = scenario_thread(channel);
-    assert_eq!(reopened.threads_to_open(), [thread]);
+    // The thread of the locked root holds no reply, so it waits unread.
+    assert!(reopened.threads_to_open().contains(&thread));
     let bytes = channel.snapshot(thread).expect("a thread exports");
     reopened
         .apply_remote(thread, &bytes)

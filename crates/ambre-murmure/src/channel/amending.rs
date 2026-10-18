@@ -8,18 +8,20 @@
 //! for messages of its own segment, each written by their author
 //! (`MURMURE-013`, `MURMURE-253`).
 
-use ambre_bus::{MessageDraft, MessageView, MurmureEvent, Timestamp};
+use ambre_bus::{MessageDraft, MessageView, MurmureEvent, ThreadHead, Timestamp};
 use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId, Seq, UserId};
-use loro::{Container, LoroDoc, LoroList, LoroMap, LoroText, UpdateOptions, ValueOrContainer};
+use loro::{
+    Container, LoroDoc, LoroList, LoroMap, LoroText, LoroValue, UpdateOptions, ValueOrContainer,
+};
 
 use super::{ChannelState, Created, Held, Sent};
 use crate::delta::{self, Arrival, Rules, Signer};
 use crate::error::MurmureError;
 use crate::mention;
 use crate::schema::{
-    self, AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENTS, DeletedBy, DocumentKind,
-    HEADER, HEADER_SEGMENT, MENTION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT, SEGMENT_FOLDED,
-    SEGMENTS,
+    self, AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS,
+    DeletedBy, DocumentKind, HEADER, HEADER_SEGMENT, MENTION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT,
+    SEGMENT_FOLDED, SEGMENTS,
 };
 use crate::sequence::Sequence;
 use crate::session::Session;
@@ -474,6 +476,7 @@ pub(super) fn entry_content(entry: &LoroMap) -> Option<LoroText> {
 /// empties the body and marks the message deleted. An edit replaces the body
 /// and marks it edited. A message deleted in its segment stays deleted.
 pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channel: ChannelId) {
+    overlay_named_threads(amendments, messages);
     let root = amendments.get_map(AMENDMENTS);
     if root.is_empty() {
         return;
@@ -494,6 +497,46 @@ pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channe
             view.edited = true;
         }
     }
+}
+
+/// Read each thread `amendments` records over the root that names none, a
+/// deleted one included (`MURMURE-484`). Its count waits for the thread.
+fn overlay_named_threads(amendments: &LoroDoc, messages: &mut [MessageView]) {
+    let threads = amendments.get_map(AMENDMENT_THREADS);
+    if threads.is_empty() {
+        return;
+    }
+    for view in messages.iter_mut().filter(|view| view.thread.is_none()) {
+        view.thread = recorded_thread(amendments, view.id).map(|document| ThreadHead {
+            document,
+            replies: 0,
+            last_replier: None,
+        });
+    }
+}
+
+/// The thread `amendments` records for `root`, `None` when it records none.
+pub(super) fn recorded_thread(amendments: &LoroDoc, root: MessageId) -> Option<DocumentId> {
+    let threads = amendments.get_map(AMENDMENT_THREADS);
+    DocumentId::parse_str(&schema::string(&threads, &root.to_string())?).ok()
+}
+
+/// Every root `amendments` records a thread for, with that thread.
+pub(super) fn recorded_threads(amendments: &LoroDoc) -> Vec<(MessageId, DocumentId)> {
+    let mut recorded = Vec::new();
+    amendments
+        .get_map(AMENDMENT_THREADS)
+        .for_each(|key, value| {
+            let ValueOrContainer::Value(LoroValue::String(value)) = value else {
+                return;
+            };
+            if let (Ok(root), Ok(thread)) =
+                (MessageId::parse_str(key), DocumentId::parse_str(&value))
+            {
+                recorded.push((root, thread));
+            }
+        });
+    recorded
 }
 
 /// The first entry of `meta.segments` that lists `segment`.

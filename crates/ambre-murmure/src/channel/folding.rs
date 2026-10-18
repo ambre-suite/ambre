@@ -21,8 +21,9 @@ use super::{ChannelState, Replay, content_of};
 use crate::error::MurmureError;
 use crate::mention;
 use crate::schema::{
-    self, AMENDMENT_DELETED, AMENDMENTS, HEADER, HEADER_FOLDED, HEADER_FOLDED_SEQ, MENTION,
-    MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGES, SEGMENT_FOLDED,
+    self, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS, HEADER, HEADER_FOLDED,
+    HEADER_FOLDED_SEQ, MENTION, MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGE_THREAD,
+    MESSAGES, SEGMENT_FOLDED,
 };
 use crate::sequence::Sequence;
 
@@ -464,7 +465,8 @@ pub(crate) fn header_fold(doc: &LoroDoc) -> Option<(DocumentId, u64)> {
 /// Fold `amendments` into the messages of `segment`, as a reader reads them
 /// over it. A delete empties the body and marks the message deleted, and an
 /// edit replaces the body and marks it edited. A message deleted in its
-/// segment stays as it is. The header names the amendments and `reached`.
+/// segment stays as it is. A thread the amendments record lands in the
+/// root's empty `thread` field. The header names the amendments and `reached`.
 ///
 /// Two clients folding the same amendments into the same state reach the
 /// same state.
@@ -479,17 +481,24 @@ fn fold_into(
     reached: u64,
 ) -> Result<(), MurmureError> {
     let root = amendments.get_map(AMENDMENTS);
+    let threads = amendments.get_map(AMENDMENT_THREADS);
     let list = segment.get_list(MESSAGES);
     for index in 0..list.len() {
         let Some(ValueOrContainer::Container(Container::Map(message))) = list.get(index) else {
             continue;
         };
-        if schema::flag(&message, MESSAGE_DELETED) {
-            continue;
-        }
         let Some(id) = schema::string(&message, MESSAGE_ID) else {
             continue;
         };
+        // A deleted root keeps its thread readable (`MURMURE-484`).
+        if schema::string(&message, MESSAGE_THREAD).is_none()
+            && let Some(thread) = schema::string(&threads, &id)
+        {
+            message.insert(MESSAGE_THREAD, thread)?;
+        }
+        if schema::flag(&message, MESSAGE_DELETED) {
+            continue;
+        }
         let Some(ValueOrContainer::Container(Container::Map(entry))) = root.get(&id) else {
             continue;
         };

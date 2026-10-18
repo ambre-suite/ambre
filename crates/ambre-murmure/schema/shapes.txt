@@ -27,6 +27,8 @@ amendments:meta/schema_version: i64
 amendments:meta: map
 amendments:peers/{id}: binary
 amendments:peers: map
+amendments:threads/{id}: string
+amendments:threads: map
 meta:channel/name: string
 meta:channel/type: string
 meta:channel: map

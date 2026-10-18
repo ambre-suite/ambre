@@ -142,6 +142,7 @@ names the unit two concurrent writers race for. Every document also carries the 
 | amendments | `header` | Map | `segment_id` | `SegmentId` | the key | messages | built |
 | amendments | `amendments` | Map | a `MessageId` | `{content}` or `{deleted: bool, by: DeletedBy}` | the entry | messages | built |
 | amendments | `amendments/{id}/content` | Text | -- | the edited body, with the `mention` mark | none: char-CRDT | messages | built |
+| amendments | `threads` | Map | a `MessageId` | `DocumentId`, the thread of a locked root | the entry | threads | built |
 | settings | `murmure/layout` | Map | a `ChannelId` | `{group: SidebarGroup, position: u32, hidden: bool, collapsed: bool}` | the entry | sidebar | design |
 | settings | `murmure/groups` | Map | a `PersonalGroupId` | `{name: String, position: u32}` | the entry | sidebar | design |
 | settings | `murmure/notify` | Map | a `ChannelId` | `NotifyLevel` | the entry | notifications | design |
@@ -175,6 +176,7 @@ nothing in.
     `tags`
 * an amendments document, one per amended locked segment
   * `header`, and `amendments`, per message: `content`, or the delete
+  * `threads`, per locked root: the thread document its first reply created
 * a thread document, one per message with a reply
   * `header`, and `messages`, the same message shape
 * the `murmure` section of the user settings (`ambre-spec-user-settings.md`), one per user

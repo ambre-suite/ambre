@@ -81,9 +81,10 @@ pub(crate) fn entry() -> Vec<u8> {
 /// The maps keyed by an identifier, whose keys are values and not schema.
 /// The PeerID registry each document carries is one of them
 /// (`ambre-spec-op-authorship.md section 3`).
-pub(crate) const KEYED_BY_ID: [&str; 10] = [
+pub(crate) const KEYED_BY_ID: [&str; 11] = [
     "amendments:amendments",
     "amendments:peers",
+    "amendments:threads",
     "meta:peers",
     "segment:messages/*/reactions",
     "segment:peers",
@@ -336,6 +337,15 @@ fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
     state
         .delete(segment, messages[2].id, AUTHOR)
         .expect("amend");
+    // A first reply to a locked root records its thread (`MURMURE-484`).
+    let root = messages[1].id;
+    let ThreadTarget::Create(thread) = state
+        .reply_target(root, Timestamp(1_700_000_000_008))
+        .expect("target")
+    else {
+        panic!("a locked root with no thread creates one");
+    };
+    state.thread_linked(segment, root, thread).expect("record");
     // A fold writes the segment's header and the `meta` entry
     // (`MURMURE-075`, `MURMURE-076`).
     let amendments = state.amendments_id(segment).expect("amended");

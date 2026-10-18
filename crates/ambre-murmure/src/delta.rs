@@ -19,8 +19,8 @@ use serde::Deserialize;
 use crate::error::MurmureError;
 use crate::reaction;
 use crate::schema::{
-    self, AMENDMENT_BY, AMENDMENTS, DeletedBy, MESSAGE_AUTHOR, MESSAGE_ID, MESSAGE_REACTIONS,
-    MESSAGE_THREAD, MESSAGES,
+    self, AMENDMENT_BY, AMENDMENT_THREADS, AMENDMENTS, DeletedBy, MESSAGE_AUTHOR, MESSAGE_ID,
+    MESSAGE_REACTIONS, MESSAGE_THREAD, MESSAGES,
 };
 
 /// The Loro JSON schema version a segment delta carries (`MURMURE-227`). A
@@ -261,6 +261,8 @@ pub(crate) fn check(
 /// `author_of` names the author the locked segment holds for a message key,
 /// `None` when it holds no such message. An entry is created under the key of
 /// one of the signer's own messages, and only its creator's user writes in it.
+/// `thread_of` reads the thread a message key already names, in the segment or
+/// in the `threads` root. Any member names an absent one (`MURMURE-484`).
 ///
 /// # Errors
 /// The first [`Refusal`] an operation earns. [`Refusal::NotInSegment`] marks an
@@ -271,6 +273,7 @@ pub(crate) fn check_amendments(
     signer: Signer,
     registered: impl Fn(u64) -> Option<UserId>,
     author_of: impl Fn(&str) -> Option<UserId>,
+    thread_of: impl Fn(&str) -> Option<String>,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
     if update.changes.iter().any(|c| c.id.peer != signer.peer) {
@@ -308,6 +311,23 @@ pub(crate) fn check_amendments(
                 },
                 _ => return Err(Refusal::Removed),
             },
+            root if is_root(root, AMENDMENT_THREADS, ContainerType::Map) => match &op.content {
+                JsonOpContent::Map(MapOp::Insert {
+                    key,
+                    value: LoroValue::String(value),
+                }) => {
+                    if author_of(key).is_none() {
+                        return Err(Refusal::NotInSegment);
+                    }
+                    let named = thread_of(key);
+                    if DocumentId::parse_str(value).is_err()
+                        || named.is_some_and(|set| set.as_str() != value.as_str())
+                    {
+                        return Err(Refusal::ForeignMessage);
+                    }
+                }
+                _ => return Err(Refusal::Removed),
+            },
             root if is_root(root, PEERS_MAP, ContainerType::Map) => {
                 entry_allowed(&op.content, signer.peer, user)?;
             }
@@ -327,6 +347,20 @@ pub(crate) fn author_in(segment: &LoroDoc, key: &str) -> Option<UserId> {
             if schema::string(&map, MESSAGE_ID).as_deref() == Some(key) =>
         {
             UserId::parse_str(&schema::string(&map, MESSAGE_AUTHOR)?).ok()
+        }
+        _ => None,
+    })
+}
+
+/// The `thread` field `segment` holds for the message `key` names, `None`
+/// when it holds no such message or no thread.
+fn thread_in(segment: &LoroDoc, key: &str) -> Option<String> {
+    let list = segment.get_list(MESSAGES);
+    (0..list.len()).find_map(|index| match list.get(index) {
+        Some(ValueOrContainer::Container(Container::Map(map)))
+            if schema::string(&map, MESSAGE_ID).as_deref() == Some(key) =>
+        {
+            schema::string(&map, MESSAGE_THREAD)
         }
         _ => None,
     })
@@ -499,6 +533,10 @@ pub(crate) fn verdict(
             signer,
             |peer| registered(doc, peer),
             |key| author_in(segment, key),
+            |key| {
+                schema::string(&doc.get_map(AMENDMENT_THREADS), key)
+                    .or_else(|| thread_in(segment, key))
+            },
         ),
     }
 }

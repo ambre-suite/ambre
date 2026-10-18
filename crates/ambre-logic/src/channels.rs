@@ -61,6 +61,36 @@ pub(crate) fn cursored_documents(channel: &ChannelState) -> Vec<DocumentId> {
     documents
 }
 
+/// The document a change of a message of `segment` writes. A locked one may
+/// first ask the Sync worker to fetch its amendments, or to create them
+/// (the Murmure messages spec).
+fn change_ask(
+    channel: &mut ChannelState,
+    channel_id: ChannelId,
+    segment: SegmentId,
+    now: ambre_bus::Timestamp,
+) -> Result<(DocumentId, Option<SyncCommand>), MurmureError> {
+    Ok(match channel.change_target(segment, now)? {
+        ChangeTarget::Write(id) => (id, None),
+        ChangeTarget::Open(id) => (
+            id,
+            Some(SyncCommand::OpenDocument {
+                document_id: id,
+                doc_type: DocType::Murmure,
+            }),
+        ),
+        ChangeTarget::Create(id) => (
+            id,
+            Some(SyncCommand::CreateAmendments {
+                channel_id,
+                meta: channel.meta_id(),
+                segment,
+                amendments: id,
+            }),
+        ),
+    })
+}
+
 impl ClosedChannel {
     /// Whether the channel held `document_id` at close.
     pub(crate) fn holds(&self, document_id: DocumentId) -> bool {
@@ -887,25 +917,8 @@ impl LogicState {
                 ..
             } => {
                 let (segment, now) = (*segment, *now);
-                let meta = channel.meta_id();
-                let (id, ask) = match channel.change_target(segment, now) {
-                    Ok(ChangeTarget::Write(id)) => (id, None),
-                    Ok(ChangeTarget::Open(id)) => (
-                        id,
-                        Some(SyncCommand::OpenDocument {
-                            document_id: id,
-                            doc_type: DocType::Murmure,
-                        }),
-                    ),
-                    Ok(ChangeTarget::Create(id)) => (
-                        id,
-                        Some(SyncCommand::CreateAmendments {
-                            channel_id,
-                            meta,
-                            segment,
-                            amendments: id,
-                        }),
-                    ),
+                let (id, ask) = match change_ask(channel, channel_id, segment, now) {
+                    Ok(target) => target,
                     Err(error) => {
                         tracing::warn!("Logic: change on {segment} refused: {error}");
                         return;
@@ -944,6 +957,17 @@ impl LogicState {
                             thread: id,
                         }),
                     ),
+                    // A locked root's amendments record its thread, so the
+                    // reply waits for them first (the Murmure threads spec).
+                    Err(MurmureError::NoAmendments(segment)) => {
+                        match change_ask(channel, channel_id, segment, now) {
+                            Ok(target) => target,
+                            Err(error) => {
+                                tracing::warn!("Logic: reply to {root} refused: {error}");
+                                return;
+                            }
+                        }
+                    }
                     Err(error) => {
                         tracing::warn!("Logic: reply to {root} refused: {error}");
                         return;
@@ -3821,6 +3845,54 @@ mod tests {
                 MurmureEvent::Messages { segment, messages }
                     if *segment == closing && messages[0].text == "two" && messages[0].edited)),
             "the view was told {shown:?}"
+        );
+    }
+
+    /// A first reply to a root of a locked segment waits for the amendments
+    /// it creates, then for its thread. The link leaves under the amendments,
+    /// never under the locked segment (the Murmure threads spec).
+    #[test]
+    fn a_reply_to_a_locked_root_waits_for_its_amendments() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, closing, root) = locked_channel(&mut state, &sync);
+        drain(&ui);
+        command(&mut state, channel_id, reply_to(root, "late", false));
+        let [(segment, amendments)] = created_amendments(&sync).try_into().expect("one create");
+        assert_eq!(segment, closing);
+        assert_eq!(
+            state.murmure_waiting.get(&amendments).map(Vec::len),
+            Some(1)
+        );
+        state.handle_logic_event(LogicEvent::AmendmentsLinked {
+            channel_id,
+            segment: closing,
+            amendments,
+        });
+        drain(&sync);
+        state.grant_identity(amendments);
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: amendments,
+            role: ambre_bus::Role::Owner,
+        });
+        let [(segment, created, thread)] =
+            created_threads(&sync).try_into().expect("then the thread");
+        assert_eq!((segment, created), (closing, root));
+
+        state.handle_logic_event(LogicEvent::ThreadLinked {
+            channel_id,
+            segment,
+            root,
+            thread,
+        });
+        let sent = drain(&sync);
+        assert!(sent.iter().any(|c| matches!(c,
+            SyncCommand::SendUpdate { document_id, summary: None, .. }
+                if *document_id == amendments)));
+        assert!(
+            !sent.iter().any(|c| matches!(c,
+                SyncCommand::SendUpdate { document_id, .. }
+                    if *document_id == closing.document_id())),
+            "the locked segment takes no delta"
         );
     }
 
