@@ -232,6 +232,13 @@ impl Rekey {
         self.begin_payment() == Refusal::Settle
     }
 
+    /// Starts the payment of an owed debt now, without waiting for an edit.
+    /// A space admin pays at once, so the channel keys sealed under the
+    /// space key can follow it. Returns whether the caller starts it.
+    pub(crate) fn pay_now(&mut self) -> bool {
+        self.owed && self.begin_payment() == Refusal::Settle
+    }
+
     fn begin_payment(&mut self) -> Refusal {
         if self.in_flight {
             return Refusal::Wait;
@@ -352,6 +359,17 @@ mod tests {
         let (resend, waiting) = r.key_installed(key(2));
         assert!(resend.is_empty());
         assert_eq!(waiting, vec![vec![1], vec![2]]);
+    }
+
+    /// A debt paid at once starts one payment, and none without a debt.
+    #[test]
+    fn a_debt_paid_now_starts_one_payment() {
+        let mut r = Rekey::default();
+        assert!(!r.pay_now(), "nothing is owed");
+        r.found_debt();
+        assert!(r.pay_now());
+        assert!(!r.pay_now(), "the payment is running");
+        assert!(!r.hold(vec![1]), "an edit waits for it");
     }
 
     /// The echo of an update clears it and every earlier one, and the log never

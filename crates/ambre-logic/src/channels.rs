@@ -177,13 +177,13 @@ impl LogicState {
         // opens: each document reopens from its local copy (the Murmure
         // engine spec). Its read cursors stay where they were (`RESID-013`).
         self.opening.insert(channel_id, None);
-        // A channel a catalogue lists is public, and its log admits a member
-        // who joined alone. Any other channel's log admits only invites
-        // (`SYNC-106`).
-        let self_join = self.lists_channel(channel_id);
+        // A channel a catalogue lists is public: its log admits a member who
+        // joined alone, and heeds the log of its space. Any other channel's
+        // log admits only invites (`SYNC-106`).
+        let listed_in = self.listing_space(channel_id);
         self.send_to_sync(SyncCommand::OpenChannel {
             channel_id,
-            self_join,
+            listed_in,
         });
     }
 
@@ -1992,7 +1992,7 @@ mod tests {
         assert!(matches!(
             drain(&sync).as_slice(),
             [SyncCommand::OpenChannel {
-                self_join: false,
+                listed_in: None,
                 ..
             }]
         ));

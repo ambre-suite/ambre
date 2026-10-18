@@ -46,7 +46,7 @@ use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, RequestId,
     RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotId,
-    SnapshotPurpose, SnapshotVerdict, SyncCommand, UserId, UserInfo,
+    SnapshotPurpose, SnapshotVerdict, SpaceId, SyncCommand, UserId, UserInfo,
 };
 use ambre_core::{KeyId, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
@@ -148,6 +148,7 @@ pub mod mock_relay;
 mod pipeline;
 mod rekey;
 mod sharing;
+mod space_rotation;
 mod updates;
 mod websocket;
 /// Web Worker entry point (`#[wasm_bindgen(start)]`): the postMessage bridge to
@@ -320,9 +321,23 @@ enum SyncEvent {
     /// documents, or why the relay refused it.
     ChannelListed {
         channel_id: ChannelId,
-        /// Whether the Logic thread said a catalogue lists the channel.
-        self_join: bool,
+        /// The space whose catalogue the Logic thread said lists the channel.
+        listed_in: Option<SpaceId>,
         result: Result<Vec<ambre_bus::ChannelDocument>, String>,
+    },
+    /// The open walked the document's log. What it says lands on the session
+    /// the open made, for the channels a space lists (the Murmure spaces
+    /// spec).
+    LogWalked {
+        document_id: DocumentId,
+        word: membership_log::SpaceWord,
+    },
+    /// The answer to the rotation of one public channel of a space
+    /// (`SyncCommand::RotateSpace`): its new key, sealed for the catalogue.
+    ChannelRotated {
+        space_id: SpaceId,
+        channel_id: ChannelId,
+        result: Result<ambre_bus::SealedChannelKey, String>,
     },
     /// The answer to a channel creation (`SyncCommand::CreateChannel`): the
     /// sealed key for the catalogue of a public channel.
@@ -431,6 +446,10 @@ enum SyncEvent {
         /// Which listing of this document answered (`SYNC-037`).
         asked: u64,
         document_id: DocumentId,
+        /// What the walked log says a channel listed in this space must heed.
+        word: membership_log::SpaceWord,
+        /// Whether the relay says the document owes a rotation (`SYNC-128`).
+        rotation_owed: bool,
         members: Vec<MemberInfo>,
         /// Refreshed presence directory (`ambre-spec-membership.md`), harvested from
         /// the same response. Membership just changed often enough for someone to
@@ -603,6 +622,9 @@ struct SyncDocumentState {
     /// member the newer one dropped (`SYNC-037`, `SYNC-094`).
     directory_asked: u64,
     directory_held: u64,
+    /// When the document is a space: what a channel it lists must heed, from
+    /// the latest walk of its log (the Murmure spaces spec).
+    word: membership_log::SpaceWord,
     /// This client's own role on this document, resolved from the members
     /// response at open. Carried here rather than emitted straight through
     /// because `DocumentReady` fires from two places: immediately for a
@@ -688,6 +710,7 @@ impl SyncDocumentState {
             signing_keys: HashMap::new(),
             directory_asked: 0,
             directory_held: 0,
+            word: membership_log::SpaceWord::default(),
             role: Role::Owner,
             awaiting_initial_hydration: false,
             rekey: rekey::Rekey::default(),
@@ -909,10 +932,14 @@ pub struct SyncState {
     /// X25519 exchange key, derived from the master seed. Used to wrap/unwrap
     /// document keys when sharing (invite + key rotation on revoke).
     exchange_key: Option<StaticSecret>,
-    /// The `meta` documents of the public channels a catalogue lists, as the
-    /// Logic thread reports them on each open. Their logs admit a self-join
-    /// (`SYNC-106`); no other log does.
-    self_join_logs: HashSet<DocumentId>,
+    /// The `meta` documents of the public channels a catalogue lists, with
+    /// that space, as the Logic thread reports them on each open. Their logs
+    /// admit a self-join (`SYNC-106`) and heed their space; no other log
+    /// does either.
+    self_join_logs: HashMap<DocumentId, SpaceId>,
+    /// The rotations this admin client drives after a leave, per space
+    /// document (the Murmure spaces spec).
+    space_rotations: HashMap<DocumentId, space_rotation::SpaceRotation>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
@@ -1038,7 +1065,8 @@ impl SyncState {
             master_seed: None,
             signing_key: None,
             exchange_key: None,
-            self_join_logs: HashSet::new(),
+            self_join_logs: HashMap::new(),
+            space_rotations: HashMap::new(),
             ws: None,
             _onmessage: None,
             _onclose: None,
@@ -1295,8 +1323,11 @@ impl SyncState {
             // -- Channel sync session (control) --------------------------------
             SyncCommand::OpenChannel {
                 channel_id,
-                self_join,
-            } => self.handle_open_channel(channel_id, self_join),
+                listed_in,
+            } => self.handle_open_channel(channel_id, listed_in),
+            SyncCommand::RotateSpace { space_id, channels } => {
+                self.handle_rotate_space(space_id, channels);
+            }
             SyncCommand::MarkRead { live, finals } => self.handle_mark_read(&live, finals),
             SyncCommand::MoveReadCursors { cursors } => self.handle_move_read_cursors(cursors),
             SyncCommand::MarkAllRead => self.handle_mark_all_read(),

@@ -203,7 +203,7 @@ fn sync_command_roundtrips_through_postcard() {
     });
     roundtrip_sync(&SyncCommand::OpenChannel {
         channel_id: chan,
-        self_join: true,
+        listed_in: Some(ambre_core::SpaceId::new()),
     });
     roundtrip_sync(&SyncCommand::Shutdown);
 }
@@ -268,6 +268,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::Reconnect { .. } => "Reconnect",
         SyncCommand::OpenChannel { .. } => "OpenChannel",
         SyncCommand::CreateChannel { .. } => "CreateChannel",
+        SyncCommand::RotateSpace { .. } => "RotateSpace",
         SyncCommand::JoinChannel { .. } => "JoinChannel",
         SyncCommand::DeleteChannel { .. } => "DeleteChannel",
         SyncCommand::LeaveChannel { .. } => "LeaveChannel",
@@ -309,6 +310,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::ChannelRefused { .. } => "ChannelRefused",
         LogicEvent::ChannelActivity { .. } => "ChannelActivity",
         LogicEvent::ChannelCreated { .. } => "ChannelCreated",
+        LogicEvent::ChannelKeyResealed { .. } => "ChannelKeyResealed",
         LogicEvent::ChannelJoined { .. } => "ChannelJoined",
         LogicEvent::DirectMessageOpened { .. } => "DirectMessageOpened",
         LogicEvent::ChannelDeleted { .. } => "ChannelDeleted",
@@ -327,8 +329,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 25;
-const EVENT_VARIANTS: usize = 36;
+const SYNC_VARIANTS: usize = 26;
+const EVENT_VARIANTS: usize = 37;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -410,7 +412,11 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::Reconnect { document_id: doc },
         SyncCommand::OpenChannel {
             channel_id: chan,
-            self_join: false,
+            listed_in: None,
+        },
+        SyncCommand::RotateSpace {
+            space_id: space,
+            channels: vec![(chan, SealedChannelKey::from_bytes(vec![8; 3]))],
         },
         SyncCommand::CreateChannel {
             channel_id: chan,
@@ -557,6 +563,11 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::ChannelCreated {
             channel_id: chan,
             key: Some(SealedChannelKey::from_bytes(vec![1; 2])),
+        },
+        LogicEvent::ChannelKeyResealed {
+            space_id: space,
+            channel_id: chan,
+            key: SealedChannelKey::from_bytes(vec![9; 2]),
         },
         LogicEvent::ChannelJoined { channel_id: chan },
         LogicEvent::DirectMessageOpened {

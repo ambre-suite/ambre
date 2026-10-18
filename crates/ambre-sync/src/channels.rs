@@ -14,9 +14,9 @@ impl SyncState {
     /// A channel travels as its documents (`SRV-102`): this is its only
     /// request of its own. The relay answers the same refusal to an unknown
     /// channel and to a caller who is no member of it (`SRV-047`).
-    /// `self_join` says whether a catalogue lists the channel; the listing
-    /// answer then records which log admits a self-join (`SYNC-106`).
-    pub(crate) fn handle_open_channel(&self, channel_id: ChannelId, self_join: bool) {
+    /// `listed_in` names the space whose catalogue lists the channel; the
+    /// listing answer then records which log admits a self-join (`SYNC-106`).
+    pub(crate) fn handle_open_channel(&self, channel_id: ChannelId, listed_in: Option<SpaceId>) {
         let Some(tx) = self.event_tx.clone() else {
             // No event bus, no HTTP: say so instead of leaving the view waiting.
             self.send_to_logic(LogicEvent::ChannelOpenFailed {
@@ -35,7 +35,7 @@ impl SyncState {
                 .map(|resp| channel_documents(&resp.documents));
             let _ = tx.send(SyncEvent::ChannelListed {
                 channel_id,
-                self_join,
+                listed_in,
                 result,
             });
         });
@@ -46,7 +46,7 @@ impl SyncState {
     pub(crate) fn channel_listed(
         &mut self,
         channel_id: ChannelId,
-        self_join: bool,
+        listed_in: Option<SpaceId>,
         result: Result<Vec<ChannelDocument>, String>,
     ) {
         match result {
@@ -59,11 +59,10 @@ impl SyncState {
                     .filter(|d| d.kind == ChannelDocumentKind::Meta)
                     .map(|d| d.document_id);
                 for meta in metas {
-                    if self_join {
-                        self.self_join_logs.insert(meta);
-                    } else {
-                        self.self_join_logs.remove(&meta);
-                    }
+                    match listed_in {
+                        Some(space_id) => self.self_join_logs.insert(meta, space_id),
+                        None => self.self_join_logs.remove(&meta),
+                    };
                 }
                 self.send_to_logic(LogicEvent::ChannelDocuments {
                     channel_id,
@@ -86,14 +85,20 @@ impl SyncState {
         }
     }
 
-    /// The rule a walk of `document_id`'s log applies to a self-join: valid
+    /// The rule a walk of `document_id`'s log applies. A self-join is valid
     /// in the log of a channel a catalogue lists, and nowhere else
-    /// (`SYNC-106`).
-    pub(crate) fn self_join_rule(&self, document_id: DocumentId) -> membership_log::SelfJoinRule {
-        if self.self_join_logs.contains(&document_id) {
-            membership_log::public_channel_self_join
-        } else {
-            membership_log::no_self_join
+    /// (`SYNC-106`). That log also heeds the word of its space, as the walk
+    /// of the open space's log last said it.
+    pub(crate) fn log_rule(&self, document_id: DocumentId) -> membership_log::LogRule {
+        match self.self_join_logs.get(&document_id) {
+            Some(space_id) => membership_log::LogRule {
+                self_join: membership_log::public_channel_self_join,
+                space: self
+                    .documents
+                    .get(&space_id.document_id())
+                    .map(|space| space.word.clone()),
+            },
+            None => membership_log::LogRule::document(),
         }
     }
 
@@ -115,9 +120,14 @@ impl SyncState {
         }
     }
 
-    /// The key of an open space that the relay holds, and this user's
-    /// exchange key: what a channel creation and a self-join both need.
-    fn space_keys(&self, space_id: SpaceId) -> Result<(DocumentKey, StaticSecret), String> {
+    /// The keys of an open space that the relay holds, and this user's
+    /// exchange key: what a channel creation and a self-join both need. A
+    /// catalogue entry sealed before a rotation of the space opens under the
+    /// older key it names.
+    pub(crate) fn space_keys(
+        &self,
+        space_id: SpaceId,
+    ) -> Result<(crate::chain::Keyring, StaticSecret), String> {
         let space = self
             .documents
             .get(&space_id.document_id())
@@ -126,7 +136,7 @@ impl SyncState {
             return Err("the space is not on the relay yet".into());
         }
         let exchange_key = self.exchange_key.clone().ok_or("session locked")?;
-        Ok((space.doc_key.clone(), exchange_key))
+        Ok((space.keyring(), exchange_key))
     }
 
     /// Create a channel of a space on the relay (the Murmure spaces and
@@ -146,7 +156,7 @@ impl SyncState {
         let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
             // A private channel is listed nowhere, so it needs no space key.
             let space_key = if public {
-                Some(self.space_keys(space_id)?.0)
+                Some(self.space_keys(space_id)?.0.current)
             } else {
                 None
             };
@@ -238,9 +248,9 @@ impl SyncState {
         sealed: &SealedChannelKey,
     ) {
         let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
-            let (space_key, exchange_key) = self.space_keys(space_id)?;
+            let (space_keys, exchange_key) = self.space_keys(space_id)?;
             let author = self.author().ok_or("session locked")?;
-            let (doc_key_enc, key_id) = join_key(channel_id, sealed, &space_key, &exchange_key)?;
+            let (doc_key_enc, key_id) = join_key(channel_id, sealed, &space_keys, &exchange_key)?;
             Ok((tx, doc_key_enc, key_id, author))
         });
         let (tx, doc_key_enc, key_id, author) = match prepared {
@@ -589,7 +599,10 @@ fn digest_of(entry: &str) -> Option<ambre_protocol::EntryDigest> {
 }
 
 /// The channel key sealed under the space key for the catalogue, with the
-/// anchor of meta's log beside it (`SYNC-104`).
+/// anchor of meta's log beside it (`SYNC-104`). The id of the space key leads
+/// the sealed bytes. A reader then opens it with the one key it names
+/// (`SYNC-045`), and a rotation of the space shows which entries it left
+/// behind.
 pub(crate) fn seal_channel_key(
     channel_id: ChannelId,
     channel_key: &DocumentKey,
@@ -603,21 +616,39 @@ pub(crate) fn seal_channel_key(
         Some(&meta_anchor.0),
     )
     .map_err(|e| format!("seal the channel key: {e}"))?;
-    let mut sealed = nonce.to_vec();
+    let mut sealed = space_key.id().as_array().to_vec();
+    sealed.extend_from_slice(&nonce);
     sealed.extend_from_slice(&ciphertext);
     Ok(SealedChannelKey::from_bytes(sealed))
 }
 
+/// The id of the space key a catalogue entry was sealed under. `None` for
+/// bytes too short to name one.
+pub(crate) fn sealed_under(sealed: &SealedChannelKey) -> Option<KeyId> {
+    sealed
+        .as_bytes()
+        .first_chunk::<{ ambre_core::KEY_ID_LEN }>()
+        .map(|id| KeyId::from_array(*id))
+}
+
 /// Unseal a channel key the catalogue holds, with the anchor sealed beside it.
+/// The space key that opens it is the one its first bytes name, as `keys`
+/// reach it.
 pub(crate) fn unseal_channel_key(
     channel_id: ChannelId,
     sealed: &SealedChannelKey,
-    space_key: &DocumentKey,
+    keys: &crate::chain::Keyring,
 ) -> Result<(DocumentKey, Option<ambre_protocol::EntryDigest>), String> {
-    let bytes = sealed.as_bytes();
-    let (nonce, ciphertext) = bytes
-        .split_first_chunk::<NONCE_LEN>()
-        .ok_or("the sealed channel key is too short")?;
+    let short = "the sealed channel key is too short";
+    let (key_id, rest) = sealed
+        .as_bytes()
+        .split_first_chunk::<{ ambre_core::KEY_ID_LEN }>()
+        .ok_or(short)?;
+    let space_key = keys
+        .find(KeyId::from_array(*key_id))
+        .ok_or("no space key this client holds sealed the channel key")?;
+    let space_key = &space_key;
+    let (nonce, ciphertext) = rest.split_first_chunk::<NONCE_LEN>().ok_or(short)?;
     let (key, anchor) = ambre_crypto::aead::open_anchored_key(
         nonce,
         ciphertext,
@@ -635,10 +666,10 @@ pub(crate) fn unseal_channel_key(
 pub(crate) fn join_key(
     channel_id: ChannelId,
     sealed: &SealedChannelKey,
-    space_key: &DocumentKey,
+    space_keys: &crate::chain::Keyring,
     exchange_key: &StaticSecret,
 ) -> Result<(String, KeyId), String> {
-    let (key, anchor) = unseal_channel_key(channel_id, sealed, space_key)?;
+    let (key, anchor) = unseal_channel_key(channel_id, sealed, space_keys)?;
     let own_pub = x25519_dalek::PublicKey::from(exchange_key);
     let wrapped = crate::sharing::wrap_anchored_b64(exchange_key, own_pub.as_bytes(), &key, anchor)
         .map_err(|e| format!("wrap the channel key: {e}"))?;
@@ -792,7 +823,7 @@ pub(crate) fn channel_documents(entries: &[http::ChannelDocumentEntry]) -> Vec<C
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use ambre_bus::Role;
 
@@ -917,6 +948,17 @@ mod tests {
         (sealed, own)
     }
 
+    /// The keys of a space whose current key is `current`, after rotations
+    /// that replaced each of `previous`.
+    pub(crate) fn ring(current: &DocumentKey, previous: &[&DocumentKey]) -> crate::chain::Keyring {
+        crate::chain::Keyring {
+            document_id: DocumentId::new(),
+            current: current.clone(),
+            previous: previous.iter().map(|&key| key.clone()).collect(),
+            chain: crate::chain::Chain::default(),
+        }
+    }
+
     /// Whether two keys are one: what one seals, the other opens.
     fn same_key(a: &DocumentKey, b: &DocumentKey) -> bool {
         let (nonce, ct) = ambre_crypto::aead::seal(b"probe", b"", a).expect("seal");
@@ -936,7 +978,8 @@ mod tests {
         let (sealed, alice_enc) = new_channel_key(channel_id, &space_key, &alice);
         let channel_key = unwrap_own(&alice, &alice_enc).expect("Alice opens her own wrap");
 
-        let (bob_enc, key_id) = join_key(channel_id, &sealed, &space_key, &bob).expect("join");
+        let (bob_enc, key_id) =
+            join_key(channel_id, &sealed, &ring(&space_key, &[]), &bob).expect("join");
         assert_eq!(key_id, channel_key.id());
         let bob_key = unwrap_own(&bob, &bob_enc).expect("Bob opens his wrap");
         assert!(same_key(&bob_key, &channel_key));
@@ -953,13 +996,34 @@ mod tests {
         let space_key = DocumentKey::generate();
         let channel_id = ChannelId::new();
         let (sealed, _) = new_channel_key(channel_id, &space_key, &exchange_key(1));
-        assert_eq!(sealed.as_bytes().len(), NONCE_LEN + 32 + 32 + 16);
-        let (_, anchor) = unseal_channel_key(channel_id, &sealed, &space_key).expect("open");
+        let keys = ring(&space_key, &[]);
+        assert_eq!(
+            sealed.as_bytes().len(),
+            ambre_core::KEY_ID_LEN + NONCE_LEN + 32 + 32 + 16
+        );
+        let (_, anchor) = unseal_channel_key(channel_id, &sealed, &keys).expect("open");
         assert_eq!(anchor, Some(ANCHOR));
-        assert!(unseal_channel_key(channel_id, &sealed, &DocumentKey::generate()).is_err());
-        assert!(unseal_channel_key(ChannelId::new(), &sealed, &space_key).is_err());
+        let stranger = ring(&DocumentKey::generate(), &[]);
+        assert!(unseal_channel_key(channel_id, &sealed, &stranger).is_err());
+        assert!(unseal_channel_key(ChannelId::new(), &sealed, &keys).is_err());
         let short = SealedChannelKey::from_bytes(vec![0; 8]);
-        assert!(unseal_channel_key(channel_id, &short, &space_key).is_err());
+        assert!(unseal_channel_key(channel_id, &short, &keys).is_err());
+        assert_eq!(sealed_under(&short), None);
+    }
+
+    /// The sealed key names the space key that sealed it. After a rotation of
+    /// the space, the entry names the older key. The space's keys still reach
+    /// it, so the entry opens, and reads as one to reseal.
+    #[test]
+    fn a_sealed_channel_key_names_its_space_key_and_opens_after_a_rotation() {
+        let (old, new) = (DocumentKey::generate(), DocumentKey::generate());
+        let channel_id = ChannelId::new();
+        let (sealed, _) = new_channel_key(channel_id, &old, &exchange_key(1));
+        assert_eq!(sealed_under(&sealed), Some(old.id()));
+        let rotated = ring(&new, &[&old]);
+        assert_ne!(sealed_under(&sealed), Some(rotated.current.id()));
+        let (_, anchor) = unseal_channel_key(channel_id, &sealed, &rotated).expect("open");
+        assert_eq!(anchor, Some(ANCHOR));
     }
 
     /// With no relay, a creation and a join fail at once, and say so.
@@ -1080,7 +1144,7 @@ mod tests {
             format!("{url}: HTTP 403"),
             format!("{url}: HTTP 500"),
         ] {
-            state.channel_listed(channel_id, false, Err(message));
+            state.channel_listed(channel_id, None, Err(message));
         }
         let events: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(
@@ -1190,12 +1254,30 @@ mod tests {
         assert_eq!(events, vec![expected], "the latest listing alone");
     }
 
+    /// A meta a catalogue lists walks under the word of its open space. Any
+    /// other log walks alone (the Murmure spaces spec).
+    #[test]
+    fn a_listed_meta_walks_under_the_word_of_its_open_space() {
+        let (sink, _rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        let (space_id, meta) = (SpaceId::new(), DocumentId::new());
+        let document_id = space_id.document_id();
+        let mut space =
+            SyncDocumentState::new(document_id, DocumentKey::generate(), DocType::Murmure, true);
+        space.word.removed.insert(ambre_bus::UserId::new());
+        let word = space.word.clone();
+        state.documents.insert(document_id, space);
+        assert_eq!(state.log_rule(meta).space, None);
+        state.self_join_logs.insert(meta, space_id);
+        assert_eq!(state.log_rule(meta).space, Some(word));
+    }
+
     #[test]
     fn with_no_relay_the_open_fails_at_once() {
         let (sink, rx) = LogicSink::channel();
         let state = SyncState::new(sink, String::new(), None);
         let channel_id = ChannelId::new();
-        state.handle_open_channel(channel_id, false);
+        state.handle_open_channel(channel_id, None);
         let events: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(matches!(
             events.as_slice(),

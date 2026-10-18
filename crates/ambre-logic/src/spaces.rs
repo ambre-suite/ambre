@@ -26,6 +26,9 @@ pub(crate) struct OpenSpace {
     /// which channels it holds. Only these may be unlisted on its answer:
     /// an entry listed since names a channel the relay held by then.
     checked: Option<Vec<ChannelId>>,
+    /// The role of each member, as Sync's last listing gave them: the last
+    /// owner hands the role on before leaving (the Murmure spaces spec).
+    roles: Vec<(UserId, Role)>,
 }
 
 /// A space on its way to open, with what arrived before its document was
@@ -67,6 +70,7 @@ impl LogicState {
                 role: Role::Owner,
                 roster: Roster::new(self.my_user_id),
                 checked: None,
+                roles: Vec::new(),
             },
         );
         self.send_to_sync(SyncCommand::OpenDocument {
@@ -154,6 +158,7 @@ impl LogicState {
                         role,
                         roster,
                         checked: None,
+                        roles: Vec::new(),
                     },
                 );
                 // The identity landed while the space was opening.
@@ -238,14 +243,57 @@ impl LogicState {
         let Some(space) = self.spaces.get(&space_id) else {
             return;
         };
+        let channels = space.state.catalogue();
+        // An admin re-keys each public channel once the space key rotates
+        // (the Murmure spaces spec). Sync reads which entries an older space
+        // key sealed, so it holds the catalogue as it now stands.
+        if space.role != Role::Viewer && !channels.is_empty() {
+            let sealed = channels
+                .iter()
+                .filter_map(|entry| {
+                    let key = space.state.sealed_key(entry.channel_id).ok()?;
+                    Some((entry.channel_id, key))
+                })
+                .collect();
+            self.send_to_sync(SyncCommand::RotateSpace {
+                space_id,
+                channels: sealed,
+            });
+        }
         self.send_to_ui(UiEvent::Space {
             space_id,
             event: SpaceEvent::Catalogue {
                 name: space.state.name(),
                 categories: space.state.categories(),
-                channels: space.state.catalogue(),
+                channels,
             },
         });
+    }
+
+    /// Sync re-keyed a public channel after a rotation of the space. Its
+    /// catalogue entry takes the new sealed key, and nothing else changes
+    /// (the Murmure spaces spec).
+    pub(crate) fn channel_resealed(
+        &mut self,
+        space_id: SpaceId,
+        channel_id: ChannelId,
+        key: &SealedChannelKey,
+    ) {
+        let Some(space) = self.spaces.get_mut(&space_id) else {
+            return;
+        };
+        match space.state.reseal_channel(channel_id, key) {
+            Ok(Some(payload)) => {
+                self.send_to_sync(SyncCommand::SendUpdate {
+                    document_id: space_id.document_id(),
+                    payload,
+                    summary: None,
+                });
+                self.show_catalogue(space_id);
+            }
+            Ok(None) => {}
+            Err(error) => tracing::warn!("Logic: resealing {channel_id} failed: {error}"),
+        }
     }
 
     fn channel_failed(&self, space_id: SpaceId, channel_id: ChannelId, message: String) {
@@ -480,12 +528,77 @@ impl LogicState {
         let Some(space) = self.spaces.get_mut(&space_id) else {
             return;
         };
+        space.roles = members.iter().map(|m| (m.user_id, m.role)).collect();
         space.roster.set_members(
             members
                 .into_iter()
                 .map(|member| (member.user_id, member.display_name)),
         );
         self.show_members(space_id);
+    }
+
+    /// The view asks to leave the document `document_id`. Say it is an open
+    /// space, this user is its last owner, and others stay. The owner role
+    /// then first passes to one of them, and the leave waits (the Murmure
+    /// spaces spec). Returns whether it waits.
+    ///
+    /// The successor is the first editor by identifier, else the first
+    /// viewer: the same member on every client that reads the same rows.
+    pub(crate) fn hand_off_before_leave(
+        &mut self,
+        leave: RequestId,
+        document_id: DocumentId,
+    ) -> bool {
+        let (Some(space), Some(me)) = (
+            self.spaces.get(&SpaceId::from_document(document_id)),
+            self.my_user_id,
+        ) else {
+            return false;
+        };
+        let owners = space.roles.iter().filter(|(_, role)| *role == Role::Owner);
+        if !owners.map(|(user, _)| *user).eq([me]) {
+            return false;
+        }
+        let first = |wanted: Role| {
+            space
+                .roles
+                .iter()
+                .filter(|(_, role)| *role == wanted)
+                .map(|(user, _)| *user)
+                .min_by_key(|user| *user.as_bytes())
+        };
+        let Some(successor) = first(Role::Editor).or_else(|| first(Role::Viewer)) else {
+            return false;
+        };
+        let change = RequestId::next();
+        self.handing_off.insert(change, (leave, document_id));
+        self.send_to_sync(SyncCommand::Rest {
+            id: change,
+            cmd: RestCommand::UpdateDocumentMemberRole {
+                document_id,
+                user_id: successor,
+                role: Role::Owner,
+            },
+        });
+        true
+    }
+
+    /// The answer to a role change this thread asked for before a leave.
+    /// The leave it held goes now, under the id the view gave it. Returns
+    /// `false` for any other answer.
+    pub(crate) fn handed_off(&mut self, id: RequestId, evt: &RestEvent) -> bool {
+        let Some((leave, document_id)) = self.handing_off.remove(&id) else {
+            return false;
+        };
+        if let RestEvent::MemberRoleUpdated { .. } = evt {
+            self.send_to_sync(SyncCommand::Rest {
+                id: leave,
+                cmd: RestCommand::LeaveDocument { document_id },
+            });
+        } else {
+            tracing::warn!("Logic: the hand-off before leaving {document_id} answered {evt:?}");
+        }
+        true
     }
 
     /// Hand the view the member list of a space.
@@ -584,11 +697,12 @@ impl LogicState {
         );
     }
 
-    /// Whether the catalogue of an open space lists `channel_id`.
-    pub(crate) fn lists_channel(&self, channel_id: ChannelId) -> bool {
+    /// The open space whose catalogue lists `channel_id`, if any.
+    pub(crate) fn listing_space(&self, channel_id: ChannelId) -> Option<SpaceId> {
         self.spaces
-            .values()
-            .any(|space| space.state.sealed_key(channel_id).is_ok())
+            .iter()
+            .find(|(_, space)| space.state.sealed_key(channel_id).is_ok())
+            .map(|(space_id, _)| *space_id)
     }
 
     /// The relay holds the new channel. List a public one in the catalogue
@@ -1266,11 +1380,101 @@ mod tests {
         assert!(
             matches!(
                 sent.as_slice(),
-                [SyncCommand::OpenChannel { channel_id: id, self_join: true }] if *id == channel_id
+                [SyncCommand::OpenChannel { channel_id: id, listed_in: Some(of) }]
+                    if *id == channel_id && *of == space_id
             ),
             "a listed channel's log admits self-joins"
         );
         assert_eq!(updates_of(&sent, space_id.document_id()), 0);
+    }
+
+    // --- A rotation of the space ---
+
+    /// Bob's client opens a space where Alice listed one channel under
+    /// `sealed(9)`, at `role`. Returns it with its Sync queue drained.
+    fn listed_space_as(role: Role) -> (LogicState, SpaceId, ChannelId, Receiver<SyncCommand>) {
+        let space_id = SpaceId::new();
+        let mut alice =
+            identified_space(SpaceState::create(space_id, "Acme", NOW).expect("create"));
+        let listed =
+            ChannelState::create(ChannelId::new(), ChannelType::Public, Some("general"), NOW)
+                .expect("channel");
+        let listing = Listing {
+            topic: None,
+            category: None,
+            position: 0,
+            key: sealed(9),
+        };
+        alice.list_channel(&listed, &listing).expect("list");
+        let (mut bob, _ui, sync) = harness();
+        bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
+        bob.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: space_id.document_id(),
+            covered_seq: 1,
+            payload: alice.snapshot().expect("snapshot"),
+        });
+        ready(&mut bob, space_id.document_id(), role);
+        (bob, space_id, listed.channel_id(), sync)
+    }
+
+    /// Whether `sent` hands Sync the catalogue of `space_id` as `channels`.
+    fn hands(
+        sent: &[SyncCommand],
+        space_id: SpaceId,
+        channels: &[(ChannelId, SealedChannelKey)],
+    ) -> bool {
+        sent.iter().any(|c| {
+            matches!(c, SyncCommand::RotateSpace { space_id: s, channels: held }
+                if *s == space_id && held.as_slice() == channels)
+        })
+    }
+
+    /// An admin hands Sync each sealed entry of the catalogue, so a rotation
+    /// of the space re-keys the stale ones. A viewer writes no catalogue,
+    /// and hands nothing (the Murmure spaces spec).
+    #[test]
+    fn an_admin_hands_the_sealed_catalogue_to_sync() {
+        let (_, space_id, channel_id, sync) = listed_space_as(Role::Editor);
+        assert!(hands(&drain(&sync), space_id, &[(channel_id, sealed(9))]));
+        let (_, space_id, _, sync) = listed_space_as(Role::Viewer);
+        let sent = drain(&sync);
+        assert!(
+            !sent
+                .iter()
+                .any(|c| matches!(c, SyncCommand::RotateSpace { .. })),
+            "a viewer hands nothing: {sent:?}"
+        );
+        assert!(!hands(&sent, space_id, &[]));
+    }
+
+    /// A re-keyed channel's entry takes the new key, sent as one update, and
+    /// Sync holds the catalogue as it now stands. The same key a second time
+    /// writes nothing (the Murmure spaces spec).
+    #[test]
+    fn a_resealed_channel_writes_its_new_key_once() {
+        let (mut bob, ui, sync) = harness();
+        let space_id = created_space(&mut bob, &ui, &sync);
+        let (channel_id, ..) = public_channel(&mut bob, space_id, "general", &ui, &sync);
+        let _ = drain(&sync);
+        let resealed = LogicEvent::ChannelKeyResealed {
+            space_id,
+            channel_id,
+            key: sealed(11),
+        };
+        bob.handle_logic_event(resealed.clone());
+        let state = &bob.spaces[&space_id].state;
+        assert_eq!(state.sealed_key(channel_id).expect("listed"), sealed(11));
+        let sent = drain(&sync);
+        assert_eq!(updates_of(&sent, space_id.document_id()), 1);
+        assert!(hands(&sent, space_id, &[(channel_id, sealed(11))]));
+        bob.handle_logic_event(resealed);
+        assert_eq!(updates_of(&drain(&sync), space_id.document_id()), 0);
+        bob.handle_logic_event(LogicEvent::ChannelKeyResealed {
+            space_id: SpaceId::new(),
+            channel_id,
+            key: sealed(8),
+        });
+        assert!(drain(&sync).is_empty(), "no such space");
     }
 
     // --- Deleting a channel ---
@@ -2067,5 +2271,120 @@ mod tests {
         sample_from(&mut state, space_id, bob, vec![9, 9, 9]);
         assert!(drain(&ui).is_empty());
         assert!(drain(&sync).is_empty());
+    }
+
+    // --- The last owner leaving ---
+
+    /// `member` at `role`.
+    fn at(user_id: UserId, role: Role) -> MemberInfo {
+        MemberInfo {
+            role,
+            ..member(user_id, "m")
+        }
+    }
+
+    /// The leave of the last owner waits while the owner role passes to the
+    /// first editor by identifier, then goes under the view's id. A refused
+    /// hand-off fails that leave, which never left (the Murmure spaces spec).
+    #[test]
+    fn the_last_owner_hands_the_role_on_before_leaving() {
+        let (mut state, ui, sync) = harness();
+        let me = UserId::from_bytes([5; 16]);
+        state.my_user_id = Some(me);
+        let (low, high, viewer) = (
+            UserId::from_bytes([1; 16]),
+            UserId::from_bytes([2; 16]),
+            UserId::from_bytes([0; 16]),
+        );
+        let rows = vec![
+            at(me, Role::Owner),
+            at(high, Role::Editor),
+            at(low, Role::Editor),
+            at(viewer, Role::Viewer),
+        ];
+        let space_id = space_with(&mut state, &ui, &sync, rows);
+        let document_id = space_id.document_id();
+        let leave = RequestId::next();
+        state.handle_logic_command(LogicCommand::Rest {
+            id: leave,
+            cmd: RestCommand::LeaveDocument { document_id },
+        });
+        let sent = drain(&sync);
+        let [SyncCommand::Rest { id: change, cmd }] = sent.as_slice() else {
+            panic!("one role change, got {sent:?}");
+        };
+        assert!(matches!(
+            cmd,
+            RestCommand::UpdateDocumentMemberRole { document_id: d, user_id, role: Role::Owner }
+                if *d == document_id && *user_id == low
+        ));
+        state.handle_logic_event(LogicEvent::Rest {
+            id: *change,
+            evt: RestEvent::MemberRoleUpdated {
+                document_id,
+                user_id: low,
+                role: Role::Owner,
+            },
+        });
+        assert!(matches!(
+            drain(&sync).as_slice(),
+            [SyncCommand::Rest { id, cmd: RestCommand::LeaveDocument { document_id: d } }]
+                if *id == leave && *d == document_id
+        ));
+        assert!(
+            drain(&ui)
+                .iter()
+                .all(|e| !matches!(e, UiEvent::Rest { .. }))
+        );
+
+        // A refusal answers the leave the view asked for.
+        state.handle_logic_command(LogicCommand::Rest {
+            id: leave,
+            cmd: RestCommand::LeaveDocument { document_id },
+        });
+        let Some(SyncCommand::Rest { id: change, .. }) = drain(&sync).pop() else {
+            panic!("a role change");
+        };
+        state.handle_logic_event(LogicEvent::ApiError {
+            id: Some(change),
+            request: "update role".into(),
+            code: 403,
+            message: "HTTP 403".into(),
+        });
+        assert!(drain(&sync).is_empty(), "no leave");
+        assert!(drain(&ui).iter().any(|e| matches!(
+            e,
+            UiEvent::ApiError { id: Some(id), .. } if *id == leave
+        )));
+    }
+
+    /// A leave goes at once in three cases (the Murmure spaces spec). Another
+    /// owner stays, no one else stays, or the document is no open space.
+    #[test]
+    fn a_leave_another_owner_covers_goes_at_once() {
+        let me = UserId::from_bytes([5; 16]);
+        let other = UserId::from_bytes([6; 16]);
+        for rows in [
+            vec![at(me, Role::Owner), at(other, Role::Owner)],
+            vec![at(me, Role::Owner)],
+            vec![at(me, Role::Editor), at(other, Role::Owner)],
+        ] {
+            let (mut state, ui, sync) = harness();
+            state.my_user_id = Some(me);
+            let space_id = space_with(&mut state, &ui, &sync, rows);
+            for document_id in [space_id.document_id(), DocumentId::new()] {
+                state.handle_logic_command(LogicCommand::Rest {
+                    id: RequestId::next(),
+                    cmd: RestCommand::LeaveDocument { document_id },
+                });
+                assert!(matches!(
+                    drain(&sync).as_slice(),
+                    [SyncCommand::Rest {
+                        cmd: RestCommand::LeaveDocument { .. },
+                        ..
+                    }]
+                ));
+            }
+        }
     }
 }

@@ -24,7 +24,7 @@ use ambre_bus::{
 };
 
 use crate::http;
-use crate::membership_log::{self, Draft, Log, SelfJoinRule};
+use crate::membership_log::{self, Draft, Log, LogRule};
 use crate::{LogicSink, SyncEvent};
 
 /// Decodes a hex-encoded X25519 public key into its 32 raw bytes.
@@ -107,21 +107,15 @@ pub(crate) fn served_log(
     exchange_key: &StaticSecret,
     resp: &http::DocumentMembersResponse,
 ) -> (Log, Option<EntryDigest>) {
-    served_log_under(
-        document_id,
-        exchange_key,
-        resp,
-        membership_log::no_self_join,
-    )
+    served_log_under(document_id, exchange_key, resp, &LogRule::document())
 }
 
-/// [`served_log`], under the self-join rule of the application that owns the
-/// document (`SYNC-106`).
+/// [`served_log`], under the rule of the document's log (`SYNC-106`).
 pub(crate) fn served_log_under(
     document_id: DocumentId,
     exchange_key: &StaticSecret,
     resp: &http::DocumentMembersResponse,
-    self_join: SelfJoinRule,
+    rule: &LogRule,
 ) -> (Log, Option<EntryDigest>) {
     let rows = resp.members.iter().map(|m| {
         (
@@ -134,22 +128,22 @@ pub(crate) fn served_log_under(
         .ok()
         .and_then(|(_, anchor)| anchor);
     (
-        walk_served_under(document_id, anchor, &resp.log, self_join),
+        walk_served_under(document_id, anchor, &resp.log, rule),
         anchor,
     )
 }
 
-/// Walks the entries a members answer serves from `anchor`, under the
-/// self-join rule of the application that owns the document (`SYNC-106`). A
-/// public channel's `meta` admits one, any other log none.
+/// Walks the entries a members answer serves from `anchor`, under the rule
+/// of the document's log (`SYNC-106`). A public channel's `meta` admits a
+/// self-join and heeds its space; any other log does neither.
 pub(crate) fn walk_served_under(
     document_id: DocumentId,
     anchor: Option<EntryDigest>,
     texts: &[String],
-    self_join: SelfJoinRule,
+    rule: &LogRule,
 ) -> Log {
     let entries = membership_log::decode(texts);
-    Log::walk(document_id, anchor, &entries, self_join)
+    Log::walk_under(document_id, anchor, &entries, rule)
 }
 
 /// The entry `draft` makes after `log`, signed by `author`, in request form.
@@ -1041,6 +1035,91 @@ pub(crate) async fn settle_task<H: ShareHttp>(
     }
 }
 
+/// Inputs for [`rotate_channel_task`].
+pub(crate) struct RotateChannelParams {
+    pub space_id: ambre_bus::SpaceId,
+    pub channel_id: ChannelId,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+    pub exchange_key: StaticSecret,
+    /// Signs the link the rotation leaves.
+    pub signing_key: SigningKey,
+    /// The channel key the catalogue holds, which the rotation replaces.
+    pub previous: DocumentKey,
+    /// The anchor of meta's log, sealed beside the catalogue's key.
+    pub anchor: EntryDigest,
+    /// The current space key, which seals the new catalogue entry.
+    pub space_key: DocumentKey,
+}
+
+/// Rotates the key of a public channel after a rotation of its space (the
+/// Murmure spaces spec). A space admin re-keys meta, member of it or not
+/// (`SRV-146`), for the members the relay still lists. The new key goes back
+/// sealed under the current space key, for the catalogue. The answer is a
+/// `SyncEvent::ChannelRotated`.
+pub(crate) async fn rotate_channel_task<H: ShareHttp>(
+    http: &H,
+    p: RotateChannelParams,
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
+) {
+    let result = rotate_channel(http, &p).await;
+    let _ = event_tx.send(SyncEvent::ChannelRotated {
+        space_id: p.space_id,
+        channel_id: p.channel_id,
+        result,
+    });
+}
+
+/// The body of [`rotate_channel_task`]: the new catalogue entry.
+async fn rotate_channel<H: ShareHttp>(
+    http: &H,
+    p: &RotateChannelParams,
+) -> Result<ambre_bus::SealedChannelKey, String> {
+    let base = format!("{}://{}/api", p.url_scheme, p.api_base);
+    let head = http
+        .get_json::<http::JoinHeadResponse>(&format!("{base}/channels/{}/join", p.channel_id))
+        .await
+        .map_err(|e| format!("Get the join head failed: {e}"))?;
+    let meta = head.meta_id.document_id();
+    let members_url = format!("{base}/documents/{meta}/members");
+    let rotate_url = format!("{base}/documents/{meta}/rotate-key");
+    let new_key = DocumentKey::generate();
+    let (_, text) = link_to(meta, &p.previous, &new_key, &p.signing_key)?;
+    let mut tries = 0;
+    loop {
+        tries += 1;
+        let resp = http
+            .get_json::<http::DocumentMembersResponse>(&members_url)
+            .await
+            .map_err(|e| format!("Get members failed: {e}"))?;
+        let (keys, unwrapped) =
+            rotate_entries_for(&p.exchange_key, &new_key, Some(p.anchor), &resp.members);
+        if !unwrapped.is_empty() {
+            tracing::warn!(
+                "Sync: the channel rotation skips {} member(s) with an unreadable key",
+                unwrapped.len()
+            );
+        }
+        let body = http::RotateKeyRequest {
+            keys,
+            members: resp.members.into_iter().map(|m| m.user_id).collect(),
+            link: text.clone(),
+        };
+        match http
+            .post_json::<_, http::RotateKeyResponse>(&rotate_url, &body)
+            .await
+        {
+            Ok(http::RotateKeyResponse {
+                status: ambre_core::RotationStatus::Rotated,
+            }) => break,
+            // A member joined since the read (`SYNC-143`): read them again.
+            Err(e) if http::is_members_changed(&e) && tries < ROTATION_TRIES => {}
+            Err(e) => return Err(format!("Rotate key failed: {e}")),
+        }
+    }
+    crate::channels::seal_channel_key(p.channel_id, &new_key, &p.space_key, p.anchor)
+}
+
 /// Inputs for [`list_members_task`].
 pub(crate) struct ListMembersParams {
     /// The request to answer, `None` for a refresh of the directory alone.
@@ -1053,8 +1132,8 @@ pub(crate) struct ListMembersParams {
     pub api_base: String,
     /// Unwraps our own row, whose seal carries the log anchor (`SYNC-104`).
     pub exchange_key: StaticSecret,
-    /// The self-join rule the document's log walks under (`SYNC-106`).
-    pub self_join: SelfJoinRule,
+    /// The rule the document's log walks under (`SYNC-106`).
+    pub rule: LogRule,
 }
 
 /// Member-list orchestration: GET the members, map them, emit
@@ -1080,12 +1159,16 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
                     .map(|m| (m.user_id, m.signing_pub_key.as_str())),
             );
             // Each row carries what the log says of it (`SYNC-108`).
-            let (log, _) = served_log_under(p.document_id, &p.exchange_key, &resp, p.self_join);
+            let (log, _) = served_log_under(p.document_id, &p.exchange_key, &resp, &p.rule);
+            let word = membership_log::SpaceWord::of(&log);
+            let rotation_owed = resp.rotation_owed;
             let members = map_members(resp.members, &log);
             let _ = event_tx.send(SyncEvent::DocumentMembersReady {
                 id: p.id,
                 asked: p.asked,
                 document_id: p.document_id,
+                word,
+                rotation_owed,
                 members,
                 signing_keys,
             });
@@ -1958,6 +2041,103 @@ mod tests {
         }
     }
 
+    /// A space admin re-keys a public channel for the members meta lists, and
+    /// reads them again when one joined meanwhile (the Murmure spaces spec).
+    /// The new key comes back sealed under the current space key, with meta's
+    /// anchor. The link it leaves opens the old key.
+    #[tokio::test]
+    async fn a_public_channel_is_rekeyed_under_the_current_space_key() {
+        let (my_xk, my_pub) = keypair(1);
+        let (_a_xk, a_pub) = keypair(2);
+        let (space_id, channel_id) = (ambre_bus::SpaceId::new(), ChannelId::new());
+        let meta = ambre_core::MetaId::new();
+        let head = serde_json::json!({
+            "meta_id": meta.to_string(), "role": "editor", "length": 1,
+        });
+        let one = serde_json::json!({ "members": [
+            member_row("11111111-1111-1111-1111-111111111111", "Me", &my_pub),
+        ] });
+        let two = serde_json::json!({ "members": [
+            member_row("11111111-1111-1111-1111-111111111111", "Me", &my_pub),
+            member_row("22222222-2222-2222-2222-222222222222", "A", &a_pub),
+        ] });
+        let changed = format!("POST x: {}", ambre_core::RefusalCode::MembersChanged);
+        let http = FakeHttp::new(vec![
+            Ok(head),
+            Ok(one),
+            Err(changed),
+            Ok(two),
+            Ok(serde_json::json!({ "status": "rotated" })),
+        ]);
+        let (etx, erx, _sink, _lrx) = channels();
+        let (previous, space_key) = (DocumentKey::generate(), DocumentKey::generate());
+        let anchor = EntryDigest([5; 32]);
+        let params = RotateChannelParams {
+            space_id,
+            channel_id,
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            exchange_key: my_xk.clone(),
+            signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
+            previous: previous.clone(),
+            anchor,
+            space_key: space_key.clone(),
+        };
+        rotate_channel_task(&http, params, &etx).await;
+        let SyncEvent::ChannelRotated {
+            space_id: s,
+            channel_id: c,
+            result: Ok(sealed),
+        } = erx.try_recv().expect("ChannelRotated")
+        else {
+            panic!("expected a rotated channel");
+        };
+        assert_eq!((s, c), (space_id, channel_id));
+        assert_eq!(crate::channels::sealed_under(&sealed), Some(space_key.id()));
+        let keys = crate::channels::tests::ring(&space_key, &[]);
+        let (new_key, sealed_anchor) =
+            crate::channels::unseal_channel_key(channel_id, &sealed, &keys).unwrap();
+        assert_eq!(sealed_anchor, Some(anchor));
+        {
+            let calls = http.calls();
+            assert_eq!(calls.len(), 5);
+            assert!(
+                matches!(&calls[0], Call::Get(u) if u.ends_with(&format!("/channels/{channel_id}/join")))
+            );
+            let rotate = format!("/documents/{}/rotate-key", meta.document_id());
+            match &calls[4] {
+                Call::Post(url, body) => {
+                    assert!(url.ends_with(&rotate));
+                    assert_eq!(body["keys"].as_array().unwrap().len(), 2, "read again");
+                    let link = posted_link(body);
+                    let opened =
+                        crate::pipeline::open_link(&link, meta.document_id(), &new_key).unwrap();
+                    assert_eq!(opened.id(), previous.id());
+                }
+                other => panic!("expected the rotate POST, got {other:?}"),
+            }
+        }
+
+        // A refusal ends the rotation with its error.
+        let http = FakeHttp::new(vec![Err("HTTP 404".into())]);
+        let params = RotateChannelParams {
+            space_id,
+            channel_id,
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            exchange_key: my_xk,
+            signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
+            previous,
+            anchor,
+            space_key,
+        };
+        rotate_channel_task(&http, params, &etx).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::ChannelRotated { result: Err(_), .. })
+        ));
+    }
+
     /// A debt already paid posts nothing, and a failed payment leaves the debt
     /// for the next edit (`SYNC-128`).
     #[tokio::test]
@@ -2065,7 +2245,7 @@ mod tests {
             url_scheme: "https",
             api_base: "api.test".into(),
             exchange_key: keypair(1).0,
-            self_join: membership_log::no_self_join,
+            rule: LogRule::document(),
         }
     }
 
@@ -2270,7 +2450,7 @@ mod tests {
                 self.document_id,
                 Some(self.anchor),
                 &texts,
-                membership_log::no_self_join,
+                &LogRule::document(),
             )
         }
 
@@ -2570,7 +2750,7 @@ mod tests {
             .unwrap();
         logged.log.push(entry);
         logged.row(&joiner, String::new(), Role::Editor);
-        let rules: [(SelfJoinRule, MemberStanding); 2] = [
+        let rules: [(membership_log::SelfJoinRule, MemberStanding); 2] = [
             (
                 membership_log::public_channel_self_join,
                 MemberStanding::Verified,
@@ -2583,7 +2763,10 @@ mod tests {
             let mut params = list_params();
             params.document_id = logged.document_id;
             params.exchange_key = owner.xk.clone();
-            params.self_join = rule;
+            params.rule = LogRule {
+                self_join: rule,
+                space: None,
+            };
             list_members_task(&http, params, &etx).await;
             match erx.try_recv().expect("DocumentMembersReady") {
                 SyncEvent::DocumentMembersReady { members, .. } => {

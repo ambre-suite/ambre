@@ -211,6 +211,15 @@ pub enum LogicEvent {
         channel_id: ChannelId,
         key: Option<SealedChannelKey>,
     },
+    /// A public channel of the space has a new key, sealed under the current
+    /// space key, answering
+    /// [`SyncCommand::RotateSpace`](crate::SyncCommand::RotateSpace). The
+    /// catalogue entry takes it in place of the old one.
+    ChannelKeyResealed {
+        space_id: SpaceId,
+        channel_id: ChannelId,
+        key: SealedChannelKey,
+    },
     /// The user is a member of the channel, answering
     /// [`SyncCommand::JoinChannel`](crate::SyncCommand::JoinChannel).
     ChannelJoined { channel_id: ChannelId },

@@ -125,10 +125,22 @@ pub enum SyncCommand {
     /// own (`SRV-102`).
     OpenChannel {
         channel_id: ChannelId,
-        /// Whether an open space's catalogue lists the channel, so its log
-        /// admits a self-join (`SYNC-106`). The Logic thread
-        /// knows the catalogues; the Sync worker does not.
-        self_join: bool,
+        /// The open space whose catalogue lists the channel, if one does. Its
+        /// log then admits a self-join (`SYNC-106`), and the log of the space
+        /// verifies its removals and its key links. The Logic thread knows
+        /// the catalogues; the Sync worker does not.
+        listed_in: Option<SpaceId>,
+    },
+    /// Rotate what a leave left owed in an open space. The space key goes
+    /// first, when the relay says the space owes it. Then each public
+    /// channel whose sealed key predates the current space key gets a new
+    /// key. `channels` is the catalogue: each entry's channel and its sealed
+    /// key. Each new key is answered by
+    /// [`crate::LogicEvent::ChannelKeyResealed`]; a failure is logged, and
+    /// the next open of the space tries again.
+    RotateSpace {
+        space_id: SpaceId,
+        channels: Vec<(ChannelId, SealedChannelKey)>,
     },
     /// Create a channel of a space on the relay: one channel key, its `meta`
     /// and first segment documents under it, and the channel record.

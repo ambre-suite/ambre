@@ -726,6 +726,10 @@ struct LogicState {
     deleting: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
     /// Channel leaves the relay has not answered yet, with their space.
     leaving: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
+    /// Leaves of a space held while its owner role passes on (the Murmure
+    /// spaces spec). Each is keyed by the role change this thread asked for,
+    /// and holds the leave the view asked for.
+    handing_off: HashMap<ambre_bus::RequestId, (ambre_bus::RequestId, DocumentId)>,
     /// Direct message requests the relay has not answered yet, keyed by the
     /// channel id each minted, with the channel it would create.
     direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
@@ -830,6 +834,7 @@ impl LogicState {
             joining: HashMap::new(),
             deleting: HashMap::new(),
             leaving: HashMap::new(),
+            handing_off: HashMap::new(),
             direct: HashMap::new(),
             unsent: HashMap::new(),
             murmure_identities: HashMap::new(),

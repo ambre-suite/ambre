@@ -22,7 +22,7 @@
 | `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 21 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | partial | 22 |  |
 | `murmure-search` | A member finds a message by its words, in the channels they have loaded. | partial | 17 |  |
-| `murmure-spaces` | A team gathers in a space. | partial | 31 |  |
+| `murmure-spaces` | A team gathers in a space. | partial | 33 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | partial | 9 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | partial | 15 |  |
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
@@ -44,4 +44,4 @@
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 17 |  |
 
-**28 features: 3 implemented, 7 partial, 18 design-only. 456 contract rows, 0 loose.**
+**28 features: 3 implemented, 7 partial, 18 design-only. 458 contract rows, 0 loose.**

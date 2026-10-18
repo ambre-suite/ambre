@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: SPACES AND THE CHANNEL CATALOGUE
 **Type:** Vertical (feature)
-**Implementation:** partial -- a space, its catalogue, a signed self-join, the leave and the delete
-ship. The key rotation on a leave, the guest and the retention do not
+**Implementation:** partial -- a space, its catalogue, a signed self-join, the leave, the key
+rotation on a leave and the delete ship. The guest and the retention do not
 
 > A team gathers in a space. The space lists its public channels, and any member joins one with no
 > one else online. A guest reaches only the channels a member invites them into.
@@ -22,8 +22,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-032` | `INV` | A member with the viewer role on the space MUST NOT change the catalogue. | this spec section 3; `SRV-008` | `ambre_logic::spaces::tests::a_viewer_creates_no_channel_and_adds_no_category` -- the client refuses before any write; `ambre_server::routes::channels::tests::a_viewer_or_a_stranger_registers_no_channel` -- database tier | none | verified |
 | `MURMURE-033` | `INV` | The catalogue MUST hold the key of each public channel it lists, sealed under the key of the space. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | `ambre_murmure::space_tests::a_listed_channel_carries_its_name_topic_category_position_and_key`; `ambre_sync::channels::tests::a_sealed_channel_key_opens_for_its_own_channel_and_space_only`; `ambre_logic::spaces::tests::a_public_channel_is_listed_with_its_sealed_key_once_the_relay_holds_it` | none | verified |
 | `MURMURE-034` | `INV` | A guest of a channel MUST NOT be a member of the space document. | this spec section 3 | `ambre_server::routes::channels::tests::a_self_join_from_outside_the_space_is_refused` -- database tier, a guest holds a row on a channel and none on the space; `ambre_server::routes::channels::tests::a_channel_takes_only_free_documents_of_its_creator` -- database tier, the space document never enters a channel | none | verified |
-| `MURMURE-236` | `INV` | A removal from a channel MUST count as verified when the log of its space holds a signed removal of the same member. | this spec section 3; `SYNC-106` | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-254` | `INV` | A key link of a public channel MUST count as verified when an admin of its space signed it. | this spec section 3; `SYNC-121`, `SRV-146` | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-236` | `INV` | A removal from a channel MUST count as verified when the log of its space holds a signed removal of the same member. | this spec section 3; `SYNC-106` | `ambre_sync::membership_log::tests::a_channel_log_heeds_the_word_of_its_space`; `ambre_sync::channels::tests::a_listed_meta_walks_under_the_word_of_its_open_space` -- the channel log walks under the word of the open space | none | verified |
+| `MURMURE-254` | `INV` | A key link of a public channel MUST count as verified when an admin of its space signed it. | this spec section 3; `SYNC-121`, `SRV-146` | `ambre_sync::membership_log::tests::a_channel_log_heeds_the_word_of_its_space` -- a link a space admin signed counts as verified; `ambre_sync::channels::tests::a_listed_meta_walks_under_the_word_of_its_open_space` | none | verified |
 | `MURMURE-301` | `INV` | A space with no retention set MUST keep every segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-302` | `OBS` | The interface MUST state the retention as a range: at least its duration, at most that plus the span of a segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -54,13 +54,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-043` | `POST` | A member leaving a space MUST cause the rotation of the space key and of the key of each public channel. | this spec section 3; `ambre-spec-key-rotation.md` | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-044` | `POST` | The catalogue MUST hold the rotated key of each public channel once the rotation completes. | this spec section 3 | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-045` | `FRAME` | Leaving a space MUST NOT change a channel of the catalogue beyond its key. | this spec section 3 | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-043` | `POST` | A member leaving a space MUST cause the rotation of the space key and of the key of each public channel. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::space_rotation::tests::a_space_debt_is_paid_before_any_channel`; `::the_entries_an_older_space_key_sealed_are_rotated_once`; `::a_new_catalogue_keeps_the_rotations_running`; `ambre_sync::sharing::tests::a_public_channel_is_rekeyed_under_the_current_space_key`; `ambre_logic::spaces::tests::an_admin_hands_the_sealed_catalogue_to_sync` -- the space key first, then each public channel | none | verified |
+| `MURMURE-044` | `POST` | The catalogue MUST hold the rotated key of each public channel once the rotation completes. | this spec section 3 | `ambre_logic::spaces::tests::a_resealed_channel_writes_its_new_key_once`; `ambre_murmure::space_tests::a_reseal_replaces_the_key_and_nothing_else` | none | verified |
+| `MURMURE-045` | `FRAME` | Leaving a space MUST NOT change a channel of the catalogue beyond its key. | this spec section 3 | `ambre_murmure::space_tests::a_reseal_replaces_the_key_and_nothing_else`; `ambre_logic::spaces::tests::a_resealed_channel_writes_its_new_key_once` -- name, topic, category and place stay | none | verified |
 | `MURMURE-234` | `POST` | Leaving a space, or being removed from it, MUST remove the member from every channel of the space, private channels included. | this spec section 3; `SRV-136` | `ambre_server::routes::channels::tests::leaving_a_space_leaves_every_channel_of_it`; `::a_removal_from_a_space_leaves_every_channel_of_it` -- a leave and a removal by an owner, over a public, a shared private and a sole-member private channel | none | verified |
 | `MURMURE-235` | `POST` | Each private channel the member leaves that way MUST owe a rotation. | this spec section 3; `SYNC-127` | `ambre_server::routes::channels::tests::leaving_a_space_leaves_every_channel_of_it` -- the shared private channel owes a rotation, the public one owes none | none | verified |
 | `MURMURE-237` | `FRAME` | Leaving a space MUST NOT remove the member from a direct message or from a channel of another space. | this spec section 3 | `ambre_server::routes::channels::tests::leaving_a_space_keeps_direct_messages_and_other_spaces` -- a direct message and a channel of a second space keep the member | none | verified |
-| `MURMURE-258` | `FAIL` | Given the last owner leaving a space that keeps other members, the client MUST first hand the owner role of the space document to one of them. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `The space rotation on a leave` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-258` | `FAIL` | Given the last owner leaving a space that keeps other members, the client MUST first hand the owner role of the space document to one of them. | this spec section 3; `SRV-015` | `ambre_logic::spaces::tests::the_last_owner_hands_the_role_on_before_leaving`; `::a_leave_another_owner_covers_goes_at_once` -- the role passes before the leave, and a refusal fails the leave | none | verified |
+| `MURMURE-479` | `FAIL` | Given a member who joined the space again, a removal of the space log signed before that join MUST NOT verify a channel removal. | this spec section 3; `MURMURE-236` | not built | unbuilt -- lands with the `The space log in time` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-480` | `FAIL` | Given a key link of a public channel, a signer the space log removed as admin before it signed MUST NOT verify it. | this spec section 3; `MURMURE-254` | not built | unbuilt -- lands with the `The space log in time` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Delete a public channel or a space
 
@@ -84,9 +86,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 20 `verified`, 11 `unimplemented`. The engine, the Logic thread, the Sync worker
+* **Verification.** 26 `verified`, 7 `unimplemented`. The engine, the Logic thread, the Sync worker
   and the relay's database tier hold a new space, the catalogue and a signed self-join. The relay's
-  database tier holds the leave and the delete. The key rotation on a leave, the guest and the
+  database tier holds the leave and the delete. The Sync worker and the Logic thread hold the key
+  rotation on a leave. The order of the space log against a channel log, the guest and the
   retention are unbuilt.
 
 ---
@@ -156,6 +159,11 @@ interface states that range, never the duration alone (`MURMURE-302`).
 each public channel. Its Sync worker seals each new key under the new space key, and the catalogue
 takes the sealed value.
 
+**A sealed entry names its space key.** It starts with the id of the space key that sealed it. An
+admin therefore re-keys exactly the channels whose entry names an older space key. A last owner who
+leaves first hands the owner role to the first editor by id, or else the first viewer
+(`MURMURE-258`).
+
 **Code.** `ambre-murmure` holds the space document and its catalogue. `ambre-logic` opens a space
 and lists a channel. `ambre-sync` seals, unseals and wraps the keys. The relay registers a channel
 and accepts a self-join.
@@ -192,6 +200,6 @@ and accepts a self-join.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Built.** A new space, the catalogue, the public channel it lists, and a self-join without its
-  signed entry.
-* **Not built.** The signed join entry, the guest, the leave, the delete of a space and the retention.
+* **Built.** A new space, the catalogue, the public channel it lists, the signed self-join, the
+  leave with its key rotation, and the delete of a space.
+* **Not built.** The guest and the retention.

@@ -770,11 +770,21 @@ impl SyncState {
             }
             SyncEvent::ChannelListed {
                 channel_id,
-                self_join,
+                listed_in,
                 result,
             } => {
-                self.channel_listed(channel_id, self_join, result);
+                self.channel_listed(channel_id, listed_in, result);
             }
+            SyncEvent::LogWalked { document_id, word } => {
+                if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                    doc_state.word = word;
+                }
+            }
+            SyncEvent::ChannelRotated {
+                space_id,
+                channel_id,
+                result,
+            } => self.channel_rotated(space_id, channel_id, result),
             SyncEvent::ActivityFetched { result } => self.activity_fetched(result),
             SyncEvent::SpaceChannelsListed { space_id, result } => {
                 self.space_channels_listed(space_id, result);
@@ -911,6 +921,7 @@ impl SyncState {
                 {
                     doc_state.rekey.found_debt();
                 }
+                self.drive_space_rotation(document_id);
             }
             SyncEvent::DebtSettled {
                 document_id,
@@ -931,6 +942,8 @@ impl SyncState {
                 id,
                 asked,
                 document_id,
+                word,
+                rotation_owed,
                 members,
                 signing_keys,
             } => {
@@ -942,10 +955,18 @@ impl SyncState {
                     Some(doc_state) if asked > doc_state.directory_held => {
                         doc_state.directory_held = asked;
                         doc_state.set_signing_keys(signing_keys);
+                        doc_state.word = word;
+                        // A leave owes a rotation the writer pays (`SYNC-128`).
+                        if rotation_owed && doc_state.role.can_write_document() {
+                            doc_state.rekey.found_debt();
+                        }
                         true
                     }
                     _ => false,
                 };
+                if fresh {
+                    self.drive_space_rotation(document_id);
+                }
                 match id {
                     Some(id) => self.reply(
                         id,
@@ -1333,7 +1354,7 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        let self_join = self.self_join_rule(document_id);
+        let rule = self.log_rule(document_id);
         wasm_bindgen_futures::spawn_local(async move {
             let members_url =
                 format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
@@ -1368,7 +1389,7 @@ impl SyncState {
             // (`SYNC-117`). It counts only when a writer the log names
             // signed it (`SYNC-121`).
             let links = http::fetch_key_links(url_scheme, &api_base, document_id, auth).await;
-            let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, self_join);
+            let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, &rule);
             let links = crate::chain::signed_by_writers(links, log.signers());
             let _ = tx.send(SyncEvent::KeyRotated {
                 document_id,

@@ -261,7 +261,7 @@ impl SyncState {
                 url_scheme,
                 api_base,
                 exchange_key,
-                self_join: self.self_join_rule(document_id),
+                rule: self.log_rule(document_id),
             };
             let http = sharing::GlooHttp { auth };
             wasm_bindgen_futures::spawn_local(async move {

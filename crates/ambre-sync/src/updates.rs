@@ -491,7 +491,7 @@ impl SyncState {
             // response. `None` only before the session is ready, which the guard
             // above already excluded on the wasm path.
             let my_user_id = self.user_id;
-            let self_join = self.self_join_rule(document_id);
+            let rule = self.log_rule(document_id);
             // A snapshot this user confirmed alone is this user's own work, and
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self
@@ -505,6 +505,7 @@ impl SyncState {
                 // generate a fresh key and defer creation to the first update.
                 let mut signers = None;
                 let mut named_key = None;
+                let mut word = None;
                 let answer = MembersAnswer::classify(
                     http::get_json_opt_auth::<http::MembersResponse>(&members_url, auth.clone())
                         .await,
@@ -512,12 +513,11 @@ impl SyncState {
                 let (doc_key, server_created, signing_keys, role, rotation_owed) = match answer {
                     MembersAnswer::Exists(resp) => match &exchange_key {
                         Some(ek) => {
-                            match Self::opened_from_members(
-                                &resp, doc_id, ek, my_user_id, self_join,
-                            ) {
+                            match Self::opened_from_members(&resp, doc_id, ek, my_user_id, &rule) {
                                 Ok(o) => {
                                     signers = o.signers;
                                     named_key = o.named_key;
+                                    word = Some(o.word);
                                     (o.doc_key, true, o.signing_keys, o.role, o.rotation_owed)
                                 }
                                 Err(_) => {
@@ -682,6 +682,13 @@ impl SyncState {
                     rotation_owed,
                     links,
                 });
+                // After the open, which made the session the word lands on.
+                if let Some(word) = word {
+                    let _ = tx.send(SyncEvent::LogWalked {
+                        document_id: doc_id,
+                        word,
+                    });
+                }
             });
         } else {
             let doc_key = DocumentKey::generate();
@@ -739,16 +746,16 @@ impl SyncState {
     ///
     /// The log walks from the anchor sealed with our copy (`SYNC-104`). A log
     /// that does not verify leaves the open as it is (`SYNC-111`). It walks
-    /// under `self_join`, the rule of the document's log (`SYNC-106`).
+    /// under `rule`, the rule of the document's log (`SYNC-106`).
     pub(crate) fn opened_from_members(
         resp: &http::MembersResponse,
         document_id: DocumentId,
         exchange_key: &x25519_dalek::StaticSecret,
         my_user_id: Option<UserId>,
-        self_join: membership_log::SelfJoinRule,
+        rule: &membership_log::LogRule,
     ) -> Result<OpenedMembers, String> {
         let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)?;
-        let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, self_join);
+        let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, rule);
         let role =
             crate::sharing::own_role(resp.members.iter().map(|m| (m.user_id, m.role)), my_user_id);
         let signing_keys = crate::sharing::presence_directory(
@@ -763,6 +770,7 @@ impl SyncState {
             rotation_owed: resp.rotation_owed,
             signers: log.signers().cloned(),
             named_key: my_user_id.and_then(|me| log.wraps(me)),
+            word: membership_log::SpaceWord::of(&log),
         })
     }
 
@@ -1227,6 +1235,8 @@ impl SyncState {
         let current = doc_state.doc_key.id();
         let (refused, waiting) = doc_state.rekey.key_installed(current);
         self.resend_refused(document_id, refused, waiting);
+        // A new space key leaves each catalogue entry under the old one stale.
+        self.drive_space_rotation(document_id);
     }
 
     /// Pays the rotation a document owes, in a spawned task (`SYNC-128`).
@@ -1554,6 +1564,8 @@ pub(crate) struct OpenedMembers {
     /// The key the entry that added us names, when the log verifies our row
     /// (`SYNC-123`).
     pub named_key: Option<ambre_core::KeyId>,
+    /// What the log says a channel listed in this space must heed.
+    pub word: membership_log::SpaceWord,
 }
 
 /// What the members request says about a document being opened (`SYNC-040`).
@@ -1646,7 +1658,7 @@ mod tests {
             DocumentId::new(),
             &my_xk,
             Some(me),
-            membership_log::no_self_join,
+            &membership_log::LogRule::document(),
         )
         .unwrap();
         assert!(opened.doc_key.id() == doc_key.id());
@@ -1687,7 +1699,7 @@ mod tests {
                 DocumentId::new(),
                 &my_xk,
                 Some(me),
-                membership_log::no_self_join,
+                &membership_log::LogRule::document(),
             )
             .is_err()
         );
@@ -2261,6 +2273,8 @@ mod tests {
             id: None,
             asked: 1,
             document_id: doc,
+            word: Default::default(),
+            rotation_owed: false,
             members: vec![listed(carol)],
             signing_keys: vec![([2u8; 32], carol)],
         });
@@ -2276,6 +2290,8 @@ mod tests {
             id: None,
             asked: 1,
             document_id: doc,
+            word: Default::default(),
+            rotation_owed: false,
             members: Vec::new(),
             signing_keys: Vec::new(),
         });
@@ -2321,6 +2337,8 @@ mod tests {
             id: None,
             asked: 2,
             document_id: doc,
+            word: Default::default(),
+            rotation_owed: false,
             members: Vec::new(),
             signing_keys: vec![([2u8; 32], carol)],
         });
@@ -2329,6 +2347,8 @@ mod tests {
             id: None,
             asked: 1,
             document_id: doc,
+            word: Default::default(),
+            rotation_owed: false,
             members: Vec::new(),
             signing_keys: vec![([1u8; 32], bob)],
         });
@@ -2364,6 +2384,8 @@ mod tests {
             id: None,
             asked: 1,
             document_id: doc,
+            word: Default::default(),
+            rotation_owed: false,
             members: vec![listed(carol)],
             signing_keys: vec![([3u8; 32], carol)],
         });

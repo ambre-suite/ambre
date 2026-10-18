@@ -182,6 +182,64 @@ fn a_channel_the_catalogue_does_not_list_has_no_key() {
     );
 }
 
+// --- MURMURE-044, MURMURE-045 ---
+
+/// A rotation reseals one entry: its key changes, and nothing else of the
+/// catalogue does. A peer replaying the delta holds the new key. The same
+/// key, or a channel the catalogue does not list, writes nothing.
+#[test]
+fn a_reseal_replaces_the_key_and_nothing_else() {
+    let space_id = SpaceId::new();
+    let mut space = SpaceState::create(space_id, "Acme", NOW)
+        .expect("create")
+        .identify();
+    let first = space.export_all().expect("export");
+    let category = CategoryId::new();
+    let named = space.put_category(category, "Teams", 1).expect("category");
+    let (budget, general) = (
+        channel(ChannelType::Public, "budget"),
+        channel(ChannelType::Public, "general"),
+    );
+    let figures = topic("the weekly figures");
+    let listed = [
+        space
+            .list_channel(
+                &budget,
+                &Listing {
+                    topic: Some(&figures),
+                    category: Some(category),
+                    position: 2,
+                    key: sealed(1),
+                },
+            )
+            .expect("list"),
+        space
+            .list_channel(&general, &listing(sealed(2)))
+            .expect("list"),
+    ];
+    let before = space.catalogue();
+
+    let delta = space
+        .reseal_channel(budget.channel_id(), &sealed(9))
+        .expect("reseal")
+        .expect("a delta");
+    assert_eq!(space.catalogue(), before, "every field but the key stays");
+    assert_eq!(space.sealed_key(budget.channel_id()), Ok(sealed(9)));
+    assert_eq!(space.sealed_key(general.channel_id()), Ok(sealed(2)));
+    let peer = SpaceState::open(space_id, &[&first, &named, &listed[0], &listed[1], &delta])
+        .expect("open");
+    assert_eq!(peer.sealed_key(budget.channel_id()), Ok(sealed(9)));
+    assert_eq!(peer.catalogue(), before);
+
+    let version = space.version();
+    assert_eq!(
+        space.reseal_channel(budget.channel_id(), &sealed(9)),
+        Ok(None)
+    );
+    assert_eq!(space.reseal_channel(ChannelId::new(), &sealed(3)), Ok(None));
+    assert_eq!(space.version(), version, "nothing to change writes nothing");
+}
+
 // --- MURMURE-014 ---
 
 /// Every member of the space reads the catalogue, so a private channel or a

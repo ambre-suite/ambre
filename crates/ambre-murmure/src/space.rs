@@ -257,6 +257,29 @@ impl SpaceState {
         self.export().map(Some)
     }
 
+    /// Replace the sealed key of a listed channel after its rotation, and
+    /// return the delta (`MURMURE-044`). The key is the one thing written:
+    /// the name, the topic, the category and the place stay (`MURMURE-045`).
+    /// `None` when the catalogue does not list it, or holds that key already.
+    ///
+    /// # Errors
+    /// [`MurmureError::Crdt`] when Loro refuses the write or the export.
+    pub fn reseal_channel(
+        &mut self,
+        channel_id: ChannelId,
+        key: &SealedChannelKey,
+    ) -> Result<Option<Vec<u8>>, MurmureError> {
+        let Some(entry) = child_map(&self.doc.get_map(CATALOGUE), &channel_id.to_string()) else {
+            return Ok(None);
+        };
+        if self.sealed_key(channel_id).as_ref() == Ok(key) {
+            return Ok(None);
+        }
+        self.writable()?;
+        entry.insert(ENTRY_KEY, key.as_bytes().to_vec())?;
+        self.export().map(Some)
+    }
+
     /// The sealed key of a listed channel, which a self-join hands the Sync
     /// worker unopened (`MURMURE-039`).
     ///

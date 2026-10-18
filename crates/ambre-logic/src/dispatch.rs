@@ -115,6 +115,7 @@ impl LogicState {
                         self.space_opening.clear();
                         self.creating.clear();
                         self.joining.clear();
+                        self.handing_off.clear();
                         self.direct.clear();
                         self.unsent.clear();
                         self.murmure_identities.clear();
@@ -129,6 +130,11 @@ impl LogicState {
                         self.owed.remove(document_id);
                         self.rest_routes.retain(|_, d| d != document_id);
                         self.forget_pending_seals(Some(*document_id));
+                    }
+                    RestCommand::LeaveDocument { document_id }
+                        if self.hand_off_before_leave(id, *document_id) =>
+                    {
+                        return;
                     }
                     _ => {}
                 }
@@ -243,6 +249,10 @@ impl LogicState {
                 // application here, and never reaches the engine, which knows
                 // nothing of the seal.
                 if self.resolve_pending_seal(id, &evt) {
+                    return;
+                }
+                // The owner role passed on: the leave it held goes now.
+                if self.handed_off(id, &evt) {
                     return;
                 }
                 // A response to a request this Logic thread issued on behalf of a
@@ -494,6 +504,11 @@ impl LogicState {
             LogicEvent::ChannelCreated { channel_id, key } => {
                 self.channel_created(channel_id, key);
             }
+            LogicEvent::ChannelKeyResealed {
+                space_id,
+                channel_id,
+                key,
+            } => self.channel_resealed(space_id, channel_id, &key),
             LogicEvent::ChannelJoined { channel_id } => self.channel_joined(channel_id),
             LogicEvent::ChannelDeleted { channel_id } => self.channel_deleted(channel_id),
             LogicEvent::ChannelLeft { channel_id } => self.channel_left(channel_id),
@@ -569,6 +584,12 @@ impl LogicState {
                     self.route_service_error(document_id, id, message);
                     return;
                 }
+                // A hand-off the relay refused fails the leave it held, which
+                // never left (the Murmure spaces spec).
+                let id = match id.map(|id| self.handing_off.remove(&id)) {
+                    Some(Some((leave, _))) => Some(leave),
+                    _ => id,
+                };
                 self.send_to_ui(UiEvent::ApiError {
                     id,
                     request,

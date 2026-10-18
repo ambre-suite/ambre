@@ -128,6 +128,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-125` | `FRAME` | Refusing a delta for its key MUST NOT give it a sequence number. | this spec section 3; `ambre-spec-sequencer.md` | `ambre_server::redis_ops::lua_tests::a_frame_owed_a_rotation_takes_no_seq_and_no_clock` -- the refused delta leaves no sequence key, and the same clock is accepted at sequence 1 once the debt clears | none | verified |
 | `SRV-167` | `FAIL` | A rotation MUST be refused whole when the document holds a member it did not read. | this spec section 3; `SYNC-143` | `ambre_server::routes::tests::handler_tests::a_member_invited_during_a_revoke_gets_the_new_key` -- a revoke that read the members before an invitation landed is refused with `MEMBERS_CHANGED`, removes no one and stores no link, and the same revoke read again lands with a copy for every member left | none | verified |
 | `SRV-168` | `FAIL` | An invitation MUST be refused when a rotation has replaced the key its copy wraps. | this spec section 3; `SYNC-143` | `ambre_server::routes::tests::handler_tests::a_member_invited_during_a_revoke_gets_the_new_key` -- an invitation naming the replaced key is refused and adds no one, and one naming the current key lands | none | verified |
+| `SRV-193` | `FAIL` | A rotation MUST be refused whole when its link names a previous key other than the current key of the document. | this spec section 3; `SYNC-116` | not built | unbuilt -- lands with the `A rotation names the current key` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-136` | `POST` | A removal from a space MUST remove the member from every channel of that space, and mark each private one as owing a rotation. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-spaces.md` | `ambre_server::routes::channels::tests::leaving_a_space_leaves_every_channel_of_it`; `::a_removal_from_a_space_leaves_every_channel_of_it` -- the shared private channel owes a rotation, the sole-member one is deleted and the public one owes none, database tier | none | verified |
 
 * **Budget.** the per-operation targets of `ambre-spec-budgets.md section 3`, and the roughly
@@ -137,7 +138,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 63 `verified`, 1 `qa-manual`, 6 `unimplemented`. A request test drives what
+* **Verification.** 63 `verified`, 1 `qa-manual`, 7 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
