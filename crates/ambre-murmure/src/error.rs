@@ -4,6 +4,8 @@ use ambre_core::schema::SchemaError;
 use ambre_core::{ChannelId, DocumentId, SpaceId};
 use thiserror::Error;
 
+use crate::delta::Refusal;
+
 /// Every refusal of the engine. None of them changes a document the channel
 /// already holds: each check runs before the engine keeps what it read.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -71,6 +73,11 @@ pub enum MurmureError {
     /// The document is not a final segment the `meta` document lists.
     #[error("document {0} is not an older segment of this channel")]
     NotOlder(DocumentId),
+
+    /// The authorship check refused a delta, which changed nothing
+    /// (`MURMURE-030`).
+    #[error("the authorship check refused a delta: {0}")]
+    Refused(#[from] Refusal),
 
     /// The Sync worker has not issued the PeerID of the document yet, and an
     /// operation under any other never travels (`AUTHOR-029`).

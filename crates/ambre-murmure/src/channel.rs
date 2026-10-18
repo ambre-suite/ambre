@@ -15,6 +15,7 @@ use ambre_bus::{
 use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroList, LoroMap, LoroText, ValueOrContainer};
 
+use crate::delta::{self, Arrival, Refusal, Signer};
 use crate::error::MurmureError;
 use crate::schema::{
     self, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, ChannelType, DocumentKind, MESSAGE_AUTHOR,
@@ -114,7 +115,7 @@ impl Created {
 pub struct Sent {
     /// The segment the message went to, the address of the delta.
     pub segment: SegmentId,
-    /// Every operation of the send, as a Loro update.
+    /// Every operation of the send, as a Loro JSON update (`MURMURE-223`).
     pub delta: Vec<u8>,
     /// What the delta holds, readable with no document (`MURMURE-081`).
     pub summary: ActivitySummary,
@@ -149,7 +150,7 @@ pub struct ChannelState {
     loaded: HashMap<SegmentId, LoroDoc>,
     /// Final segments the view asked for, whose bytes are still arriving.
     /// Nothing reads them until [`ChannelState::older_ready`] admits them.
-    pending: HashMap<SegmentId, Vec<Vec<u8>>>,
+    pending: HashMap<SegmentId, Vec<Arrival>>,
     /// The relay's number of each message, per segment
     /// (`features/ambre-spec-murmure-unread.md section 3`). A segment that
     /// came with no number has no entry.
@@ -231,7 +232,12 @@ impl ChannelState {
         let doc = LoroDoc::new();
         let mut session = Session::adopt(&doc, peer, entry)?;
         created.write(&doc, channel_id)?;
-        let first = session.export(&doc)?;
+        // A segment's first update is a delta like any other, so it travels
+        // as JSON (`MURMURE-223`). `meta` travels binary.
+        let first = match created {
+            Created::Meta { .. } => session.export(&doc)?,
+            Created::Segment { .. } => session.export_json(&doc)?,
+        };
         held.doc = doc;
         held.session = Some(session);
         held.created = None;
@@ -337,16 +343,19 @@ impl ChannelState {
     pub(crate) fn open_from_payloads(
         channel_id: ChannelId,
         meta: (DocumentId, LoroDoc),
-        segments: &HashMap<DocumentId, Vec<Vec<u8>>>,
+        mut segments: HashMap<DocumentId, Vec<Arrival>>,
         sequences: HashMap<DocumentId, Sequence>,
     ) -> Result<Self, MurmureError> {
         let (meta_id, meta_doc) = meta;
         let live = live_segments(&meta_doc, channel_id)?;
-        let admit_live = |segment: SegmentId| -> Result<Held, MurmureError> {
+        let mut admit_live = |segment: SegmentId| -> Result<Held, MurmureError> {
             let id = segment.document_id();
-            let payloads = segments.get(&id).ok_or(MurmureError::SegmentMissing(id))?;
-            let doc =
-                schema::admit_all(&borrowed(payloads), DocumentKind::Segment, channel_id, id)?;
+            let arrivals = segments
+                .remove(&id)
+                .ok_or(MurmureError::SegmentMissing(id))?;
+            let doc = schema::admit_with(DocumentKind::Segment, channel_id, id, |doc| {
+                delta::import_arrivals(doc, arrivals, id)
+            })?;
             Ok(Held::served(id, doc))
         };
         let active = admit_live(live.active)?;
@@ -610,7 +619,7 @@ impl ChannelState {
         // (`MURMURE-004`, `MURMURE-005`).
         let content = message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
         content.insert(0, &draft.text)?;
-        let delta = session.export(doc)?;
+        let delta = session.export_json(doc)?;
         Ok(Sent {
             segment,
             delta,
@@ -658,8 +667,8 @@ impl ChannelState {
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
         // An older segment still arriving keeps its bytes until it is ready.
         // Its numbers are noted now and matched once it is admitted.
-        if let Some(payloads) = self.pending.get_mut(&SegmentId::from_document(document_id)) {
-            payloads.push(payload.to_vec());
+        if let Some(arrivals) = self.pending.get_mut(&SegmentId::from_document(document_id)) {
+            arrivals.push(Arrival::Bytes(payload.to_vec()));
             if let Some(order) = order {
                 self.sequences
                     .entry(document_id)
@@ -672,6 +681,67 @@ impl ChannelState {
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
         doc.import(sequence::loro_part(payload))?;
+        // Only an update needs the messages matched; a snapshot's numbers
+        // ride in its table.
+        let resolve = matches!(order, Some(Order::Update(_)));
+        let note = order.map(|order| move |sequence: &mut Sequence| sequence.note(order, payload));
+        self.answer(document_id, resolve, note)
+    }
+
+    /// Import a delta a member signed, once the authorship check passed on
+    /// it (`MURMURE-029`). A refused delta changes nothing (`MURMURE-030`).
+    ///
+    /// A segment delta is a JSON update, checked with no document copied
+    /// (`MURMURE-226`). `meta` travels binary, and only its PeerID is checked
+    /// (`AUTHOR-012`). A refused delta still counts as delivered.
+    ///
+    /// # Errors
+    /// [`MurmureError::Refused`] for a delta the check refuses, and every
+    /// refusal of [`ChannelState::apply_remote`].
+    pub fn apply_signed(
+        &mut self,
+        document_id: DocumentId,
+        seq: Seq,
+        payload: &[u8],
+        signer: Signer,
+    ) -> Result<Vec<MurmureEvent>, MurmureError> {
+        if document_id == self.meta.id {
+            if !delta::binary_by(payload, signer.peer) {
+                return Err(Refusal::NotSigners.into());
+            }
+            return self.apply_remote_at(document_id, Some(Order::Update(seq)), payload);
+        }
+        if !self.holds(document_id) {
+            return Err(MurmureError::NotHeld(document_id));
+        }
+        let sequence = self.sequences.entry(document_id).or_default();
+        sequence.passed(seq);
+        let update = delta::read(payload)?;
+        let range = delta::range(&update);
+        if let Some(arrivals) = self.pending.get_mut(&SegmentId::from_document(document_id)) {
+            sequence.note_range(seq, range);
+            arrivals.push(Arrival::Signed { update, signer });
+            return Ok(Vec::new());
+        }
+        let doc = self
+            .doc(document_id)
+            .ok_or(MurmureError::NotHeld(document_id))?;
+        delta::check(&update, signer, |peer| delta::registered(doc, peer))?;
+        doc.import_json_updates(update)?;
+        let note = move |sequence: &mut Sequence| sequence.note_range(seq, range);
+        self.answer(document_id, true, Some(note))
+    }
+
+    /// What a document answers once a payload is in: `meta` its name, a
+    /// segment its whole message list. `note` records where the payload
+    /// stands, and `resolve` matches the messages against it. A segment
+    /// that came with no number keeps no entry.
+    fn answer(
+        &mut self,
+        document_id: DocumentId,
+        resolve: bool,
+        note: Option<impl FnOnce(&mut Sequence)>,
+    ) -> Result<Vec<MurmureEvent>, MurmureError> {
         if document_id == self.meta.id {
             // The name is the one field of `meta` a view shows. It is read
             // whole, so a delta that touched something else repeats it.
@@ -679,13 +749,14 @@ impl ChannelState {
         }
         // Every document but `meta` is a segment: a channel holds no thread
         // document yet.
+        let doc = self
+            .doc(document_id)
+            .ok_or(MurmureError::NotHeld(document_id))?;
         let messages = read_messages(doc);
-        // Only an update needs the messages matched; a snapshot's numbers
-        // ride in its table.
-        let created = matches!(order, Some(Order::Update(_))).then(|| sequence::created(doc));
-        if let Some(order) = order {
+        let created = resolve.then(|| sequence::created(doc));
+        if let Some(note) = note {
             let sequence = self.sequences.entry(document_id).or_default();
-            sequence.note(order, payload);
+            note(sequence);
             if let Some(created) = created {
                 sequence.resolve_created(&created);
             }
@@ -694,6 +765,15 @@ impl ChannelState {
             segment: SegmentId::from_document(document_id),
             messages,
         }])
+    }
+
+    /// The PeerID this session writes `document_id` under, `None` before the
+    /// Sync worker issued it.
+    pub fn peer(&self, document_id: DocumentId) -> Option<u64> {
+        self.live()
+            .find(|held| held.id == document_id)
+            .and_then(|held| held.session)
+            .map(Session::peer)
     }
 
     /// The final segment listed just before `segment`, the one a scroll past
@@ -765,11 +845,11 @@ impl ChannelState {
     /// segment is dropped, so the view can ask again.
     pub fn older_ready(&mut self, document_id: DocumentId) -> Result<MurmureEvent, MurmureError> {
         let segment = SegmentId::from_document(document_id);
-        let payloads = self
+        let arrivals = self
             .pending
             .remove(&segment)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        let loaded = self.load_older_from(segment, &borrowed(&payloads));
+        let loaded = self.load_older_from(segment, arrivals);
         if loaded.is_err() {
             self.sequences.remove(&document_id);
         }
@@ -786,13 +866,13 @@ impl ChannelState {
         segment: SegmentId,
         payload: &[u8],
     ) -> Result<MurmureEvent, MurmureError> {
-        self.load_older_from(segment, &[payload])
+        self.load_older_from(segment, vec![Arrival::Bytes(payload.to_vec())])
     }
 
     fn load_older_from(
         &mut self,
         segment: SegmentId,
-        payloads: &[&[u8]],
+        arrivals: Vec<Arrival>,
     ) -> Result<MurmureEvent, MurmureError> {
         let document_id = segment.document_id();
         let listed = segment_entries(&self.meta.doc)
@@ -801,12 +881,9 @@ impl ChannelState {
         if !listed {
             return Err(MurmureError::NotOlder(document_id));
         }
-        let doc = schema::admit_all(
-            payloads,
-            DocumentKind::Segment,
-            self.channel_id,
-            document_id,
-        )?;
+        let doc = schema::admit_with(DocumentKind::Segment, self.channel_id, document_id, |doc| {
+            delta::import_arrivals(doc, arrivals, document_id)
+        })?;
         let messages = read_messages(&doc);
         if let Some(sequence) = self.sequences.get_mut(&document_id) {
             sequence.resolve(&doc);
@@ -814,11 +891,6 @@ impl ChannelState {
         self.loaded.insert(segment, doc);
         Ok(MurmureEvent::Messages { segment, messages })
     }
-}
-
-/// The payloads of one document, borrowed for [`schema::admit_all`].
-fn borrowed(payloads: &[Vec<u8>]) -> Vec<&[u8]> {
-    payloads.iter().map(Vec::as_slice).collect()
 }
 
 /// The live segments `meta` lists: the active one, and the one being closed.

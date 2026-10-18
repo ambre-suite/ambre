@@ -109,6 +109,19 @@ impl Sequence {
         }
     }
 
+    /// Note one JSON update the relay numbered `seq`, the form a segment
+    /// delta travels in, by the range [`crate::delta::range`] read from it.
+    pub(crate) fn note_range(&mut self, seq: Seq, (start, end): (VersionVector, VersionVector)) {
+        self.passed(seq);
+        self.unresolved.push(Range { seq, start, end });
+    }
+
+    /// Note that the relay delivered `seq`, even when nothing of it was
+    /// kept: a refused delta still counts as delivered.
+    pub(crate) fn passed(&mut self, seq: Seq) {
+        self.delivered = self.delivered.max(seq);
+    }
+
     /// Match every noted update against the messages of `doc`, once its
     /// bytes are in.
     pub(crate) fn resolve(&mut self, doc: &LoroDoc) {

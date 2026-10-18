@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 mod channel;
+mod delta;
 mod error;
 mod members;
 mod opening;
@@ -21,6 +22,8 @@ mod sequence;
 mod session;
 mod space;
 
+#[cfg(test)]
+mod authorship_tests;
 #[cfg(test)]
 mod channel_tests;
 #[cfg(test)]
@@ -33,6 +36,7 @@ mod space_tests;
 mod unread_tests;
 
 pub use channel::{ChannelState, Named, Sent};
+pub use delta::{JSON_SCHEMA_VERSION, Refusal, Signer};
 pub use error::MurmureError;
 pub use members::{
     PRESENCE_EXPIRY_MS, REFRESH_PERIOD_MS, Roster, find_members, is_presence_sample,

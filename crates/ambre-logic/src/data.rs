@@ -703,6 +703,13 @@ impl LogicState {
     /// nothing (`AUTHOR-014`). The log names the document and the signer and
     /// never a byte of the payload (`ZK-001`).
     pub(crate) fn apply_signed(&mut self, document_id: DocumentId, delta: &SignedDelta) {
+        // A channel document runs the engine's own check, which reads what
+        // each operation writes (the Murmure engine spec).
+        if !self.docs.contains_key(&document_id)
+            && self.apply_channel_signed(document_id, std::slice::from_ref(delta))
+        {
+            return;
+        }
         let accepted = authored_by(&delta.payload, delta.peer);
         self.record_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
         if !accepted {
@@ -768,6 +775,10 @@ impl LogicState {
     /// The batch form of [`apply_signed`](Self::apply_signed): each delta is
     /// checked on its own, and only the refused ones are left out.
     pub(crate) fn apply_signed_batch(&mut self, document_id: DocumentId, deltas: Vec<SignedDelta>) {
+        if !self.docs.contains_key(&document_id) && self.apply_channel_signed(document_id, &deltas)
+        {
+            return;
+        }
         let accepted: Vec<(u64, Vec<u8>)> = deltas
             .into_iter()
             .filter_map(|delta| {
@@ -788,17 +799,11 @@ impl LogicState {
         if accepted.is_empty() {
             return;
         }
-        // A replay queues on an open document only. A channel or space
-        // document takes the whole batch now, each delta at its number.
+        // A replay queues on an open document only. A space document takes
+        // the whole batch now. A channel's never reaches here.
         if !self.docs.contains_key(&document_id) {
-            let numbered: Vec<(Option<Order>, &[u8])> = accepted
-                .iter()
-                .map(|(seq, p)| (Some(Order::Update(Seq(*seq))), p.as_slice()))
-                .collect();
             let borrowed: Vec<&[u8]> = accepted.iter().map(|(_, p)| p.as_slice()).collect();
-            if !self.apply_channel_remote(document_id, &numbered)
-                && !self.apply_space_remote(document_id, &borrowed)
-            {
+            if !self.apply_space_remote(document_id, &borrowed) {
                 tracing::warn!(
                     "Logic: replay for unopened doc {document_id} ({} delta(s)), dropping",
                     accepted.len()

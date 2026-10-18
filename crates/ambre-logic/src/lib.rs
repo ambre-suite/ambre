@@ -432,6 +432,16 @@ fn authored_by(payload: &[u8], peer: u64) -> bool {
     }
 }
 
+/// [`authored_by`] for a payload of either form: a binary update, or the JSON
+/// update a segment delta travels as (the Murmure messages spec).
+#[cfg(test)]
+fn sent_by(payload: &[u8], peer: u64) -> bool {
+    authored_by(payload, peer)
+        || serde_json::from_slice::<loro::json::JsonSchema>(payload).is_ok_and(|update| {
+            !update.changes.is_empty() && update.changes.iter().all(|c| c.id.peer == peer)
+        })
+}
+
 // -----------------------------------------------------------------------------
 // LiveDoc -- an open document and the caller's role on it
 // -----------------------------------------------------------------------------

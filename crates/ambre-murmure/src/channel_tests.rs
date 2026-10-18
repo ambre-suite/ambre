@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{MentionTarget, MessageDraft, MurmureEvent, Timestamp};
 use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, SchemaError};
-use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, UserId};
+use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 
 use crate::channel::push_segment_entry;
@@ -13,7 +13,9 @@ use crate::schema::{
     self, CHANNEL, CHANNEL_NAME, DocumentKind, HEADER, HEADER_CHANNEL, HEADER_KIND,
     MESSAGE_CONTENT, MESSAGES, SEGMENTS, SegmentState,
 };
-use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, SCHEMA_VERSION};
+use crate::{
+    ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, SCHEMA_VERSION, Signer,
+};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
@@ -91,6 +93,14 @@ fn open(stored: &Stored) -> ChannelState {
 }
 
 /// A second peer of the same channel, opened from the first one's documents.
+/// Who signed what `from` wrote in `segment`: `user`, under its session.
+fn signer(from: &ChannelState, segment: SegmentId, user: UserId) -> Signer {
+    Signer {
+        peer: from.peer(segment.document_id()).expect("a session"),
+        user: Some(user),
+    }
+}
+
 fn peer_of(state: &ChannelState) -> ChannelState {
     let segments = HashMap::from([(
         state.active_id(),
@@ -524,11 +534,15 @@ fn a_sent_delta_brings_a_peer_to_the_same_messages() {
         .expect("create")
         .identify();
     let mut bob = peer_of(&alice);
-    let sent = alice
-        .send(&draft("hi bob"), UserId::new(), NOW)
-        .expect("send");
+    let author = UserId::new();
+    let sent = alice.send(&draft("hi bob"), author, NOW).expect("send");
     let events = bob
-        .apply_remote(sent.segment.document_id(), &sent.delta)
+        .apply_signed(
+            sent.segment.document_id(),
+            Seq(1),
+            &sent.delta,
+            signer(&alice, sent.segment, author),
+        )
         .expect("apply");
     assert_eq!(
         events,
@@ -575,10 +589,10 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
         .expect("create")
         .identify();
     let mut bob = peer_of(&alice);
-    let sent = alice
-        .send(&draft("base"), UserId::new(), NOW)
-        .expect("send");
-    bob.apply_remote(sent.segment.document_id(), &sent.delta)
+    let author = UserId::new();
+    let sent = alice.send(&draft("base"), author, NOW).expect("send");
+    let by = signer(&alice, sent.segment, author);
+    bob.apply_signed(sent.segment.document_id(), Seq(1), &sent.delta, by)
         .expect("apply");
 
     let segment = alice.active_id();

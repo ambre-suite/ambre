@@ -10,8 +10,8 @@ use ambre_bus::{
     ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, DocumentActivity, MetaId,
     MurmureCommand, MurmureEvent,
 };
-use ambre_bus::{MessageId, SegmentId, Seq, UnreadCount};
-use ambre_murmure::{ChannelState, Opening, OpeningChannel, Position};
+use ambre_bus::{MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
+use ambre_murmure::{ChannelState, MurmureError, Opening, OpeningChannel, Position, Signer};
 
 /// This user's read cursor on one channel document (the Murmure unread spec).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -951,6 +951,90 @@ impl LogicState {
         true
     }
 
+    /// Apply signed deltas to the channel that holds `document_id`, each
+    /// through the authorship check of the engine (the Murmure engine spec).
+    /// A refused delta changes nothing, and still counts as delivered. One
+    /// from a newer build asks the user to update. Returns `false` when no
+    /// open or opening channel holds the document.
+    pub(crate) fn apply_channel_signed(
+        &mut self,
+        document_id: DocumentId,
+        deltas: &[SignedDelta],
+    ) -> bool {
+        let signer = |delta: &SignedDelta| Signer {
+            peer: delta.peer,
+            user: delta.user,
+        };
+        let mut verdicts = Vec::with_capacity(deltas.len());
+        let mut open = None;
+        if let Some(opening) = self
+            .opening
+            .values_mut()
+            .flatten()
+            .find(|o| o.expects(document_id))
+        {
+            // A segment still opening is checked once it is ready, against
+            // its registry then.
+            for delta in deltas {
+                let kept = opening.receive_signed(
+                    document_id,
+                    Seq(delta.seq),
+                    &delta.payload,
+                    signer(delta),
+                );
+                verdicts.push(kept.map(|()| Vec::new()));
+            }
+        } else if let Some((&channel_id, channel)) = self
+            .channels
+            .iter_mut()
+            .find(|(_, channel)| channel.holds(document_id))
+        {
+            for delta in deltas {
+                verdicts.push(channel.apply_signed(
+                    document_id,
+                    Seq(delta.seq),
+                    &delta.payload,
+                    signer(delta),
+                ));
+            }
+            open = Some(channel_id);
+        } else {
+            return false;
+        }
+        let mut events = Vec::new();
+        let mut outdated = false;
+        for (delta, verdict) in deltas.iter().zip(verdicts) {
+            let accepted = verdict.is_ok();
+            self.record_channel_seq(
+                document_id,
+                delta.seq,
+                accepted.then_some(delta.payload.as_slice()),
+            );
+            match verdict {
+                Ok(produced) => events.extend(produced),
+                Err(error) => {
+                    outdated |= matches!(&error, MurmureError::Refused(r) if r.asks_update());
+                    // The refusal names the rule, never a byte of the
+                    // payload (`ZK-001`).
+                    tracing::warn!(
+                        "Logic: refused a delta on doc {document_id} (user {:?}): {error}",
+                        delta.user
+                    );
+                }
+            }
+        }
+        if outdated {
+            self.send_to_ui(UiEvent::UpdateRequired);
+        }
+        // One segment answers with its whole list, so only the last answer of
+        // a batch is news to the view.
+        if let (Some(channel_id), Some(event)) = (open, events.pop()) {
+            self.send_to_ui(UiEvent::Channel { channel_id, event });
+            self.emit_count(channel_id);
+        }
+        true
+    }
+
     /// Hold an open channel, as the staged open does, without the relay's
     /// round trips. Each document is under its session identity, and the
     /// relay already holds it.
@@ -1142,8 +1226,8 @@ mod tests {
             panic!("the whole segment, then the message, got {sent:?}");
         };
         assert_eq!((*first_to, *message_to), (active, active));
-        assert!(crate::authored_by(first, peer));
-        assert!(crate::authored_by(message, peer));
+        assert!(crate::sent_by(first, peer));
+        assert!(crate::sent_by(message, peer));
         assert!(drain(&ui).iter().any(|e| matches!(
             e,
             UiEvent::Channel { event: MurmureEvent::Messages { messages, .. }, .. }
@@ -1154,7 +1238,8 @@ mod tests {
     #[test]
     fn a_remote_delta_reaches_the_channel_that_holds_its_document() {
         let (mut alice, _, alice_sync) = harness();
-        signed_in(&mut alice, UserId::new());
+        let author = UserId::new();
+        signed_in(&mut alice, author);
         let channel_id = ChannelId::new();
         alice.hold_channel(
             ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
@@ -1187,12 +1272,9 @@ mod tests {
             panic!("alice sends one update");
         };
         // The PeerID Sync would derive from alice's signer.
-        let peer = *loro::LoroDoc::decode_import_blob_meta(&payload, false)
-            .expect("an update")
-            .partial_end_vv
-            .keys()
-            .next()
-            .expect("one peer");
+        let peer = alice.channels[&channel_id]
+            .peer(document_id)
+            .expect("a session");
         bob.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id,
             delta: ambre_bus::SignedDelta {
@@ -1200,7 +1282,7 @@ mod tests {
                 payload,
                 nonce: ambre_core::SessionNonce([0; 16]),
                 peer,
-                user: None,
+                user: Some(author),
                 summary: None,
             },
         });
@@ -1873,6 +1955,8 @@ mod tests {
     /// of the same channel.
     struct Members {
         alice: ChannelState,
+        /// The user Alice writes as, and signs as.
+        author: UserId,
         bob: LogicState,
         bob_ui: Receiver<UiEvent>,
         bob_sync: Receiver<SyncCommand>,
@@ -1898,6 +1982,7 @@ mod tests {
         let _ = drain(&bob_ui);
         Members {
             alice,
+            author: UserId::new(),
             bob,
             bob_ui,
             bob_sync,
@@ -1916,13 +2001,18 @@ mod tests {
                         text: text.to_owned(),
                         mentions: Vec::new(),
                     },
-                    UserId::new(),
+                    self.author,
                     NOW,
                 )
                 .expect("send");
+            let document_id = sent.segment.document_id();
             self.bob.handle_logic_event(LogicEvent::RemoteUpdate {
-                document_id: sent.segment.document_id(),
-                delta: crate::remote_delta(seq, sent.delta),
+                document_id,
+                delta: ambre_bus::SignedDelta {
+                    peer: self.alice.peer(document_id).expect("a session"),
+                    user: Some(self.author),
+                    ..crate::remote_delta(seq, sent.delta)
+                },
             });
         }
 
@@ -2036,6 +2126,78 @@ mod tests {
         m.mark_unread(ids[0]);
         assert_eq!(m.moved(), [vec![(m.active, Seq(4))]]);
         assert_eq!(m.counts(), [Some(2)]);
+    }
+
+    /// A delta passes the engine's authorship check before it is imported,
+    /// and a refused one changes nothing the view shows (the Murmure engine
+    /// spec).
+    #[test]
+    fn a_delta_the_authorship_check_refuses_reaches_no_view() {
+        let mut m = members();
+        let forged = m
+            .alice
+            .send(
+                &MessageDraft {
+                    text: "as somebody else".to_owned(),
+                    mentions: Vec::new(),
+                },
+                UserId::new(),
+                NOW,
+            )
+            .expect("send");
+        let document_id = forged.segment.document_id();
+        m.bob.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id,
+            delta: ambre_bus::SignedDelta {
+                peer: m.alice.peer(document_id).expect("a session"),
+                user: Some(m.author),
+                ..crate::remote_delta(1, forged.delta)
+            },
+        });
+        assert!(m.message_ids().is_empty());
+        // Refused, and still delivered: the count reads past it.
+        assert_eq!(m.bob.channels[&m.channel_id].delivered(document_id), Seq(1));
+        assert!(
+            !drain(&m.bob_ui)
+                .iter()
+                .any(|e| matches!(e, UiEvent::Channel { .. } | UiEvent::UpdateRequired)),
+            "nothing reaches the view"
+        );
+    }
+
+    /// A delta from a newer build is refused, and the user is asked to
+    /// update (the Murmure messages spec).
+    #[test]
+    fn a_delta_from_a_newer_build_asks_the_user_to_update() {
+        let mut m = members();
+        let sent = m
+            .alice
+            .send(
+                &MessageDraft {
+                    text: "from the future".to_owned(),
+                    mentions: Vec::new(),
+                },
+                m.author,
+                NOW,
+            )
+            .expect("send");
+        let mut update: serde_json::Value = serde_json::from_slice(&sent.delta).expect("json");
+        update["schema_version"] = serde_json::Value::from(ambre_murmure::JSON_SCHEMA_VERSION + 1);
+        let document_id = sent.segment.document_id();
+        m.bob.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id,
+            delta: ambre_bus::SignedDelta {
+                peer: m.alice.peer(document_id).expect("a session"),
+                user: Some(m.author),
+                ..crate::remote_delta(1, serde_json::to_vec(&update).expect("bytes"))
+            },
+        });
+        assert!(m.message_ids().is_empty());
+        assert!(
+            drain(&m.bob_ui)
+                .iter()
+                .any(|e| matches!(e, UiEvent::UpdateRequired))
+        );
     }
 
     /// A message the relay has not numbered exactly cannot place a cursor.

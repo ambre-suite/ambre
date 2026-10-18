@@ -10,6 +10,7 @@ ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }
 ambre-draw = { path = "../ambre-draw" }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

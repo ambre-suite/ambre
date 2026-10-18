@@ -299,7 +299,26 @@ pub(crate) fn admit_all(
     channel_id: ChannelId,
     document_id: DocumentId,
 ) -> Result<LoroDoc, MurmureError> {
-    let doc = import_current(payloads, document_id)?;
+    admit_with(kind, channel_id, document_id, |doc| {
+        payloads
+            .iter()
+            .try_for_each(|payload| import_bytes(doc, payload, document_id))
+    })
+}
+
+/// [`admit_all`], with the document filled by `fill` rather than from bytes.
+/// A segment's signed deltas pass the authorship check on the way in (the
+/// Murmure messages spec).
+///
+/// # Errors
+/// Every refusal of `fill` and of [`admit_all`].
+pub(crate) fn admit_with(
+    kind: DocumentKind,
+    channel_id: ChannelId,
+    document_id: DocumentId,
+    fill: impl FnOnce(&LoroDoc) -> Result<(), MurmureError>,
+) -> Result<LoroDoc, MurmureError> {
+    let doc = import_current(fill)?;
     let header = doc.get_map(HEADER);
     check_kind(&header, kind, document_id)?;
     let found_channel = string(&header, HEADER_CHANNEL)
@@ -332,7 +351,11 @@ pub(crate) fn admit_all(
 /// place of the foreign channel.
 pub(crate) fn admit_space(payloads: &[&[u8]], space_id: SpaceId) -> Result<LoroDoc, MurmureError> {
     let document_id = space_id.document_id();
-    let doc = import_current(payloads, document_id)?;
+    let doc = import_current(|doc| {
+        payloads
+            .iter()
+            .try_for_each(|payload| import_bytes(doc, payload, document_id))
+    })?;
     let header = doc.get_map(HEADER);
     check_kind(&header, DocumentKind::Space, document_id)?;
     let found = string(&header, HEADER_SPACE)
@@ -348,21 +371,32 @@ pub(crate) fn admit_space(payloads: &[&[u8]], space_id: SpaceId) -> Result<LoroD
     Ok(doc)
 }
 
-/// Import the payloads into a fresh document, and bring it to the compiled
-/// version or refuse it (`SCHEMA-014`, `MURMURE-019`).
-fn import_current(payloads: &[&[u8]], document_id: DocumentId) -> Result<LoroDoc, MurmureError> {
+/// Import one payload of Loro bytes into `doc`.
+///
+/// # Errors
+/// [`SchemaError::PayloadRejected`] for bytes the CRDT engine refuses.
+pub(crate) fn import_bytes(
+    doc: &LoroDoc,
+    payload: &[u8],
+    document_id: DocumentId,
+) -> Result<(), MurmureError> {
+    // A snapshot may carry the relay's numbers before its Loro bytes; the
+    // document is the bytes past them.
+    doc.import(crate::sequence::loro_part(payload))
+        .map_err(|e| {
+            tracing::warn!("[Murmure] document {document_id} rejected by the CRDT engine: {e:?}");
+            SchemaError::PayloadRejected
+        })?;
+    Ok(())
+}
+
+/// Fill a fresh document with `fill`, and bring it to the compiled version or
+/// refuse it (`SCHEMA-014`, `MURMURE-019`).
+fn import_current(
+    fill: impl FnOnce(&LoroDoc) -> Result<(), MurmureError>,
+) -> Result<LoroDoc, MurmureError> {
     let doc = LoroDoc::new();
-    for payload in payloads {
-        // A snapshot may carry the relay's numbers before its Loro bytes;
-        // the document is the bytes past them.
-        doc.import(crate::sequence::loro_part(payload))
-            .map_err(|e| {
-                tracing::warn!(
-                    "[Murmure] document {document_id} rejected by the CRDT engine: {e:?}"
-                );
-                SchemaError::PayloadRejected
-            })?;
-    }
+    fill(&doc)?;
     let found = read_version(&doc)?;
     match verdict(found, SCHEMA_VERSION) {
         SchemaVerdict::Current => {}

@@ -183,7 +183,7 @@ mod tests {
                 panic!("one whole upload, got {sent:?}");
             };
             assert_eq!(*up, document_id);
-            assert!(crate::authored_by(payload, peer), "only {peer:#x} wrote it");
+            assert!(crate::sent_by(payload, peer), "only {peer:#x} wrote it");
         }
     }
 

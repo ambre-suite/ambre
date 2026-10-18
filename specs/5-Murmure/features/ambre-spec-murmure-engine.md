@@ -38,15 +38,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-029` | `POST` | A remote delta MUST pass the authorship check of the messages feature before it is imported. | this spec section 3; `features/ambre-spec-murmure-messages.md` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-030` | `FRAME` | A refused delta MUST NOT change any document of the channel. | this spec section 3; `AUTHOR-014` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-029` | `POST` | A remote delta MUST pass the authorship check of the messages feature before it is imported. | this spec section 3; `features/ambre-spec-murmure-messages.md` | `ambre_murmure::authorship_tests::a_message_carries_the_author_who_signed_it_and_no_other`; `ambre_murmure::authorship_tests::a_delta_refused_while_the_channel_opens_is_left_out`; `ambre_logic::channels::tests::a_delta_the_authorship_check_refuses_reaches_no_view` -- an open channel and an opening one both check before import | none | verified |
+| `MURMURE-030` | `FRAME` | A refused delta MUST NOT change any document of the channel. | this spec section 3; `AUTHOR-014` | `ambre_murmure::authorship_tests::an_edit_of_another_authors_message_is_refused_and_changes_nothing` -- every document of the channel compares equal across the refusal | none | verified |
 
 * **Budget.** the first display of a channel loads its `meta` document and its active segment, about
   2 MB, inside the memory rows of `ambre-spec-budgets.md section 6`. The authorship check costs the
-  fork row of `ambre-spec-budgets.md section 1`.
+  JSON check row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** every document here travels sealed through the document pipeline (`ZK-001`). What
   the relay learns of the grouping is `ZK-015`.
-* **Verification.** 9 `verified`, 2 `unimplemented`. The open is held on both sides of the Logic
+* **Verification.** 11 `verified`, 0 `unimplemented`. The open is held on both sides of the Logic
   thread: the engine's staged open, and the dispatcher that drives it over the relay. A close
   hands each document's copy to the local store and releases it to a light subscription. A
   reopen starts each document from its copy.
@@ -59,7 +59,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|
 | opens a channel of two years | -- | `meta` and the active segment | the latest messages at once, and older ones on scroll (`MURMURE-023`) | none |
 | sends a message | has the channel open | the message in the active segment, on both clients | the message on both screens | none |
-| -- | Mallory sends a delta that rewrites Alice's message | nothing new: the check refuses it | Alice's message as she wrote it (`MURMURE-029`) | none |
+| -- | Mallory sends a delta that rewrites Alice's message | nothing new: the check refuses it | Alice's message as she wrote it (`MURMURE-029`) | `ambre_murmure::authorship_tests::an_edit_of_another_authors_message_is_refused_and_changes_nothing` |
 
 ---
 
@@ -77,7 +77,7 @@ pub struct ChannelState {
     active: Held,
     closing: Option<Held>,
     loaded: HashMap<DocumentId, LoroDoc>, // final segments, on demand
-    pending: HashMap<DocumentId, Vec<Vec<u8>>>, // final segments asked for, still arriving
+    pending: HashMap<SegmentId, Vec<Arrival>>, // final segments asked for, still arriving
 }
 ```
 
@@ -111,10 +111,15 @@ delta and its activity summary, and the view a `MurmureEvent::Messages`.
 
 1. The Sync worker opens the envelope and forwards the delta, the nonce, the summary and the signer.
 2. The engine finds the document by its `document_id` (`MURMURE-024`).
-3. The authorship check of the messages feature runs on a fork (`MURMURE-029`).
+3. The authorship check of the messages feature reads the JSON update, with no document
+   (`MURMURE-029`). A refusal changes nothing (`MURMURE-030`), and the delta still counts as
+   delivered.
 4. The delta is imported, and the view is told which messages changed.
 
-**Code.** `crates/ambre-murmure/src/channel.rs`, `crates/ambre-murmure/src/schema.rs`,
+A segment still opening holds each delta as it arrived, and checks it when the segment is built.
+
+**Code.** `crates/ambre-murmure/src/channel.rs`, `crates/ambre-murmure/src/delta.rs`,
+`crates/ambre-murmure/src/schema.rs`,
 `crates/ambre-murmure/src/opening.rs`, `crates/ambre-bus/src/app/murmure.rs`,
 `crates/ambre-logic/src/channels.rs`.
 

@@ -2,13 +2,23 @@
 //! (`features/ambre-spec-murmure-unread.md section 3`).
 
 use ambre_bus::{MessageDraft, Timestamp, UnreadCount};
-use ambre_core::{ChannelId, Seq, UserId};
-use loro::{Container, ExportMode, ValueOrContainer};
+use ambre_core::{ChannelId, SegmentId, Seq, UserId};
+use loro::{Container, ValueOrContainer};
 
 use crate::schema::{MESSAGE_CONTENT, MESSAGES};
-use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Order, Position};
+use crate::{
+    ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Order, Position, Signer,
+};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
+
+/// Who signed what `from` wrote in `segment`: `user`, under its session.
+fn signer(from: &ChannelState, segment: SegmentId, user: UserId) -> Signer {
+    Signer {
+        peer: from.peer(segment.document_id()).expect("a session"),
+        user: Some(user),
+    }
+}
 
 fn draft(text: &str) -> MessageDraft {
     MessageDraft {
@@ -56,18 +66,11 @@ fn a_message_takes_the_number_of_the_update_that_created_it() {
     let segment = alice.active_id();
     let first = alice.send(&draft("one"), author, NOW).expect("send");
     let second = alice.send(&draft("two"), author, NOW).expect("send");
-    bob.apply_remote_at(
-        segment.document_id(),
-        Some(Order::Update(Seq(5))),
-        &first.delta,
-    )
-    .expect("apply");
-    bob.apply_remote_at(
-        segment.document_id(),
-        Some(Order::Update(Seq(6))),
-        &second.delta,
-    )
-    .expect("apply");
+    let by = signer(&alice, segment, author);
+    bob.apply_signed(segment.document_id(), Seq(5), &first.delta, by)
+        .expect("apply");
+    bob.apply_signed(segment.document_id(), Seq(6), &second.delta, by)
+        .expect("apply");
 
     let ids: Vec<_> = bob
         .messages(segment)
@@ -113,12 +116,9 @@ fn the_authors_own_message_is_numbered_by_its_echo_and_never_counts() {
     );
 
     // The relay hands every member the update, its author included.
+    let by = signer(&alice, segment, me);
     alice
-        .apply_remote_at(
-            segment.document_id(),
-            Some(Order::Update(Seq(9))),
-            &sent.delta,
-        )
+        .apply_signed(segment.document_id(), Seq(9), &sent.delta, by)
         .expect("echo");
     assert_eq!(alice.position(segment, id), Some(Position::Exact(Seq(9))));
 }
@@ -127,13 +127,11 @@ fn the_authors_own_message_is_numbered_by_its_echo_and_never_counts() {
 fn a_snapshot_hands_on_the_numbers_its_writer_knew() {
     let (mut alice, mut bob) = pair();
     let segment = alice.active_id();
-    let sent = alice.send(&draft("one"), UserId::new(), NOW).expect("send");
-    bob.apply_remote_at(
-        segment.document_id(),
-        Some(Order::Update(Seq(3))),
-        &sent.delta,
-    )
-    .expect("apply");
+    let author = UserId::new();
+    let sent = alice.send(&draft("one"), author, NOW).expect("send");
+    let by = signer(&alice, segment, author);
+    bob.apply_signed(segment.document_id(), Seq(3), &sent.delta, by)
+        .expect("apply");
     let id = bob.messages(segment).expect("messages")[0].id;
 
     let carol = open_from(&bob, Some(Seq(3)));
@@ -145,13 +143,11 @@ fn a_snapshot_hands_on_the_numbers_its_writer_knew() {
 fn a_snapshot_row_past_its_horizon_is_no_number() {
     let (mut alice, mut bob) = pair();
     let segment = alice.active_id();
-    let sent = alice.send(&draft("one"), UserId::new(), NOW).expect("send");
-    bob.apply_remote_at(
-        segment.document_id(),
-        Some(Order::Update(Seq(8))),
-        &sent.delta,
-    )
-    .expect("apply");
+    let author = UserId::new();
+    let sent = alice.send(&draft("one"), author, NOW).expect("send");
+    let by = signer(&alice, segment, author);
+    bob.apply_signed(segment.document_id(), Seq(8), &sent.delta, by)
+        .expect("apply");
     let id = bob.messages(segment).expect("messages")[0].id;
 
     // A table claiming 8 inside a snapshot folding up to 4 is a writer's
@@ -187,15 +183,11 @@ fn a_message_known_only_from_a_snapshot_lies_within_its_horizon() {
 fn an_edit_creates_no_message_and_never_counts() {
     let (mut alice, mut bob) = pair();
     let segment = alice.active_id();
-    let sent = alice
-        .send(&draft("base"), UserId::new(), NOW)
-        .expect("send");
-    bob.apply_remote_at(
-        segment.document_id(),
-        Some(Order::Update(Seq(5))),
-        &sent.delta,
-    )
-    .expect("apply");
+    let author = UserId::new();
+    let sent = alice.send(&draft("base"), author, NOW).expect("send");
+    let by = signer(&alice, segment, author);
+    bob.apply_signed(segment.document_id(), Seq(5), &sent.delta, by)
+        .expect("apply");
 
     let doc = alice.doc(segment.document_id()).expect("segment");
     let before = doc.oplog_vv();
@@ -209,8 +201,11 @@ fn an_edit_creates_no_message_and_never_counts() {
     };
     content.insert(4, " edited").expect("edit");
     doc.commit();
-    let edit = doc.export(ExportMode::updates(&before)).expect("delta");
-    bob.apply_remote_at(segment.document_id(), Some(Order::Update(Seq(6))), &edit)
+    let edit = crate::delta::encode(
+        &doc.export_json_updates_without_peer_compression(&before, &doc.oplog_vv()),
+    )
+    .expect("delta");
+    bob.apply_signed(segment.document_id(), Seq(6), &edit, by)
         .expect("apply");
 
     let id = bob.messages(segment).expect("messages")[0].id;

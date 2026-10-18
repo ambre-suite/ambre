@@ -9,10 +9,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId};
+use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, Seq};
 use loro::LoroDoc;
 
 use crate::channel::{ChannelState, live_segments};
+use crate::delta::{self, Arrival, Refusal, Signer};
 use crate::error::MurmureError;
 use crate::schema::{self, DocumentKind};
 use crate::sequence::{Order, Sequence};
@@ -33,8 +34,9 @@ pub enum Opening {
 pub struct OpeningChannel {
     channel_id: ChannelId,
     meta_id: DocumentId,
-    /// Bytes of each expected document, in arrival order, until it is ready.
-    payloads: HashMap<DocumentId, Vec<Vec<u8>>>,
+    /// Payloads of each expected document, in arrival order, until it is
+    /// ready. `meta` only ever holds bytes.
+    payloads: HashMap<DocumentId, Vec<Arrival>>,
     /// `meta` once admitted. `None` while its bytes are still arriving.
     meta: Option<LoroDoc>,
     /// The live segments `meta` named that are not ready yet.
@@ -107,7 +109,7 @@ impl OpeningChannel {
         let Some(held) = self.payloads.get_mut(&document_id) else {
             return false;
         };
-        held.push(payload.to_vec());
+        held.push(Arrival::Bytes(payload.to_vec()));
         // `meta` holds no message: only a segment is numbered.
         if let Some(order) = order
             && document_id != self.meta_id
@@ -118,6 +120,41 @@ impl OpeningChannel {
                 .note(order, payload);
         }
         true
+    }
+
+    /// Keep a delta a member signed until its document is ready
+    /// (`MURMURE-029`). A segment delta is read now and checked once the
+    /// segment opens, against its registry then. `meta` is checked now.
+    ///
+    /// # Errors
+    /// [`MurmureError::NotHeld`] for a document this opening does not expect,
+    /// and [`MurmureError::Refused`] for a delta that reads as no update of
+    /// its signer. A refused delta still counts as delivered.
+    pub fn receive_signed(
+        &mut self,
+        document_id: DocumentId,
+        seq: Seq,
+        payload: &[u8],
+        signer: Signer,
+    ) -> Result<(), MurmureError> {
+        if !self.expects(document_id) {
+            return Err(MurmureError::NotHeld(document_id));
+        }
+        if document_id == self.meta_id {
+            if !delta::binary_by(payload, signer.peer) {
+                return Err(Refusal::NotSigners.into());
+            }
+            self.receive(document_id, payload);
+            return Ok(());
+        }
+        let sequence = self.sequences.entry(document_id).or_default();
+        sequence.passed(seq);
+        let update = delta::read(payload)?;
+        sequence.note_range(seq, delta::range(&update));
+        if let Some(held) = self.payloads.get_mut(&document_id) {
+            held.push(Arrival::Signed { update, signer });
+        }
+        Ok(())
     }
 
     /// `document_id` has all its bytes. `meta` names the live segments to
@@ -151,7 +188,7 @@ impl OpeningChannel {
         let state = ChannelState::open_from_payloads(
             self.channel_id,
             (self.meta_id, meta),
-            &self.payloads,
+            std::mem::take(&mut self.payloads),
             std::mem::take(&mut self.sequences),
         )?;
         Ok(Opening::Open(Box::new(state)))
@@ -163,7 +200,10 @@ impl OpeningChannel {
             .get(&self.meta_id)
             .ok_or(MurmureError::NotHeld(self.meta_id))?
             .iter()
-            .map(Vec::as_slice)
+            .filter_map(|arrival| match arrival {
+                Arrival::Bytes(bytes) => Some(bytes.as_slice()),
+                Arrival::Signed { .. } => None,
+            })
             .collect();
         let meta = schema::admit_all(&payloads, DocumentKind::Meta, self.channel_id, self.meta_id)?;
         let live = live_segments(&meta, self.channel_id)?;

@@ -56,6 +56,22 @@ impl Session {
         self.sent = end;
         Ok(delta)
     }
+
+    /// [`Session::export`] as a JSON update, the form a segment delta travels
+    /// in (`MURMURE-223`). The range starts where this session last exported,
+    /// and holds no other PeerID.
+    ///
+    /// # Errors
+    /// [`MurmureError::Crdt`] when the update does not serialise.
+    pub(crate) fn export_json(&mut self, doc: &LoroDoc) -> Result<Vec<u8>, MurmureError> {
+        doc.commit();
+        let end = doc.oplog_vv();
+        let mut start = end.clone();
+        start.insert(self.peer, self.sent);
+        let update = doc.export_json_updates_without_peer_compression(&start, &end);
+        self.sent = end.get(&self.peer).copied().unwrap_or(0);
+        crate::delta::encode(&update)
+    }
 }
 
 /// A fresh PeerID per call, as the Sync worker issues one per opened document.
