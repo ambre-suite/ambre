@@ -3212,6 +3212,65 @@ mod tests {
         assert_eq!(state.channels[&channel_id].closing_id(), None);
     }
 
+    /// A message the relay refused for the lock leaves again for the active
+    /// segment, and the view moves it there (the Murmure segments spec).
+    #[test]
+    fn a_message_refused_by_the_lock_leaves_for_the_active_segment() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, old) = small_channel(&mut state, 1);
+        command(&mut state, channel_id, send("one", Vec::new()));
+        let mut refused = None;
+        let mut successor = None;
+        for sent in drain(&sync) {
+            match sent {
+                SyncCommand::SendUpdate {
+                    document_id,
+                    payload,
+                    ..
+                } if document_id == old.document_id() => refused = Some(payload),
+                SyncCommand::CloseSegment { successor: s, .. } => successor = Some(s),
+                _ => {}
+            }
+        }
+        let (refused, successor) = (refused.expect("the message"), successor.expect("a close"));
+        state.handle_logic_event(LogicEvent::SegmentClosed {
+            channel_id,
+            closing: old,
+            active: successor,
+            created: true,
+        });
+        let peer = crate::test_peer();
+        state
+            .channels
+            .get_mut(&channel_id)
+            .expect("open")
+            .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+            .expect("adopt");
+        drain(&sync);
+        drain(&ui);
+
+        state.handle_logic_event(LogicEvent::DeltasLocked {
+            document_id: old.document_id(),
+            deltas: vec![refused],
+        });
+        assert!(drain(&sync).iter().any(|c| matches!(
+            c,
+            SyncCommand::SendUpdate { document_id, summary: Some(_), .. }
+                if *document_id == successor.document_id()
+        )));
+        let moved = channel_events(&ui);
+        assert!(
+            matches!(
+                moved.as_slice(),
+                [(_, MurmureEvent::Messages { segment, messages })]
+                    if *segment == successor && messages[0].text == "one"
+            ),
+            "the view was told {moved:?}"
+        );
+        let channel = &state.channels[&channel_id];
+        assert!(channel.messages(old).expect("old").is_empty());
+    }
+
     /// A copy the Sync worker withdrew never asks again; a failed commit
     /// asks again past its delay.
     #[test]

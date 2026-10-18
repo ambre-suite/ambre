@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3529 rows: 2826 shipped, of which 2 loose. 703 unbuilt.**
+**3530 rows: 2828 shipped, of which 2 loose. 702 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 808 | 418 | 816 | 609 | 173 | 2824 |
+| `verified` | 809 | 418 | 816 | 609 | 174 | 2826 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 201 | 55 | 29 | 109 | 309 | 703 |
+| `unimplemented` | 201 | 55 | 29 | 109 | 308 | 702 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -72,7 +72,7 @@
 | `ambre-spec-sequencer.md` | 54 | 52 | 52 |  | 2 |
 | `ambre-spec-server.md` | 71 | 65 | 64 | 1 | 6 |
 | `ambre-spec-session.md` | 18 | 18 | 18 |  |  |
-| `ambre-spec-sync.md` | 42 | 41 | 41 |  | 1 |
+| `ambre-spec-sync.md` | 43 | 42 | 42 |  | 1 |
 | `ambre-spec-text-editor.md` | 13 | 11 | 11 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 20 | 14 | 14 |  | 6 |
@@ -167,7 +167,7 @@
 | `ambre-spec-murmure-messages.md` | 22 | 15 | 15 |  | 7 |
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
 | `ambre-spec-murmure-search.md` | 17 | 5 | 5 |  | 12 |
-| `ambre-spec-murmure-segments.md` | 25 | 12 | 12 |  | 13 |
+| `ambre-spec-murmure-segments.md` | 25 | 13 | 13 |  | 12 |
 | `ambre-spec-murmure-spaces.md` | 33 | 28 | 28 |  | 5 |
 | `ambre-spec-murmure-typing-presence.md` | 9 | 7 | 7 |  | 2 |
 | `ambre-spec-murmure-unread.md` | 15 | 13 | 13 |  | 2 |
@@ -276,7 +276,7 @@
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..199 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172 |
-| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..164 |
+| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..165 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050; UI-THREAD-014,018 |
 | `ambre-spec-text-input.md` | CHROME-007,016..021,059..064,102..103 |
 | `ambre-spec-toile-auto-layout.md` | TOILE-FEAT-005,009,029..032,038..054,099,102..104 |

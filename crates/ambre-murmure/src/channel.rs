@@ -29,6 +29,7 @@ use crate::{mention, reaction};
 
 mod closing;
 mod finalizing;
+mod relocating;
 
 pub use closing::{Closed, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS};
 pub use finalizing::{FINALIZE_RETRY_MS, FinalSnapshot};

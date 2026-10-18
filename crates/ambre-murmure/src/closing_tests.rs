@@ -296,3 +296,106 @@ fn a_remote_close_is_followed_once_its_successor_arrives() {
     );
     assert_eq!((bob.active_id(), bob.closing_id()), (successor, Some(old)));
 }
+
+// --- MURMURE-263 ---
+
+/// Bob writes to the old segment while its close is in flight, and the relay
+/// refuses both deltas for the lock. The old segment goes back to the
+/// relay's state, and the message moves to the active segment with its
+/// identifier and Bob's reaction. Alice's check accepts it there.
+#[test]
+fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
+    let mut alice = channel(1);
+    let (alice_user, bob_user) = (UserId::new(), UserId::new());
+    alice.send(&draft("one"), alice_user, NOW).expect("send");
+    let mut bob = peer_of(&alice);
+    let old = alice.active_id();
+    let (successor, meta, first) = close_created(&mut alice);
+
+    bob.apply_remote(bob.meta_id().document_id(), &meta)
+        .expect("meta");
+    bob.successor_to_open();
+    let waiting = bob.send(&draft("meanwhile"), bob_user, NOW).expect("send");
+    let MurmureEvent::Messages { messages, .. } = &waiting.event else {
+        panic!("a message");
+    };
+    let moved = messages[0].id;
+    let reacted = bob
+        .react(old, moved, "\u{1F44D}", bob_user, NOW)
+        .expect("react")
+        .expect("a reaction");
+    let signer = Signer {
+        peer: alice.peer(successor.document_id()).expect("a session"),
+        user: Some(alice_user),
+    };
+    bob.apply_signed(successor.document_id(), Seq(1), &first, signer)
+        .expect("arrival");
+    bob.older_ready(successor.document_id()).expect("ready");
+    let peer = next_peer();
+    bob.adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+        .expect("adopt");
+
+    let sent = bob
+        .relocate_locked(old.document_id(), &[waiting.delta, reacted.delta])
+        .expect("relocate")
+        .expect("a message moves");
+    assert_eq!(sent.segment, successor);
+    let MurmureEvent::Messages { segment, messages } = &sent.event else {
+        panic!("the moved message");
+    };
+    assert_eq!(*segment, successor);
+    assert_eq!(
+        messages
+            .iter()
+            .map(|m| (m.id, m.text.as_str()))
+            .collect::<Vec<_>>(),
+        [(moved, "meanwhile")]
+    );
+    assert_eq!(messages[0].reactions[0].users, [bob_user]);
+    assert_eq!(
+        bob.messages(old).expect("old"),
+        alice.messages(old).expect("old"),
+        "the old segment holds what the relay holds"
+    );
+
+    let signer = Signer {
+        peer,
+        user: Some(bob_user),
+    };
+    alice
+        .apply_signed(successor.document_id(), Seq(2), &sent.delta, signer)
+        .expect("the check accepts the moved message");
+    assert_eq!(
+        alice.messages(successor).expect("successor"),
+        bob.messages(successor).expect("successor")
+    );
+}
+
+/// A refusal that created no message moves nothing, and the active segment
+/// is never rewound.
+#[test]
+fn a_refused_reaction_alone_moves_nothing() {
+    let mut alice = channel(1);
+    let author = UserId::new();
+    let sent = alice.send(&draft("one"), author, NOW).expect("send");
+    let MurmureEvent::Messages { messages, .. } = &sent.event else {
+        panic!("a message");
+    };
+    let message = messages[0].id;
+    let old = alice.active_id();
+    close_created(&mut alice);
+    let reacted = alice
+        .react(old, message, "\u{1F44D}", author, NOW)
+        .expect("react")
+        .expect("a reaction");
+    let moved = alice
+        .relocate_locked(old.document_id(), &[reacted.delta])
+        .expect("relocate");
+    assert!(moved.is_none());
+    let kept = alice.messages(old).expect("old");
+    assert!(kept[0].reactions.is_empty(), "the refused reaction is gone");
+    assert!(matches!(
+        alice.relocate_locked(alice.active_id().document_id(), &[]),
+        Err(MurmureError::NotActive(_))
+    ));
+}

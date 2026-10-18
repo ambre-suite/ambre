@@ -161,6 +161,23 @@ impl Rekey {
         !std::mem::replace(&mut self.refused, true)
     }
 
+    /// The relay refused the delta signed `signature` for the lock of its
+    /// segment (`SYNC-165`). It and every later delta leave the log, and
+    /// their bodies return in order. Nothing is held: the lock refuses them
+    /// all, and the caller moves what they wrote. `None` for a delta the log
+    /// no longer holds, so a later refusal of the same batch returns nothing.
+    pub(crate) fn delta_locked(&mut self, signature: &Signature) -> Option<Vec<Vec<u8>>> {
+        let (_, bodies) = self.take_from(signature)?;
+        if self
+            .failed
+            .as_ref()
+            .is_some_and(|(failed, _)| self.position(failed).is_none())
+        {
+            self.failed = None;
+        }
+        Some(bodies)
+    }
+
     /// Whether a delta was refused by name, so nothing more may leave.
     pub(crate) fn holds_refused(&self) -> bool {
         self.refused

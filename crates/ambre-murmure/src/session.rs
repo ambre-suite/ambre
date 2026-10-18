@@ -42,6 +42,12 @@ impl Session {
         self.peer
     }
 
+    /// The relay refused every operation of this session from `counter` on,
+    /// and the document dropped them. The next export starts there.
+    pub(crate) fn rewind(&mut self, counter: i32) {
+        self.sent = self.sent.min(counter);
+    }
+
     /// Commit the pending writes, and export what this session wrote since its
     /// last export: its own operations alone, whatever arrived meanwhile
     /// (`AUTHOR-008`). The first export carries the registry entry.

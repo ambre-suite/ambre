@@ -326,7 +326,8 @@ pub struct ChannelMatches {
 pub enum MurmureEvent {
     /// These messages of `segment` are new or changed. The view keys them by
     /// [`MessageId`], so a message it already holds is replaced, never
-    /// duplicated. `messages` keeps the order of the segment.
+    /// duplicated. One it holds under another segment moves to `segment`.
+    /// `messages` keeps the order of the segment.
     Messages {
         segment: SegmentId,
         messages: Vec<MessageView>,

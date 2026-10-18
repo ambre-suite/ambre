@@ -1130,11 +1130,38 @@ impl SyncState {
         signature: Signature,
         code: ambre_core::RefusalCode,
     ) {
-        if code == ambre_core::RefusalCode::InternalError {
-            self.handle_delta_failed(document_id, signature);
-            return;
+        match code {
+            ambre_core::RefusalCode::InternalError => {
+                self.handle_delta_failed(document_id, signature);
+            }
+            ambre_core::RefusalCode::SegmentLocked => {
+                self.handle_delta_locked(document_id, &signature);
+            }
+            _ => self.hold_refused(document_id, &signature, &code.to_string()),
         }
-        self.hold_refused(document_id, &signature, &code.to_string());
+    }
+
+    /// The relay refused our delta signed `signature` for the lock of its
+    /// segment (`SRV-115`). It and every later delta of the document return
+    /// to the Logic thread, which moves their new messages to the active
+    /// segment (`SYNC-165`). The document is not held.
+    fn handle_delta_locked(&mut self, document_id: DocumentId, signature: &Signature) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let Some(bodies) = doc_state.rekey.delta_locked(signature) else {
+            return;
+        };
+        let deltas = bodies
+            .into_iter()
+            .filter_map(|body| pipeline::split_update_body(body).ok())
+            .map(|body| body.delta)
+            .collect();
+        tracing::warn!("[Sync] delta refused for a locked segment doc={document_id}");
+        self.send_to_logic(LogicEvent::DeltasLocked {
+            document_id,
+            deltas,
+        });
     }
 
     /// Drops the delta signed `signature` and every later one, and holds the
@@ -3043,6 +3070,47 @@ mod tests {
             signature,
             code: ambre_core::RefusalCode::PayloadTooLarge,
         });
+    }
+
+    /// `SYNC-165`: a delta refused for a locked segment returns to the Logic
+    /// thread with the delta sent behind it, once, in order. The document is
+    /// not held: its next delta leaves.
+    #[test]
+    fn a_delta_refused_for_the_lock_returns_to_logic_with_every_later_one() {
+        let (mut state, rx, doc, _key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        state.handle_send_update(doc, b"b".to_vec());
+        let sent = signatures(&drain_ws(&ws_rx));
+        let _ = drain(&rx);
+
+        for signature in [sent[0], sent[1]] {
+            state.handle_ws_message(WsServerMsg::DeltaRefused {
+                document_id: doc,
+                signature,
+                code: ambre_core::RefusalCode::SegmentLocked,
+            });
+        }
+        let told = drain(&rx);
+        assert!(
+            matches!(
+                told.as_slice(),
+                [LogicEvent::DeltasLocked { document_id, deltas }]
+                    if *document_id == doc && *deltas == [b"a".to_vec(), b"b".to_vec()]
+            ),
+            "the refusal was told as {told:?}"
+        );
+        let rekey = &state.documents[&doc].rekey;
+        assert_eq!(rekey.unconfirmed(), 0);
+        assert!(!rekey.holds_refused(), "a locked segment held its document");
+        state.handle_send_update(doc, b"c".to_vec());
+        assert_eq!(
+            signatures(&drain_ws(&ws_rx)).len(),
+            1,
+            "the next delta left"
+        );
     }
 
     /// `SYNC-155`: a delta refused by name leaves the unconfirmed log with the

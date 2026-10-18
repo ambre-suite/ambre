@@ -1,0 +1,157 @@
+//! A new message the relay refused for a locked segment
+//! (`features/ambre-spec-murmure-segments.md section 3`).
+//!
+//! The relay locks a closing segment once a member holds its finalize lease.
+//! It refuses every later delta of that segment (`SRV-115`). The deltas it
+//! refused reached no other member. So the segment goes back to the state the
+//! relay holds, and each new message they carried goes to the active segment.
+//! It keeps its identifier, so the view moves it and never shows it twice.
+
+use std::collections::HashSet;
+
+use ambre_bus::{Mention, MessageView, MurmureEvent, Notice};
+use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId};
+use loro::{LoroDoc, LoroMap, LoroText, VersionVector};
+
+use super::{ChannelState, Sent, read_messages, summary_of};
+use crate::delta;
+use crate::error::MurmureError;
+use crate::schema::{
+    self, MESSAGE_AUTHOR, MESSAGE_CONTENT, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE,
+    MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, NoticeKind,
+};
+use crate::{mention, reaction};
+
+impl ChannelState {
+    /// The relay refused `refused` for the lock of the segment `document_id`.
+    /// Each is a JSON update this client sent, in the order they left
+    /// (`MURMURE-263`).
+    ///
+    /// The segment drops every operation of this client from the first one
+    /// refused. Each message they created is written again in the active
+    /// segment, with its identifier, its stamp, its body and its reactions.
+    /// Returns that send, `None` when the refused deltas created no message.
+    ///
+    /// # Errors
+    /// - [`MurmureError::NotHeld`]: the channel holds no such segment.
+    /// - [`MurmureError::NotActive`]: `document_id` is the active segment,
+    ///   which no lock refuses.
+    /// - [`MurmureError::NoSession`]: the PeerID of the active segment has
+    ///   not landed. Nothing changed.
+    /// - [`MurmureError::Refused`]: a refused delta reads as no JSON update.
+    ///   Nothing changed.
+    /// - [`MurmureError::Crdt`]: Loro refused the fork or a write.
+    pub fn relocate_locked(
+        &mut self,
+        document_id: DocumentId,
+        refused: &[Vec<u8>],
+    ) -> Result<Option<Sent>, MurmureError> {
+        if document_id == self.active.id {
+            return Err(MurmureError::NotActive(document_id));
+        }
+        if self.active.session.is_none() {
+            return Err(MurmureError::NoSession(self.active.id));
+        }
+        let mut from = VersionVector::new();
+        for payload in refused {
+            let (start, _) = delta::range(&delta::read(payload)?);
+            for (&peer, &counter) in start.iter() {
+                if from.get(&peer).is_none_or(|c| *c > counter) {
+                    from.insert(peer, counter);
+                }
+            }
+        }
+        let doc = self
+            .doc(document_id)
+            .ok_or(MurmureError::NotHeld(document_id))?;
+        let mut kept = doc.oplog_vv();
+        for (&peer, &counter) in from.iter() {
+            if kept.get(&peer).is_some_and(|c| *c > counter) {
+                kept.insert(peer, counter);
+            }
+        }
+        let rewound = doc.fork_at(&doc.vv_to_frontiers(&kept))?;
+        let channel = self.channel_id;
+        let stays: HashSet<MessageId> = read_messages(&rewound, channel)
+            .into_iter()
+            .map(|m| m.id)
+            .collect();
+        let moved: Vec<MessageView> = read_messages(doc, channel)
+            .into_iter()
+            .filter(|m| !stays.contains(&m.id))
+            .collect();
+        self.rewind(document_id, rewound, &kept)?;
+        if moved.is_empty() {
+            return Ok(None);
+        }
+        let segment = self.active_id();
+        let (doc, session) = self.active.session()?;
+        for view in &moved {
+            rewrite(doc, channel, view)?;
+        }
+        let delta = session.export_json(doc)?;
+        let marked: Vec<Mention> = moved.iter().flat_map(|m| m.mentions.clone()).collect();
+        Ok(Some(Sent {
+            segment,
+            delta,
+            summary: summary_of(&marked),
+            event: MurmureEvent::Messages {
+                segment,
+                messages: moved,
+            },
+        }))
+    }
+
+    /// Hold `rewound` in place of the segment `document_id`, at the version
+    /// `kept`. A closing segment writes on under its own PeerID, from the
+    /// first counter the relay refused.
+    fn rewind(
+        &mut self,
+        document_id: DocumentId,
+        rewound: LoroDoc,
+        kept: &VersionVector,
+    ) -> Result<(), MurmureError> {
+        if let Some(held) = self.closing.as_mut().filter(|held| held.id == document_id) {
+            if let Some(session) = held.session.as_mut() {
+                rewound.set_peer_id(session.peer())?;
+                session.rewind(kept.get(&session.peer()).copied().unwrap_or(0));
+            }
+            held.doc = rewound;
+            return Ok(());
+        }
+        let segment = SegmentId::from_document(document_id);
+        if let Some(doc) = self.loaded.get_mut(&segment) {
+            *doc = rewound;
+        }
+        Ok(())
+    }
+}
+
+/// Write `view` as a new message at the end of `doc`, as its author sent it.
+/// Only the author's own reactions were refused with it, so only theirs are
+/// written.
+fn rewrite(doc: &LoroDoc, channel: ChannelId, view: &MessageView) -> Result<(), MurmureError> {
+    let message = doc.get_list(MESSAGES).push_container(LoroMap::new())?;
+    message.insert(MESSAGE_ID, view.id.to_string())?;
+    message.insert(MESSAGE_AUTHOR, view.author.to_string())?;
+    message.insert(MESSAGE_TS, schema::ts_value(view.ts.0))?;
+    let content = message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
+    if !view.text.is_empty() {
+        content.insert(0, &view.text)?;
+        mention::write(doc, &content, &view.mentions, channel)?;
+    }
+    let reactions = message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;
+    for kind in &view.reactions {
+        for &user in kind.users.iter().filter(|&&user| user == view.author) {
+            reactions.insert(
+                &reaction::key(user, &kind.emoji),
+                schema::ts_value(view.ts.0),
+            )?;
+        }
+    }
+    if let Some(Notice::MemberAdded { member }) = view.notice {
+        message.insert(MESSAGE_NOTICE, NoticeKind::MemberAdded.as_str())?;
+        message.insert(MESSAGE_MEMBER, member.to_string())?;
+    }
+    Ok(())
+}

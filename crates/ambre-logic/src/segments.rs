@@ -193,6 +193,36 @@ impl LogicState {
         }
     }
 
+    /// The relay refused deltas of `document_id` for its lock. The segment
+    /// drops them, and the new messages they carried leave for the active
+    /// segment (the Murmure segments spec).
+    pub(crate) fn deltas_locked(&mut self, document_id: DocumentId, deltas: &[Vec<u8>]) {
+        let Some((&channel_id, channel)) = self
+            .channels
+            .iter_mut()
+            .find(|(_, channel)| channel.holds(document_id))
+        else {
+            return;
+        };
+        match channel.relocate_locked(document_id, deltas) {
+            Ok(Some(sent)) => {
+                self.send_to_sync(SyncCommand::SendUpdate {
+                    document_id: sent.segment.document_id(),
+                    payload: sent.delta,
+                    summary: Some(sent.summary),
+                });
+                self.send_to_ui(UiEvent::Channel {
+                    channel_id,
+                    event: sent.event,
+                });
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!("Logic: locked deltas of {document_id} not moved: {error}");
+            }
+        }
+    }
+
     /// A `meta` delta may name a successor another member created, or a
     /// closing segment another member finalized. Fetch the successor once;
     /// it becomes active when its bytes are in.

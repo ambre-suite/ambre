@@ -250,6 +250,14 @@ pub enum LogicEvent {
         withdrawn: bool,
         message: String,
     },
+    /// The relay refused deltas of `document_id` for its lock. `deltas` are
+    /// the Loro updates this client sent from the first one refused, in the
+    /// order they left. None of them reached another member, and none leaves
+    /// again: the new messages they carry go to the active segment.
+    DeltasLocked {
+        document_id: DocumentId,
+        deltas: Vec<Vec<u8>>,
+    },
     /// A public channel of the space has a new key, sealed under the current
     /// space key, answering
     /// [`SyncCommand::RotateSpace`](crate::SyncCommand::RotateSpace). The

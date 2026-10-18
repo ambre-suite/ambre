@@ -320,6 +320,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::FinalizeLeaseAnswered { .. } => "FinalizeLeaseAnswered",
         LogicEvent::SegmentFinalized { .. } => "SegmentFinalized",
         LogicEvent::SegmentFinalizeFailed { .. } => "SegmentFinalizeFailed",
+        LogicEvent::DeltasLocked { .. } => "DeltasLocked",
         LogicEvent::ChannelJoined { .. } => "ChannelJoined",
         LogicEvent::DirectMessageOpened { .. } => "DirectMessageOpened",
         LogicEvent::ChannelDeleted { .. } => "ChannelDeleted",
@@ -339,7 +340,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 
 /// The number of arms of `sync_variant` and of `event_variant`.
 const SYNC_VARIANTS: usize = 30;
-const EVENT_VARIANTS: usize = 42;
+const EVENT_VARIANTS: usize = 43;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -625,6 +626,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             withdrawn: true,
             message: "refused".to_owned(),
+        },
+        LogicEvent::DeltasLocked {
+            document_id: segment.document_id(),
+            deltas: vec![b"{}".to_vec()],
         },
         LogicEvent::ChannelJoined { channel_id: chan },
         LogicEvent::DirectMessageOpened {

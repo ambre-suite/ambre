@@ -543,6 +543,10 @@ impl LogicState {
                 withdrawn,
                 message,
             } => self.segment_finalize_failed(channel_id, segment, withdrawn, &message),
+            LogicEvent::DeltasLocked {
+                document_id,
+                deltas,
+            } => self.deltas_locked(document_id, &deltas),
             LogicEvent::ChannelJoined { channel_id } => self.channel_joined(channel_id),
             LogicEvent::ChannelDeleted { channel_id } => self.channel_deleted(channel_id),
             LogicEvent::ChannelLeft { channel_id } => self.channel_left(channel_id),
