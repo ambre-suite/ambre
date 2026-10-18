@@ -298,6 +298,10 @@ pub enum RestCommand {
         document_id: DocumentId,
         invitee_email: String,
     },
+    /// Fetch the exchange key of a user the client already names, such as a
+    /// member of a space, **without wrapping**. The user compares it with the
+    /// pin before a direct message wraps a key for them. -> `MemberKey`.
+    FetchMemberKey { user_id: UserId },
     /// Phase 2 of the invite. `expect_exchange_pub_key` is the key the user confirmed
     /// (pinned) in phase 1. Sync re-fetches the invitee's key and wraps the Document Key
     /// **only if it still matches**. That closes the TOCTOU hole a compromised server holds
@@ -457,6 +461,13 @@ pub enum RestEvent {
         user_id: UserId,
         display_name: String,
         email: String,
+        exchange_pub_key: [u8; 32],
+        fingerprint: String,
+    },
+    /// The answer to `FetchMemberKey`: the key the relay serves for that
+    /// user, and its fingerprint, for the same comparison with the pin.
+    MemberKey {
+        user_id: UserId,
         exchange_pub_key: [u8; 32],
         fingerprint: String,
     },

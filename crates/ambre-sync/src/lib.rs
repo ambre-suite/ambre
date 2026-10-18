@@ -477,6 +477,14 @@ enum SyncEvent {
         exchange_pub_key: [u8; 32],
         fingerprint: String,
     },
+    /// The key a user the client named is served with, and its fingerprint.
+    /// Nothing is wrapped: the Main thread compares it with the pin first.
+    MemberKeyReady {
+        id: RequestId,
+        user_id: UserId,
+        exchange_pub_key: [u8; 32],
+        fingerprint: String,
+    },
     /// Invite completed: the invitee's DocumentKey was wrapped via ECDH and the
     /// server accepted the share request.
     InviteSent {
@@ -1544,6 +1552,7 @@ impl SyncState {
             } => {
                 self.handle_fetch_invitee_key(id, document_id, invitee_email);
             }
+            RestCommand::FetchMemberKey { user_id } => self.handle_fetch_member_key(id, user_id),
             // The instant stamps a notice Logic already wrote; Sync has no
             // use for it.
             RestCommand::InviteToDocument {

@@ -1235,10 +1235,7 @@ pub fn main() {
                     }
                 },
                 |cmd| {
-                    let _ = relay_tx.try_send(LogicCommand::Rest {
-                        id: RequestId::next(),
-                        cmd,
-                    });
+                    let _ = relay_tx.try_send(cmd);
                 },
             );
         }
@@ -1267,6 +1264,31 @@ pub fn main() {
         // Mark the turn that takes Logic's answers off the channel: the mark
         // splits a keystroke's confirmation between the relay and the view.
         let mut relayed = false;
+        // TOFU: classify a fetched key against the pinned one. Trusted (same
+        // key) -> its request leaves straight away; new (no pin) or changed
+        // (divergence) -> the modal prompt decides. The pin is read off-thread
+        // (async IndexedDB), and the store borrow is never held across it.
+        let classify_against_pin = |prompt: TofuPrompt| {
+            let pin_rx = persist_store_frame
+                .borrow()
+                .as_ref()
+                .map(|s| s.store().load_trusted_key(*prompt.user_id.as_bytes()));
+            let relay = relay_tx.clone();
+            let role_sig = invite_role;
+            let prompt_sig = tofu_prompt;
+            wasm_bindgen_futures::spawn_local(async move {
+                let pinned = match pin_rx {
+                    Some(rx) => rx.await.ok().flatten(),
+                    None => None,
+                };
+                match tofu::classify(prompt, pinned, role_sig.get_untracked()) {
+                    tofu::Next::Proceed(cmd) => {
+                        let _ = relay.try_send(cmd);
+                    }
+                    tofu::Next::Ask(prompt) => prompt_sig.set(Some(prompt)),
+                }
+            });
+        };
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
             if !relayed {
                 relayed = true;
@@ -1471,39 +1493,41 @@ pub fn main() {
                     ..
                 } => {
                     let prompt = TofuPrompt {
-                        document_id: *document_id,
+                        purpose: tofu::Purpose::Invite {
+                            document_id: *document_id,
+                            email: email.clone(),
+                        },
                         user_id: *user_id,
                         display_name: display_name.clone(),
-                        email: email.clone(),
                         exchange_pub_key: *exchange_pub_key,
                         fingerprint: fingerprint.clone(),
                         changed: false,
                     };
-                    // Read the pin off-thread (async IndexedDB); never hold the
-                    // store borrow across the await.
-                    let pin_rx = persist_store_frame
-                        .borrow()
-                        .as_ref()
-                        .map(|s| s.store().load_trusted_key(*prompt.user_id.as_bytes()));
-                    let relay = relay_tx.clone();
-                    let role_sig = invite_role;
-                    let prompt_sig = tofu_prompt;
-                    wasm_bindgen_futures::spawn_local(async move {
-                        let pinned = match pin_rx {
-                            Some(rx) => rx.await.ok().flatten(),
-                            None => None,
-                        };
-                        match tofu::classify(prompt, pinned, role_sig.get_untracked()) {
-                            // Trusted: unchanged key -> proceed without interrupting.
-                            tofu::Next::Invite(cmd) => {
-                                let _ = relay.try_send(LogicCommand::Rest {
-                                    id: RequestId::next(),
-                                    cmd,
-                                });
-                            }
-                            // New or changed: the modal decides.
-                            tofu::Next::Ask(prompt) => prompt_sig.set(Some(prompt)),
-                        }
+                    classify_against_pin(prompt);
+                }
+                // A member chosen in the Murmure palette: their key passes the
+                // same check before a direct message wraps a key for them.
+                UiEvent::Rest {
+                    evt:
+                        ambre_bus::RestEvent::MemberKey {
+                            user_id,
+                            exchange_pub_key,
+                            fingerprint,
+                        },
+                    ..
+                } => {
+                    let display_name = murmure_relay
+                        .member_name(*user_id)
+                        .unwrap_or_else(|| "This member".to_owned());
+                    classify_against_pin(TofuPrompt {
+                        purpose: tofu::Purpose::Direct {
+                            channel_id: ambre_bus::ChannelId::new(),
+                        },
+                        user_id: *user_id,
+                        display_name,
+                        exchange_pub_key: *exchange_pub_key,
+                        fingerprint: fingerprint.clone(),
+                        changed: false,
                     });
                 }
                 // Revocation done (key rotation complete): confirm and refresh.

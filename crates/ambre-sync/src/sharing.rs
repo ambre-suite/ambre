@@ -594,6 +594,51 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
     });
 }
 
+/// Inputs for [`fetch_member_key_task`].
+pub(crate) struct FetchMemberKeyParams {
+    pub id: RequestId,
+    pub user_id: UserId,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+}
+
+/// Fetch the exchange key the relay serves for a user the client already
+/// names, and answer with `SyncEvent::MemberKeyReady`. Nothing is wrapped:
+/// the Main thread compares the key with the pin first. The answer carries
+/// the id the request named, never one the relay returns.
+pub(crate) async fn fetch_member_key_task<H: ShareHttp>(
+    http: &H,
+    p: FetchMemberKeyParams,
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
+    logic_tx: &LogicSink,
+) {
+    let url = format!(
+        "{}://{}/api/users/{}/pubkeys",
+        p.url_scheme, p.api_base, p.user_id
+    );
+    let served = match http.get_json::<http::PubkeysResponse>(&url).await {
+        Ok(served) => served,
+        Err(e) => {
+            return api_error(
+                logic_tx,
+                "FetchMemberKey",
+                500,
+                format!("Key fetch failed: {e}"),
+            );
+        }
+    };
+    let exchange_pub_key = match decode_exchange_pubkey(&served.exchange_pubkey) {
+        Ok(key) => key,
+        Err(e) => return api_error(logic_tx, "FetchMemberKey", 500, e),
+    };
+    let _ = event_tx.send(SyncEvent::MemberKeyReady {
+        id: p.id,
+        user_id: p.user_id,
+        exchange_pub_key,
+        fingerprint: ambre_crypto::fingerprint(&exchange_pub_key),
+    });
+}
+
 /// How many times a rotation is posted when members keep joining between its
 /// read and its post (`SYNC-143`). Each try reads the members again.
 const ROTATION_TRIES: usize = 3;
@@ -1823,6 +1868,69 @@ mod tests {
         assert!(lrx.try_recv().is_err(), "no ApiError on success");
         // Phase 1 only searches: no wrapping, no share POST.
         assert_eq!(http.calls().len(), 1);
+    }
+
+    fn member_key_params(user_id: UserId) -> FetchMemberKeyParams {
+        FetchMemberKeyParams {
+            id: RequestId::next(),
+            user_id,
+            url_scheme: "https",
+            api_base: "api.test".into(),
+        }
+    }
+
+    /// A member's key is fetched by the id the client names, and answered
+    /// under that id with its fingerprint. One GET, and nothing is wrapped.
+    #[tokio::test]
+    async fn a_member_key_is_fetched_by_user_id_and_wraps_nothing() {
+        let (_member_xk, member_pub_hex) = keypair(3);
+        let member_pub = decode_exchange_pubkey(&member_pub_hex).unwrap();
+        let user_id = UserId::new();
+        let http = FakeHttp::new(vec![Ok(serde_json::json!({
+            "signing_pubkey": "00".repeat(32),
+            "exchange_pubkey": member_pub_hex,
+        }))]);
+        let (etx, erx, sink, lrx) = channels();
+        fetch_member_key_task(&http, member_key_params(user_id), &etx, &sink).await;
+
+        match erx.try_recv().expect("MemberKeyReady emitted") {
+            SyncEvent::MemberKeyReady {
+                user_id: answered,
+                exchange_pub_key,
+                fingerprint,
+                ..
+            } => {
+                assert_eq!(answered, user_id);
+                assert_eq!(exchange_pub_key, member_pub);
+                assert_eq!(fingerprint, ambre_crypto::fingerprint(&member_pub));
+            }
+            _ => panic!("unexpected event (want MemberKeyReady)"),
+        }
+        assert!(lrx.try_recv().is_err(), "no ApiError on success");
+        let calls = http.calls();
+        assert_eq!(calls.len(), 1);
+        assert!(
+            matches!(&calls[0], Call::Get(url) if url == &format!("https://api.test/api/users/{user_id}/pubkeys"))
+        );
+    }
+
+    /// A refused fetch or a malformed key answers an error, and no key.
+    #[tokio::test]
+    async fn a_member_key_that_fails_or_is_malformed_answers_an_error() {
+        let malformed = serde_json::json!({
+            "signing_pubkey": "00".repeat(32),
+            "exchange_pubkey": "ab".repeat(31),
+        });
+        for answer in [Err("404".to_owned()), Ok(malformed)] {
+            let http = FakeHttp::new(vec![answer]);
+            let (etx, erx, sink, lrx) = channels();
+            fetch_member_key_task(&http, member_key_params(UserId::new()), &etx, &sink).await;
+            assert!(erx.try_recv().is_err(), "no key answered");
+            assert!(matches!(
+                lrx.try_recv(),
+                Ok(LogicEvent::ApiError { code: 500, .. })
+            ));
+        }
     }
 
     #[tokio::test]

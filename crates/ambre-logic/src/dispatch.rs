@@ -1953,6 +1953,7 @@ mod tests {
                 document_id: doc,
                 invitee_email: "a@b.c".to_owned(),
             },
+            RestCommand::FetchMemberKey { user_id: user },
             RestCommand::InviteToDocument {
                 document_id: doc,
                 invitee_email: "a@b.c".to_owned(),
@@ -2024,6 +2025,7 @@ mod tests {
                 | RestCommand::CreateDocument { .. }
                 | RestCommand::RenameDocument { .. }
                 | RestCommand::FetchInviteeKey { .. }
+                | RestCommand::FetchMemberKey { .. }
                 | RestCommand::InviteToDocument { .. }
                 | RestCommand::RevokeFromDocument { .. }
                 | RestCommand::LeaveDocument { .. }

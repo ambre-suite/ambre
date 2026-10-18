@@ -885,6 +885,43 @@ async fn the_member_list_shows_each_member_by_name_initials_and_presence() {
     assert_eq!(frame.regions().await.panel, 0.0, "the list closes");
 }
 
+/// Another member's row writes to them: a click fetches their key for the
+/// check of the pin (the Murmure members spec). The user's own row is no
+/// button.
+#[wasm_bindgen_test]
+async fn a_click_on_another_member_fetches_their_key() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let (alice, members) = alice_and_bob(&acme);
+    let session = UiEvent::Rest {
+        id: ambre_bus::RequestId::next(),
+        evt: ambre_bus::RestEvent::SessionReady {
+            user_id: alice,
+            display_name: "Alice Martin".to_owned(),
+            email: "alice@test.local".to_owned(),
+        },
+    };
+    assert!(frame.absorb(session).await.is_empty());
+    assert!(frame.absorb(members).await.is_empty());
+    frame.select("sales").await;
+    frame.click(".murmure-members-toggle").await;
+    assert_eq!(
+        frame.texts(".murmure-member-open .murmure-member-name"),
+        ["Bob"]
+    );
+
+    frame.click(".murmure-member-open").await;
+    let sent = frame.sent.get_untracked();
+    assert!(
+        matches!(
+            sent.last(),
+            Some(LogicCommand::Rest { cmd: ambre_bus::RestCommand::FetchMemberKey { user_id }, .. })
+                if *user_id != alice
+        ),
+        "{sent:?}"
+    );
+}
+
 /// Online is a filled dot and offline a hollow ring: the two marks differ
 /// in shape as well as in colour (`MURMURE-443`).
 #[wasm_bindgen_test]

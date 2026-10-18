@@ -14,11 +14,13 @@
 )]
 
 use ambre_bus::{
-    ChannelActivity, ChannelName, ChannelPlace, LogicCommand, MemberChannel, MurmureEvent, UiEvent,
+    CatalogueEntry, ChannelActivity, ChannelName, ChannelPlace, DirectMessageEvent, LogicCommand,
+    MemberChannel, MemberView, MurmureEvent, Presence, RequestId, RestCommand, RestEvent,
+    SpaceEvent, UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, PaletteRow, ShellAction};
 use ambre_commands::Locale;
-use ambre_core::{ChannelId, SpaceId};
+use ambre_core::{ChannelId, SpaceId, UserId};
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{MurmureHandler, MurmureRelay};
 use ambre_murmure::commands::{COMMANDS, MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY};
@@ -166,6 +168,129 @@ fn choosing_a_channel_in_the_palette_opens_it() {
         "{opened:?}"
     );
     assert_eq!(relay.pane.get_untracked().shown_channel(), Some(zeta));
+}
+
+/// A relay showing `general`, a public channel of a space whose members are
+/// this user, Bob and Carol. Returns the space's members in that order.
+fn a_space_with_members() -> (Owner, MurmureRelay, ChannelId, [UserId; 3]) {
+    let owner = Owner::new();
+    owner.set();
+    let relay = MurmureRelay::new();
+    let space = SpaceId::new();
+    let general = ChannelId::new();
+    let users = [UserId::new(), UserId::new(), UserId::new()];
+    relay.absorb(&UiEvent::Rest {
+        id: RequestId::next(),
+        evt: RestEvent::SessionReady {
+            user_id: users[0],
+            display_name: "Alice".to_owned(),
+            email: "alice@test.local".to_owned(),
+        },
+    });
+    relay.absorb(&UiEvent::MemberChannels {
+        channels: vec![MemberChannel {
+            channel_id: general,
+            place: ChannelPlace::Public(space),
+        }],
+        spaces: vec![space],
+        names: Vec::new(),
+        peers: Vec::new(),
+    });
+    relay.absorb(&UiEvent::Space {
+        space_id: space,
+        event: SpaceEvent::Catalogue {
+            name: Some("Acme".to_owned()),
+            categories: Vec::new(),
+            channels: vec![CatalogueEntry {
+                channel_id: general,
+                name: "general".to_owned(),
+                topic: None,
+                category: None,
+                position: 0,
+            }],
+        },
+    });
+    let member = |user_id, name: &str| MemberView {
+        user_id,
+        display_name: name.to_owned(),
+        presence: Presence::Offline,
+    };
+    relay.absorb(&UiEvent::Space {
+        space_id: space,
+        event: SpaceEvent::Members {
+            members: vec![
+                member(users[0], "Alice"),
+                member(users[1], "Bob"),
+                member(users[2], "Carol"),
+            ],
+        },
+    });
+    relay.select(general);
+    (owner, relay, general, users)
+}
+
+/// After the channels, the palette lists the other members of the space of
+/// the shown channel, and the query keeps those whose name matches. This
+/// user is not among them (`MURMURE-452`).
+#[wasm_bindgen_test]
+fn the_palette_lists_the_other_members_of_the_space_after_the_channels() {
+    let (_owner, relay, general, [_, bob, carol]) = a_space_with_members();
+    let entries = relay.palette_entries().get_untracked();
+    let keys: Vec<[u8; 16]> = entries.iter().map(|e| e.key).collect();
+    assert_eq!(
+        keys,
+        [*general.as_bytes(), *bob.as_bytes(), *carol.as_bytes()],
+        "{entries:?}"
+    );
+    assert_eq!(entries[1].hint, Some("Member"));
+    let shown: Vec<String> = ambre_chrome::palette_rows(&entries, COMMANDS, "bo", &Locale::En)
+        .into_iter()
+        .map(|row| match row {
+            PaletteRow::Entry(e) => e.label.clone(),
+            PaletteRow::Command(c) => c.id.0.to_owned(),
+        })
+        .collect();
+    assert_eq!(shown, ["Bob"]);
+}
+
+/// Choosing a member fetches their key and opens nothing yet: the key is
+/// checked against the pin first. The direct message the relay answers
+/// then shows, and opens nothing the Logic thread did not (`MURMURE-455`).
+#[wasm_bindgen_test]
+fn choosing_a_member_fetches_their_key_then_shows_the_direct_message() {
+    let (_owner, relay, general, [_, bob, _]) = a_space_with_members();
+    let fetched = relay.choose(*bob.as_bytes());
+    assert!(
+        matches!(
+            fetched,
+            Some(LogicCommand::Rest { cmd: RestCommand::FetchMemberKey { user_id }, .. })
+                if user_id == bob
+        ),
+        "{fetched:?}"
+    );
+    assert_eq!(relay.pane.get_untracked().shown_channel(), Some(general));
+    assert_eq!(relay.member_name(bob).as_deref(), Some("Bob"));
+
+    let direct = ChannelId::new();
+    let after = relay.absorb(&UiEvent::DirectMessage {
+        requested: ChannelId::new(),
+        event: DirectMessageEvent::Opened { channel_id: direct },
+    });
+    assert!(
+        matches!(after[..], [LogicCommand::ListMemberChannels]),
+        "{after:?}"
+    );
+    assert_eq!(relay.pane.get_untracked().shown_channel(), Some(direct));
+    relay.absorb(&UiEvent::MemberChannels {
+        channels: vec![MemberChannel {
+            channel_id: direct,
+            place: ChannelPlace::Direct,
+        }],
+        spaces: Vec::new(),
+        names: Vec::new(),
+        peers: Vec::new(),
+    });
+    assert!(relay.select(direct).is_none(), "it is open already");
 }
 
 /// The commands a handler sent through its sink.

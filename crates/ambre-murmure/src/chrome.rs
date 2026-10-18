@@ -15,11 +15,12 @@ use crate::commands::{MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY};
 use crate::{Activity, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection};
 use ambre_bus::AppCommand;
 use ambre_bus::{
-    LogicCommand, MemberView, MurmureEvent, Presence, SpaceCommand, SpaceEvent, Timestamp, UiEvent,
+    DirectMessageEvent, LogicCommand, MemberView, MurmureEvent, Presence, RequestId, RestCommand,
+    RestEvent, SpaceCommand, SpaceEvent, Timestamp, UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, PaletteEntry, ShellAction, ShellRegion};
 use ambre_commands::CommandId;
-use ambre_core::{ChannelId, SpaceId};
+use ambre_core::{ChannelId, SpaceId, UserId};
 use leptos::prelude::*;
 
 /// The region of the shell a pane is in. The channel list is the sidebar,
@@ -104,9 +105,11 @@ pub fn ChannelHeader(
 /// The member list of the space the current channel lies in (the Murmure
 /// members spec). Each row shows the avatar, the display name and the
 /// presence mark of one member (`MURMURE-441`, `MURMURE-442`). The filter
-/// runs on what the page holds, and sends nothing (`MURMURE-454`).
+/// runs on what the page holds, and sends nothing (`MURMURE-454`). Choosing
+/// another member goes through the relay, as in the palette (`MURMURE-455`),
+/// and `send` carries what it answers.
 #[component]
-pub fn MemberList(relay: MurmureRelay) -> impl IntoView {
+pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl IntoView {
     let query = RwSignal::new(String::new());
     let rows = relay.shown_members();
     let found = move || {
@@ -130,7 +133,24 @@ pub fn MemberList(relay: MurmureRelay) -> impl IntoView {
                 on:input=move |ev| query.set(event_target_value(&ev))
             />
             <ul aria-label="Members">
-                {move || found().into_iter().map(member_view).collect_view()}
+                {move || {
+                    let me = relay.me.get();
+                    found()
+                        .into_iter()
+                        .map(|member| {
+                            let user = member.user_id;
+                            let choose = (Some(user) != me)
+                                .then(|| {
+                                    Callback::new(move |()| {
+                                        if let Some(command) = relay.choose(*user.as_bytes()) {
+                                            send.run(command);
+                                        }
+                                    })
+                                });
+                            member_view(member, choose)
+                        })
+                        .collect_view()
+                }}
             </ul>
         </div>
     }
@@ -138,19 +158,38 @@ pub fn MemberList(relay: MurmureRelay) -> impl IntoView {
 
 /// One member: the avatar, the name, then the presence mark. The two marks
 /// differ in shape as well as in colour, and each carries its word for a
-/// screen reader (`MURMURE-443`).
-fn member_view(member: MemberView) -> impl IntoView {
+/// screen reader (`MURMURE-443`). Another member's row is a button that
+/// writes to them; the user's own row is not.
+fn member_view(member: MemberView, choose: Option<Callback<()>>) -> impl IntoView {
     let (state, word) = match member.presence {
         Presence::Online => ("online", "Online"),
         Presence::Offline => ("offline", "Offline"),
     };
     let color = ambre_draw::peer_css(&member.user_id);
     let name = member.display_name;
+    let who = view! {
+        <ambre_chrome::Avatar name=name.clone() color=color />
+        <span class="murmure-member-name">{name.clone()}</span>
+        <span class="murmure-presence" data-presence=state role="img" aria-label=word></span>
+    };
     view! {
         <li class="murmure-member">
-            <ambre_chrome::Avatar name=name.clone() color=color />
-            <span class="murmure-member-name">{name}</span>
-            <span class="murmure-presence" data-presence=state role="img" aria-label=word></span>
+            {match choose {
+                Some(choose) => {
+                    view! {
+                        <button
+                            r#type="button"
+                            class="murmure-member-open"
+                            title=format!("Message {name}")
+                            on:click=move |_| choose.run(())
+                        >
+                            {who}
+                        </button>
+                    }
+                        .into_any()
+                }
+                None => who.into_any(),
+            }}
         </li>
     }
 }
@@ -168,6 +207,9 @@ pub struct MurmureRelay {
     opened: RwSignal<HashSet<ChannelId>>,
     /// The member list of each open space, as its last event drew it.
     members: RwSignal<HashMap<SpaceId, Vec<MemberView>>>,
+    /// This user, once the session names them. The palette never offers a
+    /// direct message with oneself.
+    me: RwSignal<Option<UserId>>,
 }
 
 impl Default for MurmureRelay {
@@ -184,6 +226,7 @@ impl MurmureRelay {
             pane: RwSignal::new(MurmurePane::default()),
             opened: RwSignal::new(HashSet::new()),
             members: RwSignal::new(HashMap::new()),
+            me: RwSignal::new(None),
         }
     }
 
@@ -250,6 +293,26 @@ impl MurmureRelay {
     /// open for its catalogue, the channels to list again after a join.
     pub fn absorb(&self, ev: &UiEvent) -> Vec<LogicCommand> {
         match ev {
+            UiEvent::Rest {
+                evt: RestEvent::SessionReady { user_id, .. },
+                ..
+            } => {
+                self.me.set(Some(*user_id));
+                Vec::new()
+            }
+            // The direct message a member was chosen for, created or found.
+            // The Logic thread opened it, so it shows and opens nothing more.
+            // The listing puts it in the sidebar.
+            UiEvent::DirectMessage {
+                event: DirectMessageEvent::Opened { channel_id },
+                ..
+            } => {
+                self.opened.update(|o| {
+                    o.insert(*channel_id);
+                });
+                self.pane.set(MurmurePane::channel(*channel_id));
+                vec![LogicCommand::ListMemberChannels]
+            }
             UiEvent::MemberChannels {
                 channels,
                 spaces,
@@ -366,12 +429,13 @@ impl MurmureRelay {
         }
     }
 
-    /// The channels the palette lists before the commands, in sidebar order,
-    /// each named as the sidebar names it (`MURMURE-172`).
+    /// What the palette lists before the commands: the channels in sidebar
+    /// order, each named as the sidebar names it (`MURMURE-172`). Then come
+    /// the other members of the space of the shown channel (`MURMURE-452`).
     pub fn palette_entries(&self) -> Signal<Vec<PaletteEntry>> {
-        let sidebar = self.sidebar;
+        let (sidebar, members, me) = (self.sidebar, self.shown_members(), self.me);
         Signal::derive(move || {
-            sidebar.with(|s| {
+            let mut entries: Vec<PaletteEntry> = sidebar.with(|s| {
                 s.sections()
                     .into_iter()
                     .flat_map(|section| {
@@ -383,14 +447,48 @@ impl MurmureRelay {
                         })
                     })
                     .collect()
-            })
+            });
+            let me = me.get();
+            members.with(|members| {
+                entries.extend(
+                    members
+                        .iter()
+                        .filter(|member| Some(member.user_id) != me)
+                        .map(|member| PaletteEntry {
+                            key: *member.user_id.as_bytes(),
+                            label: member.display_name.clone(),
+                            hint: Some("Member"),
+                        }),
+                );
+            });
+            entries
         })
     }
 
-    /// Choose the palette entry of `key`: the channel it lists opens as a
-    /// click on the sidebar opens it (`MURMURE-173`).
+    /// Choose the palette entry of `key`. A channel opens as a click on the
+    /// sidebar opens it (`MURMURE-173`). A member's key is fetched for the
+    /// check of the pin, which opens the direct message of the two
+    /// (`MURMURE-455`).
     pub fn choose(&self, key: [u8; 16]) -> Option<LogicCommand> {
+        let user_id = UserId::from_bytes(key);
+        if self.member_name(user_id).is_some() && self.me.get_untracked() != Some(user_id) {
+            return Some(LogicCommand::Rest {
+                id: RequestId::next(),
+                cmd: RestCommand::FetchMemberKey { user_id },
+            });
+        }
         self.select(ChannelId::from_bytes(key))
+    }
+
+    /// The display name of `user` in an open space, if they are a member.
+    pub fn member_name(&self, user: UserId) -> Option<String> {
+        self.members.with_untracked(|spaces| {
+            spaces
+                .values()
+                .flatten()
+                .find(|member| member.user_id == user)
+                .map(|member| member.display_name.clone())
+        })
     }
 
     /// Open the next channel with activity after the shown one, or the

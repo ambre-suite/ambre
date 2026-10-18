@@ -1006,6 +1006,21 @@ impl SyncState {
                     },
                 );
             }
+            SyncEvent::MemberKeyReady {
+                id,
+                user_id,
+                exchange_pub_key,
+                fingerprint,
+            } => {
+                self.reply(
+                    id,
+                    RestEvent::MemberKey {
+                        user_id,
+                        exchange_pub_key,
+                        fingerprint,
+                    },
+                );
+            }
             SyncEvent::InviteSent {
                 id,
                 document_id,

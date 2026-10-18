@@ -593,6 +593,22 @@ input[type="radio"] {
     padding: var(--space-1) var(--space-4);
 }
 
+/* Another member's row writes to them; it reads as the row it fills. */
+.murmure-member-open {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
 .murmure-member-name {
     flex: 1 1 auto;
     overflow: hidden;

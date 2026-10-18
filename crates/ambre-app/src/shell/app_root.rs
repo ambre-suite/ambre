@@ -56,7 +56,7 @@ pub(crate) fn MurmureShell(
                     // (the Murmure message list spec). The host binds it by id.
                     fallback=|| view! { <CanvasCell id=crate::host::THREAD_CANVAS /> }
                 >
-                    <MemberList relay=relay />
+                    <MemberList relay=relay send=send />
                 </Show>
             </Panel>
         </AppShell>

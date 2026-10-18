@@ -2,52 +2,77 @@
 // The recipient's key, compared and confirmed before a share
 // (`ambre-spec-key-verification.md`). The classification, the confirmation
 // and the prompt live here. This file alone builds the second phase of an
-// invitation, so every route to it passes a decision.
+// invitation and the request of a direct message, so every route to either
+// passes a decision.
 
-use ambre_bus::{DocumentId, RestCommand, Role, Timestamp, UserId};
+use ambre_bus::{
+    ChannelId, DirectMember, DirectMessageDraft, DocumentId, LogicCommand, RequestId, RestCommand,
+    Role, Timestamp, UserId,
+};
 use ambre_chrome::Dialog;
 use leptos::prelude::*;
 
-/// A pending trust decision for the share dialog. Built by the per-frame
-/// relay from the first phase's answer, once the fetched key has been
-/// compared with the pinned one.
+/// What a confirmed key is for.
+#[derive(Clone, PartialEq, Debug)]
+pub(crate) enum Purpose {
+    /// An invitation to a document, sent to the recipient's email.
+    Invite {
+        document_id: DocumentId,
+        email: String,
+    },
+    /// The direct message of this user and the recipient alone (the Murmure
+    /// members spec). `channel_id` names the request.
+    Direct { channel_id: ChannelId },
+}
+
+/// A pending trust decision. Built by the per-frame relay from a fetched
+/// key, once that key has been compared with the pinned one.
 ///
 /// Only the states that interrupt the user become a prompt. That is a **new**
-/// key (`changed == false`, the first invitation) or a **changed** key
+/// key (`changed == false`, the first contact) or a **changed** key
 /// (`changed == true`, a divergence from the pin). A **trusted** key never
-/// does: the relay proceeds straight to the second phase.
+/// does: the relay proceeds straight to what the key is for.
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct TofuPrompt {
-    /// The document being shared.
-    pub(crate) document_id: DocumentId,
+    /// What the key is for.
+    pub(crate) purpose: Purpose,
     /// The recipient, under whose identity the pin is filed.
     pub(crate) user_id: UserId,
     /// The recipient's display name, shown in the prompt.
     pub(crate) display_name: String,
-    /// The recipient's email, shown in the prompt and sent with the invitation.
-    pub(crate) email: String,
-    /// Raw X25519 key the server just returned: pinned on confirmation and sent
-    /// as `expect_exchange_pub_key` so Sync wraps only if it still matches.
+    /// Raw X25519 key the server just returned: pinned on confirmation and
+    /// sent beside the request, so Sync wraps only if it still matches.
     pub(crate) exchange_pub_key: [u8; 32],
     /// Preformatted fingerprint (`ambre_crypto::fingerprint`); displayed verbatim.
     pub(crate) fingerprint: String,
-    /// `false` = new (first invitation), `true` = changed (diverged from the pin).
+    /// `false` = new (first contact), `true` = changed (diverged from the pin).
     pub(crate) changed: bool,
+}
+
+impl TofuPrompt {
+    /// The email the prompt shows under the name, for an invitation alone.
+    fn email(&self) -> Option<&str> {
+        match &self.purpose {
+            Purpose::Invite { email, .. } => Some(email),
+            Purpose::Direct { .. } => None,
+        }
+    }
 }
 
 /// What a fetched key leads to.
 #[derive(Debug)]
 pub(crate) enum Next {
-    /// The pinned key came back: the invitation goes out with no prompt.
-    Invite(RestCommand),
+    /// The pinned key came back: the request goes out with no prompt.
+    Proceed(LogicCommand),
     /// A new or a changed key: the user decides before anything is sent.
     Ask(TofuPrompt),
 }
 
 /// Classify a fetched key against the pin (`CHROME-050`, `CHROME-051`).
+/// `role` is the one an invitation grants; a direct message ignores it.
 pub(crate) fn classify(prompt: TofuPrompt, pinned: Option<[u8; 32]>, role: Role) -> Next {
     match pinned {
-        Some(key) if key == prompt.exchange_pub_key => Next::Invite(invitation(&prompt, role)),
+        Some(key) if key == prompt.exchange_pub_key => Next::Proceed(request(&prompt, role)),
         Some(_) => Next::Ask(TofuPrompt {
             changed: true,
             ..prompt
@@ -59,32 +84,48 @@ pub(crate) fn classify(prompt: TofuPrompt, pinned: Option<[u8; 32]>, role: Role)
     }
 }
 
-/// Pin the confirmed key, then dispatch the invitation that carries it
+/// Pin the confirmed key, then dispatch the request that carries it
 /// (`CHROME-052`). The pin is filed under the recipient's identity alone.
 pub(crate) fn confirm(
     prompt: &TofuPrompt,
     role: Role,
     pin: impl FnOnce([u8; 16], [u8; 32]),
-    dispatch: impl FnOnce(RestCommand),
+    dispatch: impl FnOnce(LogicCommand),
 ) {
     pin(*prompt.user_id.as_bytes(), prompt.exchange_pub_key);
-    dispatch(invitation(prompt, role));
+    dispatch(request(prompt, role));
 }
 
-/// The second phase, carrying the key the user saw so Sync can refuse a
-/// substitution (`CHROME-047`). Private: [`classify`] and [`confirm`] are the
-/// only routes to it.
+/// The request the key is for, carrying the key the user saw so Sync can
+/// refuse a substitution (`CHROME-047`). Private: [`classify`] and
+/// [`confirm`] are the only routes to it.
 ///
 /// It names the user the key came with, and the instant it leaves, which the
 /// Logic thread cannot read for itself.
-fn invitation(prompt: &TofuPrompt, role: Role) -> RestCommand {
-    RestCommand::InviteToDocument {
-        document_id: prompt.document_id,
-        invitee_email: prompt.email.clone(),
-        invitee: prompt.user_id,
-        role,
-        expect_exchange_pub_key: prompt.exchange_pub_key,
-        now: Timestamp(js_sys::Date::now() as u64),
+fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
+    let now = Timestamp(js_sys::Date::now() as u64);
+    match &prompt.purpose {
+        Purpose::Invite { document_id, email } => LogicCommand::Rest {
+            id: RequestId::next(),
+            cmd: RestCommand::InviteToDocument {
+                document_id: *document_id,
+                invitee_email: email.clone(),
+                invitee: prompt.user_id,
+                role,
+                expect_exchange_pub_key: prompt.exchange_pub_key,
+                now,
+            },
+        },
+        Purpose::Direct { channel_id } => LogicCommand::OpenDirectMessage {
+            draft: DirectMessageDraft {
+                channel_id: *channel_id,
+                members: vec![DirectMember {
+                    user_id: prompt.user_id,
+                    exchange_pub_key: prompt.exchange_pub_key,
+                }],
+            },
+            now,
+        },
     }
 }
 
@@ -111,6 +152,8 @@ pub(crate) fn TofuDialog(
                     .get()
                     .map(|p| {
                         let changed = p.changed;
+                        let direct = matches!(p.purpose, Purpose::Direct { .. });
+                        let email = p.email().map(str::to_owned);
                         let fp_copy = p.fingerprint.clone();
                         let confirm_p = p.clone();
                         view! {
@@ -124,7 +167,10 @@ pub(crate) fn TofuDialog(
                                 </h2>
                                 <p class="ambre-tofu-who">
                                     <span class="ambre-tofu-name">{p.display_name.clone()}</span>
-                                    <span class="ambre-tofu-email">{p.email.clone()}</span>
+                                    {email
+                                        .map(|email| {
+                                            view! { <span class="ambre-tofu-email">{email}</span> }
+                                        })}
                                 </p>
                                 {changed
                                     .then(|| {
@@ -172,7 +218,12 @@ pub(crate) fn TofuDialog(
                                             prompt.set(None);
                                         }
                                     >
-                                        {if changed { "Re-pin and invite" } else { "Confirm and invite" }}
+                                        {match (changed, direct) {
+                                            (true, false) => "Re-pin and invite",
+                                            (false, false) => "Confirm and invite",
+                                            (true, true) => "Re-pin and message",
+                                            (false, true) => "Confirm and message",
+                                        }}
                                     </button>
                                 </div>
                             </div>
@@ -194,21 +245,37 @@ mod tests {
     /// A prompt for a key of `byte`, as the first phase answers it.
     fn fetched(byte: u8) -> TofuPrompt {
         TofuPrompt {
-            document_id: DocumentId::new(),
+            purpose: Purpose::Invite {
+                document_id: DocumentId::new(),
+                email: "bob@test.local".to_owned(),
+            },
             user_id: UserId::new(),
             display_name: "Bob".to_owned(),
-            email: "bob@test.local".to_owned(),
             exchange_pub_key: [byte; 32],
             fingerprint: "ABCD EFGH".to_owned(),
             changed: false,
         }
     }
 
+    /// The same key, fetched for a direct message.
+    fn fetched_for_direct(byte: u8) -> TofuPrompt {
+        TofuPrompt {
+            purpose: Purpose::Direct {
+                channel_id: ChannelId::new(),
+            },
+            ..fetched(byte)
+        }
+    }
+
     /// The key the invitation carries, or `None` for a prompt.
     fn invited_with(next: &Next) -> Option<[u8; 32]> {
         match next {
-            Next::Invite(RestCommand::InviteToDocument {
-                expect_exchange_pub_key,
+            Next::Proceed(LogicCommand::Rest {
+                cmd:
+                    RestCommand::InviteToDocument {
+                        expect_exchange_pub_key,
+                        ..
+                    },
                 ..
             }) => Some(*expect_exchange_pub_key),
             _ => None,
@@ -219,16 +286,55 @@ mod tests {
     /// pinned one goes out unasked (`CHROME-050`, `CHROME-051`).
     #[wasm_bindgen_test]
     fn a_new_or_changed_key_asks_and_only_the_pinned_key_invites() {
-        match classify(fetched(1), None, Role::Editor) {
-            Next::Ask(p) => assert!(!p.changed, "a first contact is new"),
-            other => panic!("a new key invited: {other:?}"),
-        }
-        match classify(fetched(1), Some([9; 32]), Role::Editor) {
-            Next::Ask(p) => assert!(p.changed, "a substituted key is a change"),
-            other => panic!("a substituted key invited: {other:?}"),
+        for prompt in [fetched(1), fetched_for_direct(1)] {
+            match classify(prompt.clone(), None, Role::Editor) {
+                Next::Ask(p) => assert!(!p.changed, "a first contact is new"),
+                other => panic!("a new key went out: {other:?}"),
+            }
+            match classify(prompt, Some([9; 32]), Role::Editor) {
+                Next::Ask(p) => assert!(p.changed, "a substituted key is a change"),
+                other => panic!("a substituted key went out: {other:?}"),
+            }
         }
         let trusted = classify(fetched(1), Some([1; 32]), Role::Editor);
         assert_eq!(invited_with(&trusted), Some([1; 32]));
+    }
+
+    /// A direct message goes out under the channel id the prompt names. It
+    /// carries the recipient alone and the key the user saw (the Murmure
+    /// members spec). The pin lands first, as for an invitation.
+    #[wasm_bindgen_test]
+    fn a_trusted_member_key_opens_the_direct_message_of_the_two() {
+        let prompt = fetched_for_direct(6);
+        let Purpose::Direct { channel_id } = prompt.purpose else {
+            unreachable!()
+        };
+        let expected = vec![DirectMember {
+            user_id: prompt.user_id,
+            exchange_pub_key: [6; 32],
+        }];
+        let Next::Proceed(LogicCommand::OpenDirectMessage { draft, .. }) =
+            classify(prompt.clone(), Some([6; 32]), Role::Viewer)
+        else {
+            panic!("a pinned key asks again");
+        };
+        assert_eq!(draft.channel_id, channel_id);
+        assert_eq!(draft.members, expected);
+
+        let log = RefCell::new(Vec::new());
+        confirm(
+            &prompt,
+            Role::Viewer,
+            |_, key| log.borrow_mut().push(format!("pin {}", key[0])),
+            |cmd| {
+                let LogicCommand::OpenDirectMessage { draft, .. } = cmd else {
+                    panic!("not a direct message: {cmd:?}");
+                };
+                assert_eq!(draft.members, expected);
+                log.borrow_mut().push("dispatch".to_owned());
+            },
+        );
+        assert_eq!(log.into_inner(), ["pin 6", "dispatch"]);
     }
 
     /// The pin lands before the invitation leaves, under the recipient's
@@ -242,9 +348,13 @@ mod tests {
             Role::Viewer,
             |user, key| log.borrow_mut().push(format!("pin {:?} {}", user, key[0])),
             |cmd| {
-                let RestCommand::InviteToDocument {
-                    role,
-                    expect_exchange_pub_key,
+                let LogicCommand::Rest {
+                    cmd:
+                        RestCommand::InviteToDocument {
+                            role,
+                            expect_exchange_pub_key,
+                            ..
+                        },
                     ..
                 } = cmd
                 else {
@@ -347,6 +457,22 @@ mod tests {
             );
             m.root.remove();
         }
+    }
+
+    /// A prompt for a direct message names the member without an email, and
+    /// its confirming action opens a conversation rather than an invitation.
+    #[wasm_bindgen_test]
+    async fn a_prompt_for_a_direct_message_names_the_conversation() {
+        let m = mount(fetched_for_direct(7)).await;
+        assert!(
+            m.root
+                .query_selector(".ambre-tofu-email")
+                .unwrap()
+                .is_none()
+        );
+        let confirm = find(&m, ".ambre-tofu-confirm").text_content().unwrap();
+        assert_eq!(confirm, "Confirm and message");
+        m.root.remove();
     }
 
     /// Escape, the backdrop and the refusing action leave no decision behind

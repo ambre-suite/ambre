@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE MEMBERS OF A SPACE
 **Type:** Vertical (feature)
-**Implementation:** partial -- the member rows, the presence of each member and the filter ship
-in the engine and the Logic thread. No view draws them yet.
+**Implementation:** partial -- the member rows, the presence of each member, the filter and the list
+beside a channel ship. So does the direct message to a member. The away and busy states do not.
 
 > A member sees who else belongs to the space, who is online, and writes to any of them in one
 > gesture. The list and its search stay on the client: what the user types never leaves it.
@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-452` | `POST` | The palette MUST list, after the channels, the members of the current space whose display name matches what the user types. | this spec section 4; `MURMURE-172` | not built | unbuilt -- lands with the `A direct message from a member` Story (`ambre-roadmap.md` E5). The palette lists the channels; a member listed there needs the key check before it can be chosen | unimplemented |
+| `MURMURE-452` | `POST` | The palette MUST list, after the channels, the members of the current space whose display name matches what the user types. | this spec section 4; `MURMURE-172` | `ambre_murmure::tests::chrome_relay::the_palette_lists_the_other_members_of_the_space_after_the_channels` -- the members of the shown channel's space after its channels, this user left out, and a query that keeps one | none | verified |
 | `MURMURE-453` | `POST` | The filter of the member list MUST keep only the members whose display name matches what the user types. | this spec section 4 | `ambre_murmure::members::tests::the_filter_keeps_the_members_whose_name_matches` -- a substring in any case, in the order of the list | none | verified |
 | `MURMURE-454` | `FRAME` | Finding a member MUST NOT send what the user types outside the client. | this spec section 3; `MURMURE-174` | type-level -- the filter takes the list the client holds and the query, and returns a borrow of that list: it holds no channel to the Sync worker | none | verified |
 
@@ -55,7 +55,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-455` | `POST` | Choosing a member MUST open the direct message between the user and that member alone. | this spec section 4; `MURMURE-051` | not built | unbuilt -- lands with the `A direct message from a member` Story (`ambre-roadmap.md` E5). The key of the member is fetched by its user id and checked against the pin, which only an invite does today | unimplemented |
+| `MURMURE-455` | `POST` | Choosing a member MUST open the direct message between the user and that member alone. | this spec section 4; `MURMURE-051` | `ambre_murmure::tests::chrome_relay::choosing_a_member_fetches_their_key_then_shows_the_direct_message` -- the choice fetches the key, and the answered channel shows; `ambre_app::shell::murmure_regions::a_click_on_another_member_fetches_their_key` -- the same from the list; `ambre_sync::sharing::tests::a_member_key_is_fetched_by_user_id_and_wraps_nothing`; `ambre_app::tofu::tests::a_trusted_member_key_opens_the_direct_message_of_the_two` -- the request names that member alone, with the pinned key | none | verified |
 
 **Frame:** `MURMURE-053`
 
@@ -71,8 +71,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   (`ambre-spec-budgets.md section 8`). Each picture costs the avatar row of its section 6.
 * **Boundary.** the presence sample is sealed under the key of the space document (`ZK-005`). The
   relay learns the member list and the display names it already holds (`ZK-018`).
-* **Verification.** 14 `verified`, 7 `unimplemented`. The engine and the Logic thread hold the
-  list, the presence and the filter. The browser tier draws the list beside a channel.
+* **Verification.** 16 `verified`, 5 `unimplemented`. The engine and the Logic thread hold the
+  list, the presence and the filter. The browser tier draws the list beside a channel, and a
+  member chosen there or in the palette opens a direct message.
 
 ---
 
@@ -83,7 +84,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | opens the space | has it open | Alice and Bob | Bob sees Alice online (`MURMURE-448`) | `ambre_logic::spaces::tests::a_sample_shows_its_member_online_and_a_newcomer_is_answered_once` |
 | closes every tab | has the space open | Alice and Bob | Alice offline once her presence expires (`MURMURE-445`) | `ambre_logic::spaces::tests::a_member_with_no_sample_within_the_expiry_shows_offline` |
 | reads the "budget" channel | reads "design" | nothing more | Alice online, never where (`MURMURE-446`) | `ambre_murmure::members::tests::the_sample_holds_the_state_alone` |
-| types "bo" in the palette | -- | Bob among the members | Bob under the channels; choosing him opens their direct message (`MURMURE-455`) | none |
+| types "bo" in the palette | -- | Bob among the members | Bob under the channels; choosing him opens their direct message (`MURMURE-455`) | `ambre_murmure::tests::chrome_relay::choosing_a_member_fetches_their_key_then_shows_the_direct_message` |
 | sets busy | has the space open | nothing durable | Alice busy (`MURMURE-456`) | none |
 
 ---
@@ -166,9 +167,6 @@ the member reads it (`ambre-spec-user-settings.md`). A connection copies it into
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No member is chosen from the list.** The choice of a member waits on the
-  `A direct message from a member` Story (`ambre-roadmap.md` E5). The choice needs the key
-  check of `ambre-spec-key-verification.md` before a direct message wraps a key.
 * **A private channel or a direct message lists no members.** The list shows the members of the
   space, so its button shows on a channel in a space alone. The members of a channel wait on the
   `The members of a channel` Story (`ambre-roadmap.md` E5).
