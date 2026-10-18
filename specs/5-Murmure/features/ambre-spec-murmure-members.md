@@ -19,9 +19,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-440` | `INV` | The member list of a space MUST hold the members of the space document, and no one else. | this spec section 3; `MURMURE-031`; `SRV-168` | `ambre_murmure::members::tests::the_list_holds_the_member_rows_and_no_one_else` -- a sample from a user outside the rows adds no one; `ambre_logic::spaces::tests::the_member_list_holds_the_rows_of_the_space_document_and_opens_nothing_else` -- the relay's rows become the list; `ambre_logic::spaces::tests::a_change_of_members_while_the_space_is_open_reads_the_rows_again` -- a join and a leave while the space is open; `::a_change_of_members_hands_the_rows_and_costs_the_space_no_request` -- the new rows replace the old, and nothing is asked; `ambre_sync::updates::tests::a_change_of_members_costs_one_listing_whose_rows_reach_logic` -- the rows the relay's word reads reach Logic | none | verified |
-| `MURMURE-441` | `OBS` | The member list MUST show each member by display name and avatar. | this spec section 3; `PROFILE-001` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-442` | `OBS` | The member list MUST mark each member as online or offline. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-443` | `OBS` | Each presence state MUST differ from the others in shape as well as in colour. | this spec section 3; `ambre-spec-accessibility.md` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-441` | `OBS` | The member list MUST show each member by display name and avatar. | this spec section 3; `PROFILE-001` | not built | unbuilt -- lands with the `The member list of a space` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-442` | `OBS` | The member list MUST mark each member as online or offline. | this spec section 3 | not built | unbuilt -- lands with the `The member list of a space` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-443` | `OBS` | Each presence state MUST differ from the others in shape as well as in colour. | this spec section 3; `ambre-spec-accessibility.md` | not built | unbuilt -- lands with the `The member list of a space` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-444` | `INV` | The presence of a member in a space MUST ride the ephemerals of the space document. | this spec section 3; `ambre-spec-presence.md`; `ZK-005` | `ambre_logic::spaces::tests::opening_a_space_sends_this_users_presence_on_its_document_alone` -- the one sample goes on the space document, which the Sync worker seals under its key | none | verified |
 | `MURMURE-445` | `INV` | A member MUST show as offline once no connection of theirs refreshes their presence within the presence expiry. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_murmure::members::tests::a_member_turns_offline_once_no_sample_refreshes_them_within_the_expiry` -- online at the expiry, offline one millisecond past it; `ambre_logic::spaces::tests::a_member_with_no_sample_within_the_expiry_shows_offline` -- the view's tick turns the member offline | none | verified |
 | `MURMURE-446` | `INV` | The presence in a space MUST NOT show which channel a member reads. | this spec section 3; `MURMURE-127` | `ambre_murmure::members::tests::the_sample_holds_the_state_alone` -- the sample is two bytes, its tag and the state, and nothing else decodes | none | verified |
@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-452` | `POST` | The palette MUST list, after the channels, the members of the current space whose display name matches what the user types. | this spec section 4; `MURMURE-172` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-452` | `POST` | The palette MUST list, after the channels, the members of the current space whose display name matches what the user types. | this spec section 4; `MURMURE-172` | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-453` | `POST` | The filter of the member list MUST keep only the members whose display name matches what the user types. | this spec section 4 | `ambre_murmure::members::tests::the_filter_keeps_the_members_whose_name_matches` -- a substring in any case, in the order of the list | none | verified |
 | `MURMURE-454` | `FRAME` | Finding a member MUST NOT send what the user types outside the client. | this spec section 3; `MURMURE-174` | type-level -- the filter takes the list the client holds and the query, and returns a borrow of that list: it holds no channel to the Sync worker | none | verified |
 
@@ -55,7 +55,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-455` | `POST` | Choosing a member MUST open the direct message between the user and that member alone. | this spec section 4; `MURMURE-051` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-455` | `POST` | Choosing a member MUST open the direct message between the user and that member alone. | this spec section 4; `MURMURE-051` | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 **Frame:** `MURMURE-053`
 
@@ -166,9 +166,10 @@ the member reads it (`ambre-spec-user-settings.md`). A connection copies it into
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No view draws the list.** The names, the avatars, the marks, the palette and the choice of a
-  member wait on the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5). The choice
-  needs the key check of `ambre-spec-key-verification.md` before a direct message wraps a key.
+* **No view draws the list.** The names, the avatars and the marks wait on the `The member list
+  of a space` Story (`ambre-roadmap.md` E5). The palette and the choice of a member wait on the
+  `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5). The choice needs the key
+  check of `ambre-spec-key-verification.md` before a direct message wraps a key.
 * **Do not disturb is not ruled.** It changes who a notification wakes, so it waits on the
   notification design (`ambre-spec-murmure-notifications.md`).
 * **A space of thousands of members is not ruled.** The list and the presence scale with the

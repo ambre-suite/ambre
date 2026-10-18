@@ -19,7 +19,7 @@ to this document alone.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROFILE-001` | `INV` | A user MUST have one avatar, the same in every application and every space. | this spec section 3 | not built | unbuilt -- lands with the `Avatars` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROFILE-002` | `OBS` | A user with no picture MUST show as their initials on their identity colour. | this spec section 3; `PRESENCE-006` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROFILE-002` | `OBS` | A user with no picture MUST show as their initials on their identity colour. | this spec section 3; `PRESENCE-006` | not built | unbuilt -- lands with the `The member list of a space` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Set a picture
 
