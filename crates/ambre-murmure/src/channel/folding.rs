@@ -350,6 +350,28 @@ impl ChannelState {
         Ok(Some(session.export(doc)?))
     }
 
+    /// The relay no longer holds `amendments`, which this copy holds linked
+    /// to a segment: a delta to them was refused as not found. Short of a
+    /// channel deletion, only a confirmed fold erases linked amendments. So
+    /// `meta` marks them folded as [`ChannelState::mark_folded`] does
+    /// (`MURMURE-483`).
+    ///
+    /// # Errors
+    /// [`MurmureError::NotHeld`] when this copy holds no such linked
+    /// amendments, and every refusal of [`ChannelState::mark_folded`].
+    pub fn amendments_gone(
+        &mut self,
+        amendments: DocumentId,
+    ) -> Result<Option<Vec<u8>>, MurmureError> {
+        let segment = self
+            .amendments
+            .iter()
+            .find(|(_, held)| held.id == amendments && held.created.is_none())
+            .map(|(segment, _)| *segment)
+            .ok_or(MurmureError::NotHeld(amendments))?;
+        self.mark_folded(segment, amendments)
+    }
+
     /// Fold every held amendments document `meta` marks folded into its
     /// segment, as the relay held it, and drop it.
     ///

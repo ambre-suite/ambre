@@ -3870,6 +3870,42 @@ mod tests {
         assert_ne!(other, amendments, "the replay goes to new amendments");
     }
 
+    /// Amendments the relay reports gone settle as a marked fold. `meta`
+    /// marks them and the document closes. The edit it never sequenced is
+    /// written again at the next tick. A gone document no channel holds as
+    /// amendments changes nothing (the Murmure segments spec).
+    #[test]
+    fn amendments_reported_gone_settle_as_a_marked_fold() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, segment, _, amendments) = amended_channel(&mut state, &sync);
+        state.handle_logic_event(LogicEvent::DocumentGone {
+            document_id: DocumentId::new(),
+        });
+        state.handle_logic_event(LogicEvent::DocumentGone {
+            document_id: segment.document_id(),
+        });
+        assert!(drain(&sync).is_empty(), "nothing to settle");
+
+        state.handle_logic_event(LogicEvent::DocumentGone {
+            document_id: amendments,
+        });
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let sent = drain(&sync);
+        assert!(sent.iter().any(|c| matches!(c,
+            SyncCommand::SendUpdate { document_id, .. } if *document_id == meta)));
+        assert!(sent.iter().any(|c| matches!(c,
+            SyncCommand::CloseDocument { document_id } if *document_id == amendments)));
+        state.handle_logic_event(LogicEvent::DocumentGone {
+            document_id: amendments,
+        });
+        assert!(drain(&sync).is_empty(), "settled once");
+
+        command(&mut state, channel_id, MurmureCommand::Tick { now: at(3) });
+        let [(again, other)] = created_amendments(&sync).try_into().expect("a replay");
+        assert_eq!(again, segment);
+        assert_ne!(other, amendments, "the replay goes to new amendments");
+    }
+
     /// An edit the lock refused is replayed as an amendment at the
     /// channel's next tick. The view reads the segment as the relay holds
     /// it until then (the Murmure messages spec).

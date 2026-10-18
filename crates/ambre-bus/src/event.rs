@@ -184,6 +184,11 @@ pub enum LogicEvent {
         revoked_user_id: UserId,
     },
 
+    /// The relay no longer holds a document this client held: a delta to it
+    /// was refused as not found. Sync dropped it. The Logic thread settles
+    /// what the document stood for, such as amendments a fold erased.
+    DocumentGone { document_id: DocumentId },
+
     /// A document was shared with this user (server push on `user:{id}`,
     /// translated from `WsServerMsg::DocumentShared`). The Logic thread forwards
     /// it to the UI, which refreshes its document list and notifies the user.

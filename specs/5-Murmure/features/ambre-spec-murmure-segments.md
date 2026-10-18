@@ -66,6 +66,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-075` | `POST` | A re-finalization MUST fold the amendments into a new shallow snapshot. | this spec section 3; `SRV-204`; `SRV-207` | `ambre_murmure::folding_tests::the_lease_holder_folds_the_amendments_into_the_segment` -- a new copy loads the fold and reads every amendment; `::the_fold_lease_is_asked_as_the_relay_says` -- the lease waits the relay's delay, and a failure doubles it; `::a_segment_without_amendments_asks_for_no_fold_lease` -- no amendments, no lease; `::a_fold_lease_at_odds_with_this_copy_is_asked_again` -- a lease naming other amendments is asked again; `::another_member_checks_the_fold_by_folding_its_own_copy` -- a match, a forged mismatch, and a short copy unchecked; `ambre_logic::channels::tests::a_final_segment_with_amendments_asks_and_commits_its_fold` -- the tick asks, and the grant sends the fold; `ambre_sync::fold::tests::a_fold_lease_request_reads_the_grant_or_the_deferral` -- the answer reads as a grant or a wait; `::a_fold_commit_uploads_at_the_horizon_then_names_the_reach` -- the commit names the lease and the reach | none | verified |
 | `MURMURE-076` | `POST` | A settled fold MUST leave no copy holding the amendments document it folded in. | this spec section 3; `SRV-211` | `ambre_murmure::folding_tests::a_marked_fold_settles_every_copy_and_replays_what_never_left` -- every copy folds its own and drops them; `::amendments_still_arriving_are_dropped_once_folded` -- late amendments are dropped unopened; `ambre_logic::channels::tests::a_settled_fold_marks_meta_closes_the_amendments_and_replays_the_rest` -- `meta` marks them, and the document closes; `ambre_sync::fold::tests::a_confirmation_that_settles_a_fold_names_the_erased_amendments` -- the confirmation names them | none | verified |
 | `MURMURE-077` | `FRAME` | A re-finalization MUST NOT drop an amendment written after the fold began. | this spec section 3 | `ambre_murmure::folding_tests::a_change_past_the_fold_leaves_it_unchecked` -- a copy holding more leaves the fold unchecked, so the relay keeps them; `::a_marked_fold_settles_every_copy_and_replays_what_never_left` -- a change never sequenced is replayed; `ambre_logic::channels::tests::a_settled_fold_marks_meta_closes_the_amendments_and_replays_the_rest` -- the replay goes to new amendments | none | verified |
+| `MURMURE-483` | `FAIL` | Given a delta refused because a fold erased its amendments, the client MUST write the change again into new amendments. | this spec section 3; `SYNC-167`; `MURMURE-077` | `ambre_murmure::folding_tests::amendments_reported_gone_are_marked_folded_and_replay_the_refused_change` -- `meta` marks them once, the refused edit is replayed, and every copy settles; `ambre_logic::channels::tests::amendments_reported_gone_settle_as_a_marked_fold` -- the mark leaves, the document closes, and the tick writes new amendments | none | verified |
 
 ### 1.7 Fill a gap in a final segment
 
@@ -78,7 +79,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   and the row beside it bounds the deltas a cold open replays.
 * **Boundary.** a final snapshot is sealed like any snapshot (`ZK-001`). The relay learns the state
   of each segment and its finalization time (`ZK-015`).
-* **Verification.** 25 `verified`. The engine tests hold the close on one peer and on two, the
+* **Verification.** 26 `verified`. The engine tests hold the close on one peer and on two, the
   byte bound, and the fetch again of a successor. They hold the lease, the shallow snapshot, the
   final mark, the lock, its replays, the check, the seal again and the fold. The Logic tests hold
   the close, each successor, the tick, the verdict, the replay and the fold. The Sync tests hold the
@@ -197,6 +198,7 @@ member who seals a false one cannot purge the deltas (`SRV-118`).
 the amendments into a shallow snapshot (`MURMURE-075`). A checker folds its own copy, and one
 holding more leaves it unchecked (`MURMURE-077`). The confirmation names the erased amendments, and
 `meta` marks them folded (`MURMURE-076`). Every copy folds its own, and replays what never left.
+A delta refused for erased amendments marks them so too (`MURMURE-483`).
 
 **Code.** `ChannelState::wants_close`, `close_into`, `successor_to_open` and `successor_to_retry`,
 in `crates/ambre-murmure/src/channel/closing.rs`. `ChannelState::lease_to_ask`, `final_snapshot`,
@@ -248,8 +250,8 @@ The segments have no control of their own. A user meets them only as a channel t
 * **A dropped final snapshot is sealed again only by a member holding the segment open.** A member
   who loads it later reads its deltas, and waits for the next seal.
 * **A fold waits for a member holding the segment open.** Until one loads it, the fold stays owed.
-* **A delta sent to amendments the relay erased is lost.** It is ruled by
-  the `Late amendments after a fold` Story (`ambre-roadmap.md` E5).
+* **A copy short of the fold folds what it holds.** One socket delivers the amendments before the
+  mark, so only a lost delta leaves it short. It reads the relay's fold at its next load.
 * **A final snapshot carries no search index.** The index lands with the `Search on a new device`
   Story (`ambre-roadmap.md` E5).
 * **A reaction the lock refused alone is lost.** A new message moves, and an edit or a delete is

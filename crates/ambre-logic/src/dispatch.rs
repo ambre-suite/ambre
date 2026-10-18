@@ -583,6 +583,7 @@ impl LogicState {
                 document_id,
                 amendments,
             } => self.amendments_folded(document_id, amendments),
+            LogicEvent::DocumentGone { document_id } => self.document_gone(document_id),
             LogicEvent::DeltasLocked {
                 document_id,
                 deltas,

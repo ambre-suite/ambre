@@ -18,7 +18,7 @@
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | implemented | 11 |  |
 | `murmure-mentions` | A member names another in a message with `@`. | implemented | 13 |  |
 | `murmure-reactions` | A member answers a message with an emoji. | implemented | 7 |  |
-| `murmure-segments` | A channel grows for years and still opens fast. | implemented | 25 |  |
+| `murmure-segments` | A channel grows for years and still opens fast. | implemented | 26 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 49 |  |
 | `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 21 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | partial | 22 |  |
@@ -44,4 +44,4 @@
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 17 |  |
 
-**28 features: 4 implemented, 7 partial, 17 design-only. 460 contract rows, 0 loose.**
+**28 features: 4 implemented, 7 partial, 17 design-only. 461 contract rows, 0 loose.**

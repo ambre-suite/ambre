@@ -58,6 +58,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-154` | `FAIL` | A replay stopped more times than its budget MUST reach the rest of the client as one error, and no retry MUST follow before the next reconnect. | this spec section 2; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_replay_stopped_past_its_budget_reaches_logic_once` -- eight stops give one error and no retry, and a reopened socket counts from zero | none | verified |
 | `SYNC-157` | `FAIL` | A document whose first replay stops past its budget MUST reach the rest of the client as an open that failed, never as one still loading. | this spec section 2; `SYNC-154` | `ambre_sync::websocket::tests::a_first_replay_given_up_fails_the_open` -- six stops of a first replay give one failed open and no generic error, and the document is unsubscribed and let go | none | verified |
 | `SYNC-160` | `POST` | Given a resubscription the relay refuses for want of access, the worker MUST close the document and report its user removed from it. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-047` | `ambre_sync::websocket::tests::a_refused_resubscription_closes_its_document` -- the forbidden code on a document held closes it and reports the removal, where another code or a document not held stays a refusal | none | verified |
+| `SYNC-167` | `POST` | Given a held document the relay refuses as not found, the worker MUST drop it and report it gone. | this spec section 2; `5-Murmure/features/ambre-spec-murmure-segments.md`, `MURMURE-483` | `ambre_sync::websocket::tests::a_not_found_refusal_for_a_held_document_reports_it_gone` -- the document held is dropped and reported gone, where a document not held stays a refusal | none | verified |
 | `SYNC-158` | `POST` | A stop that names a later delta than the stop before it MUST start its document's budget again. | this spec section 2; `SYNC-154`; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_replay_that_moves_on_keeps_its_budget` -- twelve stops each past the last count one apiece, a stop at or before the last still counts, and a timer armed before a reset asks nothing | none | verified |
 
 ### 1.4 A request is made
@@ -101,7 +102,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 43 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 44 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
@@ -160,6 +161,7 @@ first frame and never in the address (`SRV-031`, `SYNC-061`).
 | any other close, or a socket error | back off and reopen (`SYNC-064`) |
 | the socket opens | resubscribe every document, and pull what was missed (`SYNC-033`) |
 | the relay refuses a resubscription for want of access | close the document, and report the user removed from it: the notice went while the socket was down (`SYNC-160`) |
+| the relay refuses a held document as not found | drop it, and report it gone: a fold erased it (`SYNC-167`) |
 | the relay stops a replay | ask again from the document's cursor after a growing delay, and report it once past the budget (`SYNC-153`, `SYNC-154`) |
 | the relay refuses a delta for a locked segment | hand it and every later one to the Logic thread, and hold nothing (`SYNC-165`) |
 | a wire message arrives | reset the delay: only a wire message proves the connection is live (`SYNC-064`) |

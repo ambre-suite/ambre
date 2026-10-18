@@ -8,6 +8,7 @@ use ambre_bus::{FoldAnswer, MessageDraft, MessageView, MurmureEvent, SnapshotVer
 use ambre_core::{ChannelId, DocumentId, LeaseId, MessageId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
+use crate::error::MurmureError;
 use crate::schema::{MESSAGE_CONTENT, MESSAGES};
 use crate::sequence::loro_part;
 use crate::session::next_peer;
@@ -531,6 +532,49 @@ fn a_marked_fold_settles_every_copy_and_replays_what_never_left() {
         amended.alice.change_target(segment, NOW),
         Ok(ChangeTarget::Create(other)) if other != amendments
     ));
+}
+
+// --- MURMURE-483 ---
+
+/// Amendments the relay reports gone are marked folded, once. The change
+/// it refused is replayed, and only linked amendments are marked so.
+#[test]
+fn amendments_reported_gone_are_marked_folded_and_replay_the_refused_change() {
+    let mut amended = amended();
+    let (segment, amendments) = (amended.segment, amended.amendments);
+    let mut bob = amended.bob(3);
+    assert!(matches!(
+        amended.alice.amendments_gone(DocumentId::new()),
+        Err(MurmureError::NotHeld(_))
+    ));
+    // The relay refuses this edit: it erased the amendments meanwhile.
+    amended
+        .alice
+        .edit(segment, amended.ids[2], &draft("tres"), amended.author)
+        .expect("edit")
+        .expect("a change");
+
+    let meta = amended
+        .alice
+        .amendments_gone(amendments)
+        .expect("gone")
+        .expect("a delta");
+    assert_eq!(
+        amended.alice.amendments_gone(amendments).expect("gone"),
+        None
+    );
+    let settled = amended.alice.settle_folds().expect("settle");
+    assert_eq!(
+        settled[0].replay,
+        [Replay {
+            segment,
+            message: amended.ids[2],
+            draft: Some(draft("tres")),
+        }]
+    );
+    bob.apply_remote(bob.meta_id().document_id(), &meta)
+        .expect("meta");
+    assert_eq!(bob.settle_folds().expect("settle").len(), 1, "every copy");
 }
 
 /// Amendments `meta` marks folded while they still arrive are dropped

@@ -1448,6 +1448,17 @@ impl SyncState {
                 tracing::info!("Sync: subscription refused for {document_id}");
                 self.document_removed(document_id);
             }
+            // The relay erased a document still held here, as a fold erases
+            // its amendments: it is dropped and Logic settles it (`SYNC-167`).
+            WsServerMsg::Error {
+                document_id: Some(document_id),
+                code: RefusalCode::NotFound,
+            } if self.documents.contains_key(&document_id) => {
+                tracing::info!("Sync: {document_id} is gone from the relay");
+                self.documents.remove(&document_id);
+                self.light.remove(&document_id);
+                self.send_to_logic(LogicEvent::DocumentGone { document_id });
+            }
             WsServerMsg::Error { document_id, code } => {
                 tracing::error!("Sync: socket refusal {code} for {document_id:?}");
                 self.send_to_logic(LogicEvent::ApiError {
@@ -2104,6 +2115,36 @@ mod tests {
                     LogicEvent::ApiError { code: 403, .. },
                     LogicEvent::MemberRevoked { document_id, revoked_user_id },
                 ] if document_id == id && revoked_user_id == me
+            ),
+            "{told:?}"
+        );
+    }
+
+    /// `SYNC-167`: a document the relay no longer holds is dropped and
+    /// reported gone. The same refusal for a document not held stays one.
+    #[test]
+    fn a_not_found_refusal_for_a_held_document_reports_it_gone() {
+        let (mut state, rx, _wire, id) = with_relay_document();
+        let refused = |document_id| {
+            SyncEvent::WsMessage(WsServerMsg::Error {
+                document_id: Some(document_id),
+                code: RefusalCode::NotFound,
+            })
+        };
+
+        state.handle_sync_event(refused(DocumentId::new()));
+        assert!(state.documents.contains_key(&id));
+        state.handle_sync_event(refused(id));
+        assert!(!state.documents.contains_key(&id));
+
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(
+                told[..],
+                [
+                    LogicEvent::ApiError { code: 404, .. },
+                    LogicEvent::DocumentGone { document_id },
+                ] if document_id == id
             ),
             "{told:?}"
         );

@@ -287,6 +287,35 @@ impl LogicState {
         self.settle_folds(channel_id);
     }
 
+    /// The relay no longer holds `document_id`. Linked amendments gone so
+    /// were erased by a fold whose mark never reached this copy. `meta`
+    /// marks them, and the refused change is written again (the Murmure
+    /// segments spec).
+    pub(crate) fn document_gone(&mut self, document_id: DocumentId) {
+        let Some((&channel_id, channel)) = self
+            .channels
+            .iter_mut()
+            .find(|(_, channel)| channel.holds(document_id))
+        else {
+            return;
+        };
+        match channel.amendments_gone(document_id) {
+            Ok(Some(payload)) => {
+                let meta = channel.meta_id().document_id();
+                self.send_to_sync(SyncCommand::SendUpdate {
+                    document_id: meta,
+                    payload,
+                    summary: None,
+                });
+            }
+            Ok(None) => {}
+            Err(error) => {
+                return tracing::warn!("Logic: {document_id} gone, not settled: {error}");
+            }
+        }
+        self.settle_folds(channel_id);
+    }
+
     /// Fold in every amendments document `meta` marks folded, then close it.
     /// The changes of this client the relay never sequenced are written again
     /// at the next tick (the Murmure segments spec).
