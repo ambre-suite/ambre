@@ -14,7 +14,7 @@ use crate::schema::{
     MESSAGE_CONTENT, MESSAGES, SEGMENTS, SegmentState,
 };
 use crate::{
-    ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, SCHEMA_VERSION, Signer,
+    ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Query, SCHEMA_VERSION, Signer,
 };
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
@@ -755,6 +755,65 @@ fn only_a_direct_message_takes_a_name_from_a_member() {
         );
         assert_eq!(state.name().as_deref(), Some("team"));
     }
+}
+
+// --- MURMURE-148, MURMURE-149, MURMURE-151 ---
+
+/// A search reads every held segment and lists the one it did not read. It
+/// loads nothing: the final segment joins only once the view loaded it.
+#[test]
+fn a_search_reads_the_held_segments_and_lists_the_rest() {
+    let mut stored = stored_channel();
+    let mut writer = ChannelState::create(stored.channel, ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
+    writer
+        .send(&draft("the Été budget"), UserId::new(), NOW)
+        .expect("send");
+    let older = writer
+        .snapshot(writer.active_id().document_id())
+        .expect("snapshot");
+    stored.segments.insert(stored.final_id, older.clone());
+    let mut state = open(&stored).identify();
+    for text in ["budget review", "lunch"] {
+        state.send(&draft(text), UserId::new(), NOW).expect("send");
+    }
+    let query = Query::parse("BUDG ete").expect("two words");
+    let found = |state: &ChannelState| {
+        let answer = state.search(&query);
+        let matches: Vec<(SegmentId, String)> = answer
+            .matches
+            .iter()
+            .map(|m| (m.segment, m.message.text.clone()))
+            .collect();
+        (answer.covered, answer.listed, matches)
+    };
+
+    let (covered, listed, matches) = found(&state);
+    assert_eq!(listed, 3, "every segment meta lists");
+    assert_eq!(covered, [stored.closing_id, stored.active_id]);
+    assert!(
+        matches.is_empty(),
+        "the one match sits in the final segment"
+    );
+    assert!(!state.holds(stored.final_id.document_id()));
+    assert!(!state.is_pending(stored.final_id.document_id()));
+
+    state.load_older(stored.final_id, &older).expect("load");
+    let (covered, _, matches) = found(&state);
+    assert_eq!(
+        covered,
+        [stored.final_id, stored.closing_id, stored.active_id]
+    );
+    assert_eq!(matches, [(stored.final_id, "the Été budget".to_owned())]);
+    let budget = Query::parse("budget").expect("a word");
+    let segments: Vec<SegmentId> = state
+        .search(&budget)
+        .matches
+        .iter()
+        .map(|m| m.segment)
+        .collect();
+    assert_eq!(segments, [stored.final_id, stored.active_id], "list order");
 }
 
 // --- robustness ---

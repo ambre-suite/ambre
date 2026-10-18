@@ -40,11 +40,11 @@ pub mod ui;
 pub use activity::{ActivityAnchor, ActivityKind, ActivitySummary};
 // The Murmure data plane, addressed to a channel rather than a document.
 pub use app::murmure::{
-    CatalogueEntry, CategoryView, ChannelActivity, ChannelDocument, ChannelPlace, DirectMember,
-    DirectMessageDraft, DirectMessageEvent, DocumentActivity, MemberChannel, MemberView,
-    MentionTarget, MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence,
-    PrivateChannelDraft, PublicChannelDraft, SealedChannelKey, SpaceCommand, SpaceEvent, Timestamp,
-    Topic, UnreadCount,
+    CatalogueEntry, CategoryView, ChannelActivity, ChannelDocument, ChannelMatches, ChannelPlace,
+    DirectMember, DirectMessageDraft, DirectMessageEvent, DocumentActivity, MemberChannel,
+    MemberView, MentionTarget, MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence,
+    PrivateChannelDraft, PublicChannelDraft, SealedChannelKey, SearchMatch, SpaceCommand,
+    SpaceEvent, Timestamp, Topic, UnreadCount,
 };
 pub use command::SyncCommand;
 pub use event::{LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict};

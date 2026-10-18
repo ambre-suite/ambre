@@ -183,6 +183,11 @@ pub enum LogicCommand {
     /// Mark every channel read (the Murmure unread spec).
     MarkAllRead,
 
+    /// Search the open channels for `query`, in the segments the client
+    /// holds (the Murmure search spec). Nothing leaves the client, and
+    /// nothing is loaded: answered by [`crate::UiEvent::MessageSearch`].
+    SearchMessages { query: String },
+
     // -- Local -- Logic-thread resource seeding (no Sync involvement) ------------
     /// Hand the Logic thread font faces the UI thread has fetched
     /// (`CANVAS-067`, `CANVAS-068`). It cannot fetch any itself: it blocks on

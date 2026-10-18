@@ -9,8 +9,8 @@
 use std::collections::HashMap;
 
 use ambre_bus::{
-    ActivityKind, ActivitySummary, MentionTarget, MessageDraft, MessageView, MurmureEvent,
-    Timestamp, UnreadCount,
+    ActivityKind, ActivitySummary, ChannelMatches, MentionTarget, MessageDraft, MessageView,
+    MurmureEvent, SearchMatch, Timestamp, UnreadCount,
 };
 use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroList, LoroMap, LoroText, ValueOrContainer};
@@ -22,6 +22,7 @@ use crate::schema::{
     MESSAGE_CONTENT, MESSAGE_ID, MESSAGE_TS, MESSAGES, SEGMENT_DOCUMENT, SEGMENT_FROM,
     SEGMENT_STATE, SEGMENTS, SegmentState,
 };
+use crate::search::Query;
 use crate::sequence::{self, Order, Position, Sequence};
 use crate::session::Session;
 
@@ -591,6 +592,37 @@ impl ChannelState {
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
         Ok(read_messages(doc))
+    }
+
+    /// The messages of every held segment that match `query`, and which
+    /// segments were read (the Murmure search spec).
+    ///
+    /// It reads only what the channel holds: a final segment not loaded is
+    /// listed, never fetched, and nothing leaves the engine.
+    pub fn search(&self, query: &Query) -> ChannelMatches {
+        let listed = segment_entries(&self.meta.doc);
+        let held = self.held_segments();
+        let covered: Vec<SegmentId> = listed
+            .iter()
+            .map(|(id, _)| *id)
+            .filter(|id| held.contains(id))
+            .collect();
+        let matches = covered
+            .iter()
+            .filter_map(|segment| Some((*segment, self.doc(segment.document_id())?)))
+            .flat_map(|(segment, doc)| {
+                read_messages(doc)
+                    .into_iter()
+                    .filter(|message| query.matches(&message.text))
+                    .map(move |message| SearchMatch { segment, message })
+            })
+            .collect();
+        ChannelMatches {
+            channel_id: self.channel_id,
+            covered,
+            listed: listed.len(),
+            matches,
+        }
     }
 
     /// Append a message to the active segment (`MURMURE-080`).

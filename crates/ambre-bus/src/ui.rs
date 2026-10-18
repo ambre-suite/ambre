@@ -22,8 +22,8 @@
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{
-    ChannelActivity, ChannelId, DirectMessageEvent, DocType, DocumentId, MeetingId, MemberChannel,
-    MurmureEvent, RequestId, RestEvent, Role, SpaceEvent, SpaceId, UserId,
+    ChannelActivity, ChannelId, ChannelMatches, DirectMessageEvent, DocType, DocumentId, MeetingId,
+    MemberChannel, MurmureEvent, RequestId, RestEvent, Role, SpaceEvent, SpaceId, UserId,
 };
 
 // -----------------------------------------------------------------------------
@@ -113,6 +113,14 @@ pub enum UiEvent {
     /// Every channel this user is a member of, whole. It comes at start, and
     /// again each time the relay adds the user to one. None of them is open.
     MemberChannels { channels: Vec<MemberChannel> },
+
+    /// The answer to [`crate::LogicCommand::SearchMessages`]: one entry per
+    /// open channel, each stating the segments it covered. A query with no
+    /// word answers no channel.
+    MessageSearch {
+        query: String,
+        channels: Vec<ChannelMatches>,
+    },
 
     /// What an open space tells its view: its catalogue, and the outcome of
     /// a creation or a join.

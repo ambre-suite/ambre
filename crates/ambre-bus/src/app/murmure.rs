@@ -181,6 +181,27 @@ pub struct MessageView {
     pub text: String,
 }
 
+/// One message a search found, with the segment that holds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchMatch {
+    pub segment: SegmentId,
+    pub message: MessageView,
+}
+
+/// What a search found in one open channel, and which part of its history
+/// it read (the Murmure search spec).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChannelMatches {
+    pub channel_id: ChannelId,
+    /// The segments searched: the ones the client holds, in list order.
+    pub covered: Vec<SegmentId>,
+    /// How many segments `meta` lists, searched or not.
+    pub listed: usize,
+    /// The matches, segment by segment in list order, each segment's in
+    /// message order.
+    pub matches: Vec<SearchMatch>,
+}
+
 /// An event from an open channel, Logic thread -> UI thread.
 ///
 /// Carried by [`UiEvent::Channel`](crate::UiEvent::Channel).

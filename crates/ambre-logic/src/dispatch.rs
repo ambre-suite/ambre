@@ -175,6 +175,7 @@ impl LogicState {
                 self.send_to_sync(SyncCommand::ListMemberChannels);
             }
             LogicCommand::MarkAllRead => self.send_to_sync(SyncCommand::MarkAllRead),
+            LogicCommand::SearchMessages { query } => self.search_messages(query),
             LogicCommand::CreateSpace {
                 space_id,
                 name,

@@ -7,11 +7,11 @@
 
 use super::*;
 use ambre_bus::{
-    ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, DocumentActivity, MetaId,
-    MurmureCommand, MurmureEvent,
+    ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, ChannelMatches,
+    DocumentActivity, MetaId, MurmureCommand, MurmureEvent,
 };
 use ambre_bus::{MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
-use ambre_murmure::{ChannelState, MurmureError, Opening, OpeningChannel, Position, Signer};
+use ambre_murmure::{ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Signer};
 
 /// This user's read cursor on one channel document (the Murmure unread spec).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1033,6 +1033,22 @@ impl LogicState {
             self.emit_count(channel_id);
         }
         true
+    }
+
+    /// Search every open channel for `query` (the Murmure search spec). Each
+    /// engine reads the segments it holds, and nothing reaches the Sync
+    /// worker: the query never leaves the client, and no segment loads.
+    pub(crate) fn search_messages(&self, query: String) {
+        let mut channels: Vec<ChannelMatches> = match Query::parse(&query) {
+            Some(parsed) => self
+                .channels
+                .values()
+                .map(|channel| channel.search(&parsed))
+                .collect(),
+            None => Vec::new(),
+        };
+        channels.sort_by_key(|matches| matches.channel_id.to_string());
+        self.send_to_ui(UiEvent::MessageSearch { query, channels });
     }
 
     /// Hold an open channel, as the staged open does, without the relay's
@@ -2228,5 +2244,56 @@ mod tests {
                 .all(|(segment, _)| !other_documents.contains(&segment.document_id())),
             "no document of {other} (active {other_active}) moves"
         );
+    }
+
+    /// A search answers from every open channel, each with the segments it
+    /// read, and asks the Sync worker nothing (the Murmure search spec).
+    #[test]
+    fn a_search_covers_every_open_channel_and_leaves_nothing() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let first = open_channel(&mut state);
+        let second = open_channel(&mut state);
+        for ((channel_id, _), text) in [(first, "the budget"), (second, "lunch")] {
+            state.handle_logic_command(LogicCommand::Channel {
+                channel_id,
+                command: send(text, Vec::new()),
+            });
+        }
+        drain(&sync);
+        drain(&ui);
+
+        state.handle_logic_command(LogicCommand::SearchMessages {
+            query: "Budget".to_owned(),
+        });
+        assert!(drain(&sync).is_empty(), "the query never leaves the client");
+        let shown = drain(&ui);
+        let [UiEvent::MessageSearch { query, channels }] = shown.as_slice() else {
+            panic!("one answer, got {shown:?}");
+        };
+        assert_eq!(query, "Budget");
+        let mut answered: Vec<(ChannelId, Vec<SegmentId>, usize, Vec<String>)> = channels
+            .iter()
+            .map(|c| {
+                let texts = c.matches.iter().map(|m| m.message.text.clone()).collect();
+                (c.channel_id, c.covered.clone(), c.listed, texts)
+            })
+            .collect();
+        answered.sort_by_key(|(id, ..)| *id != first.0);
+        assert_eq!(
+            answered,
+            [
+                (first.0, vec![first.1], 1, vec!["the budget".to_owned()]),
+                (second.0, vec![second.1], 1, Vec::new()),
+            ]
+        );
+
+        state.handle_logic_command(LogicCommand::SearchMessages {
+            query: " ? ".to_owned(),
+        });
+        assert!(matches!(
+            drain(&ui).as_slice(),
+            [UiEvent::MessageSearch { channels, .. }] if channels.is_empty()
+        ));
     }
 }

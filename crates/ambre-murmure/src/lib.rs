@@ -18,6 +18,7 @@ mod error;
 mod members;
 mod opening;
 pub mod schema;
+mod search;
 mod sequence;
 mod session;
 mod space;
@@ -44,5 +45,6 @@ pub use members::{
 };
 pub use opening::{Opening, OpeningChannel};
 pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};
+pub use search::Query;
 pub use sequence::{Order, Position};
 pub use space::{Listing, SpaceState};
