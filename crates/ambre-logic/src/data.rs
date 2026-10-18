@@ -1050,6 +1050,7 @@ impl LogicState {
         purpose: SnapshotPurpose,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
+            self.check_channel_snapshot(document_id, snapshot_id, covered, payload, purpose);
             return;
         };
         let verdict = snapshot_check::check_snapshot(

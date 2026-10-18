@@ -3136,6 +3136,71 @@ mod tests {
         forget_store(&state, &channel).await;
     }
 
+    /// `SRV-118`: the deltas of a final segment stay while only its author
+    /// vouched for the final snapshot. Another member's confirmation purges
+    /// them all.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_final_segment_keeps_its_deltas_until_another_member_confirms(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let (alice, _bob, channel) = closed_channel(&state, 2).await;
+        let segment = channel.segment.document_id();
+        delta(&state, segment, 1, "2 days").await;
+        delta(&state, segment, 2, "2 days").await;
+        on_segment(
+            &state,
+            &channel,
+            "UPDATE channel_documents SET closed_at = now() - interval '2 days' \
+             WHERE document_id = $1",
+        )
+        .await;
+        let held = lease(&state, alice, &channel).await.expect("lease");
+        let held = held.lease.expect("granted");
+        let exact = snapshot(&state, segment, 2).await;
+        let author = [1; 32];
+        assert_eq!(
+            db::confirm_snapshot(&state.db, &segment, &exact, &author)
+                .await
+                .expect("confirm"),
+            Some(db::SnapshotStatus::Pending),
+            "the author vouches for no final snapshot"
+        );
+        assert_eq!(
+            finalize(&state, alice, &channel, held.lease_id, exact).await,
+            StatusCode::NO_CONTENT
+        );
+        let count = async || -> i64 {
+            sqlx::query_scalar("SELECT count(*) FROM updates WHERE document_id = $1")
+                .bind(uuid_of_doc(segment))
+                .fetch_one(&state.db)
+                .await
+                .expect("count")
+        };
+        db::purge_superseded_updates(&state.db)
+            .await
+            .expect("purge");
+        assert_eq!(
+            count().await,
+            2,
+            "an unconfirmed final snapshot purges nothing"
+        );
+        assert_eq!(
+            db::confirm_snapshot(&state.db, &segment, &exact, &[2; 32])
+                .await
+                .expect("confirm"),
+            Some(db::SnapshotStatus::Confirmed)
+        );
+        db::purge_superseded_updates(&state.db)
+            .await
+            .expect("purge");
+        assert_eq!(
+            count().await,
+            0,
+            "a confirmed final snapshot purges every delta"
+        );
+        forget_store(&state, &channel).await;
+    }
+
     /// A viewer finalizes nothing, and the active segment takes no lease.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]

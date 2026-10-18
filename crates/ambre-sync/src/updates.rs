@@ -2086,6 +2086,34 @@ mod tests {
         assert_eq!(state.documents[&doc].quarantine_len(), 0);
     }
 
+    /// A Murmure document takes the quarantine and the delta order of the
+    /// document plane (the Murmure segments spec).
+    #[test]
+    fn a_murmure_document_takes_the_quarantine_and_the_delta_order() {
+        let (mut state, rx, _doc, key, sk, _snap) = setup();
+        let doc = DocumentId::new();
+        state.documents.insert(
+            doc,
+            SyncDocumentState::new(doc, key.clone(), DocType::Murmure, true),
+        );
+        let parent = SnapshotId::new();
+        state.receive_update(Seq(1), make_update(doc, parent, 5, b"five", &key, &sk));
+        state.receive_update(Seq(2), make_update(doc, parent, 2, b"two", &key, &sk));
+        assert!(drain(&rx).is_empty(), "an unknown parent holds both");
+        assert_eq!(state.documents[&doc].quarantine_len(), 2);
+
+        state.snapshot_known(doc, parent);
+        let payloads: Vec<Vec<u8>> = drain(&rx)
+            .into_iter()
+            .filter_map(|e| match e {
+                LogicEvent::RemoteUpdate { delta, .. } => Some(delta.payload),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(payloads, vec![b"two".to_vec(), b"five".to_vec()]);
+        assert_eq!(state.documents[&doc].quarantine_len(), 0);
+    }
+
     #[test]
     fn quarantine_overflow_drops_oldest_and_warns() {
         let (mut state, rx, doc, key, sk, _snap) = setup();

@@ -729,6 +729,48 @@ impl LogicState {
         Some((payload, covered))
     }
 
+    /// Check a snapshot of a channel document against the state this client
+    /// holds, and answer the verdict to Sync (the Murmure segments spec). A
+    /// document no open channel holds is not answered.
+    pub(crate) fn check_channel_snapshot(
+        &mut self,
+        document_id: DocumentId,
+        snapshot_id: ambre_bus::SnapshotId,
+        covered: u64,
+        payload: &[u8],
+        purpose: ambre_bus::SnapshotPurpose,
+    ) {
+        let Some(channel) = self.channels.values().find(|c| c.holds(document_id)) else {
+            return;
+        };
+        let ledger = self.channel_ledgers.get(&document_id);
+        let floor = ledger.map_or(0, snapshot_check::SeqLedger::floor);
+        let end = ledger.map_or(0, snapshot_check::SeqLedger::contiguous_end);
+        let confirm = purpose == ambre_bus::SnapshotPurpose::Confirm;
+        let verdict = if covered < floor || (confirm && end < covered) {
+            SnapshotVerdict::Unchecked
+        } else {
+            channel
+                .check_snapshot(document_id, covered, payload)
+                .unwrap_or_else(|e| {
+                    tracing::warn!("Logic: check of {document_id} failed: {e}");
+                    SnapshotVerdict::Unchecked
+                })
+        };
+        if confirm
+            && matches!(verdict, SnapshotVerdict::Match { .. })
+            && let Some(ledger) = self.channel_ledgers.get_mut(&document_id)
+        {
+            ledger.fold_through(covered);
+        }
+        self.send_to_sync(SyncCommand::SnapshotVerdict {
+            document_id,
+            snapshot_id,
+            purpose,
+            verdict,
+        });
+    }
+
     /// Note the relay's number of a delta for a channel or a space document,
     /// open or opening. A document neither holds is not noted.
     pub(crate) fn record_channel_seq(
@@ -3269,6 +3311,57 @@ mod tests {
         );
         let channel = &state.channels[&channel_id];
         assert!(channel.messages(old).expect("old").is_empty());
+    }
+
+    /// The verdict Logic answers a pending snapshot of `document_id` with.
+    fn channel_verdict(
+        state: &mut LogicState,
+        sync: &Receiver<SyncCommand>,
+        document_id: DocumentId,
+        covered: u64,
+        payload: Vec<u8>,
+    ) -> SnapshotVerdict {
+        state.handle_logic_event(LogicEvent::PendingSnapshot {
+            document_id,
+            snapshot_id: ambre_bus::SnapshotId::genesis(document_id),
+            covered_seq: covered,
+            payload,
+            purpose: ambre_bus::SnapshotPurpose::Confirm,
+        });
+        drain(sync)
+            .into_iter()
+            .find_map(|c| match c {
+                SyncCommand::SnapshotVerdict { verdict, .. } => Some(verdict),
+                _ => None,
+            })
+            .expect("a pending snapshot of a segment is answered")
+    }
+
+    /// A snapshot of a segment is checked against the state this client
+    /// holds (the Murmure segments spec). A gap below its horizon leaves it
+    /// unchecked, and bytes no state reads are a mismatch.
+    #[test]
+    fn a_segment_snapshot_is_checked_against_the_held_state() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, segment) = small_channel(&mut state, 4);
+        command(&mut state, channel_id, send("one", Vec::new()));
+        drain(&sync);
+        let document_id = segment.document_id();
+        let (payload, covered) = state.channel_snapshot(document_id).expect("held");
+        assert!(matches!(
+            channel_verdict(&mut state, &sync, document_id, covered, payload.clone()),
+            SnapshotVerdict::Match { .. }
+        ));
+        assert_eq!(
+            channel_verdict(&mut state, &sync, document_id, covered, b"loro?".to_vec()),
+            SnapshotVerdict::Mismatch
+        );
+        state.record_channel_seq(document_id, 2, None);
+        assert_eq!(
+            channel_verdict(&mut state, &sync, document_id, 2, payload),
+            SnapshotVerdict::Unchecked,
+            "the delta numbered 1 is missing"
+        );
     }
 
     /// A copy the Sync worker withdrew never asks again; a failed commit

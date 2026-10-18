@@ -176,6 +176,9 @@ pub async fn get_reference_snapshot(
 /// pending one `self`, unless a snapshot another author confirmed alone
 /// already stands past the reference. The trim past the reference then drops
 /// one author's deltas only, the ones that author's snapshot holds.
+///
+/// A snapshot of a locked segment is the final one, and only another member
+/// confirms it (`SRV-118`). Its author's confirmation leaves it pending.
 pub async fn confirm_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -190,6 +193,9 @@ pub async fn confirm_snapshot(
          WHERE s.id = $1 AND s.document_id = $2 AND (
              (s.author_pubkey <> $3 AND s.status <> 'confirmed')
              OR (s.author_pubkey = $3 AND s.status = 'pending' AND NOT EXISTS (
+                 SELECT 1 FROM channel_documents c
+                 WHERE c.document_id = s.document_id AND c.horizon IS NOT NULL
+             ) AND NOT EXISTS (
                  SELECT 1 FROM snapshots o
                  WHERE o.document_id = s.document_id AND o.status = 'self'
                    AND o.author_pubkey <> s.author_pubkey
@@ -516,6 +522,10 @@ pub async fn get_clock_state(
 /// author's own deltas between the two (`SRV-130`). An open checks that
 /// snapshot against the deltas of every other user, which stay.
 ///
+/// A final segment whose final snapshot another member confirmed drops every
+/// delta that snapshot covers (`SRV-118`). No delta lies past it: the lock
+/// refused them all.
+///
 /// This is the delta index's only garbage collector for a long-lived document. The
 /// `updates.snapshot_id -> snapshots(id)` FK was dropped (see the
 /// `drop_updates_snapshot_fk` migration), so deleting an old snapshot no longer
@@ -552,6 +562,11 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
                 SELECT 1 FROM author_span a
                 WHERE a.document_id = u.document_id AND a.author_pubkey = u.author_pubkey
                   AND u.seq > a.from_seq AND u.seq <= a.to_seq
+            ) OR EXISTS (
+                SELECT 1 FROM channel_documents c
+                JOIN snapshots f ON f.id = c.final_snapshot AND f.document_id = c.document_id
+                WHERE c.document_id = u.document_id AND c.state = 'final'
+                  AND f.status = 'confirmed' AND u.seq <= f.covered_seq
             )
             RETURNING u.batch_key
         )

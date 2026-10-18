@@ -4,13 +4,13 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{MessageDraft, MurmureEvent, Timestamp};
-use ambre_core::{ChannelId, LeaseId, SegmentId, UserId};
-use loro::{Container, LoroDoc, ValueOrContainer};
+use ambre_bus::{MessageDraft, MurmureEvent, SnapshotVerdict, Timestamp};
+use ambre_core::{ChannelId, LeaseId, SegmentId, Seq, UserId};
+use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::schema::{MESSAGE_CONTENT, MESSAGES};
 use crate::session::next_peer;
-use crate::{ChannelState, ChannelType, FINALIZE_RETRY_MS};
+use crate::{ChannelState, ChannelType, FINALIZE_RETRY_MS, Order, Signer};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 const LEASE_MS: u64 = 30_000;
@@ -204,6 +204,11 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
     assert_eq!(alice.final_segments(), vec![closing]);
     assert_eq!(alice.messages(closing).expect("held"), before);
     assert_eq!(alice.lease_to_ask(at(1)), None, "nothing left to finalize");
+    // A final segment takes no operation past its finalization (`MURMURE-012`).
+    assert!(matches!(
+        alice.react(closing, before[0].id, "\u{1F44D}", UserId::new(), at(1)),
+        Err(crate::MurmureError::Final(_))
+    ));
 
     assert_eq!(bob.settle_final(), None, "meta still names it closing");
     bob.apply_remote(bob.meta_id().document_id(), &meta)
@@ -222,4 +227,128 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
         panic!("messages");
     };
     assert_eq!(messages, before, "finalizing changes no message");
+}
+
+/// Alice's channel of two-message segments, and Bob's copy of it holding
+/// her first `received` deltas, numbered as the relay delivered them. Alice
+/// then closes the segment, and seals its final snapshot at the horizon 2.
+fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, Vec<u8>) {
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .with_segment_size(2)
+        .identify();
+    let mut bob = peer_of(&alice);
+    let segment = alice.active_id();
+    let author = UserId::new();
+    let signer = Signer {
+        peer: alice.peer(segment.document_id()).expect("a session"),
+        user: Some(author),
+    };
+    for (seq, text) in [(1, "one"), (2, "two")] {
+        let sent = alice.send(&draft(text), author, NOW).expect("send");
+        if seq <= received {
+            bob.apply_signed(segment.document_id(), Seq(seq), &sent.delta, signer)
+                .expect("delivered");
+        }
+    }
+    let closing = alice.wants_close().expect("full");
+    alice
+        .close_into(closing, SegmentId::new(), true, NOW)
+        .expect("close");
+    assert_eq!(alice.lease_to_ask(NOW), Some(closing));
+    alice.lease_granted(closing, LeaseId::new(), 2, LEASE_MS);
+    let snapshot = alice.final_snapshot(NOW, 2).expect("export").expect("in");
+    (alice, bob, closing, snapshot.payload)
+}
+
+/// A shallow snapshot of `state`'s copy of `segment` after `forge` wrote on
+/// a fork of it.
+fn forged(state: &ChannelState, segment: SegmentId, forge: impl FnOnce(&LoroDoc)) -> Vec<u8> {
+    let fork = state.doc(segment.document_id()).expect("held").fork();
+    forge(&fork);
+    fork.commit();
+    fork.export(ExportMode::shallow_snapshot(&fork.oplog_frontiers()))
+        .expect("export")
+}
+
+// --- MURMURE-071, MURMURE-153 ---
+
+/// Bob holds every delta the final snapshot covers: he rebuilds its state
+/// and finds the same. The check writes neither his copy nor the snapshot.
+#[test]
+fn a_member_holding_the_deltas_confirms_the_final_snapshot() {
+    let (_alice, bob, closing, payload) = finalized_for(2);
+    let document_id = closing.document_id();
+    let before = bob.doc(document_id).expect("held").oplog_vv();
+    let messages = bob.messages(closing).expect("held");
+    let sent = payload.clone();
+    assert_eq!(
+        bob.check_snapshot(document_id, 2, &payload).expect("check"),
+        SnapshotVerdict::Match { extras: Vec::new() }
+    );
+    assert_eq!(bob.doc(document_id).expect("held").oplog_vv(), before);
+    assert_eq!(bob.messages(closing).expect("held"), messages);
+    assert_eq!(payload, sent, "the snapshot is only read");
+    assert_eq!(
+        bob.check_snapshot(document_id, 1, &payload).expect("check"),
+        SnapshotVerdict::Unchecked,
+        "his copy holds a delta past what it covers"
+    );
+}
+
+// --- MURMURE-072, MURMURE-012 ---
+
+/// A final snapshot holding an operation no delta carried is refused, and so
+/// is one that drops a delta it covers.
+#[test]
+fn a_final_snapshot_at_odds_with_the_deltas_is_refused() {
+    let (alice, bob, closing, _payload) = finalized_for(2);
+    let document_id = closing.document_id();
+    let added = forged(&alice, closing, |doc| {
+        doc.set_peer_id(next_peer()).expect("peer");
+        doc.get_list(MESSAGES).push("planted").expect("push");
+    });
+    assert_eq!(
+        bob.check_snapshot(document_id, 2, &added).expect("check"),
+        SnapshotVerdict::Mismatch
+    );
+    let doc = alice.doc(document_id).expect("held");
+    let mut short = doc.oplog_vv();
+    let (peer, end) = short
+        .iter()
+        .map(|(peer, end)| (*peer, *end))
+        .max_by_key(|(_, end)| *end)
+        .expect("operations");
+    short.insert(peer, end - 1);
+    let early = doc.fork_at(&doc.vv_to_frontiers(&short)).expect("fork");
+    let dropped = early
+        .export(ExportMode::shallow_snapshot(&early.oplog_frontiers()))
+        .expect("export");
+    assert_eq!(
+        bob.check_snapshot(document_id, 2, &dropped).expect("check"),
+        SnapshotVerdict::Mismatch
+    );
+    assert_eq!(
+        bob.check_snapshot(document_id, 2, b"not a snapshot")
+            .expect("check"),
+        SnapshotVerdict::Mismatch
+    );
+}
+
+// --- MURMURE-436 ---
+
+/// Bob missed the second delta, and the relay purged it once the final
+/// snapshot was confirmed. Loro keeps the shallow snapshot pending on his
+/// copy, so he loads it whole and waits for no delta.
+#[test]
+fn a_copy_missing_purged_deltas_loads_the_final_snapshot() {
+    let (alice, mut bob, closing, payload) = finalized_for(1);
+    let document_id = closing.document_id();
+    assert_eq!(bob.messages(closing).expect("held").len(), 1);
+    bob.apply_remote_at(document_id, Some(Order::Snapshot(Seq(2))), &payload)
+        .expect("the snapshot loads");
+    assert_eq!(
+        bob.messages(closing).expect("held"),
+        alice.messages(closing).expect("held")
+    );
 }

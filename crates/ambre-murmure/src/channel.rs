@@ -28,6 +28,7 @@ use crate::session::Session;
 use crate::{mention, reaction};
 
 mod closing;
+mod confirming;
 mod finalizing;
 mod relocating;
 
@@ -949,12 +950,43 @@ impl ChannelState {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        doc.import(sequence::loro_part(payload))?;
+        let status = doc.import(sequence::loro_part(payload))?;
+        if status.pending.is_some() && matches!(order, Some(Order::Snapshot(_))) {
+            self.replace_from_shallow(document_id, sequence::loro_part(payload))?;
+        }
         // Only an update needs the messages matched; a snapshot's numbers
         // ride in its table.
         let resolve = matches!(order, Some(Order::Update(_)));
         let note = order.map(|order| move |sequence: &mut Sequence| sequence.note(order, payload));
         self.answer(document_id, resolve, note)
+    }
+
+    /// Hold `snapshot` in place of `document_id`, a copy it could not import
+    /// into. A final snapshot is shallow, and Loro keeps it pending on a
+    /// copy that lacks some of the deltas it folds in. Those deltas are
+    /// purged, so the copy loads the snapshot and waits for none of them
+    /// (`MURMURE-436`).
+    ///
+    /// # Errors
+    /// [`MurmureError::Crdt`] when Loro refuses the snapshot or the PeerID.
+    fn replace_from_shallow(
+        &mut self,
+        document_id: DocumentId,
+        snapshot: &[u8],
+    ) -> Result<(), MurmureError> {
+        let fresh = LoroDoc::new();
+        if fresh.import(snapshot)?.pending.is_some() {
+            return Ok(());
+        }
+        if let Some(held) = self.held_mut(document_id) {
+            if let Some(session) = held.session {
+                fresh.set_peer_id(session.peer())?;
+            }
+            held.doc = fresh;
+        } else if let Some(doc) = self.loaded.get_mut(&SegmentId::from_document(document_id)) {
+            *doc = fresh;
+        }
+        Ok(())
     }
 
     /// Import a delta a member signed, once the authorship check passed on

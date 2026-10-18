@@ -74,6 +74,11 @@ impl SeqLedger {
         self.ends.insert(seq, end);
     }
 
+    /// The last seq a snapshot this client imported covers.
+    pub(crate) fn floor(&self) -> u64 {
+        self.floor
+    }
+
     /// The last seq this client holds with no gap below it. A snapshot built
     /// here covers up to it and no further.
     pub(crate) fn contiguous_end(&self) -> u64 {

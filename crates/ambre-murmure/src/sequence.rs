@@ -70,6 +70,9 @@ pub(crate) struct Sequence {
     covered: Seq,
     /// The highest number delivered, snapshot or update.
     delivered: Seq,
+    /// The end of every operation delivered, per peer. A snapshot that holds
+    /// less dropped a delta the relay sequenced (`MURMURE-072`).
+    relayed: VersionVector,
     /// Updates noted and not yet matched against the document's messages.
     unresolved: Vec<Range>,
 }
@@ -89,6 +92,7 @@ impl Sequence {
                     );
                     return;
                 };
+                self.relay(&meta.partial_end_vv);
                 self.unresolved.push(Range {
                     seq,
                     start: meta.partial_start_vv,
@@ -98,6 +102,9 @@ impl Sequence {
             Order::Snapshot(covered) => {
                 self.covered = self.covered.max(covered);
                 self.delivered = self.delivered.max(covered);
+                if let Ok(meta) = LoroDoc::decode_import_blob_meta(loro_part(payload), false) {
+                    self.relay(&meta.partial_end_vv);
+                }
                 // A row past the horizon is a number no update of this
                 // snapshot had: a writer's mistake, read as no number.
                 for (id, seq) in table(payload).into_iter().flatten() {
@@ -113,7 +120,22 @@ impl Sequence {
     /// delta travels in, by the range [`crate::delta::range`] read from it.
     pub(crate) fn note_range(&mut self, seq: Seq, (start, end): (VersionVector, VersionVector)) {
         self.passed(seq);
+        self.relay(&end);
         self.unresolved.push(Range { seq, start, end });
+    }
+
+    /// Raise the end of the operations delivered to `end`.
+    fn relay(&mut self, end: &VersionVector) {
+        for (peer, &counter) in end.iter() {
+            if self.relayed.get(peer).is_none_or(|held| *held < counter) {
+                self.relayed.insert(*peer, counter);
+            }
+        }
+    }
+
+    /// The end of every operation delivered, per peer.
+    pub(crate) fn relayed(&self) -> &VersionVector {
+        &self.relayed
     }
 
     /// Note that the relay delivered `seq`, even when nothing of it was

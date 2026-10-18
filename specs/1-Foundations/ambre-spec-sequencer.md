@@ -119,7 +119,7 @@ snapshot, and the relay arbitrates who writes it.
 | `SRV-115` | `FAIL` | Given a delta for a locked segment, the relay MUST refuse it with an answer that names the lock. | this spec section 3 | `ambre_server::redis_ops::lua_tests::a_locked_segment_refuses_every_later_delta` -- database tier, the delta takes no number and consumes no clock; `ambre_server::ws::handler::message::refusal_tests::a_delta_for_a_locked_segment_is_refused_with_the_lock` -- the refusal names the delta and the lock's code | none | verified |
 | `SRV-116` | `FAIL` | Given a finalize commit from a client that holds no live lease, the relay MUST refuse it. | this spec section 3 | `ambre_server::routes::channels::tests::a_commit_needs_the_live_lease_and_a_snapshot_of_the_horizon` -- database tier, another lease and a snapshot off the horizon or of another document are refused; `::an_expired_lease_goes_to_another_writer` -- an expired lease commits nothing | none | verified |
 | `SRV-117` | `POST` | An accepted finalization MUST record the finalization time of the segment. | this spec section 3; `ZK-015` | `ambre_server::routes::channels::tests::a_commit_needs_the_live_lease_and_a_snapshot_of_the_horizon` -- database tier, the segment is `final` with its time, and a retry is answered alike | none | verified |
-| `SRV-118` | `POST` | The deltas of a final segment MUST be purged only once a member client other than its author confirms the finalization. | this spec section 3; `SRV-126` | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-118` | `POST` | The deltas of a final segment MUST be purged only once a member client other than its author confirms the finalization. | this spec section 3; `SRV-126` | `ambre_server::routes::channels::tests::a_final_segment_keeps_its_deltas_until_another_member_confirms` -- the author's confirmation leaves the final snapshot pending and the deltas in place, and another member's purges them | none | verified |
 | `SRV-119` | `POST` | A lease that expires MUST let another client take the lease of the same segment. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::routes::channels::tests::an_expired_lease_goes_to_another_writer` -- database tier, the second writer takes a new lease at the horizon the lock fixed | none | verified |
 | `SRV-120` | `FRAME` | Finalizing a segment MUST NOT touch a delta of any other document. | this spec section 3 | `ambre_server::routes::channels::tests::a_commit_needs_the_live_lease_and_a_snapshot_of_the_horizon` -- database tier, the deltas of the segment and of `meta` all stay, and `meta` is not finalized | none | verified |
 | `SRV-147` | `POST` | A rotation of a channel key MUST lock every segment of the channel sealed under the previous key. | this spec section 3; `SRV-114`, `SYNC-125` | not built | unbuilt -- lands with the `A key rotation locks the segments it leaves behind` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -131,8 +131,8 @@ snapshot, and the relay arbitrates who writes it.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 52 `verified`, 2 `unimplemented`. What holds is the ordering, where each delta
-  lives, the replay, the close of a segment and the relay's half of its finalization. The recovery
+* **Verification.** 53 `verified`, 1 `unimplemented`. What holds is the ordering, where each delta
+  lives, the replay, the close of a segment, the relay's half of its finalization and the purge. The recovery
   paths are driven through real failures: a register that refuses inserts, a queue that refuses
   pushes, an index that cannot be read.
 ---
@@ -376,9 +376,8 @@ sees is how long a document takes to open.
 * **The snapshot chain proof is stored and never checked.** The record carries a parent hash and a
   chain proof, and the relay validates neither -- which it could not, being blind. Whether any
   client checks them is `ambre-spec-delta-order.md`.
-* **No client finalizes yet.** The relay grants the lease, locks and commits, but no client asks.
-  So a channel closes one segment, and refuses every later close. No purge after a confirmation
-  exists (`SRV-118`), and a key rotation locks nothing (`SRV-147`).
+* **A key rotation locks nothing.** A segment sealed under the previous key stays open to its
+  grace period (`SRV-147`).
 * **A delta may enter a segment past its grace check.** The grace is read, then the lock is set.
   A delta numbered between the two enters the final segment, before the grace has passed since it.
   The window is one transaction, and the delta is kept, so only the grace is shortened.

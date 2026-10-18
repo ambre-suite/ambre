@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3530 rows: 2828 shipped, of which 2 loose. 702 unbuilt.**
+**3530 rows: 2835 shipped, of which 2 loose. 695 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 809 | 418 | 816 | 609 | 174 | 2826 |
+| `verified` | 810 | 418 | 816 | 609 | 180 | 2833 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 201 | 55 | 29 | 109 | 308 | 702 |
+| `unimplemented` | 200 | 55 | 29 | 109 | 302 | 695 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -69,7 +69,7 @@
 | `ambre-spec-residency.md` | 21 | 21 | 21 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 23 | 23 |  | 1 |
-| `ambre-spec-sequencer.md` | 54 | 52 | 52 |  | 2 |
+| `ambre-spec-sequencer.md` | 54 | 53 | 53 |  | 1 |
 | `ambre-spec-server.md` | 71 | 65 | 64 | 1 | 6 |
 | `ambre-spec-session.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-sync.md` | 43 | 42 | 42 |  | 1 |
@@ -159,7 +159,7 @@
 | `ambre-spec-prose-undo.md` | 3 | 3 | 3 |  |  |
 | `ambre-spec-prose-viewport.md` | 21 | 14 | 14 |  | 7 |
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
-| `ambre-spec-murmure-schema.md` | 22 | 18 | 18 |  | 4 |
+| `ambre-spec-murmure-schema.md` | 22 | 19 | 19 |  | 3 |
 | `ambre-spec-murmure-channels.md` | 49 | 33 | 33 |  | 16 |
 | `ambre-spec-murmure-engine.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-murmure-members.md` | 21 | 11 | 11 |  | 10 |
@@ -167,7 +167,7 @@
 | `ambre-spec-murmure-messages.md` | 22 | 15 | 15 |  | 7 |
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
 | `ambre-spec-murmure-search.md` | 17 | 5 | 5 |  | 12 |
-| `ambre-spec-murmure-segments.md` | 25 | 13 | 13 |  | 12 |
+| `ambre-spec-murmure-segments.md` | 25 | 18 | 18 |  | 7 |
 | `ambre-spec-murmure-spaces.md` | 33 | 28 | 28 |  | 5 |
 | `ambre-spec-murmure-typing-presence.md` | 9 | 7 | 7 |  | 2 |
 | `ambre-spec-murmure-unread.md` | 15 | 13 | 13 |  | 2 |
