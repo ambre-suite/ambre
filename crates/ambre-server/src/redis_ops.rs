@@ -14,11 +14,12 @@ use crate::payload::Payload;
 /// - `KEYS[2]` = `doc:{id}:seq`   (counter)
 /// - `KEYS[3]` = `doc:{id}:gone`  (tombstone, see [`mark_document_gone`])
 /// - `KEYS[4]` = `doc:{id}:rotation-owed` (see [`rotation_owed_key`])
+/// - `KEYS[5]` = `doc:{id}:locked` (see [`segment_locked_key`])
 /// - `ARGV[1]` = pub_key_hex
 /// - `ARGV[2]` = incoming clock (must be last_clock + 1)
 ///
-/// Rejects the update if the clock is not strictly sequential, or if the
-/// document is being deleted.
+/// Rejects the update if the clock is not strictly sequential, if the
+/// document is being deleted, or if it is a locked segment.
 ///
 /// # Why the clock hash is intentionally not pruned
 ///
@@ -44,6 +45,9 @@ end
 if redis.call('EXISTS', KEYS[4]) == 1 then
     return redis.error_reply('ROTATION_OWED')
 end
+if redis.call('EXISTS', KEYS[5]) == 1 then
+    return redis.error_reply('SEGMENT_LOCKED')
+end
 local current  = tonumber(redis.call('HGET', KEYS[1], ARGV[1])) or 0
 local incoming = tonumber(ARGV[2])
 if incoming ~= current + 1 then
@@ -62,7 +66,8 @@ return redis.call('INCR', KEYS[2])
 ///
 /// A document that owes a rotation refuses with [`AppError::RotationOwed`]
 /// before the clock is read. The frame then takes no sequence number and
-/// consumes no clock (`SRV-123`, `SRV-125`).
+/// consumes no clock (`SRV-123`, `SRV-125`). So does a locked segment, with
+/// [`AppError::SegmentLocked`] (`SRV-115`).
 pub async fn verify_clock_and_assign_seq(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
@@ -73,6 +78,7 @@ pub async fn verify_clock_and_assign_seq(
     let seq_key = format!("doc:{document_id}:seq");
     let gone_key = document_gone_key(document_id);
     let owed_key = rotation_owed_key(document_id);
+    let locked_key = segment_locked_key(document_id);
 
     let result: i64 = redis
         .eval::<i64>(
@@ -82,6 +88,7 @@ pub async fn verify_clock_and_assign_seq(
                 seq_key.as_str(),
                 gone_key.as_str(),
                 owed_key.as_str(),
+                locked_key.as_str(),
             ],
             [pub_key_hex, &clock.to_string()],
         )
@@ -102,6 +109,9 @@ fn clock_refusal(error: &str, got: u64) -> AppError {
     }
     if error.contains(ROTATION_OWED) {
         return AppError::RotationOwed;
+    }
+    if error.contains(SEGMENT_LOCKED) {
+        return AppError::SegmentLocked;
     }
     let current = error.split_once("CLOCK_MISMATCH:").and_then(|(_, rest)| {
         let digits = rest.trim_start();
@@ -264,6 +274,10 @@ const DOCUMENT_GONE: &str = "DOCUMENT_GONE";
 /// The refusal the clock and presence scripts answer for a document that owes
 /// a rotation (see [`rotation_owed_key`]).
 const ROTATION_OWED: &str = "ROTATION_OWED";
+
+/// The refusal the clock script answers for a locked segment (see
+/// [`segment_locked_key`]).
+const SEGMENT_LOCKED: &str = "SEGMENT_LOCKED";
 
 /// Reads a guarded script's refusal out of a store error: a document being
 /// deleted is not found, anything else is a store failure.
@@ -825,9 +839,9 @@ pub async fn purge_document_state(
     ttl_secs: u64,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
-redis.call('SREM', KEYS[8], KEYS[3])
-redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7])
-redis.call('SET', KEYS[9], '1', 'EX', ARGV[1])
+redis.call('SREM', KEYS[9], KEYS[3])
+redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7], KEYS[8])
+redis.call('SET', KEYS[10], '1', 'EX', ARGV[1])
 return 1
 "#;
     let keys = document_state_keys(document_id);
@@ -843,6 +857,7 @@ return 1
                 keys[4].as_str(),
                 keys[5].as_str(),
                 keys[6].as_str(),
+                keys[7].as_str(),
                 FLUSH_DIRTY_SET,
                 gone_key.as_str(),
             ],
@@ -855,8 +870,8 @@ return 1
 
 /// The keys the relay holds for one document, in the order
 /// [`purge_document_state`] passes them: seq, clocks, pending, presence,
-/// dead-letter, owed rotation, session counts.
-pub fn document_state_keys(document_id: &ambre_core::DocumentId) -> [String; 7] {
+/// dead-letter, owed rotation, session counts, segment lock.
+pub fn document_state_keys(document_id: &ambre_core::DocumentId) -> [String; 8] {
     [
         format!("doc:{document_id}:seq"),
         format!("doc:{document_id}:clocks"),
@@ -865,7 +880,56 @@ pub fn document_state_keys(document_id: &ambre_core::DocumentId) -> [String; 7] 
         format!("doc:{document_id}:deadletter"),
         rotation_owed_key(document_id),
         doc_sessions_key(document_id),
+        segment_locked_key(document_id),
     ]
+}
+
+/// The mirror of a segment's finalize lock (`SRV-114`). The register holds
+/// the lock; this key lets the clock script refuse a delta with no extra
+/// round trip (`SRV-115`). A subscribe rewrites it from the register.
+pub fn segment_locked_key(document_id: &ambre_core::DocumentId) -> String {
+    format!("doc:{document_id}:locked")
+}
+
+/// Lock a segment against deltas, unless one still waits to be flushed.
+/// Returns the last delta number the relay gave it, the horizon of its final
+/// snapshot, or `None` while a delta is still pending. One script, so no
+/// delta is numbered between the check and the lock.
+pub async fn lock_segment(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Option<u64>, AppError> {
+    const LUA: &str = r#"
+if redis.call('LLEN', KEYS[1]) > 0 then
+    return -1
+end
+redis.call('SET', KEYS[2], '1')
+return tonumber(redis.call('GET', KEYS[3])) or 0
+"#;
+    let pending = format!("doc:{document_id}:pending");
+    let locked = segment_locked_key(document_id);
+    let seq = format!("doc:{document_id}:seq");
+    let answer: i64 = redis
+        .eval::<i64>(
+            LUA,
+            [pending.as_str(), locked.as_str(), seq.as_str()],
+            Vec::<String>::new(),
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("lock segment: {e}")))?;
+    Ok(u64::try_from(answer).ok())
+}
+
+/// Sets the mirror of a segment's lock. Nothing clears it but the purge of a
+/// deleted document: a lock holds for good.
+pub async fn mirror_segment_lock(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+) -> Result<(), AppError> {
+    redis
+        .set(segment_locked_key(document_id), "1")
+        .await
+        .map_err(|e| AppError::Redis(format!("mirror segment lock: {e}")))
 }
 
 /// The mirror of a rotation the document owes (`SRV-122`). The register holds
@@ -1055,6 +1119,45 @@ mod lua_tests {
             .await
             .expect("the same clock is accepted once the debt clears");
         assert_eq!(seq, 1);
+
+        let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
+    }
+
+    /// `SRV-114`, `SRV-115`: a lock waits for the pending deltas, then answers
+    /// the last delta number. A later delta is refused with the lock's code,
+    /// and takes no sequence number and consumes no clock.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn a_locked_segment_refuses_every_later_delta() {
+        let redis = connect_redis().await;
+        let doc_id = ambre_core::DocumentId::new();
+        let pk_hex = "0bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb1";
+        let pending = format!("doc:{doc_id}:pending");
+
+        for clock in 1..=2 {
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, clock)
+                .await
+                .expect("an open segment takes deltas");
+        }
+        let _: usize = redis.rpush(&pending, "entry").await.unwrap();
+        assert_eq!(lock_segment(&redis, &doc_id).await.unwrap(), None);
+        let locked: usize = redis.exists(segment_locked_key(&doc_id)).await.unwrap();
+        assert_eq!(locked, 0, "a pending delta holds the lock back");
+
+        let _: usize = redis.del(&pending).await.unwrap();
+        assert_eq!(lock_segment(&redis, &doc_id).await.unwrap(), Some(2));
+        let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, 3).await;
+        assert!(
+            matches!(refused, Err(AppError::SegmentLocked)),
+            "{refused:?}"
+        );
+        let seq: Option<u64> = redis.get(format!("doc:{doc_id}:seq")).await.unwrap();
+        assert_eq!(seq, Some(2), "a refused delta takes no sequence number");
+        let clock: Option<u64> = redis
+            .hget(format_doc_clocks_key(&doc_id), pk_hex)
+            .await
+            .unwrap();
+        assert_eq!(clock, Some(2), "a refused delta consumes no clock");
 
         let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
     }

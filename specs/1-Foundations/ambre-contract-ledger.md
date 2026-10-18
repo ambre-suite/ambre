@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3528 rows: 2812 shipped, of which 2 loose. 716 unbuilt.**
+**3529 rows: 2820 shipped, of which 2 loose. 709 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 800 | 418 | 816 | 609 | 167 | 2810 |
+| `verified` | 808 | 418 | 816 | 609 | 167 | 2818 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 208 | 55 | 29 | 109 | 315 | 716 |
+| `unimplemented` | 201 | 55 | 29 | 109 | 315 | 709 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -69,7 +69,7 @@
 | `ambre-spec-residency.md` | 21 | 21 | 21 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 23 | 23 |  | 1 |
-| `ambre-spec-sequencer.md` | 53 | 44 | 44 |  | 9 |
+| `ambre-spec-sequencer.md` | 54 | 52 | 52 |  | 2 |
 | `ambre-spec-server.md` | 71 | 65 | 64 | 1 | 6 |
 | `ambre-spec-session.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-sync.md` | 42 | 41 | 41 |  | 1 |
@@ -273,7 +273,7 @@
 | `ambre-spec-residency.md` | RESID-001..021 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144 |
-| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..198 |
+| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..199 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..164 |

@@ -191,6 +191,8 @@ closed_words! {
         ClockMismatch => "CLOCK_MISMATCH",
         /// The document owes a key rotation.
         RotationOwed => "ROTATION_OWED",
+        /// A finalize lease locked the segment against deltas.
+        SegmentLocked => "SEGMENT_LOCKED",
         /// A member joined after the rotation read the members.
         MembersChanged => "MEMBERS_CHANGED",
         /// The key an invitation wraps is no longer the document's.
@@ -230,6 +232,7 @@ impl RefusalCode {
             Self::Conflict
             | Self::ClockMismatch
             | Self::RotationOwed
+            | Self::SegmentLocked
             | Self::MembersChanged
             | Self::KeyChanged
             | Self::LogMoved
@@ -292,6 +295,7 @@ mod tests {
             (Conflict, "CONFLICT"),
             (ClockMismatch, "CLOCK_MISMATCH"),
             (RotationOwed, "ROTATION_OWED"),
+            (SegmentLocked, "SEGMENT_LOCKED"),
             (MembersChanged, "MEMBERS_CHANGED"),
             (KeyChanged, "KEY_CHANGED"),
             (LogMoved, "LOG_MOVED"),

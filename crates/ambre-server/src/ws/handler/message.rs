@@ -156,6 +156,9 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
         },
         // The document is being deleted (`SRV-017`).
         AppError::NotFound { .. } => refusal(Some(*doc_id), RefusalCode::NotFound),
+        // A finalize lease locked the segment: the refusal names the lock
+        // and the delta, so the author sends it elsewhere (`SRV-115`).
+        AppError::SegmentLocked => delta_refusal(update, RefusalCode::SegmentLocked),
         _ => {
             tracing::error!("clock validation failed doc={doc_id}: {e}");
             delta_refusal(update, RefusalCode::InternalError)
@@ -229,6 +232,17 @@ pub(crate) async fn handle_subscribe(
     };
     if let Err(e) = mirrored {
         tracing::error!(error = %e, "subscribe: rotation debt mirror failed");
+    }
+    // The same for the lock of a segment: a reset of the ephemeral store
+    // lets deltas in only until the next subscribe (`SRV-114`). A lock holds
+    // for good, so the mirror is only ever set.
+    let locked = match db::segment_locked(&state.db, &document_id).await {
+        Ok(true) => redis_ops::mirror_segment_lock(&state.redis, &document_id).await,
+        Ok(false) => Ok(()),
+        Err(e) => Err(e),
+    };
+    if let Err(e) = locked {
+        tracing::error!(error = %e, "subscribe: segment lock mirror failed");
     }
 
     // Count this session once, however often it re-subscribes: its departure
@@ -2238,6 +2252,22 @@ mod refusal_tests {
                 document_id,
                 signature,
                 code: RefusalCode::InternalError,
+            } if document_id == doc && signature == update.signature
+        ));
+    }
+
+    /// `SRV-115`: a delta for a locked segment is refused with the lock's
+    /// code, and the refusal names the delta.
+    #[test]
+    fn a_delta_for_a_locked_segment_is_refused_with_the_lock() {
+        let update = seq_update(2).update;
+        let doc = update.public_data.document_id;
+        assert!(matches!(
+            update_refusal(&update, &AppError::SegmentLocked),
+            WsServerMsg::DeltaRefused {
+                document_id,
+                signature,
+                code: RefusalCode::SegmentLocked,
             } if document_id == doc && signature == update.signature
         ));
     }

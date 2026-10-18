@@ -192,6 +192,12 @@ define_id! {
     OrgId
 }
 
+define_id! {
+    /// Identifies a finalize lease of a segment, minted by the relay when it
+    /// grants one. A commit names it.
+    LeaseId
+}
+
 impl SnapshotId {
     /// The genesis snapshot of a document: a deterministic id every client agrees
     /// on without a server round-trip, reusing the document's own bytes.

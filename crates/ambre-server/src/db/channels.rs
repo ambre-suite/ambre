@@ -291,10 +291,13 @@ pub async fn close_segment(
     if closing_now.is_some() {
         return Err(conflict("another segment of the channel is still closing"));
     }
-    sqlx::query("UPDATE channel_documents SET state = 'closing' WHERE document_id = $1")
-        .bind(closing)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "UPDATE channel_documents SET state = 'closing', closed_at = now() \
+         WHERE document_id = $1",
+    )
+    .bind(closing)
+    .execute(&mut *tx)
+    .await?;
     let inserted = sqlx::query(concat!(
         insert_channel_document!(),
         " ON CONFLICT DO NOTHING"
@@ -309,6 +312,236 @@ pub async fn close_segment(
     }
     tx.commit().await?;
     Ok(successor)
+}
+
+/// Whether a finalize lease locked `document_id` against deltas (`SRV-114`).
+/// The lock is its horizon, so a segment with one is locked. A document
+/// outside every channel is not locked.
+pub async fn segment_locked(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<bool, AppError> {
+    let locked: Option<bool> = sqlx::query_scalar(
+        "SELECT horizon IS NOT NULL FROM channel_documents WHERE document_id = $1",
+    )
+    .bind(id_to_uuid(*document_id))
+    .fetch_optional(pool)
+    .await?;
+    Ok(locked.unwrap_or(false))
+}
+
+/// How long a finalize lease waits, and how long it lasts
+/// (`ambre-spec-budgets.md section 8`).
+#[derive(Debug, Clone, Copy)]
+pub struct LeaseTerms {
+    /// Since the close and since the latest delta, before any lease.
+    pub grace: std::time::Duration,
+    /// How long a granted lease lasts.
+    pub lease: std::time::Duration,
+    /// The wait answered while a delta still waits to be flushed.
+    pub pending_retry: std::time::Duration,
+}
+
+/// The answer to a finalize lease request.
+#[derive(Debug, PartialEq, Eq)]
+pub enum FinalizeLease {
+    /// The caller holds the lease. It writes the snapshot of every delta up
+    /// to `horizon`, and commits it before `expires_in` runs out.
+    Granted {
+        lease_id: ambre_core::LeaseId,
+        horizon: u64,
+        expires_in: std::time::Duration,
+    },
+    /// No lease now: ask again after `retry_in`.
+    Wait { retry_in: std::time::Duration },
+}
+
+/// Take the finalize lease of the closing segment `segment` of a channel
+/// (`SRV-113`), in one transaction that locks its row.
+///
+/// A segment not yet locked waits out the grace period since its close and
+/// since its latest delta (`SRV-199`). Then `lock` locks it in the store and
+/// answers the last delta number it holds, or `None` while a delta still
+/// waits to be flushed. The register then records the lock and its horizon
+/// for good (`SRV-114`). A live lease answers its time left. An expired one
+/// gives way to a new lease (`SRV-119`). A segment that is not closing, or
+/// not of the channel, is refused with a 409.
+pub async fn take_finalize_lease(
+    pool: &PgPool,
+    channel_id: &ambre_core::ChannelId,
+    segment: ambre_core::SegmentId,
+    terms: LeaseTerms,
+    lock: impl AsyncFnOnce() -> Result<Option<u64>, AppError>,
+) -> Result<FinalizeLease, AppError> {
+    let document = id_to_uuid(segment.document_id());
+    let mut tx = pool.begin().await?;
+    let row: Option<LeaseRow> = sqlx::query_as(
+        "SELECT d.state, d.horizon, \
+           CEIL(EXTRACT(EPOCH FROM GREATEST(COALESCE(d.closed_at, now()), \
+             COALESCE((SELECT max(u.created_at) FROM updates u \
+                       WHERE u.document_id = d.document_id), '-infinity')) \
+             + make_interval(secs => $3) - now()) * 1000)::BIGINT AS grace_left_ms, \
+           CEIL(EXTRACT(EPOCH FROM d.lease_until - now()) * 1000)::BIGINT AS lease_left_ms \
+         FROM channel_documents d WHERE d.document_id = $1 AND d.channel_id = $2 \
+         FOR UPDATE OF d",
+    )
+    .bind(document)
+    .bind(id_to_uuid(*channel_id))
+    .bind(terms.grace.as_secs_f64())
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(LeaseRow {
+        state: Some(state),
+        horizon,
+        grace_left_ms,
+        lease_left_ms,
+    }) = row
+    else {
+        return Err(not_closing());
+    };
+    if state != "closing" {
+        return Err(not_closing());
+    }
+    let wait = |ms: i64| FinalizeLease::Wait {
+        retry_in: std::time::Duration::from_millis(ms.unsigned_abs()),
+    };
+    let horizon = match horizon {
+        Some(horizon) => horizon,
+        None if grace_left_ms > 0 => return Ok(wait(grace_left_ms)),
+        None => {
+            let Some(seq) = lock().await? else {
+                return Ok(FinalizeLease::Wait {
+                    retry_in: terms.pending_retry,
+                });
+            };
+            let seq = i64::try_from(seq)
+                .map_err(|_| AppError::Internal("delta number out of range".into()))?;
+            sqlx::query("UPDATE channel_documents SET horizon = $2 WHERE document_id = $1")
+                .bind(document)
+                .bind(seq)
+                .execute(&mut *tx)
+                .await?;
+            seq
+        }
+    };
+    if let Some(ms) = lease_left_ms.filter(|ms| *ms > 0) {
+        tx.commit().await?;
+        return Ok(wait(ms));
+    }
+    let lease_id = ambre_core::LeaseId::new();
+    sqlx::query(
+        "UPDATE channel_documents SET lease_id = $2, \
+         lease_until = now() + make_interval(secs => $3) WHERE document_id = $1",
+    )
+    .bind(document)
+    .bind(id_to_uuid(lease_id))
+    .bind(terms.lease.as_secs_f64())
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(FinalizeLease::Granted {
+        lease_id,
+        horizon: horizon.unsigned_abs(),
+        expires_in: terms.lease,
+    })
+}
+
+/// What a lease request reads of a segment, the waits in milliseconds by
+/// the register's clock.
+#[derive(sqlx::FromRow)]
+struct LeaseRow {
+    state: Option<String>,
+    horizon: Option<i64>,
+    grace_left_ms: i64,
+    lease_left_ms: Option<i64>,
+}
+
+/// What a finalize commit reads of a segment.
+#[derive(sqlx::FromRow)]
+struct CommitRow {
+    state: Option<String>,
+    /// The live or expired lease, if any.
+    held: Option<uuid::Uuid>,
+    live: bool,
+    horizon: Option<i64>,
+    final_snapshot: Option<uuid::Uuid>,
+}
+
+/// The refusal of a lease or a commit on a segment that is not closing.
+fn not_closing() -> AppError {
+    AppError::Conflict {
+        detail: "the segment is not closing".into(),
+    }
+}
+
+/// Accept the finalization of `segment` under `lease_id`, by its snapshot
+/// `snapshot_id` (`SRV-117`). The segment becomes `final`, and its lease ends.
+///
+/// A commit without the live lease is refused with a 409 (`SRV-116`). So is a
+/// snapshot of another document, or one that does not cover the horizon
+/// exactly. A retry of an accepted commit answers `Ok`. Only the row of
+/// `segment` is written (`SRV-120`).
+pub async fn commit_finalization(
+    pool: &PgPool,
+    channel_id: &ambre_core::ChannelId,
+    segment: ambre_core::SegmentId,
+    lease_id: ambre_core::LeaseId,
+    snapshot_id: ambre_core::SnapshotId,
+) -> Result<(), AppError> {
+    let document = id_to_uuid(segment.document_id());
+    let (lease_id, snapshot_id) = (id_to_uuid(lease_id), id_to_uuid(snapshot_id));
+    let conflict = |detail: &str| AppError::Conflict {
+        detail: detail.into(),
+    };
+    let mut tx = pool.begin().await?;
+    let row: Option<CommitRow> = sqlx::query_as(
+        "SELECT state, lease_id AS held, COALESCE(lease_until > now(), false) AS live, horizon, \
+             final_snapshot FROM channel_documents \
+             WHERE document_id = $1 AND channel_id = $2 FOR UPDATE",
+    )
+    .bind(document)
+    .bind(id_to_uuid(*channel_id))
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(CommitRow {
+        state: Some(state),
+        held,
+        live,
+        horizon,
+        final_snapshot,
+    }) = row
+    else {
+        return Err(not_closing());
+    };
+    if state == "final" && final_snapshot == Some(snapshot_id) {
+        return Ok(());
+    }
+    if state != "closing" {
+        return Err(not_closing());
+    }
+    if held != Some(lease_id) || !live {
+        return Err(conflict("the caller holds no live lease"));
+    }
+    let covered: Option<i64> =
+        sqlx::query_scalar("SELECT covered_seq FROM snapshots WHERE id = $1 AND document_id = $2")
+            .bind(snapshot_id)
+            .bind(document)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if covered.is_none() || covered != horizon {
+        return Err(conflict("the snapshot does not cover the horizon"));
+    }
+    sqlx::query(
+        "UPDATE channel_documents SET state = 'final', finalized_at = now(), \
+         final_snapshot = $2, lease_id = NULL, lease_until = NULL \
+         WHERE document_id = $1",
+    )
+    .bind(document)
+    .bind(snapshot_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 /// The kind of a channel document, or `None` for a document outside every
@@ -1037,11 +1270,12 @@ mod tests {
     }
 
     /// `ZK-015`: the channel tables hold the channel's space and public flag,
-    /// each document's channel and kind, and the state of each segment. The
-    /// cursor table holds a member,
-    /// a document and a number. Nothing else: no name, no member,
-    /// no key and no timestamp. A column added here widens what the relay
-    /// learns, so it fails this test before it ships.
+    /// each document's channel and kind, and the state of each segment. A
+    /// segment adds its close time, its finalize lease, and the horizon, time
+    /// and snapshot of its finalization. The cursor table holds a member, a
+    /// document and a number. Nothing else: no name, no member and no key. A
+    /// column added here widens what the relay learns, so it fails this test
+    /// before it ships.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn the_channel_tables_hold_only_what_the_relay_may_learn(pool: PgPool) {
@@ -1061,8 +1295,14 @@ mod tests {
             got,
             [
                 ("channel_documents", "channel_id"),
+                ("channel_documents", "closed_at"),
                 ("channel_documents", "document_id"),
+                ("channel_documents", "final_snapshot"),
+                ("channel_documents", "finalized_at"),
+                ("channel_documents", "horizon"),
                 ("channel_documents", "kind"),
+                ("channel_documents", "lease_id"),
+                ("channel_documents", "lease_until"),
                 ("channel_documents", "state"),
                 ("channels", "id"),
                 ("channels", "is_public"),

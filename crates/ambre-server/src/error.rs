@@ -46,6 +46,11 @@ pub enum AppError {
     #[error("Rotation owed")]
     RotationOwed,
 
+    /// A finalize lease locked the segment against deltas for good
+    /// (`SRV-115`).
+    #[error("Segment locked")]
+    SegmentLocked,
+
     /// A member joined after the rotation read the members, so it would hold
     /// no copy of the new key (`SRV-167`). The client reads them again.
     #[error("The members changed since the rotation read them")]
@@ -122,6 +127,7 @@ impl AppError {
             AppError::Conflict { .. } => RefusalCode::Conflict,
             AppError::ClockMismatch { .. } => RefusalCode::ClockMismatch,
             AppError::RotationOwed => RefusalCode::RotationOwed,
+            AppError::SegmentLocked => RefusalCode::SegmentLocked,
             AppError::MembersChanged => RefusalCode::MembersChanged,
             AppError::KeyChanged => RefusalCode::KeyChanged,
             AppError::LogMoved => RefusalCode::LogMoved,

@@ -342,6 +342,133 @@ pub async fn close_segment(
     Ok(axum::Json(ClosedSegmentJson { active, created }))
 }
 
+/// The grace period of a closed segment before its finalization, since its
+/// close and since its latest delta (`ambre-spec-budgets.md section 8`).
+pub const FINALIZE_GRACE: std::time::Duration = std::time::Duration::from_secs(24 * 3600);
+
+/// How long a finalize lease lasts (`ambre-spec-budgets.md section 8`).
+pub const FINALIZE_LEASE: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// The wait a lease request is answered while a delta of the segment still
+/// waits to be flushed.
+const FINALIZE_PENDING_RETRY: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// The answer to a lease request: the lease, or none and when to ask again.
+#[derive(Debug, serde::Serialize)]
+pub struct FinalizeLeaseJson {
+    pub lease: Option<GrantedLeaseJson>,
+    /// Milliseconds before asking again, `0` with a lease.
+    pub retry_in: u64,
+}
+
+/// A granted finalize lease (`SRV-113`).
+#[derive(Debug, serde::Serialize)]
+pub struct GrantedLeaseJson {
+    #[serde(with = "ambre_core::serde_id::lease_id")]
+    pub lease_id: ambre_core::LeaseId,
+    /// The last delta number the final snapshot covers.
+    pub horizon: u64,
+    /// Milliseconds before the lease expires.
+    pub expires_in: u64,
+}
+
+/// The body of a finalize commit: the lease, and the snapshot that covers
+/// the horizon.
+#[derive(serde::Deserialize)]
+pub struct FinalizeSegmentRequest {
+    #[serde(with = "ambre_core::serde_id::lease_id")]
+    pub lease_id: ambre_core::LeaseId,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
+}
+
+/// The channel and the segment of a finalize path, once the caller is a
+/// writer of the channel. A viewer posts nothing, so it finalizes nothing.
+async fn finalize_target(
+    state: &AppState,
+    auth: &auth::AuthSession,
+    channel_id: &str,
+    segment: &str,
+) -> Result<(ambre_core::ChannelId, ambre_core::SegmentId), AppError> {
+    let channel_id: ambre_core::ChannelId = parse(channel_id)?;
+    let segment: ambre_core::SegmentId = parse(segment)?;
+    let meta = db::get_channel(&state.db, &channel_id)
+        .await?
+        .and_then(|channel| channel.meta_id)
+        .ok_or(AppError::Forbidden)?;
+    let role = db::member_role(&state.db, &meta.document_id(), &auth.user_id).await?;
+    if !role.is_some_and(Role::can_write_document) {
+        return Err(AppError::Forbidden);
+    }
+    Ok((channel_id, segment))
+}
+
+/// `POST /api/channels/{id}/segments/{segment}/lease`: take the finalize lease
+/// of a closing segment (`SRV-113`).
+///
+/// The first lease locks the segment against deltas for good, in the store
+/// first, then in the register (`SRV-114`). It waits out the grace period
+/// (`SRV-199`), and any delta still unflushed.
+pub async fn take_finalize_lease(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path((channel_id, segment)): Path<(String, String)>,
+) -> Result<axum::Json<FinalizeLeaseJson>, AppError> {
+    let (channel_id, segment) = finalize_target(&state, &auth, &channel_id, &segment).await?;
+    let terms = db::LeaseTerms {
+        grace: FINALIZE_GRACE,
+        lease: FINALIZE_LEASE,
+        pending_retry: FINALIZE_PENDING_RETRY,
+    };
+    let document = segment.document_id();
+    let lock = async || crate::redis_ops::lock_segment(&state.redis, &document).await;
+    let answer = db::take_finalize_lease(&state.db, &channel_id, segment, terms, lock).await?;
+    let millis = |d: std::time::Duration| u64::try_from(d.as_millis()).unwrap_or(u64::MAX);
+    Ok(axum::Json(match answer {
+        db::FinalizeLease::Granted {
+            lease_id,
+            horizon,
+            expires_in,
+        } => {
+            tracing::info!(channel_id = %channel_id, segment = %segment, horizon, "finalize lease granted");
+            FinalizeLeaseJson {
+                lease: Some(GrantedLeaseJson {
+                    lease_id,
+                    horizon,
+                    expires_in: millis(expires_in),
+                }),
+                retry_in: 0,
+            }
+        }
+        db::FinalizeLease::Wait { retry_in } => FinalizeLeaseJson {
+            lease: None,
+            retry_in: millis(retry_in),
+        },
+    }))
+}
+
+/// `POST /api/channels/{id}/segments/{segment}/finalize`: commit the final
+/// snapshot of a segment under the caller's live lease (`SRV-116`,
+/// `SRV-117`). The segment becomes `final`.
+pub async fn finalize_segment(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path((channel_id, segment)): Path<(String, String)>,
+    Json(req): Json<FinalizeSegmentRequest>,
+) -> Result<StatusCode, AppError> {
+    let (channel_id, segment) = finalize_target(&state, &auth, &channel_id, &segment).await?;
+    db::commit_finalization(
+        &state.db,
+        &channel_id,
+        segment,
+        req.lease_id,
+        req.snapshot_id,
+    )
+    .await?;
+    tracing::info!(channel_id = %channel_id, segment = %segment, snapshot_id = %req.snapshot_id, "segment finalized");
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// `POST /api/channels/direct`: open the direct message of the caller and
 /// `members`, created when none holds exactly them (`SRV-175`, `SRV-176`).
 ///
@@ -2726,6 +2853,307 @@ mod tests {
                 .err(),
             Some(StatusCode::FORBIDDEN),
             "a segment is not its own successor"
+        );
+    }
+
+    // --- Finalizing a closed segment ---
+
+    async fn lease(
+        state: &Arc<AppState>,
+        who: UserId,
+        channel: &Channel,
+    ) -> Result<FinalizeLeaseJson, StatusCode> {
+        take_finalize_lease(
+            State(state.clone()),
+            session(who),
+            Path((channel.id.to_string(), channel.segment.to_string())),
+        )
+        .await
+        .map(|axum::Json(answer)| answer)
+        .map_err(|e| e.into_response().status())
+    }
+
+    async fn finalize(
+        state: &Arc<AppState>,
+        who: UserId,
+        channel: &Channel,
+        lease_id: ambre_core::LeaseId,
+        snapshot_id: ambre_core::SnapshotId,
+    ) -> StatusCode {
+        status(
+            finalize_segment(
+                State(state.clone()),
+                session(who),
+                Path((channel.id.to_string(), channel.segment.to_string())),
+                Json(FinalizeSegmentRequest {
+                    lease_id,
+                    snapshot_id,
+                }),
+            )
+            .await,
+        )
+    }
+
+    /// Run `sql` against the row of the channel's first segment.
+    async fn on_segment(state: &AppState, channel: &Channel, sql: &str) {
+        sqlx::query(sql)
+            .bind(uuid_of_doc(channel.segment.document_id()))
+            .execute(&state.db)
+            .await
+            .expect("update");
+    }
+
+    /// A delta of `document` at `seq`, stored `age` ago.
+    async fn delta(state: &AppState, document: DocumentId, seq: i64, age: &str) {
+        let snapshot = ambre_core::SnapshotId::new();
+        db::insert_update(&state.db, &document, &[1; 32], &snapshot, seq, seq, "k")
+            .await
+            .expect("insert");
+        sqlx::query(
+            "UPDATE updates SET created_at = now() - $2::interval \
+             WHERE document_id = $1 AND seq = $3",
+        )
+        .bind(uuid_of_doc(document))
+        .bind(age)
+        .bind(seq)
+        .execute(&state.db)
+        .await
+        .expect("age");
+    }
+
+    /// A snapshot of `document` covering every delta up to `covered`.
+    async fn snapshot(
+        state: &AppState,
+        document: DocumentId,
+        covered: i64,
+    ) -> ambre_core::SnapshotId {
+        let clocks = serde_json::json!({});
+        db::create_snapshot(
+            &state.db, &document, &[1; 32], None, None, &clocks, "s", covered,
+        )
+        .await
+        .expect("snapshot")
+    }
+
+    /// A public channel of `alice` and `bob`, its first segment closed, and the
+    /// relay holding `seq` deltas for it.
+    async fn closed_channel(state: &Arc<AppState>, seq: u64) -> (UserId, UserId, Channel) {
+        use rustis::commands::StringCommands;
+        let alice = user(state, "alice@test.dev").await;
+        let bob = user(state, "bob@test.dev").await;
+        let space = space(state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(state, alice, space).await;
+        grant(state, channel.meta.document_id(), bob, Role::Editor).await;
+        let successor = document(state, alice).await;
+        close(state, alice, &channel, successor)
+            .await
+            .expect("close");
+        let key = format!("doc:{}:seq", channel.segment.document_id());
+        state.redis.set(key, seq).await.expect("seq");
+        (alice, bob, channel)
+    }
+
+    async fn forget_store(state: &AppState, channel: &Channel) {
+        use rustis::commands::GenericCommands;
+        let keys = crate::redis_ops::document_state_keys(&channel.segment.document_id());
+        let _: usize = state.redis.del(keys).await.expect("del");
+    }
+
+    /// `SRV-199`, `SRV-113`, `SRV-114`: no lease before the grace period has
+    /// passed since the close and since the latest delta. The first lease
+    /// locks the segment at its last delta number, and a second writer waits
+    /// out the live lease.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_lease_waits_out_the_grace_then_goes_to_one_writer_at_a_time(pool: sqlx::PgPool) {
+        use rustis::commands::GenericCommands;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let (alice, bob, channel) = closed_channel(&state, 4).await;
+        let segment = channel.segment.document_id();
+
+        let early = lease(&state, alice, &channel).await.expect("lease");
+        assert!(early.lease.is_none(), "the segment just closed");
+        assert!(early.retry_in > FINALIZE_GRACE.as_millis() as u64 - 60_000);
+
+        on_segment(
+            &state,
+            &channel,
+            "UPDATE channel_documents SET closed_at = now() - interval '2 days' \
+             WHERE document_id = $1",
+        )
+        .await;
+        delta(&state, segment, 4, "1 hour").await;
+        let quiet = lease(&state, alice, &channel).await.expect("lease");
+        assert!(
+            quiet.lease.is_none(),
+            "a delta came within the grace period"
+        );
+        assert!(
+            !db::segment_locked(&state.db, &segment)
+                .await
+                .expect("query")
+        );
+
+        sqlx::query("UPDATE updates SET created_at = now() - interval '2 days'")
+            .execute(&state.db)
+            .await
+            .expect("age");
+        let granted = lease(&state, alice, &channel).await.expect("lease");
+        let held = granted.lease.expect("the grace period has passed");
+        assert_eq!(held.horizon, 4);
+        assert_eq!(held.expires_in, FINALIZE_LEASE.as_millis() as u64);
+        assert!(
+            db::segment_locked(&state.db, &segment)
+                .await
+                .expect("query")
+        );
+        let mirrored: usize = state
+            .redis
+            .exists(crate::redis_ops::segment_locked_key(&segment))
+            .await
+            .expect("exists");
+        assert_eq!(mirrored, 1, "the store refuses every later delta");
+
+        let second = lease(&state, bob, &channel).await.expect("lease");
+        assert!(second.lease.is_none(), "one lease at a time");
+        assert!(second.retry_in > 0 && second.retry_in <= FINALIZE_LEASE.as_millis() as u64);
+        forget_store(&state, &channel).await;
+    }
+
+    /// `SRV-119`: an expired lease lets another writer take the lease, at the
+    /// horizon the lock fixed.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_expired_lease_goes_to_another_writer(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let (alice, bob, channel) = closed_channel(&state, 3).await;
+        on_segment(
+            &state,
+            &channel,
+            "UPDATE channel_documents SET closed_at = now() - interval '2 days' \
+             WHERE document_id = $1",
+        )
+        .await;
+        let first = lease(&state, alice, &channel).await.expect("lease");
+        let first = first.lease.expect("granted");
+
+        on_segment(
+            &state,
+            &channel,
+            "UPDATE channel_documents SET lease_until = now() - interval '1 second' \
+             WHERE document_id = $1",
+        )
+        .await;
+        let second = lease(&state, bob, &channel).await.expect("lease");
+        let second = second.lease.expect("the first lease expired");
+        assert_ne!(second.lease_id, first.lease_id);
+        assert_eq!(second.horizon, first.horizon);
+        assert_eq!(
+            finalize(
+                &state,
+                alice,
+                &channel,
+                first.lease_id,
+                snapshot(&state, channel.segment.document_id(), 3).await,
+            )
+            .await,
+            StatusCode::CONFLICT,
+            "the expired lease commits nothing"
+        );
+        forget_store(&state, &channel).await;
+    }
+
+    /// `SRV-116`, `SRV-117`, `SRV-120`: a commit needs the live lease and a
+    /// snapshot of the segment at its horizon. An accepted one records the
+    /// time, and touches no delta of the segment or of any other document.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_commit_needs_the_live_lease_and_a_snapshot_of_the_horizon(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let (alice, bob, channel) = closed_channel(&state, 2).await;
+        let segment = channel.segment.document_id();
+        let meta = channel.meta.document_id();
+        delta(&state, segment, 2, "2 days").await;
+        delta(&state, meta, 1, "2 days").await;
+        on_segment(
+            &state,
+            &channel,
+            "UPDATE channel_documents SET closed_at = now() - interval '2 days' \
+             WHERE document_id = $1",
+        )
+        .await;
+        let held = lease(&state, alice, &channel).await.expect("lease");
+        let held = held.lease.expect("granted");
+        let short = snapshot(&state, segment, 1).await;
+        let elsewhere = snapshot(&state, meta, 2).await;
+        let exact = snapshot(&state, segment, 2).await;
+
+        for (who, lease_id, snapshot_id) in [
+            (bob, ambre_core::LeaseId::new(), exact),
+            (alice, held.lease_id, short),
+            (alice, held.lease_id, elsewhere),
+        ] {
+            assert_eq!(
+                finalize(&state, who, &channel, lease_id, snapshot_id).await,
+                StatusCode::CONFLICT
+            );
+        }
+        assert_eq!(
+            finalize(&state, alice, &channel, held.lease_id, exact).await,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            finalize(&state, alice, &channel, held.lease_id, exact).await,
+            StatusCode::NO_CONTENT,
+            "a retry of the accepted commit"
+        );
+        let (state_word, finalized): (String, bool) = sqlx::query_as(
+            "SELECT state, finalized_at IS NOT NULL FROM channel_documents WHERE document_id = $1",
+        )
+        .bind(uuid_of_doc(segment))
+        .fetch_one(&state.db)
+        .await
+        .expect("row");
+        assert_eq!((state_word.as_str(), finalized), ("final", true));
+        let deltas: i64 = sqlx::query_scalar("SELECT count(*) FROM updates")
+            .fetch_one(&state.db)
+            .await
+            .expect("count");
+        assert_eq!(deltas, 2, "the commit purges no delta");
+        let meta_final: Option<bool> = sqlx::query_scalar(
+            "SELECT finalized_at IS NOT NULL FROM channel_documents WHERE document_id = $1",
+        )
+        .bind(uuid_of_doc(meta))
+        .fetch_one(&state.db)
+        .await
+        .expect("row");
+        assert_eq!(meta_final, Some(false));
+        assert_eq!(
+            lease(&state, bob, &channel).await.err(),
+            Some(StatusCode::CONFLICT),
+            "a final segment takes no lease"
+        );
+        forget_store(&state, &channel).await;
+    }
+
+    /// A viewer finalizes nothing, and the active segment takes no lease.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_lease_needs_a_writer_and_a_closing_segment(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let vera = user(&state, "vera@test.dev").await;
+        let space = space(&state, alice, &[(vera, Role::Viewer)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        grant(&state, channel.meta.document_id(), vera, Role::Viewer).await;
+        assert_eq!(
+            lease(&state, vera, &channel).await.err(),
+            Some(StatusCode::FORBIDDEN)
+        );
+        assert_eq!(
+            lease(&state, alice, &channel).await.err(),
+            Some(StatusCode::CONFLICT),
+            "the active segment is not closing"
         );
     }
 }

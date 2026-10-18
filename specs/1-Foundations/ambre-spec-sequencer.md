@@ -114,15 +114,16 @@ snapshot, and the relay arbitrates who writes it.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-113` | `POST` | The relay MUST grant the finalize lease of a segment to one client at a time. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-114` | `POST` | Granting a finalize lease MUST lock the segment against deltas for good. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-115` | `FAIL` | Given a delta for a locked segment, the relay MUST refuse it with an answer that names the lock. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-116` | `FAIL` | Given a finalize commit from a client that holds no live lease, the relay MUST refuse it. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-117` | `POST` | An accepted finalization MUST record the finalization time of the segment. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-113` | `POST` | The relay MUST grant the finalize lease of a segment to one client at a time. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::routes::channels::tests::a_lease_waits_out_the_grace_then_goes_to_one_writer_at_a_time` -- database tier, a second writer is answered the time left on the live lease; `::a_lease_needs_a_writer_and_a_closing_segment` -- a viewer and the active segment take none | none | verified |
+| `SRV-114` | `POST` | Granting a finalize lease MUST lock the segment against deltas for good. | this spec section 3 | `ambre_server::routes::channels::tests::a_lease_waits_out_the_grace_then_goes_to_one_writer_at_a_time` -- database tier, the register records the lock at the last delta number, and the store mirrors it; `ambre_server::redis_ops::lua_tests::a_locked_segment_refuses_every_later_delta` -- a pending delta holds the lock back | none | verified |
+| `SRV-115` | `FAIL` | Given a delta for a locked segment, the relay MUST refuse it with an answer that names the lock. | this spec section 3 | `ambre_server::redis_ops::lua_tests::a_locked_segment_refuses_every_later_delta` -- database tier, the delta takes no number and consumes no clock; `ambre_server::ws::handler::message::refusal_tests::a_delta_for_a_locked_segment_is_refused_with_the_lock` -- the refusal names the delta and the lock's code | none | verified |
+| `SRV-116` | `FAIL` | Given a finalize commit from a client that holds no live lease, the relay MUST refuse it. | this spec section 3 | `ambre_server::routes::channels::tests::a_commit_needs_the_live_lease_and_a_snapshot_of_the_horizon` -- database tier, another lease and a snapshot off the horizon or of another document are refused; `::an_expired_lease_goes_to_another_writer` -- an expired lease commits nothing | none | verified |
+| `SRV-117` | `POST` | An accepted finalization MUST record the finalization time of the segment. | this spec section 3; `ZK-015` | `ambre_server::routes::channels::tests::a_commit_needs_the_live_lease_and_a_snapshot_of_the_horizon` -- database tier, the segment is `final` with its time, and a retry is answered alike | none | verified |
 | `SRV-118` | `POST` | The deltas of a final segment MUST be purged only once a member client other than its author confirms the finalization. | this spec section 3; `SRV-126` | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-119` | `POST` | A lease that expires MUST let another client take the lease of the same segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-120` | `FRAME` | Finalizing a segment MUST NOT touch a delta of any other document. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-147` | `POST` | A rotation of a channel key MUST lock every segment of the channel sealed under the previous key. | this spec section 3; `SRV-114`, `SYNC-125` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-119` | `POST` | A lease that expires MUST let another client take the lease of the same segment. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::routes::channels::tests::an_expired_lease_goes_to_another_writer` -- database tier, the second writer takes a new lease at the horizon the lock fixed | none | verified |
+| `SRV-120` | `FRAME` | Finalizing a segment MUST NOT touch a delta of any other document. | this spec section 3 | `ambre_server::routes::channels::tests::a_commit_needs_the_live_lease_and_a_snapshot_of_the_horizon` -- database tier, the deltas of the segment and of `meta` all stay, and `meta` is not finalized | none | verified |
+| `SRV-147` | `POST` | A rotation of a channel key MUST lock every segment of the channel sealed under the previous key. | this spec section 3; `SRV-114`, `SYNC-125` | not built | unbuilt -- lands with the `A key rotation locks the segments it leaves behind` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-199` | `FAIL` | Given a lease asked before the grace period has passed since the segment closed and since its latest delta, the relay MUST refuse it. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::routes::channels::tests::a_lease_waits_out_the_grace_then_goes_to_one_writer_at_a_time` -- database tier, a fresh close and a delta an hour old each answer a wait, and lock nothing | none | verified |
 
 * **Budget.** three rows of `ambre-spec-budgets.md section 3`. The live receive and broadcast
   under 5 ms, the ordering check under 1 ms, the flush batch under 2 s for a thousand deltas.
@@ -130,10 +131,10 @@ snapshot, and the relay arbitrates who writes it.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 44 `verified`, 9 `unimplemented`. What holds is the ordering, where each delta
-  lives, the replay, and the close of a segment. The recovery paths are driven through real
-  failures: a register that refuses inserts, a queue that refuses pushes, an index that cannot be
-  read.
+* **Verification.** 52 `verified`, 2 `unimplemented`. What holds is the ordering, where each delta
+  lives, the replay, the close of a segment and the relay's half of its finalization. The recovery
+  paths are driven through real failures: a register that refuses inserts, a queue that refuses
+  pushes, an index that cannot be read.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -259,16 +260,23 @@ registers, and the other is answered the winner (`SRV-195`). A close while a seg
 **A finalization.** A Murmure segment ends as one immutable snapshot
 (`5-Murmure/ambre-spec-murmure-schema.md`).
 
-1. A member client asks for the finalize lease of the segment. The relay grants it to one client
-   (`SRV-113`) and locks the segment for good (`SRV-114`). A later delta is refused with an answer
-   that names the lock, so the client rewrites the edit as an amendment (`SRV-115`).
-2. The client uploads the final snapshot and commits it with its horizon, a `Seq`. The relay refuses a
-   commit without the live lease (`SRV-116`), and records the finalization time (`SRV-117`).
-3. The deltas stay until another member client confirms the snapshot against them (`SRV-118`).
+1. A writer of the channel asks for the finalize lease of a closing segment. The relay answers a
+   wait until the grace period has passed since the close and since the latest delta (`SRV-199`).
+2. The first lease locks the segment for good, once no delta of it waits to be flushed. The lock
+   is set in the ephemeral store first, then recorded with the last delta number, the horizon
+   (`SRV-114`). A later delta is refused with an answer that names the lock, so the client sends
+   the edit elsewhere (`SRV-115`).
+3. The relay grants the lease to one client at a time (`SRV-113`), and answers another the time
+   the live lease has left. A lease that expires gives way to the next one asked (`SRV-119`).
+4. The client uploads the final snapshot, covering exactly the horizon, and commits it under the
+   lease. The relay refuses a commit without the live lease (`SRV-116`). An accepted one marks the
+   segment `final` with the finalization time (`SRV-117`), and writes no other row (`SRV-120`).
+5. The deltas stay until another member client confirms the snapshot against them (`SRV-118`).
    A false snapshot therefore loses nothing, however long the confirmation takes.
 
-The lease names the segment by its `DocumentId`, and the commit carries its `SnapshotId` and its
-horizon `Seq`. The durations are rows of `ambre-spec-budgets.md section 8`.
+The lease names the segment by its `SegmentId`, and the commit carries the lease and its
+`SnapshotId`, whose horizon the relay checks. The durations are rows of
+`ambre-spec-budgets.md section 8`.
 
 **A replay.** A client asks for everything after a number it names.
 
@@ -316,6 +324,8 @@ sees is how long a document takes to open.
 | a client asks for a page of the index over a request | up to a thousand rows, after a number it names (`SRV-075`) |
 | a client records a snapshot it has uploaded | the row is written and every subscriber is told one is available |
 | the hour turns | the oldest snapshots beyond ten are removed, and the index is trimmed to the horizon |
+| a writer asks for the finalize lease of a closing segment | a wait, or the lease with its horizon, the segment then locked for good |
+| a writer commits a final snapshot under its lease | the segment becomes `final`, and every delta stays |
 
 ---
 
@@ -366,8 +376,15 @@ sees is how long a document takes to open.
 * **The snapshot chain proof is stored and never checked.** The record carries a parent hash and a
   chain proof, and the relay validates neither -- which it could not, being blind. Whether any
   client checks them is `ambre-spec-delta-order.md`.
-* **Finalization is unbuilt.** A segment closes, and no lease, lock or purge after confirmation
-  exists (`SRV-113` to `SRV-120`). So a channel closes one segment, and refuses every later close.
+* **No client finalizes yet.** The relay grants the lease, locks and commits, but no client asks.
+  So a channel closes one segment, and refuses every later close. No purge after a confirmation
+  exists (`SRV-118`), and a key rotation locks nothing (`SRV-147`).
+* **A delta may enter a segment past its grace check.** The grace is read, then the lock is set.
+  A delta numbered between the two enters the final segment, before the grace has passed since it.
+  The window is one transaction, and the delta is kept, so only the grace is shortened.
+* **A store that loses the lock forgets it until a subscribe.** The register holds the lock for
+  good, and a subscribe writes its mirror again. A delta sent between a store reset and the next
+  subscribe is numbered, and the final snapshot does not cover it.
 * **No test drives a failing store.** Every recovery path here is reached only when the index, the
   queue or object storage refuses a single operation. The suite has no way to make one refuse
   (`ambre-spec-testing.md section 9`).

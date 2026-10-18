@@ -300,7 +300,7 @@ A duration a rule waits on before it acts. Each figure is a first estimate, to m
 
 | Duration | Target | Why this order of size | Method |
 |---|---|---|---|
-| Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | **none exists** |
+| Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | `FINALIZE_GRACE` in `ambre_server::routes::channels`, counted from the close and from the latest delta (`SRV-199`) |
 | Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | **none exists** |
 | Refresh period of the presence in a space or a channel | 60 s | a member list needs a state per minute, and the relay then writes one entry per member per minute (`MURMURE-445`, `MURMURE-126`) | `REFRESH_PERIOD_MS` in `ambre_murmure::members` |
 | Presence expiry in a space or a channel | 180 s | three refresh periods: one for the tick that dates a sample, one for a lost sample, one for two timers drifting apart (`MURMURE-445`, `MURMURE-126`) | `PRESENCE_EXPIRY_MS` in `ambre_murmure::members` |
@@ -309,7 +309,7 @@ A duration a rule waits on before it acts. Each figure is a first estimate, to m
 | Refresh period of a typing indicator | 3 s | one sample per few seconds of typing, against one per keystroke (`MURMURE-124`) | `TYPING_REFRESH_MS` in `ambre_murmure::watchers` |
 | Typing indicator expiry | 6 s | two refresh periods: one for the tick that dates a sample, one for a lost sample (`MURMURE-124`) | `TYPING_EXPIRY_MS` in `ambre_murmure::watchers` |
 | Idle delay before a member shows as away | 10 min | a short break keeps a member online, and a meeting marks them away | **none exists** |
-| Finalize lease | 30 s | long enough to encode, seal and upload one segment of about 2 MB | **none exists** |
+| Finalize lease | 30 s | long enough to encode, seal and upload one segment of about 2 MB | `FINALIZE_LEASE` in `ambre_server::routes::channels` (`SRV-119`) |
 | Idle delay before a document's inline deltas move to a batch object | 24 h | a document untouched for a day is rarely opened within the next, and its tail then costs one object read | `IDLE_SECS` in `ambre_server::hot_tail`, the delay the compaction pass reads (`SRV-152`) |
 | Shortest interval between two replays of one document on one connection | 1 s | a reconnect asks once per document, so a second ask within the second is a client looping or an amplification attempt (`SRV-086`) | `REPLAY_MIN_INTERVAL` in `ambre_server::ws::handler` |
 | Delay before Sync asks again for a stopped replay | 1 s, doubled at each stop, five stops at most | the first ask must outlast the replay interval above, or the relay drops it. Five stops wait 31 s in all, which outlasts a store that restarts, and a delta lost for good stops every ask (`SYNC-153`, `SYNC-154`) | `REPLAY_RETRY_BASE_MS` and `REPLAY_RETRY_LIMIT` in `ambre_sync::websocket` |

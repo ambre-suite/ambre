@@ -144,6 +144,14 @@ pub fn api_router(
             axum::routing::post(close_segment),
         )
         .route(
+            "/channels/{id}/segments/{segment}/lease",
+            axum::routing::post(take_finalize_lease),
+        )
+        .route(
+            "/channels/{id}/segments/{segment}/finalize",
+            axum::routing::post(finalize_segment),
+        )
+        .route(
             "/spaces/{id}/channels",
             axum::routing::get(list_space_channels),
         )

@@ -41,7 +41,7 @@ macro_rules! uuid_text_id {
 
 uuid_text_id!(
     DocumentId, UserId, ChannelId, SpaceId, MetaId, SegmentId, CategoryId, MeetingId, SnapshotId,
-    OrgId,
+    OrgId, LeaseId,
 );
 
 impl TextId for KeyId {
@@ -235,6 +235,7 @@ define_serde_adapter!(category_id, CategoryId);
 define_serde_adapter!(meeting_id, MeetingId);
 define_serde_adapter!(snapshot_id, SnapshotId);
 define_serde_adapter!(org_id, OrgId);
+define_serde_adapter!(lease_id, LeaseId);
 define_serde_adapter!(key_id, KeyId);
 
 #[cfg(test)]
