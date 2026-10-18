@@ -57,6 +57,7 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-016` | `FRAME` | Counting activity MUST NOT load the document. | this spec section 3 | `ambre_sync::light::tests::a_light_update_moves_its_counters_from_the_summary` -- nothing but the counters reaches the Logic thread, and no full session appears | none | verified |
 | `RESID-021` | `FRAME` | An update this user signed MUST NOT advance the counters of its document. | this spec section 3; `RESID-014` | `ambre_sync::light::tests::an_update_this_user_signed_counts_nothing` -- an update under the user's own key counts nothing, and another member's counts | none | verified |
 | `RESID-022` | `POST` | A document the client never held MUST be counted after the last number the relay gave for it, with no replay of the deltas up to it. | this spec section 3; `RESID-014`; `SRV-222`; `SRV-223` | `ambre_sync::light::tests::a_channel_never_opened_is_watched_after_its_last_number` -- a segment asks for what follows its last number and a reconnection resumes there, a delta at it counts nothing and the next counts; `ambre_sync::light::tests::the_meta_of_a_channel_never_opened_is_watched_after_its_last_number` -- a `meta` with a listed last number asks for what follows it and resumes there; `ambre_logic::unopened::tests::a_channel_never_opened_is_watched_once_listed_and_answered` -- each segment reaches the watch with the last number the answer gave, its `meta` with the listing's | none | verified |
+| `RESID-023` | `POST` | A rotation of a document held as a light subscription MUST give it the new key, and a document watched after under its key the same. | this spec section 3; `RESID-014`; `ambre-spec-key-rotation.md`, `SYNC-080` | `ambre_sync::light::tests::a_rotation_rekeys_a_channel_watched_unopened` -- a mention under the new key counts nothing before the rotation and one after it, the listed key follows, and a segment watched after counts under it | none | verified |
 
 ### 1.5 Meet the browser quota
 
@@ -72,7 +73,7 @@ The browser can refuse a write before the local store reaches its own budget.
   store, and one light subscription. All three wait on a measure.
 * **Boundary.** the summary rides inside the ciphertext (`SYNC-113`), so the relay learns nothing
   of it. The local store stays on the device, owned by the launcher (`ambre-spec-launcher.md`).
-* **Verification.** 22 `verified`, by host tests on the Logic, Sync and ledger states. The browser
+* **Verification.** 23 `verified`, by host tests on the Logic, Sync and ledger states. The browser
   tier holds the quota refusal and the persistent storage request.
 
 ---

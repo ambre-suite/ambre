@@ -135,9 +135,9 @@ decides in `MurmureRelay::notice` of `ambre-murmure`. The page raises it in `not
 
 * **The levels and the push are not built.** No channel has a level, and no tab closed notifies.
   They land with the `Push notifications` Story (`ambre-roadmap.md` E5).
-* **A channel never opened is watched under the key the listing carried.** After a rotation of
-  its key, its new summaries count as activity alone. It lands with
-  the `The key of a channel watched unopened` Story (`ambre-roadmap.md` E5).
+* **A rotation missed offline leaves a channel never opened under its old key.** A notice lost
+  while the socket is down leaves its new summaries counted as activity alone. It lands with
+  the `A rotation missed by a light subscription` Story (`ambre-roadmap.md` E5).
 * **Each channel never opened costs a subscription per live segment.** No ceiling bounds them yet.
   It lands with the `A ceiling on the channels watched unopened` Story (`ambre-roadmap.md` E5).
 * **A click opens the channel, not the message.** The list scrolls to it once the message list

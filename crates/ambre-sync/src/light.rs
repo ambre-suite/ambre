@@ -140,6 +140,22 @@ impl SyncState {
         true
     }
 
+    /// A rotation of a document held as a light subscription gave it a new
+    /// key (`RESID-023`). Its next summaries open under it, and so do those
+    /// of a document watched later under its key. The listed key of a
+    /// channel whose `meta` it is follows.
+    pub(crate) fn rekey_light(&mut self, document_id: DocumentId, new_key: DocumentKey) {
+        let Some(light) = self.light.get_mut(&document_id) else {
+            return;
+        };
+        light.doc_key = new_key.clone();
+        for (meta, key) in self.listed_keys.values_mut() {
+            if meta.document_id() == document_id {
+                *key = new_key.clone();
+            }
+        }
+    }
+
     /// Counts a segment of a closed channel from its first number, as a
     /// light subscription under the key of `meta` (`SYNC-162`). A segment
     /// already held, in full or light, is left as it is. A `meta` this
@@ -756,6 +772,65 @@ mod tests {
         );
         assert!(state.light_heads().is_empty());
         assert_eq!(state.light_cursors(), vec![(m, Seq(5))]);
+    }
+
+    /// Holds `RESID-023`. A rotation of a watched `meta` gives it the new
+    /// key, and its summaries under that key count. So do those of a
+    /// segment watched after under it. The listed key follows.
+    #[test]
+    fn a_rotation_rekeys_a_channel_watched_unopened() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        state.user_id = Some(UserId::from_bytes([7; 16]));
+        let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let (channel_id, meta) = (ChannelId::new(), MetaId::new());
+        let (old_key, new_key) = (DocumentKey::generate(), DocumentKey::generate());
+        state
+            .listed_keys
+            .insert(channel_id, (meta, old_key.clone()));
+        state.handle_command(SyncCommand::WatchChannel {
+            channel_id,
+            meta,
+            meta_last: Some(Seq(1)),
+            documents: Vec::new(),
+        });
+        let m = meta.document_id();
+        let mentions = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| -> Vec<(DocumentId, u32)> {
+            drain(rx)
+                .into_iter()
+                .filter_map(|event| match event {
+                    LogicEvent::Activity {
+                        document_id,
+                        counters,
+                    } => Some((document_id, counters.mentions)),
+                    _ => None,
+                })
+                .collect()
+        };
+        let mentioned =
+            |doc, key: &DocumentKey| update(doc, SnapshotId::new(), key, Some(&mention()));
+        state.receive_update(Seq(2), mentioned(m, &new_key));
+        assert_eq!(
+            mentions(&rx),
+            vec![(m, 0)],
+            "the new key opened before the rotation"
+        );
+
+        state.handle_sync_event(SyncEvent::KeyRotated {
+            document_id: m,
+            new_doc_key: new_key.clone(),
+            links: Vec::new(),
+        });
+        let listed = state.listed_keys.get(&channel_id).map(|(_, key)| key.id());
+        assert_eq!(listed, Some(new_key.id()), "the listed key follows");
+        state.receive_update(Seq(3), mentioned(m, &new_key));
+        assert_eq!(mentions(&rx), vec![(m, 1)]);
+
+        let segment = SegmentId::new();
+        state.handle_command(SyncCommand::WatchSegment { segment, meta });
+        state.receive_update(Seq(1), mentioned(segment.document_id(), &new_key));
+        assert_eq!(mentions(&rx), vec![(segment.document_id(), 1)]);
     }
 
     /// A thread held in full or light hears its deltas on its own topic, so

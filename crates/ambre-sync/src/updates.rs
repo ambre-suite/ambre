@@ -1267,6 +1267,7 @@ impl SyncState {
         links: impl IntoIterator<Item = ambre_protocol::KeyLink>,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            self.rekey_light(document_id, new_key);
             return;
         };
         for link in links {

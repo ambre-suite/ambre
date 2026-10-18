@@ -29,7 +29,7 @@
 | `message-bus` | The contract the three threads talk over. | implemented | 30 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 15 |  |
-| `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 22 |  |
+| `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 23 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 70 |  |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 18 |  |
@@ -62,4 +62,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**46 features: 20 implemented, 21 partial, 5 design-only. 1044 contract rows, 2 loose.**
+**46 features: 20 implemented, 21 partial, 5 design-only. 1045 contract rows, 2 loose.**
