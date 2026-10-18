@@ -37,6 +37,11 @@ impl LogicState {
                 deltas,
                 sessions,
             } => {
+                // The local copy a reopening channel asked for.
+                if doc_type == DocType::Murmure && self.reads_channel_copy(document_id) {
+                    self.channel_copy_landed(document_id, snapshot, &deltas);
+                    return;
+                }
                 // The local copy a reopen asked for (`RESID-010`).
                 if let Some(horizon) = self
                     .docs
@@ -471,6 +476,7 @@ impl LogicState {
                 message,
             } => {
                 if self.opening.remove(&channel_id).is_some() {
+                    self.end_light_channel(channel_id);
                     self.channel_open_failed(channel_id, message);
                 }
             }

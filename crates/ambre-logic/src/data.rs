@@ -1026,6 +1026,8 @@ impl LogicState {
             let base = doc.state.crdt().oplog_vv();
             doc.ledger.reset(covered, base);
             doc.relay_saw(payload);
+        } else {
+            self.note_murmure_snapshot(document_id, covered);
         }
         self.track_waiting(document_id, &[]);
     }

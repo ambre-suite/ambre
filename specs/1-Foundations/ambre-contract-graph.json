@@ -8458,7 +8458,7 @@
   {"edge": "verified-by", "from": "MURMURE-026", "to": "ambre_logic::channels::tests::closing_a_channel_releases_its_documents_and_no_others"},
   {"edge": "cites-section", "from": "MURMURE-476", "section": "3", "to": "5-Murmure/features/ambre-spec-murmure-engine.md"},
   {"edge": "cites-rule", "from": "MURMURE-476", "to": "RESID-010"},
-  {"edge": "lands-with", "from": "MURMURE-476", "to": "Channels in the local store"},
+  {"edge": "verified-by", "from": "MURMURE-476", "to": "ambre_logic::channels::tests::a_closed_channel_reopens_from_its_local_copy"},
   {"edge": "cites-section", "from": "MURMURE-027", "section": "3", "to": "5-Murmure/features/ambre-spec-murmure-engine.md"},
   {"edge": "cites-rule", "from": "MURMURE-027", "to": "MURMURE-001"},
   {"edge": "verified-by", "from": "MURMURE-027", "to": "ambre_murmure::channel_tests::a_document_naming_another_channel_is_refused"},
@@ -9359,7 +9359,7 @@
   {"edge": "verified-by", "from": "MURMURE-460", "to": "ambre_logic::channels::tests::a_closed_channel_with_no_count_is_marked_by_a_counted_message"},
   {"edge": "cites-section", "from": "MURMURE-477", "section": "3", "to": "5-Murmure/features/ambre-spec-murmure-unread.md"},
   {"edge": "cites-rule", "from": "MURMURE-477", "to": "RESID-014"},
-  {"edge": "lands-with", "from": "MURMURE-477", "to": "Channels in the local store"},
+  {"edge": "lands-with", "from": "MURMURE-477", "to": "Channel segments and finalization"},
   {"edge": "cites-section", "from": "MURMURE-156", "section": "3", "to": "5-Murmure/features/ambre-spec-murmure-unread.md"},
   {"edge": "cites-rule", "from": "MURMURE-156", "to": "RESID-016"},
   {"edge": "verified-by", "from": "MURMURE-156", "to": "ambre_logic::channels::tests::an_activity_answer_marks_each_channel_once_and_opens_nothing"}

@@ -47,6 +47,15 @@ impl SeqLedger {
         self.ends = self.ends.split_off(&(covered + 1));
     }
 
+    /// Start again from a snapshot covering every delta up to `covered`, for
+    /// a document no snapshot check reads: only its horizon counts. A
+    /// snapshot covering less than the floor changes nothing.
+    pub(crate) fn raise_floor(&mut self, covered: u64) {
+        if covered > self.floor {
+            self.reset(covered, VersionVector::default());
+        }
+    }
+
     /// Record the delta the relay numbered `seq`. `payload` is `None` when the
     /// delta was refused. A seq of 0 is no relay's number and is ignored.
     pub(crate) fn record(&mut self, seq: u64, payload: Option<&[u8]>) {

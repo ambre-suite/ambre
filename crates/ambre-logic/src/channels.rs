@@ -35,6 +35,11 @@ pub(crate) struct ClosedChannel {
     base: Option<UnreadCount>,
     /// The messages each document's summaries counted since the close.
     counted: HashMap<DocumentId, u32>,
+    /// The horizon of each document's copy in the local store, until a
+    /// reopen asks for it.
+    copies: HashMap<DocumentId, u64>,
+    /// The copies a reopen is reading back, each with its horizon.
+    reading: HashMap<DocumentId, u64>,
 }
 
 /// Every document of an open channel that may carry a read cursor: those it
@@ -147,9 +152,9 @@ impl LogicState {
         if self.channels.contains_key(&channel_id) || self.opening.contains_key(&channel_id) {
             return;
         }
-        // A channel closed earlier opens whole again. Its light subscriptions
-        // end first, and its read cursors stay where they were (`RESID-013`).
-        self.end_light_channel(channel_id);
+        // A channel closed earlier keeps its light subscriptions while it
+        // opens: each document reopens from its local copy (the Murmure
+        // engine spec). Its read cursors stay where they were (`RESID-013`).
         self.opening.insert(channel_id, None);
         // A channel a catalogue lists is public, and its log admits a member
         // who joined alone. Any other channel's log admits only invites
@@ -276,31 +281,47 @@ impl LogicState {
         self.unsent.remove(&document_id);
     }
 
-    /// The view of a channel closed. An open channel's documents lose their
-    /// pin: each leaves memory as a light subscription, whose summaries
-    /// count the channel's new messages (`RESID-004`). A channel still
-    /// opening ends the session of each document it asked for.
+    /// The view of a channel closed. Each document of an open channel reaches
+    /// the local store, then leaves memory as a light subscription. Its
+    /// summaries count the channel's new messages (`RESID-004`, `RESID-006`).
+    /// A channel still opening ends the session
+    /// of each document it asked for.
     pub(crate) fn close_channel(&mut self, channel_id: ChannelId) {
-        let Some(channel) = self.channels.get(&channel_id) else {
+        let Some(channel) = self.channels.remove(&channel_id) else {
             return self.end_channel(channel_id);
         };
         let base = self
             .my_user_id
-            .and_then(|me| unread_of(channel, &self.read_cursors, me));
+            .and_then(|me| unread_of(&channel, &self.read_cursors, me));
         let documents = channel.document_ids();
-        let finals = cursored_documents(channel)
+        let finals = cursored_documents(&channel)
             .into_iter()
             .filter(|id| !documents.contains(id))
             .collect();
-        self.channels.remove(&channel_id);
+        let mut copies = HashMap::new();
         for &document_id in &documents {
-            self.channel_ledgers.remove(&document_id);
+            let horizon = self
+                .channel_ledgers
+                .remove(&document_id)
+                .map_or(0, |ledger| ledger.contiguous_end());
             self.forget_murmure_session(document_id);
-            // No local copy of a channel document is kept, so the light
-            // subscription holds no horizon: a reopen fetches it whole.
+            // The copy carries the relay's numbers it knows, so a reopen
+            // counts from it. One that fails to export is fetched whole.
+            let applied = match channel.snapshot(document_id) {
+                Ok(copy) => {
+                    self.send_to_persist(document_id, PersistWrite::Snapshot(copy));
+                    self.send_to_persist(document_id, PersistWrite::Hidden);
+                    copies.insert(document_id, horizon);
+                    horizon
+                }
+                Err(error) => {
+                    tracing::warn!("Logic: no local copy of {document_id}: {error}");
+                    0
+                }
+            };
             self.send_to_sync(SyncCommand::ReleaseDocument {
                 document_id,
-                applied_seq: 0,
+                applied_seq: applied,
             });
         }
         self.closed_channels.insert(
@@ -310,8 +331,104 @@ impl LogicState {
                 finals,
                 base,
                 counted: HashMap::new(),
+                copies,
+                reading: HashMap::new(),
             },
         );
+    }
+
+    /// Ask the Sync worker for one document of an opening channel. A document
+    /// the channel left in the local store is read back first, and opens
+    /// once its copy lands (the Murmure engine spec).
+    fn open_channel_document(&mut self, channel_id: ChannelId, document_id: DocumentId) {
+        if let Some(closed) = self.closed_channels.get_mut(&channel_id)
+            && let Some(horizon) = closed.copies.remove(&document_id)
+        {
+            closed.reading.insert(document_id, horizon);
+            self.send_to_persist(
+                document_id,
+                PersistWrite::ReadBack {
+                    doc_type: DocType::Murmure,
+                },
+            );
+            return;
+        }
+        self.send_to_sync(SyncCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Murmure,
+        });
+    }
+
+    /// The local copy of a reopening channel's document landed. The opening
+    /// takes it as a snapshot at its horizon, and the Sync worker replays
+    /// only what follows (`RESID-010`). An empty copy drops the light
+    /// subscription, so the open fetches the document whole (`RESID-012`).
+    pub(crate) fn channel_copy_landed(
+        &mut self,
+        document_id: DocumentId,
+        snapshot: Option<Vec<u8>>,
+        deltas: &[Vec<u8>],
+    ) {
+        let Some((&channel_id, closed)) = self
+            .closed_channels
+            .iter_mut()
+            .find(|(_, closed)| closed.reading.contains_key(&document_id))
+        else {
+            return;
+        };
+        let horizon = closed.reading.remove(&document_id).unwrap_or(0);
+        // An opening that ended meanwhile closed the subscription already.
+        let Some(opening) = self
+            .opening
+            .get_mut(&channel_id)
+            .and_then(Option::as_mut)
+            .filter(|opening| opening.expects(document_id))
+        else {
+            return;
+        };
+        if let Some(copy) = snapshot {
+            opening.receive_at(document_id, Some(Order::Snapshot(Seq(horizon))), &copy);
+            for delta in deltas {
+                opening.receive(document_id, delta);
+            }
+            self.channel_ledgers
+                .entry(document_id)
+                .or_default()
+                .raise_floor(horizon);
+        } else {
+            tracing::warn!("Logic: no usable local copy of {document_id}, fetching it");
+            self.send_to_sync(SyncCommand::CloseDocument { document_id });
+        }
+        self.send_to_sync(SyncCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Murmure,
+        });
+    }
+
+    /// Whether a reopening channel is reading back the copy of `document_id`.
+    pub(crate) fn reads_channel_copy(&self, document_id: DocumentId) -> bool {
+        self.closed_channels
+            .values()
+            .any(|closed| closed.reading.contains_key(&document_id))
+    }
+
+    /// A reopened channel is open: the record of its close goes, and the
+    /// light subscription of each document it no longer holds ends.
+    fn settle_reopen(&mut self, channel_id: ChannelId) {
+        let Some(closed) = self.closed_channels.remove(&channel_id) else {
+            return;
+        };
+        let Some(channel) = self.channels.get(&channel_id) else {
+            return;
+        };
+        let left: Vec<DocumentId> = closed
+            .documents
+            .into_iter()
+            .filter(|id| !channel.holds(*id))
+            .collect();
+        for document_id in left {
+            self.send_to_sync(SyncCommand::CloseDocument { document_id });
+        }
     }
 
     /// End a channel, open, opening or closed: the session or the light
@@ -334,7 +451,7 @@ impl LogicState {
     }
 
     /// End the light subscriptions a closed channel left, if it left any.
-    fn end_light_channel(&mut self, channel_id: ChannelId) {
+    pub(crate) fn end_light_channel(&mut self, channel_id: ChannelId) {
         let Some(closed) = self.closed_channels.remove(&channel_id) else {
             return;
         };
@@ -386,10 +503,7 @@ impl LogicState {
             channel_id,
             MetaId::from_document(meta.document_id),
         ));
-        self.send_to_sync(SyncCommand::OpenDocument {
-            document_id: meta.document_id,
-            doc_type: DocType::Murmure,
-        });
+        self.open_channel_document(channel_id, meta.document_id);
     }
 
     /// Tell the view a channel could not open. Nothing of it is held.
@@ -408,6 +522,7 @@ impl LogicState {
         if self.opening.remove(&channel_id).is_none() {
             return;
         }
+        self.end_light_channel(channel_id);
         tracing::info!("Logic: channel {channel_id} refused its open");
         self.send_to_ui(UiEvent::Channel {
             channel_id,
@@ -448,10 +563,7 @@ impl LogicState {
             Ok(Opening::Waiting) => {}
             Ok(Opening::OpenSegments(segments)) => {
                 for segment in segments {
-                    self.send_to_sync(SyncCommand::OpenDocument {
-                        document_id: segment.document_id(),
-                        doc_type: DocType::Murmure,
-                    });
+                    self.open_channel_document(channel_id, segment.document_id());
                 }
             }
             Ok(Opening::Open(state)) => {
@@ -476,6 +588,7 @@ impl LogicState {
                 }
                 let documents = state.document_ids();
                 self.channels.insert(channel_id, *state);
+                self.settle_reopen(channel_id);
                 // Each identity landed while the channel was opening.
                 for document_id in documents {
                     self.settle_murmure_session(document_id);
@@ -521,6 +634,7 @@ impl LogicState {
                 self.send_to_sync(SyncCommand::CloseDocument { document_id });
             }
         }
+        self.end_light_channel(channel_id);
         self.channel_open_failed(channel_id, message);
     }
 
@@ -547,21 +661,36 @@ impl LogicState {
         seq: u64,
         payload: Option<&[u8]>,
     ) {
+        if self.holds_murmure(document_id) {
+            self.channel_ledgers
+                .entry(document_id)
+                .or_default()
+                .record(seq, payload);
+        }
+    }
+
+    /// Note a snapshot the relay served for a channel or a space document.
+    /// A reopen resumes after the deltas it covers (`RESID-010`).
+    pub(crate) fn note_murmure_snapshot(&mut self, document_id: DocumentId, covered: u64) {
+        if self.holds_murmure(document_id) {
+            self.channel_ledgers
+                .entry(document_id)
+                .or_default()
+                .raise_floor(covered);
+        }
+    }
+
+    /// Whether an open or opening channel or space holds `document_id`.
+    fn holds_murmure(&self, document_id: DocumentId) -> bool {
         let space = ambre_bus::SpaceId::from_document(document_id);
-        let held = self.channels.values().any(|c| c.holds(document_id))
+        self.channels.values().any(|c| c.holds(document_id))
             || self
                 .opening
                 .values()
                 .flatten()
                 .any(|o| o.expects(document_id))
             || self.spaces.contains_key(&space)
-            || self.space_opening.contains_key(&space);
-        if held {
-            self.channel_ledgers
-                .entry(document_id)
-                .or_default()
-                .record(seq, payload);
-        }
+            || self.space_opening.contains_key(&space)
     }
 
     /// Run one command on an open channel, and emit what it produced
@@ -847,11 +976,30 @@ mod tests {
     const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
+        let (state, ui, sync, store) = harness_with_store();
+        std::mem::forget(store);
+        (state, ui, sync)
+    }
+
+    /// What Logic hands the local store.
+    type StoreRx = Receiver<(DocumentId, PersistWrite)>;
+
+    /// The harness, with what Logic hands the local store.
+    fn harness_with_store() -> (
+        LogicState,
+        Receiver<UiEvent>,
+        Receiver<SyncCommand>,
+        StoreRx,
+    ) {
         let (to_ui, ui_rx) = test_link();
         let (to_sync, sync_rx) = test_link();
         let (to_persist, persist_rx) = test_link();
-        std::mem::forget(persist_rx);
-        (LogicState::new(to_ui, to_sync, to_persist), ui_rx, sync_rx)
+        (
+            LogicState::new(to_ui, to_sync, to_persist),
+            ui_rx,
+            sync_rx,
+            persist_rx,
+        )
     }
 
     fn signed_in(state: &mut LogicState, user: UserId) {
@@ -1188,20 +1336,16 @@ mod tests {
         );
     }
 
-    /// Holds `RESID-013`: a reopen ends the light subscriptions and opens
-    /// the channel whole. Its read cursors stay where they were, and nothing
-    /// marks it read.
+    /// Holds `RESID-013`: a reopen asks the relay for the channel and moves
+    /// no read cursor. Until it opens, its summaries still count it.
     #[test]
     fn reopening_a_channel_leaves_its_read_cursor_where_it_was() {
         let (mut state, ui, sync) = harness();
         let (channel_id, active, _) = closed_counted(&mut state);
-        let released = state.closed_channels[&channel_id].cursored();
         let cursors = state.read_cursors.clone();
         drain(&sync);
         state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
-        let mut expected: Vec<Sent> = released.into_iter().map(Sent::Close).collect();
-        expected.push(Sent::List(channel_id));
-        assert_eq!(sent(&sync), expected);
+        assert_eq!(sent(&sync), [Sent::List(channel_id)]);
         assert_eq!(state.read_cursors, cursors);
         drain(&ui);
         state.handle_logic_event(LogicEvent::Activity {
@@ -1209,9 +1353,108 @@ mod tests {
             counters: activity(1),
         });
         assert!(
-            matches!(drain(&ui).as_slice(), [UiEvent::Activity { .. }]),
-            "a reopened channel still counted from its summaries"
+            matches!(drain(&ui).as_slice(), [UiEvent::ChannelActivity { .. }]),
+            "a reopening channel stopped counting from its summaries"
         );
+    }
+
+    /// A closed channel reopens from the copy of its documents the local
+    /// store holds (the Murmure engine spec). Each copy reaches the store at close,
+    /// and the light subscription keeps the horizon it covers. The reopen
+    /// reads the copy back before the Sync worker opens the document, so
+    /// the relay replays only what follows. A document with no copy is
+    /// fetched whole.
+    #[test]
+    fn a_closed_channel_reopens_from_its_local_copy() {
+        let (mut state, ui, sync, store) = harness_with_store();
+        let (channel_id, stored) = stored_channel();
+        let meta = stored.meta_id().document_id();
+        let active = stored.active_id().document_id();
+        let listed = || LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        };
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(listed());
+        serve(&mut state, &stored, meta);
+        serve(&mut state, &stored, active);
+        drain(&sync);
+        drain(&store);
+
+        state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
+        let copies: HashMap<DocumentId, Vec<u8>> = drain(&store)
+            .into_iter()
+            .filter_map(|(id, write)| match write {
+                PersistWrite::Snapshot(copy) => Some((id, copy)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(copies.len(), 2, "each document reaches the store");
+        let horizons: HashMap<DocumentId, u64> = drain(&sync)
+            .into_iter()
+            .filter_map(|command| match command {
+                SyncCommand::ReleaseDocument {
+                    document_id,
+                    applied_seq,
+                } => Some((document_id, applied_seq)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            horizons,
+            HashMap::from([(meta, 1), (active, 1)]),
+            "each light subscription keeps its horizon"
+        );
+
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(listed());
+        assert_eq!(
+            sent(&sync),
+            [Sent::List(channel_id)],
+            "meta waits on its copy"
+        );
+        let read_back = |rx: &Receiver<(DocumentId, PersistWrite)>, id: DocumentId| {
+            matches!(
+                drain(rx).as_slice(),
+                [(asked, PersistWrite::ReadBack { doc_type: DocType::Murmure })] if *asked == id
+            )
+        };
+        assert!(read_back(&store, meta));
+        state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
+            document_id: meta,
+            doc_type: DocType::Murmure,
+            snapshot: Some(copies[&meta].clone()),
+            deltas: Vec::new(),
+            sessions: Vec::new(),
+        });
+        assert_eq!(sent(&sync), [Sent::Open(meta)]);
+        // The relay holds nothing past the horizon: only its ready comes.
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: meta,
+            role: ambre_bus::Role::Editor,
+        });
+        assert!(read_back(&store, active));
+        state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
+            document_id: active,
+            doc_type: DocType::Murmure,
+            snapshot: None,
+            deltas: Vec::new(),
+            sessions: Vec::new(),
+        });
+        assert_eq!(
+            sent(&sync),
+            [Sent::Close(active), Sent::Open(active)],
+            "a document with no copy is fetched whole"
+        );
+        drain(&ui);
+        serve(&mut state, &stored, active);
+        assert!(drain(&ui).iter().any(|event| matches!(
+            event,
+            UiEvent::Channel { event: MurmureEvent::Messages { messages, .. }, .. }
+                if messages.first().is_some_and(|m| m.text == "stored")
+        )));
+        assert!(state.channels.contains_key(&channel_id));
+        assert!(!state.closed_channels.contains_key(&channel_id));
     }
 
     /// The relay removing the user from a closed channel ends its light
@@ -1299,10 +1542,7 @@ mod tests {
                     doc_type: DocType::Murmure,
                 } => Sent::Open(document_id),
                 SyncCommand::CloseDocument { document_id } => Sent::Close(document_id),
-                SyncCommand::ReleaseDocument {
-                    document_id,
-                    applied_seq: 0,
-                } => Sent::Release(document_id),
+                SyncCommand::ReleaseDocument { document_id, .. } => Sent::Release(document_id),
                 _ => Sent::Other,
             })
             .collect()

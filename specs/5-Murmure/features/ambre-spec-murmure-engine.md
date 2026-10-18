@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-025` | `POST` | Opening a channel MUST subscribe to its `meta` document and to its live segments. | this spec section 3; `SRV-047` | `ambre_murmure::channel_tests::opening_takes_meta_then_its_live_segments_and_never_a_final_one`; `ambre_logic::channels::tests::a_channel_opens_its_meta_then_its_live_segments_then_shows_them` | none | verified |
 | `MURMURE-026` | `POST` | Opening a channel MUST pin the documents the view shows. | this spec section 3; `RESID-003` | `ambre_logic::channels::tests::closing_a_channel_releases_its_documents_and_no_others` -- of two open channels, closing one releases its documents alone, and the other keeps every document | none | verified |
-| `MURMURE-476` | `POST` | A closed channel MUST reopen from the copy of its documents the local store holds. | this spec section 3; `RESID-010` | not built | unbuilt -- lands with the `Channels in the local store` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-476` | `POST` | A closed channel MUST reopen from the copy of its documents the local store holds. | this spec section 3; `RESID-010` | `ambre_logic::channels::tests::a_closed_channel_reopens_from_its_local_copy` -- each document reaches the store at close and keeps its horizon, the reopen reads `meta` back before it opens, and a segment with no copy is fetched whole | none | verified |
 | `MURMURE-027` | `FAIL` | Given a document whose header names another channel, the engine MUST refuse it and warn. | this spec section 3; `MURMURE-001` | `ambre_murmure::channel_tests::a_document_naming_another_channel_is_refused`; `ambre_murmure::channel_tests::a_meta_document_of_another_channel_is_refused`; `ambre_murmure::channel_tests::a_segment_in_the_place_of_meta_is_refused`; structural -- the one branch of `schema::admit` that returns `ForeignChannel` emits the `tracing::warn!` first | none | verified |
 | `MURMURE-028` | `FRAME` | Opening a channel MUST NOT load a final segment. | this spec section 3 | `ambre_murmure::channel_tests::opening_a_channel_never_loads_a_final_segment` -- the final segment's bytes are handed to the open, and it still holds none of it | none | verified |
 
@@ -46,9 +46,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   fork row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** every document here travels sealed through the document pipeline (`ZK-001`). What
   the relay learns of the grouping is `ZK-015`.
-* **Verification.** 8 `verified`, 3 `unimplemented`. The open is held on both sides of the Logic
+* **Verification.** 9 `verified`, 2 `unimplemented`. The open is held on both sides of the Logic
   thread: the engine's staged open, and the dispatcher that drives it over the relay. A close
-  releases the channel's documents to light subscriptions, and a reopen fetches them whole.
+  hands each document's copy to the local store and releases it to a light subscription. A
+  reopen starts each document from its copy.
 
 ---
 
