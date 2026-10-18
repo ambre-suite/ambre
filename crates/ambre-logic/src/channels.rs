@@ -2629,17 +2629,22 @@ mod tests {
             channel_id: channels[0].channel_id,
             name: "board".into(),
         }];
+        let peers = vec![ambre_bus::DirectPeers {
+            channel_id: channels[1].channel_id,
+            names: vec!["Bob".into()],
+        }];
         state.handle_logic_event(LogicEvent::MemberChannels {
             channels: channels.clone(),
             spaces: spaces.clone(),
             names: names.clone(),
+            peers: peers.clone(),
         });
         let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
         assert!(
             matches!(
                 shown.as_slice(),
-                [UiEvent::MemberChannels { channels: c, spaces: s, names: n }]
-                    if *c == channels && *s == spaces && *n == names
+                [UiEvent::MemberChannels { channels: c, spaces: s, names: n, peers: p }]
+                    if *c == channels && *s == spaces && *n == names && *p == peers
             ),
             "got {shown:?}"
         );

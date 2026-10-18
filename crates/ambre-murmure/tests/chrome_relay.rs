@@ -35,6 +35,7 @@ fn shown_direct() -> (Owner, MurmureRelay, ChannelId) {
         }],
         spaces: Vec::new(),
         names: Vec::new(),
+        peers: Vec::new(),
     });
     let opened = relay.select(direct);
     assert!(
@@ -65,6 +66,7 @@ fn a_channel_lost_while_open_leaves_the_sidebar_and_the_pane() {
         }],
         spaces: Vec::new(),
         names: Vec::new(),
+        peers: Vec::new(),
     });
     assert!(
         matches!(relay.select(direct), Some(LogicCommand::OpenChannel { .. })),

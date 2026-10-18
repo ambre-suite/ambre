@@ -5,8 +5,8 @@
 
 use super::app_root::MurmureShell;
 use ambre_bus::{
-    CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace, LogicCommand,
-    MemberChannel, MentionCount, SpaceCommand, SpaceEvent, UiEvent, UnreadCount,
+    CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace, DirectPeers,
+    LogicCommand, MemberChannel, MentionCount, SpaceCommand, SpaceEvent, UiEvent, UnreadCount,
 };
 use ambre_core::{CategoryId, ChannelId, MessageId, SegmentId, SpaceId};
 use ambre_murmure::chrome::MurmureRelay;
@@ -188,6 +188,7 @@ impl Acme {
             channels,
             spaces: vec![self.space],
             names: Vec::new(),
+            peers: Vec::new(),
         }
     }
 
@@ -503,6 +504,34 @@ async fn a_named_channel_not_open_shows_its_name() {
     );
 }
 
+/// A direct message nobody named shows its other members, closed and once
+/// open, and the header names it the same way (`MURMURE-492`).
+#[wasm_bindgen_test]
+async fn an_unnamed_direct_message_shows_its_other_members() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let mut listing = acme.members(&[]);
+    if let UiEvent::MemberChannels { peers, .. } = &mut listing {
+        *peers = vec![DirectPeers {
+            channel_id: acme.direct,
+            names: vec!["Bob".into(), "Carol".into()],
+        }];
+    }
+    assert!(frame.absorb(listing).await.is_empty());
+    assert_eq!(
+        frame.texts(".murmure-entry-name"),
+        [
+            "general",
+            "sales",
+            "Private channel",
+            "Bob, Carol",
+            "random"
+        ]
+    );
+    frame.select("Bob, Carol").await;
+    assert_eq!(frame.texts(".murmure-channel-name"), ["Bob, Carol"]);
+}
+
 /// A channel with activity shows the relay's mark before any count, then
 /// its counts once known, and a read channel shows nothing (`MURMURE-119`,
 /// `MURMURE-165`).
@@ -631,6 +660,7 @@ async fn a_space_with_no_channel_of_the_user_shows_its_channels_to_join() {
         channels: Vec::new(),
         spaces: vec![acme.space],
         names: Vec::new(),
+        peers: Vec::new(),
     };
     let opened = frame.absorb(alone.clone()).await;
     assert!(

@@ -99,6 +99,9 @@ pub struct MemberChannelJson {
     /// of whoever wrapped it, empty for a self-wrapped row.
     pub doc_key_enc: String,
     pub wrapper_exchange_pub_key: String,
+    /// For a direct message, the display names of its other members, which
+    /// the client composes a name from (`SRV-220`). Empty otherwise.
+    pub peers: Vec<String>,
 }
 
 /// The channels of the caller.
@@ -135,6 +138,7 @@ pub async fn list_member_channels(
                     .wrapper_exchange_pubkey
                     .map(hex::encode)
                     .unwrap_or_default(),
+                peers: row.peers,
             }
         })
         .collect();
@@ -1076,11 +1080,15 @@ mod tests {
     }
 
     async fn user(state: &AppState, email: &str) -> UserId {
+        named_user(state, email, "Test User").await
+    }
+
+    async fn named_user(state: &AppState, email: &str, display_name: &str) -> UserId {
         let signing = signing_key().verifying_key().to_bytes();
         let row = db::create_user(
             &state.db,
             email,
-            "Test User",
+            display_name,
             &[1; 32],
             &[2; 16],
             &signing,
@@ -2637,6 +2645,42 @@ mod tests {
         let alices = listed(alice).await.expect("listed").0.channels;
         assert_eq!(alices[0].name_enc.as_deref(), Some(sealed.as_str()));
         assert_eq!(alices[0].doc_key_enc, base64.encode([1u8; 48]));
+    }
+
+    /// `SRV-220`: a direct message lists the display names of its other
+    /// members, by name, the caller left out. A channel of a space lists
+    /// none, whoever its members are.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_listed_direct_message_names_its_other_members(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = named_user(&state, "alice@test.dev", "Alice").await;
+        let bob = named_user(&state, "bob@test.dev", "Bob").await;
+        let carol = named_user(&state, "carol@test.dev", "Carol").await;
+        let space = space(&state, alice, &[(carol, Role::Editor)]).await;
+        let public = public_channel(&state, alice, space).await;
+        let req = direct_request(alice, &[carol, bob]);
+        let direct = req.channel_id;
+        open_direct(&state, alice, req).await.expect("create");
+
+        let peers = |who: UserId| {
+            let state = state.clone();
+            async move {
+                list_member_channels(State(state), session(who))
+                    .await
+                    .expect("listed")
+                    .0
+                    .channels
+                    .into_iter()
+                    .map(|c| (c.channel_id, c.peers))
+                    .collect::<std::collections::HashMap<_, _>>()
+            }
+        };
+        let alices = peers(alice).await;
+        assert_eq!(alices[&direct], ["Bob", "Carol"]);
+        assert!(alices[&public.id].is_empty(), "a channel of a space");
+        assert_eq!(peers(carol).await[&direct], ["Alice", "Bob"]);
+        assert_eq!(peers(bob).await[&direct], ["Alice", "Carol"]);
     }
 
     /// The next message on `stream`, decoded, or `None` after `millis`.

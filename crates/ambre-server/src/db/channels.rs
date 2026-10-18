@@ -163,17 +163,26 @@ pub struct MemberChannelRow {
     /// wrapped it, `None` for a self-wrapped row.
     pub doc_key_enc: Vec<u8>,
     pub wrapper_exchange_pubkey: Option<Vec<u8>>,
+    /// For a direct message, the display names of its other members, by
+    /// name then id. Empty for a channel of a space (`SRV-220`).
+    pub peers: Vec<String>,
 }
 
 /// Every channel whose `meta` holds a row of `user`, by identifier
-/// (`SRV-191`), with the name sealed beside its `meta` (`SRV-219`).
+/// (`SRV-191`), with the name sealed beside its `meta` (`SRV-219`). A direct
+/// message also lists its other members (`SRV-220`).
 pub async fn list_member_channels(
     pool: &PgPool,
     user: &ambre_core::UserId,
 ) -> Result<Vec<MemberChannelRow>, AppError> {
     let rows = sqlx::query(
         "SELECT c.id, c.space_id, c.is_public, d.document_id, doc.name_enc, m.doc_key_enc, \
-         inv.exchange_pubkey AS wrapper_exchange_pubkey FROM channels c \
+         inv.exchange_pubkey AS wrapper_exchange_pubkey, \
+         CASE WHEN c.space_id IS NULL THEN ARRAY(SELECT u.display_name \
+           FROM document_members pm JOIN users u ON u.id = pm.user_id \
+           WHERE pm.document_id = d.document_id AND pm.user_id <> $1 \
+           ORDER BY u.display_name, u.id) ELSE ARRAY[]::text[] END AS peers \
+         FROM channels c \
          JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
          JOIN documents doc ON doc.id = d.document_id \
          JOIN document_members m ON m.document_id = d.document_id \
@@ -196,6 +205,7 @@ pub async fn list_member_channels(
                 name_enc: r.try_get("name_enc")?,
                 doc_key_enc: r.try_get("doc_key_enc")?,
                 wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
+                peers: r.try_get("peers")?,
             })
         })
         .collect()

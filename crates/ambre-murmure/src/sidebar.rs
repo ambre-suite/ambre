@@ -8,8 +8,8 @@
 use std::collections::HashMap;
 
 use ambre_bus::{
-    CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace, MemberChannel,
-    MentionCount, UnreadCount,
+    CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace, DirectPeers,
+    MemberChannel, MentionCount, UnreadCount,
 };
 use ambre_core::{CategoryId, ChannelId, SpaceId};
 
@@ -104,6 +104,9 @@ pub struct Sidebar {
     /// The names the relay's listing carried sealed, for channels not open
     /// (`MURMURE-490`). What meta reads always wins over them.
     hints: HashMap<ChannelId, String>,
+    /// The other members of each direct message, by display name, which a
+    /// direct message nobody named shows (`MURMURE-492`).
+    peers: HashMap<ChannelId, Vec<String>>,
 }
 
 impl Sidebar {
@@ -172,12 +175,21 @@ impl Sidebar {
             .collect();
     }
 
+    /// Take the other members of each direct message, whole.
+    pub fn set_peers(&mut self, peers: &[DirectPeers]) {
+        self.peers = peers
+            .iter()
+            .map(|direct| (direct.channel_id, direct.names.clone()))
+            .collect();
+    }
+
     /// Drop a channel the user left, or the relay deleted.
     pub fn forget(&mut self, channel: ChannelId) {
         self.members.retain(|m| m.channel_id != channel);
         self.activity.remove(&channel);
         self.names.remove(&channel);
         self.hints.remove(&channel);
+        self.peers.remove(&channel);
     }
 
     /// Drop a space the user lost, with its catalogue and every channel of
@@ -213,6 +225,8 @@ impl Sidebar {
     /// The name the sidebar shows for a channel, if it knows one. That is
     /// what its meta read once open, else the relay's hint, else its
     /// catalogue entry. A channel whose meta reads no name drops its hint.
+    /// A direct message with no name shows its other members, composed here
+    /// and never stored (`MURMURE-492`).
     pub fn name_of(&self, channel: ChannelId) -> Option<String> {
         let read = match self.names.get(&channel) {
             Some(read) => read.clone(),
@@ -224,6 +238,10 @@ impl Sidebar {
                 .flat_map(|c| &c.channels)
                 .find(|e| e.channel_id == channel)
                 .map(|e| e.name.clone())
+        })
+        .or_else(|| {
+            let peers = self.peers.get(&channel)?;
+            (!peers.is_empty()).then(|| peers.join(", "))
         })
     }
 
@@ -618,6 +636,41 @@ mod tests {
         sidebar.set_hints(&[hint(other, "trip")]);
         sidebar.forget(other);
         assert_eq!(sidebar.name_of(other), None);
+    }
+
+    /// A direct message nobody named shows its other members, in the
+    /// relay's order. A name, hinted or read, wins over them, and meta
+    /// reading no name brings them back. A forgotten one keeps none
+    /// (`MURMURE-492`).
+    #[test]
+    fn an_unnamed_direct_message_shows_its_other_members() {
+        let (direct, lonely) = (ChannelId::new(), ChannelId::new());
+        let mut sidebar = Sidebar::default();
+        let place = |channel_id| MemberChannel {
+            channel_id,
+            place: ChannelPlace::Direct,
+        };
+        sidebar.set_member_channels(vec![place(direct), place(lonely)], &[]);
+        let peers = |channel_id, names: &[&str]| DirectPeers {
+            channel_id,
+            names: names.iter().map(|n| (*n).to_owned()).collect(),
+        };
+        sidebar.set_peers(&[peers(direct, &["Bob", "Carol"]), peers(lonely, &[])]);
+        assert_eq!(sidebar.name_of(direct).as_deref(), Some("Bob, Carol"));
+        assert_eq!(sidebar.name_of(lonely), None, "no other member");
+
+        sidebar.set_hints(&[ChannelName {
+            channel_id: direct,
+            name: "trip".into(),
+        }]);
+        assert_eq!(sidebar.name_of(direct).as_deref(), Some("trip"));
+        sidebar.set_name(direct, None);
+        assert_eq!(sidebar.name_of(direct).as_deref(), Some("Bob, Carol"));
+        sidebar.set_name(direct, Some("plans".into()));
+        assert_eq!(sidebar.name_of(direct).as_deref(), Some("plans"));
+
+        sidebar.forget(direct);
+        assert_eq!(sidebar.name_of(direct), None);
     }
 
     /// A channel absent from a later listing leaves the sidebar, never

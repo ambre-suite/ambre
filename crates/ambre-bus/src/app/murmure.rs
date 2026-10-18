@@ -116,6 +116,15 @@ pub struct ChannelName {
     pub name: String,
 }
 
+/// The display names of a direct message's other members, as the relay
+/// lists them. The view composes a name from them for a direct message
+/// nobody named, and never stores it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectPeers {
+    pub channel_id: ChannelId,
+    pub names: Vec<String>,
+}
+
 /// How many messages of a channel are past the reader's cursor. A distinct
 /// type, so a count of mentions never takes its place.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]

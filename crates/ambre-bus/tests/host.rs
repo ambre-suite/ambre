@@ -22,9 +22,10 @@
 use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
     ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelName,
-    ChannelPlace, ClipboardCell, ClipboardPayload, DocType, DocumentId, FoldAnswer, LeaseAnswer,
-    LeaseId, LogicEvent, MemberChannel, MemberInfo, MemberStanding, MessageId, RequestId,
-    RestCommand, RestEvent, Role, SelectionKind, SyncCommand, Timestamp, TrameCommand, UserId,
+    ChannelPlace, ClipboardCell, ClipboardPayload, DirectPeers, DocType, DocumentId, FoldAnswer,
+    LeaseAnswer, LeaseId, LogicEvent, MemberChannel, MemberInfo, MemberStanding, MessageId,
+    RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, Timestamp, TrameCommand,
+    UserId,
 };
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -377,6 +378,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
 
     let doc = DocumentId::new();
     let chan = ChannelId::new();
+    let direct = ChannelId::new();
     let space = SpaceId::new();
     let meta = MetaId::from_document(DocumentId::new());
     let segment = SegmentId::from_document(DocumentId::new());
@@ -764,7 +766,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                     place: ChannelPlace::Private(space),
                 },
                 MemberChannel {
-                    channel_id: ChannelId::new(),
+                    channel_id: direct,
                     place: ChannelPlace::Direct,
                 },
             ],
@@ -772,6 +774,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             names: vec![ChannelName {
                 channel_id: chan,
                 name: "board".into(),
+            }],
+            peers: vec![DirectPeers {
+                channel_id: direct,
+                names: vec!["Bob".into()],
             }],
         },
         LogicEvent::MeetingParticipantJoined {

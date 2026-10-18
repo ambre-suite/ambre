@@ -114,10 +114,12 @@ impl MurmureRelay {
                 channels,
                 spaces,
                 names,
+                peers,
             } => self
                 .sidebar
                 .try_update(|s| {
                     s.set_hints(names);
+                    s.set_peers(peers);
                     s.set_member_channels(channels.clone(), spaces)
                 })
                 .unwrap_or_default()

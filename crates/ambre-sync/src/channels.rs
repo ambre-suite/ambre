@@ -777,11 +777,12 @@ impl SyncState {
                             }
                             None => Vec::new(),
                         };
-                        let (channels, spaces) = answer.listing();
+                        let (channels, spaces, peers) = answer.listing();
                         Ok(MemberListing {
                             channels,
                             spaces,
                             names,
+                            peers,
                         })
                     }
                     Err(message) => Err(message),
@@ -803,11 +804,13 @@ impl SyncState {
                 channels,
                 spaces,
                 names,
+                peers,
             }) => {
                 self.send_to_logic(LogicEvent::MemberChannels {
                     channels,
                     spaces,
                     names,
+                    peers,
                 });
             }
             Err(message) => {
@@ -818,11 +821,13 @@ impl SyncState {
 }
 
 /// What a listing of the user's channels answers: the channels, the spaces,
-/// and the name each named channel shows before it opens.
+/// and the name each named channel shows before it opens. Each direct
+/// message also carries its other members.
 pub(crate) struct MemberListing {
     pub(crate) channels: Vec<MemberChannel>,
     pub(crate) spaces: Vec<SpaceId>,
     pub(crate) names: Vec<ChannelName>,
+    pub(crate) peers: Vec<ambre_bus::DirectPeers>,
 }
 
 /// The names sealed beside each meta of `answer`, opened with the user's
@@ -1539,9 +1544,9 @@ pub(crate) mod tests {
         let keys = r#""doc_key_enc":"AA","wrapper_exchange_pub_key":"""#;
         let body = format!(
             r#"{{"channels":[
-                {{"channel_id":"{public}","space_id":"{space}","public":true,"meta_id":"{meta}",{keys}}},
+                {{"channel_id":"{public}","space_id":"{space}","public":true,"meta_id":"{meta}",{keys},"peers":["Eve"]}},
                 {{"channel_id":"{private}","space_id":"{space}","public":false,"meta_id":"{meta}",{keys}}},
-                {{"channel_id":"{direct}","space_id":null,"public":false,"meta_id":"{meta}",{keys}}}],
+                {{"channel_id":"{direct}","space_id":null,"public":false,"meta_id":"{meta}",{keys},"peers":["Bob","Carol"]}}],
                 "spaces":["{space}","{bare}"]}}"#
         );
         let answer: http::MemberChannelsResponse = serde_json::from_str(&body).expect("decodes");
@@ -1549,12 +1554,14 @@ pub(crate) mod tests {
             channel_id: private,
             name: "Design".into(),
         }];
-        let listing = |(channels, spaces), names| MemberListing {
+        let listing = |(channels, spaces, peers), names| MemberListing {
             channels,
             spaces,
             names,
+            peers,
         };
-        state.member_channels_listed(1, Ok(listing((Vec::new(), Vec::new()), Vec::new())));
+        let empty = (Vec::new(), Vec::new(), Vec::new());
+        state.member_channels_listed(1, Ok(listing(empty, Vec::new())));
         state.member_channels_listed(2, Ok(listing(answer.listing(), named.clone())));
         state.member_channels_listed(2, Err("HTTP 500".into()));
         let events: Vec<_> = rx
@@ -1564,10 +1571,16 @@ pub(crate) mod tests {
                     channels,
                     spaces,
                     names,
-                } => Some((channels, spaces, names)),
+                    peers,
+                } => Some((channels, spaces, names, peers)),
                 _ => None,
             })
             .collect();
+        // A channel of a space composes no name, whatever the relay lists.
+        let peers = vec![ambre_bus::DirectPeers {
+            channel_id: direct,
+            names: vec!["Bob".into(), "Carol".into()],
+        }];
         let expected = vec![
             MemberChannel {
                 channel_id: public,
@@ -1584,7 +1597,7 @@ pub(crate) mod tests {
         ];
         assert_eq!(
             events,
-            vec![(expected, vec![space, bare], named)],
+            vec![(expected, vec![space, bare], named, peers)],
             "the latest listing alone"
         );
     }
@@ -1612,6 +1625,7 @@ pub(crate) mod tests {
             name_enc,
             doc_key_enc: doc_key_enc.clone(),
             wrapper_exchange_pub_key: String::new(),
+            peers: Vec::new(),
         };
         let (named, elsewhere, cleared, bare) =
             (MetaId::new(), MetaId::new(), MetaId::new(), MetaId::new());

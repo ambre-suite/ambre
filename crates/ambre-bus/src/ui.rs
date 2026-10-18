@@ -113,11 +113,12 @@ pub enum UiEvent {
     /// Every channel and every space this user is a member of, whole. It
     /// comes at start, and again each time the relay adds the user to one.
     /// None of them is open. `names` holds the name each named channel shows
-    /// before it opens.
+    /// before it opens, and `peers` the other members of each direct message.
     MemberChannels {
         channels: Vec<MemberChannel>,
         spaces: Vec<SpaceId>,
         names: Vec<crate::ChannelName>,
+        peers: Vec<crate::DirectPeers>,
     },
 
     /// The answer to [`crate::LogicCommand::SearchMessages`]: one entry per

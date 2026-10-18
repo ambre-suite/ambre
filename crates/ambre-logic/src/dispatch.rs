@@ -634,11 +634,13 @@ impl LogicState {
                 channels,
                 spaces,
                 names,
+                peers,
             } => {
                 self.send_to_ui(UiEvent::MemberChannels {
                     channels,
                     spaces,
                     names,
+                    peers,
                 });
             }
 

@@ -737,15 +737,31 @@ pub(crate) struct MemberChannelsResponse {
 }
 
 impl MemberChannelsResponse {
-    /// The answer as the bus carries it: the channels, then the spaces.
-    /// The names stay sealed; the caller opens them.
-    pub(crate) fn listing(&self) -> (Vec<ambre_bus::MemberChannel>, Vec<ambre_core::SpaceId>) {
+    /// The answer as the bus carries it: the channels, the spaces, and the
+    /// other members of each direct message that lists some. The names stay
+    /// sealed; the caller opens them.
+    pub(crate) fn listing(
+        &self,
+    ) -> (
+        Vec<ambre_bus::MemberChannel>,
+        Vec<ambre_core::SpaceId>,
+        Vec<ambre_bus::DirectPeers>,
+    ) {
         let channels = self
             .channels
             .iter()
             .map(MemberChannelEntry::member_channel)
             .collect();
-        (channels, self.spaces.clone())
+        let peers = self
+            .channels
+            .iter()
+            .filter(|entry| entry.space_id.is_none() && !entry.peers.is_empty())
+            .map(|entry| ambre_bus::DirectPeers {
+                channel_id: entry.channel_id,
+                names: entry.peers.clone(),
+            })
+            .collect();
+        (channels, self.spaces.clone(), peers)
     }
 }
 
@@ -768,6 +784,9 @@ pub(crate) struct MemberChannelEntry {
     pub doc_key_enc: String,
     /// Hex, empty for a self-wrapped row.
     pub wrapper_exchange_pub_key: String,
+    /// The display names of a direct message's other members (`SRV-220`).
+    #[serde(default)]
+    pub peers: Vec<String>,
 }
 
 impl MemberChannelEntry {
