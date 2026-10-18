@@ -135,6 +135,7 @@ mod chain;
 mod channels;
 mod docfile;
 mod documents;
+mod finalize;
 #[cfg(feature = "fuzz")]
 pub mod fuzz;
 mod http;
@@ -366,6 +367,19 @@ enum SyncEvent {
         channel_id: ChannelId,
         closing: ambre_bus::SegmentId,
         result: Result<(ambre_bus::SegmentId, bool), String>,
+    },
+    /// The answer to a finalize lease request
+    /// (`SyncCommand::TakeFinalizeLease`).
+    FinalizeLeaseAnswered {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        result: Result<ambre_bus::LeaseAnswer, String>,
+    },
+    /// The answer to a finalize commit (`SyncCommand::FinalizeSegment`).
+    SegmentFinalized {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        result: Result<(), String>,
     },
     /// The answer to a direct message request
     /// (`SyncCommand::CreateDirectMessage`): the channel the relay created
@@ -1357,6 +1371,17 @@ impl SyncState {
                 closing,
                 successor,
             } => self.handle_close_segment(channel_id, meta, closing, successor),
+            SyncCommand::TakeFinalizeLease {
+                channel_id,
+                segment,
+            } => self.handle_take_finalize_lease(channel_id, segment),
+            SyncCommand::FinalizeSegment {
+                channel_id,
+                segment,
+                lease,
+                horizon,
+                payload,
+            } => self.handle_finalize_segment(channel_id, segment, lease, horizon, &payload),
             SyncCommand::WatchSegment { segment, meta } => self.handle_watch_segment(segment, meta),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
             SyncCommand::LeaveChannel { channel_id } => self.handle_leave_channel(channel_id),

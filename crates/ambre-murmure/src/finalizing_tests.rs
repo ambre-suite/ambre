@@ -1,0 +1,225 @@
+//! The finalization of a closing segment against its contract rows. They hold
+//! when the lease is asked, the shallow snapshot at the horizon, and the
+//! final mark every member settles.
+
+use std::collections::HashMap;
+
+use ambre_bus::{MessageDraft, MurmureEvent, Timestamp};
+use ambre_core::{ChannelId, LeaseId, SegmentId, UserId};
+use loro::{Container, LoroDoc, ValueOrContainer};
+
+use crate::schema::{MESSAGE_CONTENT, MESSAGES};
+use crate::session::next_peer;
+use crate::{ChannelState, ChannelType, FINALIZE_RETRY_MS};
+
+const NOW: Timestamp = Timestamp(1_700_000_000_000);
+const LEASE_MS: u64 = 30_000;
+
+fn at(ms: u64) -> Timestamp {
+    Timestamp(NOW.0 + ms)
+}
+
+fn draft(text: &str) -> MessageDraft {
+    MessageDraft {
+        text: text.to_owned(),
+        mentions: Vec::new(),
+    }
+}
+
+/// A channel of one-message segments, holding `texts` in a closing segment.
+/// Returns it with that segment.
+fn closed_with(texts: &[&str]) -> (ChannelState, SegmentId) {
+    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .with_segment_size(texts.len())
+        .identify();
+    let author = UserId::new();
+    for text in texts {
+        state.send(&draft(text), author, NOW).expect("send");
+    }
+    let closing = state.wants_close().expect("full");
+    let successor = SegmentId::new();
+    state
+        .close_into(closing, successor, true, NOW)
+        .expect("close");
+    let peer = next_peer();
+    state
+        .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+        .expect("adopt");
+    (state, closing)
+}
+
+/// A second member's copy of `state`, opened from its live documents.
+fn peer_of(state: &ChannelState) -> ChannelState {
+    let segments: HashMap<SegmentId, Vec<u8>> = state
+        .held_segments()
+        .into_iter()
+        .map(|segment| {
+            let bytes = state.snapshot(segment.document_id()).expect("segment");
+            (segment, bytes)
+        })
+        .collect();
+    let meta = state.snapshot(state.meta_id().document_id()).expect("meta");
+    ChannelState::open(state.channel_id(), state.meta_id(), &meta, &segments)
+        .expect("peer")
+        .identify()
+}
+
+/// Delete the whole body of the message at `index` of `segment`, as an edit
+/// before the finalization would.
+fn erase_body(state: &ChannelState, segment: SegmentId, index: usize) {
+    let doc = state.doc(segment.document_id()).expect("held");
+    let Some(ValueOrContainer::Container(Container::Map(message))) =
+        doc.get_list(MESSAGES).get(index)
+    else {
+        panic!("no message at {index}");
+    };
+    let Some(ValueOrContainer::Container(Container::Text(body))) = message.get(MESSAGE_CONTENT)
+    else {
+        panic!("no body");
+    };
+    body.delete(0, body.len_unicode()).expect("delete");
+    doc.commit();
+}
+
+fn holds(bytes: &[u8], word: &str) -> bool {
+    bytes.windows(word.len()).any(|w| w == word.as_bytes())
+}
+
+// --- MURMURE-067, MURMURE-062 ---
+
+/// A closing segment asks for its lease at the first tick, then as late as
+/// the relay says. The relay holds the grace period, so a message younger
+/// than it never reaches a final segment.
+#[test]
+fn a_closing_segment_asks_for_its_lease_as_the_relay_says() {
+    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
+    assert_eq!(state.lease_to_ask(NOW), None, "no segment is closing");
+    let (mut state, closing) = closed_with(&["one"]);
+    assert_eq!(
+        state.lease_to_ask(NOW),
+        Some(closing),
+        "the first tick asks"
+    );
+    assert_eq!(state.lease_to_ask(NOW), None, "asked once");
+
+    // The grace period runs: the relay says when to ask again.
+    state.lease_deferred(closing, 5_000);
+    assert_eq!(state.lease_to_ask(NOW), None, "the tick dates it");
+    assert_eq!(state.lease_to_ask(at(4_999)), None);
+    assert_eq!(state.lease_to_ask(at(5_000)), Some(closing));
+
+    // A failed request waits a delay that doubles.
+    state.finalize_failed(closing);
+    assert_eq!(state.lease_to_ask(at(5_000)), None, "the tick dates it");
+    assert_eq!(
+        state.lease_to_ask(at(5_000 + FINALIZE_RETRY_MS)),
+        Some(closing)
+    );
+    state.finalize_failed(closing);
+    let base = 5_000 + FINALIZE_RETRY_MS;
+    assert_eq!(state.lease_to_ask(at(base)), None);
+    assert_eq!(state.lease_to_ask(at(base + FINALIZE_RETRY_MS)), None);
+    assert_eq!(
+        state.lease_to_ask(at(base + 2 * FINALIZE_RETRY_MS)),
+        Some(closing)
+    );
+}
+
+/// A copy holding an edit the relay refused never asks for the lease again.
+#[test]
+fn a_withdrawn_copy_never_asks_for_the_lease() {
+    let (mut state, closing) = closed_with(&["one"]);
+    assert_eq!(state.lease_to_ask(NOW), Some(closing));
+    state.finalize_withdrawn(closing);
+    state.finalize_failed(closing);
+    assert_eq!(state.lease_to_ask(at(3_600_000)), None);
+}
+
+// --- MURMURE-068, MURMURE-063 ---
+
+/// The lease holder seals the snapshot once it holds every delta up to the
+/// horizon. It is shallow: the text deleted before it is gone.
+#[test]
+fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
+    let (mut state, closing) = closed_with(&["kept zanzibar-quokka", "erased marzipan-wombat"]);
+    erase_body(&state, closing, 1);
+    let full = state.export_all(closing.document_id()).expect("full");
+    assert!(holds(&full, "marzipan-wombat"), "the history keeps it");
+
+    let lease = LeaseId::new();
+    assert_eq!(state.lease_to_ask(NOW), Some(closing));
+    state.lease_granted(closing, lease, 7, LEASE_MS);
+    let early = state.final_snapshot(NOW, 6).expect("export");
+    assert!(early.is_none(), "a delta below the horizon is missing");
+    let snapshot = state.final_snapshot(at(1), 7).expect("export");
+    let snapshot = snapshot.expect("every delta is in");
+    assert_eq!(snapshot.segment, closing);
+    assert_eq!(snapshot.lease, lease);
+    assert_eq!(snapshot.horizon, 7);
+    assert!(holds(&snapshot.payload, "zanzibar-quokka"));
+    assert!(!holds(&snapshot.payload, "marzipan-wombat"), "shallow");
+    assert!(
+        state.final_snapshot(at(2), 7).expect("export").is_none(),
+        "sealed once"
+    );
+
+    let doc = LoroDoc::new();
+    doc.import(&snapshot.payload)
+        .expect("a fresh copy imports it");
+}
+
+/// A lease that runs out before the snapshot leaves seals nothing, and is
+/// asked again.
+#[test]
+fn a_lease_that_runs_out_is_asked_again() {
+    let (mut state, closing) = closed_with(&["one"]);
+    assert_eq!(state.lease_to_ask(NOW), Some(closing));
+    state.lease_granted(closing, LeaseId::new(), 9, LEASE_MS);
+    assert!(state.final_snapshot(NOW, 1).expect("export").is_none());
+    assert_eq!(state.lease_to_ask(at(LEASE_MS - 1)), None, "still held");
+    let late = state.final_snapshot(at(LEASE_MS), 9).expect("export");
+    assert!(late.is_none(), "the lease ran out");
+    assert_eq!(state.lease_to_ask(at(LEASE_MS)), Some(closing));
+}
+
+// --- MURMURE-069, MURMURE-070 ---
+
+/// The accepted commit marks the segment final in `meta`. Every member then
+/// holds it as a final segment, whose messages read as before, and the
+/// closing slot is free.
+#[test]
+fn an_accepted_commit_marks_the_segment_final_for_every_member() {
+    let (mut alice, closing) = closed_with(&["one", "two"]);
+    let mut bob = peer_of(&alice);
+    let before = alice.messages(closing).expect("messages");
+    assert_eq!(alice.lease_to_ask(NOW), Some(closing));
+    alice.lease_granted(closing, LeaseId::new(), 2, LEASE_MS);
+    let snapshot = alice.final_snapshot(NOW, 2).expect("export").expect("in");
+
+    let meta = alice.mark_final(closing).expect("mark");
+    assert_eq!(alice.closing_id(), None, "the slot is free");
+    assert_eq!(alice.final_segments(), vec![closing]);
+    assert_eq!(alice.messages(closing).expect("held"), before);
+    assert_eq!(alice.lease_to_ask(at(1)), None, "nothing left to finalize");
+
+    assert_eq!(bob.settle_final(), None, "meta still names it closing");
+    bob.apply_remote(bob.meta_id().document_id(), &meta)
+        .expect("meta");
+    assert_eq!(bob.settle_final(), Some(closing));
+    assert_eq!(bob.closing_id(), None);
+    assert_eq!(bob.messages(closing).expect("held"), before);
+
+    // A member opening the channel later loads the final snapshot alone.
+    let mut carol = peer_of(&alice);
+    carol.cancel_older(closing.document_id());
+    let loaded = carol
+        .load_older(closing, &snapshot.payload)
+        .expect("the final snapshot loads");
+    let MurmureEvent::Messages { messages, .. } = loaded else {
+        panic!("messages");
+    };
+    assert_eq!(messages, before, "finalizing changes no message");
+}

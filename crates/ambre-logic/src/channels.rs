@@ -963,6 +963,7 @@ impl LogicState {
                         doc_type: DocType::Murmure,
                     });
                 }
+                self.drive_finalization(channel_id, now);
                 let watchers = self.channel_watchers.entry(channel_id).or_default();
                 let changed = watchers.tick(now);
                 if watchers.owes_watching(now) {
@@ -1376,8 +1377,8 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::{
-        ActivityKind, Mention, MentionTarget, MessageDraft, MurmureEvent, RestEvent, SegmentId,
-        Timestamp,
+        ActivityKind, LeaseAnswer, LeaseId, Mention, MentionTarget, MessageDraft, MurmureEvent,
+        RestEvent, SegmentId, Timestamp,
     };
     use ambre_murmure::ChannelType;
 
@@ -3106,6 +3107,147 @@ mod tests {
         });
         assert_eq!(state.channels[&channel_id].active_id(), successor);
         assert!(state.close_successors.is_empty());
+    }
+
+    // --- The finalization of a closing segment ---
+
+    /// A channel whose first segment closed into a successor. Returns the
+    /// closing segment.
+    fn closed_channel(
+        state: &mut LogicState,
+        sync: &Receiver<SyncCommand>,
+    ) -> (ChannelId, SegmentId) {
+        let (channel_id, _old) = small_channel(state, 1);
+        command(state, channel_id, send("one", Vec::new()));
+        let [(closing, successor)] = closes(sync).try_into().expect("one close");
+        state.handle_logic_event(LogicEvent::SegmentClosed {
+            channel_id,
+            closing,
+            active: successor,
+            created: true,
+        });
+        drain(sync);
+        (channel_id, closing)
+    }
+
+    /// The finalize commands Logic sent: a lease request names no horizon.
+    fn finalizes(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, Option<u64>)> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|c| match c {
+                SyncCommand::TakeFinalizeLease { segment, .. } => Some((segment, None)),
+                SyncCommand::FinalizeSegment {
+                    segment, horizon, ..
+                } => Some((segment, Some(horizon))),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The finalization of the Murmure segments spec, in Logic. The tick
+    /// past the close asks for the lease, and the relay's deferral is waited
+    /// out. The snapshot leaves once the deltas up to the horizon are in,
+    /// and the accepted commit leaves as a `meta` delta.
+    #[test]
+    fn a_closing_segment_finalizes_once_its_horizon_is_in() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, closing) = closed_channel(&mut state, &sync);
+        command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
+        assert_eq!(finalizes(&sync), [(closing, None)], "the lease is asked");
+        state.handle_logic_event(LogicEvent::FinalizeLeaseAnswered {
+            channel_id,
+            segment: closing,
+            answer: LeaseAnswer::Deferred { retry_in: 5_000 },
+        });
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(1_000) },
+        );
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(5_999) },
+        );
+        assert!(finalizes(&sync).is_empty(), "the deferral runs");
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(6_000) },
+        );
+        assert_eq!(finalizes(&sync), [(closing, None)]);
+
+        state.handle_logic_event(LogicEvent::FinalizeLeaseAnswered {
+            channel_id,
+            segment: closing,
+            answer: LeaseAnswer::Granted {
+                lease: LeaseId::new(),
+                horizon: 1,
+                expires_in: 30_000,
+            },
+        });
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(7_000) },
+        );
+        assert!(finalizes(&sync).is_empty(), "the horizon is not in");
+        state.record_channel_seq(closing.document_id(), 1, None);
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(8_000) },
+        );
+        assert_eq!(finalizes(&sync), [(closing, Some(1))]);
+
+        state.handle_logic_event(LogicEvent::SegmentFinalized {
+            channel_id,
+            segment: closing,
+        });
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        assert!(drain(&sync).iter().any(|c| matches!(
+            c,
+            SyncCommand::SendUpdate { document_id, summary: None, .. } if *document_id == meta
+        )));
+        assert_eq!(state.channels[&channel_id].closing_id(), None);
+    }
+
+    /// A copy the Sync worker withdrew never asks again; a failed commit
+    /// asks again past its delay.
+    #[test]
+    fn a_withdrawn_copy_stops_and_a_failed_one_asks_again() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, closing) = closed_channel(&mut state, &sync);
+        command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
+        drain(&sync);
+        state.handle_logic_event(LogicEvent::SegmentFinalizeFailed {
+            channel_id,
+            segment: closing,
+            withdrawn: false,
+            message: "HTTP 500".into(),
+        });
+        command(&mut state, channel_id, MurmureCommand::Tick { now: at(1) });
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick {
+                now: at(1 + ambre_murmure::FINALIZE_RETRY_MS),
+            },
+        );
+        assert_eq!(finalizes(&sync), [(closing, None)], "asked again");
+
+        state.handle_logic_event(LogicEvent::SegmentFinalizeFailed {
+            channel_id,
+            segment: closing,
+            withdrawn: true,
+            message: "the relay refused an edit".into(),
+        });
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(1 << 40) },
+        );
+        assert!(finalizes(&sync).is_empty(), "a withdrawn copy never asks");
     }
 
     /// A close another member wrote reaches this client in `meta`, which

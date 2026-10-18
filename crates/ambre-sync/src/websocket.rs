@@ -835,6 +835,29 @@ impl SyncState {
                     },
                 });
             }
+            SyncEvent::FinalizeLeaseAnswered {
+                channel_id,
+                segment,
+                result,
+            } => match result {
+                Ok(answer) => self.send_to_logic(LogicEvent::FinalizeLeaseAnswered {
+                    channel_id,
+                    segment,
+                    answer,
+                }),
+                Err(message) => self.finalize_failed(channel_id, segment, false, &message),
+            },
+            SyncEvent::SegmentFinalized {
+                channel_id,
+                segment,
+                result,
+            } => match result {
+                Ok(()) => self.send_to_logic(LogicEvent::SegmentFinalized {
+                    channel_id,
+                    segment,
+                }),
+                Err(message) => self.finalize_failed(channel_id, segment, false, &message),
+            },
             SyncEvent::DirectMessageOpened { requested, result } => {
                 self.channel_answered(
                     requested,

@@ -1,6 +1,6 @@
 # AMBRE -- FEATURE: CHANNEL SEGMENTS AND FINALIZATION
 **Type:** Vertical (feature)
-**Implementation:** partial -- a full segment closes into its successor; no segment is finalized yet.
+**Implementation:** partial -- a full segment closes and finalizes; no finalization is confirmed yet.
 
 > A channel grows for years and still opens fast. Its history is cut into segments. A full segment
 > closes, stays open to edits for a day, then becomes one immutable snapshot another member checks.
@@ -17,8 +17,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-062` | `INV` | A message sent live, and younger than the grace period, MUST NOT be in a final segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-063` | `INV` | A final snapshot MUST be shallow: it MUST hold no text deleted before the finalization. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-062` | `INV` | A message sent live, and younger than the grace period, MUST NOT be in a final segment. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_murmure::finalizing_tests::a_closing_segment_asks_for_its_lease_as_the_relay_says` -- the client asks no earlier than the relay's deferral, which holds the grace period (`SRV-199`); `ambre_logic::channels::tests::a_closing_segment_finalizes_once_its_horizon_is_in` -- the ticks within the deferral ask nothing | none | verified |
+| `MURMURE-063` | `INV` | A final snapshot MUST be shallow: it MUST hold no text deleted before the finalization. | this spec section 3 | `ambre_murmure::finalizing_tests::the_lease_holder_seals_a_shallow_snapshot_at_the_horizon` -- a body deleted before the seal is in the full export, never in the snapshot | none | verified |
 | `MURMURE-222` | `INV` | An active segment MUST NOT hold more deltas past its latest snapshot than the budget register allows. | this spec section 3; `ambre-spec-budgets.md section 6`; `SRV-038` | `ambre_server::compaction::tests::a_segment_is_asked_before_its_250th_delta` -- a segment past its snapshot is asked for a compaction before its 250th delta | none | verified |
 | `MURMURE-239` | `OBS` | A dropped snapshot MUST be shown to the members of the channel, with its author and its reporter. | this spec section 3; `AUTHOR-023` | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-435` | `INV` | Every Murmure document MUST take the delta order and the quarantine of the document plane. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -37,10 +37,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-067` | `POST` | Once the grace period of a closing segment ends, a member client MUST ask for its finalize lease. | this spec section 3; `SRV-113` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-068` | `POST` | The lease holder MUST upload a shallow snapshot of the deltas up to the number the relay returns. | this spec section 3; `SRV-114` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-069` | `POST` | The lease holder MUST mark the segment `final` in `meta` once the relay accepts the commit. | this spec section 3; `SRV-117` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-070` | `FRAME` | Finalizing a segment MUST NOT change the content of a message. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-067` | `POST` | Once the grace period of a closing segment ends, a member client MUST ask for its finalize lease. | this spec section 3; `SRV-113` | `ambre_murmure::finalizing_tests::a_closing_segment_asks_for_its_lease_as_the_relay_says` -- the first tick past the close asks, then each deferral is waited out; `::a_withdrawn_copy_never_asks_for_the_lease` -- a withdrawn copy stops; `::a_lease_that_runs_out_is_asked_again` -- an expired lease is asked again; `ambre_sync::finalize::tests::a_lease_request_reads_the_grant_or_the_deferral` -- the relay's answer reads as a lease or a deferral; `ambre_logic::channels::tests::a_withdrawn_copy_stops_and_a_failed_one_asks_again` -- a failure asks again past its delay | none | verified |
+| `MURMURE-068` | `POST` | The lease holder MUST upload a shallow snapshot of the deltas up to the number the relay returns. | this spec section 3; `SRV-114` | `ambre_murmure::finalizing_tests::the_lease_holder_seals_a_shallow_snapshot_at_the_horizon` -- the snapshot waits for every delta up to the horizon; `ambre_sync::finalize::tests::a_commit_uploads_the_snapshot_at_the_horizon_then_names_it` -- it uploads covering the horizon, and the commit names it; `ambre_sync::updates::tests::a_copy_the_relay_lacks_an_edit_of_never_finalizes` -- a copy the relay lacks an edit of seals nothing; `ambre_logic::channels::tests::a_closing_segment_finalizes_once_its_horizon_is_in` -- the tick hands the snapshot over once the horizon is in | none | verified |
+| `MURMURE-069` | `POST` | The lease holder MUST mark the segment `final` in `meta` once the relay accepts the commit. | this spec section 3; `SRV-117` | `ambre_murmure::finalizing_tests::an_accepted_commit_marks_the_segment_final_for_every_member` -- `meta` names it final, and a second member settles it from the delta; `ambre_logic::channels::tests::a_closing_segment_finalizes_once_its_horizon_is_in` -- the mark leaves as a `meta` delta | none | verified |
+| `MURMURE-070` | `FRAME` | Finalizing a segment MUST NOT change the content of a message. | this spec section 3 | `ambre_murmure::finalizing_tests::an_accepted_commit_marks_the_segment_final_for_every_member` -- the final segment reads the same messages on the holder, on a member who settles it, and on one who loads the snapshot | none | verified |
 
 ### 1.4 Confirm a finalization
 
@@ -57,7 +57,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-073` | `POST` | An edit the relay refuses for a locked segment MUST be rewritten as an amendment. | this spec section 3; `SRV-115` | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-074` | `FRAME` | The rewrite MUST NOT drop the edit. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-263` | `FAIL` | Given a new message the relay refuses for a locked segment, the client MUST send it again to the active segment. | this spec section 3; `SRV-115` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-263` | `FAIL` | Given a new message the relay refuses for a locked segment, the client MUST send it again to the active segment. | this spec section 3; `SRV-115` | not built | unbuilt -- lands with the `A message refused by a lock goes to the active segment` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Re-finalize an amended segment
 
@@ -78,10 +78,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   and the row beside it bounds the deltas a cold open replays.
 * **Boundary.** a final snapshot is sealed like any snapshot (`ZK-001`). The relay learns the state
   of each segment and its finalization time (`ZK-015`).
-* **Verification.** 6 `verified`, 19 `unimplemented`. The engine tests hold the close on one peer
-  and on two, the byte bound, and the fetch again of a successor. The Logic tests hold the request,
-  the answer, and each fetch of a remote successor. The
-  relay holds the count that asks for a compaction. No lease, amendment or final snapshot exists.
+* **Verification.** 12 `verified`, 13 `unimplemented`. The engine tests hold the close on one peer
+  and on two, the byte bound, and the fetch again of a successor. They hold the lease, the shallow
+  snapshot and the final mark. The Logic tests hold the close, each fetch of a remote successor, and the
+  finalization driven by the tick. The Sync tests hold the lease, the upload and the commit.
 
 ---
 
@@ -148,9 +148,24 @@ deleted text leaves the ciphertext only then.
 5. Every other member reads the close in `meta`, and fetches the successor once (`MURMURE-066`).
    An open that fails is fetched again on a later tick (`MURMURE-482`).
 
+**A finalization, on the client.**
+
+1. The first tick past the close asks for the lease (`MURMURE-067`). The relay answers how long
+   the grace period still runs, and the client waits that long (`MURMURE-062`).
+2. The holder seals a shallow snapshot once it holds every delta up to the horizon (`MURMURE-068`).
+   A lease that runs out first is asked again.
+3. A copy holding an edit the relay refused withdraws, and leaves the segment to another member.
+   A copy whose edit is still unanswered asks again later.
+4. The Sync worker uploads the snapshot at the horizon, then commits it under the lease.
+5. The holder marks the segment `final` in `meta` (`MURMURE-069`). Every other member reads the
+   mark and holds the segment as a final one, with the same messages (`MURMURE-070`).
+
 **Code.** `ChannelState::wants_close`, `close_into`, `successor_to_open` and `successor_to_retry`,
-in `crates/ambre-murmure/src/channel/closing.rs`. The Logic side is `crates/ambre-logic/src/segments.rs`, and
-the request is `close_segment_task` in `crates/ambre-sync/src/sharing.rs`.
+in `crates/ambre-murmure/src/channel/closing.rs`. `ChannelState::lease_to_ask`, `final_snapshot`,
+`mark_final` and `settle_final` are in `crates/ambre-murmure/src/channel/finalizing.rs`. The Logic
+side is `crates/ambre-logic/src/segments.rs`. The requests are `close_segment_task` in
+`crates/ambre-sync/src/sharing.rs`, and `take_lease` and `commit_final` in
+`crates/ambre-sync/src/finalize.rs`.
 
 ---
 
@@ -184,8 +199,12 @@ The segments have no control of their own. A user meets them only as a channel t
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No segment is finalized.** No lease, amendment or re-finalization exists. A channel closes one
-  segment, and refuses a second close while the first is still `closing`.
+* **No finalization is confirmed.** The deltas of a final segment stay, and no amendment or
+  re-finalization exists. A channel refuses a second close while the first is still `closing`.
+* **A final snapshot carries no search index.** The index lands with the `Search on a new device`
+  Story (`ambre-roadmap.md` E5).
+* **A new message the lock refused stays on its writer's copy.** The `A message refused by a lock
+  goes to the active segment` Story (`ambre-roadmap.md` E5) sends it again (`MURMURE-263`).
 * **A successor fetched five times in vain is given up.** The member keeps writing to the old
   segment until the next `meta` delta names the successor again (`MURMURE-482`).
 * **A closed channel counts what its `meta` names.** After a key rotation, a new segment counts its

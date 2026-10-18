@@ -4,11 +4,14 @@
 // the active segment asks the Sync worker to close it, the relay names the
 // successor, and `meta` records the answer. A member who did not write the
 // close follows it from `meta`, and a closed channel watches the new segment.
+// The closing segment then finalizes: the lease holder seals its shallow
+// snapshot, and `meta` marks it final.
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelDocument, ChannelDocumentKind, ChannelId, SegmentId, Timestamp};
-use ambre_murmure::ChannelState;
+use ambre_bus::{
+    ChannelDocument, ChannelDocumentKind, ChannelId, LeaseAnswer, SegmentId, Timestamp,
+};
 
 impl LogicState {
     /// Ask the Sync worker to close the active segment of `channel_id` once
@@ -91,14 +94,114 @@ impl LogicState {
         }
     }
 
-    /// A `meta` delta may name a successor another member created. Fetch
-    /// it once; it becomes active when its bytes are in.
+    /// Drive the finalization of the closing segment of `channel_id` at
+    /// `now`: ask for its lease when due. The final snapshot goes to the
+    /// Sync worker once this copy holds every delta up to the horizon.
+    pub(crate) fn drive_finalization(&mut self, channel_id: ChannelId, now: Timestamp) {
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        if let Some(segment) = channel.lease_to_ask(now) {
+            self.send_to_sync(SyncCommand::TakeFinalizeLease {
+                channel_id,
+                segment,
+            });
+            return;
+        }
+        let Some(closing) = channel.closing_id() else {
+            return;
+        };
+        let covered = self
+            .channel_ledgers
+            .get(&closing.document_id())
+            .map_or(0, snapshot_check::SeqLedger::contiguous_end);
+        match channel.final_snapshot(now, covered) {
+            Ok(Some(snapshot)) => self.send_to_sync(SyncCommand::FinalizeSegment {
+                channel_id,
+                segment: snapshot.segment,
+                lease: snapshot.lease,
+                horizon: snapshot.horizon,
+                payload: snapshot.payload,
+            }),
+            Ok(None) => {}
+            Err(error) => {
+                channel.finalize_failed(closing);
+                tracing::warn!("Logic: final snapshot of {closing} refused: {error}");
+            }
+        }
+    }
+
+    /// The relay answered the lease request for `segment`.
+    pub(crate) fn finalize_lease_answered(
+        &mut self,
+        channel_id: ChannelId,
+        segment: SegmentId,
+        answer: LeaseAnswer,
+    ) {
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        match answer {
+            LeaseAnswer::Granted {
+                lease,
+                horizon,
+                expires_in,
+            } => channel.lease_granted(segment, lease, horizon, expires_in),
+            LeaseAnswer::Deferred { retry_in } => channel.lease_deferred(segment, retry_in),
+        }
+    }
+
+    /// The relay accepted the final snapshot of `segment`: `meta` marks it
+    /// final, and the delta leaves for the other members.
+    pub(crate) fn segment_finalized(&mut self, channel_id: ChannelId, segment: SegmentId) {
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        let meta = match channel.mark_final(segment) {
+            Ok(meta) => meta,
+            Err(error) => {
+                tracing::warn!("Logic: final mark of {segment} on {channel_id} refused: {error}");
+                return;
+            }
+        };
+        let document_id = channel.meta_id().document_id();
+        self.send_to_sync(SyncCommand::SendUpdate {
+            document_id,
+            payload: meta,
+            summary: None,
+        });
+    }
+
+    /// A lease request or a commit of `segment` failed. A copy that
+    /// `withdrawn` leaves the segment to another member; any other failure
+    /// asks again later.
+    pub(crate) fn segment_finalize_failed(
+        &mut self,
+        channel_id: ChannelId,
+        segment: SegmentId,
+        withdrawn: bool,
+        message: &str,
+    ) {
+        tracing::warn!("Logic: finalization of {segment} on {channel_id} failed: {message}");
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        if withdrawn {
+            channel.finalize_withdrawn(segment);
+        } else {
+            channel.finalize_failed(segment);
+        }
+    }
+
+    /// A `meta` delta may name a successor another member created, or a
+    /// closing segment another member finalized. Fetch the successor once;
+    /// it becomes active when its bytes are in.
     pub(crate) fn follow_close(&mut self, channel_id: ChannelId) {
-        let Some(successor) = self
-            .channels
-            .get_mut(&channel_id)
-            .and_then(ChannelState::successor_to_open)
-        else {
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        channel.settle_final();
+        let Some(successor) = channel.successor_to_open() else {
             return;
         };
         self.send_to_sync(SyncCommand::OpenDocument {

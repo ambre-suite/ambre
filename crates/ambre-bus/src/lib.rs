@@ -47,7 +47,7 @@ pub use app::murmure::{
     SealedChannelKey, SearchMatch, SpaceCommand, SpaceEvent, Timestamp, Topic, UnreadCount,
 };
 pub use command::SyncCommand;
-pub use event::{LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict};
+pub use event::{LeaseAnswer, LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict};
 // Trame data plane (command + event + value types) lives under `app::trame`;
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
 pub use app::trame::{
@@ -144,8 +144,8 @@ pub enum CopyOutcome {
 }
 // Re-export core types so that users don't need to depend on ambre-core directly.
 pub use ambre_core::{
-    CategoryId, ChannelDocumentKind, ChannelId, DocType, DocumentId, MeetingId, MessageId, MetaId,
-    PublicKey, Role, SegmentId, Seq, SnapshotId, SpaceId, UserId, Uuid,
+    CategoryId, ChannelDocumentKind, ChannelId, DocType, DocumentId, LeaseId, MeetingId, MessageId,
+    MetaId, PublicKey, Role, SegmentId, Seq, SnapshotId, SpaceId, UserId, Uuid,
 };
 
 #[cfg(test)]

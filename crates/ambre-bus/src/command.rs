@@ -23,8 +23,9 @@ use ambre_core::SessionNonce;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActivitySummary, ChannelId, DirectMember, DocType, DocumentId, MetaId, RequestId, RestCommand,
-    SealedChannelKey, SegmentId, Seq, SnapshotId, SnapshotPurpose, SnapshotVerdict, SpaceId,
+    ActivitySummary, ChannelId, DirectMember, DocType, DocumentId, LeaseId, MetaId, RequestId,
+    RestCommand, SealedChannelKey, SegmentId, Seq, SnapshotId, SnapshotPurpose, SnapshotVerdict,
+    SpaceId,
 };
 
 /// Command sent from the Logic thread to the Sync thread.
@@ -166,6 +167,25 @@ pub enum SyncCommand {
         meta: MetaId,
         closing: SegmentId,
         successor: SegmentId,
+    },
+    /// Ask the relay for the finalize lease of the closing segment `segment`
+    /// (the Murmure segments spec). Answered by
+    /// [`crate::LogicEvent::FinalizeLeaseAnswered`] or by
+    /// [`crate::LogicEvent::SegmentFinalizeFailed`].
+    TakeFinalizeLease {
+        channel_id: ChannelId,
+        segment: SegmentId,
+    },
+    /// Upload `payload`, the final snapshot of `segment` up to `horizon`,
+    /// then commit it under `lease`. Answered by
+    /// [`crate::LogicEvent::SegmentFinalized`] or by
+    /// [`crate::LogicEvent::SegmentFinalizeFailed`].
+    FinalizeSegment {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        lease: LeaseId,
+        horizon: u64,
+        payload: Vec<u8>,
     },
     /// Count a segment of a closed channel as a light subscription, from its
     /// first number. It opens under the key of the light subscription of

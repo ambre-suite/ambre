@@ -1348,18 +1348,56 @@ impl SyncState {
         payload: Vec<u8>,
         covered_seq: Seq,
     ) {
-        let Some(signing_key) = self.signing_key.clone() else {
-            tracing::warn!("Sync: SendSnapshot before session keys ready, dropping");
+        let upload = match self.snapshot_upload(document_id, &payload, covered_seq) {
+            Ok(upload) => upload,
+            Err(e) => {
+                tracing::warn!("Sync: SendSnapshot for {document_id:?} dropped: {e}");
+                return;
+            }
+        };
+        // Off the wasm path (host tests / mock relay) there is no event queue
+        // and no real S3: sealing is the observable behavior, stop here.
+        let Some(tx) = self.event_tx.clone() else {
+            tracing::info!(
+                "Sync: SendSnapshot {document_id:?} sealed ({} bytes), no event channel (test path)",
+                upload.blob.len()
+            );
             return;
         };
-        let Some(pub_key) = self.author_pub_key() else {
-            return;
-        };
+        let base = format!("{}://{}", self.url_scheme, self.api_base);
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            match upload_snapshot(&http::Fetch, &auth, &base, upload).await {
+                Ok(snapshot_id) => {
+                    let _ = tx.send(SyncEvent::SnapshotUploaded {
+                        document_id,
+                        snapshot_id,
+                    });
+                }
+                Err(e) => tracing::error!("Sync: SendSnapshot failed for {document_id:?}: {e}"),
+            }
+        });
+    }
+
+    /// Seal `payload` as a snapshot of `document_id` that folds in every delta
+    /// up to `covered_seq`, ready to upload.
+    ///
+    /// # Errors
+    /// Before the session keys, for a document this worker does not hold, or
+    /// when the seal fails.
+    pub(crate) fn snapshot_upload(
+        &self,
+        document_id: DocumentId,
+        payload: &[u8],
+        covered_seq: Seq,
+    ) -> Result<SnapshotUpload, String> {
+        let signing_key = self.signing_key.as_ref().ok_or("session keys not ready")?;
+        let pub_key = self.author_pub_key().ok_or("session keys not ready")?;
         let author_pubkey = hex::encode(pub_key.as_array());
-        let Some(doc_state) = self.documents.get(&document_id) else {
-            tracing::warn!("Sync: SendSnapshot for unknown doc {document_id:?}");
-            return;
-        };
+        let doc_state = self
+            .documents
+            .get(&document_id)
+            .ok_or("the document is not open")?;
         let public_data = SnapshotPublicData {
             document_id,
             pub_key,
@@ -1373,51 +1411,17 @@ impl SyncState {
         };
         // The full sealed `Snapshot`, serialized as the S3 blob (the inverse of
         // `decode_snapshot_blob` + `open_snapshot`).
-        let blob = match pipeline::snapshot_blob(
-            &payload,
-            public_data,
-            &doc_state.doc_key,
-            &signing_key,
-        ) {
-            Ok(blob) => blob,
-            Err(e) => {
-                tracing::error!("Sync: SendSnapshot seal failed for {document_id:?}: {e}");
-                return;
-            }
-        };
-
-        // Off the wasm path (host tests / mock relay) there is no event queue
-        // and no real S3: sealing is the observable behavior, stop here.
-        let Some(tx) = self.event_tx.clone() else {
-            tracing::info!(
-                "Sync: SendSnapshot {document_id:?} sealed ({} bytes), no event channel (test path)",
-                blob.len()
-            );
-            return;
-        };
+        let blob = pipeline::snapshot_blob(payload, public_data, &doc_state.doc_key, signing_key)
+            .map_err(|e| format!("seal failed: {e}"))?;
         // The Logic thread names the last delta it holds with no gap below it,
         // not the high-water `last_seq`. A snapshot claims every delta up to
         // its horizon, and a checker holds it to that claim (`AUTHOR-016`).
-        let covered_seq = i64::try_from(covered_seq.0).unwrap_or(i64::MAX);
-        let base = format!("{}://{}", self.url_scheme, self.api_base);
-        let auth = self.auth_context();
-        let upload = SnapshotUpload {
+        Ok(SnapshotUpload {
             document_id,
             author_pubkey,
-            covered_seq,
+            covered_seq: i64::try_from(covered_seq.0).unwrap_or(i64::MAX),
             blob,
-        };
-        wasm_bindgen_futures::spawn_local(async move {
-            match upload_snapshot(&http::Fetch, &auth, &base, upload).await {
-                Ok(snapshot_id) => {
-                    let _ = tx.send(SyncEvent::SnapshotUploaded {
-                        document_id,
-                        snapshot_id,
-                    });
-                }
-                Err(e) => tracing::error!("Sync: SendSnapshot failed for {document_id:?}: {e}"),
-            }
-        });
+        })
     }
 
     pub(crate) fn handle_send_ephemeral(&mut self, document_id: DocumentId, payload: Vec<u8>) {
@@ -3072,6 +3076,41 @@ mod tests {
             ),
             "the refusal was told as {told:?}"
         );
+    }
+
+    /// A copy whose edit is unanswered waits to finalize, and one the relay
+    /// refused an edit of withdraws (the Murmure segments spec). Neither
+    /// seals a snapshot.
+    #[test]
+    fn a_copy_the_relay_lacks_an_edit_of_never_finalizes() {
+        let (mut state, rx, doc, _key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let (channel, segment) = (ChannelId::new(), ambre_bus::SegmentId::from_document(doc));
+        let finalize = |state: &SyncState| {
+            state.handle_finalize_segment(channel, segment, ambre_bus::LeaseId::new(), 3, b"s");
+        };
+        let withdrawn = |events: &[LogicEvent]| -> Vec<bool> {
+            events
+                .iter()
+                .filter_map(|e| match e {
+                    LogicEvent::SegmentFinalizeFailed { withdrawn, .. } => Some(*withdrawn),
+                    _ => None,
+                })
+                .collect()
+        };
+
+        state.handle_send_update(doc, b"a".to_vec());
+        let sent = signatures(&drain_ws(&ws_rx));
+        let _ = drain(&rx);
+        finalize(&state);
+        assert_eq!(withdrawn(&drain(&rx)), vec![false], "it waits for the echo");
+
+        refuse_by_name(&mut state, doc, sent[0]);
+        let _ = drain(&rx);
+        finalize(&state);
+        assert_eq!(withdrawn(&drain(&rx)), vec![true], "it withdraws");
     }
 
     /// `SYNC-156`: once a delta is refused by name, no later delta of its

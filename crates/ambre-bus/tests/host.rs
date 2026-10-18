@@ -22,9 +22,9 @@
 use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
     ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelPlace,
-    ClipboardCell, ClipboardPayload, DocType, DocumentId, LogicEvent, MemberChannel, MemberInfo,
-    MemberStanding, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, Timestamp,
-    TrameCommand, UserId,
+    ClipboardCell, ClipboardPayload, DocType, DocumentId, LeaseAnswer, LeaseId, LogicEvent,
+    MemberChannel, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent, Role,
+    SelectionKind, SyncCommand, Timestamp, TrameCommand, UserId,
 };
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -270,6 +270,8 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::CreateChannel { .. } => "CreateChannel",
         SyncCommand::RotateSpace { .. } => "RotateSpace",
         SyncCommand::CloseSegment { .. } => "CloseSegment",
+        SyncCommand::TakeFinalizeLease { .. } => "TakeFinalizeLease",
+        SyncCommand::FinalizeSegment { .. } => "FinalizeSegment",
         SyncCommand::WatchSegment { .. } => "WatchSegment",
         SyncCommand::JoinChannel { .. } => "JoinChannel",
         SyncCommand::DeleteChannel { .. } => "DeleteChannel",
@@ -315,6 +317,9 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::ChannelKeyResealed { .. } => "ChannelKeyResealed",
         LogicEvent::SegmentClosed { .. } => "SegmentClosed",
         LogicEvent::SegmentCloseFailed { .. } => "SegmentCloseFailed",
+        LogicEvent::FinalizeLeaseAnswered { .. } => "FinalizeLeaseAnswered",
+        LogicEvent::SegmentFinalized { .. } => "SegmentFinalized",
+        LogicEvent::SegmentFinalizeFailed { .. } => "SegmentFinalizeFailed",
         LogicEvent::ChannelJoined { .. } => "ChannelJoined",
         LogicEvent::DirectMessageOpened { .. } => "DirectMessageOpened",
         LogicEvent::ChannelDeleted { .. } => "ChannelDeleted",
@@ -333,8 +338,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 28;
-const EVENT_VARIANTS: usize = 39;
+const SYNC_VARIANTS: usize = 30;
+const EVENT_VARIANTS: usize = 42;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -439,6 +444,17 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             meta,
             closing: segment,
             successor: SegmentId::from_document(DocumentId::new()),
+        },
+        SyncCommand::TakeFinalizeLease {
+            channel_id: chan,
+            segment,
+        },
+        SyncCommand::FinalizeSegment {
+            channel_id: chan,
+            segment,
+            lease: LeaseId::new(),
+            horizon: 42,
+            payload: vec![4; 3],
         },
         SyncCommand::WatchSegment { segment, meta },
         SyncCommand::DeleteChannel { channel_id: chan },
@@ -589,6 +605,25 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::SegmentCloseFailed {
             channel_id: chan,
             closing: segment,
+            message: "refused".to_owned(),
+        },
+        LogicEvent::FinalizeLeaseAnswered {
+            channel_id: chan,
+            segment,
+            answer: LeaseAnswer::Granted {
+                lease: LeaseId::new(),
+                horizon: 42,
+                expires_in: 30_000,
+            },
+        },
+        LogicEvent::SegmentFinalized {
+            channel_id: chan,
+            segment,
+        },
+        LogicEvent::SegmentFinalizeFailed {
+            channel_id: chan,
+            segment,
+            withdrawn: true,
             message: "refused".to_owned(),
         },
         LogicEvent::ChannelJoined { channel_id: chan },

@@ -871,6 +871,36 @@ pub(crate) struct ClosedSegmentResponse {
     pub created: bool,
 }
 
+/// `POST /api/channels/{id}/segments/{segment}/lease`: the lease, or none
+/// and when to ask again.
+#[derive(Deserialize)]
+pub(crate) struct FinalizeLeaseResponse {
+    pub lease: Option<GrantedLeaseResponse>,
+    /// Milliseconds before asking again, `0` with a lease.
+    pub retry_in: u64,
+}
+
+/// A granted finalize lease.
+#[derive(Deserialize)]
+pub(crate) struct GrantedLeaseResponse {
+    #[serde(with = "ambre_core::serde_id::lease_id")]
+    pub lease_id: ambre_core::LeaseId,
+    /// The last delta the final snapshot covers.
+    pub horizon: u64,
+    /// Milliseconds before the lease expires.
+    pub expires_in: u64,
+}
+
+/// `POST /api/channels/{id}/segments/{segment}/finalize`: commit the final
+/// snapshot under the lease.
+#[derive(Serialize)]
+pub(crate) struct FinalizeSegmentRequest {
+    #[serde(with = "ambre_core::serde_id::lease_id")]
+    pub lease_id: ambre_core::LeaseId,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
+}
+
 /// One member of a direct message, other than the caller, and the channel
 /// key wrapped for them.
 #[derive(Serialize)]

@@ -528,6 +528,21 @@ impl LogicState {
                 closing,
                 message,
             } => self.segment_close_failed(channel_id, closing, &message),
+            LogicEvent::FinalizeLeaseAnswered {
+                channel_id,
+                segment,
+                answer,
+            } => self.finalize_lease_answered(channel_id, segment, answer),
+            LogicEvent::SegmentFinalized {
+                channel_id,
+                segment,
+            } => self.segment_finalized(channel_id, segment),
+            LogicEvent::SegmentFinalizeFailed {
+                channel_id,
+                segment,
+                withdrawn,
+                message,
+            } => self.segment_finalize_failed(channel_id, segment, withdrawn, &message),
             LogicEvent::ChannelJoined { channel_id } => self.channel_joined(channel_id),
             LogicEvent::ChannelDeleted { channel_id } => self.channel_deleted(channel_id),
             LogicEvent::ChannelLeft { channel_id } => self.channel_left(channel_id),

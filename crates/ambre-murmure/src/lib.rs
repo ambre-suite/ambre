@@ -33,6 +33,8 @@ mod channel_tests;
 #[cfg(test)]
 mod closing_tests;
 #[cfg(test)]
+mod finalizing_tests;
+#[cfg(test)]
 mod mention_tests;
 #[cfg(test)]
 mod reaction_tests;
@@ -46,7 +48,8 @@ mod space_tests;
 mod unread_tests;
 
 pub use channel::{
-    ChannelState, Closed, Named, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS, Sent,
+    ChannelState, Closed, FINALIZE_RETRY_MS, FinalSnapshot, Named, SEGMENT_BYTES, SEGMENT_MESSAGES,
+    SUCCESSOR_RETRY_MS, Sent,
 };
 pub use delta::{JSON_SCHEMA_VERSION, Refusal, Signer};
 pub use error::MurmureError;

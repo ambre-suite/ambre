@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{
-    ChannelDocument, ChannelId, DocType, DocumentActivity, DocumentId, MemberInfo, RequestId,
-    RestEvent, Role, SealedChannelKey, SegmentId, SnapshotId, SpaceId, UserId,
+    ChannelDocument, ChannelId, DocType, DocumentActivity, DocumentId, LeaseId, MemberInfo,
+    RequestId, RestEvent, Role, SealedChannelKey, SegmentId, SnapshotId, SpaceId, UserId,
 };
 use ambre_core::SessionNonce;
 
@@ -228,6 +228,28 @@ pub enum LogicEvent {
         closing: SegmentId,
         message: String,
     },
+    /// The relay's answer to
+    /// [`SyncCommand::TakeFinalizeLease`](crate::SyncCommand::TakeFinalizeLease).
+    FinalizeLeaseAnswered {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        answer: LeaseAnswer,
+    },
+    /// The relay accepted the final snapshot of `segment`, answering
+    /// [`SyncCommand::FinalizeSegment`](crate::SyncCommand::FinalizeSegment).
+    SegmentFinalized {
+        channel_id: ChannelId,
+        segment: SegmentId,
+    },
+    /// A lease request or a commit of `segment` failed. `withdrawn` says this
+    /// copy holds an edit the relay refused, so it never finalizes the
+    /// segment: another member does.
+    SegmentFinalizeFailed {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        withdrawn: bool,
+        message: String,
+    },
     /// A public channel of the space has a new key, sealed under the current
     /// space key, answering
     /// [`SyncCommand::RotateSpace`](crate::SyncCommand::RotateSpace). The
@@ -318,6 +340,22 @@ pub enum LogicEvent {
     /// The relay speaks a newer wire version than this build. Only an update
     /// cures it, so the socket stays closed (`ambre-spec-sync.md`, `SYNC-137`).
     UpdateRequired,
+}
+
+/// The relay's answer to a finalize lease request (the Murmure segments
+/// spec).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LeaseAnswer {
+    /// This client holds the lease for `expires_in` milliseconds. Its
+    /// snapshot covers the deltas up to `horizon`.
+    Granted {
+        lease: LeaseId,
+        horizon: u64,
+        expires_in: u64,
+    },
+    /// No lease yet: ask again in `retry_in` milliseconds. The grace period
+    /// runs, or another member holds the lease.
+    Deferred { retry_in: u64 },
 }
 
 /// Why a snapshot is checked (`ambre-spec-op-authorship.md` section 3).

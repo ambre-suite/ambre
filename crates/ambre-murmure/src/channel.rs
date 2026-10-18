@@ -28,8 +28,10 @@ use crate::session::Session;
 use crate::{mention, reaction};
 
 mod closing;
+mod finalizing;
 
 pub use closing::{Closed, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS};
+pub use finalizing::{FINALIZE_RETRY_MS, FinalSnapshot};
 
 /// One document the channel holds, with the identifier the Sync worker routes
 /// it by.
@@ -177,6 +179,8 @@ pub struct ChannelState {
     successor_session: Option<(u64, Vec<u8>)>,
     /// The successor that failed to open, fetched again on a later tick.
     successor_retry: Option<closing::Retry>,
+    /// The finalization of the closing segment, as this client drives it.
+    finalizing: Option<finalizing::Finalizing>,
 }
 
 impl ChannelState {
@@ -325,6 +329,7 @@ impl ChannelState {
             successor: None,
             successor_session: None,
             successor_retry: None,
+            finalizing: None,
         }
     }
 
