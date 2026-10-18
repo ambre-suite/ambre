@@ -2535,7 +2535,7 @@
   {"edge": "verified-by", "from": "SRV-168", "to": "ambre_server::routes::tests::handler_tests::a_member_invited_during_a_revoke_gets_the_new_key"},
   {"edge": "cites-section", "from": "SRV-193", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
   {"edge": "cites-rule", "from": "SRV-193", "to": "SYNC-116"},
-  {"edge": "lands-with", "from": "SRV-193", "to": "A rotation names the current key"},
+  {"edge": "verified-by", "from": "SRV-193", "to": "ambre_server::routes::tests::handler_tests::the_relay_keeps_every_link_in_rotation_order"},
   {"edge": "cites-section", "from": "SRV-136", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
   {"edge": "cites-document", "from": "SRV-136", "to": "5-Murmure/features/ambre-spec-murmure-spaces.md"},
   {"edge": "verified-by", "from": "SRV-136", "to": "ambre_server::routes::channels::tests::leaving_a_space_leaves_every_channel_of_it"},

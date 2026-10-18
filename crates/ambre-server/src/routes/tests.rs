@@ -3701,8 +3701,9 @@ mod handler_tests {
 
     /// `SYNC-117`, `SYNC-118`: every rotation's link is kept, in the order
     /// the rotations landed. Three rotations are refused whole, with no copy
-    /// changed. One link does not chain from the last key, one belongs to
-    /// another document, and one is missing. A non-member reads no link.
+    /// changed. One link does not chain from the last key (`SRV-193`), one
+    /// belongs to another document, and one is missing. A non-member reads
+    /// no link.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn the_relay_keeps_every_link_in_rotation_order(pool: sqlx::PgPool) {

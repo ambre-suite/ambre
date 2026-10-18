@@ -471,9 +471,9 @@ pub(super) async fn lock_document(
 }
 
 /// Appends a rotation's link, inside the caller's transaction and under the
-/// document lock (`SYNC-118`). A link that does not start from the last key
-/// chained is refused: another rotation landed first, and its key is the one
-/// to replace.
+/// document lock (`SYNC-118`). A link must start from the last key chained
+/// (`SRV-193`). Otherwise another rotation landed first, and its key is the
+/// one to replace.
 async fn append_link(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: uuid::Uuid,
