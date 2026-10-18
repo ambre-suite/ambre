@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-291` | `POST` | Writing the root, replying, or being mentioned in a thread MUST follow it. | this spec section 3; `SETTINGS-004` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-292` | `POST` | The Threads view MUST list every followed thread with unread replies, newest first. | this spec section 3; `MURMURE-260` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-293` | `POST` | Marking a thread read MUST move its read cursor to its last reply. | this spec section 3; `MURMURE-114` | not built | unbuilt -- lands with the `Thread read` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-293` | `POST` | Marking a thread read MUST move its read cursor to its last reply. | this spec section 3; `MURMURE-114` | `ambre_logic::channels::tests::marking_a_thread_read_moves_its_cursor_to_its_last_reply` -- the cursor takes the last reply delivered, the mention stops counting, and a thread not held moves nothing; `ambre_sync::updates::tests::a_read_reaches_the_last_update_delivered_and_no_further` -- the number the worker sends stops at what it delivered | none | verified |
 | `MURMURE-294` | `POST` | Unfollowing a thread MUST remove it from the Threads view and from the user settings. | this spec section 3 | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-415` | `FAIL` | Given a followed thread whose document expired, the client MUST drop it from the Threads view and from the user settings. | this spec section 3; `SRV-156` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-295` | `FRAME` | Following a thread MUST NOT subscribe the client to it. | this spec section 3; `MURMURE-112` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -57,9 +57,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, the identifier of its root, and when it
   changes (`ZK-015`, `SRV-162`).
-* **Verification.** 12 `verified`, 7 `unimplemented`. The engine tests hold the thread document,
+* **Verification.** 13 `verified`, 6 `unimplemented`. The engine tests hold the thread document,
   the link, the count, the changes on a reply, a locked root and the mentions. The Logic tests
-  hold the waits, the race and the watch. The Sync tests hold the signal and the light thread.
+  hold the waits, the race, the watch and the read cursor. The Sync tests hold the signal, the
+  light thread and the number a read reaches.
 
 ---
 
@@ -104,9 +105,11 @@ replies belong to the Threads view.
 **Followed threads.** The `followed` map of the user settings names each thread the user follows
 (`MURMURE-291`). A followed thread is not subscribed: its activity signals and their summaries
 count its unread replies, as for any thread not open (`MURMURE-260`). The Threads view gathers the
-followed threads with unread replies (`MURMURE-292`). A thread has a read cursor like any document,
-so marking it read moves that cursor (`MURMURE-293`). A thread never archives on a delay
+followed threads with unread replies (`MURMURE-292`). A thread never archives on a delay
 (`MURMURE-290`).
+
+**Reading a thread.** Its cursor moves to the last reply this client was delivered, so its
+mentions stop counting (`MURMURE-293`).
 
 **Code.** `ChannelState::reply_target`, `thread_linked`, `thread_failed`, `threads_to_open`,
 `thread_view` and `reply` are in `crates/ambre-murmure/src/channel/threading.rs`. The Logic side
@@ -140,8 +143,7 @@ is `crates/ambre-logic/src/threads.rs`, and the Sync side is `thread_task` in
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A thread's mentions stay counted.** No action moves the read cursor of a thread, so its
-  mentions count from its start. The cursor moves with the
-  `Thread read` Story (`ambre-roadmap.md` E5).
+* **No screen marks a thread read yet.** The command exists, and the thread pane sends it with
+  `The message list and the composer` Story (`ambre-roadmap.md` E5).
 * **An open channel holds every thread its loaded segments name.** A root scrolled off screen
   keeps its thread held. Releasing it is not ruled.

@@ -312,6 +312,12 @@ pub enum SyncCommand {
     MoveReadCursors {
         cursors: Vec<(SegmentId, Seq)>,
     },
+    /// Move the cursor of one thread to the last sequence number this worker
+    /// delivered on it (the Murmure threads spec). A reply sequenced and not
+    /// yet shown stays past it.
+    MarkThreadRead {
+        thread: DocumentId,
+    },
     /// Move every read cursor of the user to its document's last number
     /// (the Murmure unread spec), then answer with a fresh
     /// [`crate::LogicEvent::ChannelActivity`].

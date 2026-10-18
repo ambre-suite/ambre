@@ -1387,6 +1387,7 @@ impl SyncState {
             }
             SyncCommand::MarkRead { live, finals } => self.handle_mark_read(&live, finals),
             SyncCommand::MoveReadCursors { cursors } => self.handle_move_read_cursors(cursors),
+            SyncCommand::MarkThreadRead { thread } => self.handle_mark_thread_read(thread),
             SyncCommand::MarkAllRead => self.handle_mark_all_read(),
             SyncCommand::FetchActivity => self.handle_fetch_activity(),
             SyncCommand::CreateChannel {

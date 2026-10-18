@@ -197,6 +197,9 @@ pub enum MurmureCommand {
         segment: SegmentId,
         message: MessageId,
     },
+    /// The view shows the last reply of `thread`: move its read cursor to
+    /// it (`MURMURE-293`). A relay record, never a document write.
+    MarkThreadRead { thread: DocumentId },
     /// Name a direct message, or clear its name with `None` (`MURMURE-054`,
     /// `MURMURE-055`). A name of blanks alone clears it too. Any member may,
     /// and every member reads it.
@@ -279,6 +282,7 @@ impl MurmureCommand {
             Self::LoadOlder { .. }
             | Self::MarkRead
             | Self::MarkUnread { .. }
+            | Self::MarkThreadRead { .. }
             | Self::Tick { .. }
             | Self::Typing { .. } => false,
         }

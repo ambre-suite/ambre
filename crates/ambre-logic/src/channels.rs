@@ -1015,6 +1015,7 @@ impl LogicState {
             MurmureCommand::LoadOlder { .. }
             | MurmureCommand::MarkRead
             | MurmureCommand::MarkUnread { .. }
+            | MurmureCommand::MarkThreadRead { .. }
             | MurmureCommand::Tick { .. }
             | MurmureCommand::Typing { .. } => None,
         };
@@ -1151,6 +1152,25 @@ impl LogicState {
             },
             MurmureCommand::MarkUnread { segment, message } => {
                 self.mark_unread(channel_id, segment, message);
+            }
+            MurmureCommand::MarkThreadRead { thread } => {
+                // The view shows the thread, so the channel holds it. The
+                // cursor takes what this client was delivered, as a live
+                // segment's does: the count runs over, never under.
+                if !channel.held_threads().contains(&thread) {
+                    tracing::warn!("Logic: thread {thread} not held; its cursor stays");
+                    return;
+                }
+                let read = channel.delivered(thread);
+                self.read_cursors.insert(
+                    thread,
+                    ReadCursor {
+                        read,
+                        active: false,
+                    },
+                );
+                self.send_to_sync(SyncCommand::MarkThreadRead { thread });
+                self.emit_count(channel_id);
             }
             MurmureCommand::React {
                 at,
@@ -4750,6 +4770,59 @@ mod tests {
     #[test]
     fn a_mention_in_a_held_thread_counts_on_its_open_channel() {
         let mut m = members();
+        held_mention(&mut m);
+        assert_eq!(
+            m.bob.counted(m.channel_id),
+            Some(ChannelActivity {
+                channel_id: m.channel_id,
+                active: true,
+                unread: Some(UnreadCount(0)),
+                mentions: Some(MentionCount(1)),
+            })
+        );
+    }
+
+    /// Marking a held thread read moves its cursor to what this client was
+    /// delivered, so its mention stops counting. A thread not held moves
+    /// nothing.
+    #[test]
+    fn marking_a_thread_read_moves_its_cursor_to_its_last_reply() {
+        let mut m = members();
+        let thread = held_mention(&mut m);
+        drain(&m.bob_sync);
+        drain(&m.bob_ui);
+        let mark = |m: &mut Members, thread| {
+            m.bob.handle_logic_command(LogicCommand::Channel {
+                channel_id: m.channel_id,
+                command: MurmureCommand::MarkThreadRead { thread },
+            });
+        };
+        mark(&mut m, DocumentId::new());
+        assert!(drain(&m.bob_sync).is_empty());
+        mark(&mut m, thread);
+        let asked = drain(&m.bob_sync);
+        assert!(
+            matches!(asked.as_slice(), [SyncCommand::MarkThreadRead { thread: t }] if *t == thread),
+            "Sync was asked {asked:?}"
+        );
+        assert_eq!(
+            m.bob.read_cursors.get(&thread),
+            Some(&ReadCursor {
+                read: Seq(1),
+                active: false,
+            })
+        );
+        let shown = drain(&m.bob_ui);
+        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
+            panic!("expected the channel's mark, got {shown:?}");
+        };
+        assert_eq!(channels[0].mentions, Some(MentionCount(0)));
+        assert!(!channels[0].active);
+    }
+
+    /// Bob holds a thread of the channel with one reply of Alice's that
+    /// mentions him, and has read every segment. Returns the thread.
+    fn held_mention(m: &mut Members) -> DocumentId {
         m.deliver("root", 1);
         let root = m.alice.messages(m.active).expect("held")[0].id;
         let ThreadTarget::Create(thread) = m.alice.reply_target(root, NOW).expect("target") else {
@@ -4793,15 +4866,7 @@ mod tests {
                 active: false,
             },
         );
-        assert_eq!(
-            m.bob.counted(m.channel_id),
-            Some(ChannelActivity {
-                channel_id: m.channel_id,
-                active: true,
-                unread: Some(UnreadCount(0)),
-                mentions: Some(MentionCount(1)),
-            })
-        );
+        thread
     }
 
     /// One batch answers once per list: the last answer of the segment, and

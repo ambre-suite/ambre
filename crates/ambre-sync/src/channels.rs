@@ -555,12 +555,10 @@ impl SyncState {
     /// Each final segment no longer changes, so it moves to the relay's last
     /// number.
     pub(crate) fn handle_mark_read(&self, live: &[SegmentId], finals: Vec<SegmentId>) {
-        let cursors: Vec<(SegmentId, Seq)> = live
+        let cursors: Vec<(DocumentId, Seq)> = live
             .iter()
-            .filter_map(|&segment| {
-                self.read_up_to(segment.document_id())
-                    .map(|seq| (segment, seq))
-            })
+            .map(SegmentId::document_id)
+            .filter_map(|document_id| self.read_up_to(document_id).map(|seq| (document_id, seq)))
             .collect();
         if self.event_tx.is_none() {
             tracing::warn!("Sync: no relay on this transport, the read cursors stay");
@@ -588,6 +586,25 @@ impl SyncState {
     /// forward: marking a message unread (the Murmure unread spec). No other
     /// cursor moves.
     pub(crate) fn handle_move_read_cursors(&self, cursors: Vec<(SegmentId, Seq)>) {
+        self.move_cursors(
+            cursors
+                .into_iter()
+                .map(|(segment, seq)| (segment.document_id(), seq))
+                .collect(),
+        );
+    }
+
+    /// Move the cursor of one thread to what this worker delivered on it
+    /// (the Murmure threads spec). A thread not open, empty or holding a
+    /// quarantine keeps its cursor, so a reply is never read too far.
+    pub(crate) fn handle_mark_thread_read(&self, thread: DocumentId) {
+        match self.read_up_to(thread) {
+            Some(seq) => self.move_cursors(vec![(thread, seq)]),
+            None => tracing::warn!("Sync: thread {thread} has nothing delivered, its cursor stays"),
+        }
+    }
+
+    fn move_cursors(&self, cursors: Vec<(DocumentId, Seq)>) {
         if self.event_tx.is_none() {
             tracing::warn!("Sync: no relay on this transport, the read cursors stay");
             return;
@@ -733,12 +750,12 @@ fn no_relay() -> String {
 
 /// Move each cursor to its number, one request per document. A refused move
 /// leaves that cursor where it was and says so in the log.
-async fn put_cursors(base: &str, cursors: Vec<(SegmentId, Seq)>, auth: http::AuthContext) {
-    for (segment, seq) in cursors {
-        let url = format!("{base}/documents/{segment}/read-cursor");
+async fn put_cursors(base: &str, cursors: Vec<(DocumentId, Seq)>, auth: http::AuthContext) {
+    for (document_id, seq) in cursors {
+        let url = format!("{base}/documents/{document_id}/read-cursor");
         let body = http::ReadCursorRequest { seq };
         if let Err(e) = http::put_json_auth(&url, &body, auth.clone()).await {
-            tracing::warn!("Sync: read cursor of {segment} not moved: {e}");
+            tracing::warn!("Sync: read cursor of {document_id} not moved: {e}");
         }
     }
 }

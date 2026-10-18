@@ -288,6 +288,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::ReleaseInbound => "ReleaseInbound",
         SyncCommand::MarkRead { .. } => "MarkRead",
         SyncCommand::MoveReadCursors { .. } => "MoveReadCursors",
+        SyncCommand::MarkThreadRead { .. } => "MarkThreadRead",
         SyncCommand::MarkAllRead => "MarkAllRead",
         SyncCommand::FetchActivity => "FetchActivity",
         SyncCommand::Shutdown => "Shutdown",
@@ -356,7 +357,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 35;
+const SYNC_VARIANTS: usize = 36;
 const EVENT_VARIANTS: usize = 55;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
@@ -527,6 +528,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::MoveReadCursors {
             cursors: vec![(segment, Seq(4))],
         },
+        SyncCommand::MarkThreadRead { thread: doc },
         SyncCommand::MarkAllRead,
         SyncCommand::FetchActivity,
         SyncCommand::Shutdown,
