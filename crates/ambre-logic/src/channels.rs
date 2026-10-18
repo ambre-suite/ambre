@@ -2815,6 +2815,7 @@ mod tests {
             metas: vec![ambre_bus::ChannelMeta {
                 channel_id: channels[0].channel_id,
                 meta: MetaId::new(),
+                last: None,
             }],
         });
         let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();

@@ -1478,8 +1478,9 @@ impl SyncState {
             SyncCommand::WatchChannel {
                 channel_id,
                 meta,
+                meta_last,
                 documents,
-            } => self.handle_watch_channel(channel_id, meta, &documents),
+            } => self.handle_watch_channel(channel_id, (meta, meta_last), &documents),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
             SyncCommand::LeaveChannel { channel_id } => self.handle_leave_channel(channel_id),
             SyncCommand::CreateDirectMessage {

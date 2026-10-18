@@ -166,6 +166,9 @@ pub struct MemberChannelRow {
     /// For a direct message, the display names of its other members, by
     /// name then id. Empty for a channel of a space (`SRV-220`).
     pub peers: Vec<String>,
+    /// The highest sequence number the register holds for `meta`. The
+    /// ephemeral store may hold a higher one not yet flushed.
+    pub meta_durable_last: i64,
 }
 
 /// Every channel whose `meta` holds a row of `user`, by identifier
@@ -181,7 +184,13 @@ pub async fn list_member_channels(
          CASE WHEN c.space_id IS NULL THEN ARRAY(SELECT u.display_name \
            FROM document_members pm JOIN users u ON u.id = pm.user_id \
            WHERE pm.document_id = d.document_id AND pm.user_id <> $1 \
-           ORDER BY u.display_name, u.id) ELSE ARRAY[]::text[] END AS peers \
+           ORDER BY u.display_name, u.id) ELSE ARRAY[]::text[] END AS peers, \
+         GREATEST( \
+             COALESCE((SELECT MAX(u.seq) FROM updates u \
+                       WHERE u.document_id = d.document_id), 0), \
+             COALESCE((SELECT MAX(s.covered_seq) FROM snapshots s \
+                       WHERE s.document_id = d.document_id), 0) \
+         ) AS meta_durable_last \
          FROM channels c \
          JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
          JOIN documents doc ON doc.id = d.document_id \
@@ -206,6 +215,7 @@ pub async fn list_member_channels(
                 doc_key_enc: r.try_get("doc_key_enc")?,
                 wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
                 peers: r.try_get("peers")?,
+                meta_durable_last: r.try_get("meta_durable_last")?,
             })
         })
         .collect()

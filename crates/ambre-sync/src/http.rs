@@ -787,6 +787,10 @@ pub(crate) struct MemberChannelEntry {
     /// The display names of a direct message's other members (`SRV-220`).
     #[serde(default)]
     pub peers: Vec<String>,
+    /// The last number the relay gave in the meta (`SRV-223`), none from a
+    /// relay that lists none.
+    #[serde(default)]
+    pub meta_last: Option<ambre_core::Seq>,
 }
 
 impl MemberChannelEntry {

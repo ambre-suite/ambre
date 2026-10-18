@@ -868,6 +868,7 @@ fn listed_keys(
             let listed = ambre_bus::ChannelMeta {
                 channel_id: entry.channel_id,
                 meta: entry.meta_id,
+                last: entry.meta_last,
             };
             Some((listed, key))
         })
@@ -1611,11 +1612,13 @@ pub(crate) mod tests {
         let body = format!(
             r#"{{"channels":[
                 {{"channel_id":"{public}","space_id":"{space}","public":true,"meta_id":"{meta}",{keys},"peers":["Eve"]}},
-                {{"channel_id":"{private}","space_id":"{space}","public":false,"meta_id":"{meta}",{keys}}},
+                {{"channel_id":"{private}","space_id":"{space}","public":false,"meta_id":"{meta}",{keys},"meta_last":6}},
                 {{"channel_id":"{direct}","space_id":null,"public":false,"meta_id":"{meta}",{keys},"peers":["Bob","Carol"]}}],
                 "spaces":["{space}","{bare}"]}}"#
         );
         let answer: http::MemberChannelsResponse = serde_json::from_str(&body).expect("decodes");
+        let lasts: Vec<_> = answer.channels.iter().map(|c| c.meta_last).collect();
+        assert_eq!(lasts, [None, Some(ambre_core::Seq(6)), None]);
         let named = vec![ChannelName {
             channel_id: private,
             name: "Design".into(),
@@ -1623,6 +1626,7 @@ pub(crate) mod tests {
         let listed = ambre_bus::ChannelMeta {
             channel_id: private,
             meta,
+            last: Some(ambre_core::Seq(6)),
         };
         let key = DocumentKey::generate();
         let listing = |(channels, spaces, peers), names, keys| MemberListing {
@@ -1705,6 +1709,7 @@ pub(crate) mod tests {
             doc_key_enc: doc_key_enc.clone(),
             wrapper_exchange_pub_key: String::new(),
             peers: Vec::new(),
+            meta_last: None,
         };
         let (named, elsewhere, cleared, bare) =
             (MetaId::new(), MetaId::new(), MetaId::new(), MetaId::new());
@@ -1728,13 +1733,20 @@ pub(crate) mod tests {
             }]
         );
         // Each key opens, and one that does not is left out.
+        // Each keeps the last number of its meta, none where none is listed.
         let mut answer = answer;
         answer.channels[3].doc_key_enc = "AA".into();
+        answer.channels[0].meta_last = Some(ambre_core::Seq(6));
         let keys: Vec<_> = listed_keys(&answer, &own)
             .into_iter()
-            .map(|(listed, opened)| (listed.meta, opened.id()))
+            .map(|(listed, opened)| (listed.meta, listed.last, opened.id()))
             .collect();
-        let held = [named, elsewhere, cleared].map(|meta| (meta, key.id()));
+        let held = [
+            (named, Some(ambre_core::Seq(6))),
+            (elsewhere, None),
+            (cleared, None),
+        ]
+        .map(|(meta, last)| (meta, last, key.id()));
         assert_eq!(keys, held);
     }
 

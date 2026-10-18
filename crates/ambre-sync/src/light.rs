@@ -199,7 +199,7 @@ impl SyncState {
     pub(crate) fn handle_watch_channel(
         &mut self,
         channel_id: ChannelId,
-        meta: MetaId,
+        (meta, meta_last): (MetaId, Option<Seq>),
         documents: &[(DocumentId, Option<Seq>)],
     ) {
         let Some(doc_key) = self
@@ -211,7 +211,8 @@ impl SyncState {
             tracing::warn!("[Sync] no listed key to watch channel {channel_id}");
             return;
         };
-        for &(document_id, last) in std::iter::once(&(meta.document_id(), None)).chain(documents) {
+        let meta_entry = (meta.document_id(), meta_last);
+        for &(document_id, last) in std::iter::once(&meta_entry).chain(documents) {
             self.watch_unheld(document_id, &doc_key, last);
         }
     }
@@ -631,6 +632,7 @@ mod tests {
         let watch = SyncCommand::WatchChannel {
             channel_id,
             meta,
+            meta_last: None,
             documents: vec![(segment, Some(Seq(4))), (older, None)],
         };
         state.handle_command(watch.clone());
@@ -715,6 +717,45 @@ mod tests {
             "an open replays from the start"
         );
         assert_eq!(state.documents_len(), 0, "watching loads nothing");
+    }
+
+    /// Holds `RESID-022` for the `meta`. A `meta` the listing gave a last
+    /// number asks for what follows it, and a reconnect resumes there.
+    #[test]
+    fn the_meta_of_a_channel_never_opened_is_watched_after_its_last_number() {
+        let mut state = SyncState::new(LogicSink::channel().0, String::new(), None);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let (channel_id, meta) = (ChannelId::new(), MetaId::new());
+        state
+            .listed_keys
+            .insert(channel_id, (meta, DocumentKey::generate()));
+        state.handle_command(SyncCommand::WatchChannel {
+            channel_id,
+            meta,
+            meta_last: Some(Seq(5)),
+            documents: Vec::new(),
+        });
+        let sent: Vec<WsClientMsg> = ws_rx
+            .try_iter()
+            .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
+            .collect();
+        let m = meta.document_id();
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [
+                    WsClientMsg::Subscribe { document_id: a },
+                    WsClientMsg::RequestMissing {
+                        document_id: b,
+                        after_seq: Seq(5),
+                    },
+                ] if (*a, *b) == (m, m)
+            ),
+            "expected a subscribe and a request after the last number, got {sent:?}"
+        );
+        assert!(state.light_heads().is_empty());
+        assert_eq!(state.light_cursors(), vec![(m, Seq(5))]);
     }
 
     /// A thread held in full or light hears its deltas on its own topic, so

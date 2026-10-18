@@ -259,12 +259,13 @@ pub enum SyncCommand {
     /// Count a channel this session never opened, as light subscriptions
     /// (the Murmure notifications spec). Each of `documents` counts after
     /// the last number beside it, the activity answer's, and from the next
-    /// delta without one. Its `meta` counts from the next delta. They open
-    /// under the key of `meta` the listing wrapped, and an open fetches them
-    /// whole.
+    /// delta without one. Its `meta` counts after `meta_last`, the listing's,
+    /// the same way. They open under the key of `meta` the listing wrapped,
+    /// and an open fetches them whole.
     WatchChannel {
         channel_id: ChannelId,
         meta: MetaId,
+        meta_last: Option<Seq>,
         documents: Vec<(DocumentId, Option<Seq>)>,
     },
     /// Join a public channel alone. The Sync worker unseals `key` with the

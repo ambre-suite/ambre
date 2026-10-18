@@ -516,6 +516,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::WatchChannel {
             channel_id: chan,
             meta,
+            meta_last: Some(Seq(2)),
             documents: vec![(doc, Some(Seq(3))), (doc, None)],
         },
         SyncCommand::DeleteChannel { channel_id: chan },
@@ -790,6 +791,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             metas: vec![ChannelMeta {
                 channel_id: chan,
                 meta: MetaId::from_document(doc),
+                last: Some(Seq(5)),
             }],
         },
         LogicEvent::MeetingParticipantJoined {

@@ -121,6 +121,9 @@ pub struct MemberChannel {
 pub struct ChannelMeta {
     pub channel_id: ChannelId,
     pub meta: MetaId,
+    /// The last number the relay gave in `meta`, none from a relay that
+    /// lists none. A watch resumes after it.
+    pub last: Option<Seq>,
 }
 
 /// The name a channel not yet open shows, read from the name sealed beside

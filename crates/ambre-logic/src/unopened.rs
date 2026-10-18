@@ -6,7 +6,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelDocumentKind, ChannelId, ChannelMeta, DocumentActivity, MetaId};
+use ambre_bus::{ChannelDocumentKind, ChannelId, ChannelMeta, DocumentActivity};
 
 /// The segments of a channel, each with the last number the activity
 /// answer gave, if any.
@@ -15,8 +15,9 @@ type Segments = Vec<(DocumentId, Option<Seq>)>;
 /// What the Logic thread knows of the channels it may watch unopened.
 #[derive(Debug, Default)]
 pub(crate) struct ListedChannels {
-    /// The `meta` of each channel of the latest listing whose key opened.
-    metas: HashMap<ChannelId, MetaId>,
+    /// The `meta` of each channel of the latest listing whose key opened,
+    /// with its last number then.
+    metas: HashMap<ChannelId, ChannelMeta>,
     /// Whether a listing answered in this session.
     listed: bool,
     /// The segments of each channel the latest activity answer named, each
@@ -41,8 +42,8 @@ impl LogicState {
     /// its watch ends. A channel joined since the last listing has segments
     /// no activity answer named yet, so the activity is asked again.
     pub(crate) fn channels_listed(&mut self, metas: &[ChannelMeta]) {
-        let fresh: HashMap<ChannelId, MetaId> =
-            metas.iter().map(|m| (m.channel_id, m.meta)).collect();
+        let fresh: HashMap<ChannelId, ChannelMeta> =
+            metas.iter().map(|m| (m.channel_id, *m)).collect();
         let listed = &mut self.listed_channels;
         let joined = listed.listed && fresh.keys().any(|c| !listed.metas.contains_key(c));
         let gone: Vec<ChannelId> = listed
@@ -81,14 +82,15 @@ impl LogicState {
 
     /// Watch each listed channel this session neither holds, opens nor
     /// counts. Each segment counts after the last number the answer gave,
-    /// so nothing landing since is missed (`RESID-022`). A thread is left to
-    /// its own signal, which counts its mentions alone. A channel no answer
-    /// names a segment of waits.
+    /// and its `meta` after the listing's, so nothing landing since is
+    /// missed (`RESID-022`). A thread is left to its own signal, which
+    /// counts its mentions alone. A channel no answer names a segment of
+    /// waits.
     fn watch_unheld(&mut self) {
         let Some(segments) = &self.listed_channels.segments else {
             return;
         };
-        let unheld: Vec<(ChannelId, MetaId, Segments)> = self
+        let unheld: Vec<(ChannelMeta, Segments)> = self
             .listed_channels
             .metas
             .iter()
@@ -97,9 +99,14 @@ impl LogicState {
                     && !self.opening.contains_key(c)
                     && !self.closed_channels.contains_key(c)
             })
-            .filter_map(|(c, m)| segments.get(c).map(|s| (*c, *m, s.clone())))
+            .filter_map(|(c, m)| segments.get(c).map(|s| (*m, s.clone())))
             .collect();
-        for (channel_id, meta, documents) in unheld {
+        for (listed, documents) in unheld {
+            let ChannelMeta {
+                channel_id,
+                meta,
+                last,
+            } = listed;
             let held = documents
                 .iter()
                 .map(|(document_id, _)| *document_id)
@@ -111,6 +118,7 @@ impl LogicState {
             self.send_to_sync(SyncCommand::WatchChannel {
                 channel_id,
                 meta,
+                meta_last: last,
                 documents,
             });
         }
@@ -120,7 +128,7 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{ChannelActivity, Seq, SpaceId};
+    use ambre_bus::{ChannelActivity, MetaId, Seq, SpaceId};
     use ambre_core::activity::ActivityCounters;
 
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
@@ -138,6 +146,9 @@ mod tests {
     /// The last number the activity answer gives every document.
     const LAST: Seq = Seq(3);
 
+    /// The last number the listing gives every `meta`.
+    const META_LAST: Seq = Seq(8);
+
     fn list(state: &mut LogicState, metas: &[(ChannelId, MetaId)]) {
         state.handle_logic_event(LogicEvent::MemberChannels {
             channels: Vec::new(),
@@ -146,7 +157,11 @@ mod tests {
             peers: Vec::new(),
             metas: metas
                 .iter()
-                .map(|&(channel_id, meta)| ChannelMeta { channel_id, meta })
+                .map(|&(channel_id, meta)| ChannelMeta {
+                    channel_id,
+                    meta,
+                    last: Some(META_LAST),
+                })
                 .collect(),
         });
     }
@@ -168,6 +183,7 @@ mod tests {
     }
 
     /// Every channel the Sync worker was asked to watch, with its documents.
+    /// Each `meta` must resume after the listing's last number.
     fn watches(sync: &Receiver<SyncCommand>) -> Vec<(ChannelId, MetaId, Segments)> {
         drain(sync)
             .into_iter()
@@ -175,17 +191,22 @@ mod tests {
                 SyncCommand::WatchChannel {
                     channel_id,
                     meta,
+                    meta_last,
                     documents,
-                } => Some((channel_id, meta, documents)),
+                } => {
+                    assert_eq!(meta_last, Some(META_LAST), "the meta's last number");
+                    Some((channel_id, meta, documents))
+                }
                 _ => None,
             })
             .collect()
     }
 
     /// A channel listed with its key, and named by the activity answer, is
-    /// watched once, whichever lands first, each segment after its last
-    /// number (`RESID-022`). Its threads are left to their own signal, and a
-    /// channel listed with no key watches nothing.
+    /// watched once, whichever lands first. Each segment counts after its
+    /// last number, and its `meta` after the listing's (`RESID-022`). Its
+    /// threads are left to their own signal, and a channel listed with no
+    /// key watches nothing.
     #[test]
     fn a_channel_never_opened_is_watched_once_listed_and_answered() {
         use ChannelDocumentKind::{Segment, Thread};

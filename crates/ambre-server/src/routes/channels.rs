@@ -102,6 +102,9 @@ pub struct MemberChannelJson {
     /// For a direct message, the display names of its other members, which
     /// the client composes a name from (`SRV-220`). Empty otherwise.
     pub peers: Vec<String>,
+    /// The last number the relay gave in the channel's `meta`, zero for a
+    /// `meta` that holds nothing (`SRV-223`).
+    pub meta_last: ambre_core::Seq,
 }
 
 /// The channels of the caller.
@@ -121,10 +124,17 @@ pub async fn list_member_channels(
     auth: auth::AuthSession,
 ) -> Result<axum::Json<MemberChannelsJson>, AppError> {
     let spaces = db::list_member_spaces(&state.db, &auth.user_id).await?;
-    let channels = db::list_member_channels(&state.db, &auth.user_id)
-        .await?
+    let rows = db::list_member_channels(&state.db, &auth.user_id).await?;
+    let metas: Vec<ambre_core::DocumentId> =
+        rows.iter().map(|row| row.meta_id.document_id()).collect();
+    let counters = crate::redis_ops::document_seqs(&state.redis, &metas).await?;
+    let channels = rows
         .into_iter()
-        .map(|row| {
+        .zip(counters)
+        .map(|(row, counter)| {
+            // The live counter runs ahead of the register until a flush.
+            let live = counter.and_then(|c| i64::try_from(c).ok()).unwrap_or(0);
+            let last = u64::try_from(row.meta_durable_last.max(live)).unwrap_or(0);
             use base64::Engine;
             let base64 = base64::engine::general_purpose::URL_SAFE;
             MemberChannelJson {
@@ -139,6 +149,7 @@ pub async fn list_member_channels(
                     .map(hex::encode)
                     .unwrap_or_default(),
                 peers: row.peers,
+                meta_last: ambre_core::Seq(last),
             }
         })
         .collect();
@@ -2681,6 +2692,51 @@ mod tests {
         assert!(alices[&public.id].is_empty(), "a channel of a space");
         assert_eq!(peers(carol).await[&direct], ["Alice", "Bob"]);
         assert_eq!(peers(bob).await[&direct], ["Alice", "Carol"]);
+    }
+
+    /// `SRV-223`: each listed channel carries the last number of its `meta`,
+    /// the higher of the ephemeral counter and the register's horizon. A
+    /// `meta` that holds nothing lists zero.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_listed_channel_carries_the_last_number_of_its_meta(pool: sqlx::PgPool) {
+        use rustis::commands::StringCommands;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let public = public_channel(&state, alice, space).await;
+        let private = private_channel(&state, alice, space).await;
+        let req = direct_request(alice, &[bob]);
+        let (direct, direct_meta) = (req.channel_id, req.meta_id.document_id());
+        open_direct(&state, alice, req).await.expect("create");
+        state
+            .redis
+            .set(format!("doc:{direct_meta}:seq"), 6)
+            .await
+            .expect("counter");
+        sqlx::query(
+            "INSERT INTO snapshots (document_id, author_pubkey, s3_key, covered_seq) \
+             VALUES ($1, $2, 'k', 4)",
+        )
+        .bind(uuid_of_doc(public.meta.document_id()))
+        .bind([1u8; 32].as_slice())
+        .execute(&state.db)
+        .await
+        .expect("snapshot");
+
+        let lasts: std::collections::HashMap<_, _> =
+            list_member_channels(State(state.clone()), session(alice))
+                .await
+                .expect("listed")
+                .0
+                .channels
+                .into_iter()
+                .map(|c| (c.channel_id, c.meta_last))
+                .collect();
+        assert_eq!(lasts[&direct], ambre_core::Seq(6), "the live counter");
+        assert_eq!(lasts[&public.id], ambre_core::Seq(4), "the register");
+        assert_eq!(lasts[&private.id], ambre_core::Seq(0), "nothing held");
     }
 
     /// The next message on `stream`, decoded, or `None` after `millis`.
