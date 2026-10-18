@@ -360,3 +360,64 @@ fn the_mark_all_read_chord_runs_the_command_of_the_unread_feature() {
         KeyRoute::Run(actions) if matches!(actions[..], [ShellAction::OpenPalette])
     ));
 }
+
+fn news(channel_id: ChannelId, mention: bool) -> UiEvent {
+    UiEvent::NewMessage {
+        channel_id,
+        mention,
+    }
+}
+
+/// A mention of the user notifies, and a plain message of a public channel
+/// does not. A message of a direct message notifies with or without one,
+/// under its members' names (`MURMURE-143`).
+#[wasm_bindgen_test]
+fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
+    let (_owner, relay, general, _) = a_space_with_members();
+    let direct = ChannelId::new();
+    relay.absorb(&UiEvent::MemberChannels {
+        channels: vec![
+            MemberChannel {
+                channel_id: general,
+                place: ChannelPlace::Public(SpaceId::new()),
+            },
+            MemberChannel {
+                channel_id: direct,
+                place: ChannelPlace::Direct,
+            },
+        ],
+        spaces: Vec::new(),
+        names: Vec::new(),
+        peers: vec![ambre_bus::DirectPeers {
+            channel_id: direct,
+            names: vec!["Bob".to_owned()],
+        }],
+    });
+    relay.pane.set(MurmurePane::ChannelList);
+
+    assert_eq!(relay.notice(&news(general, false), true), None);
+    let mention = relay
+        .notice(&news(general, true), true)
+        .expect("a mention notifies");
+    assert_eq!(mention.channel_id, general);
+    assert_eq!(mention.title, "You were mentioned in general");
+    for named in [false, true] {
+        let message = relay
+            .notice(&news(direct, named), true)
+            .expect("a direct message notifies");
+        assert_eq!(message.channel_id, direct);
+        assert_eq!(message.title, "New message from Bob");
+    }
+    assert_eq!(relay.notice(&UiEvent::UpdateRequired, true), None);
+}
+
+/// The channel the user is reading notifies nothing. On a hidden page
+/// nobody reads it, and it notifies (`MURMURE-146`).
+#[wasm_bindgen_test]
+fn the_channel_being_read_notifies_nothing_until_the_page_is_hidden() {
+    let (_owner, relay, direct) = shown_direct();
+    assert_eq!(relay.notice(&news(direct, true), true), None);
+    assert!(relay.notice(&news(direct, true), false).is_some());
+    relay.pane.set(MurmurePane::ChannelList);
+    assert!(relay.notice(&news(direct, false), true).is_some());
+}

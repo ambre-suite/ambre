@@ -212,6 +212,17 @@ pub struct MurmureRelay {
     me: RwSignal<Option<UserId>>,
 }
 
+/// A system notification the view asks the page to raise (the Murmure
+/// notifications spec). It names the channel and why, never what was
+/// written: the summary it comes from holds no text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notice {
+    /// The channel a click opens.
+    pub channel_id: ChannelId,
+    /// What the notification says.
+    pub title: String,
+}
+
 impl Default for MurmureRelay {
     fn default() -> Self {
         Self::new()
@@ -228,6 +239,36 @@ impl MurmureRelay {
             members: RwSignal::new(HashMap::new()),
             me: RwSignal::new(None),
         }
+    }
+
+    /// The notification an event calls for, if any (`MURMURE-143`). A
+    /// message that names the user notifies, and so does any message of a
+    /// direct message. The channel the user is reading notifies nothing
+    /// (`MURMURE-146`). A page that is not `visible` shows none to read.
+    pub fn notice(&self, ev: &UiEvent, visible: bool) -> Option<Notice> {
+        let UiEvent::NewMessage {
+            channel_id,
+            mention,
+        } = *ev
+        else {
+            return None;
+        };
+        let reading = visible && self.pane.get_untracked().shown_channel() == Some(channel_id);
+        if reading {
+            return None;
+        }
+        self.sidebar.with_untracked(|s| {
+            let direct = s.is_direct(channel_id);
+            let name = s.name_of(channel_id);
+            let title = match (direct, mention, name) {
+                (true, _, Some(name)) => format!("New message from {name}"),
+                (true, _, None) => "New direct message".to_owned(),
+                (false, true, Some(name)) => format!("You were mentioned in {name}"),
+                (false, true, None) => "You were mentioned".to_owned(),
+                (false, false, _) => return None,
+            };
+            Some(Notice { channel_id, title })
+        })
     }
 
     /// Whether the channel the pane shows is a public channel of a space,

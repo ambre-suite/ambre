@@ -93,6 +93,17 @@ pub fn drive_frame(control: &RafControl, relay: impl FnOnce(), frame: impl FnOnc
     }
 }
 
+/// Run one timer tick of a page that may be hidden (`CANVAS-075`).
+///
+/// A hidden page gets no animation frame, so the relay would stop with it:
+/// the threads would hear nothing until the page shows again. A timer runs
+/// it then. A shown page leaves the relay to its frames.
+pub fn drive_hidden(hidden: bool, relay: impl FnOnce()) {
+    if hidden {
+        relay();
+    }
+}
+
 /// What a frame does, given the process-wide fatal latch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tick {
@@ -277,6 +288,17 @@ mod tests {
             order.into_inner(),
             ["relay", "draw", "relay", "draw", "relay", "draw"]
         );
+    }
+
+    /// A hidden page relays on its timer, and a shown one does not, so the
+    /// relay never runs twice in one frame (`CANVAS-075`).
+    #[test]
+    fn a_hidden_page_relays_on_its_timer_and_a_shown_one_does_not() {
+        let relayed = Cell::new(0);
+        for hidden in [true, false, true] {
+            drive_hidden(hidden, || relayed.set(relayed.get() + 1));
+        }
+        assert_eq!(relayed.get(), 2);
     }
 
     /// An open modal suspends the loop and its close resumes it (`CHROME-089`).

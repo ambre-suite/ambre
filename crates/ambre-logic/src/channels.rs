@@ -603,19 +603,26 @@ impl LogicState {
         else {
             return false;
         };
-        closed.counted.insert(
-            document_id,
-            Counts {
-                unread: UnreadCount(counters.content),
-                mentions: MentionCount(counters.mentions),
-            },
-        );
+        let now = Counts {
+            unread: UnreadCount(counters.content),
+            mentions: MentionCount(counters.mentions),
+        };
+        let before = closed.counted.insert(document_id, now).unwrap_or_default();
+        // The summaries counted a message since the last count: that is
+        // news (the Murmure notifications spec).
+        let news = (now.unread > before.unread).then_some(now.mentions > before.mentions);
         if let Some(mark) = closed.mark(
             channel_id,
             threads::mentions_of(&self.watched_threads, channel_id),
         ) {
             self.send_to_ui(UiEvent::ChannelActivity {
                 channels: vec![mark],
+            });
+        }
+        if let Some(mention) = news {
+            self.send_to_ui(UiEvent::NewMessage {
+                channel_id,
+                mention,
             });
         }
         true
@@ -1645,8 +1652,14 @@ impl LogicState {
         }
         let mut events = Vec::new();
         let mut outdated = false;
+        let mut fresh = None;
         for (delta, verdict) in deltas.iter().zip(verdicts) {
             let accepted = verdict.is_ok();
+            if accepted && open.is_some() {
+                fresh = self
+                    .news_of(delta)
+                    .map_or(fresh, |mention| Some(mention || fresh.unwrap_or(false)));
+            }
             self.record_channel_seq(
                 document_id,
                 delta.seq,
@@ -1677,9 +1690,33 @@ impl LogicState {
             self.emit_count(channel_id);
         }
         if let Some(channel_id) = open {
+            if let Some(mention) = fresh {
+                self.send_to_ui(UiEvent::NewMessage {
+                    channel_id,
+                    mention,
+                });
+            }
             self.follow_close(channel_id);
         }
         true
+    }
+
+    /// Whether a delta is a message another member wrote, from its sealed
+    /// summary alone (the Murmure notifications spec). `Some(true)` when it
+    /// names this user or the channel. A delta with no summary is none.
+    fn news_of(&self, delta: &SignedDelta) -> Option<bool> {
+        let summary = delta.summary.as_ref()?;
+        if summary.kind != ambre_bus::ActivityKind::Content
+            || (delta.user.is_some() && delta.user == self.my_user_id)
+        {
+            return None;
+        }
+        Some(
+            summary.mentions_all
+                || self
+                    .my_user_id
+                    .is_some_and(|me| summary.mentions.contains(&me)),
+        )
     }
 
     /// Search every open channel for `query` (the Murmure search spec). Each
@@ -1969,6 +2006,100 @@ mod tests {
         assert_eq!(messages[0].text, "over the wire");
     }
 
+    /// An open channel reads the news from the summary of each accepted
+    /// delta (the Murmure notifications spec). A message of another member
+    /// that names the user is a mention. The user's own message, from another device, is
+    /// none, and neither is a delta with no summary.
+    #[test]
+    fn a_message_of_another_member_is_news_and_names_a_mention() {
+        let (mut alice, _, alice_sync) = harness();
+        let author = UserId::new();
+        signed_in(&mut alice, author);
+        let channel_id = ChannelId::new();
+        alice.hold_channel(
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
+        );
+        let original = &alice.channels[&channel_id];
+        let active = original.active_id();
+        let segments = std::collections::HashMap::from([(
+            active,
+            original.snapshot(active.document_id()).expect("active"),
+        )]);
+        let meta = original
+            .snapshot(original.meta_id().document_id())
+            .expect("meta");
+        let copy =
+            ChannelState::open(channel_id, original.meta_id(), &meta, &segments).expect("open");
+        let (mut bob, bob_ui, _) = harness();
+        let bob_id = UserId::new();
+        signed_in(&mut bob, bob_id);
+        bob.hold_channel(copy);
+        drain(&bob_ui);
+
+        let mut deltas = Vec::new();
+        for (seq, text, mention) in [(1, "plain", false), (2, "hi @bob", true)] {
+            let mentions = if mention {
+                vec![Mention {
+                    target: MentionTarget::User(bob_id),
+                    range: 3..7,
+                }]
+            } else {
+                Vec::new()
+            };
+            alice.handle_logic_command(LogicCommand::Channel {
+                channel_id,
+                command: send(text, mentions),
+            });
+            let Ok(SyncCommand::SendUpdate {
+                document_id,
+                payload,
+                summary,
+            }) = alice_sync.try_recv()
+            else {
+                panic!("alice sends one update");
+            };
+            let peer = alice.channels[&channel_id]
+                .peer(document_id)
+                .expect("a session");
+            deltas.push((
+                document_id,
+                ambre_bus::SignedDelta {
+                    seq,
+                    payload,
+                    nonce: ambre_core::SessionNonce([0; 16]),
+                    peer,
+                    user: Some(author),
+                    summary,
+                },
+            ));
+        }
+        let news = |bob: &mut LogicState, (document_id, delta): (DocumentId, SignedDelta)| {
+            bob.handle_logic_event(LogicEvent::RemoteUpdate { document_id, delta });
+            drain(&bob_ui)
+                .into_iter()
+                .filter_map(|event| match event {
+                    UiEvent::NewMessage {
+                        channel_id: c,
+                        mention,
+                    } if c == channel_id => Some(mention),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let [plain, named] = <[_; 2]>::try_from(deltas).expect("two deltas");
+        // The same message as bob's own, which the engine would refuse
+        // under alice's peer: the filter is read on its own.
+        let (doc, mut own) = plain.clone();
+        own.user = Some(bob_id);
+        assert_eq!(bob.news_of(&own), None);
+        assert_eq!(bob.news_of(&plain.1), Some(false));
+        let (_, mut bare) = plain.clone();
+        bare.summary = None;
+        assert_eq!(news(&mut bob, (doc, bare)), Vec::<bool>::new());
+        assert_eq!(news(&mut bob, plain), [false]);
+        assert_eq!(news(&mut bob, named), [true]);
+    }
+
     /// An open channel keeps its documents while its view shows it (the
     /// Murmure engine spec). Closing one channel releases its documents alone, as
     /// light subscriptions, and the other stays whole.
@@ -2037,10 +2168,18 @@ mod tests {
                 counters: activity(content),
             });
         }
+        let mut news = 0;
         let marks: Vec<_> = drain(&ui)
             .into_iter()
-            .map(|event| match event {
-                UiEvent::ChannelActivity { channels } => channels,
+            .filter_map(|event| match event {
+                UiEvent::ChannelActivity { channels } => Some(channels),
+                UiEvent::NewMessage {
+                    channel_id: c,
+                    mention: false,
+                } if c == channel_id => {
+                    news += 1;
+                    None
+                }
                 other => panic!("a document badge leaked: {other:?}"),
             })
             .collect();
@@ -2053,6 +2192,8 @@ mod tests {
             }]
         };
         assert_eq!(marks, vec![mark(2), mark(3), mark(3)]);
+        // A count that rose is news; the update with no message is not.
+        assert_eq!(news, 2);
     }
 
     /// A closed channel counts its mentions from the summaries beside its
@@ -2070,9 +2211,17 @@ mod tests {
             },
         });
         let shown = drain(&ui);
-        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-            panic!("expected the channel's mark, got {shown:?}");
+        let [
+            UiEvent::ChannelActivity { channels },
+            UiEvent::NewMessage {
+                channel_id: news,
+                mention: true,
+            },
+        ] = shown.as_slice()
+        else {
+            panic!("expected the channel's mark, then a mention, got {shown:?}");
         };
+        assert_eq!(*news, channel_id);
         assert_eq!(
             channels,
             &[ChannelActivity {
@@ -2106,8 +2255,12 @@ mod tests {
             counters: activity(1),
         });
         let shown = drain(&ui);
-        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-            panic!("expected the channel's mark, got {shown:?}");
+        let [
+            UiEvent::ChannelActivity { channels },
+            UiEvent::NewMessage { mention: false, .. },
+        ] = shown.as_slice()
+        else {
+            panic!("expected the channel's mark, then the news, got {shown:?}");
         };
         assert_eq!(
             channels,
@@ -2137,7 +2290,10 @@ mod tests {
             counters: activity(1),
         });
         assert!(
-            matches!(drain(&ui).as_slice(), [UiEvent::ChannelActivity { .. }]),
+            matches!(
+                drain(&ui).as_slice(),
+                [UiEvent::ChannelActivity { .. }, UiEvent::NewMessage { .. }]
+            ),
             "a reopening channel stopped counting from its summaries"
         );
     }
@@ -5049,9 +5205,17 @@ mod tests {
                 },
             });
             let shown = drain(&ui);
-            let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-                panic!("expected the mark of {channel_id}, got {shown:?}");
+            let [
+                UiEvent::ChannelActivity { channels },
+                UiEvent::NewMessage {
+                    channel_id: news,
+                    mention: true,
+                },
+            ] = shown.as_slice()
+            else {
+                panic!("expected the mark of {channel_id}, then a mention, got {shown:?}");
             };
+            assert_eq!(*news, channel_id);
             assert_eq!(
                 channels,
                 &[ChannelActivity {
@@ -5088,8 +5252,12 @@ mod tests {
             },
         });
         let shown = drain(&ui);
-        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-            panic!("expected the channel's mark, got {shown:?}");
+        let [
+            UiEvent::ChannelActivity { channels },
+            UiEvent::NewMessage { mention: true, .. },
+        ] = shown.as_slice()
+        else {
+            panic!("expected the channel's mark, then a mention, got {shown:?}");
         };
         assert_eq!(
             channels,

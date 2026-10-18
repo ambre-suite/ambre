@@ -424,7 +424,10 @@ ENGINE_SPAWN = re.compile(r"\bambre_logic::run\(")
 APP_SRC = "crates/ambre-app/src"
 APP_LIB = "crates/ambre-app/src/lib.rs"
 FRAME_HOST = "crates/ambre-app/src/host/run.rs"
-FRAME_RELAY = re.compile(r"drive_frame\(\s*&\w+,\s*&mut pre_frame\b")
+# The relay is either borrowed whole, or shared with the hidden page's timer.
+FRAME_RELAY = re.compile(
+    r"drive_frame\(\s*&\w+,\s*(?:&mut pre_frame\b|\|\|\s*\(pre_frame\.borrow_mut\(\)\)\(\))"
+)
 SYNC_DRAIN = re.compile(r"\.drain\(&logic_to_sync_rx\b")
 APP_MESSAGE = re.compile(
     r"\bambre_bus::app\b|\b(?:Trame|Toile|Prose|Murmure|App)(?:Command|Event)\b|\bLogicCommand\b|\bUiEvent\b"

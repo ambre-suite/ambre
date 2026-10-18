@@ -66,6 +66,8 @@ mod host;
 mod landing;
 /// The local store the Main thread drives, within its budget (`RESID-002`).
 mod local_store;
+/// The system notifications of an open tab.
+mod notify;
 mod route;
 mod signin;
 /// The recipient's key, compared and confirmed before a share.
@@ -1070,6 +1072,17 @@ pub fn main() {
     let mut last_perf_push_ms: f64 = 0.0;
     let mut list_requested = false;
     let relay_tx = ui_to_logic_tx.clone();
+    // A click on a notification opens its channel (the Murmure
+    // notifications spec). The permission is asked once per page.
+    let notice_asked = Rc::new(std::cell::Cell::new(false));
+    let open_noticed: Rc<dyn Fn(ambre_core::ChannelId)> = {
+        let tx = ui_to_logic_tx.clone();
+        Rc::new(move |channel| {
+            if let Some(command) = murmure_relay.select(channel) {
+                let _ = tx.try_send(command);
+            }
+        })
+    };
     // A Murmure page refreshes this user's presence on each of its spaces once
     // per refresh period (the Murmure members spec). An interval, not the frame loop: a
     // hidden tab pauses its frames, yet holds its spaces open. The interval
@@ -1333,6 +1346,9 @@ pub fn main() {
             toile_relay.absorb(&ev);
             for command in murmure_relay.absorb(&ev) {
                 let _ = relay_tx.try_send(command);
+            }
+            if let Some(notice) = murmure_relay.notice(&ev, notify::page_visible()) {
+                notify::deliver(notice, &notice_asked, Rc::clone(&open_noticed));
             }
             match &ev {
                 // Non-fatal sync warnings surface as a transient warning toast.

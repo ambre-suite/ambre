@@ -92,6 +92,10 @@ const AMBRE_CLIPBOARD_TYPE: &str = "application/x-ambre";
 /// `paste` event (`ambre-spec-clipboard.md`).
 pub(crate) const AMBRE_CLIPBOARD_WEB_TYPE: &str = "web application/x-ambre";
 
+/// How often a hidden page relays, in milliseconds (`CANVAS-075`). The
+/// browser spaces a hidden page's timers to a second at least.
+const HIDDEN_RELAY_PERIOD_MS: i32 = 1000;
+
 /// The ownership token under the `web ` prefix the asynchronous Clipboard API
 /// demands. The async publish writes it beside the payload so the whole-clipboard
 /// `write` never removes the token the copy event established (`UI-THREAD-023`).

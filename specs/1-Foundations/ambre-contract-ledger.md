@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3567 rows: 2936 shipped, of which 2 loose. 631 unbuilt.**
+**3570 rows: 2942 shipped, of which 2 loose. 628 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 844 | 418 | 816 | 609 | 247 | 2934 |
+| `verified` | 845 | 418 | 816 | 609 | 252 | 2940 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 193 | 55 | 29 | 109 | 245 | 631 |
+| `unimplemented` | 193 | 55 | 29 | 109 | 242 | 628 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -51,7 +51,7 @@
 | `ambre-spec-drawing-surface.md` | 16 | 12 | 12 |  | 4 |
 | `ambre-spec-find.md` | 15 | 10 | 10 |  | 5 |
 | `ambre-spec-fixtures.md` | 36 | 36 | 36 |  |  |
-| `ambre-spec-frame.md` | 19 | 18 | 17 | 1 | 1 |
+| `ambre-spec-frame.md` | 20 | 19 | 18 | 1 | 1 |
 | `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-key-rotation.md` | 29 | 28 | 28 |  | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 18 |  |  |
@@ -169,6 +169,7 @@
 | `ambre-spec-murmure-mentions.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-murmure-message-list.md` | 31 | 1 | 1 |  | 30 |
 | `ambre-spec-murmure-messages.md` | 22 | 22 | 22 |  |  |
+| `ambre-spec-murmure-notifications.md` | 17 | 5 | 5 |  | 12 |
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
 | `ambre-spec-murmure-search.md` | 17 | 5 | 5 |  | 12 |
 | `ambre-spec-murmure-segments.md` | 26 | 26 | 26 |  |  |
@@ -198,7 +199,7 @@
 | `ambre-spec-drawing-surface.md` | CANVAS-002,025..030,055..056,061..066,074 |
 | `ambre-spec-find.md` | FIND-001..015 |
 | `ambre-spec-fixtures.md` | FIXTURE-001..036 |
-| `ambre-spec-frame.md` | CANVAS-001,003..005,008..016,057..060,070,072 |
+| `ambre-spec-frame.md` | CANVAS-001,003..005,008..016,057..060,070,072,075 |
 | `ambre-spec-high-density.md` | CANVAS-031..035,043..046,071 |
 | `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..143,168 |
 | `ambre-spec-key-verification.md` | CHROME-046..055,071..078 |
@@ -228,7 +229,7 @@
 | `ambre-spec-murmure-message-list.md` | MURMURE-182..192,205..209,218..221,417..427 |
 | `ambre-spec-murmure-messages.md` | MURMURE-078..090,223..228,253,255..256 |
 | `ambre-spec-murmure-moderation.md` | MURMURE-299..300,305..312 |
-| `ambre-spec-murmure-notifications.md` | MURMURE-142..146,265..274 |
+| `ambre-spec-murmure-notifications.md` | MURMURE-142..146,265..274,493..494 |
 | `ambre-spec-murmure-pins.md` | MURMURE-338..347 |
 | `ambre-spec-murmure-reactions.md` | MURMURE-091..097 |
 | `ambre-spec-murmure-schema.md` | MURMURE-001..020,157,437 |

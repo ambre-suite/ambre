@@ -206,7 +206,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` The message list and the composer | MVP | the virtualized message list, and a composer built on the Prose editor, with the `@` panel of the channel's members and `@channel` first. The channel selected in the sidebar shows there (`MURMURE-166`) |
 | `[ ]` The keyboard in a conversation | MVP | the jump to the first unread message, the up arrow that edits the last own message, and a mark-all-read that keeps the draft. Done when `MURMURE-175`, `MURMURE-178`, `MURMURE-179` and `MURMURE-181` read `verified` |
 | `[x]` The third member notice | MVP | a third member invited into a direct message of two is announced to both members by a notice in the channel, written before the invite is posted. The notice is a message kind the schema does not hold yet, drawn by the message list. Done when `MURMURE-057` reads `verified` |
-| `[ ]` Notifications in an open tab | MVP | a system notification for a mention or a direct message while a tab is open |
+| `[x]` Notifications in an open tab | MVP | a system notification for a mention or a direct message while a tab is open, raised from the sealed summaries, never for the channel on screen. A hidden tab runs the relay on a timer. Done when `MURMURE-142` to `MURMURE-146` and `CANVAS-075` read `verified` |
+| `[ ]` The activity of a channel never opened | MVP | a channel of the user that no session opened yet sends no news: Logic counts only a channel it holds or once held. Watch the live segment of every channel the relay's listing names, from the summaries alone, so its first message marks the sidebar and notifies. Done when `MURMURE-494` reads `verified` |
 | `[x]` Search in loaded segments | MVP | local search over the active segment and the final segments already fetched. The jump to a result lands with the message list. Done when `MURMURE-147`, `MURMURE-148`, `MURMURE-149` and `MURMURE-151` read `verified` |
 | `[x]` A search fold for every script | MVP | the search folds the diacritics of Greek, Vietnamese and every script the client draws, past the Latin table, within the Main instance budget. Done when `MURMURE-478` reads `verified` |
 | `[ ]` Attachments | MVP | files and images attached to a message through the shared media flow |
@@ -218,6 +219,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Presence settings | V1 | turning off the presence and typing indicators, kept in the user settings |
 | `[ ]` Presence states | V1 | away after an idle delay and busy set by the member, each with its own mark in the member list, and a status that follows the member to every device. Done when `MURMURE-447`, `MURMURE-456` to `MURMURE-458` and `MURMURE-459` read `verified` |
 | `[ ]` Push notifications | V1 | a notification with every tab closed, a level per channel, and mentions routed by the relay |
+| `[ ]` Wake a hidden tab from the worker | V1 | a browser may slow the timers of a tab hidden for minutes, so its relay runs late and a notification lags. A message from a worker wakes the page as soon as an event waits, in place of the one-second timer of `CANVAS-075` |
 | `[ ]` Mute and hide | V1 | a channel muted or hidden, kept in the user settings |
 | `[ ]` The personal sidebar | V1 | personal groups and order of channels, and bookmarks, kept in the user settings |
 | `[ ]` Followed threads | V1 | one view of every followed thread with unread replies |

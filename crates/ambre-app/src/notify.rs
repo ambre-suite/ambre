@@ -1,0 +1,111 @@
+//! The system notifications of an open tab (the Murmure notifications spec).
+//!
+//! The Murmure view decides which message notifies, and this module raises
+//! it. A permission the browser refuses raises nothing, and the badges of
+//! the sidebar stay as they are.
+
+use std::cell::Cell;
+use std::rc::Rc;
+
+use ambre_core::ChannelId;
+use ambre_murmure::chrome::Notice;
+use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
+use web_sys::{Notification, NotificationOptions, NotificationPermission};
+
+/// What the page does with a notice, given the browser's permission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Act {
+    /// Raise it.
+    Raise,
+    /// Ask for the permission, then raise it if granted.
+    Ask,
+    /// Raise nothing.
+    Nothing,
+}
+
+/// The act a permission calls for. The page asks once: a question left
+/// unanswered is not asked again.
+pub(crate) fn act(permission: NotificationPermission, asked: bool) -> Act {
+    match permission {
+        NotificationPermission::Granted => Act::Raise,
+        NotificationPermission::Default if !asked => Act::Ask,
+        _ => Act::Nothing,
+    }
+}
+
+/// Raise `notice`, asking for the permission first when none was given.
+/// A click on it calls `open` with its channel. A browser with no
+/// notifications raises nothing.
+pub(crate) fn deliver(notice: Notice, asked: &Rc<Cell<bool>>, open: Rc<dyn Fn(ChannelId)>) {
+    if !has_notifications() {
+        return;
+    }
+    match act(Notification::permission(), asked.get()) {
+        Act::Raise => raise(&notice, open),
+        Act::Nothing => {}
+        Act::Ask => {
+            asked.set(true);
+            let Ok(question) = Notification::request_permission() else {
+                return;
+            };
+            wasm_bindgen_futures::spawn_local(async move {
+                let _ = wasm_bindgen_futures::JsFuture::from(question).await;
+                if Notification::permission() == NotificationPermission::Granted {
+                    raise(&notice, open);
+                }
+            });
+        }
+    }
+}
+
+/// Whether the page is on screen. A hidden page shows no channel to read.
+pub(crate) fn page_visible() -> bool {
+    web_sys::window()
+        .and_then(|window| window.document())
+        .is_some_and(|document| !document.hidden())
+}
+
+/// Whether the page offers the notification API at all.
+fn has_notifications() -> bool {
+    web_sys::window().is_some_and(|window| {
+        js_sys::Reflect::has(&window, &JsValue::from_str("Notification")).unwrap_or(false)
+    })
+}
+
+/// Show one notification. Its tag is the channel, so a second message of
+/// the same channel replaces the first rather than stacking.
+fn raise(notice: &Notice, open: Rc<dyn Fn(ChannelId)>) {
+    let options = NotificationOptions::new();
+    options.set_tag(&notice.channel_id.to_string());
+    let Ok(shown) = Notification::new_with_options(&notice.title, &options) else {
+        tracing::warn!("Notification refused by the browser");
+        return;
+    };
+    let channel_id = notice.channel_id;
+    let target = shown.clone();
+    let click = Closure::once_into_js(move || {
+        open(channel_id);
+        if let Some(window) = web_sys::window() {
+            let _ = window.focus();
+        }
+        target.close();
+    });
+    shown.set_onclick(Some(click.unchecked_ref()));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// A granted permission raises, and a refused one raises nothing (the
+    /// Murmure notifications spec). An unanswered one is asked once.
+    #[wasm_bindgen_test]
+    fn a_refused_permission_raises_nothing_and_an_open_one_is_asked_once() {
+        assert_eq!(act(NotificationPermission::Granted, true), Act::Raise);
+        assert_eq!(act(NotificationPermission::Denied, false), Act::Nothing);
+        assert_eq!(act(NotificationPermission::Default, false), Act::Ask);
+        assert_eq!(act(NotificationPermission::Default, true), Act::Nothing);
+    }
+}

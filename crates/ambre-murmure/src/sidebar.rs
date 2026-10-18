@@ -222,6 +222,13 @@ impl Sidebar {
         self.members.iter().any(|m| m.channel_id == channel)
     }
 
+    /// Whether a channel of the user is a direct message.
+    pub fn is_direct(&self, channel: ChannelId) -> bool {
+        self.members
+            .iter()
+            .any(|m| m.channel_id == channel && m.place == ChannelPlace::Direct)
+    }
+
     /// The name the sidebar shows for a channel, if it knows one. That is
     /// what its meta read once open, else the relay's hint, else its
     /// catalogue entry. A channel whose meta reads no name drops its hint.

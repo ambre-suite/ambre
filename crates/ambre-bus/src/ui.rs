@@ -110,6 +110,15 @@ pub enum UiEvent {
     /// mark the view last drew for it.
     ChannelActivity { channels: Vec<ChannelActivity> },
 
+    /// Another member wrote a message in a channel, as its sealed summary
+    /// says (the Murmure notifications spec). `mention` holds when the
+    /// summary names this user or the channel. The view decides whether it
+    /// notifies: it alone knows the direct messages and what is on screen.
+    NewMessage {
+        channel_id: ChannelId,
+        mention: bool,
+    },
+
     /// Every channel and every space this user is a member of, whole. It
     /// comes at start, and again each time the relay adds the user to one.
     /// None of them is open. `names` holds the name each named channel shows

@@ -166,6 +166,10 @@ web-sys = { version = "0.3.85", features = [
     # a larger dependency graph unified the feature in, so a crate tested alone
     # lost the method. Declared here, it is no longer an accident.
     "NodeList",
+    # The system notifications of an open tab (the Murmure notifications spec).
+    "Notification",
+    "NotificationOptions",
+    "NotificationPermission",
     "Location",
     "MediaQueryList",
     "MediaQueryListEvent",
