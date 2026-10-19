@@ -319,4 +319,8 @@ who writes its key into the catalogue.
 
 * **The invite list offers current members too.** The view holds no member list of a private
   channel or a direct message. The Logic thread refuses an invite of a listed member
-  (`MURMURE-500`). The `The members of a channel` Story (`ambre-roadmap.md` E5) would leave them out.
+  (`MURMURE-500`). They leave the list with this Story:
+  the `The invite list without the channel's members` Story (`ambre-roadmap.md` E5).
+* **No rule holds a private channel to its space.** The relay takes an invitee by id from any
+  account with keys. One outside the space is refused with this Story:
+  the `A private channel admits the members of its space` Story (`ambre-roadmap.md` E5).
