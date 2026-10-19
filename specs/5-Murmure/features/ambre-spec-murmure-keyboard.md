@@ -93,6 +93,7 @@ Page Up. It acts on the list or the composer that holds the focus, which the she
 | edit the last own message | Up, in an empty composer | the composer |
 | mark the channel read | Escape, in the message list | the message list |
 | close the thread | Escape, in the message list of a thread | the thread's list |
+| send the next reply to the channel too | Alt+Enter, in the composer of a thread (`MURMURE-534`) | the thread's composer |
 | mark everything read | Alt+Shift+A | anywhere in Murmure |
 
 ```rust

@@ -61,6 +61,12 @@ pub(crate) const ALSO_PX: f32 = FONT_UI + SPACE_8;
 /// The side of the box.
 const BOX_PX: f32 = FONT_UI;
 
+/// What a screen reader hears when a key turns the box (`MURMURE-535`).
+pub fn also_said(checked: bool) -> String {
+    let state = if checked { "checked" } else { "unchecked" };
+    format!("{ALSO_IN_CHANNEL}, {state}")
+}
+
 /// The line that names the members typing, `None` when nobody types. Past
 /// two names it counts no one, so the line stays one short line.
 pub fn typing_line(names: &[String]) -> Option<String> {
@@ -515,7 +521,8 @@ impl Composer {
     }
 
     /// A key while the composer holds the focus. Enter sends and Shift+Enter
-    /// breaks the line (`MURMURE-199`, `MURMURE-200`). `Ctrl+Z` undoes, and
+    /// breaks the line (`MURMURE-199`, `MURMURE-200`). Alt+Enter in a thread
+    /// checks the box or unchecks it (`MURMURE-534`). `Ctrl+Z` undoes, and
     /// `Ctrl+Shift+Z` or `Ctrl+Y` redoes (`MURMURE-433`). Escape cancels an
     /// edit (`MURMURE-204`), and otherwise gives the keys back to the list.
     /// Answers whether the composer took the key.
@@ -526,6 +533,10 @@ impl Composer {
         let word = ctrl || alt;
         let intent = match key {
             "Enter" if shift => EditIntent::Newline,
+            "Enter" if alt && matches!(of, DraftOf::Thread(..)) => {
+                self.toggle_also(of);
+                return true;
+            }
             "Enter" => {
                 self.send = Some(of);
                 return true;

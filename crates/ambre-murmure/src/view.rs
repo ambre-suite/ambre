@@ -28,7 +28,7 @@ use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 use crate::commands::{
     EDIT, FromThread, MessageAction, MessageTarget, PendingEdit, message_action,
 };
-use crate::composer::{Composer, DraftOf, EDITING_LINE, typing_line};
+use crate::composer::{Composer, DraftOf, EDITING_LINE, also_said, typing_line};
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 use crate::select::Selecting;
@@ -1266,6 +1266,12 @@ impl MurmureView {
                 }
                 if !self.composer.key(channel, key, shift, ctrl, alt) {
                     return None;
+                }
+                // The box is drawn, so its turn by Alt+Enter is said
+                // (`MURMURE-535`).
+                if key == "Enter" && alt && !shift && matches!(channel, DraftOf::Thread(..)) {
+                    let checked = self.composer.also_in_channel(channel);
+                    (self.reads.announce)(&also_said(checked));
                 }
             }
             _ => return None,
@@ -3496,6 +3502,63 @@ mod tests {
             assert_eq!(page.view.touch_up(20.0), None, "the tap is taken");
             assert_eq!(page.view.composer().also_in_channel(of), checked);
         }
+    }
+
+    fn alt_enter(page: &mut Page) -> bool {
+        let ev = InputEvent::Key {
+            key: "Enter".to_owned(),
+            ctrl: false,
+            alt: true,
+            shift: false,
+            meta: false,
+        };
+        page.view.handle_input(&ev)
+    }
+
+    /// Alt+Enter in a thread's composer checks the box and sends nothing.
+    /// A second one unchecks it (`MURMURE-534`).
+    #[test]
+    fn alt_enter_turns_the_box() {
+        let channel = ChannelId::new();
+        let (mut page, _channel_view, root, _) = threaded(channel);
+        let of = DraftOf::Thread(channel, root);
+        assert!(press_composer(&mut page));
+        type_slowly(&mut page, "ok");
+        assert!(alt_enter(&mut page));
+        frame_with_fonts(&mut page.view);
+        assert!(page.view.composer().also_in_channel(of));
+        assert!(copies(&page).is_empty(), "nothing sent");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(copies(&page), [true]);
+        assert!(alt_enter(&mut page));
+        assert!(alt_enter(&mut page));
+        assert!(!page.view.composer().also_in_channel(of), "unchecked");
+    }
+
+    /// Alt+Enter in a channel's composer sends, as Enter does, since a
+    /// channel's draft has no box (`MURMURE-534`).
+    #[test]
+    fn alt_enter_in_a_channel_sends() {
+        let mut page = composing(ChannelId::new());
+        assert!(press_composer(&mut page));
+        type_text(&mut page, "hi");
+        assert!(alt_enter(&mut page));
+        frame_with_fonts(&mut page.view);
+        assert_eq!(sent(&page).len(), 1);
+    }
+
+    /// Each turn of the box by a key is said with its state, since the box
+    /// is drawn on the canvas (`MURMURE-535`).
+    #[test]
+    fn a_turn_of_the_box_by_a_key_is_said() {
+        let channel = ChannelId::new();
+        let (mut page, _channel_view, _root, _) = threaded(channel);
+        assert!(press_composer(&mut page));
+        page.said.borrow_mut().clear();
+        alt_enter(&mut page);
+        alt_enter(&mut page);
+        assert_eq!(*page.said.borrow(), [also_said(true), also_said(false)]);
     }
 
     /// The reply action on a reply also sent to the channel opens its
