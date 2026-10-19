@@ -67,7 +67,7 @@ mod web_embed;
 pub use ambre_murmure::view::{MurmureView, THREAD_CANVAS};
 pub(crate) use frame::send_faces;
 pub use frame::{FrameHost, MakeChild};
-pub use murmure::page_reads;
+pub use murmure::{DraftKeeper, page_reads};
 pub use prose::{ProseSignals, ProseView};
 
 /// Where a finger is in its gesture.

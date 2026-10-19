@@ -10,6 +10,7 @@ use ambre_bus::{
 use ambre_canvas::{TextInput, ThemeControl};
 
 use crate::MurmurePane;
+use crate::drafts::DraftShelf;
 use crate::view::{MurmureView, PageReads};
 
 /// The Logic thread's word that `watching` watch `channel_id`, and no one
@@ -50,6 +51,7 @@ pub fn channel_of(texts: &[&str], size: (f64, f64)) -> (MurmureView, Sender<UiEv
         take_press: Rc::new(|_| None),
         take_returned: Rc::new(|_| None),
         open_link: Rc::new(|_| {}),
+        drafts: DraftShelf::default(),
     };
     let (events, from_logic) = local(8);
     let view = MurmureView::new(Some(from_logic), None, reads, size, ThemeControl::default());

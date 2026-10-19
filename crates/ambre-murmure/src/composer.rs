@@ -36,6 +36,7 @@ use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, 
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::PendingEdit;
+use crate::drafts::{DraftShelf, Loss};
 use crate::look;
 use crate::markers::{self, MarkBar};
 use crate::mention_list::{MentionList, Offer, offers, query_at};
@@ -443,6 +444,11 @@ pub struct Composer {
     saying: Option<(DraftOf, Say)>,
     /// What the last paint said, until the view takes it.
     said: Option<String>,
+    /// The drafts sent since the shelf last read the composer, whose rows
+    /// go (`MURMURE-212`).
+    sent: Vec<DraftOf>,
+    /// How many losses of the shelf the composer applied.
+    losses_seen: usize,
 }
 
 impl Composer {
@@ -584,6 +590,13 @@ impl Composer {
         if !self.blank(of) {
             return false;
         }
+        self.load(of, draft, also_in_channel);
+        self.focused = true;
+        true
+    }
+
+    /// Hold `draft` as the draft `of`, the caret at its end.
+    fn load(&mut self, of: DraftOf, draft: MessageDraft, also_in_channel: bool) {
         let editor = TextEditor::new(&draft.text, body_style(Color::BLACK));
         self.drafts.insert(of, editor);
         let history = History {
@@ -600,8 +613,60 @@ impl Composer {
         if also_in_channel && matches!(of, DraftOf::Thread(..)) {
             self.also.insert(of);
         }
-        self.focused = true;
-        true
+    }
+
+    /// Read the shelf before a paint of the draft `shown`: drop what the
+    /// shelf lost since the last read, and take the draft it keeps `shown`
+    /// into a blank composer, the keys left where they are (`MURMURE-210`).
+    pub fn unshelve(&mut self, shown: Option<DraftOf>, shelf: &DraftShelf) {
+        let (losses, seen) = shelf.losses_since(self.losses_seen);
+        self.losses_seen = seen;
+        for loss in losses {
+            let lost = |of: &DraftOf| match loss {
+                Loss::Channel(channel) => of.channel() == channel,
+                Loss::All => true,
+            };
+            self.drafts.retain(|of, _| !lost(of));
+            self.histories.retain(|of, _| !lost(of));
+            self.editing.retain(|of, _| !lost(of));
+            self.marks.retain(|of, _| !lost(of));
+            self.also.retain(|of| !lost(of));
+            self.sent.retain(|of| !lost(of));
+        }
+        if let Some(of) = shown
+            && self.blank(of)
+            && let Some(draft) = shelf.get(of)
+        {
+            self.load(of, draft, false);
+        }
+    }
+
+    /// Hand the shelf the drafts after a paint: each one held, the one an
+    /// edit put aside in place of the edit, and the ones sent, which go
+    /// (`MURMURE-212`). A draft this composer never held stays as the shelf
+    /// keeps it, so another region's is safe.
+    pub fn shelve(&mut self, shelf: &DraftShelf) {
+        for of in std::mem::take(&mut self.sent) {
+            if !self.drafts.contains_key(&of) {
+                shelf.put(of, None);
+            }
+        }
+        for (of, editor) in &self.drafts {
+            let kept = match self.editing.get(of) {
+                Some(open) => open
+                    .kept
+                    .as_ref()
+                    .map(|(editor, _, marks)| (editor.text(), marks.clone().unwrap_or_default())),
+                None => Some((
+                    editor.text(),
+                    self.marks.get(of).cloned().unwrap_or_default(),
+                )),
+            };
+            let draft = kept
+                .filter(|(text, _)| !text.is_empty())
+                .map(|(text, mut marks)| marks.draft(text));
+            shelf.put(*of, draft);
+        }
     }
 
     /// Whether the composer `of` a channel or a thread holds an edit.
@@ -1182,6 +1247,7 @@ impl Composer {
                 // message sent (`MURMURE-434`).
                 self.histories.remove(&asked);
                 self.marks.remove(&asked);
+                self.sent.push(asked);
                 // The box unchecks once the reply leaves (`MURMURE-531`).
                 sent = Some(Sent::Message {
                     to: asked,

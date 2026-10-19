@@ -1000,8 +1000,11 @@ pub fn main() {
     let persist_store: Rc<RefCell<Option<local_store::LocalStore>>> = Rc::new(RefCell::new(None));
     // Set when the store will never open, so the writes waiting for it go.
     let persist_gone = Rc::new(std::cell::Cell::new(false));
+    // The drafts the composer keeps go to the same store (`MURMURE-210`).
+    let draft_keeper = host::DraftKeeper::new(murmure_relay.drafts());
     {
         let store_slot = Rc::clone(&persist_store);
+        let keeper = draft_keeper.clone();
         let gone = Rc::clone(&persist_gone);
         let restore_tx = ui_to_logic_tx.clone();
         let full_tx = ui_to_logic_tx.clone();
@@ -1051,6 +1054,7 @@ pub fn main() {
                     });
                 }
             }
+            keeper.store_opened(store.clone());
             *store_slot.borrow_mut() = Some(local_store::LocalStore::open(store, full_tx).await);
         });
     }
@@ -1377,6 +1381,7 @@ pub fn main() {
                 } => {
                     username.set(Some(display_name.clone()));
                     me.set(Some(*user_id));
+                    draft_keeper.signed_in(*user_id);
                     if !list_requested {
                         list_requested = true;
                         let _ = relay_tx.try_send(LogicCommand::Rest {

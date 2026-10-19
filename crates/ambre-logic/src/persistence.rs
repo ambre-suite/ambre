@@ -62,7 +62,8 @@ const DB_NAME: &str = "ambre-persistence";
 // v3 adds the `deltas` store, created the same guarded way.
 // v4 adds the `sessions` store, created the same guarded way.
 // v5 adds the `meta` store, created the same guarded way.
-const DB_VERSION: u32 = 5;
+// v6 adds the `drafts` store, created the same guarded way.
+const DB_VERSION: u32 = 6;
 const STORE_SNAPSHOTS: &str = "snapshots";
 /// The deltas written since each document's snapshot, keyed
 /// `"{document hex}:{unique suffix}"`. A Loro import does not depend on the
@@ -79,6 +80,11 @@ const STORE_TRUSTED_KEYS: &str = "trusted_keys";
 /// What the store's ledger knows of each document it holds, keyed by the
 /// document hex: one [`Meta`] row, read back at boot (`RESID-008`).
 const STORE_META: &str = "meta";
+/// The drafts the user has not sent, one text row per channel or thread,
+/// under a key the composer builds from the user (the Murmure composer
+/// spec, section 3). No document row names them, so no eviction reaches them
+/// (`MURMURE-214`).
+const STORE_DRAFTS: &str = "drafts";
 
 /// How one write ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -153,6 +159,9 @@ impl PersistenceStore {
                 }
                 if !existing.contains(STORE_META) {
                     let _ = db.create_object_store(STORE_META);
+                }
+                if !existing.contains(STORE_DRAFTS) {
+                    let _ = db.create_object_store(STORE_DRAFTS);
                 }
             }
         });
@@ -731,6 +740,119 @@ impl PersistenceStore {
             }
         }
     }
+
+    /// Keep a draft's `row` under `key`, in place of the row there
+    /// (fire-and-forget). A lost write leaves the draft as it was at the
+    /// write before.
+    pub fn save_draft(&self, key: &str, row: &str) {
+        if let Some(store) = self.drafts_store()
+            && let Err(e) = store.put_with_key(&JsValue::from_str(row), &JsValue::from_str(key))
+        {
+            tracing::warn!("Persistence: draft put failed: {e:?}");
+        }
+    }
+
+    /// Delete the draft under `key` (fire-and-forget).
+    pub fn delete_draft(&self, key: &str) {
+        if let Some(store) = self.drafts_store()
+            && let Err(e) = store.delete(&JsValue::from_str(key))
+        {
+            tracing::warn!("Persistence: draft delete failed: {e:?}");
+        }
+    }
+
+    /// Delete every draft whose key falls in `lower..=upper`
+    /// (fire-and-forget).
+    pub fn delete_drafts(&self, lower: &str, upper: &str) {
+        let range =
+            web_sys::IdbKeyRange::bound(&JsValue::from_str(lower), &JsValue::from_str(upper));
+        if let (Some(store), Ok(range)) = (self.drafts_store(), range)
+            && let Err(e) = store.delete(&range)
+        {
+            tracing::warn!("Persistence: drafts delete failed: {e:?}");
+        }
+    }
+
+    /// Delete every draft on the device (fire-and-forget).
+    pub fn clear_drafts(&self) {
+        if let Some(store) = self.drafts_store()
+            && let Err(e) = store.clear()
+        {
+            tracing::warn!("Persistence: drafts clear failed: {e:?}");
+        }
+    }
+
+    /// The `drafts` store in a fresh read-write transaction.
+    fn drafts_store(&self) -> Option<web_sys::IdbObjectStore> {
+        match self
+            .db
+            .transaction_with_str_and_mode(STORE_DRAFTS, IdbTransactionMode::Readwrite)
+            .and_then(|txn| txn.object_store(STORE_DRAFTS))
+        {
+            Ok(store) => Some(store),
+            Err(e) => {
+                tracing::warn!("Persistence: drafts txn failed: {e:?}");
+                None
+            }
+        }
+    }
+
+    /// Load every draft whose key falls in `lower..=upper`, as its key and
+    /// its row. Resolves to an empty list when the read failed; a row that is
+    /// not text is skipped.
+    pub fn load_drafts(
+        &self,
+        lower: &str,
+        upper: &str,
+    ) -> oneshot::Receiver<Vec<(String, String)>> {
+        let (tx, rx) = answer();
+        let range =
+            web_sys::IdbKeyRange::bound(&JsValue::from_str(lower), &JsValue::from_str(upper));
+        let Ok(txn) = self.db.transaction_with_str(STORE_DRAFTS) else {
+            tx.send(Vec::new());
+            return rx;
+        };
+        let requests = txn.object_store(STORE_DRAFTS).and_then(|store| {
+            let range = range?;
+            Ok((
+                store.get_all_keys_with_key(&range)?,
+                store.get_all_with_key(&range)?,
+            ))
+        });
+        let Ok((keys, rows)) = requests else {
+            tx.send(Vec::new());
+            return rx;
+        };
+        // Both requests list the rows in key order, so the transaction's
+        // `complete` pairs them.
+        let tx_ok = tx.clone();
+        let on_complete =
+            Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
+                let as_array = |r: &web_sys::IdbRequest| {
+                    r.result()
+                        .ok()
+                        .and_then(|v| v.dyn_into::<js_sys::Array>().ok())
+                };
+                let (Some(keys), Some(rows)) = (as_array(&keys), as_array(&rows)) else {
+                    tx_ok.send(Vec::new());
+                    return;
+                };
+                let drafts = keys
+                    .iter()
+                    .zip(rows.iter())
+                    .filter_map(|(key, row)| Some((key.as_string()?, row.as_string()?)))
+                    .collect();
+                tx_ok.send(drafts);
+            });
+        txn.set_oncomplete(Some(on_complete.as_ref().unchecked_ref()));
+        on_complete.forget();
+        let on_abort = Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
+            tx.send(Vec::new());
+        });
+        txn.set_onabort(Some(on_abort.as_ref().unchecked_ref()));
+        on_abort.forget();
+        rx
+    }
 }
 
 /// How a write transaction ends: `complete`, or an `abort` that names the
@@ -1011,6 +1133,50 @@ mod wasm_tests {
         store.delete_snapshot(doc);
         assert!(store.load_deltas(doc).await.unwrap().is_empty());
         assert_eq!(store.load_snapshot(doc).await.unwrap(), None);
+    }
+
+    /// `MURMURE-214`: the eviction of a document leaves every draft, even one
+    /// whose key starts with the document's. A range takes its own rows
+    /// alone, and a clear takes them all.
+    #[wasm_bindgen_test]
+    async fn drafts_outlive_an_eviction() {
+        let name = "ambre-test-drafts";
+        delete_db(name).await;
+        let store = PersistenceStore::open_named(name)
+            .await
+            .expect("channel")
+            .expect("store opens");
+        let doc = [8u8; 16];
+        let hex = id_to_hex(&doc);
+        let (mine, theirs) = (format!("{hex}:a"), "z/b".to_owned());
+        assert_eq!(store.save_snapshot(doc, &[1]).await, Ok(Stored::Done));
+        store.save_delta(doc, &[2]);
+        store.save_draft(&mine, "one");
+        store.save_draft(&theirs, "two");
+        store.delete_snapshot(doc);
+        let every = || store.load_drafts("", "\u{10FFFF}");
+        let rows = every().await.unwrap();
+        assert_eq!(
+            rows,
+            [
+                (mine.clone(), "one".to_owned()),
+                (theirs.clone(), "two".to_owned())
+            ]
+        );
+
+        store.save_draft(&mine, "one again");
+        store.delete_drafts("z/", "z/\u{10FFFF}");
+        assert_eq!(
+            every().await.unwrap(),
+            [(mine.clone(), "one again".to_owned())]
+        );
+        store.delete_draft(&mine);
+        assert!(every().await.unwrap().is_empty());
+
+        store.save_draft(&mine, "one");
+        store.save_draft(&theirs, "two");
+        store.clear_drafts();
+        assert!(every().await.unwrap().is_empty());
     }
 
     /// `RESID-008`: the ledger rows come back at boot, each with its

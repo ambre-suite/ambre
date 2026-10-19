@@ -88,6 +88,59 @@ fn a_channel_lost_while_open_leaves_the_sidebar_and_the_pane() {
     );
 }
 
+/// The drafts of a channel lost go with it, those of a channel that only
+/// failed to open stay, and a sign-out takes every one (`MURMURE-215`,
+/// `MURMURE-216`, `MURMURE-217`).
+#[wasm_bindgen_test]
+fn a_lost_channel_and_a_sign_out_take_their_drafts() {
+    use ambre_murmure::composer::DraftOf;
+    let (_owner, relay, direct) = shown_direct();
+    let (failed, left, deleted) = (ChannelId::new(), ChannelId::new(), ChannelId::new());
+    let shelf = relay.drafts();
+    shelf.load(UserId::new(), Vec::new());
+    let draft = MessageDraft {
+        text: "kept".to_owned(),
+        mentions: Vec::new(),
+        styles: Vec::new(),
+    };
+    for channel in [direct, failed, left, deleted] {
+        shelf.put(DraftOf::Channel(channel), Some(draft.clone()));
+    }
+    let thread_of = DraftOf::Thread(left, MessageId::new());
+    shelf.put(thread_of, Some(draft.clone()));
+    relay.absorb(&UiEvent::Channel {
+        channel_id: direct,
+        event: MurmureEvent::Left,
+    });
+    relay.absorb(&UiEvent::Channel {
+        channel_id: failed,
+        event: MurmureEvent::OpenFailed {
+            message: "unreachable".to_owned(),
+        },
+    });
+    relay.absorb(&UiEvent::Space {
+        space_id: SpaceId::new(),
+        event: SpaceEvent::ChannelLeft { channel_id: left },
+    });
+    relay.absorb(&UiEvent::Space {
+        space_id: SpaceId::new(),
+        event: SpaceEvent::ChannelDeleted {
+            channel_id: deleted,
+        },
+    });
+    assert_eq!(shelf.get(DraftOf::Channel(direct)), None);
+    assert_eq!(shelf.get(DraftOf::Channel(left)), None);
+    assert_eq!(shelf.get(DraftOf::Channel(deleted)), None);
+    assert_eq!(shelf.get(thread_of), None, "a thread goes with its channel");
+    assert_eq!(shelf.get(DraftOf::Channel(failed)), Some(draft));
+
+    relay.absorb(&UiEvent::Rest {
+        id: RequestId::next(),
+        evt: RestEvent::LoggedOut,
+    });
+    assert_eq!(shelf.get(DraftOf::Channel(failed)), None);
+}
+
 /// The root a reply on a copy sought opens its thread in the channel shown,
 /// and moves no pane once the user went elsewhere (`MURMURE-545`).
 #[wasm_bindgen_test]

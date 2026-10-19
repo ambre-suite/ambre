@@ -27,9 +27,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-525` | `INV` | A draft MUST be kept per thread, apart from the draft of its channel. | this spec section 3; `MURMURE-195` | `ambre_murmure::view::tests::a_thread_keeps_its_own_draft_apart_from_the_channels` -- the thread's draft is not the channel's, and another thread opens on an empty one | none | verified |
 | `MURMURE-530` | `INV` | A thread's draft MUST survive the thread closing and opening again. | this spec section 3; `MURMURE-525` | `ambre_murmure::view::tests::a_threads_draft_survives_the_thread_closing` -- the region dropped and built again shows the draft, and the field does not take the keys | none | verified |
 | `MURMURE-196` | `OBS` | The composer MUST show no permanent formatting toolbar. | this spec section 3 | `ambre_murmure::view::tests::the_band_holds_a_field_and_no_toolbar` -- the band paints its fill, the field and its outline, and no other shape, under a list cut to the band's top | none | verified |
-| `MURMURE-210` | `INV` | A draft MUST survive a reload of the page. | this spec section 3; `ambre-spec-launcher.md` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-211` | `INV` | A draft MUST NOT leave the device before it is sent. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-214` | `INV` | Eviction from the local store MUST NOT drop a draft. | this spec section 3; `RESID-009` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-210` | `INV` | A draft MUST survive a reload of the page. | this spec section 3; `ambre-spec-launcher.md` | `ambre_murmure::view::tests::a_draft_comes_back_after_a_reload` -- a page typed into, then a page built over the same rows, shows the draft with its marks and takes no focus; `ambre_murmure::drafts::tests::a_reload_reads_back_the_users_rows`; `::a_row_keeps_the_draft_whole` | none | verified |
+| `MURMURE-211` | `INV` | A draft MUST NOT leave the device before it is sent. | this spec section 3; `ZK-007` | `ambre_murmure::view::tests::a_draft_comes_back_after_a_reload` -- no command the page sends while the draft is typed carries its text | none | verified |
+| `MURMURE-214` | `INV` | Eviction from the local store MUST NOT drop a draft. | this spec section 3; `RESID-009` | `ambre_logic::persistence::wasm_tests::drafts_outlive_an_eviction` -- wasm tier, a real browser database: drafts sit in a store of their own, which an eviction of documents leaves whole | none | verified |
 | `MURMURE-430` | `INV` | The composer MUST be canvas content, fed by the shared input pipe. | this spec section 3; `UI-THREAD-014`; `ambre-spec-text-input.md` | `ambre_murmure::view::tests::the_composer_takes_the_pipe_until_escape` -- a press in the band focuses the pipe, and its text and keys reach the draft, never the list, until Escape; `ambre_murmure::view::tests::paste_copy_and_cut_go_through_the_draft` -- a paste lands in the draft, and a copy or a cut reads its selection; `ambre_murmure::view::tests::a_tap_in_the_band_focuses_the_composer` -- a tap focuses the pipe, and a press in the list takes the focus back | none | verified |
 | `MURMURE-431` | `INV` | A formatting chord of the composer MUST take the chord Prose binds to the same mark, and put the mark on the selection or take it off. | this spec section 3; `UI-THREAD-019` | `ambre_murmure::markers::tests::a_chord_names_its_style` -- `b`, `i` and `e` name bold, italic and code; `::a_chord_puts_a_style_on_or_takes_it_off` -- a chord takes off a mark covering the whole selection; `ambre_murmure::view::tests::a_chord_puts_its_style_on_the_selection` -- the chord reaches the draft, and none changes an empty selection; `ambre_app::shell::murmure_regions::a_style_takes_the_chord_prose_binds_to_its_mark` -- each chord is the one Prose binds | none | verified |
 | `MURMURE-432` | `OBS` | A selection in the composer MUST show the Prose format bar, with the Murmure marks alone. | this spec section 3; `MURMURE-194`; `CHROME-105` | `ambre_murmure::view::tests::a_selection_shows_the_format_bar_and_a_press_toggles_its_style` -- a selection hands the bar over, a press on its own region's bar toggles the style, and the bar leaves with the selection; `ambre_murmure::markers::tests::a_control_shows_how_much_of_the_selection_its_style_covers` -- the pressed state of each control; `ambre_murmure::tests::chrome_relay::the_format_bar_shows_the_murmure_marks_and_a_press_toggles_one` -- the DOM belt, one region's press and close; `ambre_app::shell::murmure_regions::the_format_bar_shows_the_prose_controls_of_the_murmure_marks` -- each control is Prose's, in Prose's order | none | verified |
@@ -50,7 +50,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-199` | `POST` | Enter MUST send the draft as a message. | this spec section 3; `features/ambre-spec-murmure-messages.md` | `ambre_murmure::view::tests::enter_sends_the_draft_and_shift_enter_breaks_the_line` -- Enter sends the draft's text at the page's clock, and the draft is gone | none | verified |
 | `MURMURE-200` | `POST` | Shift+Enter MUST insert a line break. | this spec section 3 | `ambre_murmure::view::tests::enter_sends_the_draft_and_shift_enter_breaks_the_line` -- Shift+Enter puts a line break in the draft and sends nothing | none | verified |
 | `MURMURE-201` | `FAIL` | Given an empty draft, Enter MUST send nothing. | this spec section 3 | `ambre_murmure::view::tests::an_empty_or_blank_draft_sends_nothing` -- an empty draft, and one of white space alone, send nothing and stay | none | verified |
-| `MURMURE-212` | `POST` | Sending a message MUST delete its stored draft. | this spec section 3 | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-212` | `POST` | Sending a message MUST delete its stored draft. | this spec section 3 | `ambre_murmure::view::tests::a_sent_draft_leaves_the_store` -- Enter sends, and the row is gone; `ambre_murmure::drafts::tests::a_change_writes_its_row_and_a_send_deletes_it` | none | verified |
 | `MURMURE-202` | `FRAME` | Sending MUST NOT clear the draft of another channel. | this spec section 3 | `ambre_murmure::view::tests::each_channel_keeps_its_own_draft` -- a send in one channel leaves the draft of the other as it was, unsent | none | verified |
 | `MURMURE-523` | `POST` | Enter in the composer of a thread MUST send the draft as a reply to the thread's root. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::view::tests::enter_in_a_thread_sends_a_reply_to_its_root` -- the thread shows a composer, and Enter sends a reply to the root at the page's clock and posts nothing in the channel | none | verified |
 | `MURMURE-524` | `FRAME` | Sending a reply MUST NOT clear the draft of the channel. | this spec section 3; `MURMURE-202` | `ambre_murmure::view::tests::a_thread_keeps_its_own_draft_apart_from_the_channels` -- a reply sent leaves the channel's draft as it was | none | verified |
@@ -71,9 +71,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-215` | `POST` | Losing access to a channel MUST delete its stored draft. | this spec section 3; `SYNC-109` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-216` | `POST` | Signing out MUST delete every stored draft. | this spec section 3; `ambre-spec-session.md` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-217` | `FRAME` | Deleting the draft of one channel MUST NOT touch the draft of another. | this spec section 3 | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-215` | `POST` | Losing access to a channel MUST delete its stored draft. | this spec section 3; `SYNC-109` | `ambre_murmure::tests::chrome_relay::a_lost_channel_and_a_sign_out_take_their_drafts` -- a leave, and a channel left or deleted in its space, each take the draft of their channel and of its threads, and a failed open takes none; `ambre_murmure::view::tests::a_lost_channel_takes_its_draft_from_the_composer` -- a composer holding the draft writes nothing back | none | verified |
+| `MURMURE-216` | `POST` | Signing out MUST delete every stored draft. | this spec section 3; `ambre-spec-session.md` | `ambre_murmure::tests::chrome_relay::a_lost_channel_and_a_sign_out_take_their_drafts` -- a `LoggedOut` empties the shelf; `ambre_murmure::drafts::tests::a_sign_out_deletes_every_draft` | none | verified |
+| `MURMURE-217` | `FRAME` | Deleting the draft of one channel MUST NOT touch the draft of another. | this spec section 3 | `ambre_murmure::drafts::tests::a_lost_channel_takes_its_drafts_and_no_other` -- the drafts of the channel and its threads go, another channel's stay; `::a_users_range_holds_their_keys_alone`; `ambre_murmure::view::tests::a_lost_channel_takes_its_draft_from_the_composer` | none | verified |
 
 ### 1.6 Undo while writing
 
@@ -96,9 +96,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 37 `verified`, 8 `unimplemented`. The host tier drives the view with the events
+* **Verification.** 44 `verified`, 1 `unimplemented`. The host tier drives the view with the events
   the page sends: a press, a tap, text, keys, a paste. The marks are built, drawn in the field and
-  sent, and the format bar shows. The stored draft is not built.
+  sent, and the format bar shows. A stored draft is held by the host tier over a store in memory,
+  and its own store by the wasm tier in a real browser database.
 
 ---
 
@@ -116,7 +117,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 ## 3. MODEL
 
 **CRDT containers.** none while drafting: a draft is local text with its marks, never shared. It
-is kept in the local store the launcher owns, so a reload finds it (`MURMURE-210`).
+is kept in the local store the launcher owns, so a reload finds it (`MURMURE-210`). Each draft is
+a row of a store of its own, keyed by the user, the channel and the thread, so a reload reads the
+rows of its user alone, and a lost channel takes its rows by their prefix (`MURMURE-217`). The row
+is plain text on the device, as a document copy is, and never travels (`MURMURE-211`).
 
 **How long a draft lives.** A draft is work the user has not sent, so no delay removes it and no
 eviction drops it (`MURMURE-214`). It goes in three cases only.
@@ -232,4 +236,3 @@ changed text.
 
 * **An undo puts the caret at the end.** The history keeps the text of each step, not its caret.
   That waits for the `The caret after an undo` Story (`ambre-roadmap.md` E5).
-* **A draft lives in memory.** A reload loses it, until the `Drafts` Story (`ambre-roadmap.md` E5).

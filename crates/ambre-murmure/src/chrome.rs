@@ -16,6 +16,7 @@ use crate::commands::{
     PALETTE, PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, SEARCH, asked_all_title, key_list,
     message_action, message_actions,
 };
+use crate::drafts::DraftShelf;
 use crate::markers::{Cover, MarkBar};
 use crate::mention_list::MentionList;
 use crate::{
@@ -377,6 +378,9 @@ pub struct MurmureRelay {
     /// The send the author cancelled, until its region takes the draft back
     /// (`MURMURE-558`).
     returned: RwSignal<Option<AskedAll>>,
+    /// The drafts the device keeps. A lost channel takes its own, and a
+    /// sign-out takes them all (`MURMURE-215`, `MURMURE-216`).
+    drafts: StoredValue<DraftShelf, LocalStorage>,
 }
 
 /// The search box: whether it is open, the query typed, and the last answer
@@ -468,6 +472,20 @@ impl MurmureRelay {
             asking_all: RwSignal::new(None),
             returned: RwSignal::new(None),
             keys: RwSignal::new(false),
+            drafts: StoredValue::new_local(DraftShelf::default()),
+        }
+    }
+
+    /// The drafts the device keeps, which every region of the page shares.
+    pub fn drafts(&self) -> DraftShelf {
+        self.drafts.get_value()
+    }
+
+    /// Delete the drafts of `channels`, which the user lost (`MURMURE-215`).
+    fn forget_drafts(&self, channels: &[ChannelId]) {
+        let shelf = self.drafts();
+        for channel in channels {
+            shelf.forget_channel(*channel);
         }
     }
 
@@ -765,6 +783,15 @@ impl MurmureRelay {
                 self.me.set(Some(*user_id));
                 Vec::new()
             }
+            // The next person on the device finds no draft (`MURMURE-216`).
+            UiEvent::Rest {
+                evt: RestEvent::LoggedOut,
+                ..
+            } => {
+                self.me.set(None);
+                self.drafts().sign_out();
+                Vec::new()
+            }
             // The direct message a member was chosen for, created or found.
             // The Logic thread opened it, so it shows and opens nothing more.
             // The listing puts it in the sidebar.
@@ -876,6 +903,7 @@ impl MurmureRelay {
             } => {
                 self.sidebar.update(|s| s.forget(*channel_id));
                 self.drop_channels(&[*channel_id]);
+                self.forget_drafts(&[*channel_id]);
                 Vec::new()
             }
             UiEvent::Space { space_id, event } => self.absorb_space(*space_id, event),
@@ -921,6 +949,7 @@ impl MurmureRelay {
             SpaceEvent::ChannelLeft { channel_id } | SpaceEvent::ChannelDeleted { channel_id } => {
                 self.sidebar.update(|s| s.forget(*channel_id));
                 self.drop_channels(&[*channel_id]);
+                self.forget_drafts(&[*channel_id]);
                 Vec::new()
             }
             // A space that could not open keeps its joined channels, and the
@@ -939,6 +968,7 @@ impl MurmureRelay {
                     m.remove(&space);
                 });
                 self.drop_channels(&dropped);
+                self.forget_drafts(&dropped);
                 Vec::new()
             }
             _ => Vec::new(),

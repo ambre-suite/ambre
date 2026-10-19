@@ -20,6 +20,7 @@ pub mod chrome;
 pub mod commands;
 pub mod composer;
 mod delta;
+pub mod drafts;
 mod error;
 mod layout;
 pub mod list;

@@ -3,11 +3,14 @@
 // and reads the page through closures. They give the pane, a member's name,
 // and the time in the reader's language and zone.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
-use ambre_bus::Timestamp;
+use ambre_bus::{Timestamp, UserId};
 use ambre_canvas::TextInput;
+use ambre_logic::persistence::PersistenceStore;
 use ambre_murmure::chrome::MurmureRelay;
+use ambre_murmure::drafts::{DraftShelf, DraftWrite, user_range};
 use ambre_murmure::view::PageReads;
 use leptos::prelude::{GetUntracked, Set, Update};
 use wasm_bindgen::JsValue;
@@ -36,6 +39,73 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput) -> PageReads {
         take_press: Rc::new(move |in_thread| relay.take_press(in_thread)),
         take_returned: Rc::new(move |in_thread| relay.take_returned(in_thread)),
         open_link: Rc::new(super::open_address),
+        drafts: relay.drafts(),
+    }
+}
+
+/// The page's drafts in the local store (`MURMURE-210`). The store opens and
+/// the session names the user in either order; the user's rows load once
+/// both did, and every write of the shelf lands in the store from then on.
+#[derive(Clone)]
+pub struct DraftKeeper(Rc<RefCell<Keeper>>);
+
+struct Keeper {
+    shelf: DraftShelf,
+    store: Option<PersistenceStore>,
+    user: Option<UserId>,
+    /// The user whose rows were read, so a second sign-in reads its own.
+    loaded: Option<UserId>,
+}
+
+impl DraftKeeper {
+    pub fn new(shelf: DraftShelf) -> Self {
+        Self(Rc::new(RefCell::new(Keeper {
+            shelf,
+            store: None,
+            user: None,
+            loaded: None,
+        })))
+    }
+
+    /// The store opened: the shelf writes into it.
+    pub fn store_opened(&self, store: PersistenceStore) {
+        let sink = store.clone();
+        self.0
+            .borrow()
+            .shelf
+            .set_sink(Rc::new(move |write| match write {
+                DraftWrite::Put { key, row } => sink.save_draft(&key, &row),
+                DraftWrite::Delete { key } => sink.delete_draft(&key),
+                DraftWrite::DeleteRange { lower, upper } => sink.delete_drafts(&lower, &upper),
+                DraftWrite::DeleteAll => sink.clear_drafts(),
+            }));
+        self.0.borrow_mut().store = Some(store);
+        self.load();
+    }
+
+    /// The session named `user`.
+    pub fn signed_in(&self, user: UserId) {
+        self.0.borrow_mut().user = Some(user);
+        self.load();
+    }
+
+    /// Read the user's rows into the shelf, once the store and the user are
+    /// both known.
+    fn load(&self) {
+        let mut keeper = self.0.borrow_mut();
+        let (Some(store), Some(user)) = (keeper.store.clone(), keeper.user) else {
+            return;
+        };
+        if keeper.loaded == Some(user) {
+            return;
+        }
+        keeper.loaded = Some(user);
+        let shelf = keeper.shelf.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            let (lower, upper) = user_range(user);
+            let rows = store.load_drafts(&lower, &upper).await.unwrap_or_default();
+            shelf.load(user, rows);
+        });
     }
 }
 

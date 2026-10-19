@@ -29,6 +29,7 @@ use crate::commands::{
     AskedAll, EDIT, FromThread, MessageAction, MessageTarget, PendingEdit, message_action,
 };
 use crate::composer::{Composer, DraftOf, EDITING_LINE, also_said, typing_line};
+use crate::drafts::DraftShelf;
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::markers::MarkBar;
 use crate::mention_list::MentionList;
@@ -94,6 +95,9 @@ pub struct PageReads {
     /// Open the address of a link a click landed on, in a fresh tab with no
     /// opener (`MURMURE-567`).
     pub open_link: Rc<dyn Fn(&str)>,
+    /// The drafts the device keeps, which every region reads before a paint
+    /// and writes after it (`MURMURE-210`).
+    pub drafts: DraftShelf,
 }
 
 /// The id of the content canvas, which the channel's region paints. The
@@ -214,6 +218,8 @@ pub struct MurmureView {
     listed: Option<MentionList>,
     /// The format bar this region last handed the page.
     barred: Option<MarkBar>,
+    /// The version of the shelf the last plan read.
+    shelf_seen: u64,
     dirty: bool,
 }
 
@@ -275,6 +281,7 @@ impl MurmureView {
             ticked: None,
             listed: None,
             barred: None,
+            shelf_seen: 0,
             dirty: true,
         }
     }
@@ -806,6 +813,13 @@ impl MurmureView {
             self.painted = shown;
             self.dirty = true;
         }
+        // Rows read back after a reload, or a loss, change what the composer
+        // shows: the next paint reads the shelf (`MURMURE-210`).
+        let shelved = self.reads.drafts.version();
+        if shelved != self.shelf_seen {
+            self.shelf_seen = shelved;
+            self.dirty = true;
+        }
         if let Some(step) = self.kinetic.tick(now_ms)
             && step.y() != 0.0
         {
@@ -881,7 +895,12 @@ impl MurmureView {
         let pane = (self.reads.pane)();
         let writes_in = self.writes_in();
         let (size, palette) = (self.size, self.theme.palette());
-        if let Some(sent) = self.composer.flush(font_cx, writes_in, size, palette) {
+        // A draft kept on the device comes back on its paint, and the draft
+        // painted is kept (`MURMURE-210`, `MURMURE-212`).
+        self.composer.unshelve(writes_in, &self.reads.drafts);
+        let sent = self.composer.flush(font_cx, writes_in, size, palette);
+        self.composer.shelve(&self.reads.drafts);
+        if let Some(sent) = sent {
             // The view stamps the time of the message or the edit
             // (`MURMURE-199`, `MURMURE-203`).
             let now = self.now();
@@ -1585,6 +1604,7 @@ mod tests {
                 }
             }),
             open_link: Rc::new(move |address: &str| opens.borrow_mut().push(address.to_owned())),
+            drafts: DraftShelf::default(),
         };
         let size = (300.0, 400.0);
         let view = MurmureView::new(
@@ -4468,6 +4488,119 @@ mod tests {
             line.len() < draft.len(),
             "the whole draft, not the line drawn"
         );
+    }
+
+    /// The rows a page's shelf keeps in the store, by key.
+    type Rows = Rc<RefCell<std::collections::BTreeMap<String, String>>>;
+
+    /// Give the page's shelf `me` and a store of `rows`, as the launcher does
+    /// once the session and the store are ready.
+    fn keep_drafts(page: &Page, me: UserId, rows: &Rows) {
+        use crate::drafts::DraftWrite;
+        let store = Rc::clone(rows);
+        page.view.reads.drafts.set_sink(Rc::new(move |write| {
+            let mut store = store.borrow_mut();
+            match write {
+                DraftWrite::Put { key, row } => {
+                    store.insert(key, row);
+                }
+                DraftWrite::Delete { key } => {
+                    store.remove(&key);
+                }
+                DraftWrite::DeleteRange { lower, upper } => {
+                    store.retain(|key, _| {
+                        !(lower.as_str()..=upper.as_str()).contains(&key.as_str())
+                    });
+                }
+                DraftWrite::DeleteAll => store.clear(),
+            }
+        }));
+        let kept = rows.borrow().clone().into_iter().collect();
+        page.view.reads.drafts.load(me, kept);
+    }
+
+    /// A draft typed and not sent is in the store, and a page built anew
+    /// shows it in its composer once the rows are read, with no key pressed.
+    /// No command carried it meanwhile (`MURMURE-210`, `MURMURE-211`).
+    #[test]
+    fn a_draft_comes_back_after_a_reload() {
+        let (channel, me) = (ChannelId::new(), UserId::new());
+        let rows = Rows::default();
+        let mut page = composing(channel);
+        keep_drafts(&page, me, &rows);
+        press_composer(&mut page);
+        page.view.paste("not sent yet");
+        frame_with_fonts(&mut page.view);
+        assert_eq!(rows.borrow().len(), 1, "the draft is in the store");
+        while let Ok(command) = page.commands.try_recv() {
+            let command = format!("{command:?}");
+            assert!(
+                !command.contains("not sent yet"),
+                "the draft left: {command}"
+            );
+        }
+
+        let mut again = composing(channel);
+        assert_eq!(again.view.composer().draft(channel), None);
+        keep_drafts(&again, me, &rows);
+        frame_with_fonts(&mut again.view);
+        assert_eq!(
+            again.view.composer().draft(channel).as_deref(),
+            Some("not sent yet")
+        );
+        assert!(
+            !again.view.composer().focused(),
+            "the keys stay where they are"
+        );
+    }
+
+    /// A message sent takes its row out of the store, and an empty draft
+    /// keeps none (`MURMURE-212`).
+    #[test]
+    fn a_sent_draft_leaves_the_store() {
+        let (channel, me) = (ChannelId::new(), UserId::new());
+        let rows = Rows::default();
+        let mut page = composing(channel);
+        keep_drafts(&page, me, &rows);
+        press_composer(&mut page);
+        page.view.paste("hello");
+        frame_with_fonts(&mut page.view);
+        assert_eq!(rows.borrow().len(), 1);
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(drafts_sent(&page).len(), 1, "the message left");
+        assert!(rows.borrow().is_empty(), "its draft went with it");
+    }
+
+    /// A channel lost takes its draft from the store and from the composer,
+    /// which writes it back no more; another channel keeps its own
+    /// (`MURMURE-215`, `MURMURE-217`).
+    #[test]
+    fn a_lost_channel_takes_its_draft_from_the_composer() {
+        let (lost, kept, me) = (ChannelId::new(), ChannelId::new(), UserId::new());
+        let rows = Rows::default();
+        let mut page = composing(kept);
+        keep_drafts(&page, me, &rows);
+        press_composer(&mut page);
+        page.view.paste("stays");
+        frame_with_fonts(&mut page.view);
+        list(&page, lost, &["b"]);
+        page.pane.set(MurmurePane::Channel {
+            channel: lost,
+            at: None,
+        });
+        frame_with_fonts(&mut page.view);
+        press_composer(&mut page);
+        page.view.paste("goes");
+        frame_with_fonts(&mut page.view);
+        assert_eq!(rows.borrow().len(), 2);
+        page.view.reads.drafts.forget_channel(lost);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().draft(lost), None);
+        let left: Vec<String> = rows.borrow().values().cloned().collect();
+        assert_eq!(left.len(), 1, "one draft left: {left:?}");
+        assert!(left[0].contains("stays"));
+        assert_eq!(page.view.composer().draft(kept).as_deref(), Some("stays"));
     }
 
     /// An edit loads the styles of its message. One that changes the styles
