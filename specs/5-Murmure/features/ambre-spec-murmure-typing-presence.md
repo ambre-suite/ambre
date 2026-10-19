@@ -96,5 +96,6 @@ learns nothing of when the member is active. The member still sees the others (`
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No surface is built.** The indicators land in the message list and its composer.
+* **No surface is built.** A keystroke in the composer sends no typing sample, and the list draws
+  no indicator. Both wait for the `Typing seen in a channel` Story (`ambre-roadmap.md` E5).
 * **The setting is not built.** Turning the indicators off waits on the user settings.

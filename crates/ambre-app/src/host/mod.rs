@@ -328,10 +328,11 @@ impl AppView {
             AppView::Trame(v) => v.clipboard_write(cut),
             AppView::Toile(v) => v.clipboard_write(cut),
             AppView::Prose(v) => v.clipboard_write(cut),
-            // Read-only text: a cut leaves it where it is, and copies nothing.
-            AppView::Murmure(v) => match v.copy() {
-                Some(text) if !cut => ambre_bus::CopyOutcome::Text(text),
-                _ => ambre_bus::CopyOutcome::Nothing,
+            // The list's text is read-only: a cut leaves it where it is, and
+            // copies nothing. The composer's draft is cut like any text.
+            AppView::Murmure(v) => match v.clipboard(cut) {
+                Some(text) => ambre_bus::CopyOutcome::Text(text),
+                None => ambre_bus::CopyOutcome::Nothing,
             },
         }
     }
@@ -358,7 +359,8 @@ impl AppView {
             AppView::Trame(v) => v.paste_clipboard(blob, own_copy),
             AppView::Toile(v) => v.paste_clipboard(blob, own_copy),
             AppView::Prose(v) => v.paste_clipboard(blob, own_copy),
-            AppView::Murmure(_) => {}
+            // The composer takes the text mirror alone (the Murmure composer spec).
+            AppView::Murmure(v) => v.paste(&blob.text),
         }
     }
 

@@ -306,7 +306,7 @@ fn draw_line<S: DrawSurface>(
 }
 
 /// The layout of one text of a row, shaped once and kept in the cache.
-fn shape<'c>(
+pub(crate) fn shape<'c>(
     font_cx: &mut FontContext,
     cache: &'c mut TextCache,
     text: &str,
@@ -365,7 +365,7 @@ fn draw_row<S: DrawSurface>(
 }
 
 /// Emit every glyph run of `layout`, its top-left at `(x, y)`.
-fn draw<S: DrawSurface>(
+pub(crate) fn draw<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
     x: f32,

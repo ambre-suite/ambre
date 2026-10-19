@@ -20,8 +20,12 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput) -> PageReads {
         name_of: Rc::new(move |user| relay.member_name(user)),
         time_of: Rc::new(move |ts| clock.format(ts)),
         now_ms: Rc::new(super::probe::now_ms),
-        announce: Rc::new(move |text| pipe.announce(text)),
+        announce: Rc::new({
+            let pipe = pipe.clone();
+            move |text| pipe.announce(text)
+        }),
         act_on: Rc::new(move |target| relay.target.set(target)),
+        pipe,
     }
 }
 

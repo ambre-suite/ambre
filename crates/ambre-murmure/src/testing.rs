@@ -7,7 +7,7 @@ use ambre_bus::conduit::{Sender, local};
 use ambre_bus::{
     ChannelId, MessageId, MessageView, MurmureEvent, SegmentId, Timestamp, UiEvent, UserId,
 };
-use ambre_canvas::ThemeControl;
+use ambre_canvas::{TextInput, ThemeControl};
 
 use crate::MurmurePane;
 use crate::view::{MurmureView, PageReads};
@@ -26,6 +26,7 @@ pub fn channel_of(texts: &[&str], size: (f64, f64)) -> (MurmureView, Sender<UiEv
         now_ms: Rc::new(|| 0.0),
         announce: Rc::new(|_| {}),
         act_on: Rc::new(|_| {}),
+        pipe: TextInput::detached(),
     };
     let (events, from_logic) = local(8);
     let view = MurmureView::new(Some(from_logic), None, reads, size, ThemeControl::default());

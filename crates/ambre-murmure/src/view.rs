@@ -15,18 +15,19 @@ use std::rc::Rc;
 
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
-    ChannelId, DocumentId, LogicCommand, MessageAt, MessageId, MurmureCommand, SegmentId,
-    Timestamp, UiEvent, UserId,
+    ChannelId, DocumentId, LogicCommand, MessageAt, MessageDraft, MessageId, MurmureCommand,
+    SegmentId, Timestamp, UiEvent, UserId,
 };
 use ambre_canvas::{
-    ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, Theme,
-    ThemeControl,
+    ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, TextInput,
+    Theme, ThemeControl,
 };
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::MurmurePane;
 use crate::commands::MessageTarget;
+use crate::composer::Composer;
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 use crate::select::Selecting;
@@ -53,6 +54,9 @@ pub struct PageReads {
     /// `None` off any message. The page opens its actions; nothing is sent
     /// (`MURMURE-424`).
     pub act_on: Rc<dyn Fn(Option<MessageTarget>)>,
+    /// The page's input pipe. A press in the composer gives it the keyboard
+    /// focus, and its caret follows the composer's (`MURMURE-430`).
+    pub pipe: TextInput,
 }
 
 /// The id of the content canvas, which the channel's region paints. The
@@ -161,6 +165,8 @@ pub struct MurmureView {
     selecting: Selecting,
     /// A mouse button holds a drag: `true` once it moved.
     drag: Option<bool>,
+    /// The composer at the foot of the channel's region, `MURMURE-199`.
+    composer: Composer,
     dirty: bool,
 }
 
@@ -199,6 +205,7 @@ impl MurmureView {
             heard: (None, None),
             selecting: Selecting::default(),
             drag: None,
+            composer: Composer::default(),
             dirty: true,
         }
     }
@@ -217,6 +224,29 @@ impl MurmureView {
     /// The size this region lays out in, in logical pixels.
     pub fn size(&self) -> (f32, f32) {
         self.size
+    }
+
+    /// The height the list lays out in: the region, less the composer.
+    fn list_height(&self) -> f32 {
+        (self.size.1 - self.composer.band()).max(0.0)
+    }
+
+    /// The channel whose composer this region shows, `None` in the thread's
+    /// region or with no channel on screen.
+    fn composer_channel(&self) -> Option<ChannelId> {
+        let pane = (self.reads.pane)();
+        pane.shown_channel()
+            .filter(|_| self.region == Region::Channel)
+    }
+
+    /// Whether the height `y` falls in the composer's band.
+    fn in_composer(&self, y: f64) -> bool {
+        self.composer.band() > 0.0 && y as f32 >= self.list_height()
+    }
+
+    /// The composer, for the page and for tests.
+    pub fn composer(&self) -> &Composer {
+        &self.composer
     }
 
     /// Where the pointer last was over this region.
@@ -276,7 +306,9 @@ impl MurmureView {
     /// `pages`. The model takes it as a wheel step of a page (`MURMURE-504`).
     fn page(&mut self, pages: f32) {
         let now_ms = (self.reads.now_ms)();
-        let step = self.kinetic.wheel(0.0, pages * self.size.1, true, now_ms);
+        let step = self
+            .kinetic
+            .wheel(0.0, pages * self.list_height(), true, now_ms);
         self.scroll_by(step);
     }
 
@@ -299,7 +331,7 @@ impl MurmureView {
     /// `None` on a band, between rows, or on the control to the latest.
     fn target_at(&self, x: f32, y: f32, pressed: bool) -> Option<MessageTarget> {
         let at = Point::new(x.into(), y.into());
-        if self.on_jump(at) {
+        if self.on_jump(at) || self.in_composer(y.into()) {
             return None;
         }
         let i = self.last.as_ref()?.row_at(y)?;
@@ -455,8 +487,8 @@ impl MurmureView {
         self.reveal = false;
         let over = if top < -REVEAL_SLACK_PX {
             top
-        } else if bottom > self.size.1 + REVEAL_SLACK_PX {
-            (bottom - self.size.1).min(top)
+        } else if bottom > self.list_height() + REVEAL_SLACK_PX {
+            (bottom - self.list_height()).min(top)
         } else {
             return;
         };
@@ -483,11 +515,21 @@ impl MurmureView {
     /// A finger lifted: a pan released with speed leaves a flick. Answers
     /// the point of a tap, save one the view takes. A tap on the control back
     /// to the latest message presses it, and one on a band asks for its
-    /// segment again (`MURMURE-513`).
+    /// segment again (`MURMURE-513`). A tap in the composer puts its caret
+    /// there and gives it the keys.
     pub fn touch_up(&mut self, now_ms: f64) -> Option<(f32, f32)> {
         match self.kinetic.release(now_ms) {
             Release::Tap { x, y } if self.on_jump(Point::new(x.into(), y.into())) => {
                 self.rest_at_latest();
+                None
+            }
+            Release::Tap { x, y } if self.in_composer(y.into()) => {
+                if let Some(channel) = self.composer_channel() {
+                    self.composer.press(channel, x, y);
+                    self.composer.release();
+                    self.reads.pipe.focus();
+                    self.dirty = true;
+                }
                 None
             }
             Release::Tap { x, y } => (!self.retry_at(y)).then_some((x, y)),
@@ -532,7 +574,7 @@ impl MurmureView {
         let over = if y < 0.0 {
             y
         } else {
-            (y - self.size.1).max(0.0)
+            (y - self.list_height()).max(0.0)
         };
         if over != 0.0 {
             let now_ms = (self.reads.now_ms)();
@@ -588,6 +630,24 @@ impl MurmureView {
         _strip: Option<Rect>,
     ) {
         let pane = (self.reads.pane)();
+        let writes_in = self.composer_channel();
+        let (size, palette) = (self.size, self.theme.palette());
+        if let Some((channel_id, text)) = self.composer.flush(font_cx, writes_in, size, palette) {
+            // The view stamps the time of the message (`MURMURE-199`).
+            let now = Timestamp((self.reads.now_ms)().max(0.0) as u64);
+            self.send(LogicCommand::Channel {
+                channel_id,
+                command: MurmureCommand::SendMessage {
+                    draft: MessageDraft {
+                        text,
+                        mentions: Vec::new(),
+                    },
+                    now,
+                    confirmed: false,
+                },
+            });
+        }
+        let list_size = (self.size.0, self.list_height());
         let lists = Rc::clone(&self.lists);
         let lists = lists.borrow();
         let empty = MessageList::default();
@@ -623,7 +683,7 @@ impl MurmureView {
                 focus,
                 selecting: self.selecting,
             },
-            self.size,
+            list_size,
             self.theme.palette(),
             &*self.reads.name_of,
             &*self.reads.time_of,
@@ -642,7 +702,16 @@ impl MurmureView {
         let higher_up = !painted.latest_shown && !list.is_empty();
         let palette = self.theme.palette();
         let shown_before = self.jump.is_some();
-        self.jump = higher_up.then(|| paint_jump(surface, font_cx, text_cache, self.size, palette));
+        self.jump = higher_up.then(|| paint_jump(surface, font_cx, text_cache, list_size, palette));
+        let caret = self
+            .composer
+            .paint(surface, font_cx, text_cache, writes_in, self.size, palette);
+        if let Some((x, y, tall)) = caret {
+            // The input method opens where the caret is (`MURMURE-430`).
+            self.reads
+                .pipe
+                .set_caret(f64::from(x), f64::from(y), f64::from(tall.max(1.0)));
+        }
         if higher_up && !shown_before {
             // The control shows: End reaches it from the keyboard
             // (`MURMURE-509`).
@@ -715,7 +784,7 @@ impl MurmureView {
         self.rest = match (self.region, pane) {
             (Region::Channel, MurmurePane::Channel { at: Some(at), .. }) => Rest::Row {
                 key: RowKey::Message(at.message),
-                anchor_y: self.size.1 * AT_FRACTION,
+                anchor_y: self.list_height() * AT_FRACTION,
             },
             _ => Rest::Latest,
         };
@@ -802,11 +871,24 @@ impl MurmureView {
     ///
     /// A drag of the main button selects text, and leaves the press to the
     /// page, so the canvas takes the focus (`MURMURE-425`).
+    ///
+    /// The composer takes the text of the pipe, and a press in its band. Once
+    /// it holds the focus, it takes the keys it edits with. Page Up and Page
+    /// Down still move the list.
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+        if let Some(consumed) = self.composer_input(ev) {
+            self.dirty = true;
+            return consumed;
+        }
         match *ev {
             InputEvent::PointerDown { x, y, button, .. } => {
                 let at = Point::new(x, y);
                 self.hover = Some(at);
+                // A press in the list gives the keys back to it.
+                if self.composer.focused() {
+                    self.composer.blur();
+                    self.dirty = true;
+                }
                 if button == SECONDARY_BUTTON {
                     // The page's menu event follows, and opens the actions of
                     // the message found here (`MURMURE-422`).
@@ -876,7 +958,7 @@ impl MurmureView {
             } => {
                 let unit = match delta_mode {
                     1 => WHEEL_LINE_PX,
-                    2 => self.size.1,
+                    2 => self.list_height(),
                     _ => 1.0,
                 };
                 let now_ms = (self.reads.now_ms)();
@@ -889,6 +971,80 @@ impl MurmureView {
             _ => {}
         }
         false
+    }
+
+    /// The share of `ev` the composer takes, and whether its default is
+    /// prevented. `None` leaves it to the list.
+    fn composer_input(&mut self, ev: &InputEvent) -> Option<bool> {
+        let channel = self.composer_channel()?;
+        match *ev {
+            InputEvent::Text { ref text } => self.composer.text(channel, text),
+            InputEvent::CompositionUpdate { ref text } => {
+                self.composer.compose(channel, text, false);
+            }
+            InputEvent::CompositionEnd { ref text } => self.composer.compose(channel, text, true),
+            InputEvent::PointerDown { x, y, button, .. } if self.in_composer(y) => {
+                self.hover = Some(Point::new(x, y));
+                if button != PRIMARY_BUTTON {
+                    // No message is under the band.
+                    (self.reads.act_on)(None);
+                    return Some(false);
+                }
+                self.composer.press(channel, x as f32, y as f32);
+                // The pipe takes the keys. The press is consumed, so the
+                // canvas does not take the focus back.
+                self.reads.pipe.focus();
+            }
+            InputEvent::PointerMove { x, y }
+                if self.composer.drag_to(channel, x as f32, y as f32) =>
+            {
+                self.hover = Some(Point::new(x, y));
+            }
+            InputEvent::PointerUp { .. } if self.composer.release() => {}
+            InputEvent::DoubleClick { x, y } if self.in_composer(y) => {
+                self.composer.word_at(channel, x as f32, y as f32);
+            }
+            InputEvent::Key {
+                ref key,
+                shift,
+                ctrl,
+                alt,
+                meta: false,
+            } if self.composer.focused() => {
+                if !self.composer.key(channel, key, shift, ctrl, alt) {
+                    return None;
+                }
+            }
+            _ => return None,
+        }
+        Some(true)
+    }
+
+    /// The text a copy or a cut puts on the clipboard. The composer's
+    /// selection, while it holds the focus, else the list's (`MURMURE-426`).
+    /// A cut takes the text out of the draft. The list's text stays.
+    pub fn clipboard(&mut self, cut: bool) -> Option<String> {
+        if let Some(channel) = self.composer_channel()
+            && self.composer.focused()
+        {
+            self.dirty |= cut;
+            return if cut {
+                self.composer.cut(channel)
+            } else {
+                self.composer.selected(channel)
+            };
+        }
+        self.copy().filter(|_| !cut)
+    }
+
+    /// A paste lands in the composer of the channel on screen, as text.
+    pub fn paste(&mut self, text: &str) {
+        if let Some(channel) = self.composer_channel()
+            && !text.is_empty()
+        {
+            self.composer.text(channel, text);
+            self.dirty = true;
+        }
     }
 
     /// A Murmure page binds no document, so a route swap changes nothing.
@@ -939,6 +1095,7 @@ mod tests {
             now_ms: Rc::new(move || now.get()),
             announce: Rc::new(move |text: &str| said.borrow_mut().push(text.to_owned())),
             act_on: Rc::new(move |target| acted.borrow_mut().push(target)),
+            pipe: TextInput::detached(),
         };
         let size = (300.0, 400.0);
         let view = MurmureView::new(
@@ -2009,5 +2166,248 @@ mod tests {
         assert!(!page.view.handle_input(&ev));
         assert_eq!(page.view.hover(), Some(Point::new(3.0, 4.0)));
         assert_eq!(page.view.size(), (300.0, 400.0));
+    }
+
+    /// A page on `channel`, painted once so the composer's band exists.
+    fn composing(channel: ChannelId) -> Page {
+        let mut page = page();
+        list(&page, channel, &["a"]);
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        frame_with_fonts(&mut page.view);
+        page
+    }
+
+    /// A primary press in the composer's band, near the region's bottom.
+    fn press_composer(page: &mut Page) -> bool {
+        let press = InputEvent::PointerDown {
+            x: 40.0,
+            y: 395.0,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        };
+        let consumed = page.view.handle_input(&press);
+        let up = InputEvent::PointerUp {
+            x: 40.0,
+            y: 395.0,
+            button: 0,
+            ctrl: false,
+        };
+        page.view.handle_input(&up);
+        consumed
+    }
+
+    fn type_text(page: &mut Page, text: &str) -> bool {
+        let ev = InputEvent::Text {
+            text: text.to_owned(),
+        };
+        page.view.handle_input(&ev)
+    }
+
+    fn shift_key(page: &mut Page, key: &str) -> bool {
+        let ev = InputEvent::Key {
+            key: key.to_owned(),
+            ctrl: false,
+            alt: false,
+            shift: true,
+            meta: false,
+        };
+        page.view.handle_input(&ev)
+    }
+
+    /// The messages sent since the last call, as text and time.
+    fn sent(page: &Page) -> Vec<(String, u64)> {
+        let mut sent = Vec::new();
+        while let Ok(command) = page.commands.try_recv() {
+            if let LogicCommand::Channel {
+                command:
+                    MurmureCommand::SendMessage {
+                        draft,
+                        now,
+                        confirmed,
+                    },
+                ..
+            } = command
+            {
+                assert!(!confirmed, "a plain send asks no confirmation");
+                assert!(draft.mentions.is_empty());
+                sent.push((draft.text, now.0));
+            }
+        }
+        sent
+    }
+
+    /// Enter sends the draft at the clock's time and empties it
+    /// (`MURMURE-199`). Shift+Enter breaks the line and sends nothing
+    /// (`MURMURE-200`).
+    #[test]
+    fn enter_sends_the_draft_and_shift_enter_breaks_the_line() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        assert!(press_composer(&mut page));
+        assert!(type_text(&mut page, "a"));
+        assert!(shift_key(&mut page, "Enter"));
+        assert!(type_text(&mut page, "b"));
+        frame_with_fonts(&mut page.view);
+        assert!(sent(&page).is_empty(), "Shift+Enter sends nothing");
+        assert_eq!(page.view.composer().draft(channel).as_deref(), Some("a\nb"));
+
+        assert!(key(&mut page, "Enter", false, 1_234.0));
+        frame_with_fonts(&mut page.view);
+        assert_eq!(sent(&page), vec![("a\nb".to_owned(), 1_234)]);
+        assert_eq!(
+            page.view.composer().draft(channel),
+            None,
+            "the draft is gone"
+        );
+    }
+
+    /// An empty draft, or one of white space alone, sends nothing and
+    /// stays (`MURMURE-201`).
+    #[test]
+    fn an_empty_or_blank_draft_sends_nothing() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        assert!(press_composer(&mut page));
+        assert!(key(&mut page, "Enter", false, 0.0));
+        frame_with_fonts(&mut page.view);
+        assert!(sent(&page).is_empty());
+        type_text(&mut page, "  ");
+        shift_key(&mut page, "Enter");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert!(sent(&page).is_empty(), "white space is not a message");
+        assert_eq!(page.view.composer().draft(channel).as_deref(), Some("  \n"));
+    }
+
+    /// Each channel keeps its own draft: a send in one leaves the other's
+    /// draft as it was (`MURMURE-195`, `MURMURE-202`).
+    #[test]
+    fn each_channel_keeps_its_own_draft() {
+        let (a, b) = (ChannelId::new(), ChannelId::new());
+        let mut page = composing(a);
+        press_composer(&mut page);
+        type_text(&mut page, "for a");
+        list(&page, b, &["b"]);
+        page.pane.set(MurmurePane::Channel {
+            channel: b,
+            at: None,
+        });
+        frame_with_fonts(&mut page.view);
+        press_composer(&mut page);
+        type_text(&mut page, "for b");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(sent(&page), vec![("for b".to_owned(), 0)]);
+        assert_eq!(page.view.composer().draft(b), None);
+        // A's keys wait for the next paint of A, and land there.
+        page.pane.set(MurmurePane::Channel {
+            channel: a,
+            at: None,
+        });
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().draft(a).as_deref(), Some("for a"));
+        assert!(sent(&page).is_empty(), "A's draft was not sent");
+    }
+
+    /// The band holds a field and its text, no toolbar, and the list
+    /// stands above it (`MURMURE-196`).
+    #[test]
+    fn the_band_holds_a_field_and_no_toolbar() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        let band = page.view.composer().band();
+        assert!(band > 0.0, "a channel region shows the composer");
+        assert_eq!(page.view.list_height(), 400.0 - band);
+        page.view.update();
+        page.view.plan_repaint(0.0, false);
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let mut surface = RecordingSurface::new();
+        page.view
+            .paint_content(&mut surface, &mut font_cx, &mut cache, None);
+        let top = 400.0 - band;
+        let in_band = surface.ops().iter().filter(|op| match op {
+            ambre_draw::testing::DrawOp::FillRect { rect, .. }
+            | ambre_draw::testing::DrawOp::StrokeRect { rect, .. } => rect.y0 >= f64::from(top),
+            _ => false,
+        });
+        // The band's fill, the field's fill and the field's outline.
+        assert_eq!(in_band.count(), 3, "no button and no toolbar");
+
+        page.pane.set(MurmurePane::ChannelList);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().band(), 0.0, "no channel, no composer");
+    }
+
+    /// A press in the band gives the pipe the keyboard and is consumed.
+    /// The keys then go to the draft, never to the list, until Escape
+    /// (`MURMURE-430`).
+    #[test]
+    fn the_composer_takes_the_pipe_until_escape() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        assert_eq!(page.view.reads.pipe.focus_requests(), 0);
+        assert!(press_composer(&mut page), "the press is the composer's");
+        assert_eq!(page.view.reads.pipe.focus_requests(), 1);
+        assert!(page.view.composer().focused());
+        type_text(&mut page, "ab");
+        assert!(key(&mut page, "ArrowLeft", false, 0.0));
+        assert!(shift_key(&mut page, "ArrowLeft"));
+        assert!(key(&mut page, "ArrowUp", false, 0.0), "the caret takes it");
+        frame_with_fonts(&mut page.view);
+        assert!(page.said.borrow().is_empty(), "the list announced nothing");
+        assert!(
+            !key(&mut page, "F5", false, 0.0),
+            "a key it does not use stays the page's"
+        );
+
+        assert!(key(&mut page, "Escape", false, 0.0));
+        assert!(!page.view.composer().focused());
+        assert!(
+            key(&mut page, "ArrowUp", false, 0.0),
+            "the list takes it again"
+        );
+        frame_with_fonts(&mut page.view);
+        assert!(!page.said.borrow().is_empty(), "the list moved its focus");
+    }
+
+    /// A paste lands in the draft, and a copy or a cut reads the draft's
+    /// selection while the composer holds the focus (`MURMURE-430`).
+    #[test]
+    fn paste_copy_and_cut_go_through_the_draft() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        page.view.paste("hello");
+        assert!(key(&mut page, "a", true, 0.0), "Ctrl+A selects the draft");
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.clipboard(false).as_deref(), Some("hello"));
+        assert_eq!(page.view.clipboard(true).as_deref(), Some("hello"));
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().draft(channel).as_deref(), Some(""));
+
+        key(&mut page, "Escape", false, 0.0);
+        assert_eq!(page.view.clipboard(true), None, "the list's text stays");
+    }
+
+    /// A tap in the band puts the caret there and gives the pipe the
+    /// keyboard; a press in the list takes it back (`MURMURE-430`).
+    #[test]
+    fn a_tap_in_the_band_focuses_the_composer() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        page.view.touch_down(40.0, 395.0, 0.0);
+        assert_eq!(page.view.touch_up(50.0), None, "the tap is taken");
+        assert_eq!(page.view.reads.pipe.focus_requests(), 1);
+        assert!(page.view.composer().focused());
+        let press = InputEvent::PointerDown {
+            x: 40.0,
+            y: 20.0,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        };
+        page.view.handle_input(&press);
+        assert!(!page.view.composer().focused(), "the list has it back");
     }
 }

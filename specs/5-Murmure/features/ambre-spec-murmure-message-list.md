@@ -275,7 +275,7 @@ both to each region, and `ambre_app::host::murmure` hands it the pane, the names
   `Retrying a closing segment in place` Story (`ambre-roadmap.md` E5).
 * **Only four actions are built.** Reply, mark unread, copy text and delete.
   React lands with the `Emoji` Story (`ambre-roadmap.md` E5).
-  Edit lands with the `The composer` Story (`ambre-roadmap.md` E5).
+  Edit lands with the `Editing a message from the composer` Story (`ambre-roadmap.md` E5).
   Pin and bookmark wait for the `Pin, bookmark and copy link` Story (`ambre-roadmap.md` E5).
   Remove waits for the `Moderation` Story (`ambre-roadmap.md` E5).
 * **A copy carries no private type.** The mirror alone reaches the clipboard, so a paste drops the

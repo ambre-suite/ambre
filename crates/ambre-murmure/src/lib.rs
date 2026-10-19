@@ -18,6 +18,7 @@ mod channel;
 #[cfg(target_arch = "wasm32")]
 pub mod chrome;
 pub mod commands;
+pub mod composer;
 mod delta;
 mod error;
 mod layout;
