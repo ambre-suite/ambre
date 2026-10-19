@@ -658,6 +658,23 @@ impl TextEditor {
         Some(focus.geometry(&styled.layout, CARET_WIDTH))
     }
 
+    /// The bytes of the line drawn around the caret: a wrapped line, not the
+    /// text between two breaks. `None` while a selection or a composition
+    /// holds, or before the first layout. Call after [`flush`](Self::flush).
+    pub fn caret_line(&mut self) -> Option<std::ops::Range<usize>> {
+        self.caret()?;
+        // The caret's own box, so a caret at a wrap reads the line it is
+        // drawn on, whichever side of the wrap its affinity holds.
+        let caret = self.caret_local()?;
+        let mid = ((caret.y0 + caret.y1) / 2.0) as f32;
+        let layout = self.layout()?;
+        let line = layout
+            .lines()
+            .find(|line| mid < line.metrics().max_coord)
+            .or_else(|| layout.lines().last())?;
+        Some(line.text_range())
+    }
+
     /// The total laid-out text height in local (screen) pixels, or `None` before
     /// the first layout. Lets a host grow its box to fit wrapped lines. Call after
     /// [`flush`](Self::flush).
@@ -1159,6 +1176,33 @@ mod tests {
         ed.set_spans(&mut fcx, Vec::new());
         let back = ed.layout().expect("a layout").full_width();
         assert!((back - plain).abs() < 0.5, "the spans' layout with no span");
+    }
+
+    /// The caret's line is the one drawn: a wrapped line, not the text
+    /// between two breaks. At a wrap, End reads the line it ended, and no
+    /// caret reads no line (`CANVAS-083`).
+    #[test]
+    fn the_caret_line_is_the_line_drawn() {
+        let mut fcx = shipped();
+        let mut ed = TextEditor::new("wwww", style());
+        assert_eq!(ed.caret_line(), None, "no line before the first flush");
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        let word = ed.layout().expect("a layout").full_width();
+        ed.set_text("wwww wwww wwww");
+        // Room for one word and its space, never two.
+        ed.flush(&mut fcx, word * 1.5, 1.0);
+        assert_eq!(ed.layout().expect("a layout").len(), 3, "three lines drawn");
+        assert_eq!(ed.caret(), Some(14));
+        assert_eq!(ed.caret_line(), Some(10..14), "the last line drawn");
+        ed.move_up();
+        ed.flush(&mut fcx, word * 1.5, 1.0);
+        assert_eq!(ed.caret_line(), Some(5..10), "the middle line");
+        ed.move_end();
+        ed.flush(&mut fcx, word * 1.5, 1.0);
+        assert_eq!(ed.caret_line(), Some(5..10), "End stays on its line");
+        ed.push(EditIntent::SelectAll);
+        ed.flush(&mut fcx, word * 1.5, 1.0);
+        assert_eq!(ed.caret_line(), None, "a selection reads no line");
     }
 
     /// Over the spans, a run of line moves keeps its column through a short

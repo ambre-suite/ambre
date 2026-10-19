@@ -1239,7 +1239,8 @@ impl Composer {
                 editor.set_spans(font_cx, spans);
                 if let Some((_, say)) = self.saying.take().filter(|(of, _)| *of == shown) {
                     let (caret, selection) = (editor.caret(), editor.selection());
-                    self.said = read_aloud::said(say, &before, &text, caret, selection);
+                    let drawn = editor.caret_line();
+                    self.said = read_aloud::said(say, &before, &text, caret, selection, drawn);
                 }
                 let tall = editor.layout_height().unwrap_or(0.0);
                 self.drafts.insert(shown, editor);

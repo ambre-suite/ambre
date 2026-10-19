@@ -4449,6 +4449,27 @@ mod tests {
         assert_eq!(page.said.borrow().len(), count, "a key is said once");
     }
 
+    /// A line move on a draft wider than the field says the line it draws,
+    /// one wrapped part of a draft that holds no break (`MURMURE-576`).
+    #[test]
+    fn a_line_move_on_a_wrapped_draft_says_the_line_drawn() {
+        let mut page = composing(ChannelId::new());
+        let last = |page: &Page| page.said.borrow().last().cloned();
+        press_composer(&mut page);
+        // Shorter than an announcement holds, so a clip cannot pass for a line.
+        let draft = ["word"; 30].join(" ");
+        page.view.paste(&draft);
+        frame_with_fonts(&mut page.view);
+        key(&mut page, "Home", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        let line = last(&page).expect("the line said");
+        assert!(line.starts_with("word"), "a line of the draft: {line}");
+        assert!(
+            line.len() < draft.len(),
+            "the whole draft, not the line drawn"
+        );
+    }
+
     /// An edit loads the styles of its message. One that changes the styles
     /// alone is sent, and one that changes nothing is not (`MURMURE-562`).
     #[test]

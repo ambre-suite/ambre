@@ -91,11 +91,12 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-573` | `POST` | A selection in the composer MUST say the text selected. | this spec section 3 | `ambre_murmure::read_aloud::tests::a_selection_says_its_text` -- the text, then `selected`; `ambre_murmure::view::tests::the_keys_on_the_draft_are_said_once_they_land` -- a Shift move on the view | none | verified |
 | `MURMURE-574` | `POST` | The composer MUST say its draft as it takes the focus or an undo lands. | this spec section 3 | `ambre_murmure::read_aloud::tests::the_draft_is_said_by_its_start` -- trimmed, clipped, `blank`; `ambre_murmure::view::tests::the_keys_on_the_draft_are_said_once_they_land` -- a press and an undo on the view | none | verified |
 | `MURMURE-575` | `FRAME` | A key that types text MUST NOT be said by the composer. | this spec section 3 | `ambre_murmure::view::tests::the_keys_on_the_draft_are_said_once_they_land` -- a typed draft adds nothing to what was said | none | verified |
+| `MURMURE-576` | `POST` | A line move in the composer MUST say the line the field draws, so a draft wrapped on the screen says its wrapped line. | this spec section 3; `CANVAS-083` | `ambre_murmure::read_aloud::tests::a_line_move_says_the_line_drawn` -- the line drawn over the text between breaks, and the breaks with no layout or a line off the text; `ambre_murmure::view::tests::a_line_move_on_a_wrapped_draft_says_the_line_drawn` -- Home on a draft of no break, wider than the field, says less than the draft | none | verified |
 
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 36 `verified`, 8 `unimplemented`. The host tier drives the view with the events
+* **Verification.** 37 `verified`, 8 `unimplemented`. The host tier drives the view with the events
   the page sends: a press, a tap, text, keys, a paste. The marks are built, drawn in the field and
   sent, and the format bar shows. The stored draft is not built.
 
@@ -142,6 +143,8 @@ does. The bar leaves with the selection, so nothing stays on screen (`MURMURE-19
 
 **A draft read aloud.** The pipe holds no text, so the composer says what a key did in the polite
 live region (`MURMURE-571` to `MURMURE-574`). The screen reader echoes a typed key itself (`MURMURE-575`).
+A line move says the line drawn, which the layout of the field names, so a wrapped draft says the
+part the caret is on (`MURMURE-576`).
 
 **A style on the body.** A sent style is a mark on the `content` text, beside the mentions
 (`MURMURE-562`). An edit, an amendment, a fold and a relocation carry it. A link holds an `http`
@@ -230,5 +233,3 @@ changed text.
 * **An undo puts the caret at the end.** The history keeps the text of each step, not its caret.
   That waits for the `The caret after an undo` Story (`ambre-roadmap.md` E5).
 * **A draft lives in memory.** A reload loses it, until the `Drafts` Story (`ambre-roadmap.md` E5).
-* **A line move says the logical line.** A wrapped draft is said from break to break. That waits
-  for the `The wrapped line read aloud` Story (`ambre-roadmap.md` E5).

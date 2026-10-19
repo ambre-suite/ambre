@@ -27,14 +27,16 @@ pub enum Say {
 }
 
 /// What a screen reader hears of the draft `text`, once the key that asked
-/// for `say` landed on `before`. `caret` and `selection` are byte offsets
-/// in `text`. A move that leaves a selection says the text selected.
+/// for `say` landed on `before`. `caret`, `selection` and `drawn` are byte
+/// offsets in `text`, `drawn` the line the layout draws around the caret. A
+/// move that leaves a selection says the text selected.
 pub fn said(
     say: Say,
     before: &str,
     text: &str,
     caret: Option<usize>,
     selection: Option<Range<usize>>,
+    drawn: Option<Range<usize>>,
 ) -> Option<String> {
     let moved = matches!(say, Say::Char | Say::Word | Say::Line);
     if moved && let Some(selected) = selection.and_then(|range| text.get(range)) {
@@ -51,7 +53,12 @@ pub fn said(
                 clipped(word)
             }
         }),
-        Say::Line => caret.and_then(|at| line_at(text, at)).map(spoken),
+        // The line drawn, a wrapped one on a narrow screen. With no layout
+        // to read, the line between two breaks.
+        Say::Line => drawn
+            .and_then(|range| text.get(range))
+            .or_else(|| caret.and_then(|at| line_at(text, at)))
+            .map(spoken),
         Say::Removed => removed(before, text).map(|gone| {
             let mut chars = gone.chars();
             match (chars.next(), chars.next()) {
@@ -129,7 +136,7 @@ mod tests {
     #[test]
     fn a_move_says_the_char_or_the_word_after_the_caret() {
         let text = "one two\nthree";
-        let say = |say, at| said(say, text, text, Some(at), None);
+        let say = |say, at| said(say, text, text, Some(at), None, None);
         assert_eq!(say(Say::Char, 0).as_deref(), Some("o"));
         assert_eq!(say(Say::Char, 3).as_deref(), Some("space"));
         assert_eq!(say(Say::Char, 7).as_deref(), Some("new line"));
@@ -137,7 +144,7 @@ mod tests {
         assert_eq!(say(Say::Word, 4).as_deref(), Some("two"));
         assert_eq!(say(Say::Word, 3).as_deref(), Some("space"));
         assert_eq!(
-            said(Say::Char, text, text, None, None),
+            said(Say::Char, text, text, None, None, None),
             None,
             "no caret, nothing said"
         );
@@ -153,17 +160,32 @@ mod tests {
     #[test]
     fn a_line_move_says_the_line_of_the_caret() {
         let text = "one\n\nthree";
-        let say = |at| said(Say::Line, text, text, Some(at), None);
+        let say = |at| said(Say::Line, text, text, Some(at), None, None);
         assert_eq!(say(1).as_deref(), Some("one"));
         assert_eq!(say(4).as_deref(), Some("blank"));
         assert_eq!(say(text.len()).as_deref(), Some("three"));
+    }
+
+    /// A line move on a draft the layout wraps says the line drawn, not the
+    /// text between its breaks (`MURMURE-576`).
+    #[test]
+    fn a_line_move_says_the_line_drawn() {
+        let text = "one two three\nfour";
+        let say = |drawn| said(Say::Line, text, text, Some(5), None, drawn);
+        assert_eq!(say(Some(4..8)).as_deref(), Some("two"));
+        assert_eq!(say(None).as_deref(), Some("one two three"), "no layout");
+        assert_eq!(
+            say(Some(4..99)).as_deref(),
+            Some("one two three"),
+            "a line off the text falls back to the breaks"
+        );
     }
 
     /// A delete says what it took: a char by its name, more by their text.
     /// An edit that took nothing says nothing (`MURMURE-572`).
     #[test]
     fn a_delete_says_what_it_took() {
-        let take = |before, after| said(Say::Removed, before, after, None, None);
+        let take = |before, after| said(Say::Removed, before, after, None, None, None);
         assert_eq!(take("one two", "one tw").as_deref(), Some("o"));
         assert_eq!(take("one two", "onetwo").as_deref(), Some("space"));
         assert_eq!(take("one two", "one ").as_deref(), Some("two"));
@@ -179,7 +201,7 @@ mod tests {
     #[test]
     fn a_selection_says_its_text() {
         let text = "one two";
-        let said = said(Say::Char, text, text, None, Some(4..7));
+        let said = said(Say::Char, text, text, None, Some(4..7), None);
         assert_eq!(said.as_deref(), Some("two, selected"));
     }
 
@@ -187,7 +209,7 @@ mod tests {
     /// `blank` (`MURMURE-574`).
     #[test]
     fn the_draft_is_said_by_its_start() {
-        let draft = |text: &str| said(Say::Draft, "", text, None, None);
+        let draft = |text: &str| said(Say::Draft, "", text, None, None, None);
         assert_eq!(draft("  hi \n").as_deref(), Some("hi"));
         assert_eq!(draft(" ").as_deref(), Some("blank"));
         let long = "a".repeat(TEXT_LIMIT + 5);
