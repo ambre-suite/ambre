@@ -4971,8 +4971,8 @@ mod tests {
         );
     }
 
-    /// The marks the field draws in its margin, in the muted ink: a quote's
-    /// rule and a list's dots.
+    /// The marks the field draws in the indent of a block, in the muted ink:
+    /// a quote's rule and a list's dots.
     fn margin_marks(page: &mut Page) -> usize {
         page.view.update();
         page.view.plan_repaint(0.0, false);
@@ -4982,10 +4982,11 @@ mod tests {
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);
         let ink = crate::look::margin_ink(page.view.theme.palette());
         let top = f64::from(400.0 - page.view.composer().band());
+        let indent = f64::from(SPACE_8) + f64::from(crate::look::BLOCK_INDENT);
         surface.count(|op| {
             matches!(op, ambre_draw::testing::DrawOp::FillRect { rect, color }
                 if *color == ink && rect.y0 >= top
-                    && rect.x0 >= f64::from(SPACE_4) && rect.x1 <= f64::from(SPACE_8))
+                    && rect.x0 >= f64::from(SPACE_8) && rect.x1 <= indent)
         })
     }
 
@@ -5046,6 +5047,55 @@ mod tests {
         assert_eq!(spans[0].family.as_deref(), Some("Monospace"));
         assert_eq!(spans[0].background, Some(palette.header_hover));
         assert_eq!(margin_marks(&mut page), 0, "code draws no margin mark");
+    }
+
+    /// A quote in the field draws each of its lines past its rule, a wrapped
+    /// one too. The line after it starts at the field's edge again
+    /// (`MURMURE-570`).
+    #[test]
+    fn the_field_draws_a_blocks_lines_past_its_margin_mark() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        let long = "word ".repeat(20);
+        type_slowly(&mut page, &format!("> {long}"));
+        shift_key(&mut page, "Enter");
+        type_slowly(&mut page, "plain");
+        page.view.update();
+        page.view.plan_repaint(0.0, false);
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let mut surface = RecordingSurface::new();
+        page.view
+            .paint_content(&mut surface, &mut font_cx, &mut cache, None);
+        let ink = page.view.theme.palette().cell_text;
+        let top = f64::from(400.0 - page.view.composer().band());
+        let mut lines: Vec<(f64, f64)> = surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                ambre_draw::testing::DrawOp::Glyphs {
+                    color: Some(c),
+                    transform,
+                    ..
+                } if *c == ink && transform.translation().y >= top => {
+                    let at = transform.translation();
+                    Some((at.y, at.x))
+                }
+                _ => None,
+            })
+            .collect();
+        lines.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let [block @ .., (_, after)] = lines.as_slice() else {
+            panic!("the draft's lines, got {lines:?}");
+        };
+        let edge = f64::from(SPACE_8);
+        let indent = edge + f64::from(crate::look::BLOCK_INDENT);
+        assert!(block.len() >= 2, "the quote wraps, got {block:?}");
+        assert!(
+            block.iter().all(|(_, x)| (x - indent).abs() < 0.5),
+            "each line of the quote starts past its rule, got {block:?}"
+        );
+        assert!((after - edge).abs() < 0.5, "the next line at the edge");
     }
 
     /// `Ctrl+B` puts bold on the selection and takes it off again. With no

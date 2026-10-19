@@ -15,6 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
+| `murmure-composer` | The field where a member writes. | implemented | 45 |  |
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | implemented | 14 |  |
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | implemented | 21 |  |
 | `murmure-mentions` | A member names another in a message with `@`. | implemented | 23 |  |
@@ -24,7 +25,6 @@
 | `murmure-unread` | The sidebar shows where something new is, and how much. | implemented | 17 |  |
 | `murmure-attachments` | A member drops a file or an image into a message. | partial | 14 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 53 |  |
-| `murmure-composer` | The field where a member writes. | partial | 45 |  |
 | `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | partial | 14 |  |
 | `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | partial | 26 |  |
 | `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 23 |  |
@@ -44,4 +44,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 7 implemented, 12 partial, 9 design-only. 555 contract rows, 0 loose.**
+**28 features: 8 implemented, 11 partial, 9 design-only. 555 contract rows, 0 loose.**

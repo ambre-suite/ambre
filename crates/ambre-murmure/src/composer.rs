@@ -133,6 +133,7 @@ fn span_of(text: &str, mark: &StyleMark, palette: &Palette) -> TextSpan {
         color: look::ink(&mark.style, palette),
         underline: shape.underline,
         background: look::tint(&mark.style, palette),
+        indent: f32::from(shape.indent),
     }
 }
 
@@ -1471,7 +1472,7 @@ impl Composer {
         let origin = Point::new(SPACE_8.into(), (inner.0 + shift).into());
         surface.push_clip(rect(SPACE_4, inner.0, width - SPACE_4, inner.1));
         editor.render(surface, origin, palette.selection, self.focused);
-        // A quote's rule and a list's dots, in the margin of the field.
+        // A quote's rule and a list's dots, in the indent of their lines.
         if let (Some(layout), Some(marks)) = (editor.layout(), self.marks.get(&shown)) {
             let text = editor.text();
             for mark in crate::style::normalized(&marks.styles) {

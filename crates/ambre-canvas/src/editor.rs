@@ -35,7 +35,7 @@ use ambre_draw::{
 use parley::{Affinity, AlignmentOptions, Cursor, Layout, Selection};
 
 use crate::registered_family_name;
-use crate::text_cache::{SpanShape, push_shape};
+use crate::text_cache::{SpanShape, break_indented, push_shape};
 
 /// Caret bar width in screen pixels.
 pub const CARET_WIDTH: f32 = 1.5;
@@ -141,6 +141,9 @@ pub struct TextSpan {
     pub underline: bool,
     /// A tint drawn behind the range.
     pub background: Option<Color>,
+    /// How far right each paragraph holding bytes of the range starts,
+    /// before the zoom (`CANVAS-085`).
+    pub indent: f32,
 }
 
 /// The buffer laid out with the spans, and the text it was laid out from.
@@ -573,6 +576,7 @@ impl TextEditor {
         for property in base {
             builder.push_default(property);
         }
+        let mut indents = Vec::new();
         for span in &self.spans {
             let shape = SpanShape {
                 range: span.range.clone(),
@@ -580,8 +584,12 @@ impl TextEditor {
                 italic: span.italic,
                 family: span.family.clone(),
                 underline: span.underline,
+                indent: 0,
             };
             let placed = push_shape(&mut builder, &text, &shape);
+            if placed && span.indent > 0.0 {
+                indents.push((shape.range.clone(), span.indent * self.zoom as f32));
+            }
             if let Some(color) = span.color.filter(|_| placed) {
                 builder.push(StyleProperty::Brush(Brush::Solid(color)), shape.range);
             }
@@ -590,7 +598,7 @@ impl TextEditor {
             builder.push(StyleProperty::Underline(true), compose);
         }
         let mut layout = builder.build(&text);
-        layout.break_all_lines(Some(self.wrap_w));
+        break_indented(&mut layout, &text, self.wrap_w, &indents);
         layout.align(self.align, AlignmentOptions::default());
         self.styled = Some(Styled { text, layout });
     }
@@ -654,8 +662,9 @@ impl TextEditor {
         let Some(styled) = &self.styled else {
             return Some(plain);
         };
-        let focus = laid_on(self.editor.raw_selection(), &styled.layout).focus();
-        Some(focus.geometry(&styled.layout, CARET_WIDTH))
+        let layout = &styled.layout;
+        let focus = laid_on(self.editor.raw_selection(), layout).focus();
+        Some(on_its_line(layout, focus.geometry(layout, CARET_WIDTH)))
     }
 
     /// The bytes of the line drawn around the caret: a wrapped line, not the
@@ -821,6 +830,20 @@ fn reads_geometry(intent: &EditIntent) -> bool {
 fn laid_on(selection: &Selection, layout: &Layout<Brush>) -> Selection {
     let at = |cursor: Cursor| Cursor::from_byte_index(layout, cursor.index(), cursor.affinity());
     Selection::new(at(selection.anchor()), at(selection.focus()))
+}
+
+/// `caret`, a box `layout` gives a cursor, moved right by the start of the
+/// line it is drawn on. Parley 0.12 leaves a line's start out of a caret,
+/// though it draws, hits and selects the glyphs past it. An indented line
+/// would draw its caret left of its text (`CANVAS-085`).
+fn on_its_line(layout: &Layout<Brush>, caret: BoundingBox) -> BoundingBox {
+    let mid = ((caret.y0 + caret.y1) / 2.0) as f32;
+    let start = layout
+        .lines()
+        .find(|line| mid < line.metrics().block_max_coord)
+        .or_else(|| layout.lines().last())
+        .map_or(0.0, |line| f64::from(line.metrics().inline_min_coord));
+    BoundingBox::new(caret.x0 + start, caret.y0, caret.x1 + start, caret.y1)
 }
 
 /// The selection that covers the bytes `range` of `layout`.
@@ -1155,6 +1178,53 @@ mod tests {
             (caret_x(&mut ed) - sixteenth.x0 * plain / wide).abs() < 1.0,
             "with no span, the plain layout serves again"
         );
+    }
+
+    /// A span's indent starts the lines of its paragraph past it, zoomed
+    /// with the text. The glyphs, a click and the caret all read them there
+    /// (`CANVAS-085`).
+    #[test]
+    fn an_indented_paragraph_draws_and_puts_its_caret_past_the_indent() {
+        let mut fcx = shipped();
+        let mut ed = TextEditor::new("top\nheld", style());
+        ed.flush(&mut fcx, 1000.0, 2.0);
+        let flat = ed.caret_local().expect("a caret");
+        let indent = TextSpan {
+            indent: 12.0,
+            ..span(4..8)
+        };
+        ed.set_spans(&mut fcx, vec![indent]);
+        let end = ed.caret_local().expect("a caret");
+        assert!(
+            (end.x0 - flat.x0 - 24.0).abs() < 0.5,
+            "the zoomed indent moves the caret"
+        );
+        let y = (end.y0 + end.y1) / 2.0;
+        ed.point_down(25.0, y as f32);
+        ed.flush(&mut fcx, 1000.0, 2.0);
+        assert_eq!(
+            ed.caret(),
+            Some(4),
+            "a click past the indent lands at the start"
+        );
+        assert!(
+            (caret_x(&mut ed) - 24.0).abs() < 0.5,
+            "the caret stands past the indent"
+        );
+        let starts: Vec<f32> = ed
+            .layout()
+            .expect("a layout")
+            .lines()
+            .flat_map(|line| line.items())
+            .filter_map(|item| match item {
+                PositionedLayoutItem::GlyphRun(run) => Some(run.offset()),
+                PositionedLayoutItem::InlineBox(_) => None,
+            })
+            .collect();
+        let [top, held] = starts.as_slice() else {
+            panic!("a run a line, got {starts:?}");
+        };
+        assert!(*top < 0.5 && (held - 24.0).abs() < 0.5, "got {starts:?}");
     }
 
     /// The layout handed out is the one the editor draws: the spans' own

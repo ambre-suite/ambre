@@ -2,7 +2,7 @@
 //!
 //! Bold takes the heavy face and italic the slanted one. Code, inline or a
 //! block, takes the mono family on a tint, and a link the accent ink,
-//! underlined. A quote draws a rule in the margin, and a list a dot before
+//! underlined. A quote draws a rule in its indent, and a list a dot before
 //! each item. The field draws it as it is typed (`MURMURE-564`), the list
 //! once it is sent (`MURMURE-565`). No token is new: the tint and the ink are
 //! the palette's.
@@ -10,18 +10,23 @@
 use std::ops::Range;
 
 use ambre_bus::TextStyle;
+use ambre_canvas::theme::SPACE_6;
 use ambre_canvas::{Palette, SpanShape};
 use ambre_draw::{Affinity, Color, Cursor, Layout, ParleyBrush, Rect, Selection};
 
 /// The family label an inline code run draws in.
 pub(crate) const CODE_FAMILY: &str = "Monospace";
 
-/// The left and right edges of a quote's rule, left of the text.
-const QUOTE_RULE: (f64, f64) = (3.0, 1.0);
+/// How far right a quote's and a list's lines start: the `space_6` step.
+/// The margin mark stands in it, and a wrapped line keeps the block's edge
+/// (`MURMURE-570`).
+pub(crate) const BLOCK_INDENT: u16 = SPACE_6 as u16;
 
-/// The side of a list's dot, and its gap to the text.
+/// The left and right edges of a quote's rule, in the indent.
+const QUOTE_RULE: (f64, f64) = (2.0, 4.0);
+
+/// The side of a list's dot, centred in the indent.
 const LIST_DOT: f64 = 3.0;
-const LIST_GAP: f64 = 0.5;
 
 /// The weight of a bold run.
 const BOLD_WEIGHT: u16 = 700;
@@ -37,15 +42,15 @@ pub(crate) fn shape(style: &TextStyle, range: Range<usize>) -> SpanShape {
         TextStyle::Italic => shape.italic = true,
         TextStyle::Code | TextStyle::CodeBlock => shape.family = Some(CODE_FAMILY.to_owned()),
         TextStyle::Link(_) => shape.underline = true,
-        TextStyle::Quote | TextStyle::List => {}
+        TextStyle::Quote | TextStyle::List => shape.indent = BLOCK_INDENT,
     }
     shape
 }
 
-/// The marks the block `style` draws in the margin left of the bytes
+/// The marks the block `style` draws in the indent left of the bytes
 /// `bytes`, in the frame of `layout`. A quote takes one rule beside its
-/// lines, and a list one dot before each item. The margin holds them, so
-/// the text keeps its place.
+/// lines, and a list one dot before each item. The lines start past the
+/// indent, so no mark covers the text (`MURMURE-570`).
 pub(crate) fn margin(
     layout: &Layout<ParleyBrush>,
     text: &str,
@@ -65,7 +70,7 @@ pub(crate) fn margin(
             let top = boxes.iter().map(|(bb, _)| bb.y0).reduce(f64::min);
             let bottom = boxes.iter().map(|(bb, _)| bb.y1).reduce(f64::max);
             let (top, bottom) = top.zip(bottom).unwrap_or_else(|| line(bytes.start));
-            vec![Rect::new(-QUOTE_RULE.0, top, -QUOTE_RULE.1, bottom)]
+            vec![Rect::new(QUOTE_RULE.0, top, QUOTE_RULE.1, bottom)]
         }
         TextStyle::List => {
             let ends = text.get(bytes.clone()).unwrap_or_default();
@@ -79,12 +84,8 @@ pub(crate) fn margin(
                     let (top, bottom) = line(at);
                     let middle = (top + bottom) / 2.0;
                     let half = LIST_DOT / 2.0;
-                    Rect::new(
-                        -LIST_GAP - LIST_DOT,
-                        middle - half,
-                        -LIST_GAP,
-                        middle + half,
-                    )
+                    let centre = f64::from(BLOCK_INDENT) / 2.0;
+                    Rect::new(centre - half, middle - half, centre + half, middle + half)
                 })
                 .collect()
         }

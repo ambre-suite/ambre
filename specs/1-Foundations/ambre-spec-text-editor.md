@@ -31,6 +31,7 @@ rules live beside the design they constrain, rather than in the thread's own doc
 | `CANVAS-080` | `INV` | With spans pinned, a run of line moves MUST keep its column through a shorter line. | this spec section 2 | `ambre_canvas::editor::tests::a_line_move_over_spans_keeps_its_column` -- two moves up through a one-char line land at the column they left, in one flush or across two, and a move left first aims at a new column | none | verified |
 | `CANVAS-082` | `INV` | The layout the core hands out MUST be the one it draws: the spans' own while it holds spans, the plain one otherwise. | this spec section 2 | `ambre_canvas::editor::tests::the_layout_handed_out_is_the_one_drawn` -- none before the first flush, wider under a bold span, and plain again with no span | none | verified |
 | `CANVAS-083` | `INV` | The line the core names around the caret MUST be the line it draws, a wrapped line rather than the text between two breaks. | this spec section 2 | `ambre_canvas::editor::tests::the_caret_line_is_the_line_drawn` -- three words wrapped one a line: the last line, a move up, End at the wrap, and no line before a flush or under a selection | none | verified |
+| `CANVAS-085` | `INV` | Under a span's indent, the glyphs, a click and the caret MUST all start past the indent, scaled by the zoom. | this spec section 2; `CANVAS-084` | `ambre_canvas::editor::tests::an_indented_paragraph_draws_and_puts_its_caret_past_the_indent` -- at zoom 2 the held line's glyphs and caret move right by twice the indent, and a click just past it lands at the paragraph's start | none | verified |
 | `CANVAS-048` | `INV` | A composition preview MUST be replaceable in place. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- after the composition ends, its second assertion reads the buffer back as the composed run alone, so a preview appended beside its own commit fails | none | verified |
 | `CANVAS-040` | `OBS` | A composition preview MUST read as unconfirmed text. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- its first assertion finds the underline on the composing run, and its last asserts the committed run has lost it | none | verified |
 | `CANVAS-041` | `INV` | The caret and the selection MUST be drawn as paths, so a caller's transform carries them. | this spec section 2; `ambre-spec-drawing-surface.md` | `ambre_canvas::editor::tests::the_caret_and_selection_are_drawn_as_paths` -- it renders a selection and a caret under a pushed rotation and finds both as path fills and no rect fill, which a rotation maps by its bounding box alone | none | verified |
@@ -74,7 +75,7 @@ The host compares the body it captured when the edit opened against the one the 
 * **Boundary.** none: the core holds a string in memory, reaches no relay and opens no socket. What
   the user types leaves it as a commit the application turns into a document operation, and the
   keyboard path that feeds it is `ambre-spec-text-input.md`.
-* **Verification.** 17 `verified`, 2 `unimplemented`. Host-tier tests hold the queue, the drain at
+* **Verification.** 18 `verified`, 2 `unimplemented`. Host-tier tests hold the queue, the drain at
   paint time, the drawn paths and the no-op close. A parity belt per wrapper proves each one
   delegates to the core. What is loose is the two rules nothing has built yet.
 
@@ -138,6 +139,7 @@ Parley's `PlainEditor` lays its text out with one style. So the spans get a seco
 from the same text at the same wrap width (`CANVAS-079`). Every geometry is read from that layout:
 the caret, the band, the height, and the outcome of a click or a line move (`CANVAS-078`). With no
 span, the core takes the one-layout path it had before. A line move keeps its column (`CANVAS-080`).
+An indent moves the glyphs, the caret and a click alike (`CANVAS-085`).
 
 **What a host reads.** The core hands out its layout, so a host can draw beside the text
 (`CANVAS-082`). It names the caret's line from the caret's own box (`CANVAS-083`).

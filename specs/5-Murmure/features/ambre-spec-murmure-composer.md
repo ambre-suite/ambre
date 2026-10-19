@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-561` | `INV` | A link MUST hold an `http` or `https` address: the engine refuses another one, and reads one stored as text. | this spec section 3; `MURMURE-562` | `ambre_murmure::style_tests::a_style_outside_the_body_or_a_bad_link_is_refused` -- a send, an edit and a reply with another scheme are refused; `::a_link_to_another_scheme_reads_as_text` -- a stored `javascript:` link reads as text | none | verified |
 | `MURMURE-562` | `INV` | Each style MUST be a mark on the body beside the mentions, carried through an edit, an amendment, a fold and a relocation. | this spec section 3; `ambre-spec-murmure-schema.md` | `ambre_murmure::style_tests::a_style_is_a_mark_on_the_body_that_travels_with_it` -- each style is a mark a second peer reads; `::runs_of_one_style_read_as_one` -- touching runs read as one; `::an_edit_rewrites_the_styles_of_the_body` -- an edit replaces them; `ambre_murmure::amending_tests::a_member_reads_the_amendments_over_the_segment` -- an amendment carries them; `ambre_murmure::amending_tests::a_change_refused_by_the_lock_is_replayed` -- and its replay; `ambre_murmure::folding_tests::the_lease_holder_folds_the_amendments_into_the_segment` -- a fold keeps them; `ambre_murmure::closing_tests::a_message_refused_by_the_lock_moves_to_the_active_segment` -- a relocated message keeps them; `ambre_murmure::view::tests::an_edit_of_the_styles_alone_is_sent` -- an edit of the styles alone is sent | none | verified |
 | `MURMURE-564` | `OBS` | The composer MUST draw each style of its draft as it is typed. | this spec section 3; `MURMURE-193` | `ambre_murmure::view::tests::the_field_draws_each_mark_as_it_is_typed` -- markers typed past a wide char give a bold span, a code span on its tint and an underlined link, each at its byte range, and a draft with no mark draws none; `ambre_murmure::view::tests::a_block_marker_becomes_its_mark_and_the_field_draws_it` -- a quote's rule and a list's dot in the margin, a code block in the code face on its tint | none | verified |
-| `MURMURE-570` | `OBS` | A quote and a list MUST draw their lines past their margin mark, in the composer and in the list. | this spec section 3; `MURMURE-564`; `MURMURE-565` | not built | unbuilt -- lands with the `Block marks indented` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-570` | `OBS` | A quote and a list MUST draw their lines past their margin mark, in the composer and in the list. | this spec section 3; `MURMURE-564`; `MURMURE-565` | `ambre_murmure::view::tests::the_field_draws_a_blocks_lines_past_its_margin_mark` -- a wrapped quote's lines start past its indent and the plain line after it at the edge; `ambre_murmure::paint::tests::a_sent_block_draws_its_lines_past_its_margin_mark` -- the same for a sent quote and list | none | verified |
 | `MURMURE-195` | `INV` | A draft MUST be kept per channel while the user moves between channels. | this spec section 3 | `ambre_murmure::view::tests::each_channel_keeps_its_own_draft` -- a draft typed in one channel is there when the user comes back from another | none | verified |
 | `MURMURE-525` | `INV` | A draft MUST be kept per thread, apart from the draft of its channel. | this spec section 3; `MURMURE-195` | `ambre_murmure::view::tests::a_thread_keeps_its_own_draft_apart_from_the_channels` -- the thread's draft is not the channel's, and another thread opens on an empty one | none | verified |
 | `MURMURE-530` | `INV` | A thread's draft MUST survive the thread closing and opening again. | this spec section 3; `MURMURE-525` | `ambre_murmure::view::tests::a_threads_draft_survives_the_thread_closing` -- the region dropped and built again shows the draft, and the field does not take the keys | none | verified |
@@ -96,10 +96,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 44 `verified`, 1 `unimplemented`. The host tier drives the view with the events
-  the page sends: a press, a tap, text, keys, a paste. The marks are built, drawn in the field and
-  sent, and the format bar shows. The host tier holds a stored draft over a store in memory. The
-  wasm tier holds its store in a real browser database.
+* **Verification.** 45 `verified`. The host tier drives the view with the events the page sends: a
+  press, a tap, text, keys, a paste. The marks are built, drawn in the field and sent, and the
+  format bar shows. The host tier holds a stored draft over a store in memory. The wasm tier holds
+  its store in a real browser database.
 
 ---
 
@@ -169,7 +169,8 @@ the draft, and one undo gives them back. A marker touching code stays text (`MUR
 
 **Block markers, on their end** (`MURMURE-563`). `> ` and `- ` at a line's start close on the
 line break or the send, three backticks on three more. A mark covers its lines and their breaks,
-so a list reads as one. The margin holds a quote's rule and a list's dots (`MURMURE-564`).
+so a list reads as one. A quote's rule and a list's dots stand in their indent (`MURMURE-564`,
+`MURMURE-570`).
 
 **A mark through an edit.** Each mark follows its text as the draft changes. Text typed at either
 end of a mark stays out of it, as in most chat editors. A chord or a marker typed in the frame of

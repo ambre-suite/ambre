@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-079` | `CONC` | Two peers MUST accept and refuse the same deltas on a message. | this spec section 3; `AUTHOR-007` | `ambre_murmure::authorship_tests::two_peers_accept_and_refuse_the_same_deltas` -- two receivers reach the same verdicts and the same messages | none | verified |
 | `MURMURE-223` | `INV` | A delta of a segment, a thread or an amendments document MUST travel as a Loro JSON update. | this spec section 3; `ambre-spec-murmure-schema.md section 7` | `ambre_murmure::authorship_tests::a_segment_delta_travels_as_a_json_update_of_the_pinned_version` -- a send and a first update both parse as JSON | none | verified |
 | `MURMURE-227` | `INV` | A JSON update MUST carry the Loro JSON schema version the schema register pins. | this spec section 3; `ambre-spec-murmure-schema.md section 7` | `ambre_murmure::authorship_tests::a_segment_delta_travels_as_a_json_update_of_the_pinned_version` -- the update reads `JSON_SCHEMA_VERSION` | none | verified |
-| `MURMURE-565` | `OBS` | A message in the list MUST draw each style of its body. | this spec section 3; `MURMURE-562` | `ambre_murmure::paint::tests::a_sent_body_draws_each_of_its_marks` -- bold widens the layout, code paints its tint under the words, the link alone takes the accent over a rule, past a renamed mention; `ambre_murmure::paint::tests::a_sent_block_draws_its_margin_marks` -- a quote draws one rule and a list one dot per item in the margin, a code block its tint and no margin mark | none | verified |
+| `MURMURE-565` | `OBS` | A message in the list MUST draw each style of its body. | this spec section 3; `MURMURE-562` | `ambre_murmure::paint::tests::a_sent_body_draws_each_of_its_marks` -- bold widens the layout, code paints its tint under the words, the link alone takes the accent over a rule, past a renamed mention; `ambre_murmure::paint::tests::a_sent_block_draws_its_margin_marks` -- a quote draws one rule and a list one dot per item in the indent, a code block its tint and no margin mark | none | verified |
 ### 1.2 Send a message
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
@@ -134,7 +134,7 @@ leaves `thread` and `reactions` as they were. Both take a summary of kind edit, 
 **The list draws the marks** (`MURMURE-565`). The shape of each mark is part of the layout's cache
 key, and its ink and tint are painted on top. A renamed mention shifts the bytes, so each char
 range is mapped onto the body as shown. A quote draws a rule and a list a dot per item, in the
-margin beside its lines.
+indent its lines start past (`MURMURE-570`).
 
 **A click opens a link** (`MURMURE-567`). The next paint looks for a link under a click or a tap
 that moved nothing. It checks the address again, and the page opens it as a Toile link opens. The

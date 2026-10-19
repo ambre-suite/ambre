@@ -1420,9 +1420,11 @@ pub(crate) mod tests {
             let mut list = MessageList::default();
             list.absorb(SegmentId::new(), vec![sent]);
             let (surface, _) = paint(&list, 600.0);
+            let indent = f64::from(SPACE_8) + f64::from(look::BLOCK_INDENT);
             let marks = surface.count(|op| {
                 matches!(op, DrawOp::FillRect { color, rect }
-                    if *color == LIGHT.header_text && rect.x1 <= f64::from(SPACE_8))
+                    if *color == LIGHT.header_text
+                        && rect.x0 >= f64::from(SPACE_8) && rect.x1 <= indent)
             });
             let tints = surface.count(
                 |op| matches!(op, DrawOp::FillRect { color, .. } if *color == LIGHT.header_hover),
@@ -1434,6 +1436,52 @@ pub(crate) mod tests {
         assert_eq!(margin("said\none\ntwo", blocks), (3, 0), "a rule, two dots");
         let code = vec![mark(TextStyle::CodeBlock, 0..4)];
         assert_eq!(margin("fn a", code), (0, 1), "a tint, no margin mark");
+    }
+
+    /// A quote and a list draw each of their lines past their margin mark,
+    /// a wrapped one too. The line after the block starts at the body's edge
+    /// again (`MURMURE-570`).
+    #[test]
+    fn a_sent_block_draws_its_lines_past_its_margin_mark() {
+        let long = "word ".repeat(30);
+        for style in [TextStyle::Quote, TextStyle::List] {
+            let mut sent = message(UserId::new(), 0, &format!("{long}\nplain"));
+            sent.styles = vec![StyleMark {
+                style,
+                range: 0..long.len() + 1,
+            }];
+            let mut list = MessageList::default();
+            list.absorb(SegmentId::new(), vec![sent]);
+            let (surface, _) = paint(&list, 600.0);
+            let mut lines: Vec<(f64, f64)> = surface
+                .ops()
+                .iter()
+                .filter_map(|op| match op {
+                    DrawOp::Glyphs {
+                        color: Some(c),
+                        transform,
+                        ..
+                    } if *c == LIGHT.cell_text => {
+                        let at = transform.translation();
+                        Some((at.y, at.x))
+                    }
+                    _ => None,
+                })
+                .collect();
+            lines.sort_by(|a, b| a.0.total_cmp(&b.0));
+            // The author's name comes first, then the body's lines.
+            let [_, block @ .., (_, after)] = lines.as_slice() else {
+                panic!("the author and the body, got {lines:?}");
+            };
+            let edge = f64::from(SPACE_8);
+            let indent = edge + f64::from(look::BLOCK_INDENT);
+            assert!(block.len() >= 2, "the block wraps, got {block:?}");
+            assert!(
+                block.iter().all(|(_, x)| (x - indent).abs() < 0.5),
+                "each line of the block starts past its mark, got {block:?}"
+            );
+            assert!((after - edge).abs() < 0.5, "the next line at the edge");
+        }
     }
 
     /// The unread line paints in the accent between the read message and

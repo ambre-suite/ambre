@@ -17,7 +17,10 @@ use ambre_draw::{Brush, Color};
 use parley::style::{
     FontFamily, FontFamilyName, FontStyle, FontWeight, OverflowWrap, StyleProperty,
 };
-use parley::{Alignment, AlignmentOptions, FontContext, Layout, LayoutContext, RangedBuilder};
+use parley::{
+    Alignment, AlignmentOptions, BreakReason, FontContext, Layout, LayoutContext, RangedBuilder,
+    YieldData,
+};
 use rustc_hash::FxHashMap;
 
 use crate::fonts::LazyFontLoader;
@@ -54,8 +57,8 @@ struct CacheKey {
 }
 
 /// What a span shapes over its byte range: a weight, a slant, a family, an
-/// underline. Its ink and its tint are drawn over the layout, so they stay
-/// out of the cache key (`CANVAS-081`).
+/// underline, an indent. Its ink and its tint are drawn over the layout, so
+/// they stay out of the cache key (`CANVAS-081`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct SpanShape {
     pub range: Range<usize>,
@@ -63,6 +66,89 @@ pub struct SpanShape {
     pub italic: bool,
     pub family: Option<String>,
     pub underline: bool,
+    /// How far right each paragraph holding bytes of the range starts, in
+    /// the units of the width the text breaks to (`CANVAS-084`).
+    pub indent: u16,
+}
+
+/// Break `layout`, laid out from `text`, to `width`. Each paragraph holding
+/// bytes of one of `indents` starts that far right, the largest one if
+/// several hold it. Its lines narrow by as much, so a wrapped line keeps the
+/// paragraph's edge (`CANVAS-084`). With no indent, the plain break. The
+/// inline editor breaks its spans through it too.
+pub(crate) fn break_indented<B: parley::Brush>(
+    layout: &mut Layout<B>,
+    text: &str,
+    width: f32,
+    indents: &[(Range<usize>, f32)],
+) {
+    if !indents.iter().any(|(_, indent)| *indent > 0.0) {
+        layout.break_all_lines(Some(width));
+        return;
+    }
+    let shifts: Vec<f32> = paragraphs(text)
+        .map(|held| {
+            indents
+                .iter()
+                .filter(|(range, _)| range.start < range.end)
+                .filter(|(range, _)| range.start <= held.end && held.start < range.end)
+                .map(|(_, indent)| *indent)
+                .fold(0.0, f32::max)
+                .min(width)
+        })
+        .collect();
+    let mut lines = layout.break_lines();
+    lines.state_mut().set_layout_max_advance(width);
+    let mut paragraph = 0;
+    loop {
+        // The state set before a break is the one the line it commits takes.
+        let shift = shifts.get(paragraph).copied().unwrap_or(0.0);
+        let state = lines.state_mut();
+        state.set_line_x(shift);
+        state.set_line_max_advance(width - shift);
+        match lines.break_next() {
+            Some(YieldData::LineBreak(line)) => {
+                if line.reason == BreakReason::Explicit {
+                    paragraph += 1;
+                }
+            }
+            // No max height is set, and no box of the canvas is out of flow.
+            // Another yield ends the break rather than loop on it.
+            Some(_) | None => break,
+        }
+    }
+    lines.finish();
+}
+
+/// The byte ranges of the paragraphs of `text`, each break left out. A break
+/// is a mandatory one of UAX #14, the set parley ends a paragraph on, and a
+/// CR LF is one break.
+fn paragraphs(text: &str) -> impl Iterator<Item = Range<usize>> + '_ {
+    let mut start = 0;
+    let mut chars = text.char_indices().peekable();
+    std::iter::from_fn(move || {
+        if start > text.len() {
+            return None;
+        }
+        while let Some((at, c)) = chars.next() {
+            let mandatory = matches!(
+                c,
+                '\n' | '\r' | '\u{0B}' | '\u{0C}' | '\u{85}' | '\u{2028}' | '\u{2029}'
+            );
+            if mandatory {
+                let mut next = at + c.len_utf8();
+                if c == '\r' && chars.next_if(|(_, c)| *c == '\n').is_some() {
+                    next += 1;
+                }
+                let held = start..at;
+                start = next;
+                return Some(held);
+            }
+        }
+        let held = start..text.len();
+        start = text.len() + 1;
+        Some(held)
+    })
 }
 
 /// Push the look of `shape` over its range, and say whether it was pushed.
@@ -405,11 +491,14 @@ impl TextCache {
             builder.push_default(StyleProperty::OverflowWrap(OverflowWrap::BreakWord));
         }
         builder.push_default(StyleProperty::Brush(Brush::Solid(Color::BLACK)));
+        let mut indents = Vec::new();
         for shape in spans {
-            push_shape(&mut builder, text, shape);
+            if push_shape(&mut builder, text, shape) && shape.indent > 0 {
+                indents.push((shape.range.clone(), f32::from(shape.indent)));
+            }
         }
         let mut layout = builder.build(text);
-        layout.break_all_lines(Some(max_width));
+        break_indented(&mut layout, text, max_width, &indents);
         layout.align(align, AlignmentOptions::default());
         layout
     }
@@ -492,6 +581,46 @@ mod tests {
         cache.reset_frame_stats();
         cache.get_or_build_spans(&mut cx, "wide text", 14.0, 400.0, &[bold]);
         assert_eq!((cache.frame_hits, cache.frame_misses), (1, 0));
+    }
+
+    /// A span's indent starts each line of the paragraphs it holds that far
+    /// right, a wrapped line too, and narrows them by as much. The paragraph
+    /// after it starts at the edge again, and a CR LF is one break
+    /// (`CANVAS-084`).
+    #[test]
+    fn an_indent_starts_each_line_of_its_paragraphs_past_it() {
+        let mut cx = font_cx();
+        let mut cache = TextCache::new(1.0);
+        let long = "word ".repeat(20);
+        let text = format!("top\r\n{long}\r\nend");
+        let indent = SpanShape {
+            range: 5..5 + long.len() + 2,
+            indent: 12,
+            ..SpanShape::default()
+        };
+        let layout = cache.get_or_build_spans(&mut cx, &text, 14.0, 200.0, &[indent]);
+        let lines: Vec<(f32, f32)> = layout
+            .lines()
+            .map(|line| {
+                let m = line.metrics();
+                (
+                    m.inline_min_coord,
+                    m.inline_min_coord + m.advance - m.hanging_advance,
+                )
+            })
+            .collect();
+        let [(top, _), held @ .., (end, _)] = lines.as_slice() else {
+            panic!("three paragraphs, got {lines:?}");
+        };
+        assert_eq!((*top, *end), (0.0, 0.0), "the paragraphs around it");
+        assert!(held.len() >= 2, "the paragraph wraps, got {held:?}");
+        assert!(
+            held.iter()
+                .all(|(start, end)| *start == 12.0 && *end <= 200.0),
+            "each of its lines starts past the indent, within the width: {held:?}"
+        );
+        let paragraphs: Vec<_> = super::paragraphs("a\r\nb\n\u{2029}").collect();
+        assert_eq!(paragraphs, [0..1, 3..4, 5..5, 8..8]);
     }
 
     /// An overflow drops the coldest layouts and keeps the hot ones
