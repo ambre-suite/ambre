@@ -211,8 +211,6 @@ changed text.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A sent mark is not drawn.** The list draws a body as plain text, until the
-  `Marks drawn in a message` Story (`ambre-roadmap.md` E5).
 * **No block mark.** A code block, a list and a quote wait for the `Block marks in a message`
   Story (`ambre-roadmap.md` E5).
 * **No format bar.** A selection shows nothing. That waits for the

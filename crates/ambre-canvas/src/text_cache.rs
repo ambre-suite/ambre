@@ -11,9 +11,11 @@
 // shaping cost. Only new or changed strings trigger a shape call.
 // ============================================================================
 
+use std::ops::Range;
+
 use ambre_draw::{Brush, Color};
 use parley::style::{FontFamily, FontStack, FontStyle, FontWeight, OverflowWrap, StyleProperty};
-use parley::{Alignment, AlignmentOptions, FontContext, Layout, LayoutContext};
+use parley::{Alignment, AlignmentOptions, FontContext, Layout, LayoutContext, RangedBuilder};
 use rustc_hash::FxHashMap;
 
 use crate::fonts::LazyFontLoader;
@@ -45,11 +47,71 @@ struct CacheKey {
     /// Font family name (`None` = the grid default). Part of the key so each
     /// family of the same string is cached separately.
     font: Option<Box<str>>,
+    /// The ranges shaped in a face of their own, empty for a plain text.
+    spans: Box<[SpanShape]>,
+}
+
+/// What a span shapes over its byte range: a weight, a slant, a family, an
+/// underline. Its ink and its tint are drawn over the layout, so they stay
+/// out of the cache key (`CANVAS-081`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct SpanShape {
+    pub range: Range<usize>,
+    pub weight: Option<u16>,
+    pub italic: bool,
+    pub family: Option<String>,
+    pub underline: bool,
+}
+
+/// Push the look of `shape` over its range, and say whether it was pushed.
+/// A range that is empty or off a char boundary of `text` is not. The
+/// inline editor shapes its spans through it too.
+pub(crate) fn push_shape(
+    builder: &mut RangedBuilder<'_, Brush>,
+    text: &str,
+    shape: &SpanShape,
+) -> bool {
+    let range = &shape.range;
+    let placed = range.start < range.end
+        && text.is_char_boundary(range.start)
+        && text.is_char_boundary(range.end);
+    if !placed {
+        return false;
+    }
+    if let Some(weight) = shape.weight {
+        let weight = FontWeight::new(f32::from(weight));
+        builder.push(StyleProperty::FontWeight(weight), range.clone());
+    }
+    if shape.italic {
+        builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
+    }
+    if let Some(family) = &shape.family {
+        let face = registered_family_name(Some(family.as_str()));
+        let stack = FontStack::Single(FontFamily::Named(face.into()));
+        builder.push(StyleProperty::FontStack(stack), range.clone());
+    }
+    if shape.underline {
+        builder.push(StyleProperty::Underline(true), range.clone());
+    }
+    true
 }
 
 // -----------------------------------------------------------------------------
 // TextCache
 // -----------------------------------------------------------------------------
+
+/// The look of a whole text: everything a layout is shaped with but the
+/// text and its spans.
+#[derive(Clone, Copy)]
+struct Look<'a> {
+    font_size: f32,
+    max_width: f32,
+    align: Alignment,
+    bold: bool,
+    italic: bool,
+    family: Option<&'a str>,
+    break_word: bool,
+}
 
 /// A cached layout plus the monotonic tick of its last access, used to drive
 /// least-recently-used eviction instead of clearing the whole cache.
@@ -191,6 +253,57 @@ impl TextCache {
         family: Option<&str>,
         break_word: bool,
     ) -> &Layout<Brush> {
+        let plain = Look {
+            font_size,
+            max_width,
+            align,
+            bold,
+            italic,
+            family,
+            break_word,
+        };
+        self.get_or_build_look(font_cx, text, plain, &[])
+    }
+
+    /// A body text at `font_size` within `max_width`, start-aligned, with
+    /// each of `spans` shaped in its own look. Each set of spans of one text
+    /// is cached apart (`CANVAS-081`).
+    pub fn get_or_build_spans(
+        &mut self,
+        font_cx: &mut FontContext,
+        text: &str,
+        font_size: f32,
+        max_width: f32,
+        spans: &[SpanShape],
+    ) -> &Layout<Brush> {
+        let look = Look {
+            font_size,
+            max_width,
+            align: Alignment::Start,
+            bold: false,
+            italic: false,
+            family: None,
+            break_word: false,
+        };
+        self.get_or_build_look(font_cx, text, look, spans)
+    }
+
+    fn get_or_build_look(
+        &mut self,
+        font_cx: &mut FontContext,
+        text: &str,
+        look: Look<'_>,
+        spans: &[SpanShape],
+    ) -> &Layout<Brush> {
+        let Look {
+            font_size,
+            max_width,
+            align,
+            bold,
+            italic,
+            family,
+            break_word,
+        } = look;
         let align_u8 = match align {
             Alignment::Center => 1,
             Alignment::End | Alignment::Right => 2,
@@ -205,6 +318,7 @@ impl TextCache {
             italic,
             break_word,
             font: family.map(Box::from),
+            spans: spans.into(),
         };
 
         self.tick += 1;
@@ -224,18 +338,12 @@ impl TextCache {
                 // the base fonts and kick off a lazy fetch if needed. Only on a
                 // miss -- a cache hit means we already scanned this text.
                 self.lazy_fonts.observe(&e.key().text);
-                let family = e.key().font.clone();
                 let layout = Self::build_layout(
                     &mut self.layout_cx,
                     font_cx,
                     &e.key().text,
-                    font_size,
-                    max_width,
-                    align,
-                    bold,
-                    italic,
-                    family.as_deref(),
-                    break_word,
+                    look,
+                    &e.key().spans,
                     self.scale,
                 );
                 &e.insert(CachedLayout {
@@ -247,20 +355,23 @@ impl TextCache {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn build_layout(
         layout_cx: &mut LayoutContext<Brush>,
         font_cx: &mut FontContext,
         text: &str,
-        font_size: f32,
-        max_width: f32,
-        align: Alignment,
-        bold: bool,
-        italic: bool,
-        family: Option<&str>,
-        break_word: bool,
+        look: Look<'_>,
+        spans: &[SpanShape],
         scale: f32,
     ) -> Layout<Brush> {
+        let Look {
+            font_size,
+            max_width,
+            align,
+            bold,
+            italic,
+            family,
+            break_word,
+        } = look;
         let mut builder = layout_cx.ranged_builder(font_cx, text, scale, true);
         // Resolve every requested family to an actually-loaded face through the
         // single family authority. A family is a toolbar label
@@ -285,6 +396,9 @@ impl TextCache {
             builder.push_default(StyleProperty::OverflowWrap(OverflowWrap::BreakWord));
         }
         builder.push_default(StyleProperty::Brush(Brush::Solid(Color::BLACK)));
+        for shape in spans {
+            push_shape(&mut builder, text, shape);
+        }
         let mut layout = builder.build(text);
         layout.break_all_lines(Some(max_width));
         layout.align(Some(max_width), align, AlignmentOptions::default());
@@ -294,7 +408,7 @@ impl TextCache {
 
 #[cfg(test)]
 mod tests {
-    use super::{TextCache, registered_family_name};
+    use super::{SpanShape, TextCache, registered_family_name};
     use parley::{Alignment, FontContext};
 
     /// A context holding the shipped Noto Sans face, read from the tree.
@@ -319,6 +433,56 @@ mod tests {
             })
             .sum();
         (layout.width(), glyphs)
+    }
+
+    /// A span shapes its range in its own face. Each set of spans of one text
+    /// is cached apart, and the same set is served again (`CANVAS-081`).
+    #[test]
+    fn each_set_of_spans_shapes_and_caches_apart() {
+        const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+        let faces = ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"]
+            .map(|file| std::fs::read(format!("{DIR}{file}")).expect("a shipped face"));
+        let mut cx = crate::fonts::font_context_from_bytes(faces);
+        let mut cache = TextCache::new(1.0);
+        let bold = SpanShape {
+            range: 0..4,
+            weight: Some(700),
+            ..SpanShape::default()
+        };
+        let faces_of = |layout: &parley::Layout<ambre_draw::Brush>| {
+            let mut ids: Vec<u64> = layout
+                .lines()
+                .flat_map(|line| line.items())
+                .filter_map(|item| match item {
+                    parley::PositionedLayoutItem::GlyphRun(run) => Some(run.run().font().data.id()),
+                    parley::PositionedLayoutItem::InlineBox(_) => None,
+                })
+                .collect();
+            ids.dedup();
+            ids.len()
+        };
+        let plain = cache.get_or_build_spans(&mut cx, "wide text", 14.0, 400.0, &[]);
+        let plain_width = plain.width();
+        assert_eq!(faces_of(plain), 1);
+        let spanned = cache.get_or_build_spans(
+            &mut cx,
+            "wide text",
+            14.0,
+            400.0,
+            std::slice::from_ref(&bold),
+        );
+        assert_eq!(faces_of(spanned), 2, "the span shaped no face of its own");
+        assert!(spanned.width() > plain_width);
+        let off = SpanShape {
+            range: 0..40,
+            ..bold.clone()
+        };
+        let off = cache.get_or_build_spans(&mut cx, "wide text", 14.0, 400.0, &[off]);
+        assert_eq!(faces_of(off), 1, "a range past the text shapes nothing");
+        assert_eq!(cache.cache_size(), 3);
+        cache.reset_frame_stats();
+        cache.get_or_build_spans(&mut cx, "wide text", 14.0, 400.0, &[bold]);
+        assert_eq!((cache.frame_hits, cache.frame_misses), (1, 0));
     }
 
     /// An overflow drops the coldest layouts and keeps the hot ones

@@ -6,16 +6,18 @@
 //! recording surface of a host test.
 
 use std::collections::HashMap;
+use std::ops::Range;
 
 use ambre_bus::{MessageId, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
-use ambre_canvas::{Palette, TextCache};
+use ambre_canvas::{Palette, SpanShape, TextCache};
 use ambre_draw::{
     Affine, Affinity, Alignment, Brush, Color, Cursor, DrawSurface, FontContext, Layout,
     ParleyBrush, PositionedLayoutItem, Rect, Selection,
 };
 
 use crate::list::{JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, window};
+use crate::look;
 use crate::select::{Selecting, Spot, TextSelection};
 
 /// How strongly a selection tints the text under it.
@@ -135,15 +137,22 @@ pub fn paint_list<S: DrawSurface>(
         let Some((row, line)) = words.get(&i) else {
             continue;
         };
-        if let Some((start, end)) = selection.and_then(|s| s.range_in(&keys, i, row.body.len())) {
+        let band = selection.and_then(|s| s.range_in(&keys, i, row.body.len()));
+        let tints: Vec<(Range<usize>, Color)> = row
+            .marks
+            .iter()
+            .filter_map(|mark| look::tint(&mark.style, palette).map(|c| (mark.bytes.clone(), c)))
+            .collect();
+        if band.is_some() || !tints.is_empty() {
             let body_y = body_top(font_cx, cache, row, *line, top, text_width);
-            let tint = palette.selection.with_alpha(SELECTION_ALPHA);
-            let layout = shape(font_cx, cache, &row.body, FONT_BODY, text_width, false);
-            let from = Cursor::from_byte_index(layout, start, Affinity::Downstream);
-            let to = Cursor::from_byte_index(layout, end, Affinity::Upstream);
-            for (bb, _) in Selection::new(from, to).geometry(layout) {
-                let (x, y) = (f64::from(SPACE_8), f64::from(body_y));
-                surface.fill_rect(Rect::new(bb.x0 + x, bb.y0 + y, bb.x1 + x, bb.y1 + y), tint);
+            let layout = body(font_cx, cache, row, text_width);
+            // The tints go first, so a selection band stays visible over code.
+            for (bytes, color) in tints {
+                fill_bytes(surface, layout, bytes, body_y, color);
+            }
+            if let Some((start, end)) = band {
+                let tint = palette.selection.with_alpha(SELECTION_ALPHA);
+                fill_bytes(surface, layout, start..end, body_y, tint);
             }
         }
         let bottom = top + tall;
@@ -200,7 +209,7 @@ fn spot_at(
         .or_else(|| rows.last())?;
     let (row, line) = words.get(&i)?;
     let body_y = body_top(font_cx, cache, row, *line, top, width);
-    let layout = shape(font_cx, cache, &row.body, FONT_BODY, width, false);
+    let layout = body(font_cx, cache, row, width);
     let cursor = Cursor::from_point(layout, x - SPACE_8, y - body_y);
     Some(Spot {
         row: *keys.get(i)?,
@@ -317,10 +326,42 @@ pub(crate) fn shape<'c>(
     cache.get_or_build(font_cx, text, size, width, Alignment::Start, bold, false)
 }
 
+/// The layout of a row's body, each of its marks shaped in (`MURMURE-565`).
+/// A body with no mark takes the same entry as its plain text.
+fn body<'c>(
+    font_cx: &mut FontContext,
+    cache: &'c mut TextCache,
+    row: &RowWords,
+    width: f32,
+) -> &'c Layout<ParleyBrush> {
+    let spans: Vec<SpanShape> = row
+        .marks
+        .iter()
+        .map(|mark| look::shape(&mark.style, mark.bytes.clone()))
+        .collect();
+    cache.get_or_build_spans(font_cx, &row.body, FONT_BODY, width, &spans)
+}
+
+/// Fill the boxes `layout` gives the bytes `bytes`, its top at `body_y`.
+fn fill_bytes<S: DrawSurface>(
+    surface: &mut S,
+    layout: &Layout<ParleyBrush>,
+    bytes: Range<usize>,
+    body_y: f32,
+    color: Color,
+) {
+    let from = Cursor::from_byte_index(layout, bytes.start, Affinity::Downstream);
+    let to = Cursor::from_byte_index(layout, bytes.end, Affinity::Upstream);
+    let (x, y) = (f64::from(SPACE_8), f64::from(body_y));
+    for (bb, _) in Selection::new(from, to).geometry(layout) {
+        surface.fill_rect(Rect::new(bb.x0 + x, bb.y0 + y, bb.x1 + x, bb.y1 + y), color);
+    }
+}
+
 /// The height of a row, from the same layouts [`draw_row`] paints.
 fn measure(font_cx: &mut FontContext, cache: &mut TextCache, row: &RowWords, width: f32) -> f32 {
     let mut tall = 2.0 * SPACE_2 + header_height(font_cx, cache, row, width);
-    tall += shape(font_cx, cache, &row.body, FONT_BODY, width, false).height();
+    tall += body(font_cx, cache, row, width).height();
     if let Some(replies) = &row.replies {
         tall += shape(font_cx, cache, replies, FONT_UI, width, false).height();
     }
@@ -349,14 +390,14 @@ fn draw_row<S: DrawSurface>(
         draw(surface, layout, x + wide + SPACE_4, y, palette.header_text);
         y += author_tall.max(time_tall);
     }
-    let body = if row.muted {
+    let ink = if row.muted {
         palette.header_text
     } else {
         palette.cell_text
     };
-    let layout = shape(font_cx, cache, &row.body, FONT_BODY, width, false);
+    let layout = body(font_cx, cache, row, width);
     let body_tall = layout.height();
-    draw(surface, layout, x, y, body);
+    draw_body(surface, layout, x, y, ink, palette);
     y += body_tall;
     if let Some(replies) = &row.replies {
         let layout = shape(font_cx, cache, replies, FONT_UI, width, false);
@@ -384,9 +425,47 @@ pub(crate) fn draw<S: DrawSurface>(
     }
 }
 
+/// Emit every glyph run of a body, its top-left at `(x, y)`. An underlined
+/// run is a link: it takes the link ink and a rule under its baseline.
+fn draw_body<S: DrawSurface>(
+    surface: &mut S,
+    layout: &Layout<ParleyBrush>,
+    x: f32,
+    y: f32,
+    ink: Color,
+    palette: &Palette,
+) {
+    for line in layout.lines() {
+        for item in line.items() {
+            let PositionedLayoutItem::GlyphRun(run) = item else {
+                continue;
+            };
+            let linked = run.style().underline.is_some();
+            let color = if linked { look::link_ink(palette) } else { ink };
+            let (left, baseline) = (x + run.offset(), y + run.baseline());
+            let at = (f64::from(left), f64::from(baseline));
+            surface.draw_glyphs(&run, &Brush::Solid(color), Affine::translate(at));
+            if linked {
+                let metrics = run.run().metrics();
+                let top = baseline - metrics.underline_offset;
+                let size = metrics.underline_size.max(1.0);
+                let rule = Rect::new(
+                    f64::from(left),
+                    f64::from(top),
+                    f64::from(left + run.advance()),
+                    f64::from(top + size),
+                );
+                surface.fill_rect(rule, color);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
-    use ambre_bus::{DocumentId, SegmentId, ThreadHead};
+    use ambre_bus::{
+        DocumentId, Mention, MentionTarget, SegmentId, StyleMark, TextStyle, ThreadHead,
+    };
     use ambre_canvas::fonts::font_context_from_bytes;
     use ambre_canvas::theme::LIGHT;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
@@ -605,6 +684,62 @@ pub(crate) mod tests {
         let muted: usize = runs(&surface, LIGHT.header_text).iter().map(|r| r.1).sum();
         assert_eq!(muted, 1 + crate::list::DELETED.chars().count());
         assert!(!runs(&surface, LIGHT.selection).is_empty());
+    }
+
+    /// A sent body draws its marks: bold shapes heavier, code sits on its
+    /// tint, a link takes the accent over a rule (`MURMURE-565`). A renamed
+    /// mention before them does not shift them.
+    #[test]
+    fn a_sent_body_draws_each_of_its_marks() {
+        let mut sent = message(UserId::new(), 0, "@bo hi bold c d");
+        sent.mentions = vec![Mention {
+            target: MentionTarget::User(UserId::new()),
+            range: 0..3,
+        }];
+        let mark = |style, range| StyleMark { style, range };
+        sent.styles = vec![
+            mark(TextStyle::Link("https://ambre.dev".to_owned()), 14..15),
+            mark(TextStyle::Bold, 7..11),
+            mark(TextStyle::Code, 12..13),
+        ];
+        let mut list = MessageList::default();
+        list.absorb(SegmentId::new(), vec![sent]);
+        let rows = list.rows();
+        let first = rows.first().expect("one row");
+        let row = first.words(|_| Some("Ada".to_owned()), |_| "t".to_owned());
+        assert_eq!(row.body, "@Ada hi bold c d");
+        let mut marks: Vec<(usize, usize)> = row
+            .marks
+            .iter()
+            .map(|m| (m.bytes.start, m.bytes.end))
+            .collect();
+        marks.sort_unstable();
+        assert_eq!(marks, [(8, 12), (13, 14), (15, 16)]);
+        let (mut font_cx, mut cache) = (fonts(), TextCache::new(1.0));
+        let plain = shape(&mut font_cx, &mut cache, &row.body, FONT_BODY, 384.0, false).width();
+        assert!(body(&mut font_cx, &mut cache, &row, 384.0).width() > plain);
+
+        let (surface, _) = paint(&list, 600.0);
+        let ops = surface.ops();
+        let fill = |want: Color| {
+            ops.iter().position(
+                |op| matches!(op, DrawOp::FillRect { color, rect } if *color == want && rect.height() < 3.0),
+            )
+        };
+        let tint = ops
+            .iter()
+            .position(
+                |op| matches!(op, DrawOp::FillRect { color, .. } if *color == LIGHT.header_hover),
+            )
+            .expect("the code tint");
+        let first_glyph = ops
+            .iter()
+            .position(|op| matches!(op, DrawOp::Glyphs { .. }))
+            .expect("the words");
+        assert!(tint < first_glyph, "the tint lies under the words");
+        let link: usize = runs(&surface, LIGHT.selection).iter().map(|r| r.1).sum();
+        assert_eq!(link, 1, "only the link takes the accent");
+        assert!(fill(LIGHT.selection).is_some(), "the link has its rule");
     }
 
     /// The unread line paints in the accent between the read message and

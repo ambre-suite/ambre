@@ -21,8 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-079` | `CONC` | Two peers MUST accept and refuse the same deltas on a message. | this spec section 3; `AUTHOR-007` | `ambre_murmure::authorship_tests::two_peers_accept_and_refuse_the_same_deltas` -- two receivers reach the same verdicts and the same messages | none | verified |
 | `MURMURE-223` | `INV` | A delta of a segment, a thread or an amendments document MUST travel as a Loro JSON update. | this spec section 3; `ambre-spec-murmure-schema.md section 7` | `ambre_murmure::authorship_tests::a_segment_delta_travels_as_a_json_update_of_the_pinned_version` -- a send and a first update both parse as JSON | none | verified |
 | `MURMURE-227` | `INV` | A JSON update MUST carry the Loro JSON schema version the schema register pins. | this spec section 3; `ambre-spec-murmure-schema.md section 7` | `ambre_murmure::authorship_tests::a_segment_delta_travels_as_a_json_update_of_the_pinned_version` -- the update reads `JSON_SCHEMA_VERSION` | none | verified |
-| `MURMURE-565` | `OBS` | A message in the list MUST draw each style of its body. | this spec section 3; `MURMURE-562` | not built | unbuilt -- lands with the `Marks drawn in a message` Story (`ambre-roadmap.md` E5) | unimplemented |
-
+| `MURMURE-565` | `OBS` | A message in the list MUST draw each style of its body. | this spec section 3; `MURMURE-562` | `ambre_murmure::paint::tests::a_sent_body_draws_each_of_its_marks` -- bold widens the layout, code paints its tint under the words, the link alone takes the accent over a rule, past a renamed mention | none | verified |
 ### 1.2 Send a message
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
@@ -61,13 +60,20 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-228` | `FAIL` | Given a JSON update of a schema version the client does not compile, the client MUST refuse it and ask the user to update. | this spec section 3; `MURMURE-019` | `ambre_murmure::authorship_tests::a_json_update_of_another_version_is_refused_and_asks_an_update`; `ambre_logic::channels::tests::a_delta_from_a_newer_build_asks_the_user_to_update` -- the view gets `UpdateRequired` | none | verified |
 | `MURMURE-226` | `FRAME` | Checking a delta MUST NOT copy its document. | this spec section 3; `ambre-spec-budgets.md section 1` | type-level -- `delta::check` takes the JSON update, a registry lookup and a reactions lookup, never a document | none | verified |
 
+### 1.6 Open a link
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-567` | `POST` | A click on a link in a message MUST open its address in a fresh tab, with no opener. | this spec section 3; `MURMURE-561` | not built | unbuilt -- lands with the `A link in a message opens on a click` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-568` | `FRAME` | Opening a link MUST NOT move the selection or a read cursor. | this spec section 3; `MURMURE-425` | not built | unbuilt -- lands with the `A link in a message opens on a click` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** the authorship check reads each received delta with no document, a row of
   `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
   summary (`SYNC-113`). The relay never learns whether a delta is a message, an edit or a delete.
-* **Verification.** 22 `verified`, 1 `unimplemented`. The send, the authorship check, the edit
+* **Verification.** 23 `verified`, 2 `unimplemented`. The send, the authorship check, the edit
   and the delete are built, live and as amendments. So is the `thread` field another member sets
-  once. The list draws a body as plain text, its styles not yet.
+  once. The list draws the styles of a body, and a click on a link does nothing yet.
 
 ---
 
@@ -124,6 +130,10 @@ moderator whose standing the membership log proves (`features/ambre-spec-murmure
 **An edit and a delete in a live segment.** An edit replaces the body by its difference alone, writes
 the marks again from the draft, and sets `edited`. A delete empties the body and sets `deleted`. It
 leaves `thread` and `reactions` as they were. Both take a summary of kind edit, which names no one.
+
+**The list draws the marks** (`MURMURE-565`). The shape of each mark is part of the layout's cache
+key, and its ink and tint are painted on top. A renamed mention shifts the bytes, so each char
+range is mapped onto the body as shown.
 
 **Code.** the send is `ChannelState::send`, in `crates/ambre-murmure/src/channel.rs`, beside
 `ChannelState::edit` and `ChannelState::delete`. The check is

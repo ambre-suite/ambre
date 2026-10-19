@@ -26,7 +26,7 @@
 | `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | partial | 26 |  |
 | `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 23 |  |
 | `murmure-message-list` | The conversation of a channel, newest at the bottom. | partial | 39 |  |
-| `murmure-messages` | A member writes a message, edits it, or deletes it. | partial | 23 |  |
+| `murmure-messages` | A member writes a message, edits it, or deletes it. | partial | 25 |  |
 | `murmure-notifications` | A member learns that someone mentioned them or wrote to them directly. | partial | 19 |  |
 | `murmure-search` | A member finds a message by its words, in the channels they have loaded. | partial | 18 |  |
 | `murmure-spaces` | A team gathers in a space. | partial | 34 |  |
@@ -44,4 +44,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 6 implemented, 11 partial, 11 design-only. 543 contract rows, 0 loose.**
+**28 features: 6 implemented, 11 partial, 11 design-only. 545 contract rows, 0 loose.**

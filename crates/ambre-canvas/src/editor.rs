@@ -35,6 +35,7 @@ use ambre_draw::{
 use parley::{Affinity, AlignmentOptions, Cursor, Layout, Selection};
 
 use crate::registered_family_name;
+use crate::text_cache::{SpanShape, push_shape};
 
 /// Caret bar width in screen pixels.
 pub const CARET_WIDTH: f32 = 1.5;
@@ -573,30 +574,16 @@ impl TextEditor {
             builder.push_default(property);
         }
         for span in &self.spans {
-            let range = &span.range;
-            let placed = range.start < range.end
-                && text.is_char_boundary(range.start)
-                && text.is_char_boundary(range.end);
-            if !placed {
-                continue;
-            }
-            if let Some(weight) = span.weight {
-                let weight = FontWeight::new(f32::from(weight));
-                builder.push(StyleProperty::FontWeight(weight), range.clone());
-            }
-            if span.italic {
-                builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
-            }
-            if let Some(family) = &span.family {
-                let face = registered_family_name(Some(family.as_str()));
-                let stack = FontStack::Single(FontFamily::Named(face.into()));
-                builder.push(StyleProperty::FontStack(stack), range.clone());
-            }
-            if let Some(color) = span.color {
-                builder.push(StyleProperty::Brush(Brush::Solid(color)), range.clone());
-            }
-            if span.underline {
-                builder.push(StyleProperty::Underline(true), range.clone());
+            let shape = SpanShape {
+                range: span.range.clone(),
+                weight: span.weight,
+                italic: span.italic,
+                family: span.family.clone(),
+                underline: span.underline,
+            };
+            let placed = push_shape(&mut builder, &text, &shape);
+            if let Some(color) = span.color.filter(|_| placed) {
+                builder.push(StyleProperty::Brush(Brush::Solid(color)), shape.range);
             }
         }
         if let Some(compose) = compose {

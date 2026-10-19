@@ -36,6 +36,7 @@ use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, 
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::PendingEdit;
+use crate::look;
 use crate::markers;
 use crate::mention_list::{MentionList, Offer, offers, query_at};
 use crate::paint::{draw, shape};
@@ -51,9 +52,6 @@ const MIN_LINE_PX: f32 = FONT_BODY + SPACE_4;
 
 /// The family label of the composer's text, the one of the message bodies.
 const FAMILY: &str = "Sans";
-
-/// The family label an inline code span draws in (`MURMURE-564`).
-const CODE_FAMILY: &str = "Monospace";
 
 /// The height of the strip that names who types, above the field.
 const TYPING_PX: f32 = FONT_UI + SPACE_4;
@@ -101,32 +99,24 @@ fn body_style(color: Color) -> TextEditorStyle {
     }
 }
 
-/// The span the style `mark` draws over `text`, its chars turned to bytes
-/// (`MURMURE-564`). Code takes the mono face on a tint, and a link the accent
-/// ink, underlined.
+/// The span the style `mark` draws over `text`, its chars turned to bytes,
+/// in the look the list draws it in too (`MURMURE-564`).
 fn span_of(text: &str, mark: &StyleMark, palette: &Palette) -> TextSpan {
     let byte = |chars: usize| {
         text.char_indices()
             .nth(chars)
             .map_or(text.len(), |(at, _)| at)
     };
-    let mut span = TextSpan {
-        range: byte(mark.range.start)..byte(mark.range.end),
-        ..TextSpan::default()
-    };
-    match &mark.style {
-        TextStyle::Bold => span.weight = Some(700),
-        TextStyle::Italic => span.italic = true,
-        TextStyle::Code => {
-            span.family = Some(CODE_FAMILY.to_owned());
-            span.background = Some(palette.header_hover);
-        }
-        TextStyle::Link(_) => {
-            span.color = Some(palette.selection);
-            span.underline = true;
-        }
+    let shape = look::shape(&mark.style, byte(mark.range.start)..byte(mark.range.end));
+    TextSpan {
+        range: shape.range,
+        weight: shape.weight,
+        italic: shape.italic,
+        family: shape.family,
+        color: look::ink(&mark.style, palette),
+        underline: shape.underline,
+        background: look::tint(&mark.style, palette),
     }
-    span
 }
 
 /// Which way a step of the history moved the draft.

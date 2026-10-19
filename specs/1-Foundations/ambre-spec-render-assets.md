@@ -25,6 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-017` | `INV` | Every font family label MUST resolve to a loaded face before shaping; an unmatched label MUST NOT reach the shaper. | this spec section 2 | `ambre_canvas::text_cache::tests::family_labels_map_to_registered_faces`; `::registered_face_names_pass_through` | none | verified |
+| `CANVAS-081` | `INV` | A layout shaped with styled spans MUST be cached apart from the same text with other spans, and a span off the text MUST shape nothing. | this spec section 2; `MURMURE-565` | `ambre_canvas::text_cache::tests::each_set_of_spans_shapes_and_caches_apart` -- a bold span adds a face and widens the text, a span past the end shapes one face, and the same set hits | none | verified |
 | `CANVAS-067` | `INV` | A face the application has loaded MUST be held by every thread that measures text, never by the thread that fetched it alone. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- it opens one document before the delivery and one after, and reads the face count back off both | none | verified |
 | `CANVAS-069` | `INV` | The context the UI thread shapes on MUST hold only the faces the application loaded into it: a face of the machine MUST NOT be discoverable from it. | this spec section 2; `PROSE-114` | `ambre_canvas::fonts::tests::a_built_context_discovers_no_face_of_the_machine` -- it asks for families a desktop carries; structural -- `font_context_from` builds on `font_context_from_bytes`, the one constructor, which starts from `ambre_draw::sealed_font_context`; `ambre_draw::text::tests::a_sealed_context_discovers_no_face_of_the_machine` -- that context, asked for the same families | none | verified |
 | `CANVAS-018` | `INV` | A font MUST NOT be embedded in a binary. | this spec section 3; `ambre-spec-budgets.md section 5` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses an `include_bytes!` of a font file on any Rust line | none | verified |
@@ -65,7 +66,7 @@ keep the allocation where it is.
 * **Boundary.** the font fetch is the one network path this layer opens, same-origin by
   `CANVAS-018` and the single exception `UI-THREAD-004` names to the UI thread's ban. This layer
   holds no key and reaches no relay.
-* **Verification.** 15 `verified`, 3 `unimplemented`. The atlases and the layout cache are driven
+* **Verification.** 16 `verified`, 3 `unimplemented`. The atlases and the layout cache are driven
   on the host past their capacity, and what survives is compared with what it drew before. The
   font fetch and its origin are read from the paths, and a source gate refuses an embedded face.
   The send of a late face runs in the browser tier, through the function the boot send calls.
@@ -116,8 +117,8 @@ of ours.
 **From a string to pixels.** Four stages, and a cache between each pair.
 
 1. `TextCache` keys a Parley `Layout` on the text, the size, the wrap width, the alignment, the
-   weight, the slant, the emergency-break flag and the family. A hit costs nothing; a miss shapes
-   (`CANVAS-022`).
+   weight, the slant, the emergency-break flag and the family. The styled spans join the key
+   (`CANVAS-081`). A hit costs nothing; a miss shapes (`CANVAS-022`).
 2. every string the cache shapes is offered to the lazy loader. It fetches a face the first time it
    sees a codepoint the base faces cannot cover (`CANVAS-006`).
 3. Swash rasterizes each glyph, keyed on the font blob id, the glyph id and the size.

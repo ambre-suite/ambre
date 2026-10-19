@@ -6,10 +6,11 @@
 //! `paint` lays the rows out and draws them.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::ops::Range;
 
 use ambre_bus::{
     ChannelId, DocumentId, LogicCommand, MessageId, MessageView, MurmureCommand, MurmureEvent,
-    Notice, SegmentId, Timestamp, UiEvent, Unreadable, UserId,
+    Notice, SegmentId, TextStyle, Timestamp, UiEvent, Unreadable, UserId,
 };
 
 /// Consecutive messages of one author inside this span share one header:
@@ -257,6 +258,13 @@ pub enum RowKey {
     Band(SegmentId),
 }
 
+/// One style over the body a row shows, in bytes of that body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BodyMark {
+    pub style: TextStyle,
+    pub bytes: Range<usize>,
+}
+
 /// What a row shows, in words.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RowWords {
@@ -266,6 +274,8 @@ pub struct RowWords {
     pub body: String,
     /// The body is no text a member wrote: a deleted message or a notice.
     pub muted: bool,
+    /// The style marks of the body, over its bytes as shown (`MURMURE-565`).
+    pub marks: Vec<BodyMark>,
     /// How many replies its thread holds, once it holds one. On a reply
     /// also sent to the channel, the line that names its thread
     /// (`MURMURE-532`).
@@ -294,13 +304,20 @@ impl<'a> Row<'a> {
         };
         let name = |user| name_of(user).unwrap_or_else(|| UNKNOWN_MEMBER.to_owned());
         let header = header.then(|| (name(message.author), time_of(message.ts)));
-        let (body, muted) = match message.notice {
+        let (body, muted, marks) = match message.notice {
             Some(Notice::MemberAdded { member }) => {
-                (format!("{} joined the conversation", name(member)), true)
+                let body = format!("{} joined the conversation", name(member));
+                (body, true, Vec::new())
             }
-            None if message.deleted => (DELETED.to_owned(), true),
-            None if message.edited => (format!("{} {EDITED}", message.shown(&name_of)), false),
-            None => (message.shown(&name_of), false),
+            None if message.deleted => (DELETED.to_owned(), true, Vec::new()),
+            None => {
+                let (mut body, bytes) = message.shown_at(&name_of);
+                let marks = body_marks(message, &bytes);
+                if message.edited {
+                    body = format!("{body} {EDITED}");
+                }
+                (body, false, marks)
+            }
         };
         let replies = message
             .thread
@@ -314,6 +331,7 @@ impl<'a> Row<'a> {
             header,
             body,
             muted,
+            marks,
             replies,
         }
     }
@@ -359,8 +377,26 @@ fn band_words(band: &Band, time_of: impl Fn(Timestamp) -> String) -> RowWords {
         header: None,
         body,
         muted: true,
+        marks: Vec::new(),
         replies: None,
     }
+}
+
+/// The style marks of `message` over the bytes of its shown body, `bytes`
+/// giving where each char of its text starts there. A mark the shown body
+/// leaves empty, such as one inside a renamed mention, is dropped.
+fn body_marks(message: &MessageView, bytes: &[usize]) -> Vec<BodyMark> {
+    let byte = |chars: usize| bytes.get(chars).copied();
+    crate::style::normalized(&message.styles)
+        .into_iter()
+        .filter_map(|mark| {
+            let range = byte(mark.range.start)?..byte(mark.range.end)?;
+            (range.start < range.end).then_some(BodyMark {
+                style: mark.style,
+                bytes: range,
+            })
+        })
+        .collect()
 }
 
 /// The rows a viewport `height` tall shows when the list rests on its

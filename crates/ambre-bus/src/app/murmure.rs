@@ -434,12 +434,22 @@ impl MessageView {
     /// `@` and that member's current name (`MURMURE-098`). A name `name_of`
     /// does not know keeps the text the author typed.
     pub fn shown(&self, name_of: impl Fn(UserId) -> Option<String>) -> String {
+        self.shown_at(name_of).0
+    }
+
+    /// The body as [`shown`](Self::shown) writes it, and the byte of it
+    /// where each char of the text starts, one past the last included. A
+    /// char a name took the place of starts past that name (`MURMURE-565`).
+    pub fn shown_at(&self, name_of: impl Fn(UserId) -> Option<String>) -> (String, Vec<usize>) {
         let mut shown = String::with_capacity(self.text.len());
+        let mut bytes = Vec::with_capacity(self.text.len() + 1);
         let mut at = 0;
         for (i, c) in self.text.chars().enumerate() {
             if i < at {
+                bytes.push(shown.len());
                 continue;
             }
+            bytes.push(shown.len());
             let mention = self.mentions.iter().find(|m| m.range.start == i);
             let named = mention.and_then(|m| match m.target {
                 MentionTarget::User(user) => name_of(user).map(|name| (m, name)),
@@ -454,7 +464,8 @@ impl MessageView {
                 None => shown.push(c),
             }
         }
-        shown
+        bytes.push(shown.len());
+        (shown, bytes)
     }
 }
 
