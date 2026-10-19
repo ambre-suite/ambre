@@ -269,7 +269,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` A search fold for every script | MVP | the search folds the diacritics of Greek, Vietnamese and every script the client draws, past the Latin table, within the Main instance budget. Done when `MURMURE-478` reads `verified` |
 | `[x]` Attachments | MVP | files and images attached to a message through the shared media flow |
 | `[x]` Emoji | MVP | Unicode emoji drawn in messages and reactions, with a picker |
-| `[ ]` Animated images | MVP | an animated GIF plays in the message list, and stays still under reduced motion |
+| `[x]` Animated images | MVP | an animated GIF plays in the message list, and stays still under reduced motion |
 | `[ ]` Murmure measured on a phone | MVP | the Murmure budgets measured in WASM on a mid-range phone, in place of the desktop figures and the ratio they assume: segment replay and snapshot import, the JSON authorship check, the envelope open, the rotation of a space leave, the color emoji font size, and the two residency memory budgets. The `segment` bench of `ambre-murmure` is the starting point. It also measures a cold open end to end, relay read included, against the cold start row |
 | `[ ]` Moderation | V1 | a moderator hides the message of another member |
 | `[ ]` Custom emoji | V1 | emoji a space admin adds for the members of that space |

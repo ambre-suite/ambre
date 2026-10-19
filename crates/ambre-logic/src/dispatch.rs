@@ -277,6 +277,10 @@ impl LogicState {
                 if self.erased(id, &evt) {
                     return;
                 }
+                // The image of a preview, which the view awaits decoded.
+                if self.pictured(id, &evt) {
+                    return;
+                }
                 // A response to a request this Logic thread issued on behalf of a
                 // document (`toile-media`) is fed back into the owning engine. It
                 // is not forwarded to the UI. UI-issued requests are absent from
@@ -717,7 +721,7 @@ impl LogicState {
                     self.route_service_error(document_id, id, message);
                     return;
                 }
-                if id.is_some_and(|id| self.erase_failed(id)) {
+                if id.is_some_and(|id| self.erase_failed(id) || self.picture_failed(id)) {
                     return;
                 }
                 // A hand-off the relay refused fails the leave it held, which

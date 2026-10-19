@@ -25,6 +25,13 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
         name_of: Rc::new(move |user| relay.member_name(user)),
         time_of: Rc::new(move |ts| clock.format(ts)),
         now_ms: Rc::new(super::probe::now_ms),
+        still: Rc::new({
+            // The query is asked once; its answer follows the user's setting.
+            let query = web_sys::window()
+                .and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok())
+                .flatten();
+            move || query.as_ref().is_some_and(web_sys::MediaQueryList::matches)
+        }),
         announce: Rc::new({
             let pipe = pipe.clone();
             move |text| pipe.announce(text)

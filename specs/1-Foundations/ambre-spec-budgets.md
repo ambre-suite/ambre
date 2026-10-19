@@ -203,7 +203,7 @@
 | `swash` | ~120 KB | Glyph rasterization |
 | Fonts (Noto Sans plus Mono) | 0 KB binary | ~600 KB fetched and HTTP-cached: Regular plus Bold, Latin, Cyrillic, Greek |
 | Icon atlas blob (vertex buffers) | < 200 KB | ~500 tessellated icons |
-| `image` (PNG, JPEG, WebP) | ~60 KB | Feature-flagged, only the activated decoders |
+| `image` (PNG, JPEG, WebP, GIF) | ~60 KB | Feature-flagged, only the activated decoders |
 | `ambre-sync` logic | ~50 KB | Excluding its dependencies |
 | RustCrypto (chacha20, ed25519, blake2, hmac, argon2) | ~140 KB | Shared with `ambre-crypto`; Argon2 is there for login, and for a passphrase-sealed file, which reuses the same work factor rather than adding a second one (`ambre-spec-docfile.md`) |
 | `ruzstd` (compression and decompression) | ~80 KB | |
@@ -246,7 +246,8 @@
 | View state (content) | < 5 MB | Proportional to the visible content: cells, text runs |
 | Fonts in memory | < 10 MB | Base fonts plus lazily loaded ones |
 | Icon atlas | < 1 MB | Compiled vector blob |
-| **Total UI thread** | **< 41 MB** | Within the global < 100 MB |
+| Murmure decoded pictures, per page | < 16 MiB | `PICTURES_BYTES` in `ambre-murmure`, shared by the channel's region and the thread's. Evicted least recently painted, never a picture on screen, which may hold it past the cap. One picture holds at most 8 MiB of frames (`PICTURE_BYTES` in `ambre-logic`), decoded at most 480x320: an animation past it plays the frames that fit (`features/ambre-spec-murmure-attachments.md`) |
+| **Total UI thread** | **< 57 MB** | Within the global < 100 MB |
 | `SyncState` base, per session | < 1 MB | `MasterSeed`, `SigningKey`, `ExchangeKey`, plus `HashMap` overhead |
 | `SyncDocumentState`, per open document | < 1 MB | `DocumentKey`, counters, sync state, quarantine |
 | `quarantine`, per document | ~2 MB max | Capped at 1000 updates of ~2 KB average |

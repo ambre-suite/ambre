@@ -33,6 +33,7 @@ mod mention;
 pub mod mention_list;
 mod opening;
 pub mod paint;
+pub mod pictures;
 mod reaction;
 mod read_aloud;
 pub mod schema;

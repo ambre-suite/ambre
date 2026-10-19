@@ -17,7 +17,8 @@ use std::rc::Rc;
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
     Attachment, ByteSize, ChannelId, DocumentId, LogicCommand, MessageAt, MessageId, MessageView,
-    MurmureCommand, RequestId, RestEvent, SegmentId, TextStyle, Timestamp, UiEvent, UserId,
+    MurmureCommand, MurmureEvent, RequestId, RestEvent, SegmentId, TextStyle, Timestamp, UiEvent,
+    UserId,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, TextInput,
@@ -35,7 +36,8 @@ use crate::drafts::DraftShelf;
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::markers::MarkBar;
 use crate::mention_list::MentionList;
-use crate::paint::{Painted, Shown, paint_jump, paint_list};
+use crate::paint::{Painted, Pictured, Shown, paint_jump, paint_list};
+use crate::pictures::{Pictures, Screen};
 use crate::select::Selecting;
 use crate::uploads::{PickedFile, Uploaded};
 use crate::watchers::TICK_MS;
@@ -54,8 +56,12 @@ pub struct PageReads {
     pub name_of: Rc<dyn Fn(UserId) -> Option<String>>,
     /// A time, in the reader's language and zone (`MURMURE-418`).
     pub time_of: Rc<dyn Fn(Timestamp) -> String>,
-    /// The page's clock, in milliseconds: the wheel reads it.
+    /// The page's clock, in milliseconds: the wheel and the pictures read
+    /// it.
     pub now_ms: Rc<dyn Fn() -> f64>,
+    /// The user asks for reduced motion: an animated picture holds its
+    /// first frame (`MURMURE-130`).
+    pub still: Rc<dyn Fn() -> bool>,
     /// Say a text to a screen reader, through the polite live region of the
     /// content (`CHROME-023`). It holds no element that takes the focus.
     pub announce: Rc<dyn Fn(&str)>,
@@ -235,6 +241,12 @@ pub struct MurmureView {
     /// The files a click asked for, by the request that fetches each. Both
     /// regions share it, and the content canvas reads the answers.
     fetching: Rc<RefCell<HashMap<RequestId, Attachment>>>,
+    /// The pictures the previews show. Both regions share it, and the
+    /// content canvas takes the answers.
+    pictures: Rc<RefCell<Pictures>>,
+    /// When the next frame of a picture this region shows is due, `None`
+    /// when none plays (`MURMURE-136`).
+    next_frame: Option<f64>,
     /// The channel on screen this region last ticked, and when.
     ticked: Option<(ChannelId, f64)>,
     /// The `@` list this region last handed the page.
@@ -302,6 +314,8 @@ impl MurmureView {
             composer: Composer::default(),
             parked: Rc::default(),
             fetching: Rc::default(),
+            pictures: Rc::default(),
+            next_frame: None,
             ticked: None,
             listed: None,
             barred: None,
@@ -320,6 +334,7 @@ impl MurmureView {
         view.region = Region::Thread;
         view.parked = Rc::clone(&self.parked);
         view.fetching = Rc::clone(&self.fetching);
+        view.pictures = Rc::clone(&self.pictures);
         if let Some(composer) = view.parked.borrow_mut().take() {
             view.composer = composer;
         }
@@ -431,6 +446,15 @@ impl MurmureView {
                     return Some(ev);
                 }
             }
+            UiEvent::Channel {
+                event: MurmureEvent::Picture { media_ref, picture },
+                ..
+            } => {
+                // Both regions repaint: either may show the picture.
+                if self.pictures.borrow_mut().land(media_ref, picture) {
+                    self.lists.borrow_mut().revision += 1;
+                }
+            }
             ev => return Some(ev),
         }
         self.dirty = true;
@@ -540,6 +564,32 @@ impl MurmureView {
             channel_id,
             command: MurmureCommand::FetchFile { id, media_ref },
         });
+    }
+
+    /// Ask the Logic thread for each picture the paint drew and the shelf
+    /// lacks, and note when the next frame is due. Only the previews painted
+    /// are on screen, so only they are fetched and play (`MURMURE-131`).
+    fn show_pictures(&mut self, pane: MurmurePane, painted: &Painted) {
+        self.next_frame = painted.next_frame;
+        let channel_id = match self.list_of(pane) {
+            Some(ListOf::Channel(channel) | ListOf::Thread(channel, _)) => channel,
+            None => return,
+        };
+        let wanted: Vec<_> = {
+            let mut shelf = self.pictures.borrow_mut();
+            painted
+                .pictures
+                .iter()
+                .filter(|media_ref| shelf.want(media_ref))
+                .cloned()
+                .collect()
+        };
+        for media_ref in wanted {
+            self.send(LogicCommand::Channel {
+                channel_id,
+                command: MurmureCommand::ShowPicture { media_ref },
+            });
+        }
     }
 
     /// Ask the Logic thread to upload each file the page took for this
@@ -984,6 +1034,10 @@ impl MurmureView {
             self.painted = shown;
             self.dirty = true;
         }
+        // A picture on screen reached its next frame (`MURMURE-136`).
+        if self.next_frame.is_some_and(|at| now_ms >= at) {
+            self.dirty = true;
+        }
         // Rows read back after a reload, or a loss, change what the composer
         // shows: the next paint reads the shelf (`MURMURE-210`).
         let shelved = self.reads.drafts.version();
@@ -1124,6 +1178,13 @@ impl MurmureView {
         if focus.is_none() {
             self.focus = None;
         }
+        let screen = match self.region {
+            Region::Channel => Screen::Channel,
+            Region::Thread => Screen::Thread,
+        };
+        self.pictures.borrow_mut().begin_paint(screen);
+        let shelf = Rc::clone(&self.pictures);
+        let shelf = shelf.borrow();
         let painted = paint_list(
             surface,
             font_cx,
@@ -1135,12 +1196,19 @@ impl MurmureView {
                 focus,
                 selecting: self.selecting,
                 me: (self.reads.me)(),
+                pictures: Some(Pictured {
+                    shelf: &shelf,
+                    now_ms: (self.reads.now_ms)(),
+                    still: (self.reads.still)(),
+                }),
             },
             list_size,
             self.theme.palette(),
             &*self.reads.name_of,
             &*self.reads.time_of,
         );
+        drop(shelf);
+        self.show_pictures(pane, &painted);
         self.last = Some(painted.clone());
         if let Some(address) = &painted.link {
             (self.reads.open_link)(address);
@@ -1700,6 +1768,8 @@ mod tests {
         view: MurmureView,
         pane: Rc<Cell<MurmurePane>>,
         clock: Rc<Cell<f64>>,
+        /// The user asks for reduced motion.
+        still: Rc<Cell<bool>>,
         events: Sender<UiEvent>,
         commands: Receiver<LogicCommand>,
         /// What the view said to a screen reader, oldest first.
@@ -1755,6 +1825,8 @@ mod tests {
         let back = Rc::clone(&pane);
         let clock = Rc::new(Cell::new(0.0));
         let now = Rc::clone(&clock);
+        let still = Rc::new(Cell::new(false));
+        let reduced = Rc::clone(&still);
         let said_log = Rc::new(RefCell::new(Vec::new()));
         let said = Rc::clone(&said_log);
         let acted_log = Rc::new(RefCell::new(Vec::new()));
@@ -1792,6 +1864,7 @@ mod tests {
             name_of: Rc::new(|_| Some("Ada".to_owned())),
             time_of: Rc::new(|_| "t".to_owned()),
             now_ms: Rc::new(move || now.get()),
+            still: Rc::new(move || reduced.get()),
             announce: Rc::new(move |text: &str| said.borrow_mut().push(text.to_owned())),
             act_on: Rc::new(move |target| acted.borrow_mut().push(target)),
             take_edit: Rc::new(move |in_thread| {
@@ -1863,6 +1936,7 @@ mod tests {
             view,
             pane,
             clock,
+            still,
             events,
             commands,
             said: said_log,
@@ -3371,6 +3445,122 @@ mod tests {
             .expect("room");
         frame_with_fonts(&mut page.view);
         assert_eq!(*page.saved.borrow(), vec![(file, vec![1, 2, 3])]);
+    }
+
+    /// The pictures a paint asked the Logic thread for since the last call.
+    fn pictures_asked(page: &Page) -> usize {
+        std::iter::from_fn(|| page.commands.try_recv().ok())
+            .filter(|command| {
+                matches!(
+                    command,
+                    LogicCommand::Channel {
+                        command: MurmureCommand::ShowPicture { .. },
+                        ..
+                    }
+                )
+            })
+            .count()
+    }
+
+    /// A message of `texts.len()` rows whose first carries an animated image.
+    fn gif_list(page: &Page, channel: ChannelId, texts: &[&str]) -> Attachment {
+        let file = Attachment {
+            media_ref: MediaRef::parse(HASH).expect("an address"),
+            name: "a.gif".to_owned(),
+            media_type: MediaType("image/gif".to_owned()),
+            size: ByteSize(3),
+        };
+        let ada = UserId::new();
+        let mut messages: Vec<_> = texts
+            .iter()
+            .enumerate()
+            .map(|(i, text)| message(ada, i as u64, text))
+            .collect();
+        messages[0].attachments = vec![file.clone()];
+        let segment = SegmentId::new();
+        send(page, channel, MurmureEvent::Messages { segment, messages });
+        file
+    }
+
+    /// `MURMURE-136`: a picture on screen is asked once. Once it lands, the
+    /// frame loop repaints when its next frame is due, and not before.
+    #[test]
+    fn a_picture_on_screen_is_asked_once_and_plays_its_frames() {
+        use ambre_bus::{Picture, PictureFrame};
+        let channel = ChannelId::new();
+        let mut page = page();
+        let file = gif_list(&page, channel, &["see"]);
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        frame_with_fonts(&mut page.view);
+        assert_eq!(pictures_asked(&page), 1);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(pictures_asked(&page), 0, "asked once");
+
+        let frame = || PictureFrame {
+            pixels: vec![0; 2 * 4],
+            delay_ms: 100,
+        };
+        let gif = Picture {
+            width: 2,
+            height: 1,
+            frames: vec![frame(), frame()],
+        };
+        let picture = Some(gif);
+        let media_ref = file.media_ref.clone();
+        send(&page, channel, MurmureEvent::Picture { media_ref, picture });
+        frame_with_fonts(&mut page.view);
+        assert_eq!(
+            page.view.last_painted().and_then(|p| p.next_frame),
+            Some(100.0)
+        );
+        assert!(!frame_at(&mut page.view, 50.0), "no frame is due yet");
+        page.clock.set(100.0);
+        assert!(frame_at(&mut page.view, 100.0), "the next frame is due");
+    }
+
+    /// `MURMURE-130`: under reduced motion a picture holds its first frame,
+    /// and the frame loop never repaints for it.
+    #[test]
+    fn under_reduced_motion_a_picture_never_asks_a_frame() {
+        use ambre_bus::{Picture, PictureFrame};
+        let channel = ChannelId::new();
+        let mut page = page();
+        page.still.set(true);
+        let file = gif_list(&page, channel, &["see"]);
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        frame_with_fonts(&mut page.view);
+        let frame = || PictureFrame {
+            pixels: vec![0; 4],
+            delay_ms: 100,
+        };
+        let picture = Some(Picture {
+            width: 1,
+            height: 1,
+            frames: vec![frame(), frame()],
+        });
+        let media_ref = file.media_ref.clone();
+        send(&page, channel, MurmureEvent::Picture { media_ref, picture });
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.last_painted().and_then(|p| p.next_frame), None);
+        assert!(!frame_at(&mut page.view, 1000.0));
+    }
+
+    /// `MURMURE-131`: a picture scrolled off screen is not painted, so it is
+    /// neither fetched nor played.
+    #[test]
+    fn a_picture_off_screen_is_not_asked() {
+        let channel = ChannelId::new();
+        let mut page = page();
+        let texts = vec!["row"; 60];
+        gif_list(&page, channel, &texts);
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        frame_with_fonts(&mut page.view);
+        assert_eq!(pictures_asked(&page), 0);
+        assert!(
+            page.view
+                .last_painted()
+                .is_some_and(|p| p.pictures.is_empty())
+        );
     }
 
     /// An empty draft, or one of white space alone, sends nothing and

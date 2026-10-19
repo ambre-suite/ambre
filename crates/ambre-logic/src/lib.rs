@@ -39,6 +39,7 @@ mod data;
 mod direct;
 mod dispatch;
 mod erasing;
+mod pictures;
 /// A history replay imported in slices (`SYNC-131`).
 mod replay;
 /// Which documents this thread holds, and the reopen of one that left
@@ -766,6 +767,9 @@ struct LogicState {
     /// The erases that did not reach the relay, asked again on the next
     /// connection (`MURMURE-241`).
     erase_owed: Vec<(DocumentId, String)>,
+    /// The images fetched for a preview the relay has not answered, each
+    /// with the channel whose view asked (`MURMURE-135`).
+    picturing: HashMap<ambre_bus::RequestId, (ambre_bus::ChannelId, ambre_bus::MediaRef)>,
     /// Direct message requests the relay has not answered yet, keyed by the
     /// channel id each minted, with the channel it would create.
     direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
@@ -880,6 +884,7 @@ impl LogicState {
             handing_off: HashMap::new(),
             erasing: HashMap::new(),
             erase_owed: Vec::new(),
+            picturing: HashMap::new(),
             direct: HashMap::new(),
             unsent: HashMap::new(),
             murmure_identities: HashMap::new(),

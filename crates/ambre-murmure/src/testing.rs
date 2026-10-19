@@ -38,6 +38,7 @@ pub fn channel_of(texts: &[&str], size: (f64, f64)) -> (MurmureView, Sender<UiEv
         name_of: Rc::new(|_| Some("Ada".to_owned())),
         time_of: Rc::new(|_| "t".to_owned()),
         now_ms: Rc::new(|| 0.0),
+        still: Rc::new(|| false),
         announce: Rc::new(|_| {}),
         act_on: Rc::new(|_| {}),
         take_edit: Rc::new(|_| None),

@@ -1231,6 +1231,7 @@ impl LogicState {
             | MurmureCommand::Typing { .. }
             | MurmureCommand::Retry { .. }
             | MurmureCommand::FetchFile { .. }
+            | MurmureCommand::ShowPicture { .. }
             // A file writes no document: its message does, once it sends.
             | MurmureCommand::UploadFile { .. } => None,
         };
@@ -1329,6 +1330,12 @@ impl LogicState {
                         content_hash: media_ref.as_str().to_owned(),
                     },
                 });
+            }
+            // The image of a preview decodes here, off the render thread
+            // (`MURMURE-135`).
+            MurmureCommand::ShowPicture { media_ref } => {
+                let document_id = channel.meta_id().document_id();
+                self.show_picture(channel_id, document_id, media_ref);
             }
             MurmureCommand::Retry { segment } => {
                 // Sync walks the key chain again at each open, so a new open
@@ -3841,6 +3848,107 @@ mod tests {
         assert!(
             erases(&drain(&sync)).is_empty(),
             "an answered erase is done"
+        );
+    }
+
+    /// The image of a preview, as `(request, document, file)`.
+    fn downloads(sent: &[SyncCommand]) -> Vec<(RequestId, DocumentId, String)> {
+        sent.iter()
+            .filter_map(|command| match command {
+                SyncCommand::Rest {
+                    id,
+                    cmd:
+                        RestCommand::DownloadMedia {
+                            document_id,
+                            content_hash,
+                        },
+                } => Some((*id, *document_id, content_hash.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `MURMURE-135`: an image a view paints is fetched once under the
+    /// channel's meta, and reaches the view decoded, never as its file. One
+    /// the relay refuses reaches it as nothing.
+    #[test]
+    fn a_preview_is_fetched_once_and_reaches_the_view_decoded() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, _) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let file = MediaRef::parse(&"cd".repeat(32)).expect("a content hash");
+        drain(&sync);
+        for _ in 0..2 {
+            let media_ref = file.clone();
+            command(
+                &mut state,
+                channel_id,
+                MurmureCommand::ShowPicture { media_ref },
+            );
+        }
+        let asked = downloads(&drain(&sync));
+        let [(id, document_id, hash)] = asked.as_slice() else {
+            panic!("one fetch, got {asked:?}");
+        };
+        assert_eq!((*document_id, hash.as_str()), (meta, file.as_str()));
+        let mut png = Vec::new();
+        image::RgbaImage::from_pixel(4, 2, image::Rgba([9, 8, 7, 255]))
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .expect("png");
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::Rest {
+            id: *id,
+            evt: RestEvent::MediaDownloaded {
+                document_id: meta,
+                content_hash: file.as_str().to_owned(),
+                data: png,
+            },
+        });
+        let got = drain(&ui);
+        let [
+            UiEvent::Channel {
+                channel_id: to,
+                event:
+                    MurmureEvent::Picture {
+                        media_ref,
+                        picture: Some(picture),
+                    },
+            },
+        ] = got.as_slice()
+        else {
+            panic!("one decoded picture, got {} events", got.len());
+        };
+        assert_eq!((*to, media_ref), (channel_id, &file));
+        assert_eq!((picture.width, picture.height), (4, 2));
+        assert_eq!(picture.frames[0].pixels[..4], [9, 8, 7, 255]);
+
+        let media_ref = file.clone();
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::ShowPicture { media_ref },
+        );
+        let [(again, _, _)] = downloads(&drain(&sync))[..] else {
+            panic!("a fetch once the first was answered");
+        };
+        state.handle_logic_event(LogicEvent::ApiError {
+            id: Some(again),
+            request: "DownloadMedia".into(),
+            code: 404,
+            message: "gone".into(),
+        });
+        let got = drain(&ui);
+        assert!(
+            matches!(
+                got.as_slice(),
+                [UiEvent::Channel {
+                    event: MurmureEvent::Picture { picture: None, .. },
+                    ..
+                }]
+            ),
+            "a refused fetch reaches the view as nothing, got {} events",
+            got.len()
         );
     }
 

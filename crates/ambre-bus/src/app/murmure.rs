@@ -271,6 +271,31 @@ pub struct Attachment {
     pub size: ByteSize,
 }
 
+/// An image a message carries, decoded off the render thread at the size
+/// of its preview (`MURMURE-135`). A still image has one frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Picture {
+    pub width: u32,
+    pub height: u32,
+    /// Each frame in play order, never empty.
+    pub frames: Vec<PictureFrame>,
+}
+
+/// One frame of a [`Picture`]: non-premultiplied RGBA8, row-major, `width *
+/// height * 4` bytes, shown for `delay_ms`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PictureFrame {
+    pub pixels: Vec<u8>,
+    pub delay_ms: u32,
+}
+
+impl Picture {
+    /// The bytes its frames hold.
+    pub fn bytes(&self) -> usize {
+        self.frames.iter().map(|f| f.pixels.len()).sum()
+    }
+}
+
 /// A send the Logic thread holds until its author confirms the `@channel`
 /// in it (`MURMURE-231`). The view sends it again, or gives the draft back.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -410,6 +435,9 @@ pub enum MurmureCommand {
         id: crate::RequestId,
         media_ref: MediaRef,
     },
+    /// Fetch the image `media_ref` of a message and decode it for its
+    /// preview. The answer is [`MurmureEvent::Picture`].
+    ShowPicture { media_ref: MediaRef },
 }
 
 impl MurmureCommand {
@@ -430,6 +458,7 @@ impl MurmureCommand {
             | Self::UploadFile { .. } => true,
             Self::LoadOlder { .. }
             | Self::FetchFile { .. }
+            | Self::ShowPicture { .. }
             | Self::MarkRead
             | Self::MarkUnread { .. }
             | Self::MarkThreadRead { .. }
@@ -645,6 +674,13 @@ pub enum MurmureEvent {
         cause: Unreadable,
         from: Timestamp,
         to: Option<Timestamp>,
+    },
+    /// The image `media_ref`, decoded for its preview, answering a
+    /// `ShowPicture`. `None` when it could not be fetched or decoded: the
+    /// view keeps its chip alone.
+    Picture {
+        media_ref: MediaRef,
+        picture: Option<Picture>,
     },
 }
 

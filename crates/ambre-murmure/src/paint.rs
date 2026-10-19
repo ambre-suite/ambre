@@ -8,22 +8,55 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
-use ambre_bus::{Attachment, MessageId, TextStyle, Timestamp, UserId};
+use ambre_bus::{Attachment, MediaRef, MessageId, TextStyle, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
 use ambre_draw::{
-    Affine, Affinity, Alignment, Brush, Color, Cursor, DrawSurface, FontContext, Layout,
-    ParleyBrush, PositionedLayoutItem, Rect, Selection,
+    Affine, Affinity, Alignment, Brush, Color, Cursor, DrawSurface, FontContext, ImageSource,
+    Layout, ParleyBrush, PositionedLayoutItem, Rect, Selection,
 };
 
 use crate::list::{
     JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, chip_label, file_label, window,
 };
 use crate::look;
+use crate::pictures::{Pictures, frame_at, frame_key, previews};
 use crate::select::{Selecting, Spot, TextSelection};
 
 /// How strongly a selection tints the text under it.
 const SELECTION_ALPHA: f32 = 0.3;
+/// The height of the box an image previews in. A picture not decoded yet
+/// takes the same, so its row keeps its height when it lands.
+pub const PREVIEW_TALL: f32 = 160.0;
+/// The aspect of the box a picture not decoded yet holds.
+const PLACEHOLDER_ASPECT: f32 = 4.0 / 3.0;
+
+/// The pictures a paint previews, and the clock that plays them.
+#[derive(Clone, Copy)]
+pub struct Pictured<'a> {
+    pub shelf: &'a Pictures,
+    pub now_ms: f64,
+    /// The user asks for reduced motion: each picture shows its first frame
+    /// (`MURMURE-130`).
+    pub still: bool,
+}
+
+impl std::fmt::Debug for Pictured<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Pictured")
+            .field("now_ms", &self.now_ms)
+            .field("still", &self.still)
+            .finish_non_exhaustive()
+    }
+}
+
+/// What the previews of one paint drew: the files they show, and when the
+/// next frame of one is due.
+#[derive(Debug, Default)]
+struct Played {
+    files: Vec<MediaRef>,
+    next: Option<f64>,
+}
 
 /// What one paint of the list did.
 #[derive(Debug, Clone, PartialEq)]
@@ -59,6 +92,12 @@ pub struct Painted {
     pub chip: Option<(usize, String)>,
     /// The file chip a click landed on: the file it fetches.
     pub file: Option<Attachment>,
+    /// The files whose preview this paint drew, decoded or not. Only these
+    /// are on screen, so only these play (`MURMURE-131`).
+    pub pictures: Vec<MediaRef>,
+    /// When the next frame of a picture on screen is due, `None` when none
+    /// plays.
+    pub next_frame: Option<f64>,
 }
 
 impl Painted {
@@ -86,6 +125,9 @@ pub struct Shown<'a> {
     pub selecting: Selecting,
     /// The signed-in member, whose own reactions take the accent.
     pub me: Option<UserId>,
+    /// The pictures to preview. `None` previews nothing: each file shows
+    /// as its chip alone.
+    pub pictures: Option<Pictured<'a>>,
 }
 
 /// Paint `shown` from its anchor, in a viewport of `size`.
@@ -115,7 +157,7 @@ pub fn paint_list<S: DrawSurface>(
         };
         let line = shown.unread.is_some() && shown.unread == row.message().map(|m| m.id);
         let row = row.words(name_of, time_of);
-        let mut tall = measure(font_cx, cache, &row, text_width);
+        let mut tall = measure(font_cx, cache, &row, shown.pictures, text_width);
         if line {
             tall += line_height(font_cx, cache, text_width);
         }
@@ -145,12 +187,14 @@ pub fn paint_list<S: DrawSurface>(
     let link = selecting
         .click
         .and_then(|at| link_at(font_cx, cache, &reached.rows, &words, at, text_width));
+    let pics = shown.pictures;
     let chip = selecting
         .click
-        .and_then(|at| chip_at(font_cx, cache, &reached.rows, &words, at, text_width));
+        .and_then(|at| chip_at(font_cx, cache, &reached.rows, &words, at, text_width, pics));
     let file = selecting
         .click
-        .and_then(|at| file_at(font_cx, cache, &reached.rows, &words, at, text_width));
+        .and_then(|at| file_at(font_cx, cache, &reached.rows, &words, at, text_width, pics));
+    let mut played = Played::default();
     let mut line_shown = false;
     let mut focus = None;
     for &(i, top, tall) in &reached.rows {
@@ -193,7 +237,16 @@ pub fn paint_list<S: DrawSurface>(
             top = draw_line(surface, font_cx, cache, top, width, palette);
         }
         draw_row(
-            surface, font_cx, cache, row, top, text_width, palette, shown.me,
+            surface,
+            font_cx,
+            cache,
+            row,
+            top,
+            text_width,
+            palette,
+            shown.me,
+            pics,
+            &mut played,
         );
         if shown.focus == Some(i) {
             let ring = Rect::new(
@@ -224,6 +277,8 @@ pub fn paint_list<S: DrawSurface>(
         link,
         chip,
         file,
+        pictures: played.files,
+        next_frame: played.next,
     }
 }
 
@@ -236,6 +291,7 @@ fn chip_at(
     words: &HashMap<usize, (RowWords, bool)>,
     (x, y): (f32, f32),
     width: f32,
+    pics: Option<Pictured<'_>>,
 ) -> Option<(usize, String)> {
     let &(i, top, _) = rows
         .iter()
@@ -244,9 +300,10 @@ fn chip_at(
     if row.reactions.is_empty() {
         return None;
     }
-    // The reactions sit under the files.
+    // The reactions sit under the previews and the files.
     let chips_y = body_top(font_cx, cache, row, *line, top, width)
         + body(font_cx, cache, row, width).height()
+        + previews_height(row, pics)
         + file_chips(font_cx, cache, row, width).1;
     let (boxes, _) = chips(font_cx, cache, row, width);
     let (x, y) = (f64::from(x - SPACE_8), f64::from(y - chips_y));
@@ -372,8 +429,8 @@ fn draw_files<S: DrawSurface>(
     }
 }
 
-/// The file chip drawn under `(x, y)`: the file a click fetches. `None` off
-/// every file chip.
+/// The preview or the file chip drawn under `(x, y)`: the file a click
+/// fetches. `None` off every one.
 fn file_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
@@ -381,6 +438,7 @@ fn file_at(
     words: &HashMap<usize, (RowWords, bool)>,
     (x, y): (f32, f32),
     width: f32,
+    pics: Option<Pictured<'_>>,
 ) -> Option<Attachment> {
     let &(i, top, _) = rows
         .iter()
@@ -389,10 +447,18 @@ fn file_at(
     if row.files.is_empty() {
         return None;
     }
-    let files_y = body_top(font_cx, cache, row, *line, top, width)
+    let previews_y = body_top(font_cx, cache, row, *line, top, width)
         + body(font_cx, cache, row, width).height();
+    let (x, y) = (f64::from(x - SPACE_8), f64::from(y - previews_y));
+    let hit = |b: &Rect| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1;
+    if let Some((file, _)) = preview_boxes(row, pics, width)
+        .into_iter()
+        .find(|(_, b)| hit(b))
+    {
+        return Some(file.clone());
+    }
+    let y = y - f64::from(previews_height(row, pics));
     let (boxes, _) = file_chips(font_cx, cache, row, width);
-    let (x, y) = (f64::from(x - SPACE_8), f64::from(y - files_y));
     boxes
         .iter()
         .zip(&row.files)
@@ -598,10 +664,113 @@ fn fill_bytes<S: DrawSurface>(
     }
 }
 
+/// The files of a row that preview: a type the Logic thread decodes, and
+/// not failed. None when the paint previews nothing.
+fn previewed<'r>(row: &'r RowWords, pics: Option<Pictured<'_>>) -> Vec<&'r Attachment> {
+    let Some(pics) = pics else {
+        return Vec::new();
+    };
+    row.files
+        .iter()
+        .filter(|file| previews(&file.media_type) && !pics.shelf.failed(&file.media_ref))
+        .collect()
+}
+
+/// The box of each preview of a row, from the top-left of the first, one
+/// under the other. A picture keeps its aspect within `width`. One not
+/// decoded yet takes [`PLACEHOLDER_ASPECT`].
+fn preview_boxes<'r>(
+    row: &'r RowWords,
+    pics: Option<Pictured<'_>>,
+    width: f32,
+) -> Vec<(&'r Attachment, Rect)> {
+    let mut y = 0.0_f32;
+    let mut boxes = Vec::new();
+    for file in previewed(row, pics) {
+        let aspect = pics
+            .and_then(|pics| pics.shelf.get(&file.media_ref))
+            .filter(|picture| picture.width > 0 && picture.height > 0)
+            .map_or(PLACEHOLDER_ASPECT, |picture| {
+                #[allow(clippy::cast_precision_loss)]
+                let aspect = picture.width as f32 / picture.height as f32;
+                aspect
+            });
+        y += SPACE_2;
+        let mut wide = PREVIEW_TALL * aspect;
+        let mut tall = PREVIEW_TALL;
+        if wide > width {
+            (wide, tall) = (width, width / aspect);
+        }
+        boxes.push((
+            file,
+            Rect::new(0.0, f64::from(y), f64::from(wide), f64::from(y + tall)),
+        ));
+        y += PREVIEW_TALL;
+    }
+    boxes
+}
+
+/// The height the previews of a row take, the space above each included.
+/// Each takes [`PREVIEW_TALL`], so a row keeps its height when one lands.
+fn previews_height(row: &RowWords, pics: Option<Pictured<'_>>) -> f32 {
+    #[allow(clippy::cast_precision_loss)]
+    let count = previewed(row, pics).len() as f32;
+    count * (SPACE_2 + PREVIEW_TALL)
+}
+
+/// Paint the previews of a row, their top-left at `(x, y)`. A decoded
+/// picture draws the frame its clock reaches. One not decoded yet draws
+/// its box empty. `played` records each file and the next frame due.
+fn draw_previews<S: DrawSurface>(
+    surface: &mut S,
+    row: &RowWords,
+    pics: Option<Pictured<'_>>,
+    (x, y): (f32, f32),
+    width: f32,
+    palette: &Palette,
+    played: &mut Played,
+) {
+    let Some(pictured) = pics else {
+        return;
+    };
+    let (dx, dy) = (f64::from(x), f64::from(y));
+    for (file, b) in preview_boxes(row, pics, width) {
+        let at = Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
+        played.files.push(file.media_ref.clone());
+        let Some(picture) = pictured.shelf.get(&file.media_ref) else {
+            surface.fill_rect(at, palette.header_bg);
+            surface.stroke_rect(at, palette.header_border, 1.0);
+            continue;
+        };
+        let (index, next) = frame_at(picture, pictured.now_ms, pictured.still);
+        let Some(frame) = picture.frames.get(index) else {
+            continue;
+        };
+        let image = ImageSource {
+            key: frame_key(&file.media_ref, index),
+            pixels: &frame.pixels,
+            width: picture.width,
+            height: picture.height,
+        };
+        surface.draw_image(&image, at);
+        played.next = match (played.next, next) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+    }
+}
+
 /// The height of a row, from the same layouts [`draw_row`] paints.
-fn measure(font_cx: &mut FontContext, cache: &mut TextCache, row: &RowWords, width: f32) -> f32 {
+fn measure(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    row: &RowWords,
+    pics: Option<Pictured<'_>>,
+    width: f32,
+) -> f32 {
     let mut tall = 2.0 * SPACE_2 + header_height(font_cx, cache, row, width);
     tall += body(font_cx, cache, row, width).height();
+    tall += previews_height(row, pics);
     tall += file_chips(font_cx, cache, row, width).1;
     tall += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
@@ -621,6 +790,8 @@ fn draw_row<S: DrawSurface>(
     width: f32,
     palette: &Palette,
     me: Option<UserId>,
+    pics: Option<Pictured<'_>>,
+    played: &mut Played,
 ) {
     let x = SPACE_8;
     let mut y = top + SPACE_2;
@@ -643,6 +814,8 @@ fn draw_row<S: DrawSurface>(
     let body_tall = layout.height();
     draw_body(surface, layout, x, y, ink, palette);
     y += body_tall;
+    draw_previews(surface, row, pics, (x, y), width, palette, played);
+    y += previews_height(row, pics);
     draw_files(surface, font_cx, cache, row, (x, y), width, palette);
     y += file_chips(font_cx, cache, row, width).1;
     draw_chips(surface, font_cx, cache, row, (x, y), width, palette, me);
@@ -752,6 +925,7 @@ pub(crate) mod tests {
                 focus: None,
                 selecting: Selecting::default(),
                 me: None,
+                pictures: None,
             },
             height,
         )
@@ -833,6 +1007,7 @@ pub(crate) mod tests {
             focus: Some(focus),
             selecting: Selecting::default(),
             me: None,
+            pictures: None,
         };
         let (surface, painted) = paint_from(focused(98), 300.0);
         let rings: Vec<Rect> = surface
@@ -890,6 +1065,7 @@ pub(crate) mod tests {
             focus: None,
             selecting: Selecting::default(),
             me: None,
+            pictures: None,
         };
         let (_, painted) = paint_from(at((10, 0.0)), 200.0);
         assert_eq!(painted.rest, Some((10, 0.0)));
@@ -981,6 +1157,7 @@ pub(crate) mod tests {
             focus: None,
             selecting,
             me: Some(me),
+            pictures: None,
         };
         let (surface, painted) = paint_from(shown, 600.0);
         assert!(tall(&painted) > tall(&plain), "the chips take room");
@@ -1051,11 +1228,81 @@ pub(crate) mod tests {
             focus: None,
             selecting,
             me: None,
+            pictures: None,
         };
         let (surface, painted) = paint_from(shown, 600.0);
         assert_eq!(painted.file, Some(file));
         assert_eq!(painted.chip, None);
         assert!(!runs(&surface, LIGHT.selection).is_empty(), "link ink");
+    }
+
+    /// `MURMURE-136`, `MURMURE-131`: an image previews in a box of its own
+    /// above its chip. Before it lands the box is empty, and the row keeps
+    /// its height when it does. A paint draws the frame its clock reaches
+    /// and names the next. Under reduced motion none is due (`MURMURE-130`).
+    #[test]
+    fn an_image_previews_in_a_box_that_keeps_its_height_and_plays() {
+        use ambre_bus::{Attachment, ByteSize, MediaType, Picture, PictureFrame};
+        let ada = UserId::new();
+        let file = Attachment {
+            media_ref: MediaRef::parse(&"a".repeat(64)).expect("an address"),
+            name: "a.gif".to_owned(),
+            media_type: MediaType("image/gif".to_owned()),
+            size: ByteSize(2048),
+        };
+        let mut carrying = message(ada, 0, "hello");
+        carrying.attachments = vec![file.clone()];
+        let mut list = MessageList::default();
+        list.absorb(SegmentId::new(), vec![carrying]);
+        let mut shelf = Pictures::default();
+        let at = |shelf: &Pictures, now_ms, still| {
+            let shown = Shown {
+                list: &list,
+                unread: None,
+                anchor: None,
+                focus: None,
+                selecting: Selecting::default(),
+                me: None,
+                pictures: Some(Pictured {
+                    shelf,
+                    now_ms,
+                    still,
+                }),
+            };
+            paint_from(shown, 600.0)
+        };
+        let images = |surface: &RecordingSurface| {
+            surface
+                .ops()
+                .iter()
+                .filter(|op| matches!(op, DrawOp::DrawImage { .. }))
+                .count()
+        };
+        let tall = |painted: &Painted| painted.rows[0].2 - painted.rows[0].1;
+        let (_, chip_only) = paint(&list, 600.0);
+        let (surface, waiting) = at(&shelf, 0.0, false);
+        assert_eq!(waiting.pictures, vec![file.media_ref.clone()]);
+        assert_eq!(images(&surface), 0, "not decoded yet");
+        assert!(tall(&waiting) >= tall(&chip_only) + PREVIEW_TALL);
+
+        shelf.begin_paint(crate::pictures::Screen::Channel);
+        assert!(shelf.want(&file.media_ref));
+        let frame = |delay_ms| PictureFrame {
+            pixels: vec![0; 2 * 4],
+            delay_ms,
+        };
+        let gif = Picture {
+            width: 2,
+            height: 1,
+            frames: vec![frame(100), frame(100)],
+        };
+        assert!(shelf.land(file.media_ref.clone(), Some(gif)));
+        let (surface, playing) = at(&shelf, 30.0, false);
+        assert_eq!(images(&surface), 1);
+        assert_eq!(tall(&playing), tall(&waiting), "the row keeps its height");
+        assert_eq!(playing.next_frame, Some(100.0));
+        let (surface, still) = at(&shelf, 30.0, true);
+        assert_eq!((images(&surface), still.next_frame), (1, None));
     }
 
     /// The colour emoji face is fetched the first time a painted row holds
@@ -1074,6 +1321,7 @@ pub(crate) mod tests {
                 focus: None,
                 selecting: Selecting::default(),
                 me: None,
+                pictures: None,
             };
             let palette = &LIGHT;
             paint_list(
@@ -1274,6 +1522,7 @@ pub(crate) mod tests {
                 click: None,
             },
             me: None,
+            pictures: None,
         };
         let press = (SPACE_8, first - SPACE_2 - 2.0);
         let (surface, painted) = paint_from(drag(press, (399.0, (top + second) / 2.0)), 600.0);
@@ -1334,6 +1583,8 @@ pub(crate) mod tests {
                 link: None,
                 chip: None,
                 file: None,
+                pictures: Vec::new(),
+                next_frame: None,
             }
         );
         assert!(

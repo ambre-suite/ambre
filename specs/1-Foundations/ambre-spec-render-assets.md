@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-051` | `INV` | A font MUST be fetched from the same origin. | this spec section 3; `UI-THREAD-004` | `ambre_canvas::fonts::tests::every_face_is_fetched_from_the_page_origin` -- every base and lazy face path, refused a scheme or a host | none | verified |
 | `CANVAS-019` | `OBS` | A layout mixing text and colour emoji MUST paint both: a colour glyph through the colour atlas, a mask glyph through the alpha atlas. | this spec section 2 | `ambre_canvas::render::atlas::tests::an_emoji_rasterizes_to_colour_and_a_letter_to_a_mask` -- the raster; `ambre_canvas::render::surface::tests::a_mask_glyph_and_a_colour_glyph_land_in_their_own_batch` -- the batch each one is drawn through | none | verified |
 | `CANVAS-020` | `INV` | The colour atlas MUST NOT be allocated at full size before the first colour glyph appears. | this spec section 2; `ambre-spec-budgets.md section 6` | `ambre_canvas::render::atlas::tests::the_color_atlas_is_grown_only_for_a_color_glyph` -- no request without a colour glyph, one with the first | none | verified |
-| `CANVAS-007` | `INV` | Every decoded image MUST pass through one bounded cache, whichever application decoded it. | this spec section 2; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `One media cache` Story (`ambre-roadmap.md` E8). Toile holds a `MediaCache` in its own Logic module and no other application has one | unimplemented |
+| `CANVAS-007` | `INV` | Every decoded image MUST pass through one bounded cache, whichever application decoded it. | this spec section 2; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `One media cache` Story (`ambre-roadmap.md` E8). Toile holds a `MediaCache` in its own Logic module, and Murmure a shelf of its own in the view | unimplemented |
 | `CANVAS-023` | `INV` | An icon MUST stay a vector buffer: it MUST NOT be rasterized into a bitmap atlas. | this spec section 2 | not built | unbuilt -- lands with the `The icon pipeline` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `CANVAS-024` | `INV` | An icon MUST be tessellated at build time, never on the frame path. | this spec section 2 | not built | unbuilt -- lands with the `The icon pipeline` Story (`ambre-roadmap.md` E6) | unimplemented |
 
@@ -157,7 +157,7 @@ At run time the blob loads once and each icon is one draw call through the paths
 (`CANVAS-023`, `CANVAS-024`).
 
 **The images.** A decoded image is RGBA8 pixels, produced by the `image` crate with only the PNG,
-JPEG and WebP decoders compiled in. One bounded LRU serves every consumer: a board picture, a
+JPEG, WebP and GIF decoders compiled in. One bounded LRU serves every consumer: a board picture, a
 sheet chart, an inline illustration. The memory budget is therefore one number rather than the sum
 of three nobody set together (`CANVAS-007`). Toile is the heaviest consumer, so the **cap** may need
 revisiting; the **mechanism** stays common.
