@@ -220,6 +220,23 @@ pub enum MemberStanding {
     Revoked,
 }
 
+/// Where a row sits in the local store. Its seal is bound to it, so a row
+/// moved to another place stops opening (`ambre-spec-residency.md` section 3).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RowPlace {
+    /// A snapshot or a delta of this document.
+    Document(DocumentId),
+    /// The draft the store keeps under this key.
+    Draft(String),
+}
+
+/// One row of the local store, as the store holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SealedRow {
+    pub place: RowPlace,
+    pub sealed: Vec<u8>,
+}
+
 /// User (search result).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserInfo {
@@ -393,6 +410,21 @@ pub enum RestCommand {
         passphrase: SecretBytes,
     },
 
+    // -- The local store (`ambre-spec-residency.md` section 3) -------------------
+    //
+    // Served inside the Sync worker too, under a key the session's seed derives
+    // there and nowhere else (`RESID-026`). Without a session there is no key,
+    // and both answer `LocalStoreLocked`.
+    //
+    /// Seal one row of the local store. -> `LocalRowSealed` / `LocalStoreLocked`.
+    SealLocalRow {
+        place: RowPlace,
+        plaintext: SecretBytes,
+    },
+    /// Open rows the local store holds. -> `LocalRowsOpened` /
+    /// `LocalStoreLocked`.
+    OpenLocalRows { rows: Vec<SealedRow> },
+
     // -- Meetings (Rendez-Vous) --------------------------------------------------
     /// Create an ephemeral meeting room. -> `MeetingCreated`.
     CreateMeeting { name: String },
@@ -546,6 +578,20 @@ pub enum RestEvent {
     /// tag cannot tell a wrong passphrase from a modified file, so naming one
     /// would be a guess. The surface says both (`DOCFILE-016`).
     DocFileOpenFailed,
+
+    // -- The local store ---------------------------------------------------------
+    /// The row, sealed for the store.
+    LocalRowSealed {
+        sealed: Vec<u8>,
+    },
+    /// The rows asked for, in their order. `None` is a row this session cannot
+    /// open. It was sealed under another key or at another place, modified, or
+    /// held in the clear before the store was sealed (`RESID-027`).
+    LocalRowsOpened {
+        rows: Vec<Option<SecretBytes>>,
+    },
+    /// No session holds a key yet, so nothing was sealed or opened.
+    LocalStoreLocked,
 
     // -- Meetings (Rendez-Vous) --------------------------------------------------
     MeetingCreated {

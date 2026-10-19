@@ -27,7 +27,7 @@ pub use ecdh::WrappedKey;
 pub use envelope::{Sealed, open, seal};
 pub use error::CryptoError;
 pub use hash::fingerprint;
-pub use keys::{DocumentKey, FileKey, MasterSeed};
+pub use keys::{DocumentKey, FileKey, MasterSeed, StoreKey};
 
 #[cfg(test)]
 mod tests;

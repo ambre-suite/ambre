@@ -4,9 +4,10 @@
 // and the time in the reader's language and zone.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
-use ambre_bus::{Attachment, Timestamp, UserId};
+use ambre_bus::{Attachment, RowPlace, SealedRow, Timestamp, UserId};
 use ambre_canvas::TextInput;
 use ambre_logic::persistence::PersistenceStore;
 use ambre_murmure::chrome::MurmureRelay;
@@ -15,6 +16,8 @@ use ambre_murmure::uploads::opens_as;
 use ambre_murmure::view::PageReads;
 use leptos::prelude::{GetUntracked, Set, Update};
 use wasm_bindgen::JsValue;
+
+use crate::vault::Vault;
 
 /// What the page tells a Murmure region, read from the shell's relay. `warn`
 /// puts a warning in front of the user.
@@ -109,6 +112,9 @@ fn save_file(file: &Attachment, data: Vec<u8>) {
 /// The page's drafts in the local store (`MURMURE-210`). The store opens and
 /// the session names the user in either order. The user's rows load once both
 /// did, and every write of the shelf lands in the store from then on.
+///
+/// Each row lands sealed by the Sync worker, and opens through it when read
+/// (`RESID-025`). A row that does not open leaves the store (`RESID-027`).
 #[derive(Clone)]
 pub struct DraftKeeper(Rc<RefCell<Keeper>>);
 
@@ -118,29 +124,74 @@ struct Keeper {
     user: Option<UserId>,
     /// The user whose rows were read, so a second sign-in reads its own.
     loaded: Option<UserId>,
+    vault: Vault,
+}
+
+/// The rows on their way to their seal, by key: the number of the latest
+/// write each waits for. A write that is no longer the latest of its key
+/// lands nothing, so a delete made meanwhile stays a delete.
+#[derive(Default)]
+struct Sealing {
+    next: u64,
+    latest: HashMap<String, u64>,
 }
 
 impl DraftKeeper {
-    pub fn new(shelf: DraftShelf) -> Self {
+    pub fn new(shelf: DraftShelf, vault: Vault) -> Self {
         Self(Rc::new(RefCell::new(Keeper {
             shelf,
             store: None,
             user: None,
             loaded: None,
+            vault,
         })))
     }
 
     /// The store opened: the shelf writes into it.
     pub fn store_opened(&self, store: PersistenceStore) {
         let sink = store.clone();
+        let vault = self.0.borrow().vault.clone();
+        let sealing = Rc::new(RefCell::new(Sealing::default()));
         self.0
             .borrow()
             .shelf
             .set_sink(Rc::new(move |write| match write {
-                DraftWrite::Put { key, row } => sink.save_draft(&key, &row),
-                DraftWrite::Delete { key } => sink.delete_draft(&key),
-                DraftWrite::DeleteRange { lower, upper } => sink.delete_drafts(&lower, &upper),
-                DraftWrite::DeleteAll => sink.clear_drafts(),
+                DraftWrite::Put { key, row } => {
+                    let number = {
+                        let mut sealing = sealing.borrow_mut();
+                        sealing.next += 1;
+                        let number = sealing.next;
+                        sealing.latest.insert(key.clone(), number);
+                        number
+                    };
+                    let (sink, sealing) = (sink.clone(), Rc::clone(&sealing));
+                    let place = RowPlace::Draft(key.clone());
+                    vault.seal(place, row.into_bytes(), move |sealed| {
+                        let mut sealing = sealing.borrow_mut();
+                        if sealing.latest.get(&key) != Some(&number) {
+                            return;
+                        }
+                        sealing.latest.remove(&key);
+                        match sealed {
+                            Some(sealed) => sink.save_draft(&key, &sealed),
+                            None => tracing::warn!("Drafts: no session seals the draft"),
+                        }
+                    });
+                }
+                DraftWrite::Delete { key } => {
+                    sealing.borrow_mut().latest.remove(&key);
+                    sink.delete_draft(&key);
+                }
+                DraftWrite::DeleteRange { lower, upper } => {
+                    sealing.borrow_mut().latest.retain(|key, _| {
+                        !(lower.as_str()..=upper.as_str()).contains(&key.as_str())
+                    });
+                    sink.delete_drafts(&lower, &upper);
+                }
+                DraftWrite::DeleteAll => {
+                    sealing.borrow_mut().latest.clear();
+                    sink.clear_drafts();
+                }
             }));
         self.0.borrow_mut().store = Some(store);
         self.load();
@@ -174,10 +225,30 @@ impl DraftKeeper {
         }
         keeper.loaded = Some(user);
         let shelf = keeper.shelf.clone();
+        let vault = keeper.vault.clone();
         wasm_bindgen_futures::spawn_local(async move {
             let (lower, upper) = user_range(user);
             let rows = store.load_drafts(&lower, &upper).await.unwrap_or_default();
-            shelf.load(user, rows);
+            let keys: Vec<String> = rows.iter().map(|(key, _)| key.clone()).collect();
+            let sealed = rows
+                .into_iter()
+                .map(|(key, sealed)| SealedRow {
+                    place: RowPlace::Draft(key),
+                    sealed,
+                })
+                .collect();
+            vault.open(sealed, move |opened| {
+                // No session holds the key: the rows stay for the next.
+                let opened = opened.unwrap_or_default();
+                let mut drafts = Vec::new();
+                for (key, row) in keys.into_iter().zip(opened) {
+                    match row.and_then(|row| String::from_utf8(row.to_vec()).ok()) {
+                        Some(row) => drafts.push((key, row)),
+                        None => store.delete_draft(&key),
+                    }
+                }
+                shelf.load(user, drafts);
+            });
         });
     }
 }

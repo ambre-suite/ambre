@@ -741,12 +741,12 @@ impl PersistenceStore {
         }
     }
 
-    /// Keep a draft's `row` under `key`, in place of the row there
+    /// Keep a draft's sealed `row` under `key`, in place of the row there
     /// (fire-and-forget). A lost write leaves the draft as it was at the
     /// write before.
-    pub fn save_draft(&self, key: &str, row: &str) {
+    pub fn save_draft(&self, key: &str, row: &[u8]) {
         if let Some(store) = self.drafts_store()
-            && let Err(e) = store.put_with_key(&JsValue::from_str(row), &JsValue::from_str(key))
+            && let Err(e) = store.put_with_key(&bytes_to_js(row), &JsValue::from_str(key))
         {
             tracing::warn!("Persistence: draft put failed: {e:?}");
         }
@@ -798,13 +798,14 @@ impl PersistenceStore {
     }
 
     /// Load every draft whose key falls in `lower..=upper`, as its key and
-    /// its row. Resolves to an empty list when the read failed; a row that is
-    /// not text is skipped.
+    /// its row. Resolves to an empty list when the read failed. A row kept as
+    /// text before the store was sealed comes back as its bytes. It then fails
+    /// to open like any row that is not sealed.
     pub fn load_drafts(
         &self,
         lower: &str,
         upper: &str,
-    ) -> oneshot::Receiver<Vec<(String, String)>> {
+    ) -> oneshot::Receiver<Vec<(String, Vec<u8>)>> {
         let (tx, rx) = answer();
         let range =
             web_sys::IdbKeyRange::bound(&JsValue::from_str(lower), &JsValue::from_str(upper));
@@ -840,7 +841,13 @@ impl PersistenceStore {
                 let drafts = keys
                     .iter()
                     .zip(rows.iter())
-                    .filter_map(|(key, row)| Some((key.as_string()?, row.as_string()?)))
+                    .filter_map(|(key, row)| {
+                        let row = match row.as_string() {
+                            Some(text) => text.into_bytes(),
+                            None => row.dyn_into::<Uint8Array>().ok()?.to_vec(),
+                        };
+                        Some((key.as_string()?, row))
+                    })
                     .collect();
                 tx_ok.send(drafts);
             });
@@ -1151,30 +1158,30 @@ mod wasm_tests {
         let (mine, theirs) = (format!("{hex}:a"), "z/b".to_owned());
         assert_eq!(store.save_snapshot(doc, &[1]).await, Ok(Stored::Done));
         store.save_delta(doc, &[2]);
-        store.save_draft(&mine, "one");
-        store.save_draft(&theirs, "two");
+        store.save_draft(&mine, b"one");
+        store.save_draft(&theirs, b"two");
         store.delete_snapshot(doc);
         let every = || store.load_drafts("", "\u{10FFFF}");
         let rows = every().await.unwrap();
         assert_eq!(
             rows,
             [
-                (mine.clone(), "one".to_owned()),
-                (theirs.clone(), "two".to_owned())
+                (mine.clone(), b"one".to_vec()),
+                (theirs.clone(), b"two".to_vec())
             ]
         );
 
-        store.save_draft(&mine, "one again");
+        store.save_draft(&mine, b"one again");
         store.delete_drafts("z/", "z/\u{10FFFF}");
         assert_eq!(
             every().await.unwrap(),
-            [(mine.clone(), "one again".to_owned())]
+            [(mine.clone(), b"one again".to_vec())]
         );
         store.delete_draft(&mine);
         assert!(every().await.unwrap().is_empty());
 
-        store.save_draft(&mine, "one");
-        store.save_draft(&theirs, "two");
+        store.save_draft(&mine, b"one");
+        store.save_draft(&theirs, b"two");
         store.clear_drafts();
         assert!(every().await.unwrap().is_empty());
     }

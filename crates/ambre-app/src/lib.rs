@@ -72,6 +72,8 @@ mod route;
 mod signin;
 /// The recipient's key, compared and confirmed before a share.
 mod tofu;
+/// The seal of the local store's rows, asked of the Sync worker.
+mod vault;
 
 // The crate's unit tests (pure helpers in `route`/`host`) run under headless
 // Chrome via `wasm-pack test --headless --chrome` (`just test-wasm`). `--chrome`
@@ -245,6 +247,9 @@ struct Wiring {
     /// Set by `AppRoot` when the user confirms a TOFU prompt. The relay polls it,
     /// pins the key in `trusted_keys`, and dispatches phase 2 of the invite.
     tofu_confirm: RwSignal<Option<TofuPrompt>>,
+    /// Set by the landing's file picker with a plaintext `.ambre` container.
+    /// The relay polls it and stores the payload sealed (`RESID-025`).
+    opened_file: RwSignal<Option<platform::OpenedFile>>,
     /// Role selected in the invite form, carried across the two-phase invite. The
     /// phase-1 `FetchInviteeKey` does not carry it, so both the confirm path and
     /// the auto-proceed (Trusted) path grant the intended role.
@@ -624,6 +629,7 @@ pub fn main() {
     // relay (trust decision + phase-2 dispatch).
     let tofu_prompt = RwSignal::new(None::<TofuPrompt>);
     let tofu_confirm = RwSignal::new(None::<TofuPrompt>);
+    let opened_file = RwSignal::new(None::<platform::OpenedFile>);
     let invite_role = RwSignal::new(Role::Editor);
     let me = RwSignal::new(None::<UserId>);
 
@@ -899,6 +905,7 @@ pub fn main() {
         formula_action,
         tofu_prompt,
         tofu_confirm,
+        opened_file,
         invite_role,
         me,
         sel_stats,
@@ -1000,14 +1007,21 @@ pub fn main() {
     let persist_store: Rc<RefCell<Option<local_store::LocalStore>>> = Rc::new(RefCell::new(None));
     // Set when the store will never open, so the writes waiting for it go.
     let persist_gone = Rc::new(std::cell::Cell::new(false));
+    // The Sync worker seals each row the store keeps and opens it again
+    // (`RESID-025`).
+    let vault = vault::Vault::new(ui_to_logic_tx.clone());
+    // Set once a session holds the key: the page's document comes back from
+    // its copy only then.
+    let session_seen = Rc::new(std::cell::Cell::new(false));
     // The drafts the composer keeps go to the same store (`MURMURE-210`).
-    let draft_keeper = host::DraftKeeper::new(murmure_relay.drafts());
+    let draft_keeper = host::DraftKeeper::new(murmure_relay.drafts(), vault.clone());
     {
         let store_slot = Rc::clone(&persist_store);
         let keeper = draft_keeper.clone();
         let gone = Rc::clone(&persist_gone);
-        let restore_tx = ui_to_logic_tx.clone();
         let full_tx = ui_to_logic_tx.clone();
+        let vault = vault.clone();
+        let session_seen = Rc::clone(&session_seen);
         wasm_bindgen_futures::spawn_local(async move {
             let store = match ambre_logic::persistence::PersistenceStore::open().await {
                 Ok(Ok(store)) => store,
@@ -1022,40 +1036,14 @@ pub fn main() {
                     return;
                 }
             };
-            if let Some((doc_type, document_id)) = boot_doc_typed {
-                let snapshot = store
-                    .load_snapshot(*document_id.as_bytes())
-                    .await
-                    .ok()
-                    .flatten();
-                let deltas = store
-                    .load_deltas(*document_id.as_bytes())
-                    .await
-                    .unwrap_or_default();
-                let sessions = store
-                    .load_sessions(*document_id.as_bytes())
-                    .await
-                    .unwrap_or_default();
-                // Sessions alone restore nothing: without local operations
-                // there is nothing of theirs left to send.
-                if snapshot.is_some() || !deltas.is_empty() {
-                    tracing::info!(
-                        "Persistence: restoring doc ({} snapshot bytes, {} deltas, {} sessions)",
-                        snapshot.as_ref().map_or(0, Vec::len),
-                        deltas.len(),
-                        sessions.len(),
-                    );
-                    let _ = restore_tx.try_send(LogicCommand::RestoreLocalSnapshot {
-                        document_id,
-                        doc_type,
-                        snapshot,
-                        deltas,
-                        sessions,
-                    });
-                }
-            }
             keeper.store_opened(store.clone());
-            *store_slot.borrow_mut() = Some(local_store::LocalStore::open(store, full_tx).await);
+            let local = local_store::LocalStore::open(store, full_tx, vault, boot_doc_typed).await;
+            // The page's document comes back from its copy once a session
+            // holds the key, whichever of the two came first.
+            if session_seen.get() {
+                local.signed_in();
+            }
+            *store_slot.borrow_mut() = Some(local);
         });
     }
 
@@ -1070,6 +1058,8 @@ pub fn main() {
     let notice_pump = notice_pub.clone();
     let persist_store_frame = Rc::clone(&persist_store);
     let persist_gone_frame = Rc::clone(&persist_gone);
+    let vault_frame = vault.clone();
+    let session_seen_frame = Rc::clone(&session_seen);
     let mut persist_waiting: Vec<(DocumentId, ambre_logic::PersistWrite)> = Vec::new();
     let mut last_anchor: Option<(f64, f64)> = None;
     let mut last_busy = false;
@@ -1208,36 +1198,23 @@ pub fn main() {
                 }
             }
         }
+        vault_frame.flush();
         if let Some(local) = persist_store_frame.borrow().as_ref() {
             local.tick();
+            // Each write is sealed, then passes the store's ledger, which
+            // keeps it within its budget and meets the quota (`RESID-002`,
+            // `RESID-025`).
             for (document_id, write) in persist_waiting.drain(..) {
-                match write {
-                    // Read after every write queued before it, so the copy
-                    // holds what the document had when it left (`RESID-010`).
-                    ambre_logic::PersistWrite::ReadBack { doc_type } => {
-                        let store = local.store().clone();
-                        let tx = relay_tx.clone();
-                        wasm_bindgen_futures::spawn_local(async move {
-                            let key = *document_id.as_bytes();
-                            let snapshot = store.load_snapshot(key).await.ok().flatten();
-                            let deltas = store.load_deltas(key).await.unwrap_or_default();
-                            let sessions = store.load_sessions(key).await.unwrap_or_default();
-                            let _ = tx.try_send(LogicCommand::RestoreLocalSnapshot {
-                                document_id,
-                                doc_type,
-                                snapshot,
-                                deltas,
-                                sessions,
-                            });
-                        });
-                    }
-                    // Each write passes the store's ledger, which keeps it
-                    // within its budget and meets the quota (`RESID-002`).
-                    write => local.apply(document_id, write),
-                }
+                local.apply(document_id, write);
             }
         }
 
+        // A plaintext file the picker read: its payload lands sealed, as every
+        // copy does (`RESID-025`).
+        if let Some(file) = opened_file.get_untracked() {
+            opened_file.set(None);
+            platform::open_plaintext_container(file.0, toasts, vault_frame.clone());
+        }
         // TOFU: a confirmed prompt -> pin the fetched key in `trusted_keys` and
         // fire phase 2 of the invite (`ambre-spec-key-verification.md`). Handled here
         // rather than in `AppRoot` because the trusted-key store is Main-thread
@@ -1321,6 +1298,13 @@ pub fn main() {
                 send_to_child(&child_routes_relay, &child_backlog_relay, id, ev);
                 continue;
             }
+            // The seal of a local row this thread asked for, which no view
+            // awaits (`RESID-025`).
+            if let UiEvent::Rest { id, evt } = &ev
+                && vault_frame.answer(*id, evt)
+            {
+                continue;
+            }
             // Mirror authoritative command-toggle state into the chrome store.
             // The active app owns the event->toggle mapping; the launcher names
             // no content event variant.
@@ -1382,6 +1366,10 @@ pub fn main() {
                     username.set(Some(display_name.clone()));
                     me.set(Some(*user_id));
                     draft_keeper.signed_in(*user_id);
+                    session_seen_frame.set(true);
+                    if let Some(local) = persist_store_frame.borrow().as_ref() {
+                        local.signed_in();
+                    }
                     if !list_requested {
                         list_requested = true;
                         let _ = relay_tx.try_send(LogicCommand::Rest {
@@ -1485,7 +1473,11 @@ pub fn main() {
                 UiEvent::Rest {
                     evt: ambre_bus::RestEvent::DocFileOpened { plaintext },
                     ..
-                } => platform::open_plaintext_container(plaintext.to_vec(), toasts),
+                } => platform::open_plaintext_container(
+                    plaintext.to_vec(),
+                    toasts,
+                    vault_frame.clone(),
+                ),
                 // One message for two causes, and that is the contract rather
                 // than laziness. The tag cannot tell a wrong passphrase from a
                 // modified file, and a message that named one would be a guess

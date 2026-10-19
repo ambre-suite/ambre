@@ -30,6 +30,8 @@ const EXCH_DOMAIN: &[u8] = b"ambre-exch-v1";
 const FILE_DOMAIN: &[u8] = b"ambre-file-v1";
 /// Domain-separation tag for the identifier of a document key.
 const KEY_ID_DOMAIN: &[u8] = b"ambre-key-id-v1";
+/// Domain-separation tag for the key that seals the local store.
+const STORE_DOMAIN: &[u8] = b"ambre-store-v1";
 
 /// Derives 32 bytes from `domain || seed` via BLAKE2b, truncating the 64-byte
 /// digest. Distinct domains yield independent keys from the same seed.
@@ -72,6 +74,13 @@ impl MasterSeed {
     pub fn derive_exchange_key(&self) -> StaticSecret {
         let sk = derive32(EXCH_DOMAIN, &self.0);
         StaticSecret::from(sk)
+    }
+
+    /// Derives the key that seals the rows of the local store
+    /// (`ambre-spec-residency.md`, `RESID-025`). The same seed derives it on
+    /// every device and every sign-in, so nothing of it is ever written down.
+    pub fn derive_store_key(&self) -> StoreKey {
+        StoreKey(derive32(STORE_DOMAIN, &self.0))
     }
 
     /// Returns the raw seed bytes for recovery-word encoding. This is the one
@@ -167,6 +176,22 @@ impl DocumentKey {
             .map_err(|_| CryptoError::InvalidKeyLength);
         bytes.zeroize();
         key
+    }
+}
+
+/// The 32-byte key that seals the rows of this user's local store, derived
+/// from the [`MasterSeed`] and never stored.
+///
+/// A type of its own, like [`FileKey`]. A row sealed under a document key
+/// would stop opening at the next rotation, and no AEAD entry point takes the
+/// other's key. It carries no [`Clone`], so the one copy is the one wiped.
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct StoreKey([u8; 32]);
+
+impl StoreKey {
+    /// Returns the raw key bytes. Restricted to crate use (AEAD).
+    pub(crate) fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
     }
 }
 

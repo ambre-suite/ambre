@@ -615,7 +615,11 @@ pub(crate) fn install_command_keys(keymap: Keymap, commands: shell::CommandPath)
 ///   land on an empty document.
 ///
 /// One path, taken every time, beats two that differ by the byte at offset 5.
-pub(crate) fn open_ambre_file_picker(toasts: Toasts, on_sealed: Callback<Vec<u8>>) {
+pub(crate) fn open_ambre_file_picker(
+    toasts: Toasts,
+    on_sealed: Callback<Vec<u8>>,
+    opened: RwSignal<Option<OpenedFile>>,
+) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
         return;
     };
@@ -631,7 +635,7 @@ pub(crate) fn open_ambre_file_picker(toasts: Toasts, on_sealed: Callback<Vec<u8>
     let picker = input.clone();
     let onchange = Closure::<dyn FnMut()>::new(move || {
         if let Some(file) = picker.files().and_then(|fs| fs.get(0)) {
-            read_ambre_file(file, toasts, on_sealed);
+            read_ambre_file(file, toasts, on_sealed, opened);
         }
     });
     input.set_onchange(Some(onchange.as_ref().unchecked_ref()));
@@ -651,7 +655,12 @@ pub(crate) fn open_ambre_file_picker(toasts: Toasts, on_sealed: Callback<Vec<u8>
 ///
 /// None of them navigates anywhere, so a refused file costs the user a message
 /// and nothing else.
-fn read_ambre_file(file: web_sys::File, toasts: Toasts, on_sealed: Callback<Vec<u8>>) {
+fn read_ambre_file(
+    file: web_sys::File,
+    toasts: Toasts,
+    on_sealed: Callback<Vec<u8>>,
+    opened: RwSignal<Option<OpenedFile>>,
+) {
     wasm_bindgen_futures::spawn_local(async move {
         let Ok(buf) = wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await else {
             toasts.error("Ambre could not read that file");
@@ -671,26 +680,56 @@ fn read_ambre_file(file: web_sys::File, toasts: Toasts, on_sealed: Callback<Vec<
             on_sealed.run(bytes);
             return;
         }
-        open_container_bytes(bytes, toasts).await;
+        // The per-frame relay holds the store's seal, and resumes from here
+        // (`RESID-025`).
+        opened.set(Some(OpenedFile(bytes)));
     });
 }
 
-/// Attribute a plaintext container, persist its payload and navigate to it.
+/// A plaintext container the picker read, on its way to the store's seal.
+#[derive(Clone)]
+pub(crate) struct OpenedFile(pub(crate) Vec<u8>);
+
+/// Attribute a plaintext container, persist its payload sealed and navigate
+/// to it.
 ///
 /// Split from [`read_ambre_file`] because a sealed file reaches exactly this
 /// point too, one round trip later and by way of the Sync worker. What it holds
 /// is a whole plaintext container, so the two lineages share every step after
 /// the seal comes off (`DOCFILE-014`).
-pub(crate) fn open_plaintext_container(bytes: Vec<u8>, toasts: Toasts) {
-    wasm_bindgen_futures::spawn_local(open_container_bytes(bytes, toasts));
+pub(crate) fn open_plaintext_container(bytes: Vec<u8>, toasts: Toasts, vault: crate::vault::Vault) {
+    let Some((document_id, doc_type, payload)) = read_container(&bytes, toasts) else {
+        return;
+    };
+    // The payload lands as every copy does, sealed under the session's key.
+    vault.seal(
+        ambre_bus::RowPlace::Document(document_id),
+        payload,
+        move |sealed| match sealed {
+            Some(sealed) => {
+                wasm_bindgen_futures::spawn_local(store_container(
+                    document_id,
+                    doc_type,
+                    sealed,
+                    toasts,
+                ));
+            }
+            None => toasts.error("Sign in to open that file"),
+        },
+    );
 }
 
-async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
-    let header = match ambre_core::docfile::read_ambre_plaintext(&bytes) {
+/// The container's document, its type and its payload, once this build
+/// can render it. A refusal reaches the user by name.
+fn read_container(
+    bytes: &[u8],
+    toasts: Toasts,
+) -> Option<(DocumentId, ambre_bus::DocType, Vec<u8>)> {
+    let header = match ambre_core::docfile::read_ambre_plaintext(bytes) {
         Ok(header) => header,
         Err(e) => {
             toasts.error(format!("Ambre cannot open that file: {e}"));
-            return;
+            return None;
         }
     };
     // A type this build knows by name but cannot render draws a refusal here
@@ -701,9 +740,19 @@ async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
             "Ambre cannot open a {} yet",
             header.doc_type.generic_label()
         ));
-        return;
+        return None;
     }
+    Some((header.document_id.into(), header.doc_type, header.payload))
+}
 
+/// Store a container's sealed payload as the document's copy, and navigate
+/// to it.
+async fn store_container(
+    document_id: DocumentId,
+    doc_type: ambre_bus::DocType,
+    sealed: Vec<u8>,
+    toasts: Toasts,
+) {
     let store = match ambre_logic::persistence::PersistenceStore::open().await {
         Ok(Ok(store)) => store,
         _ => {
@@ -714,14 +763,14 @@ async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
     // Durable, not fire-and-forget: the navigation below unloads the page,
     // and an open transaction goes with it.
     let committed = store
-        .save_snapshot_committed(*header.document_id.as_bytes(), header.payload)
+        .save_snapshot_committed(*document_id.as_bytes(), sealed)
         .await;
     if committed != Ok(true) {
         toasts.error("Ambre could not store that file locally");
         return;
     }
 
-    let path = crate::route::doc_path(header.doc_type, header.document_id.into());
+    let path = crate::route::doc_path(doc_type, document_id);
     if let Some(window) = web_sys::window() {
         let _ = window.location().set_href(&path);
     }

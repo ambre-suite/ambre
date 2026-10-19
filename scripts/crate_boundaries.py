@@ -381,6 +381,8 @@ WIDTH_MEDIA = re.compile(r"@media[^{]*\((?:min|max)-width:[^)]*\)[^{]*\{")
 HIDING = re.compile(r"\bdisplay:\s*none\b|\bvisibility:\s*hidden\b")
 # A width threshold spelled anywhere else: a width query, or a media read.
 THRESHOLD = re.compile(r"\((?:min|max)-width:\s*\d+(?:px|em|rem)\s*\)|\bmatch_media\b|\bmatchMedia\b")
+# A media read that asks for the user's motion setting, which no width rides.
+MOTION_QUERY = re.compile(r"\(prefers-reduced-motion:\s*reduce\)")
 # The relay's log lines, and the words that name a payload in them.
 RELAY = "crates/ambre-server/src"
 LOG_MACRO = re.compile(
@@ -1132,7 +1134,7 @@ def check_widths(errors: list[str]) -> int:
             continue
         for number, line in enumerate(path.read_text().splitlines(), 1):
             found = THRESHOLD.search(code(line) if path.suffix == ".rs" else line)
-            if found:
+            if found and not MOTION_QUERY.search(line):
                 errors.append(f"{rel}:{number}: a width spelled outside the stylesheet: `{found.group(0)}`")
         held += 1
     for path in sources(CONTENT_VIEWS):

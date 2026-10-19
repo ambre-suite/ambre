@@ -45,6 +45,9 @@ mod replay;
 /// Which documents this thread holds, and the reopen of one that left
 /// (`ambre-spec-residency.md`).
 mod residency;
+/// The order of the local store's writes while their rows are sealed
+/// (`RESID-025`).
+pub mod seal_queue;
 mod segments;
 /// The snapshot check against the signed deltas (`AUTHOR-016`).
 mod snapshot_check;

@@ -84,6 +84,9 @@ pub struct LandingSignals {
     /// launcher raises no other notification, so this is the one handle it
     /// needs.
     pub toasts: Toasts,
+    /// Where a plaintext `.ambre` container goes once read: the per-frame
+    /// relay stores its payload sealed (`RESID-025`).
+    pub opened_file: RwSignal<Option<crate::platform::OpenedFile>>,
 }
 
 /// The landing overlay view. `to_logic` lets the dev sign-in panel dispatch
@@ -99,6 +102,7 @@ pub fn landing_view(
         dev_mode,
         booted,
         toasts,
+        opened_file,
     } = signals;
 
     // New document (`ambre-spec-launcher.md`): the app-agnostic type picker hands
@@ -181,6 +185,7 @@ pub fn landing_view(
                             on:click=move |_| crate::platform::open_ambre_file_picker(
                                 toasts,
                                 on_sealed,
+                                opened_file,
                             )
                         >
                             "Open a file"

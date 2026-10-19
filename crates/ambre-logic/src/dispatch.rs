@@ -2021,6 +2021,16 @@ mod tests {
                 sealed: vec![1],
                 passphrase: secret(),
             },
+            RestCommand::SealLocalRow {
+                place: ambre_bus::RowPlace::Document(doc),
+                plaintext: secret(),
+            },
+            RestCommand::OpenLocalRows {
+                rows: vec![ambre_bus::SealedRow {
+                    place: ambre_bus::RowPlace::Document(doc),
+                    sealed: vec![1],
+                }],
+            },
             RestCommand::CreateMeeting {
                 name: "m".to_owned(),
             },
@@ -2066,6 +2076,8 @@ mod tests {
                 | RestCommand::EraseMedia { .. }
                 | RestCommand::SealDocFile { .. }
                 | RestCommand::OpenDocFile { .. }
+                | RestCommand::SealLocalRow { .. }
+                | RestCommand::OpenLocalRows { .. }
                 | RestCommand::CreateMeeting { .. }
                 | RestCommand::JoinMeeting { .. }
                 | RestCommand::LeaveMeeting { .. }

@@ -142,6 +142,7 @@ pub mod fuzz;
 mod http;
 mod lifecycle;
 mod light;
+mod local_store;
 mod media;
 mod members;
 mod membership_log;
@@ -1637,6 +1638,12 @@ impl SyncState {
             RestCommand::OpenDocFile { sealed, passphrase } => {
                 self.handle_open_doc_file(id, sealed, passphrase);
             }
+
+            // -- The local store -----------------------------------------------
+            RestCommand::SealLocalRow { place, plaintext } => {
+                self.handle_seal_local_row(id, place, plaintext);
+            }
+            RestCommand::OpenLocalRows { rows } => self.handle_open_local_rows(id, rows),
 
             // -- Meetings ------------------------------------------------------
             RestCommand::CreateMeeting { name } => tracing::info!("Sync: CreateMeeting '{name}'"),

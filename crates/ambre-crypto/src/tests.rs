@@ -222,6 +222,44 @@ fn derived_keys_match_the_frozen_domains() {
     assert_eq!(seed.derive_exchange_key().to_bytes(), EXCH);
 }
 
+// -- The local store -----------------------------------------------------------
+
+/// The store key is the seed's alone: pinned here, so a renamed domain fails
+/// this test rather than every copy a device holds.
+#[test]
+fn the_store_key_matches_its_frozen_domain() {
+    const STORE: [u8; 32] = [
+        0x44, 0xfc, 0xec, 0x32, 0x4e, 0x29, 0xce, 0x2e, 0x4b, 0xd9, 0x42, 0xac, 0x8f, 0x6b, 0x6a,
+        0x5c, 0xdb, 0xde, 0xeb, 0x2b, 0xbd, 0x20, 0xa6, 0xe3, 0x13, 0xc4, 0xe6, 0x85, 0xe8, 0xdd,
+        0x10, 0x14,
+    ];
+    let seed = MasterSeed::from_array([0x07; 32]);
+    assert_eq!(seed.derive_store_key().as_bytes(), &STORE);
+}
+
+/// A row opens under its own key and its own place, and under nothing else.
+#[test]
+fn a_store_row_opens_only_where_it_was_sealed() {
+    let key = fixed_seed().derive_store_key();
+    let row = aead::seal_row(b"a copy", b"doc:0a", &key).unwrap();
+    assert_eq!(row.first(), Some(&aead::ROW_VERSION));
+    assert!(!row.windows(6).any(|w| w == b"a copy"));
+    assert_eq!(aead::open_row(&row, b"doc:0a", &key).unwrap(), b"a copy");
+
+    let stranger = MasterSeed::from_array([0x33; 32]).derive_store_key();
+    assert!(aead::open_row(&row, b"doc:0a", &stranger).is_err());
+    assert!(aead::open_row(&row, b"doc:0b", &key).is_err());
+    let mut flipped = row.clone();
+    if let Some(last) = flipped.last_mut() {
+        *last ^= 1;
+    }
+    assert!(aead::open_row(&flipped, b"doc:0a", &key).is_err());
+    // A row the store held in the clear, or a stub, opens as nothing.
+    assert!(aead::open_row(b"a copy", b"doc:0a", &key).is_err());
+    assert!(aead::open_row(&[], b"doc:0a", &key).is_err());
+    assert!(aead::open_row(&[aead::ROW_VERSION], b"doc:0a", &key).is_err());
+}
+
 // -- ECDH --------------------------------------------------------------------
 
 #[test]
