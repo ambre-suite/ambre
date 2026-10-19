@@ -1341,6 +1341,8 @@ pub fn main() {
             toile_chrome::notify_event(&toasts, &ev);
             // Prose's conversion reports, the same way (`PROSE-IO-053`).
             ambre_prose::chrome::notify_event(&toasts, &ev);
+            // Murmure's root of a copy not reached, the same way.
+            ambre_murmure::chrome::notify_event(&toasts, &ev);
             // Each application fills its own panels from its own events
             // (`ARCH-018`). The launcher names no variant.
             trame_relay.absorb(&ev);

@@ -866,8 +866,12 @@ impl LogicState {
                 doc_type: DocType::Murmure,
             }),
             SeekStep::Wait => {}
-            SeekStep::Lost => {
+            SeekStep::Lost { thread } => {
                 tracing::warn!("Logic: channel {channel_id} holds no root for the copy");
+                self.send_to_ui(UiEvent::Channel {
+                    channel_id,
+                    event: MurmureEvent::RootLost { thread },
+                });
             }
         }
     }
@@ -5618,6 +5622,11 @@ mod tests {
             message: "gone".to_owned(),
         });
         assert!(sent(&sync).is_empty(), "the seek ends");
+        let lost = channel_events(&ui)
+            .into_iter()
+            .filter(|(_, event)| *event == MurmureEvent::RootLost { thread: unknown })
+            .count();
+        assert_eq!(lost, 1, "the view is told once");
     }
 
     /// A reply that mentions me in a thread the open channel holds counts

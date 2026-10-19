@@ -25,10 +25,28 @@ use ambre_bus::{
     MurmureCommand, MurmureEvent, Presence, RequestId, RestCommand, RestEvent, SpaceCommand,
     SpaceEvent, Timestamp, UiEvent,
 };
-use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteEntry, ShellAction, ShellRegion};
+use ambre_chrome::{
+    CommandHandler, KeyRoute, MenuEntry, PaletteEntry, ShellAction, ShellRegion, Toasts,
+};
 use ambre_commands::{CommandId, Locale};
 use ambre_core::{ChannelId, SpaceId, UserId};
 use leptos::prelude::*;
+
+/// What the user reads when the root of a copy could not be reached. Replying
+/// again starts a fresh seek (the Murmure threads spec).
+pub const ROOT_LOST: &str = "This thread cannot open: its first message could not be loaded.";
+
+/// Surface a root the seek could not reach as a toast (the Murmure threads
+/// spec). The launcher names no Murmure variant. A no-op for every other event.
+pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
+    if let UiEvent::Channel {
+        event: MurmureEvent::RootLost { .. },
+        ..
+    } = ev
+    {
+        toasts.warning(ROOT_LOST);
+    }
+}
 
 /// The region of the shell a pane is in. The channel list is the sidebar,
 /// a channel the content, and a thread or the member list the panel.

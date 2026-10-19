@@ -823,19 +823,22 @@ fn a_seek_ends_on_what_it_cannot_follow() {
         probed(&mut unlisted),
         Err(MurmureError::ForeignRoot(thread))
     );
-    assert_eq!(unlisted.seek_step(), None);
+    assert_eq!(unlisted.seek_step(), Some(SeekStep::Lost { thread }));
+    assert_eq!(unlisted.seek_step(), None, "said once");
 
     let (mut failed, middle) = far_copy(&alice, Some(old));
     assert_eq!(probed(&mut failed), Ok(()));
     assert_eq!(failed.seek_step(), Some(SeekStep::Load(middle)));
     assert!(failed.cancel_older(middle.document_id()));
-    assert_eq!(failed.seek_step(), Some(SeekStep::Lost), "asked once");
+    let lost = Some(SeekStep::Lost { thread });
+    assert_eq!(failed.seek_step(), lost, "asked once");
     assert_eq!(failed.seek_step(), None);
 
     let (mut gone, _) = far_copy(&alice, Some(old));
     assert_eq!(gone.seek_root(thread), Some(thread));
     assert!(gone.cancel_older(thread));
-    assert_eq!(gone.seek_step(), None, "the probe failed");
+    assert_eq!(gone.seek_step(), lost, "the probe failed");
+    assert_eq!(gone.seek_step(), None);
 
     let (mut empty, middle) = far_copy(&alice, Some(old));
     assert_eq!(probed(&mut empty), Ok(()));
@@ -843,7 +846,7 @@ fn a_seek_ends_on_what_it_cannot_follow() {
     load(&mut empty, middle, &empty_segment(alice.channel_id()));
     assert_eq!(empty.seek_step(), Some(SeekStep::Load(old)));
     load(&mut empty, old, &empty_segment(alice.channel_id()));
-    assert_eq!(empty.seek_step(), Some(SeekStep::Lost), "no such root");
+    assert_eq!(empty.seek_step(), lost, "no such root");
     assert_eq!(
         empty.probe_ready(thread),
         Err(MurmureError::NotHeld(thread))

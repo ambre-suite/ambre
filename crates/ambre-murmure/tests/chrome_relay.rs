@@ -116,6 +116,47 @@ fn a_root_found_opens_its_thread_in_the_channel_shown() {
     );
 }
 
+/// A root the seek could not reach reaches the user as a toast, and moves
+/// no pane (`MURMURE-548`).
+#[wasm_bindgen_test]
+fn a_root_lost_tells_the_user_the_thread_cannot_open() {
+    use wasm_bindgen::JsCast;
+
+    let (_owner, relay, direct) = shown_direct();
+    let lost = UiEvent::Channel {
+        channel_id: direct,
+        event: MurmureEvent::RootLost {
+            thread: ambre_core::DocumentId::new(),
+        },
+    };
+    assert!(relay.absorb(&lost).is_empty());
+    assert_eq!(relay.pane.get_untracked(), MurmurePane::channel(direct));
+    let toasts = ambre_chrome::Toasts::new();
+    ambre_murmure::chrome::notify_event(&toasts, &lost);
+    ambre_murmure::chrome::notify_event(
+        &toasts,
+        &UiEvent::Channel {
+            channel_id: direct,
+            event: MurmureEvent::Left,
+        },
+    );
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let _handle = leptos::mount::mount_to(
+        mount,
+        move || view! { <ambre_chrome::ToastHost toasts=toasts /> },
+    );
+    let shown = root.query_selector_all(".ambre-toast").unwrap();
+    assert_eq!(shown.length(), 1, "only the lost root is told");
+    let text = shown
+        .item(0)
+        .and_then(|t| t.text_content())
+        .unwrap_or_default();
+    assert!(text.contains(ambre_murmure::chrome::ROOT_LOST), "{text}");
+    root.remove();
+}
+
 /// The name an open channel learns is the one its header reads
 /// (`MURMURE-428`).
 #[wasm_bindgen_test]

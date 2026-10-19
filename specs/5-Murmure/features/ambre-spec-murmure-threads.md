@@ -39,6 +39,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-545` | `POST` | The reply action on a copy whose root lies in no loaded segment MUST load the segments down to the root's, then open its thread at its root. | this spec section 3; `MURMURE-533`; `MURMURE-023` | `ambre_murmure::thread_tests::the_reply_on_a_far_copy_loads_down_to_its_root` -- a probe reads the header, the segments load one at a time, and the root is found; `ambre_logic::channels::tests::the_reply_on_a_far_copy_loads_its_root_then_names_it` -- the probe is closed, the segment opens, and the view is told the root; `ambre_murmure::commands::tests::the_reply_on_a_copy_opens_the_thread_it_came_from` -- such a copy asks Logic to seek its root; `ambre_murmure::tests::chrome_relay::a_root_found_opens_its_thread_in_the_channel_shown` -- the found root opens its thread in the channel still shown | none | verified |
 | `MURMURE-546` | `FRAME` | Seeking the root of a copy MUST NOT load a segment older than the one its thread's header names. | this spec section 3; `MURMURE-545` | `ambre_murmure::thread_tests::the_reply_on_a_far_copy_loads_down_to_its_root` -- the seek stops at the named segment, and a found root ends it; `::a_seek_ends_on_what_it_cannot_follow` -- a named segment without the root asks nothing older | none | verified |
 | `MURMURE-547` | `FAIL` | Given a thread whose header names no segment `meta` lists, or a segment on the way that fails, the seek MUST end with no thread opened. | this spec section 3; `MURMURE-545`; `MURMURE-221` | `ambre_murmure::thread_tests::a_seek_ends_on_what_it_cannot_follow` -- an unlisted segment, a failed segment, a failed probe and a missing root each end it; `ambre_logic::channels::tests::the_reply_on_a_far_copy_loads_its_root_then_names_it` -- a probe that fails asks nothing more | none | verified |
+| `MURMURE-548` | `FAIL` | Given a seek that ends with no root, the client MUST tell the user once that the thread cannot open. | this spec section 3; `MURMURE-547` | `ambre_murmure::thread_tests::a_seek_ends_on_what_it_cannot_follow` -- each end of a seek steps lost once, then nothing; `ambre_logic::channels::tests::the_reply_on_a_far_copy_loads_its_root_then_names_it` -- a failed probe tells the view once; `ambre_murmure::tests::chrome_relay::a_root_lost_tells_the_user_the_thread_cannot_open` -- one toast says so, and the pane stays | none | verified |
 
 ### 1.3 Follow a thread that is not open
 
@@ -65,7 +66,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, the identifier of its root, and when it
   changes (`ZK-015`, `SRV-162`).
-* **Verification.** 21 `verified`, 6 `unimplemented`. The engine tests hold the thread document,
+* **Verification.** 22 `verified`, 6 `unimplemented`. The engine tests hold the thread document,
   the link, the count, the changes on a reply, a locked root and the mentions. The Logic tests
   hold the waits, the race, the watch and the read cursor. The Sync tests hold the signal, the
   light thread and the number a read reaches. The view's host tests hold the read a thread shown sends.
@@ -104,6 +105,7 @@ action opens the thread of the loaded root that names its thread document, and n
 **A copy of a far root.** A probe reads the segment the thread's header names, then closes. The
 older segments load one at a time, so the list keeps no gap, down to that one (`MURMURE-545`,
 `MURMURE-546`, `MURMURE-547`). The cost is the thread fetched twice, and each segment between.
+A seek with no root says so once; replying again seeks anew (`MURMURE-548`).
 
 **A copy follows its reply.** Its identifier is the reply's, the last bit turned. An edit of the
 reply reaches the copy (`MURMURE-538`), and so does a delete (`MURMURE-539`), as an amendment once
@@ -167,7 +169,7 @@ is `crates/ambre-logic/src/threads.rs`, and the Sync side is `thread_task` in
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A seek that ends with no root shows nothing.** The reply then does nothing visible. Saying so
-  waits for the `A far root not reached` Story (`ambre-roadmap.md` E5).
+* **A lost root names no cause.** One notice covers a failed segment and a header naming none.
+  Telling them apart is not ruled.
 * **An open channel holds every thread its loaded segments name.** A root scrolled off screen
   keeps its thread held. Releasing it is not ruled.

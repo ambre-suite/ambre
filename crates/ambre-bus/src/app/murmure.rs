@@ -474,6 +474,9 @@ pub enum MurmureEvent {
         segment: SegmentId,
         root: MessageId,
     },
+    /// The root of `thread`, which a copy names, could not be reached (the
+    /// Murmure threads spec). Nothing opens.
+    RootLost { thread: DocumentId },
     /// The first message past the read cursors, in list order, that another
     /// member wrote. `None` when every held message is read. Sent each time
     /// the count of the channel is known anew (`MURMURE-499`).

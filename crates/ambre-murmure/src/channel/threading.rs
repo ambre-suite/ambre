@@ -71,6 +71,8 @@ pub(super) struct Seek {
     target: Option<SegmentId>,
     /// The older segment the seek last asked for.
     asked: Option<SegmentId>,
+    /// Its probe failed, or named no listed segment. The next step says so.
+    lost: bool,
 }
 
 /// Where a seek for the root of a copy stands.
@@ -86,9 +88,10 @@ pub enum SeekStep {
     Load(SegmentId),
     /// A probe or a segment is on its way.
     Wait,
-    /// No segment down to the one the header names holds the root. The
-    /// seek ends, and nothing opens.
-    Lost,
+    /// The root of `thread` cannot be reached: its probe failed, or no
+    /// segment down to the one the header names holds it. The seek ends,
+    /// and nothing opens.
+    Lost { thread: DocumentId },
 }
 
 /// The document a reply writes.
@@ -425,6 +428,7 @@ impl ChannelState {
             thread,
             target: None,
             asked: None,
+            lost: false,
         });
         if self.root_naming(thread).is_some()
             || self.is_thread(thread)
@@ -450,14 +454,14 @@ impl ChannelState {
     /// # Errors
     /// [`MurmureError::NotHeld`] for no such probe, every refusal of the
     /// header check, and [`MurmureError::ForeignRoot`] for a header naming no
-    /// segment `meta` lists. The seek then ends.
+    /// segment `meta` lists. The next step of the seek is then lost.
     pub fn probe_ready(&mut self, document_id: DocumentId) -> Result<(), MurmureError> {
         let read = self.read_probe(document_id);
-        let seek = self.seek.as_mut().filter(|seek| seek.thread == document_id);
-        match (&read, seek) {
-            (Ok(segment), Some(seek)) => seek.target = Some(*segment),
-            (Err(_), Some(_)) => self.seek = None,
-            _ => {}
+        if let Some(seek) = self.seek.as_mut().filter(|seek| seek.thread == document_id) {
+            match &read {
+                Ok(segment) => seek.target = Some(*segment),
+                Err(_) => seek.lost = true,
+            }
         }
         read.map(|_| ())
     }
@@ -488,19 +492,23 @@ impl ChannelState {
     /// that failed is not asked for twice.
     pub fn seek_step(&mut self) -> Option<SeekStep> {
         let seek = self.seek?;
-        let step = if let Some((segment, root)) = self.root_naming(seek.thread) {
+        let thread = seek.thread;
+        let step = if seek.lost {
+            SeekStep::Lost { thread }
+        } else if let Some((segment, root)) = self.root_naming(thread) {
             SeekStep::Found {
-                thread: seek.thread,
+                thread,
                 segment,
                 root,
             }
         } else if let Some(target) = seek.target {
             self.seek_older(target, seek.asked)
+                .unwrap_or(SeekStep::Lost { thread })
         } else {
             SeekStep::Wait
         };
         match step {
-            SeekStep::Found { .. } | SeekStep::Lost => self.seek = None,
+            SeekStep::Found { .. } | SeekStep::Lost { .. } => self.seek = None,
             SeekStep::Load(segment) => {
                 if let Some(seek) = self.seek.as_mut() {
                     seek.asked = Some(segment);
@@ -511,33 +519,32 @@ impl ChannelState {
         Some(step)
     }
 
-    fn seek_older(&mut self, target: SegmentId, asked: Option<SegmentId>) -> SeekStep {
+    /// The next older segment to load down to `target`. `None` when the
+    /// root is out of reach.
+    fn seek_older(&mut self, target: SegmentId, asked: Option<SegmentId>) -> Option<SeekStep> {
         if self.held_segments().contains(&target) {
-            return SeekStep::Lost;
+            return None;
         }
         if !self.pending.is_empty() {
-            return SeekStep::Wait;
+            return Some(SeekStep::Wait);
         }
-        let Some(oldest) = self.oldest_held() else {
-            return SeekStep::Lost;
-        };
-        match self.older_than(oldest) {
-            Some(older) if Some(older) != asked => {
-                self.request_older(oldest);
-                SeekStep::Load(older)
-            }
-            _ => SeekStep::Lost,
-        }
+        let oldest = self.oldest_held()?;
+        let older = self
+            .older_than(oldest)
+            .filter(|older| Some(*older) != asked)?;
+        self.request_older(oldest);
+        Some(SeekStep::Load(older))
     }
 
     /// The thread `document_id` could not open: a seek still waiting on its
-    /// probe ends.
+    /// probe is lost.
     pub(super) fn end_seek_of(&mut self, document_id: DocumentId) {
-        if self
+        if let Some(seek) = self
             .seek
-            .is_some_and(|seek| seek.thread == document_id && seek.target.is_none())
+            .as_mut()
+            .filter(|seek| seek.thread == document_id && seek.target.is_none())
         {
-            self.seek = None;
+            seek.lost = true;
         }
     }
 
