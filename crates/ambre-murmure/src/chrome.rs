@@ -40,16 +40,28 @@ pub const ROOT_LOST: &str = "This thread cannot open: its first message could no
 /// log, where Logic wrote it (`MURMURE-549`).
 pub const CHANNEL_NOT_OPENED: &str = "This channel could not open. Select it again to retry.";
 
-/// Surface a root the seek could not reach, and a channel that could not
-/// open, as a toast (the Murmure threads spec, `MURMURE-549`). The launcher
-/// names no Murmure variant. A no-op for every other event.
+/// What the user reads when a space could not open (`MURMURE-550`).
+pub const SPACE_NOT_OPENED: &str =
+    "A space could not open, so its channels to join are missing for now.";
+
+/// Surface a root the seek could not reach as a toast (the Murmure threads
+/// spec). A channel or a space that could not open is told the same way
+/// (`MURMURE-549`, `MURMURE-550`). The launcher names no Murmure variant. A
+/// no-op for every other event.
 pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
-    let UiEvent::Channel { event, .. } = ev else {
-        return;
-    };
-    match event {
-        MurmureEvent::RootLost { .. } => toasts.warning(ROOT_LOST),
-        MurmureEvent::OpenFailed { .. } => toasts.warning(CHANNEL_NOT_OPENED),
+    match ev {
+        UiEvent::Channel {
+            event: MurmureEvent::RootLost { .. },
+            ..
+        } => toasts.warning(ROOT_LOST),
+        UiEvent::Channel {
+            event: MurmureEvent::OpenFailed { .. },
+            ..
+        } => toasts.warning(CHANNEL_NOT_OPENED),
+        UiEvent::Space {
+            event: SpaceEvent::OpenFailed { .. },
+            ..
+        } => toasts.warning(SPACE_NOT_OPENED),
         _ => {}
     }
 }
@@ -839,6 +851,12 @@ impl MurmureRelay {
             SpaceEvent::ChannelLeft { channel_id } | SpaceEvent::ChannelDeleted { channel_id } => {
                 self.sidebar.update(|s| s.forget(*channel_id));
                 self.drop_channels(&[*channel_id]);
+                Vec::new()
+            }
+            // A space that could not open keeps its joined channels, and the
+            // next listing opens it anew (`MURMURE-550`).
+            SpaceEvent::OpenFailed { .. } => {
+                self.sidebar.update(|s| s.space_failed(space));
                 Vec::new()
             }
             // The space leaves with every channel of it (`MURMURE-488`).

@@ -107,12 +107,16 @@ pub struct Sidebar {
     /// The other members of each direct message, by display name, which a
     /// direct message nobody named shows (`MURMURE-492`).
     peers: HashMap<ChannelId, Vec<String>>,
+    /// The spaces whose open failed. The next listing naming one opens it
+    /// anew (`MURMURE-550`).
+    unopened: Vec<SpaceId>,
 }
 
 impl Sidebar {
     /// Take the channels and the spaces of the user, whole. Returns the
-    /// spaces named for the first time, which the view opens to read their
-    /// catalogue. A space with no channel of the user is one of them.
+    /// spaces named for the first time, and those whose open failed, which
+    /// the view opens to read their catalogue. A space with no channel of
+    /// the user is one of them.
     pub fn set_member_channels(
         &mut self,
         channels: Vec<MemberChannel>,
@@ -127,10 +131,21 @@ impl Sidebar {
             if !self.spaces.contains(&space) {
                 self.spaces.push(space);
                 fresh.push(space);
+            } else if self.unopened.contains(&space) && !fresh.contains(&space) {
+                fresh.push(space);
             }
         }
+        self.unopened.retain(|space| !fresh.contains(space));
         self.members = channels;
         fresh
+    }
+
+    /// A space that could not open. Its joined channels stay drawn, and the
+    /// next listing naming it opens it anew (`MURMURE-550`).
+    pub fn space_failed(&mut self, space: SpaceId) {
+        if self.spaces.contains(&space) && !self.unopened.contains(&space) {
+            self.unopened.push(space);
+        }
     }
 
     /// Take the catalogue of an open space, whole.
@@ -649,6 +664,36 @@ mod tests {
                 .set_member_channels(vec![general_m], &[space, other])
                 .is_empty()
         );
+    }
+
+    /// A space that could not open keeps its joined channels drawn, and the
+    /// next listing naming it opens it once more. A space never listed, or
+    /// failed twice, is asked no more than once (`MURMURE-550`).
+    #[test]
+    fn a_space_that_failed_opens_anew_on_the_next_listing() {
+        let space = SpaceId::new();
+        let (general, general_m) = public(space);
+        let mut sidebar = Sidebar::default();
+        assert_eq!(
+            sidebar.set_member_channels(vec![general_m], &[space]),
+            [space]
+        );
+        sidebar.space_failed(space);
+        sidebar.space_failed(space);
+        sidebar.space_failed(SpaceId::new());
+        let drawn = sidebar.sections();
+        assert_eq!(drawn[0].entries[0].channel, general, "still drawn");
+        assert_eq!(
+            sidebar.set_member_channels(vec![general_m], &[space]),
+            [space],
+            "opened anew, once"
+        );
+        assert!(
+            sidebar
+                .set_member_channels(vec![general_m], &[space])
+                .is_empty()
+        );
+        assert_eq!(sidebar.spaces(), [space]);
     }
 
     /// A space the user lost leaves the sidebar with its catalogue, its

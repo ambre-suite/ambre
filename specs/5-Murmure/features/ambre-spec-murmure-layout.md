@@ -41,6 +41,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-166` | `POST` | Selecting a channel MUST show it in the message list and mark it current in the sidebar. | this spec section 3 | `ambre_murmure::view::tests::the_selected_channel_shows_its_list_and_is_marked_read_once` -- the channel the pane shows paints its own list, and no other, on a recording surface | none | verified |
 | `MURMURE-167` | `FRAME` | Selecting a channel MUST NOT move the read cursor of the channel left behind. | this spec section 3; `MURMURE-116` | `ambre_app::shell::murmure_regions::selecting_a_channel_sends_nothing_for_the_one_left_behind` -- switching channels sends one open per new channel and no other command | none | verified |
 | `MURMURE-549` | `FAIL` | Given a channel that could not open, the client MUST tell the user, show the channel list, keep the channel in the sidebar, and open it anew when selected again. | this spec section 3; `MURMURE-166` | `ambre_logic::channels::tests::a_refused_listing_tells_the_view_and_holds_nothing` -- a refused listing tells the view; `::a_document_that_fails_to_open_ends_the_opening` -- so does a document that fails; `ambre_murmure::tests::chrome_relay::a_channel_that_cannot_open_is_told_and_opens_anew` -- one toast without the cause, the pane back to the list, and a new open on the next selection | none | verified |
+| `MURMURE-550` | `FAIL` | Given a space that could not open, the client MUST tell the user, keep its joined channels drawn, and open it anew on the next listing that names it. | this spec section 3; `MURMURE-486` | `ambre_logic::spaces::tests::a_space_with_nothing_readable_fails_to_open` -- the view is told; `ambre_murmure::sidebar::tests::a_space_that_failed_opens_anew_on_the_next_listing` -- its channels stay drawn, and the next listing opens it once; `ambre_murmure::tests::chrome_relay::a_space_that_cannot_open_is_told_and_opens_anew` -- one toast without the cause, then one new open | none | verified |
 
 ### 1.3 Go back on a phone
 
@@ -61,7 +62,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 20 `verified`, 5 `unimplemented`. The regions, the back control, the rows of
+* **Verification.** 21 `verified`, 5 `unimplemented`. The regions, the back control, the rows of
   the shell, the sidebar entries and the list of the shown channel are built. The split view is
   not.
 
@@ -129,8 +130,10 @@ The sidebar is rebuilt from what the Logic thread hands the view. That is the ch
 the catalogue of each space they name, the activity answer and the names of open channels. A space
 named for the first time is opened for its catalogue. Drawing the sidebar sends nothing.
 Selecting a joined channel opens it once, and selecting one to join joins it in its space.
+
 A channel that could not open is told with no cause, and its next selection opens it anew
-(`MURMURE-549`).
+(`MURMURE-549`). A space that could not open is told too, and the next listing opens it anew
+(`MURMURE-550`).
 
 **A name, then a hint, then the members.** A channel shows what its `meta` reads once open, else the
 name sealed beside it (`MURMURE-490`). A direct message with neither shows its other members' display
@@ -183,6 +186,8 @@ in a cell of its own (`MURMURE-421`).
 * **The name a closed channel shows can be stale.** A seal that failed to reach the relay, or two
   renames racing, leave an older name until the channel opens. It lands with the
   `A stale channel name` Story (`ambre-roadmap.md` E5).
+* **A space that failed waits for the next listing.** No timer opens it again, so a quiet session
+  shows its channels to join only once a listing comes. A retry on a delay is not ruled.
 * **A space made before the relay knew spaces, and with no channel, is not listed.** Only dev data
   holds one: the relay learns a space at its creation, or from its channels.
 * **The id of a Murmure route names nothing yet.** A page opens on the channel list. A link to a

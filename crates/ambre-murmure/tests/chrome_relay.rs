@@ -199,6 +199,48 @@ fn a_channel_that_cannot_open_is_told_and_opens_anew() {
     assert!(!texts[0].contains("refused"), "the cause stays out of it");
 }
 
+/// A space that could not open is told, and the next listing naming it
+/// opens it anew, once (`MURMURE-550`).
+#[wasm_bindgen_test]
+fn a_space_that_cannot_open_is_told_and_opens_anew() {
+    let owner = Owner::new();
+    owner.set();
+    let relay = MurmureRelay::new();
+    let space = SpaceId::new();
+    let listing = UiEvent::MemberChannels {
+        channels: vec![MemberChannel {
+            channel_id: ChannelId::new(),
+            place: ChannelPlace::Public(space),
+        }],
+        spaces: Vec::new(),
+        names: Vec::new(),
+        peers: Vec::new(),
+    };
+    let opens = |commands: Vec<LogicCommand>| {
+        commands
+            .iter()
+            .filter(|c| matches!(c, LogicCommand::OpenSpace { space_id } if *space_id == space))
+            .count()
+    };
+    assert_eq!(opens(relay.absorb(&listing)), 1);
+    let failed = UiEvent::Space {
+        space_id: space,
+        event: SpaceEvent::OpenFailed {
+            message: "the relay refused it".to_owned(),
+        },
+    };
+    assert!(relay.absorb(&failed).is_empty());
+    assert_eq!(opens(relay.absorb(&listing)), 1, "opened anew");
+    assert_eq!(opens(relay.absorb(&listing)), 0, "once");
+    let texts = toasts_for(&[failed]);
+    assert_eq!(texts.len(), 1, "{texts:?}");
+    assert!(
+        texts[0].contains(ambre_murmure::chrome::SPACE_NOT_OPENED),
+        "{texts:?}"
+    );
+    assert!(!texts[0].contains("refused"), "the cause stays out of it");
+}
+
 /// The name an open channel learns is the one its header reads
 /// (`MURMURE-428`).
 #[wasm_bindgen_test]
