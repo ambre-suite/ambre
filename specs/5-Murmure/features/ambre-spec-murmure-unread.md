@@ -169,8 +169,6 @@ so the relay moves its cursor to its own last number, and the client need not lo
 * **A segment that goes live while its channel is closed** counts what its `meta` names. After a
   key rotation, it counts its activity alone. A `meta` write from another device of the same user
   lists nothing new, so its segment counts nothing until the reopen.
-* **No mark unread from the list.** The message list sends mark read. Mark unread waits for the
-  actions of a message, the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5).
 * **A snapshot from a member who knows no number.** Its messages read as bounded by its horizon,
   so a cursor below the horizon counts them all. Not yet ruled whether a compaction should wait
   for a member who holds the numbers.

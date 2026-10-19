@@ -18,7 +18,7 @@ use ambre_draw::{
 use crate::list::{JUMP_TO_LATEST, MessageList, RowWords, UNREAD_LINE, window};
 
 /// What one paint of the list did.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Painted {
     /// The rows laid out: the ones the viewport reaches, never the whole
     /// list.
@@ -38,6 +38,20 @@ pub struct Painted {
     /// The top and the bottom of the focused row, `None` when it is off
     /// screen (`MURMURE-205`).
     pub focus: Option<(f32, f32)>,
+    /// Each row on screen, top first: its index, its top and its bottom. A
+    /// press finds the row under it here.
+    pub rows: Vec<(usize, f32, f32)>,
+}
+
+impl Painted {
+    /// The index of the row under the height `y`, `None` between rows or
+    /// past them.
+    pub fn row_at(&self, y: f32) -> Option<usize> {
+        self.rows
+            .iter()
+            .find(|&&(_, top, bottom)| top <= y && y < bottom)
+            .map(|&(i, _, _)| i)
+    }
 }
 
 /// What the list paints: the messages, the first unread one, which the
@@ -119,6 +133,11 @@ pub fn paint_list<S: DrawSurface>(
         top: reached.rows.first().map(|&(i, top, _)| (i, top)),
         bottom: reached.rows.last().map(|&(i, _, _)| i),
         focus,
+        rows: reached
+            .rows
+            .iter()
+            .map(|&(i, top, tall)| (i, top, top + tall))
+            .collect(),
     }
 }
 
@@ -564,6 +583,7 @@ mod tests {
                 top: None,
                 bottom: None,
                 focus: None,
+                rows: Vec::new(),
             }
         );
         assert!(

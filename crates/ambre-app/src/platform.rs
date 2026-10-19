@@ -396,29 +396,36 @@ pub(crate) fn apply_theme_attr(theme: ambre_canvas::Theme) {
     }
 }
 
-/// Attach a `contextmenu` listener to the canvas: right-click opens the DOM
-/// context menu at the click point (and suppresses the browser menu). Runs in
-/// a post-mount effect so the AppShell's `<canvas>` is already in the DOM.
-/// While `silent` holds, a right-click opens nothing: a presenting board shows
-/// no editing surface.
+/// The canvases a right-click opens the DOM menu on: the content's, and the
+/// thread's of a Murmure page.
+pub(crate) const MENU_CANVASES: [&str; 2] = ["ambre-canvas", crate::host::THREAD_CANVAS];
+
+/// Listen for `contextmenu` on the document. A right-click on one of the
+/// `MENU_CANVASES` opens the DOM context menu at the click point, and the
+/// browser menu stays shut. The document holds the listener, since a panel
+/// mounts its canvas later. While `silent` holds, a right-click opens nothing:
+/// a presenting board shows no editing surface.
 pub(crate) fn install_canvas_context_menu(
     ctx_menu: RwSignal<Option<(f64, f64)>>,
     silent: Signal<bool>,
 ) {
-    Effect::new(move |_| {
-        let Some(canvas) = leptos::prelude::document().get_element_by_id("ambre-canvas") else {
+    let cb = Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |e: web_sys::MouseEvent| {
+        let on_canvas = e
+            .target()
+            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+            .is_some_and(|el| MENU_CANVASES.contains(&el.id().as_str()));
+        if !on_canvas {
             return;
-        };
-        let cb = Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |e: web_sys::MouseEvent| {
-            e.prevent_default();
-            if silent.get_untracked() {
-                return;
-            }
-            ctx_menu.set(Some((e.client_x() as f64, e.client_y() as f64)));
-        });
-        let _ = canvas.add_event_listener_with_callback("contextmenu", cb.as_ref().unchecked_ref());
-        cb.forget();
+        }
+        e.prevent_default();
+        if silent.get_untracked() {
+            return;
+        }
+        ctx_menu.set(Some((e.client_x() as f64, e.client_y() as f64)));
     });
+    let _ = leptos::prelude::document()
+        .add_event_listener_with_callback("contextmenu", cb.as_ref().unchecked_ref());
+    cb.forget();
 }
 
 /// Attach the file drop to a board's canvas: a file dropped on it reaches the
@@ -745,6 +752,58 @@ mod tests {
         assert!(keydown_reads_editable("div", Some("true")));
         assert!(!keydown_reads_editable("div", None));
         assert!(!keydown_reads_editable("button", None));
+    }
+
+    /// A right-click on `id` at (12, 34): whether the browser menu stayed
+    /// shut. The element lives in the body for the click alone.
+    fn right_click(id: &str) -> bool {
+        let document = leptos::prelude::document();
+        let el = document.create_element("canvas").expect("a canvas");
+        el.set_id(id);
+        document
+            .body()
+            .expect("a body")
+            .append_child(&el)
+            .expect("in the body");
+        let init = web_sys::PointerEventInit::new();
+        init.set_bubbles(true);
+        init.set_cancelable(true);
+        init.set_client_x(12);
+        init.set_client_y(34);
+        let ev = web_sys::PointerEvent::new_with_event_init_dict("contextmenu", &init)
+            .expect("an event");
+        el.dispatch_event(&ev).expect("dispatched");
+        el.remove();
+        ev.default_prevented()
+    }
+
+    /// A right-click on the content's canvas or on the thread's, mounted
+    /// after the listener, opens the menu at its point. While `silent`
+    /// holds it opens nothing, and a right-click elsewhere keeps the
+    /// browser menu (the Murmure message list spec).
+    #[wasm_bindgen_test]
+    fn a_right_click_on_either_canvas_opens_the_menu_at_its_point() {
+        // A scoped owner: one left current would dispose the signals of the
+        // tests that follow.
+        Owner::new().with(right_clicks_open_the_menu);
+    }
+
+    fn right_clicks_open_the_menu() {
+        let ctx_menu = RwSignal::new(None);
+        let silent = RwSignal::new(false);
+        install_canvas_context_menu(ctx_menu, silent.into());
+        for id in MENU_CANVASES {
+            ctx_menu.set(None);
+            assert!(right_click(id), "{id}: the browser menu stays shut");
+            assert_eq!(ctx_menu.get_untracked(), Some((12.0, 34.0)), "{id}");
+        }
+        ctx_menu.set(None);
+        silent.set(true);
+        assert!(right_click(crate::host::THREAD_CANVAS));
+        assert_eq!(ctx_menu.get_untracked(), None, "silent opens nothing");
+        silent.set(false);
+        assert!(!right_click("elsewhere"), "the browser menu of the page");
+        assert_eq!(ctx_menu.get_untracked(), None);
     }
 
     /// `CHROME-103`: a pipe that is not typed text gives a bare key to the

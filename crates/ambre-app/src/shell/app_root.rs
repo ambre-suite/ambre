@@ -340,10 +340,42 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // Canvas right-click -> context menu (the launcher owns the listener since
     // the canvas is created by the AppShell).
     let ctx_menu = RwSignal::new(None::<(f64, f64)>);
+    // A Murmure right-click off any message opens nothing. Its menu holds
+    // the actions of the message under the pointer (the Murmure message list
+    // spec). The view names it before the browser's menu event.
     install_canvas_context_menu(
         ctx_menu,
-        Signal::derive(move || boot_is_toile && present_toile.get().is_presenting()),
+        Signal::derive(move || {
+            (boot_is_toile && present_toile.get().is_presenting())
+                || (boot_is_murmure && murmure_relay.target.with(Option::is_none))
+        }),
     );
+    if boot_is_murmure {
+        // A long press opens the same menu where the finger held. The view
+        // names that point in its canvas, and the menu needs the client's.
+        Effect::new(move |_| {
+            let Some((target, (x, y))) = murmure_relay
+                .target
+                .with(|t| t.as_ref().and_then(|t| Some((t.canvas, t.pressed?))))
+            else {
+                return;
+            };
+            if let Some(canvas) = leptos::prelude::document().get_element_by_id(target) {
+                let rect = canvas.get_bounding_client_rect();
+                ctx_menu.set(Some((
+                    rect.left() + f64::from(x),
+                    rect.top() + f64::from(y),
+                )));
+            }
+        });
+        // The target lives as long as its menu: once it closes, a palette
+        // run of an action finds no message to act on.
+        Effect::new(move |_| {
+            if ctx_menu.with(Option::is_none) {
+                murmure_relay.target.set(None);
+            }
+        });
+    }
     // A file dropped on a board reaches the importer at the point it landed on
     // (`toile-import-export`). Same reason the listener lives here: the canvas
     // belongs to the AppShell, not to the view that paints into it.
@@ -476,6 +508,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
             toile_chrome::context_entries_for(&toile_ctx_scope.get())
         } else if boot_is_prose {
             ambre_prose::chrome::context_entries(prose_signals.history.get())
+        } else if boot_is_murmure {
+            murmure_relay.menu_entries().get()
         } else {
             trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get().is_filtered())
         }

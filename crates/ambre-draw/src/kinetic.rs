@@ -9,6 +9,9 @@
 
 /// How far a pointer may move, in screen pixels, and still be a tap.
 pub const TAP_SLOP_PX: f32 = 8.0;
+/// How long a press held inside the slop lasts before it is a long press,
+/// in milliseconds (`KINETIC-014`).
+pub const LONG_PRESS_MS: f64 = 500.0;
 /// The window of samples the release speed is read over, in milliseconds.
 pub const SAMPLE_MS: f64 = 100.0;
 /// The time constant of the slowdown, in milliseconds: the speed falls to
@@ -158,7 +161,7 @@ pub enum Release {
     Tap { x: f32, y: f32 },
     /// A pan released with speed: the view keeps moving (`KINETIC-004`).
     Fling,
-    /// A pan released at rest, or nothing pressed.
+    /// A pan released at rest, a long press, or nothing pressed.
     Rest,
 }
 
@@ -182,6 +185,10 @@ struct Pan {
     start: (f32, f32),
     last: (f32, f32),
     panned: bool,
+    /// When the pointer went down.
+    at_ms: f64,
+    /// The press became a long press: it pans nothing and taps nothing.
+    held: bool,
     /// Recent positions and their times, for the release speed.
     samples: Vec<(f64, f32, f32)>,
 }
@@ -202,8 +209,22 @@ impl Kinetic {
             start: (x, y),
             last: (x, y),
             panned: false,
+            at_ms: now_ms,
+            held: false,
             samples: vec![(now_ms, x, y)],
         });
+    }
+
+    /// Whether the press became a long press by `now_ms`: held inside the
+    /// slop past the delay. The answer is its press point, once. The press
+    /// then pans nothing, and its release is no tap (`KINETIC-014`).
+    pub fn held(&mut self, now_ms: f64) -> Option<(f32, f32)> {
+        let pan = self.pressed.as_mut()?;
+        if pan.panned || pan.held || now_ms - pan.at_ms < LONG_PRESS_MS {
+            return None;
+        }
+        pan.held = true;
+        Some(pan.start)
     }
 
     /// The pointer moved. Inside the slop it moves nothing (`KINETIC-003`).
@@ -212,6 +233,9 @@ impl Kinetic {
     /// reversed.
     pub fn sample(&mut self, x: f32, y: f32, now_ms: f64) -> Option<ScrollStep> {
         let pan = self.pressed.as_mut()?;
+        if pan.held {
+            return None;
+        }
         if !pan.panned {
             if (x - pan.start.0).hypot(y - pan.start.1) < TAP_SLOP_PX {
                 return None;
@@ -234,6 +258,9 @@ impl Kinetic {
         let Some(pan) = self.pressed.take() else {
             return Release::Rest;
         };
+        if pan.held {
+            return Release::Rest;
+        }
         if !pan.panned {
             return Release::Tap {
                 x: pan.start.0,
@@ -404,6 +431,27 @@ mod tests {
         assert_eq!(kinetic.release(20.0), Release::Tap { x: 10.0, y: 20.0 });
         assert!(!kinetic.moving());
         assert_eq!(kinetic.tick(36.0), None);
+    }
+
+    /// `KINETIC-014`: a press held inside the slop past the delay is a long
+    /// press, said once. It then pans nothing and taps nothing, and a pan
+    /// never becomes one.
+    #[test]
+    fn a_press_held_inside_the_slop_is_a_long_press_and_no_tap() {
+        let mut kinetic = Kinetic::default();
+        kinetic.press(10.0, 20.0, 0.0);
+        assert_eq!(kinetic.sample(13.0, 24.0, 100.0), None);
+        assert_eq!(kinetic.held(LONG_PRESS_MS - 1.0), None);
+        assert_eq!(kinetic.held(LONG_PRESS_MS), Some((10.0, 20.0)));
+        assert_eq!(kinetic.held(LONG_PRESS_MS + 100.0), None);
+        assert_eq!(kinetic.sample(60.0, 90.0, LONG_PRESS_MS + 120.0), None);
+        assert_eq!(kinetic.release(LONG_PRESS_MS + 200.0), Release::Rest);
+        assert!(!kinetic.moving());
+
+        kinetic.press(10.0, 20.0, 0.0);
+        assert!(kinetic.sample(10.0, 60.0, 16.0).is_some());
+        assert_eq!(kinetic.held(LONG_PRESS_MS), None);
+        assert_eq!(Kinetic::default().held(LONG_PRESS_MS), None);
     }
 
     /// `KINETIC-001`: a drag moves the view as a pan past the slop does, the

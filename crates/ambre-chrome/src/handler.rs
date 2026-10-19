@@ -31,6 +31,9 @@ pub enum ShellAction<C> {
         /// Cut rather than copy.
         cut: bool,
     },
+    /// Put this text on the system clipboard: the copy of something the page
+    /// paints, which holds no browser selection.
+    CopyText(String),
     /// Paste the system clipboard into the routed document.
     Paste {
         /// Drop the formatting, keep the text.

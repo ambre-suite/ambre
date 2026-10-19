@@ -771,6 +771,60 @@ fn mount_modal(open: RwSignal<bool>) -> Modal {
     }
 }
 
+/// The native `close` event is queued. One that lands after the owner of
+/// `on_close` is gone notifies no one, and panics nothing.
+#[wasm_bindgen_test]
+async fn a_close_after_its_callback_is_gone_notifies_no_one() {
+    let open = RwSignal::new(true);
+    let heard = RwSignal::new(0);
+    let owner = Owner::new();
+    let on_close = owner.with(|| Callback::new(move |()| heard.update(|n| *n += 1)));
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let target: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let handle = mount_to(target, move || {
+        view! { <ambre_chrome::Dialog open=open on_close=on_close>"Body"</ambre_chrome::Dialog> }
+            .into_any()
+    });
+    leptos::task::tick().await;
+    let dialog: web_sys::HtmlDialogElement = root
+        .query_selector("dialog")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    assert!(dialog.open());
+
+    let modal = Modal {
+        root,
+        dialog,
+        holds: std::sync::Arc::default(),
+        handle: Some(Box::new(handle)),
+    };
+    // A panic in the handler throws out of the event, to the window.
+    let thrown = std::rc::Rc::new(std::cell::Cell::new(0));
+    let count = std::rc::Rc::clone(&thrown);
+    let on_error = wasm_bindgen::closure::Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
+        count.set(count.get() + 1);
+    });
+    let window = web_sys::window().unwrap();
+    let listener = on_error.as_ref().unchecked_ref();
+    window
+        .add_event_listener_with_callback("error", listener)
+        .unwrap();
+    let closed = modal.closed();
+    modal.dialog.close();
+    owner.cleanup();
+    closed.await.unwrap();
+    window
+        .remove_event_listener_with_callback("error", listener)
+        .unwrap();
+    assert_eq!(thrown.get(), 0, "the handler threw");
+    assert_eq!(heard.get_untracked(), 0, "the callback was gone");
+    assert!(!open.get_untracked(), "the signal still follows");
+    modal.root.remove();
+}
+
 /// Setting the signal shows the modal (`CHROME-012`) and suspends the loop
 /// (`CHROME-011`). Clearing it hides the modal (`CHROME-091`) and gives the
 /// loop back (`CHROME-089`).

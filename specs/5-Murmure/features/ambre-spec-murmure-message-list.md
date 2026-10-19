@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-208` | `OBS` | A new message MUST be announced to a screen reader when the user was at the bottom of the list. | this spec section 3; `ambre-spec-accessibility.md section 2` | `ambre_murmure::view::tests::a_new_message_is_said_at_the_bottom_and_leaves_the_focus` -- at the bottom a new message is said, higher up it is not; `ambre_app::host::murmure::tests::an_announcement_writes_the_live_region_and_leaves_the_focus` -- the words land in the polite live region, in the browser tier | none | verified |
 | `MURMURE-417` | `INV` | The list MUST scroll through the shared kinetic model, never through a speed or a decay of its own. | this spec section 3; `KINETIC-001` | type-level -- the list's `scroll_by` takes a `ScrollStep`, which only the model builds; `ambre_murmure::view::tests::a_paused_glide_coasts_and_a_notch_never_does` -- a paused glide coasts on the model's ticks, a notch never does; `ambre_murmure::view::tests::a_finger_drags_the_list_and_a_still_one_taps` -- a finger drags past the slop, a still one taps; ci-gate -- `scripts/crate_boundaries.py` refuses an anchor moved by a distance outside `scroll_by`, and a friction or a decay outside the model | none | verified |
 | `MURMURE-418` | `OBS` | The time of a message MUST show in the reader's own language and time zone. | this spec section 3 | `ambre_app::host::murmure::tests::the_time_reads_in_the_readers_language_and_zone` -- the time reads as the browser writes it in its own language and zone, in the browser tier | none | verified |
-| `MURMURE-419` | `INV` | Every action on a message MUST be a command of the command table. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-419` | `INV` | Every action on a message MUST be a command of the command table. | this spec section 3; `UI-THREAD-019` | `ambre_murmure::commands::tests::every_action_of_a_message_is_a_command_of_the_table` -- each action offered is a row of the command table, with its title; `ambre_murmure::commands::tests::the_actions_follow_the_message` -- a notice, a reply and an empty text each drop the actions they cannot take; `ambre_murmure::commands::tests::each_action_does_what_its_title_says` -- reply opens the thread, mark unread asks the engine, copy text copies the text; `ambre_murmure::chrome_relay::the_menu_of_a_message_runs_its_actions_on_it` -- the menu lists the commands by their labels and runs each on its message | none | verified |
 | `MURMURE-420` | `INV` | A thread MUST show its messages through the same list as a channel. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::list::tests::a_thread_fills_its_own_list_and_leaving_drops_the_channel` -- a thread fills a list of the same type as a channel; `ambre_murmure::view::tests::the_thread_region_shows_the_thread_through_the_same_list` -- the thread's region paints the thread through the same painter, on a recording surface | none | verified |
 | `MURMURE-421` | `INV` | Each region that shows messages MUST be a canvas of its own, one cell of the chrome layout. | this spec section 3; `CHROME-009`; `CANVAS-070` | `ambre_app::shell::murmure_regions::tests::the_channel_and_the_thread_are_each_a_canvas_of_their_cell` -- the channel and the thread each hold a canvas of their cell's width; `ambre_app::host::cell::tests::the_thread_is_a_canvas_of_its_own_sized_by_its_cell` -- the thread's canvas takes its own size, input and resize, in the browser tier | none | verified |
 | `MURMURE-509` | `OBS` | The control back to the latest message MUST be reachable from the keyboard and announced to a screen reader. | this spec section 3; `ambre-spec-accessibility.md section 2` | `ambre_murmure::view::tests::the_control_is_said_with_its_key_each_time_it_shows` -- each time the control shows, the words name End, the key that answers it | none | verified |
@@ -71,17 +71,19 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-422` | `POST` | A right-click on a message MUST open its actions in the shared floating menu. | this spec section 3; `CHROME-004` | not built | unbuilt -- lands with the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-423` | `POST` | A long press on a message MUST open its actions on a touch screen. | this spec section 3; `KINETIC-003` | not built | unbuilt -- lands with the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-424` | `FRAME` | Opening the actions of a message MUST NOT change the message. | this spec section 3 | not built | unbuilt -- lands with the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-422` | `POST` | A right-click on a message MUST open its actions in the shared floating menu. | this spec section 3; `CHROME-004` | `ambre_murmure::view::tests::a_right_click_hands_the_page_its_message_and_sends_nothing` -- a right-click on a message hands the page that message, and one off any message hands none; `ambre_app::platform::tests::a_right_click_on_either_canvas_opens_the_menu_at_its_point` -- a right-click on the channel or the thread canvas opens the shared menu at its point, in the browser tier | none | verified |
+| `MURMURE-423` | `POST` | A long press on a message MUST open its actions on a touch screen. | this spec section 3; `KINETIC-003`; `KINETIC-014` | `ambre_murmure::view::tests::a_long_press_hands_the_page_its_message_where_it_held` -- a finger held still past the delay hands the page its message and the point it held; `ambre_draw::kinetic::tests::a_press_held_inside_the_slop_is_a_long_press_and_no_tap` -- the model calls a press held inside the slop a long press, and its release no tap | none | verified |
+| `MURMURE-511` | `POST` | The ContextMenu key, or Shift+F10, on the focused message MUST open its actions in the shared floating menu. | this spec section 3; `MURMURE-205`; `MURMURE-422` | not built | unbuilt -- lands with the `Opening the actions of a message from the keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-512` | `POST` | Deleting a message of the member from its actions MUST ask for a confirmation first, since a deletion cannot be undone. | this spec section 3; `MURMURE-087` | not built | unbuilt -- lands with the `Deleting a message from the list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-424` | `FRAME` | Opening the actions of a message MUST NOT change the message. | this spec section 3 | `ambre_murmure::view::tests::a_right_click_hands_the_page_its_message_and_sends_nothing` -- a right-click sends the engine nothing; `ambre_murmure::view::tests::a_long_press_hands_the_page_its_message_where_it_held` -- a long press sends the engine nothing | none | verified |
 
 ### 1.7 Select and copy text
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-425` | `POST` | A mouse drag across the messages MUST select their text, from one character to several messages. | this spec section 3; `CANVAS-037` | not built | unbuilt -- lands with the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-426` | `POST` | Copying a selection MUST put its text on the clipboard, each message under its author and its time. | this spec section 3; `UI-THREAD-006` | not built | unbuilt -- lands with the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-427` | `FRAME` | Selecting text MUST NOT move a read cursor. | this spec section 3; `MURMURE-206` | not built | unbuilt -- lands with the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-425` | `POST` | A mouse drag across the messages MUST select their text, from one character to several messages. | this spec section 3; `CANVAS-037` | not built | unbuilt -- lands with the `Selecting text in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-426` | `POST` | Copying a selection MUST put its text on the clipboard, each message under its author and its time. | this spec section 3; `UI-THREAD-006` | not built | unbuilt -- lands with the `Selecting text in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-427` | `FRAME` | Selecting text MUST NOT move a read cursor. | this spec section 3; `MURMURE-206` | not built | unbuilt -- lands with the `Selecting text in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 **Frame:** `UI-THREAD-044`
 
@@ -97,10 +99,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
   only what `meta` already tells every member: the span of a segment.
-* **Verification.** 28 `verified`, 8 `unimplemented`. The host tier holds the order, the groups,
+* **Verification.** 32 `verified`, 6 `unimplemented`. The host tier holds the order, the groups,
   the words and the paint of the rows and the bands. It holds the scroll, the jumps, the focus and
-  the thread's list too. The browser tier holds each canvas, the finger, the local time and the live
-  region.
+  the thread's list too, and the actions of a message. The browser tier holds each canvas, the
+  finger, the local time, the live region and the menu's listener.
 
 ---
 
@@ -159,6 +161,11 @@ in two countries read one message at two local times.
 with its label, its icon and its chord where it has one (`MURMURE-419`). The hover bar, the context
 menu, the long press and the palette read the same description. A long press is a press held
 inside the tap slop of `ambre-spec-kinetic-scroll.md`, past the delay of the platform.
+
+A right-click or a long press hands the page the message under it. The page opens the shared
+floating menu at that point (`MURMURE-422`, `MURMURE-423`). The menu lists the actions the
+message offers now: reply, mark unread and copy text. The keyboard opens the same menu on the
+focused message (`MURMURE-511`). A delete asks for a confirmation first (`MURMURE-512`).
 
 | Command | Offered on |
 |---|---|
@@ -246,5 +253,14 @@ both to each region, and `ambre_app::host::murmure` hands it the pane, the names
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **A band names its remedy in words.** It says to reopen the channel; no control on it asks again.
+* **Only three actions are built.** Reply, mark unread and copy text.
+  React lands with the `Emoji` Story (`ambre-roadmap.md` E5).
+  Edit lands with the `The composer` Story (`ambre-roadmap.md` E5).
+  Pin and bookmark wait for the `Pin, bookmark and copy link` Story (`ambre-roadmap.md` E5).
+  Remove waits for the `Moderation` Story (`ambre-roadmap.md` E5).
+* **No hover bar.** A pointer over a message shows no actions; the right-click opens them. The bar
+  waits for the `The hover bar of a message` Story (`ambre-roadmap.md` E5).
+* **A message command in the palette does nothing.** The palette lists it with no message to act
+  on, so running it there leaves everything as it was.
 * **Only the focused message reaches a screen reader.** The list is not mirrored whole, by the rule
   of `ambre-spec-accessibility.md section 2`, so a reader moves through it message by message.

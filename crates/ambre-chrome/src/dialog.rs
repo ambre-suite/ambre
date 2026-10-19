@@ -121,8 +121,10 @@ pub fn Dialog(
         if let Some(hold) = &hold {
             hold.release();
         }
+        // The native event is queued: it can land after the owner of the
+        // callback is gone, and a disposed callback has no one to notify.
         if let Some(cb) = on_close {
-            cb.run(());
+            let _ = cb.try_run(());
         }
     };
 

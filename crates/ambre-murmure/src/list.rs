@@ -173,6 +173,15 @@ impl MessageList {
         self.segments.first().map(|s| s.id)
     }
 
+    /// The segment that holds `message`, `None` when the list holds no such
+    /// message.
+    pub fn segment_of(&self, message: MessageId) -> Option<SegmentId> {
+        self.segments
+            .iter()
+            .find(|s| s.messages.iter().any(|m| m.id == message))
+            .map(|s| s.id)
+    }
+
     /// What names each row, in the order of [`MessageList::rows`]. A key
     /// outlives a load above, where an index does not (`MURMURE-192`).
     pub fn keys(&self) -> Vec<RowKey> {

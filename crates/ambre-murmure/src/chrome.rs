@@ -11,7 +11,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::commands::{MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, SEARCH};
+use crate::commands::{
+    COMMANDS, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY, PALETTE,
+    PREVIOUS_ACTIVITY, SEARCH, message_action, message_actions,
+};
 use crate::{
     Activity, MessageRef, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
 };
@@ -20,8 +23,8 @@ use ambre_bus::{
     ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MurmureEvent,
     Presence, RequestId, RestCommand, RestEvent, SpaceCommand, SpaceEvent, Timestamp, UiEvent,
 };
-use ambre_chrome::{CommandHandler, KeyRoute, PaletteEntry, ShellAction, ShellRegion};
-use ambre_commands::CommandId;
+use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteEntry, ShellAction, ShellRegion};
+use ambre_commands::{CommandId, Locale};
 use ambre_core::{ChannelId, SpaceId, UserId};
 use leptos::prelude::*;
 
@@ -290,6 +293,9 @@ pub struct MurmureRelay {
     /// The members of each open channel, as the Logic thread last listed
     /// them. The invite control offers none of them.
     channel_members: RwSignal<HashMap<ChannelId, HashSet<UserId>>>,
+    /// The message the actions are open on, as the view last found it under
+    /// a right-click or a long press. `None` once the menu closes.
+    pub target: RwSignal<Option<MessageTarget>>,
 }
 
 /// The search box: whether it is open, the query typed, and the last answer
@@ -370,7 +376,35 @@ impl MurmureRelay {
             search: RwSignal::new(SearchBox::default()),
             inviting: RwSignal::new(None),
             channel_members: RwSignal::new(HashMap::new()),
+            target: RwSignal::new(None),
         }
+    }
+
+    /// The menu of the target: one entry per action it offers, each a
+    /// command of the table (`MURMURE-419`). Empty with no target.
+    pub fn menu_entries(&self) -> Signal<Vec<MenuEntry>> {
+        let target = self.target;
+        Signal::derive(move || {
+            target.with(|target| {
+                let Some(target) = target else {
+                    return Vec::new();
+                };
+                message_actions(target)
+                    .into_iter()
+                    .filter_map(|id| ambre_commands::find(COMMANDS, id))
+                    .map(|command| MenuEntry::command(command, &Locale::En))
+                    .collect()
+            })
+        })
+    }
+
+    /// What the action `id` does on the target, which the menu closes on.
+    /// `None` with no target, or for an id it does not offer.
+    pub fn act(&self, id: CommandId) -> Option<MessageAction> {
+        let target = self.target.get_untracked()?;
+        let action = message_action(id, &target)?;
+        self.target.set(None);
+        Some(action)
     }
 
     /// Open the search box, on the find chord (`MURMURE-213`). An open box
@@ -924,7 +958,16 @@ impl CommandHandler for MurmureHandler {
         if id == PALETTE {
             return vec![ShellAction::OpenPalette];
         }
-        self.run(id);
+        // An action of a message acts on the target of the menu. With none,
+        // as from the palette, it does nothing (`MURMURE-419`).
+        match self.relay.act(id) {
+            Some(MessageAction::Open(pane)) => self.relay.pane.set(pane),
+            Some(MessageAction::Send(command)) => self.send.run(command),
+            Some(MessageAction::Copy(text)) => return vec![ShellAction::CopyText(text)],
+            None => {
+                self.run(id);
+            }
+        }
         Vec::new()
     }
 

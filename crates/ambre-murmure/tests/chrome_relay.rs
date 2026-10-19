@@ -15,15 +15,17 @@
 
 use ambre_bus::{
     CatalogueEntry, ChannelActivity, ChannelMatches, ChannelName, ChannelPlace, DirectMessageEvent,
-    LogicCommand, MemberChannel, MemberInfo, MemberStanding, MemberView, MessageView, MurmureEvent,
-    Presence, RequestId, RestCommand, RestEvent, Role, SearchMatch, SpaceEvent, Timestamp, UiEvent,
+    LogicCommand, MemberChannel, MemberInfo, MemberStanding, MemberView, MessageAt, MessageView,
+    MurmureCommand, MurmureEvent, Presence, RequestId, RestCommand, RestEvent, Role, SearchMatch,
+    SpaceEvent, Timestamp, UiEvent,
 };
-use ambre_chrome::{CommandHandler, KeyRoute, PaletteRow, ShellAction};
+use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId};
 use ambre_murmure::chrome::{MurmureHandler, MurmureRelay, SearchBox, coverage};
 use ambre_murmure::commands::{
-    COMMANDS, MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, SEARCH,
+    COMMANDS, COPY_TEXT, MARK_ALL_READ, MARK_UNREAD, MessageTarget, NEXT_ACTIVITY, PALETTE,
+    PREVIOUS_ACTIVITY, REPLY, SEARCH,
 };
 use ambre_murmure::{MessageRef, MurmurePane};
 use leptos::prelude::*;
@@ -500,6 +502,77 @@ fn the_mark_all_read_chord_runs_the_command_of_the_unread_feature() {
         handler.on_key(PALETTE, true),
         KeyRoute::Run(actions) if matches!(actions[..], [ShellAction::OpenPalette])
     ));
+}
+
+/// The labels of the menu of the target, in order.
+fn menu_labels(relay: MurmureRelay) -> Vec<String> {
+    relay
+        .menu_entries()
+        .get_untracked()
+        .iter()
+        .map(|entry| match entry {
+            MenuEntry::Item(item) => item.label().to_owned(),
+            MenuEntry::Separator => "-".to_owned(),
+        })
+        .collect()
+}
+
+/// The menu offers the actions of the message the view named, each a
+/// command of the table. Reply opens its thread, mark unread sends the
+/// cursor back, and copy asks the shell for the clipboard. Each closes the
+/// menu, and an action with no target does nothing (`MURMURE-419`).
+#[wasm_bindgen_test]
+fn the_menu_of_a_message_runs_its_actions_on_it() {
+    let (_owner, relay, direct) = shown_direct();
+    let (handler, sent) = handler(relay);
+    assert!(menu_labels(relay).is_empty(), "no target, no menu");
+    assert!(handler.on_command(REPLY).is_empty());
+    assert!(sent.get_untracked().is_empty(), "no target, nothing sent");
+
+    let segment = SegmentId::new();
+    let message = MessageId::new();
+    let target = MessageTarget {
+        channel: direct,
+        at: MessageAt::Segment(segment),
+        message,
+        text: "hello".to_owned(),
+        notice: false,
+        pressed: None,
+        canvas: "ambre-canvas",
+    };
+    relay.target.set(Some(target.clone()));
+    assert_eq!(
+        menu_labels(relay),
+        ["Reply in thread", "Mark unread", "Copy text"]
+    );
+
+    assert!(handler.on_command(REPLY).is_empty());
+    let root = MessageRef { segment, message };
+    assert_eq!(
+        relay.pane.get_untracked(),
+        MurmurePane::Thread {
+            channel: direct,
+            root
+        }
+    );
+    assert_eq!(relay.target.get_untracked(), None, "the menu closed");
+
+    relay.target.set(Some(target.clone()));
+    handler.on_command(MARK_UNREAD);
+    assert!(matches!(
+        sent.get_untracked()[..],
+        [LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::MarkUnread { segment: s, message: m },
+        }] if channel_id == direct && s == segment && m == message
+    ));
+
+    relay.target.set(Some(target));
+    assert!(matches!(
+        &handler.on_command(COPY_TEXT)[..],
+        [ShellAction::CopyText(text)] if text == "hello"
+    ));
+    assert_eq!(sent.get_untracked().len(), 1, "copy sends nothing");
 }
 
 /// What a search of `query` found: `budget` holds one match in the one

@@ -15,8 +15,8 @@ use std::rc::Rc;
 
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
-    ChannelId, DocumentId, LogicCommand, MessageId, MurmureCommand, SegmentId, Timestamp, UiEvent,
-    UserId,
+    ChannelId, DocumentId, LogicCommand, MessageAt, MessageId, MurmureCommand, SegmentId,
+    Timestamp, UiEvent, UserId,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, Theme,
@@ -26,6 +26,7 @@ use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::MurmurePane;
+use crate::commands::MessageTarget;
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, RowKey, UnreadLine};
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 
@@ -47,7 +48,18 @@ pub struct PageReads {
     /// Say a text to a screen reader, through the polite live region of the
     /// content (`CHROME-023`). It holds no element that takes the focus.
     pub announce: Rc<dyn Fn(&str)>,
+    /// Hand the page the message a right-click or a long press fell on,
+    /// `None` off any message. The page opens its actions; nothing is sent
+    /// (`MURMURE-424`).
+    pub act_on: Rc<dyn Fn(Option<MessageTarget>)>,
 }
+
+/// The id of the content canvas, which the channel's region paints. The
+/// shell names it.
+pub const CHANNEL_CANVAS: &str = "ambre-canvas";
+
+/// The button of a pointer event that opens a menu: the right one.
+const SECONDARY_BUTTON: i16 = 2;
 
 /// The height of one line of a wheel that steps by lines.
 const WHEEL_LINE_PX: f32 = 40.0;
@@ -203,7 +215,7 @@ impl MurmureView {
 
     /// What the last paint did, `None` before the first.
     pub fn last_painted(&self) -> Option<Painted> {
-        self.last
+        self.last.clone()
     }
 
     /// Drain the inbound queue into the lists, so a full queue never stalls
@@ -271,6 +283,43 @@ impl MurmureView {
         self.jump.is_some_and(|rect| rect.contains(at))
     }
 
+    /// The message under `(x, y)` at the last paint, as the target of its
+    /// actions. `pressed` keeps the point, where a long press opens them.
+    /// `None` on a band, between rows, or on the control to the latest.
+    fn target_at(&self, x: f32, y: f32, pressed: bool) -> Option<MessageTarget> {
+        let at = Point::new(x.into(), y.into());
+        if self.on_jump(at) {
+            return None;
+        }
+        let i = self.last.as_ref()?.row_at(y)?;
+        let pane = (self.reads.pane)();
+        let lists = self.lists.borrow();
+        let list = self.shown(&lists.conversations, pane)?;
+        let message = list.rows().get(i)?.message()?;
+        let (channel, at) = match (self.region, pane) {
+            (Region::Thread, MurmurePane::Thread { channel, root }) => {
+                (channel, MessageAt::Thread(root.message))
+            }
+            (Region::Channel, pane) => (
+                pane.shown_channel()?,
+                MessageAt::Segment(list.segment_of(message.id)?),
+            ),
+            (Region::Thread, _) => return None,
+        };
+        Some(MessageTarget {
+            channel,
+            at,
+            message: message.id,
+            text: message.text.clone(),
+            notice: message.notice.is_some(),
+            pressed: pressed.then_some((x, y)),
+            canvas: match self.region {
+                Region::Channel => CHANNEL_CANVAS,
+                Region::Thread => THREAD_CANVAS,
+            },
+        })
+    }
+
     /// The row that holds the focus, `None` before Up or Down.
     pub fn focused(&self) -> Option<RowKey> {
         self.focus
@@ -289,7 +338,11 @@ impl MurmureView {
         };
         let keys = list.keys();
         // A focus just moved is on its way into view.
-        let on_screen = self.reveal || self.last.is_some_and(|painted| painted.focus.is_some());
+        let on_screen = self.reveal
+            || self
+                .last
+                .as_ref()
+                .is_some_and(|painted| painted.focus.is_some());
         let from = self
             .focus
             .and_then(|key| keys.iter().position(|k| *k == key));
@@ -298,7 +351,7 @@ impl MurmureView {
                 .checked_add_signed(by)
                 .filter(|&next| next < keys.len())
                 .unwrap_or(i),
-            _ => match self.last.and_then(|painted| painted.bottom) {
+            _ => match self.last.as_ref().and_then(|painted| painted.bottom) {
                 Some(bottom) => bottom.min(keys.len().saturating_sub(1)),
                 None => return,
             },
@@ -401,6 +454,11 @@ impl MurmureView {
         {
             self.scroll_by(step);
         }
+        if let Some((x, y)) = self.kinetic.held(now_ms) {
+            // A finger held still: the actions of its message open where it
+            // went down (`MURMURE-423`).
+            (self.reads.act_on)(self.target_at(x, y, true));
+        }
         let dirty = std::mem::take(&mut self.dirty);
         RepaintPlan {
             content: if dirty {
@@ -463,7 +521,7 @@ impl MurmureView {
             &*self.reads.name_of,
             &*self.reads.time_of,
         );
-        self.last = Some(painted);
+        self.last = Some(painted.clone());
         self.settle(&painted, &keys);
         if self.reveal {
             self.reveal_focus(&painted, focus, &keys);
@@ -624,7 +682,15 @@ impl MurmureView {
     /// `MURMURE-205`).
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
         match *ev {
-            InputEvent::PointerDown { x, y, .. } | InputEvent::PointerMove { x, y } => {
+            InputEvent::PointerDown { x, y, button, .. } => {
+                self.hover = Some(Point::new(x, y));
+                if button == SECONDARY_BUTTON {
+                    // The page's menu event follows, and opens the actions of
+                    // the message found here (`MURMURE-422`).
+                    (self.reads.act_on)(self.target_at(x as f32, y as f32, false));
+                }
+            }
+            InputEvent::PointerMove { x, y } => {
                 self.hover = Some(Point::new(x, y));
             }
             InputEvent::PointerUp { x, y, .. } => {
@@ -685,6 +751,7 @@ mod tests {
 
     use ambre_bus::conduit::local;
     use ambre_bus::{ChannelId, MessageView, MurmureEvent};
+    use ambre_draw::kinetic::LONG_PRESS_MS;
     use ambre_draw::testing::RecordingSurface;
 
     use super::*;
@@ -699,6 +766,8 @@ mod tests {
         commands: Receiver<LogicCommand>,
         /// What the view said to a screen reader, oldest first.
         said: Rc<RefCell<Vec<String>>>,
+        /// Each target the view handed the page, oldest first.
+        acted: Rc<RefCell<Vec<Option<MessageTarget>>>>,
     }
 
     fn page() -> Page {
@@ -710,12 +779,15 @@ mod tests {
         let now = Rc::clone(&clock);
         let said_log = Rc::new(RefCell::new(Vec::new()));
         let said = Rc::clone(&said_log);
+        let acted_log = Rc::new(RefCell::new(Vec::new()));
+        let acted = Rc::clone(&acted_log);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| Some("Ada".to_owned())),
             time_of: Rc::new(|_| "t".to_owned()),
             now_ms: Rc::new(move || now.get()),
             announce: Rc::new(move |text: &str| said.borrow_mut().push(text.to_owned())),
+            act_on: Rc::new(move |target| acted.borrow_mut().push(target)),
         };
         let size = (300.0, 400.0);
         let view = MurmureView::new(
@@ -732,6 +804,7 @@ mod tests {
             events,
             commands,
             said: said_log,
+            acted: acted_log,
         }
     }
 
@@ -1405,6 +1478,124 @@ mod tests {
         page.view.touch_down(10.0, 100.0, 200.0);
         page.view.touch_move(10.0, 300.0, 300.0);
         assert_eq!(page.view.touch_up(1_000.0), None);
+    }
+
+    /// The middle height of the row at `index`, as the last paint placed it.
+    fn middle_of(view: &MurmureView, index: usize) -> f32 {
+        let painted = shown(view);
+        let &(_, top, bottom) = painted
+            .rows
+            .iter()
+            .find(|&&(i, _, _)| i == index)
+            .expect("the row on screen");
+        (top + bottom) / 2.0
+    }
+
+    fn button(page: &mut Page, button: i16, y: f32) -> bool {
+        let ev = InputEvent::PointerDown {
+            x: 10.0,
+            y: y.into(),
+            button,
+            shift: false,
+            ctrl: false,
+        };
+        page.view.handle_input(&ev)
+    }
+
+    /// A right-click on a message hands the page that message, where it lies
+    /// and its text (`MURMURE-422`). One off any message hands none, and a
+    /// left click hands nothing. No command leaves (`MURMURE-424`).
+    #[test]
+    fn a_right_click_hands_the_page_its_message_and_sends_nothing() {
+        let mut page = page();
+        let channel = ChannelId::new();
+        let segment = list(&page, channel, &["a", "b"]);
+        page.pane.set(MurmurePane::channel(channel));
+        frame(&mut page.view);
+        let _ = reads(&page);
+        let rows = page
+            .view
+            .lists
+            .borrow()
+            .conversations
+            .channel(channel)
+            .map(|l| l.keys());
+        let Some(RowKey::Message(second)) = rows.and_then(|keys| keys.get(1).copied()) else {
+            panic!("two messages listed");
+        };
+
+        let y = middle_of(&page.view, 1);
+        assert!(!button(&mut page, 2, y));
+        let target = MessageTarget {
+            channel,
+            at: MessageAt::Segment(segment),
+            message: second,
+            text: "b".to_owned(),
+            notice: false,
+            pressed: None,
+            canvas: CHANNEL_CANVAS,
+        };
+        assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
+        // The list rests on its latest row: the top of the region is empty.
+        let above = shown(&page.view).rows.first().map_or(0.0, |r| r.1) - 1.0;
+        assert!(above > 0.0, "room above the first row");
+        button(&mut page, 2, above);
+        assert_eq!(page.acted.borrow().last(), Some(&None), "off any message");
+        button(&mut page, 0, y);
+        assert_eq!(page.acted.borrow().len(), 2, "a left click opens nothing");
+        assert!(page.commands.try_recv().is_err(), "nothing was sent");
+    }
+
+    /// A finger held still on a reply hands the page that reply at the
+    /// point it held, in the thread's canvas (`MURMURE-423`). The lift is no
+    /// tap, and no command leaves (`MURMURE-424`).
+    #[test]
+    fn a_long_press_hands_the_page_its_message_where_it_held() {
+        let mut page = page();
+        let channel = ChannelId::new();
+        let ada = UserId::new();
+        let root = message(ada, 0, "root");
+        let segment = SegmentId::new();
+        let messages = vec![root.clone()];
+        send(&page, channel, MurmureEvent::Messages { segment, messages });
+        let reply = message(ada, 1, "one");
+        let ev = MurmureEvent::ThreadMessages {
+            root: root.id,
+            thread: DocumentId::new(),
+            messages: vec![reply.clone()],
+        };
+        send(&page, channel, ev);
+        let mut thread_view = page.view.region(300.0, 400.0);
+        page.pane.set(MurmurePane::Thread {
+            channel,
+            root: MessageRef {
+                segment,
+                message: root.id,
+            },
+        });
+        frame(&mut page.view);
+        frame(&mut thread_view);
+        let _ = reads(&page);
+
+        let y = middle_of(&thread_view, 0);
+        thread_view.touch_down(10.0, y, 0.0);
+        frame_at(&mut thread_view, LONG_PRESS_MS - 1.0);
+        assert!(page.acted.borrow().is_empty(), "not yet held");
+        frame_at(&mut thread_view, LONG_PRESS_MS);
+        let target = MessageTarget {
+            channel,
+            at: MessageAt::Thread(root.id),
+            message: reply.id,
+            text: "one".to_owned(),
+            notice: false,
+            pressed: Some((10.0, y)),
+            canvas: THREAD_CANVAS,
+        };
+        assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
+        assert_eq!(thread_view.touch_up(LONG_PRESS_MS + 100.0), None, "no tap");
+        frame_at(&mut thread_view, LONG_PRESS_MS + 200.0);
+        assert_eq!(page.acted.borrow().len(), 1, "said once");
+        assert!(page.commands.try_recv().is_err(), "nothing was sent");
     }
 
     /// The pane that names a message rests the list on it, a quarter down,

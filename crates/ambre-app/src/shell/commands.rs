@@ -131,6 +131,11 @@ impl CommandPath {
             ShellAction::OpenPalette => self.palette_open.set(true),
             ShellAction::OpenSealedSave => self.seal_open.set(true),
             ShellAction::Copy { cut } => exec_clipboard(!cut),
+            ShellAction::CopyText(text) => {
+                if let Some(win) = web_sys::window() {
+                    let _ = win.navigator().clipboard().write_text(&text);
+                }
+            }
             ShellAction::Paste { plain } => {
                 read_clipboard(self.clipboard_paste.clone(), self.toasts, plain);
             }
