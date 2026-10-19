@@ -1259,6 +1259,7 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
         ts: Timestamp(1),
         text: "the budget for May".to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
         reactions: Vec::new(),
         notice: None,
         edited: false,
@@ -1345,5 +1346,29 @@ async fn the_canvas_reads_the_desktop_width_as_the_stylesheet_does() {
         let window = frame.frame.content_window().unwrap();
         assert_eq!(crate::host::desktop_in(&window), wide, "at {width}");
         assert_eq!(frame.width_of(".ambre-kbd") > 0.0, wide, "chip at {width}");
+    }
+}
+
+/// Each style of the composer takes the chord Prose binds to the same mark,
+/// so a hand learns one chord per mark (`MURMURE-431`).
+#[wasm_bindgen_test]
+fn a_style_takes_the_chord_prose_binds_to_its_mark() {
+    use ambre_bus::TextStyle;
+    use ambre_chrome::commands::KeyBinding;
+    use ambre_prose::commands::{BOLD, CODE, COMMANDS, ITALIC};
+
+    for (key, style) in ambre_murmure::markers::MARK_CHORDS {
+        let id = match style {
+            TextStyle::Bold => BOLD,
+            TextStyle::Italic => ITALIC,
+            TextStyle::Code => CODE,
+            TextStyle::Link(_) => panic!("a link takes no chord"),
+        };
+        let command = COMMANDS.iter().find(|c| c.id == id).unwrap();
+        assert_eq!(
+            command.keybindings,
+            &[KeyBinding::primary(key)],
+            "{style:?} takes another chord than Prose"
+        );
     }
 }

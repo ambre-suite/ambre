@@ -75,6 +75,7 @@ fn plain(text: &str) -> MessageDraft {
     MessageDraft {
         text: text.to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     }
 }
 
@@ -126,6 +127,7 @@ fn an_edit_changes_the_body_and_marks_the_message_edited() {
     let dave = UserId::new();
     let (mut alice, mut bob, message) = pair(&MessageDraft {
         text: "@carol lunch?".to_owned(),
+        styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::User(carol),
             range: 0..6,
@@ -134,6 +136,7 @@ fn an_edit_changes_the_body_and_marks_the_message_edited() {
     assert!(!alice.only_message().edited);
     let draft = MessageDraft {
         text: "lunch at noon, @dave?".to_owned(),
+        styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::User(dave),
             range: 15..20,
@@ -173,6 +176,7 @@ fn an_edit_with_a_mention_past_its_body_is_refused() {
     let (mut alice, _bob, message) = pair(&plain("lunch?"));
     let draft = MessageDraft {
         text: "hi".to_owned(),
+        styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::Channel,
             range: 0..9,

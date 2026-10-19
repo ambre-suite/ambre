@@ -19,13 +19,13 @@ use super::finalizing::{FINALIZE_RETRY_MS, RETRY_DOUBLINGS};
 use super::relocating::replay_of;
 use super::{ChannelState, Replay, content_of};
 use crate::error::MurmureError;
-use crate::mention;
 use crate::schema::{
     self, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS, HEADER, HEADER_FOLDED,
     HEADER_FOLDED_SEQ, MENTION, MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGE_THREAD,
     MESSAGES, SEGMENT_FOLDED,
 };
 use crate::sequence::Sequence;
+use crate::{mention, style};
 
 /// The delay before a fold lease is asked again once a fold left: the
 /// `FOLD_DELAY` row of `ambre-spec-budgets.md section 8`, which the relay
@@ -513,13 +513,16 @@ fn fold_into(
             message.insert(MESSAGE_DELETED, true)?;
         } else if let Some(edited) = entry_content(&entry) {
             let mentions = mention::read(&edited, channel);
+            let styles = style::read(&edited);
             if len > 0 {
                 content.unmark(0..len, MENTION)?;
             }
+            style::clear(&content)?;
             content
                 .update(&edited.to_string(), UpdateOptions::default())
                 .map_err(|error| MurmureError::Crdt(error.to_string()))?;
             mention::write(segment, &content, &mentions, channel)?;
+            style::write(segment, &content, &styles)?;
             message.insert(MESSAGE_EDITED, true)?;
         }
     }

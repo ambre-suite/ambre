@@ -4,7 +4,9 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{ActivityKind, MessageDraft, MessageView, MurmureEvent, Timestamp};
+use ambre_bus::{
+    ActivityKind, MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle, Timestamp,
+};
 use ambre_core::{DocumentId, MessageId, SegmentId, Seq, UserId};
 use loro::{Container, LoroDoc, LoroMap, ValueOrContainer, VersionVector};
 
@@ -24,6 +26,7 @@ fn draft(text: &str) -> MessageDraft {
     MessageDraft {
         text: text.to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     }
 }
 
@@ -259,8 +262,17 @@ fn a_member_reads_the_amendments_over_the_segment() {
         .iter()
         .map(|m| m.id)
         .collect();
+    // `MURMURE-562`: the amendment carries the styles of the edit.
+    let bold = StyleMark {
+        style: TextStyle::Bold,
+        range: 0..2,
+    };
+    let styled = MessageDraft {
+        styles: vec![bold.clone()],
+        ..draft("uno")
+    };
     let edited = alice
-        .edit(segment, ids[0], &draft("uno"), author)
+        .edit(segment, ids[0], &styled, author)
         .expect("edit")
         .expect("a change");
 
@@ -278,6 +290,7 @@ fn a_member_reads_the_amendments_over_the_segment() {
     }
     let ready = bob.older_ready(amendments).expect("admitted");
     assert_eq!(messages_of(&ready)[0].text, "uno");
+    assert_eq!(messages_of(&ready)[0].styles, [bold]);
 
     let deleted = alice.delete(segment, ids[1], author).expect("delete");
     let events = bob
@@ -599,8 +612,16 @@ fn a_change_refused_by_the_lock_is_replayed() {
         .iter()
         .map(|m| m.id)
         .collect();
+    // `MURMURE-562`: the replay carries the styles of the edit.
+    let styled = MessageDraft {
+        styles: vec![StyleMark {
+            style: TextStyle::Italic,
+            range: 1..3,
+        }],
+        ..draft("uno")
+    };
     let edited = alice
-        .edit(segment, ids[0], &draft("uno"), author)
+        .edit(segment, ids[0], &styled, author)
         .expect("edit")
         .expect("a change");
     assert_eq!(edited.document, segment.document_id(), "not locked yet");
@@ -616,7 +637,7 @@ fn a_change_refused_by_the_lock_is_replayed() {
             Replay {
                 segment,
                 message: ids[0],
-                draft: Some(draft("uno")),
+                draft: Some(styled),
             },
             Replay {
                 segment,

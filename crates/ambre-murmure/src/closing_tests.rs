@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{MessageDraft, MurmureEvent, Timestamp};
+use ambre_bus::{MessageDraft, MurmureEvent, StyleMark, TextStyle, Timestamp};
 use ambre_core::{ChannelId, SegmentId, Seq, UserId};
 
 use crate::channel::live_segments;
@@ -16,6 +16,7 @@ fn draft(text: &str) -> MessageDraft {
     MessageDraft {
         text: text.to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     }
 }
 
@@ -342,7 +343,16 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
     bob.apply_remote(bob.meta_id().document_id(), &meta)
         .expect("meta");
     bob.successor_to_open();
-    let waiting = bob.send(&draft("meanwhile"), bob_user, NOW).expect("send");
+    // `MURMURE-562`: the moved message keeps its styles.
+    let code = StyleMark {
+        style: TextStyle::Code,
+        range: 0..4,
+    };
+    let styled = MessageDraft {
+        styles: vec![code.clone()],
+        ..draft("meanwhile")
+    };
+    let waiting = bob.send(&styled, bob_user, NOW).expect("send");
     let MurmureEvent::Messages { messages, .. } = &waiting.event else {
         panic!("a message");
     };
@@ -380,6 +390,7 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
         [(moved, "meanwhile")]
     );
     assert_eq!(messages[0].reactions[0].users, [bob_user]);
+    assert_eq!(messages[0].styles, [code]);
     assert_eq!(
         bob.messages(old).expect("old"),
         alice.messages(old).expect("old"),

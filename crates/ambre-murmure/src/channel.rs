@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
     ActivityKind, ActivitySummary, ChannelMatches, Mention, MentionCount, MentionTarget, MessageAt,
-    MessageDraft, MessageView, MurmureEvent, Notice, SearchMatch, ThreadHead, Timestamp,
+    MessageDraft, MessageView, MurmureEvent, Notice, SearchMatch, StyleMark, ThreadHead, Timestamp,
     UnreadCount, Unreadable,
 };
 use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
@@ -29,7 +29,7 @@ use crate::schema::{
 use crate::search::Query;
 use crate::sequence::{self, Order, Position, Sequence};
 use crate::session::Session;
-use crate::{mention, reaction};
+use crate::{mention, reaction, style};
 
 mod amending;
 mod closing;
@@ -905,6 +905,9 @@ impl ChannelState {
         if !mention::fits(&draft.mentions, &draft.text) {
             return Err(MurmureError::BadMention);
         }
+        if !style::fits(&draft.styles, &draft.text) {
+            return Err(MurmureError::BadStyle);
+        }
         self.send_from(draft, author, now, None)
     }
 
@@ -921,7 +924,7 @@ impl ChannelState {
         let channel = self.channel_id;
         let segment = self.active_id();
         let (doc, session) = self.active.session()?;
-        let (id, mentions) = write_message(doc, draft, author, now, channel, copy)?;
+        let (id, mentions, styles) = write_message(doc, draft, author, now, channel, copy)?;
         let delta = session.export_json(doc)?;
         Ok(Sent {
             segment,
@@ -936,6 +939,7 @@ impl ChannelState {
                     ts: now,
                     text: draft.text.clone(),
                     mentions,
+                    styles,
                     reactions: Vec::new(),
                     notice: None,
                     edited: false,
@@ -988,6 +992,7 @@ impl ChannelState {
                     ts: now,
                     text: String::new(),
                     mentions: Vec::new(),
+                    styles: Vec::new(),
                     reactions: Vec::new(),
                     notice: Some(Notice::MemberAdded { member }),
                     edited: false,
@@ -1158,6 +1163,9 @@ impl ChannelState {
         if !mention::fits(&draft.mentions, &draft.text) {
             return Err(MurmureError::BadMention);
         }
+        if !style::fits(&draft.styles, &draft.text) {
+            return Err(MurmureError::BadStyle);
+        }
         if let MessageAt::Segment(segment) = at
             && self.amendable(segment)
         {
@@ -1166,19 +1174,24 @@ impl ChannelState {
         let channel = self.channel_id;
         let (doc, session, map) = self.own_message(at, message, user)?;
         let content = content_of(&map).ok_or(MurmureError::NoMessage(message))?;
-        if content.to_string() == draft.text && mention::read(&content, channel) == draft.mentions {
+        if content.to_string() == draft.text
+            && mention::read(&content, channel) == draft.mentions
+            && style::read(&content) == style::normalized(&draft.styles)
+        {
             return Ok(None);
         }
-        // The marks are written again from the draft, so a mention the edit
-        // took out leaves no mark on the text that stays.
+        // The marks are written again from the draft. A mention or a style
+        // the edit took out leaves no mark on the text that stays.
         let len = content.len_unicode();
         if len > 0 {
             content.unmark(0..len, MENTION)?;
         }
+        style::clear(&content)?;
         content
             .update(&draft.text, UpdateOptions::default())
             .map_err(|error| MurmureError::Crdt(error.to_string()))?;
         mention::write(doc, &content, &draft.mentions, channel)?;
+        style::write(doc, &content, &draft.styles)?;
         map.insert(MESSAGE_EDITED, true)?;
         let delta = session.export_json(doc)?;
         self.changed_at(at, delta).map(Some)
@@ -1853,6 +1866,7 @@ fn read_message(item: ValueOrContainer, channel: ChannelId) -> Option<MessageVie
         ts,
         text: content.to_string(),
         mentions: mention::read(&content, channel),
+        styles: style::read(&content),
         reactions: reaction::read(&map),
         notice: notice_of(&map)?,
         edited: schema::flag(&map, MESSAGE_EDITED),
@@ -1891,7 +1905,7 @@ fn write_message(
     now: Timestamp,
     channel: ChannelId,
     copy: Option<(DocumentId, MessageId)>,
-) -> Result<(MessageId, Vec<Mention>), MurmureError> {
+) -> Result<(MessageId, Vec<Mention>, Vec<StyleMark>), MurmureError> {
     let id = copy.map_or_else(MessageId::new, |(_, reply)| threading::copy_id(reply));
     let message = doc.get_list(MESSAGES).push_container(LoroMap::new())?;
     message.insert(MESSAGE_ID, id.to_string())?;
@@ -1905,11 +1919,12 @@ fn write_message(
     let content = message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
     content.insert(0, &draft.text)?;
     mention::write(doc, &content, &draft.mentions, channel)?;
+    style::write(doc, &content, &draft.styles)?;
     // Created empty here, so no reaction ever creates a container, and
     // two first reactors never race for one (`MURMURE-256`).
     message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;
     // The summary and the view read the marks as written.
-    Ok((id, mention::read(&content, channel)))
+    Ok((id, mention::read(&content, channel), style::read(&content)))
 }
 
 /// The notice a message carries: `Some(None)` for a message a member wrote,

@@ -29,13 +29,14 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
     ChannelId, LogicCommand, Mention, MessageAt, MessageDraft, MessageId, MurmureCommand,
-    Timestamp, UserId,
+    StyleMark, TextStyle, Timestamp, UserId,
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle};
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::PendingEdit;
+use crate::markers;
 use crate::mention_list::{MentionList, Offer, offers, query_at};
 use crate::paint::{draw, shape};
 
@@ -219,29 +220,43 @@ impl From<ChannelId> for DraftOf {
 struct Editing {
     at: MessageAt,
     message: MessageId,
-    /// The text the message read when the edit began.
+    /// The text the message read when the edit began, and its styles.
     original: String,
+    original_styles: Vec<StyleMark>,
     /// The draft, its history and its mentions the edit put aside, `None`
     /// with no draft.
     kept: Option<(TextEditor, History, Option<Marks>)>,
 }
 
-/// The mentions of a draft, and the text whose chars their ranges count.
+/// The mentions and the styles of a draft, and the text whose chars their
+/// ranges count.
 #[derive(Debug, Clone, Default)]
 struct Marks {
     text: String,
     mentions: Vec<Mention>,
+    styles: Vec<StyleMark>,
 }
 
 impl Marks {
     /// The mentions `text` leaves whole, once the ranges follow it
-    /// (`MURMURE-553`).
+    /// (`MURMURE-553`). The styles follow it too.
     fn follow(&mut self, text: &str) -> &[Mention] {
         if self.text != text {
             self.mentions = kept_mentions(&self.text, text, &self.mentions);
+            self.styles = markers::kept_styles(&self.text, text, &self.styles);
             text.clone_into(&mut self.text);
         }
         &self.mentions
+    }
+
+    /// The draft `text` sends, its marks followed to it.
+    fn draft(&mut self, text: String) -> MessageDraft {
+        let mentions = self.follow(&text).to_vec();
+        MessageDraft {
+            text,
+            mentions,
+            styles: crate::style::normalized(&self.styles),
+        }
     }
 }
 
@@ -326,16 +341,7 @@ impl Sent {
 /// one the change touches goes.
 fn kept_mentions(old: &str, new: &str, mentions: &[Mention]) -> Vec<Mention> {
     let (old, new): (Vec<char>, Vec<char>) = (old.chars().collect(), new.chars().collect());
-    let head = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
-    let room = old.len().min(new.len()) - head;
-    let tail = old
-        .iter()
-        .rev()
-        .zip(new.iter().rev())
-        .take(room)
-        .take_while(|(a, b)| a == b)
-        .count();
-    let (old_end, new_end) = (old.len() - tail, new.len() - tail);
+    let (head, old_end, new_end) = markers::change(&old, &new);
     mentions
         .iter()
         .filter_map(|mention| {
@@ -396,6 +402,12 @@ pub struct Composer {
     dismissed: Option<(DraftOf, usize)>,
     /// The entry picked, which the next paint writes into the draft.
     picked: Option<(DraftOf, usize)>,
+    /// A key that can close a marker was typed in this draft: the next paint
+    /// looks before the caret (`MURMURE-197`).
+    closing: Option<DraftOf>,
+    /// The styles chords asked for, which the next paint puts on the
+    /// selection or takes off it (`MURMURE-431`).
+    toggles: Vec<(DraftOf, TextStyle)>,
 }
 
 impl Composer {
@@ -508,6 +520,7 @@ impl Composer {
         let marks = Marks {
             text: edit.text.clone(),
             mentions: edit.mentions,
+            styles: edit.styles.clone(),
         };
         self.marks.insert(of, marks);
         self.editing.insert(
@@ -516,6 +529,7 @@ impl Composer {
                 at: edit.at,
                 message: edit.message,
                 original: edit.text,
+                original_styles: edit.styles,
                 kept,
             },
         );
@@ -539,6 +553,7 @@ impl Composer {
         let marks = Marks {
             text: draft.text,
             mentions: draft.mentions,
+            styles: draft.styles,
         };
         self.marks.insert(of, marks);
         if also_in_channel && matches!(of, DraftOf::Thread(..)) {
@@ -581,6 +596,10 @@ impl Composer {
         }
         history.edit();
         history.seal_after |= text.ends_with(char::is_whitespace);
+        // A paste is text, whatever its last char (`MURMURE-197`).
+        if markers::closes(text) {
+            self.closing = Some(of);
+        }
         self.editor(of).insert(text);
     }
 
@@ -620,6 +639,17 @@ impl Composer {
             return false;
         }
         if !(shift || ctrl || alt) && self.list_key(of, key) {
+            return true;
+        }
+        // A chord puts its style on the selection once the keys before it
+        // landed (`MURMURE-431`).
+        if ctrl
+            && !(shift || alt)
+            && let Some(style) = markers::chord_style(key)
+        {
+            self.typed = true;
+            self.editor(of);
+            self.toggles.push((of, style));
             return true;
         }
         let word = ctrl || alt;
@@ -793,7 +823,7 @@ impl Composer {
         let start = text[..at].chars().count();
         let marks = self.marks.entry(of).or_insert_with(|| Marks {
             text: text.clone(),
-            mentions: Vec::new(),
+            ..Marks::default()
         });
         marks.follow(&text);
         marks.follow(&editor.text());
@@ -802,6 +832,97 @@ impl Composer {
             range: start..start + written.chars().count(),
         });
         marks.mentions.sort_by_key(|mention| mention.range.start);
+    }
+
+    /// Turn the marker the caret of the draft `of` just closed into its
+    /// mark, and take its chars out (`MURMURE-197`). A marker typed in code
+    /// stays text (`MURMURE-198`). The change is a step of its own, so an
+    /// undo gives the markers back.
+    fn close_marker(
+        &mut self,
+        of: DraftOf,
+        editor: &mut TextEditor,
+        font_cx: &mut FontContext,
+        wrap: f32,
+    ) {
+        if self.closing.take() != Some(of) {
+            return;
+        }
+        let text = editor.text();
+        let Some(caret) = editor.caret() else {
+            return;
+        };
+        let marks = self.marks.entry(of).or_insert_with(|| Marks {
+            text: text.clone(),
+            ..Marks::default()
+        });
+        marks.follow(&text);
+        let code: Vec<_> = marks
+            .styles
+            .iter()
+            .filter(|mark| mark.style == TextStyle::Code)
+            .map(|mark| mark.range.clone())
+            .collect();
+        let Some(closed) = markers::closed(&text, caret, &code) else {
+            return;
+        };
+        let (between, after) = closed.apply(&text);
+        editor.push(EditIntent::Replace {
+            start: closed.span.start,
+            end: closed.span.end,
+            text: text[closed.inner.clone()].to_owned(),
+        });
+        editor.flush(font_cx, wrap, 1.0);
+        if editor.text() != after {
+            return;
+        }
+        // The close marker goes, then the open one, so a mention between
+        // them stays whole.
+        marks.follow(&between);
+        marks.follow(&after);
+        marks.styles.push(StyleMark {
+            range: closed.range(&text),
+            style: closed.style,
+        });
+        marks.styles = crate::style::normalized(&marks.styles);
+        let history = self.history(of);
+        history.seal();
+        history.record(&after);
+    }
+
+    /// Put each style a chord asked for in the draft `of` on its selection,
+    /// or take it off (`MURMURE-431`). With no selection, a chord changes
+    /// nothing.
+    fn toggle_styles(&mut self, of: DraftOf, editor: &TextEditor) {
+        let toggles = std::mem::take(&mut self.toggles);
+        let Some(bytes) = editor.selection() else {
+            return;
+        };
+        let text = editor.text();
+        let range = text[..bytes.start].chars().count()..text[..bytes.end].chars().count();
+        let marks = self.marks.entry(of).or_insert_with(|| Marks {
+            text: text.clone(),
+            ..Marks::default()
+        });
+        marks.follow(&text);
+        for (_, style) in toggles.into_iter().filter(|(to, _)| *to == of) {
+            marks.styles = markers::toggled(&marks.styles, &style, range.clone());
+        }
+    }
+
+    /// The styles the draft `of` carries now, for a test.
+    #[cfg(test)]
+    pub fn styles(&self, of: impl Into<DraftOf>) -> Vec<StyleMark> {
+        let of = of.into();
+        let text = self
+            .drafts
+            .get(&of)
+            .map(TextEditor::text)
+            .unwrap_or_default();
+        self.marks
+            .get(&of)
+            .map(|marks| marks.clone().draft(text).styles)
+            .unwrap_or_default()
     }
 
     /// Open the `@` list where the caret of the draft `of` ends a query, or
@@ -886,25 +1007,28 @@ impl Composer {
         let style = body_style(palette.cell_text);
         let mut sent = None;
         if let Some(asked) = self.send.take()
-            && let Some(editor) = self.drafts.get_mut(&asked)
+            && let Some(mut editor) = self.drafts.remove(&asked)
         {
             editor.set_style(style.clone());
             editor.flush(font_cx, wrap, 1.0);
+            // A marker or a chord typed before Enter lands before the draft
+            // leaves, never on the draft that comes back.
+            self.close_marker(asked, &mut editor, font_cx, wrap);
+            self.toggle_styles(asked, &editor);
             let text = editor.text();
-            // The mentions the text left whole leave with it (`MURMURE-552`).
-            let mentions = self
-                .marks
-                .get_mut(&asked)
-                .map(|marks| marks.follow(&text).to_vec())
-                .unwrap_or_default();
+            self.drafts.insert(asked, editor);
+            // The mentions the text left whole leave with it (`MURMURE-552`),
+            // and the styles with them (`MURMURE-562`).
+            let draft = self.marks.entry(asked).or_default().draft(text.clone());
             if let Some(open) = self.editing.get(&asked) {
                 if !text.trim().is_empty() {
-                    if text != open.original {
+                    let styled = draft.styles != crate::style::normalized(&open.original_styles);
+                    if text != open.original || styled {
                         sent = Some(Sent::Edit {
                             channel: asked.channel(),
                             at: open.at,
                             message: open.message,
-                            draft: MessageDraft { mentions, text },
+                            draft,
                         });
                     }
                     self.end_edit(asked);
@@ -918,7 +1042,7 @@ impl Composer {
                 // The box unchecks once the reply leaves (`MURMURE-531`).
                 sent = Some(Sent::Message {
                     to: asked,
-                    draft: MessageDraft { text, mentions },
+                    draft,
                     also_in_channel: self.also.remove(&asked),
                 });
             }
@@ -951,6 +1075,11 @@ impl Composer {
                 if let Some(marks) = self.marks.get_mut(&shown) {
                     marks.follow(&editor.text());
                 }
+                if walked {
+                    self.closing = None;
+                }
+                self.close_marker(shown, &mut editor, font_cx, wrap);
+                self.toggle_styles(shown, &editor);
                 self.ask(shown, &editor);
                 let tall = editor.layout_height().unwrap_or(0.0);
                 self.drafts.insert(shown, editor);

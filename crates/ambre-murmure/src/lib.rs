@@ -23,6 +23,7 @@ mod delta;
 mod error;
 mod layout;
 pub mod list;
+pub mod markers;
 mod members;
 mod mention;
 pub mod mention_list;
@@ -36,6 +37,7 @@ mod sequence;
 mod session;
 mod sidebar;
 mod space;
+mod style;
 #[cfg(feature = "testing")]
 pub mod testing;
 pub mod view;
@@ -65,6 +67,8 @@ mod schema_reading;
 mod schema_shape;
 #[cfg(test)]
 mod space_tests;
+#[cfg(test)]
+mod style_tests;
 #[cfg(test)]
 mod thread_tests;
 #[cfg(test)]

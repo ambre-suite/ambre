@@ -25,6 +25,7 @@ fn draft(text: &str) -> MessageDraft {
     MessageDraft {
         text: text.to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     }
 }
 
@@ -418,6 +419,34 @@ fn a_document_a_newer_client_wrote_is_refused_whole() {
     );
 }
 
+/// A segment stamped at version 1 opens, and the walk writes nothing in it:
+/// no member would sign that write (`MURMURE-566`).
+#[test]
+fn an_older_document_opens_and_the_walk_writes_nothing() {
+    let mut stored = stored_channel();
+    let older = segment_doc(stored.channel);
+    older
+        .get_map(SCHEMA_META_MAP)
+        .insert(SCHEMA_VERSION_KEY, 1)
+        .expect("stamp");
+    older.commit();
+    let before = older.oplog_vv();
+    stored.segments.insert(stored.active_id, snapshot(&older));
+    let state = ChannelState::open(
+        stored.channel,
+        stored.meta_id,
+        &stored.meta,
+        &stored.segments,
+    )
+    .expect("a version 1 segment opens");
+    let opened = state.doc(stored.active_id.document_id()).expect("held");
+    assert_eq!(opened.oplog_vv(), before, "the walk wrote an operation");
+    assert_eq!(
+        schema::unsigned(&opened.get_map(SCHEMA_META_MAP), SCHEMA_VERSION_KEY),
+        Some(1)
+    );
+}
+
 #[test]
 fn a_document_with_no_version_finds_no_migration_and_is_refused() {
     let stored = stored_channel();
@@ -486,6 +515,7 @@ fn a_sent_message_carries_a_content_summary_with_its_mentions() {
     let (bob, carol) = (UserId::new(), UserId::new());
     let with_mentions = MessageDraft {
         text: "@bob @carol @bob @channel".to_owned(),
+        styles: Vec::new(),
         mentions: vec![
             Mention {
                 target: MentionTarget::User(bob),

@@ -4,7 +4,10 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{FoldAnswer, MessageDraft, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
+use ambre_bus::{
+    FoldAnswer, MessageDraft, MessageView, MurmureEvent, SnapshotVerdict, StyleMark, TextStyle,
+    Timestamp,
+};
 use ambre_core::{ChannelId, DocumentId, LeaseId, MessageId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
@@ -23,10 +26,19 @@ fn at(ms: u64) -> Timestamp {
     Timestamp(NOW.0 + ms)
 }
 
+/// The style the amendments put on the edited message.
+fn bold() -> StyleMark {
+    StyleMark {
+        style: TextStyle::Bold,
+        range: 1..3,
+    }
+}
+
 fn draft(text: &str) -> MessageDraft {
     MessageDraft {
         text: text.to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     }
 }
 
@@ -107,8 +119,12 @@ fn amended() -> Amended {
         .iter()
         .map(|m| m.id)
         .collect();
+    let styled = MessageDraft {
+        styles: vec![bold()],
+        ..draft("uno")
+    };
     let edited = alice
-        .edit(segment, ids[0], &draft("uno"), author)
+        .edit(segment, ids[0], &styled, author)
         .expect("edit")
         .expect("a change");
     let deleted = alice.delete(segment, ids[1], author).expect("delete");
@@ -337,6 +353,8 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
         ["uno", "", "three"]
     );
     assert!(read[0].edited && read[1].deleted);
+    // `MURMURE-562`: the fold keeps the styles of the edit.
+    assert_eq!(read[0].styles, [bold()]);
     assert_eq!(read, before, "the fold reads as the amendments did");
 }
 

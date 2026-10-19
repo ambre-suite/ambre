@@ -127,6 +127,12 @@ pub enum MurmureError {
     #[error("a mention outside the body of its message")]
     BadMention,
 
+    /// A style whose range is empty or past the body (`MURMURE-561`). Also a
+    /// link to an address that is not `http` or `https`, or two links over
+    /// one char.
+    #[error("a style outside the body of its message, or a link refused")]
+    BadStyle,
+
     /// The authorship check refused a delta, which changed nothing
     /// (`MURMURE-030`).
     #[error("the authorship check refused a delta: {0}")]

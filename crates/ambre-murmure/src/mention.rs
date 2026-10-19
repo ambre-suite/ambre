@@ -7,10 +7,11 @@
 
 use ambre_bus::{Mention, MentionTarget, MessageDraft};
 use ambre_core::{ChannelId, UserId};
-use loro::{ExpandType, LoroDoc, LoroText, LoroValue, StyleConfig, StyleConfigMap, TextDelta};
+use loro::{LoroDoc, LoroText, LoroValue, TextDelta};
 
 use crate::error::MurmureError;
 use crate::schema::MENTION;
+use crate::style;
 
 /// The value a mark stores for `target`: the user, or the channel itself.
 fn value_of(target: MentionTarget, channel: ChannelId) -> String {
@@ -54,16 +55,7 @@ pub(crate) fn write(
     if mentions.is_empty() {
         return Ok(());
     }
-    // The style config is local to this document and read at the mark: a
-    // receiver takes the expansion from the op itself.
-    let mut styles = StyleConfigMap::default_rich_text_config();
-    styles.insert(
-        MENTION.into(),
-        StyleConfig {
-            expand: ExpandType::None,
-        },
-    );
-    doc.config_text_style(styles);
+    style::configure(doc);
     for mention in mentions {
         content.mark(
             mention.range.clone(),

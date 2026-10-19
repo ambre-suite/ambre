@@ -22,7 +22,7 @@ use crate::schema::{
     self, MESSAGE_AUTHOR, MESSAGE_CONTENT, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE,
     MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, NoticeKind,
 };
-use crate::{mention, reaction};
+use crate::{mention, reaction, style};
 
 /// What a relocation produced: the send of the moved messages, and the
 /// changes of older messages to write again as amendments.
@@ -185,12 +185,14 @@ pub(super) fn replay_of(
         }
         None
     } else {
-        if now.text == before.text && now.mentions == before.mentions {
+        if now.text == before.text && now.mentions == before.mentions && now.styles == before.styles
+        {
             return None;
         }
         Some(MessageDraft {
             text: now.text,
             mentions: now.mentions,
+            styles: now.styles,
         })
     };
     Some(Replay {
@@ -212,6 +214,7 @@ fn rewrite(doc: &LoroDoc, channel: ChannelId, view: &MessageView) -> Result<(), 
     if !view.text.is_empty() {
         content.insert(0, &view.text)?;
         mention::write(doc, &content, &view.mentions, channel)?;
+        style::write(doc, &content, &view.styles)?;
     }
     let reactions = message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;
     for kind in &view.reactions {

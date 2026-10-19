@@ -60,6 +60,7 @@ pub fn channel_of(texts: &[&str], size: (f64, f64)) -> (MurmureView, Sender<UiEv
             ts: Timestamp(i as u64),
             text: (*text).to_owned(),
             mentions: Vec::new(),
+            styles: Vec::new(),
             reactions: Vec::new(),
             notice: None,
             edited: false,

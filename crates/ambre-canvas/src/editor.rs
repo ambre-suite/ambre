@@ -333,6 +333,14 @@ impl TextEditor {
         self.editor.selected_text().map(str::to_owned)
     }
 
+    /// The bytes the selection covers, or `None` while it is collapsed or a
+    /// composition holds. Font-free, and as of the last flush.
+    pub fn selection(&self) -> Option<std::ops::Range<usize>> {
+        let selection = self.editor.raw_selection();
+        let held = !selection.is_collapsed() && self.editor.raw_compose().is_none();
+        held.then(|| selection.text_range())
+    }
+
     /// The byte offset of the caret, or `None` while a selection or a
     /// composition holds. Font-free, and as of the last flush.
     pub fn caret(&self) -> Option<usize> {

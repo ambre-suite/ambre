@@ -25,6 +25,7 @@ fn draft(text: &str) -> MessageDraft {
     MessageDraft {
         text: text.to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     }
 }
 
@@ -678,6 +679,7 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
     let (thread, _, _) = threaded(&mut state, root);
     let mentioning = MessageDraft {
         text: "@alice".to_owned(),
+        styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::User(alice),
             range: 0..6,

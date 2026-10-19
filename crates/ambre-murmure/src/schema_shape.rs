@@ -26,7 +26,9 @@
 
 use std::collections::BTreeSet;
 
-use ambre_bus::{Mention, MentionTarget, MessageDraft, SealedChannelKey, Timestamp, Topic};
+use ambre_bus::{
+    Mention, MentionTarget, MessageDraft, SealedChannelKey, StyleMark, TextStyle, Timestamp, Topic,
+};
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN, SessionNonce};
 use ambre_core::schema::{migration_peer, step_fingerprint};
 use ambre_core::{CategoryId, ChannelId, DocumentId, MessageId, SegmentId, SpaceId, UserId};
@@ -211,6 +213,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
         .send(
             &MessageDraft {
                 text: "hello @channel".to_owned(),
+                styles: Vec::new(),
                 mentions: vec![Mention {
                     target: MentionTarget::Channel,
                     range: 6..14,
@@ -239,6 +242,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
         let draft = MessageDraft {
             text: text.to_owned(),
             mentions: Vec::new(),
+            styles: Vec::new(),
         };
         state.send(&draft, AUTHOR, Timestamp(ts)).expect("send");
     }
@@ -246,6 +250,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
     let edited = MessageDraft {
         text: "edited".to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     };
     state
         .edit(segment, messages[2].id, &edited, AUTHOR)
@@ -274,6 +279,7 @@ fn reply_in_thread(state: &mut ChannelState, segment: SegmentId, root: MessageId
     let reply = MessageDraft {
         text: "a reply".to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     };
     state
         .reply(root, &reply, AUTHOR, Timestamp(1_700_000_000_005), true)
@@ -324,8 +330,19 @@ fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
         .expect("adopt");
     state.amendments_linked(segment, amendments).expect("link");
     let messages = state.messages(segment).expect("held");
+    // Every style over "hi", so each key is one run of its own.
+    let styles = [
+        TextStyle::Bold,
+        TextStyle::Italic,
+        TextStyle::Code,
+        TextStyle::Link("https://ambre.dev".to_owned()),
+    ];
     let amended = MessageDraft {
         text: "hi @channel".to_owned(),
+        styles: styles
+            .into_iter()
+            .map(|style| StyleMark { style, range: 0..2 })
+            .collect(),
         mentions: vec![Mention {
             target: MentionTarget::Channel,
             range: 3..11,
@@ -538,7 +555,31 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 /// layout, holding what the step rewrites. Each step reads its own, so a step
 /// added later never moves what an earlier one writes.
 fn canonical(from: u32) -> LoroDoc {
-    panic!("the step from version {from} has no canonical document: write one here")
+    match from {
+        // A version 1 segment holds one message, its body with no style.
+        1 => {
+            let doc = LoroDoc::new();
+            doc.set_peer_id(1).expect("a peer");
+            doc.get_map(ambre_core::schema::SCHEMA_META_MAP)
+                .insert(ambre_core::schema::SCHEMA_VERSION_KEY, 1)
+                .expect("the stamp");
+            doc.get_map(crate::schema::HEADER)
+                .insert(crate::schema::HEADER_KIND, DocumentKind::Segment.as_str())
+                .expect("the kind");
+            let message = doc
+                .get_list(crate::schema::MESSAGES)
+                .insert_container(0, loro::LoroMap::new())
+                .expect("a message");
+            message
+                .insert_container(crate::schema::MESSAGE_CONTENT, loro::LoroText::new())
+                .expect("a body")
+                .insert(0, "hi")
+                .expect("its text");
+            doc.commit();
+            doc
+        }
+        _ => panic!("the step from version {from} has no canonical document: write one here"),
+    }
 }
 
 /// Each step of the registry, run as the gate runs it on its canonical
@@ -571,8 +612,8 @@ fn steps_written() -> Vec<String> {
 }
 
 /// Every build of one version runs each migration step alike (`AUTHOR-024`).
-/// Version 1 runs none, and its section is empty. The first step lands with
-/// a raised version, its canonical document and a section of its own.
+/// Version 1 runs none, and its section is empty. Each step writes nothing
+/// (`MURMURE-566`), so each line holds the fingerprint of no operation.
 #[test]
 fn each_migration_step_writes_what_its_version_froze() {
     let listed: String = steps_written()

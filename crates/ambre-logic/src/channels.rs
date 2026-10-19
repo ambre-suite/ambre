@@ -2062,6 +2062,7 @@ mod tests {
             draft: MessageDraft {
                 text: text.to_owned(),
                 mentions,
+                styles: Vec::new(),
             },
             now: NOW,
             confirmed: false,
@@ -2684,6 +2685,7 @@ mod tests {
                 &MessageDraft {
                     text: "stored".to_owned(),
                     mentions: Vec::new(),
+                    styles: Vec::new(),
                 },
                 UserId::new(),
                 NOW,
@@ -3150,6 +3152,7 @@ mod tests {
                     &MessageDraft {
                         text: text.to_owned(),
                         mentions: Vec::new(),
+                        styles: Vec::new(),
                     },
                     self.author,
                     NOW,
@@ -3327,6 +3330,7 @@ mod tests {
                 &MessageDraft {
                     text: "as somebody else".to_owned(),
                     mentions: Vec::new(),
+                    styles: Vec::new(),
                 },
                 UserId::new(),
                 NOW,
@@ -3363,6 +3367,7 @@ mod tests {
                 &MessageDraft {
                     text: "from the future".to_owned(),
                     mentions: Vec::new(),
+                    styles: Vec::new(),
                 },
                 m.author,
                 NOW,
@@ -3565,6 +3570,7 @@ mod tests {
             message,
             draft: MessageDraft {
                 text: "lunch @bob @eve?".to_owned(),
+                styles: Vec::new(),
                 mentions: vec![
                     mention(MentionTarget::User(bob), 6..10),
                     mention(MentionTarget::User(UserId::new()), 11..15),
@@ -3955,6 +3961,7 @@ mod tests {
         let draft = MessageDraft {
             text: "@channel".to_owned(),
             mentions: all.clone(),
+            styles: Vec::new(),
         };
         let asked = MurmureEvent::ConfirmChannelMention {
             members: ambre_murmure::CONFIRM_CHANNEL_PAST + 1,
@@ -4602,6 +4609,7 @@ mod tests {
             draft: MessageDraft {
                 text: text.to_owned(),
                 mentions: Vec::new(),
+                styles: Vec::new(),
             },
             now,
         }
@@ -5241,6 +5249,7 @@ mod tests {
             draft: MessageDraft {
                 text: text.to_owned(),
                 mentions: Vec::new(),
+                styles: Vec::new(),
             },
             also_in_channel,
             now: at(1),
@@ -5372,6 +5381,7 @@ mod tests {
                 draft: MessageDraft {
                     text: "edited".to_owned(),
                     mentions: Vec::new(),
+                    styles: Vec::new(),
                 },
                 now: NOW,
             },
@@ -5574,6 +5584,7 @@ mod tests {
         let draft = MessageDraft {
             text: "a reply".to_owned(),
             mentions: Vec::new(),
+            styles: Vec::new(),
         };
         m.alice
             .reply(root, &draft, m.author, NOW, false)
@@ -5767,6 +5778,7 @@ mod tests {
         let bob = m.bob.my_user_id.expect("signed in");
         let draft = MessageDraft {
             text: "@bob".to_owned(),
+            styles: Vec::new(),
             mentions: vec![ambre_bus::Mention {
                 target: ambre_bus::MentionTarget::User(bob),
                 range: 0..4,

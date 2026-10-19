@@ -724,6 +724,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         author: UserId::new(),
         text: "hello".to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
         notice: false,
         deleted: false,
         pressed: None,
@@ -788,6 +789,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         author: me,
         text: "typo".to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
         notice: false,
         deleted: false,
         pressed: None,
@@ -804,6 +806,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         message: target.message,
         text: "typo".to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     };
     assert_eq!(relay.take_edit(true), None, "the thread's region leaves it");
     assert_eq!(relay.take_edit(false), Some(asked.clone()));
@@ -851,6 +854,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         author: me,
         text: "oops".to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
         notice: false,
         deleted: false,
         pressed: None,
@@ -990,6 +994,7 @@ fn found(query: &str, budget: ChannelId, zeta: ChannelId) -> UiEvent {
         ts: Timestamp(1),
         text: "the budget for May".to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
         reactions: Vec::new(),
         notice: None,
         edited: false,
@@ -1309,6 +1314,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
     let draft = MessageDraft {
         text: "@channel hi".to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     };
     let ask = |reply: Option<HeldReply>| UiEvent::Channel {
         channel_id: direct,

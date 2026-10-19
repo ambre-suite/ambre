@@ -190,16 +190,38 @@ pub struct Mention {
     pub range: Range<usize>,
 }
 
+/// How a run of a message body reads (`MURMURE-194`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TextStyle {
+    Bold,
+    Italic,
+    /// Inline code: a marker typed in it stays text (`MURMURE-198`).
+    Code,
+    /// A link to an `http` or `https` address (`MURMURE-561`).
+    Link(String),
+}
+
+/// One style over the body of a message, and the run of text it covers.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StyleMark {
+    pub style: TextStyle,
+    /// In chars of the body.
+    pub range: Range<usize>,
+}
+
 /// A message the view hands the engine to send.
 ///
 /// The engine writes each mention as a `mention` mark over its range, and
-/// the summary lists what the marks name (`MURMURE-101`).
+/// the summary lists what the marks name (`MURMURE-101`). Each style is a
+/// mark of its own (`MURMURE-562`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessageDraft {
     /// The body, as the author typed it.
     pub text: String,
     /// Who the body names, in the order the author typed them.
     pub mentions: Vec<Mention>,
+    /// How its runs read, in text order.
+    pub styles: Vec<StyleMark>,
 }
 
 /// A send the Logic thread holds until its author confirms the `@channel`
@@ -366,6 +388,8 @@ pub struct MessageView {
     pub text: String,
     /// The `mention` marks of the body, in text order (`MURMURE-103`).
     pub mentions: Vec<Mention>,
+    /// The style marks of the body, in text order (`MURMURE-562`).
+    pub styles: Vec<StyleMark>,
     /// One per emoji, in emoji order (`MURMURE-006`).
     pub reactions: Vec<Reaction>,
     /// What the channel announces, `None` for a message a member wrote. A

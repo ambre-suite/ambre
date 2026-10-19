@@ -21,6 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-079` | `CONC` | Two peers MUST accept and refuse the same deltas on a message. | this spec section 3; `AUTHOR-007` | `ambre_murmure::authorship_tests::two_peers_accept_and_refuse_the_same_deltas` -- two receivers reach the same verdicts and the same messages | none | verified |
 | `MURMURE-223` | `INV` | A delta of a segment, a thread or an amendments document MUST travel as a Loro JSON update. | this spec section 3; `ambre-spec-murmure-schema.md section 7` | `ambre_murmure::authorship_tests::a_segment_delta_travels_as_a_json_update_of_the_pinned_version` -- a send and a first update both parse as JSON | none | verified |
 | `MURMURE-227` | `INV` | A JSON update MUST carry the Loro JSON schema version the schema register pins. | this spec section 3; `ambre-spec-murmure-schema.md section 7` | `ambre_murmure::authorship_tests::a_segment_delta_travels_as_a_json_update_of_the_pinned_version` -- the update reads `JSON_SCHEMA_VERSION` | none | verified |
+| `MURMURE-565` | `OBS` | A message in the list MUST draw each style of its body. | this spec section 3; `MURMURE-562` | not built | unbuilt -- lands with the `Marks drawn in a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Send a message
 
@@ -64,8 +65,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
   summary (`SYNC-113`). The relay never learns whether a delta is a message, an edit or a delete.
-* **Verification.** 22 `verified`. The send, the authorship check, the edit and the delete are
-  built, live and as amendments. So is the `thread` field another member sets once.
+* **Verification.** 22 `verified`, 1 `unimplemented`. The send, the authorship check, the edit
+  and the delete are built, live and as amendments. So is the `thread` field another member sets
+  once. The list draws a body as plain text, its styles not yet.
 
 ---
 

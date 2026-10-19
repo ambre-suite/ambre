@@ -693,6 +693,7 @@ pub(crate) mod tests {
             ts: Timestamp(ts),
             text: text.to_owned(),
             mentions: Vec::new(),
+            styles: Vec::new(),
             reactions: Vec::new(),
             notice: None,
             edited: false,

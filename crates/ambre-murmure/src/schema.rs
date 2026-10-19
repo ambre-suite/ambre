@@ -24,7 +24,9 @@ use crate::error::MurmureError;
 ///
 /// Raise it in the commit that changes a key or a value type, and append the
 /// new section to `schema/shapes.txt`.
-pub const SCHEMA_VERSION: u32 = 1;
+///
+/// Version 2 adds the style marks over a body (`MURMURE-562`).
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// The root map every Murmure document carries (`MURMURE-001`).
 pub(crate) const HEADER: &str = "header";
@@ -119,14 +121,35 @@ pub(crate) const MESSAGE_ALSO_IN_THREAD: &str = "also_in_thread";
 /// The mark over a mention in a body. Its value is a user identifier, or the
 /// channel identifier for an `@channel` (`MURMURE-008`).
 pub(crate) const MENTION: &str = "mention";
+/// The style marks over a body (`MURMURE-562`). Bold, italic and code hold
+/// `true`, a link its address.
+pub(crate) const BOLD: &str = "bold";
+pub(crate) const ITALIC: &str = "italic";
+pub(crate) const CODE: &str = "code";
+pub(crate) const LINK: &str = "link";
 
 /// Murmure's migration registry: one row per version bump, appended never
 /// rewritten.
 ///
 /// A document with no version reads as 0 (`SCHEMA-005`). No Murmure document
 /// was ever written without one, so the walk finds no step from 0 and
-/// refuses it. Version 1 is the first layout, so no step exists yet.
-pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
+/// refuses it. Version 1 is the first layout.
+///
+/// A step writes no operation (`MURMURE-566`). Each member signs its own
+/// writes, and the check refuses a change under any other identity, so a
+/// migration's writes would never travel. `1 -> 2` adds marks a version 1
+/// body holds none of, so the document reads as it is and keeps its stamp.
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
+    from: 1,
+    to: 2,
+    apply: read_as_it_is,
+}];
+
+/// A step that leaves the document as it is (`MURMURE-566`).
+#[allow(clippy::unnecessary_wraps)]
+fn read_as_it_is(_: &LoroDoc) -> Result<(), String> {
+    Ok(())
+}
 
 /// The document kinds this build writes and reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

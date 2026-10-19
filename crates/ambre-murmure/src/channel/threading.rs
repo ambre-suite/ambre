@@ -16,12 +16,12 @@ use super::{
 };
 use crate::delta::{self, Arrival, Rules};
 use crate::error::MurmureError;
-use crate::mention;
 use crate::schema::{
     self, AMENDMENT_THREADS, DocumentKind, HEADER, HEADER_ROOT, HEADER_SEGMENT,
     MESSAGE_ALSO_IN_THREAD, MESSAGE_ID, MESSAGE_THREAD, MESSAGES,
 };
 use crate::session::Session;
+use crate::{mention, style};
 
 /// A thread document the channel holds, with the segment of its root.
 #[derive(Debug)]
@@ -623,7 +623,8 @@ impl ChannelState {
     /// thread (`MURMURE-109`).
     ///
     /// # Errors
-    /// [`MurmureError::BadMention`] for a mention past the draft, and
+    /// [`MurmureError::BadMention`] for a mention past the draft,
+    /// [`MurmureError::BadStyle`] for a style it refuses, and
     /// [`MurmureError::NoThread`] before the channel holds the thread.
     /// [`MurmureError::NoSession`] before the PeerID of the thread, or of
     /// the active segment for a copy, landed. [`MurmureError::Crdt`] when
@@ -639,6 +640,9 @@ impl ChannelState {
         if !mention::fits(&draft.mentions, &draft.text) {
             return Err(MurmureError::BadMention);
         }
+        if !style::fits(&draft.styles, &draft.text) {
+            return Err(MurmureError::BadStyle);
+        }
         // Checked before the first write, so a reply never lands without
         // the copy it was sent with.
         if also_in_channel && self.active.session.is_none() {
@@ -652,7 +656,7 @@ impl ChannelState {
         let segment = thread.segment;
         let document = thread.held.id;
         let (doc, session) = thread.held.session()?;
-        let (id, mentions) = super::write_message(doc, draft, author, now, channel, None)?;
+        let (id, mentions, _) = super::write_message(doc, draft, author, now, channel, None)?;
         let delta = session.export_json(doc)?;
         let event = self
             .thread_view(document)

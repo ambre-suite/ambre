@@ -10,7 +10,7 @@
 
 use ambre_bus::{
     ChannelId, HeldReply, HeldSend, LogicCommand, Mention, MessageAt, MessageId, MurmureCommand,
-    Timestamp,
+    StyleMark, Timestamp,
 };
 use ambre_commands::{
     Command, CommandCategory, CommandId, Key, KeyBinding, Keymap, Locale, Modifiers,
@@ -210,6 +210,8 @@ pub struct MessageTarget {
     pub text: String,
     /// Who its text names, as the list holds them.
     pub mentions: Vec<Mention>,
+    /// How its runs read, as the list holds them.
+    pub styles: Vec<StyleMark>,
     /// The message is a notice the channel wrote, not a member.
     pub notice: bool,
     /// The message reads deleted already.
@@ -263,6 +265,8 @@ pub struct PendingEdit {
     pub text: String,
     /// Who that text names.
     pub mentions: Vec<Mention>,
+    /// How its runs read.
+    pub styles: Vec<StyleMark>,
 }
 
 /// A deletion the member asked for and has not confirmed yet
@@ -422,6 +426,7 @@ pub fn message_action(
             message: target.message,
             text: target.text.clone(),
             mentions: target.mentions.clone(),
+            styles: target.styles.clone(),
         })),
         _ => None,
     }
@@ -571,6 +576,7 @@ mod tests {
             author: UserId::new(),
             text: text.to_owned(),
             mentions: Vec::new(),
+            styles: Vec::new(),
             notice,
             deleted: text.is_empty(),
             pressed: None,
@@ -587,6 +593,7 @@ mod tests {
         let draft = ambre_bus::MessageDraft {
             text: "@channel hi".to_owned(),
             mentions: Vec::new(),
+            styles: Vec::new(),
         };
         let asked = AskedAll {
             channel,
@@ -780,6 +787,7 @@ mod tests {
             message: own.message,
             text: "hi".to_owned(),
             mentions: Vec::new(),
+            styles: Vec::new(),
         };
         assert_eq!(pending, asked);
     }

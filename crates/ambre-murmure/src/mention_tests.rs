@@ -48,6 +48,7 @@ fn draft(text: &str, mentions: Vec<Mention>) -> MessageDraft {
     MessageDraft {
         text: text.to_owned(),
         mentions,
+        styles: Vec::new(),
     }
 }
 

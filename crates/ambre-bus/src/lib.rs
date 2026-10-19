@@ -45,7 +45,8 @@ pub use app::murmure::{
     DocumentActivity, HeldReply, HeldSend, MemberChannel, MemberView, Mention, MentionCount,
     MentionTarget, MessageAt, MessageDraft, MessageView, MurmureCommand, MurmureEvent, Notice,
     Presence, PrivateChannelDraft, PublicChannelDraft, Reaction, SealedChannelKey, SearchMatch,
-    SpaceCommand, SpaceEvent, ThreadHead, Timestamp, Topic, UnreadCount, Unreadable,
+    SpaceCommand, SpaceEvent, StyleMark, TextStyle, ThreadHead, Timestamp, Topic, UnreadCount,
+    Unreadable,
 };
 pub use command::SyncCommand;
 pub use event::{

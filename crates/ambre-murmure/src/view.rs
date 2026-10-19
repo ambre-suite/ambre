@@ -429,6 +429,7 @@ impl MurmureView {
             author: message.author,
             text: message.text.clone(),
             mentions: message.mentions.clone(),
+            styles: message.styles.clone(),
             notice: message.notice.is_some(),
             deleted: message.deleted,
             pressed: None,
@@ -2419,6 +2420,7 @@ mod tests {
             author: ada,
             text: "b".to_owned(),
             mentions: Vec::new(),
+            styles: Vec::new(),
             notice: false,
             deleted: false,
             pressed: None,
@@ -2479,6 +2481,7 @@ mod tests {
             author: ada,
             text: "one".to_owned(),
             mentions: Vec::new(),
+            styles: Vec::new(),
             notice: false,
             deleted: false,
             pressed: Some((10.0, y)),
@@ -2949,6 +2952,7 @@ mod tests {
             message,
             text: text.to_owned(),
             mentions: vec![ada],
+            styles: Vec::new(),
         });
         at
     }
@@ -3532,6 +3536,7 @@ mod tests {
             message: own,
             text: "mine".to_owned(),
             mentions: Vec::new(),
+            styles: Vec::new(),
         });
         frame_with_fonts(&mut channel_view);
         assert!(
@@ -3969,6 +3974,158 @@ mod tests {
         assert_eq!(mentions, vec![(MentionTarget::User(bob), 2..6)]);
     }
 
+    fn styled(style: ambre_bus::TextStyle, range: std::ops::Range<usize>) -> ambre_bus::StyleMark {
+        ambre_bus::StyleMark { style, range }
+    }
+
+    /// A marker becomes its mark the moment it closes, and its chars leave
+    /// the draft. One undo gives them back, and the message sent carries the
+    /// mark (`MURMURE-197`).
+    #[test]
+    fn a_closed_marker_becomes_its_mark_and_an_undo_gives_it_back() {
+        use ambre_bus::TextStyle::{Bold, Italic};
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "say **done**");
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("say done"));
+        assert_eq!(page.view.composer().styles(channel), [styled(Bold, 4..8)]);
+
+        chord(&mut page, "z", false);
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("say **done**"));
+        assert_eq!(page.view.composer().styles(channel), []);
+        key(&mut page, "End", false, 0.0);
+        type_slowly(&mut page, " _now_");
+        assert_eq!(
+            painted(&mut page, channel).as_deref(),
+            Some("say **done** now"),
+            "the next marker closes alone, and the undone one stays text"
+        );
+        type_slowly(&mut page, "!");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        let sent = drafts_sent(&page);
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].text, "say **done** now!");
+        assert_eq!(
+            sent[0].styles,
+            [styled(Italic, 13..16)],
+            "text typed past a mark stays out of it"
+        );
+
+        // A marker closed in the frame of Enter becomes its mark first.
+        type_text(&mut page, "**go*");
+        type_text(&mut page, "*");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        let sent = drafts_sent(&page);
+        assert_eq!(sent.len(), 1);
+        assert_eq!(
+            (sent[0].text.as_str(), sent[0].styles.as_slice()),
+            ("go", [styled(Bold, 0..2)].as_slice())
+        );
+    }
+
+    /// A marker typed inside inline code stays text (`MURMURE-198`).
+    #[test]
+    fn a_marker_typed_in_code_stays_text() {
+        use ambre_bus::TextStyle::Code;
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "`a b`");
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("a b"));
+        assert_eq!(page.view.composer().styles(channel), [styled(Code, 0..3)]);
+        key(&mut page, "ArrowLeft", false, 0.0);
+        type_slowly(&mut page, "**x**");
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("a **x**b"));
+        assert_eq!(
+            page.view.composer().styles(channel),
+            [styled(Code, 0..8)],
+            "the marker is text in the code"
+        );
+    }
+
+    /// `Ctrl+B` puts bold on the selection and takes it off again. With no
+    /// selection the chord changes nothing (`MURMURE-431`). The style is a
+    /// mark over the draft of the inline editor, sent with it (`MURMURE-193`).
+    #[test]
+    fn a_chord_puts_its_style_on_the_selection() {
+        use ambre_bus::TextStyle::{Bold, Italic};
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "one two");
+        assert!(
+            chord(&mut page, "b", false),
+            "no selection: the chord is taken"
+        );
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().styles(channel), []);
+        for _ in 0..3 {
+            shift_key(&mut page, "ArrowLeft");
+        }
+        frame_with_fonts(&mut page.view);
+        chord(&mut page, "b", false);
+        chord(&mut page, "I", false);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(
+            page.view.composer().styles(channel),
+            [styled(Bold, 4..7), styled(Italic, 4..7)]
+        );
+        chord(&mut page, "b", false);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().styles(channel), [styled(Italic, 4..7)]);
+        assert!(!chord(&mut page, "q", false), "no style takes `q`");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        let sent = drafts_sent(&page);
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].styles, [styled(Italic, 4..7)]);
+    }
+
+    /// An edit loads the styles of its message. One that changes the styles
+    /// alone is sent, and one that changes nothing is not (`MURMURE-562`).
+    #[test]
+    fn an_edit_of_the_styles_alone_is_sent() {
+        use ambre_bus::TextStyle::Bold;
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        let message = MessageId::new();
+        let edit = |page: &Page| {
+            *page.editing.borrow_mut() = Some(PendingEdit {
+                channel,
+                at: MessageAt::Segment(SegmentId::new()),
+                message,
+                text: "hi you".to_owned(),
+                mentions: Vec::new(),
+                styles: vec![styled(Bold, 0..2)],
+            });
+        };
+        edit(&page);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().styles(channel), [styled(Bold, 0..2)]);
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(edits(&page), (Vec::new(), 0), "nothing changed");
+
+        edit(&page);
+        frame_with_fonts(&mut page.view);
+        chord(&mut page, "a", false);
+        chord(&mut page, "b", false);
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        let (sent, messages) = edits(&page);
+        assert_eq!(messages, 0);
+        let [(_, edited, draft)] = &sent[..] else {
+            panic!("one edit, got {sent:?}");
+        };
+        assert_eq!(*edited, message);
+        assert_eq!(draft.text, "hi you");
+        assert_eq!(draft.styles, [styled(Bold, 0..6)]);
+    }
+
     /// While the list shows, Up and Down move its choice round it and say
     /// the entry. Escape closes it and keeps the draft and the focus, and the
     /// list stays closed until its query ends (`MURMURE-554`). None of it
@@ -4034,6 +4191,7 @@ mod tests {
         let (mut page, bob, _) = mentioning(channel);
         let draft = ambre_bus::MessageDraft {
             text: "@channel @Bob hi".to_owned(),
+            styles: Vec::new(),
             mentions: vec![
                 Mention {
                     target: MentionTarget::Channel,

@@ -1,0 +1,416 @@
+//! The style marks of a draft (the Murmure composer spec).
+//!
+//! A Markdown marker becomes its mark the moment it closes, and its chars
+//! leave the draft (`MURMURE-197`). A marker typed in code stays text
+//! (`MURMURE-198`). A chord puts a style on the selection, or takes it off
+//! (`MURMURE-431`). The marks follow the text through each edit, as the
+//! mentions do (`MURMURE-553`).
+
+use std::ops::Range;
+
+use ambre_bus::{StyleMark, TextStyle};
+
+use crate::style::linkable;
+
+/// The chord of each style, `Ctrl` with this key, the one Prose binds to the
+/// same mark (`MURMURE-431`).
+pub const MARK_CHORDS: [(char, TextStyle); 3] = [
+    ('b', TextStyle::Bold),
+    ('i', TextStyle::Italic),
+    ('e', TextStyle::Code),
+];
+
+/// The style of a chord's key, `None` for a key no style takes.
+pub fn chord_style(key: &str) -> Option<TextStyle> {
+    let mut chars = key.chars();
+    let (Some(key), None) = (chars.next(), chars.next()) else {
+        return None;
+    };
+    MARK_CHORDS
+        .iter()
+        .find(|(chord, _)| *chord == key.to_ascii_lowercase())
+        .map(|(_, style)| style.clone())
+}
+
+/// The chars a key closes a marker with. Only such a key asks for a look.
+pub fn closes(text: &str) -> bool {
+    matches!(text, "*" | "_" | "`" | ")")
+}
+
+/// A marker the caret just closed: the bytes it spans, open marker to close
+/// marker, and the text between them, which takes the style.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Closed {
+    pub span: Range<usize>,
+    /// The bytes of the text that stays, inside `span`.
+    pub inner: Range<usize>,
+    pub style: TextStyle,
+}
+
+impl Closed {
+    /// The draft once the markers leave it, and the one between, with the
+    /// close marker gone alone. The marks follow the two in turn, so a
+    /// mention between the markers stays whole.
+    pub fn apply(&self, text: &str) -> (String, String) {
+        let between = format!("{}{}", &text[..self.inner.end], &text[self.span.end..]);
+        let after = format!(
+            "{}{}{}",
+            &text[..self.span.start],
+            &text[self.inner.clone()],
+            &text[self.span.end..]
+        );
+        (between, after)
+    }
+
+    /// The chars of the text that stays, once the markers left.
+    pub fn range(&self, text: &str) -> Range<usize> {
+        let start = text[..self.span.start].chars().count();
+        start..start + text[self.inner.clone()].chars().count()
+    }
+}
+
+/// Whether `inner` may sit between two markers: some text, and no blank at
+/// either end.
+fn holds(inner: &str) -> bool {
+    !inner.is_empty()
+        && !inner.starts_with(char::is_whitespace)
+        && !inner.ends_with(char::is_whitespace)
+}
+
+/// The marker the text before the byte `caret` closes, on its own line, or
+/// `None`. `code` lists the chars inline code covers: a marker in it stays
+/// text (`MURMURE-198`).
+///
+/// `**text**` is bold, `_text_` italic, `` `text` `` inline code, and
+/// `[text](address)` a link to an `http` or `https` address.
+pub fn closed(text: &str, caret: usize, code: &[Range<usize>]) -> Option<Closed> {
+    let before = text.get(..caret)?;
+    let line_start = before.rfind('\n').map_or(0, |at| at + 1);
+    let line = &before[line_start..];
+    let found = bold(line)
+        .or_else(|| italic(line))
+        .or_else(|| inline_code(line))
+        .or_else(|| link(line))?;
+    let closed = Closed {
+        span: found.span.start + line_start..found.span.end + line_start,
+        inner: found.inner.start + line_start..found.inner.end + line_start,
+        style: found.style,
+    };
+    let chars = |byte: usize| text[..byte].chars().count();
+    let (first, last) = (chars(closed.span.start), chars(closed.span.end) - 1);
+    let in_code = code.iter().any(|run| {
+        run.contains(&first) || run.contains(&last) || (first < run.start && run.end <= last)
+    });
+    (!in_code).then_some(closed)
+}
+
+/// `**text**` closing `line`.
+fn bold(line: &str) -> Option<Closed> {
+    let open_end = line.strip_suffix("**")?;
+    let open = open_end.rfind("**")?;
+    let inner = open + 2..open_end.len();
+    holds(&line[inner.clone()]).then_some(Closed {
+        span: open..line.len(),
+        inner,
+        style: TextStyle::Bold,
+    })
+}
+
+/// `_text_` closing `line`, its open marker at a word's start, so a
+/// `snake_case_name` stays text.
+fn italic(line: &str) -> Option<Closed> {
+    let open_end = line.strip_suffix('_')?;
+    let open = open_end.rfind('_')?;
+    let starts = line[..open]
+        .chars()
+        .next_back()
+        .is_none_or(|c| !c.is_alphanumeric() && c != '_');
+    let inner = open + 1..open_end.len();
+    (starts && holds(&line[inner.clone()])).then_some(Closed {
+        span: open..line.len(),
+        inner,
+        style: TextStyle::Italic,
+    })
+}
+
+/// `` `text` `` closing `line`. Three backticks open a block, which this
+/// story leaves to text.
+fn inline_code(line: &str) -> Option<Closed> {
+    let open_end = line.strip_suffix('`')?;
+    let open = open_end.rfind('`')?;
+    let inner = open + 1..open_end.len();
+    let text = &line[inner.clone()];
+    (!text.trim().is_empty() && !line[..open].ends_with('`')).then_some(Closed {
+        span: open..line.len(),
+        inner,
+        style: TextStyle::Code,
+    })
+}
+
+/// `[text](address)` closing `line`, with an address a link may hold
+/// (`MURMURE-561`).
+fn link(line: &str) -> Option<Closed> {
+    let open_end = line.strip_suffix(')')?;
+    let middle = open_end.rfind("](")?;
+    let address = &open_end[middle + 2..];
+    let open = open_end[..middle].rfind('[')?;
+    let inner = open + 1..middle;
+    let text = &line[inner.clone()];
+    (holds(text) && !text.contains(']') && linkable(address)).then(|| Closed {
+        span: open..line.len(),
+        inner,
+        style: TextStyle::Link(address.to_owned()),
+    })
+}
+
+/// Where the edit from `old` to `new` falls: the common head, and the end
+/// of the change in each text, all in chars.
+pub(crate) fn change(old: &[char], new: &[char]) -> (usize, usize, usize) {
+    let head = old.iter().zip(new).take_while(|(a, b)| a == b).count();
+    let room = old.len().min(new.len()) - head;
+    let tail = old
+        .iter()
+        .rev()
+        .zip(new.iter().rev())
+        .take(room)
+        .take_while(|(a, b)| a == b)
+        .count();
+    (head, old.len() - tail, new.len() - tail)
+}
+
+/// The styles of `old` once an edit made it `new`. A run grows or shrinks
+/// with an edit inside it, and loses the chars an edit took from its ends.
+/// Text typed at either end stays out of it.
+pub fn kept_styles(old: &str, new: &str, styles: &[StyleMark]) -> Vec<StyleMark> {
+    let (old, new): (Vec<char>, Vec<char>) = (old.chars().collect(), new.chars().collect());
+    let (head, old_end, new_end) = change(&old, &new);
+    let shifted = |at: usize| at - old_end + new_end;
+    styles
+        .iter()
+        .filter_map(|mark| {
+            let (start, end) = (mark.range.start, mark.range.end);
+            let start = if start < head {
+                start
+            } else if start >= old_end {
+                shifted(start)
+            } else {
+                new_end
+            };
+            let end = if end <= head {
+                end
+            } else if end >= old_end {
+                shifted(end)
+            } else {
+                head
+            };
+            (start < end).then(|| StyleMark {
+                style: mark.style.clone(),
+                range: start..end,
+            })
+        })
+        .collect()
+}
+
+/// `styles` with `style` put on `range`, or taken off it when it already
+/// covers every char of it (`MURMURE-431`). An empty range changes nothing.
+pub fn toggled(styles: &[StyleMark], style: &TextStyle, range: Range<usize>) -> Vec<StyleMark> {
+    if range.is_empty() {
+        return styles.to_vec();
+    }
+    let runs = crate::style::normalized(styles);
+    let covered = runs.iter().any(|run| {
+        run.style == *style && run.range.start <= range.start && range.end <= run.range.end
+    });
+    if !covered {
+        let mut added = runs;
+        added.push(StyleMark {
+            style: style.clone(),
+            range,
+        });
+        return crate::style::normalized(&added);
+    }
+    let mut kept = Vec::with_capacity(runs.len() + 1);
+    for run in runs {
+        if run.style != *style || run.range.end <= range.start || range.end <= run.range.start {
+            kept.push(run);
+            continue;
+        }
+        for part in [run.range.start..range.start, range.end..run.range.end] {
+            if !part.is_empty() {
+                kept.push(StyleMark {
+                    style: run.style.clone(),
+                    range: part,
+                });
+            }
+        }
+    }
+    crate::style::normalized(&kept)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::slice::from_ref;
+
+    use super::*;
+
+    fn mark(style: TextStyle, range: Range<usize>) -> StyleMark {
+        StyleMark { style, range }
+    }
+
+    /// The draft once the marker `text` closes at its end leaves it, and the
+    /// chars of the text that took the style.
+    fn converted(text: &str) -> Option<(String, Range<usize>, TextStyle)> {
+        let closed = closed(text, text.len(), &[])?;
+        let (_, after) = closed.apply(text);
+        Some((after, closed.range(text), closed.style))
+    }
+
+    /// Each marker becomes its mark as it closes, and its chars leave the
+    /// draft (`MURMURE-197`).
+    #[test]
+    fn each_marker_becomes_its_mark_as_it_closes() {
+        let site = TextStyle::Link("https://ambre.dev".to_owned());
+        let cases = [
+            ("say **done**", "say done", 4..8, TextStyle::Bold),
+            ("an _aside_", "an aside", 3..8, TextStyle::Italic),
+            ("run `ls -a`", "run ls -a", 4..9, TextStyle::Code),
+            ("see [site](https://ambre.dev)", "see site", 4..8, site),
+            ("é **ü ö**", "é ü ö", 2..5, TextStyle::Bold),
+        ];
+        for (typed, after, range, style) in cases {
+            assert_eq!(
+                converted(typed),
+                Some((after.to_owned(), range, style)),
+                "{typed}"
+            );
+        }
+
+        // The caret closes the marker before it, on its own line.
+        let text = "a\n**b** tail";
+        let closed = closed(text, "a\n**b**".len(), &[]).expect("closed at the caret");
+        assert_eq!(
+            closed.apply(text),
+            ("a\n**b tail".to_owned(), "a\nb tail".to_owned())
+        );
+        assert_eq!(closed.range(text), 2..3);
+        assert_eq!(super::closed("é", 1, &[]), None, "not a char boundary");
+    }
+
+    /// Text that only looks like a marker stays text.
+    #[test]
+    fn a_marker_that_holds_no_text_or_no_address_stays_text() {
+        for typed in [
+            "****",
+            "** x**",
+            "**x **",
+            "**a\nb**",
+            "snake_case_",
+            "__",
+            "``",
+            "```",
+            "` `",
+            "[x](javascript:alert(1))",
+            "[x](ftp://host)",
+            "[](https://ambre.dev)",
+            "[ x](https://ambre.dev)",
+            "[a]b](https://ambre.dev)",
+            "plain",
+        ] {
+            assert_eq!(converted(typed), None, "{typed}");
+        }
+        assert!(
+            converted("call _now_").is_some(),
+            "an italic opens at a word's start"
+        );
+    }
+
+    /// A marker that touches inline code stays text (`MURMURE-198`).
+    #[test]
+    fn a_marker_typed_in_code_stays_text() {
+        let text = "`a **b**`";
+        let caret = "`a **b**".len();
+        assert_eq!(
+            closed(text, caret, from_ref(&(1..8))),
+            None,
+            "inside a code run"
+        );
+        let text = "**a`b`c**";
+        assert_eq!(
+            closed(text, text.len(), from_ref(&(3..4))),
+            None,
+            "around a code run"
+        );
+        assert!(
+            closed(text, text.len(), &[]).is_some(),
+            "the same marker outside code"
+        );
+        let text = "x **b**";
+        assert!(
+            closed(text, text.len(), from_ref(&(0..1))).is_some(),
+            "code beside the marker leaves it a marker"
+        );
+    }
+
+    /// `Ctrl` with `b`, `i` and `e` names its style, and any other key none
+    /// (`MURMURE-431`).
+    #[test]
+    fn a_chord_names_its_style() {
+        assert_eq!(chord_style("b"), Some(TextStyle::Bold));
+        assert_eq!(chord_style("I"), Some(TextStyle::Italic));
+        assert_eq!(chord_style("e"), Some(TextStyle::Code));
+        for key in ["x", "bb", "", "Enter"] {
+            assert_eq!(chord_style(key), None, "{key}");
+        }
+        for key in ["*", "_", "`", ")"] {
+            assert!(closes(key), "{key}");
+        }
+        assert!(!closes("a") && !closes("**"));
+    }
+
+    /// A run follows the text through an edit, and text typed at either end
+    /// stays out of it.
+    #[test]
+    fn a_style_follows_the_text_through_an_edit() {
+        let bold = |range| vec![mark(TextStyle::Bold, range)];
+        let kept = |old: &str, new: &str| kept_styles(old, new, &bold(2..6));
+        assert_eq!(kept("a bold", "a bold!"), bold(2..6), "typed at its end");
+        assert_eq!(kept("a bold", "a Xbold"), bold(3..7), "typed at its start");
+        assert_eq!(kept("a bold", "a boXld"), bold(2..7), "typed inside");
+        assert_eq!(kept("a bold", "Xa bold"), bold(3..7), "typed before");
+        assert_eq!(kept("a bold", "a bd"), bold(2..4), "cut inside");
+        assert_eq!(kept("a bold", "a ld"), bold(2..4), "cut at its start");
+        assert_eq!(kept("a bold", "a "), [], "cut whole");
+        assert_eq!(kept("a bold", "a bXX"), bold(2..5), "chars replaced inside");
+        assert_eq!(
+            kept_styles("a bold x", "a bo", &bold(2..6)),
+            bold(2..4),
+            "cut past its end"
+        );
+    }
+
+    /// A chord puts its style on the selection, and takes it off a
+    /// selection it covers whole (`MURMURE-431`).
+    #[test]
+    fn a_chord_puts_a_style_on_or_takes_it_off() {
+        let bold = TextStyle::Bold;
+        let on = toggled(&[], &bold, 2..4);
+        assert_eq!(on, [mark(bold.clone(), 2..4)]);
+        assert_eq!(toggled(&on, &bold, 2..4), []);
+        assert_eq!(
+            toggled(&[mark(bold.clone(), 0..4)], &bold, 1..2),
+            [mark(bold.clone(), 0..1), mark(bold.clone(), 2..4)]
+        );
+        assert_eq!(
+            toggled(&[mark(bold.clone(), 0..4)], &bold, 3..6),
+            [mark(bold.clone(), 0..6)],
+            "a selection half covered takes the style"
+        );
+        let italic = mark(TextStyle::Italic, 0..4);
+        assert_eq!(
+            toggled(&[italic.clone(), mark(bold.clone(), 0..4)], &bold, 0..4),
+            from_ref(&italic),
+            "another style stays"
+        );
+        assert_eq!(toggled(from_ref(&italic), &bold, 2..2), [italic]);
+    }
+}
