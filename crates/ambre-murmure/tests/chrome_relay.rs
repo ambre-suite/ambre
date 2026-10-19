@@ -637,8 +637,7 @@ async fn settle() {
 }
 
 /// The next native `close` of `dialog`. Listen before the click that closes
-/// it: the event is a task of its own, and a `settle` may run before it, so
-/// the next question would open under a stale close that cancels it.
+/// it: the event is a task of its own, which a `settle` may not wait for.
 fn next_close(dialog: &web_sys::HtmlDialogElement) -> wasm_bindgen_futures::JsFuture {
     let closed = js_sys::Promise::new(&mut |resolve, _| {
         dialog

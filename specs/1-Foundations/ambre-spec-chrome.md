@@ -66,6 +66,7 @@ the DOM side produces.
 | `CHROME-091` | `POST` | Clearing a modal's open signal MUST hide the element. | this spec section 2 | `ambre_chrome::chrome_ui::a_modal_follows_its_signal_and_holds_the_loop_while_open` | none | verified |
 | `CHROME-088` | `POST` | Escape and a click on the backdrop MUST close a modal. | this spec section 2 | `ambre_chrome::chrome_ui::a_backdrop_click_dismisses_the_modal_and_clears_its_signal`; `::a_native_close_clears_the_signal_and_the_modal_reopens` -- Escape is the browser's own close, which the second test drives | none | verified |
 | `CHROME-092` | `POST` | A dismissed modal MUST clear its signal. | this spec section 2 | `ambre_chrome::chrome_ui::a_backdrop_click_dismisses_the_modal_and_clears_its_signal`; `::a_native_close_clears_the_signal_and_the_modal_reopens` -- the second opens the modal again after the dismissal | none | verified |
+| `CHROME-106` | `FRAME` | A close that lands after its modal opened again MUST NOT close it, clear its signal, give the frame loop back or notify its caller. | this spec section 2; `CHROME-092` | `ambre_chrome::chrome_ui::a_close_landing_after_a_reopen_leaves_the_modal_open` -- the signal is cleared and set again before the queued event lands | none | verified |
 | `CHROME-089` | `FRAME` | Closing a modal MUST NOT leave the frame loop suspended. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | `ambre_chrome::chrome_ui::a_modal_follows_its_signal_and_holds_the_loop_while_open`; `::a_backdrop_click_dismisses_the_modal_and_clears_its_signal`; `::an_open_modal_unmounted_releases_the_loop` -- each close path returns the hold; `ambre_canvas::frame::tests::a_closed_modal_resumes_only_what_it_suspended` -- a release keeps the loop paused while the route is away | none | verified |
 
 ### 1.6 A drag drives a control
@@ -80,7 +81,7 @@ the DOM side produces.
 * **Boundary.** none: `UI-THREAD-004` and `UI-THREAD-049` ban a network, crypto and persistence
   path on this thread, and the toolkit adds no exception. Its manifest names no transport and no
   crypto crate, which is the crate-graph fact `CHROME-001` and `CHROME-002` are read off.
-* **Verification.** 23 `verified`, 1 `unimplemented`. What holds is a crate-graph fact, placement
+* **Verification.** 24 `verified`, 1 `unimplemented`. What holds is a crate-graph fact, placement
   arithmetic, or a component mounted in a headless document and driven past its mount. The modal
   rows rest on one shared element, which a gate keeps the only one, and on a hold the loop counts.
   The drag rows rest on one debouncer, which a gate keeps every drag control behind.
@@ -147,6 +148,8 @@ why `CHROME-003` has five tests and no browser.
 behind it, along with Escape and the backdrop. The component adds two things and no more. It keeps
 the open signal and the element agreeing in both directions (`CHROME-012`). It also fires the
 callbacks that pause and resume the frame loop (`CHROME-011`). A blur over a frozen canvas then costs nothing.
+The element's close event is queued, so a modal can open again before the event of its last close
+lands. That event then describes a state already gone, and the component ignores it (`CHROME-106`).
 
 **The application's own chrome.** An application builds its specific components on this toolkit, in
 its own crate. Those are a formula bar, a filter popover, a find panel, a selection toolbar and a

@@ -560,6 +560,9 @@ async fn a_key_that_closes_a_trigger_menu_returns_the_focus_to_its_trigger() {
             .query_selector(".statusbar-zoom-menu")
             .unwrap()
             .unwrap();
+        // A menu opened again takes the focus a task later than the first
+        // time: its list is built, then its node lands, then the effect runs.
+        leptos::task::tick().await;
         assert_ne!(active().as_ref(), btn.dyn_ref(), "{key}: the menu took it");
         press(&menu, key);
         leptos::task::tick().await;
@@ -856,6 +859,8 @@ struct Modal {
     root: web_sys::Element,
     dialog: web_sys::HtmlDialogElement,
     holds: std::sync::Arc<std::sync::atomic::AtomicI32>,
+    /// How many times `on_close` ran.
+    heard: RwSignal<u32>,
     /// The mount's handle: dropping it unmounts the modal.
     handle: Option<Box<dyn std::any::Any>>,
 }
@@ -890,13 +895,15 @@ fn mount_modal(open: RwSignal<bool>) -> Modal {
             holds.fetch_add(if held { 1 } else { -1 }, Ordering::Relaxed);
         })
     };
+    let heard = RwSignal::new(0);
+    let on_close = Callback::new(move |()| heard.update(|n| *n += 1));
     let root = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&root).unwrap();
     let target: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
     let handle = mount_to(target, move || {
         provide_context(hold);
         view! {
-            <ambre_chrome::Dialog open=open>
+            <ambre_chrome::Dialog open=open on_close=on_close>
                 <button class="inside">"Inside"</button>
             </ambre_chrome::Dialog>
         }
@@ -912,8 +919,34 @@ fn mount_modal(open: RwSignal<bool>) -> Modal {
         root,
         dialog,
         holds,
+        heard,
         handle: Some(Box::new(handle)),
     }
+}
+
+/// A modal opened again before the `close` event of its last close lands
+/// stays open (`CHROME-106`): the stale event clears no signal, releases no
+/// hold and notifies no one.
+#[wasm_bindgen_test]
+async fn a_close_landing_after_a_reopen_leaves_the_modal_open() {
+    let open = RwSignal::new(true);
+    let modal = mount_modal(open);
+    leptos::task::tick().await;
+    assert_eq!(modal.holds(), 1);
+
+    let closed = modal.closed();
+    open.set(false);
+    leptos::task::tick().await;
+    assert!(!modal.dialog.open(), "closed, its event queued");
+    open.set(true);
+    leptos::task::tick().await;
+    assert!(modal.dialog.open(), "open again before the event");
+    closed.await.unwrap();
+    assert!(modal.dialog.open(), "the stale close closed nothing");
+    assert!(open.get_untracked(), "nor cleared the signal");
+    assert_eq!(modal.holds(), 1, "nor released the loop");
+    assert_eq!(modal.heard.get_untracked(), 0, "nor notified");
+    modal.root.remove();
 }
 
 /// The native `close` event is queued. One that lands after the owner of
@@ -944,6 +977,7 @@ async fn a_close_after_its_callback_is_gone_notifies_no_one() {
         root,
         dialog,
         holds: std::sync::Arc::default(),
+        heard,
         handle: Some(Box::new(handle)),
     };
     // A panic in the handler throws out of the event, to the window.

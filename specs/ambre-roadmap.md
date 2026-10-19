@@ -485,6 +485,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Toile's snapshot command answers | -- | the command returns an empty outcome and no caller sends it; the dispatcher answers a Sync request from the document state instead (`TOILE-093`) |
 | `[ ]` Shaped runs bounded to the view | -- | every measured block keeps its shaped run for the life of the block, about 150 KB a page (`ambre-spec-budgets.md section 6`). The view could send the pages it shows, and the Logic thread keep runs near them alone, re-shaping on scroll. A click on a block with no run would then wait for it |
 | `[ ]` The memory budgets add up | -- | the UI-thread table of `ambre-spec-budgets.md section 6` totals forty-one megabytes over rows that sum to sixty-five: the picture upload budget was added beside the others and charged to no total. Prose then states fifty megabytes of video memory for three pages against a shared wgpu row of twenty, and the table records the arithmetic rather than settling it. A stated total its own rows exceed holds no regression |
+| `[x]` A late close leaves a reopened modal open | MVP | the native close of a modal is queued, and one that lands after the modal opened again clears its signal, gives the frame loop back and runs its close callback. A Murmure question asked again just after a Cancel is cancelled, and its draft comes back unasked. Done when `CHROME-106` reads `verified` |
 
 ---
 
