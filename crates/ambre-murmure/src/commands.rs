@@ -9,7 +9,8 @@
 //! (`MURMURE-419`). The menu of a message offers the ones its target allows.
 
 use ambre_bus::{
-    ChannelId, LogicCommand, Mention, MessageAt, MessageId, MurmureCommand, Timestamp,
+    ChannelId, HeldReply, HeldSend, LogicCommand, Mention, MessageAt, MessageId, MurmureCommand,
+    Timestamp,
 };
 use ambre_commands::{
     Command, CommandCategory, CommandId, Key, KeyBinding, Keymap, Locale, Modifiers,
@@ -291,6 +292,57 @@ impl PendingDelete {
     }
 }
 
+/// An `@channel` the Logic thread holds until its author answers the
+/// question (`MURMURE-557`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AskedAll {
+    /// The channel the send writes in.
+    pub channel: ChannelId,
+    /// How many members the channel holds, as the question says.
+    pub members: usize,
+    /// The draft, and the thread it answers for a reply.
+    pub held: HeldSend,
+}
+
+impl AskedAll {
+    /// The send again, confirmed and stamped `now` by the view
+    /// (`MURMURE-557`).
+    pub fn command(self, now: Timestamp) -> LogicCommand {
+        let HeldSend { draft, reply } = self.held;
+        let command = match reply {
+            None => MurmureCommand::SendMessage {
+                draft,
+                now,
+                confirmed: true,
+            },
+            Some(HeldReply {
+                root,
+                also_in_channel,
+            }) => MurmureCommand::Reply {
+                root,
+                draft,
+                also_in_channel,
+                now,
+                confirmed: true,
+            },
+        };
+        LogicCommand::Channel {
+            channel_id: self.channel,
+            command,
+        }
+    }
+
+    /// Whether the send was a reply, which the thread's region takes back.
+    pub fn in_thread(&self) -> bool {
+        self.held.reply.is_some()
+    }
+}
+
+/// The question an `@channel` past the member threshold asks.
+pub fn asked_all_title(members: usize) -> String {
+    format!("Notify all {members} members of this channel?")
+}
+
 /// The actions offered on `target` to the member `me`, in menu order. A
 /// notice takes no reply, a reply takes no thread of its own, and a message
 /// with no text no copy. Only the author deletes or edits a message. A reply
@@ -525,6 +577,62 @@ mod tests {
             canvas: "ambre-canvas",
             from_thread: None,
         }
+    }
+
+    /// The answer to the `@channel` question sends the held draft again,
+    /// confirmed, to the channel or the thread it was for (`MURMURE-557`).
+    #[test]
+    fn a_confirmed_at_channel_sends_the_held_draft_again() {
+        let channel = ChannelId::new();
+        let draft = ambre_bus::MessageDraft {
+            text: "@channel hi".to_owned(),
+            mentions: Vec::new(),
+        };
+        let asked = AskedAll {
+            channel,
+            members: 12,
+            held: HeldSend {
+                draft: draft.clone(),
+                reply: None,
+            },
+        };
+        assert!(!asked.in_thread());
+        assert!(matches!(
+            asked.clone().command(Timestamp(7)),
+            LogicCommand::Channel {
+                channel_id,
+                command: MurmureCommand::SendMessage { draft: d, now: Timestamp(7), confirmed: true },
+            } if channel_id == channel && d == draft
+        ));
+        let root = MessageId::new();
+        let reply = AskedAll {
+            held: HeldSend {
+                draft: draft.clone(),
+                reply: Some(HeldReply {
+                    root,
+                    also_in_channel: true,
+                }),
+            },
+            ..asked
+        };
+        assert!(reply.in_thread());
+        assert!(matches!(
+            reply.command(Timestamp(8)),
+            LogicCommand::Channel {
+                channel_id,
+                command: MurmureCommand::Reply {
+                    root: r,
+                    draft: d,
+                    also_in_channel: true,
+                    now: Timestamp(8),
+                    confirmed: true,
+                },
+            } if channel_id == channel && r == root && d == draft
+        ));
+        assert_eq!(
+            asked_all_title(12),
+            "Notify all 12 members of this channel?"
+        );
     }
 
     /// Every action of a message is a command of the table, so the menu,

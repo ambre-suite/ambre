@@ -329,7 +329,8 @@ fn an_at_channel_past_the_threshold_waits_for_confirmation() {
     assert_eq!(
         screen(all.clone(), Some(&members), false),
         Screened::Confirm {
-            members: CONFIRM_CHANNEL_PAST + 1
+            members: CONFIRM_CHANNEL_PAST + 1,
+            draft: all.clone(),
         }
     );
     assert_eq!(

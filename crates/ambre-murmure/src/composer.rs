@@ -522,6 +522,32 @@ impl Composer {
         self.focused = true;
     }
 
+    /// Give back a draft its author did not send, with its mentions and the
+    /// box of its thread, and the caret at its end. A composer that holds a
+    /// draft typed since keeps it (`MURMURE-558`). Answers whether it took it.
+    pub fn restore(&mut self, of: DraftOf, draft: MessageDraft, also_in_channel: bool) -> bool {
+        if !self.blank(of) {
+            return false;
+        }
+        let editor = TextEditor::new(&draft.text, body_style(Color::BLACK));
+        self.drafts.insert(of, editor);
+        let history = History {
+            last: draft.text.clone(),
+            ..History::default()
+        };
+        self.histories.insert(of, history);
+        let marks = Marks {
+            text: draft.text,
+            mentions: draft.mentions,
+        };
+        self.marks.insert(of, marks);
+        if also_in_channel && matches!(of, DraftOf::Thread(..)) {
+            self.also.insert(of);
+        }
+        self.focused = true;
+        true
+    }
+
     /// Whether the composer `of` a channel or a thread holds an edit.
     pub fn editing(&self, of: impl Into<DraftOf>) -> bool {
         self.editing.contains_key(&of.into())

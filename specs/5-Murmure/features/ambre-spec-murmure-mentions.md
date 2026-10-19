@@ -1,6 +1,6 @@
 # AMBRE -- FEATURE: MURMURE MENTIONS
 **Type:** Vertical (feature)
-**Implementation:** partial -- every rule is built; the `@channel` question is not drawn yet
+**Implementation:** partial -- every rule is built; the panel waits for the shared floating shell
 
 > A member names another in a message with `@`. The one named is told, even when the channel is
 > not loaded, and the name follows a later rename.
@@ -57,12 +57,21 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-555` | `POST` | A press on an entry MUST pick it in the region whose list shows it, and leave the focus in the composer. | this spec section 4 | `ambre_murmure::view::tests::a_click_on_an_entry_picks_it_in_its_region` -- a pick for the thread leaves the channel's draft; `ambre_murmure::tests::chrome_relay::the_mention_list_shows_its_entries_and_a_press_picks_one` -- the options show the choice, and a press is taken once by its region | none | verified |
 | `MURMURE-556` | `FRAME` | Moving through the `@` list or closing it MUST NOT change the draft, and MUST NOT send it. | this spec section 4 | `ambre_murmure::view::tests::the_list_takes_its_keys_and_escape_closes_it_until_the_query_ends` -- the draft reads `@` after Down, Up and Escape, and nothing left | none | verified |
 
+### 1.6 Answer the `@channel` question
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-557` | `POST` | The question MUST name the number of members it notifies, and Send MUST send the held draft once, confirmed, to its channel or its thread. | this spec section 3; `MURMURE-231` | `ambre_murmure::commands::tests::a_confirmed_at_channel_sends_the_held_draft_again` -- a message and a reply leave confirmed, the reply with its box; `ambre_murmure::tests::chrome_relay::the_at_channel_question_sends_on_send_and_gives_back_on_cancel` -- one confirmed send after Send | none | verified |
+| `MURMURE-558` | `POST` | Cancel, Escape and the backdrop MUST give the draft back to the composer it left, with its mentions. A draft typed there since MUST stay. | this spec section 3 | `ambre_murmure::view::tests::a_cancelled_at_channel_gives_its_draft_back` -- the next Enter sends the draft and its two marks, and a typed draft stays; `ambre_murmure::tests::chrome_relay::the_at_channel_question_sends_on_send_and_gives_back_on_cancel` -- the thread's region alone takes a reply back, once | none | verified |
+| `MURMURE-559` | `FRAME` | Asking the question, and cancelling it, MUST NOT send the message. | this spec section 3 | `ambre_murmure::tests::chrome_relay::the_at_channel_question_sends_on_send_and_gives_back_on_cancel` -- nothing is sent while the dialog is open, nor after Cancel | none | verified |
+| `MURMURE-560` | `FRAME` | A reply held by the question MUST NOT open its thread before Send. | this spec section 3 | `ambre_logic::channels::tests::an_at_channel_past_the_threshold_asks_before_it_sends` -- the first reply on a message asks, and Sync gets no thread to create | none | verified |
+
 * **Budget.** none of its own: a mention is a mark inside a message.
 * **Boundary.** the mentioned users ride in the sealed summary (`SYNC-113`), never in a field the
   relay reads. Push notifications, later, put that list in front of the relay, which they rule.
-* **Verification.** 19 `verified`. The mention tests of `crates/ambre-murmure` hold the mark, the
+* **Verification.** 23 `verified`. The mention tests of `crates/ambre-murmure` hold the mark, the
   count, the summary and the screen. The Logic tests hold the members that feed it. The view tests
-  hold the `@` list, and a browser test holds its panel.
+  hold the `@` list and the draft given back, and browser tests hold the panel and the question.
 
 ---
 
@@ -87,6 +96,14 @@ not a list of members (`MURMURE-230`), and each client counts it as its own ment
 (`MURMURE-233`). The list would grow with the channel, and the relay would learn nothing more from
 it anyway. Past a member threshold, the composer asks first (`MURMURE-231`). Only moderation, a
 later Story, can restrict it by role.
+
+**The question** is a modal dialog. The Logic thread holds no draft: it hands the send back in its
+event, and the view keeps it. Send sends it again, confirmed (`MURMURE-557`). Cancel gives it back
+to the composer it left (`MURMURE-558`).
+
+A draft typed there in the round trip wins, and the held one is lost. The dialog is modal, so that
+window is a few milliseconds. Logic asks before it opens the thread of a first reply, so a cancel
+leaves none (`MURMURE-560`).
 
 **The mention list** is a floating panel hung above the caret. An `@` that starts a word opens a
 query (`MURMURE-551`), and a pick writes the name with its mark (`MURMURE-552`). The pipe keeps the
@@ -117,6 +134,8 @@ The Logic thread folds the counts into the channel mark.
 | Enter, Tab in the list | the choice is written into the draft |
 | Escape in the list | the list closes until its query ends |
 | a press on an entry | that entry is written into the draft |
+| Enter on an `@channel`, past the threshold | a dialog: "Notify all N members of this channel?", Cancel first, then Send |
+| Cancel, Escape or the backdrop of that dialog | the draft is back in the composer, with its mentions |
 | a click on a mention | the profile of the member named |
 
 ---
@@ -134,8 +153,5 @@ The Logic thread folds the counts into the channel mark.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The question before an `@channel` is not drawn.** The Logic thread asks it, but the draft has
-  left the composer by then. Keeping it, asking and sending it again wait for the
-  `The @channel question` Story (`ambre-roadmap.md` E5).
 * **The panel has a shell of its own.** It takes no placement nor flip from the shared one
   (`CHROME-004`), which waits for the `One floating-menu shell` Story (`ambre-roadmap.md` E8).

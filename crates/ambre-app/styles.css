@@ -2047,6 +2047,20 @@ input[type="radio"] {
     filter: brightness(1.1);
 }
 
+.ambre-btn-primary {
+    padding: var(--space-4) var(--space-8);
+    border: 0;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: var(--font-body);
+    cursor: pointer;
+}
+
+.ambre-btn-primary:hover {
+    filter: brightness(1.1);
+}
+
 /* -- Sign-in panel -------------------------------------------------------- */
 .ambre-signin {
     display: flex;

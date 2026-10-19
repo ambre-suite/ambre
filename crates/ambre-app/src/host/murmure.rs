@@ -32,6 +32,7 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput) -> PageReads {
         members_of: Rc::new(move |channel| relay.members_of(channel)),
         show_mentions: Rc::new(move |in_thread, list| relay.show_mentions(in_thread, list)),
         take_pick: Rc::new(move |in_thread| relay.take_pick(in_thread)),
+        take_returned: Rc::new(move |in_thread| relay.take_returned(in_thread)),
     }
 }
 

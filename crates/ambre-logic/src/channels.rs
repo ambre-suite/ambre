@@ -8,11 +8,11 @@
 use super::*;
 use ambre_bus::{
     ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, ChannelMatches,
-    DocumentActivity, MessageAt, MetaId, MurmureCommand, MurmureEvent,
+    DocumentActivity, HeldReply, HeldSend, MessageAt, MetaId, MurmureCommand, MurmureEvent,
 };
 use ambre_bus::{
-    MemberInfo, MentionCount, MessageId, OpenFailure, SegmentId, Seq, SignedDelta, UnreadCount,
-    Unreadable,
+    MemberInfo, Mention, MentionCount, MentionTarget, MessageId, OpenFailure, SegmentId, Seq,
+    SignedDelta, UnreadCount, Unreadable,
 };
 use ambre_murmure::{
     ChangeTarget, ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample,
@@ -1043,6 +1043,49 @@ impl LogicState {
             || self.space_opening.contains_key(&space)
     }
 
+    /// The question an unconfirmed `@channel` past the threshold asks, with
+    /// the send it holds. `None` lets the command run.
+    fn held_send(&self, channel_id: ChannelId, command: &MurmureCommand) -> Option<MurmureEvent> {
+        let (draft, reply) = match command {
+            MurmureCommand::SendMessage {
+                draft,
+                confirmed: false,
+                ..
+            } => (draft, None),
+            MurmureCommand::Reply {
+                root,
+                draft,
+                also_in_channel,
+                confirmed: false,
+                ..
+            } => {
+                let reply = HeldReply {
+                    root: *root,
+                    also_in_channel: *also_in_channel,
+                };
+                (draft, Some(reply))
+            }
+            _ => return None,
+        };
+        let all = |mention: &Mention| mention.target == MentionTarget::Channel;
+        if !draft.mentions.iter().any(all) {
+            return None;
+        }
+        let members: Vec<UserId> = self
+            .channel_members
+            .get(&channel_id)?
+            .iter()
+            .map(|row| row.user_id)
+            .collect();
+        match screen(draft.clone(), Some(&members), false) {
+            Screened::Send(_) => None,
+            Screened::Confirm { members, draft } => Some(MurmureEvent::ConfirmChannelMention {
+                members,
+                held: HeldSend { draft, reply },
+            }),
+        }
+    }
+
     /// Run one command on an open channel, and emit what it produced
     /// (`BUS-027`).
     ///
@@ -1053,6 +1096,11 @@ impl LogicState {
         channel_id: ChannelId,
         command: MurmureCommand,
     ) {
+        // An `@channel` past the threshold is asked about before anything
+        // moves, so a cancel leaves no thread created for it.
+        if let Some(event) = self.held_send(channel_id, &command) {
+            return self.send_to_ui(UiEvent::Channel { channel_id, event });
+        }
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             tracing::warn!("Logic: command for channel {channel_id}, which is not open; dropped");
             return;
@@ -1192,27 +1240,15 @@ impl LogicState {
             return;
         };
         match command {
-            MurmureCommand::SendMessage {
-                draft,
-                now,
-                confirmed,
-            } => {
-                // A mention of anyone outside the channel is no mark, and an
-                // `@channel` past the threshold waits for the author (the
-                // Murmure mentions spec).
+            MurmureCommand::SendMessage { draft, now, .. } => {
+                // A mention of anyone outside the channel is no mark (the
+                // Murmure mentions spec). The `@channel` question was asked
+                // on the way in.
                 let members: Option<Vec<UserId>> = self
                     .channel_members
                     .get(&channel_id)
                     .map(|rows| rows.iter().map(|row| row.user_id).collect());
-                let draft = match screen(draft, members.as_deref(), confirmed) {
-                    Screened::Send(draft) => draft,
-                    Screened::Confirm { members } => {
-                        return self.send_to_ui(UiEvent::Channel {
-                            channel_id,
-                            event: MurmureEvent::ConfirmChannelMention { members },
-                        });
-                    }
-                };
+                let draft = members_only(draft, members.as_deref());
                 // The author is this session's user. Before `SessionReady`
                 // there is none, and a message with no author is refused
                 // rather than written under a placeholder (the Murmure schema).
@@ -1457,7 +1493,7 @@ impl LogicState {
                 draft,
                 also_in_channel,
                 now,
-                confirmed,
+                ..
             } => {
                 // A reply is screened as a message is: a copy to the channel
                 // notifies it as one (the Murmure threads spec).
@@ -1465,15 +1501,7 @@ impl LogicState {
                     .channel_members
                     .get(&channel_id)
                     .map(|rows| rows.iter().map(|row| row.user_id).collect());
-                let draft = match screen(draft, members.as_deref(), confirmed) {
-                    Screened::Send(draft) => draft,
-                    Screened::Confirm { members } => {
-                        return self.send_to_ui(UiEvent::Channel {
-                            channel_id,
-                            event: MurmureEvent::ConfirmChannelMention { members },
-                        });
-                    }
-                };
+                let draft = members_only(draft, members.as_deref());
                 let Some(author) = self.my_user_id else {
                     tracing::warn!("Logic: reply on {channel_id} before the session; dropped");
                     return;
@@ -3907,7 +3935,7 @@ mod tests {
         let (mut state, ui, sync) = harness();
         let alice = UserId::new();
         signed_in(&mut state, alice);
-        let (channel_id, _active) = open_channel(&mut state);
+        let (channel_id, active) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         let members: Vec<MemberInfo> = (0..=ambre_murmure::CONFIRM_CHANNEL_PAST)
             .map(|_| member(UserId::new()))
@@ -3924,23 +3952,53 @@ mod tests {
         }];
 
         command(&mut state, channel_id, send("@channel", all.clone()));
+        let draft = MessageDraft {
+            text: "@channel".to_owned(),
+            mentions: all.clone(),
+        };
         let asked = MurmureEvent::ConfirmChannelMention {
             members: ambre_murmure::CONFIRM_CHANNEL_PAST + 1,
+            held: HeldSend {
+                draft: draft.clone(),
+                reply: None,
+            },
         };
         assert_eq!(channel_events(&ui), [(channel_id, asked)]);
         assert!(drain(&sync).is_empty(), "nothing leaves unconfirmed");
 
         let confirmed = MurmureCommand::SendMessage {
-            draft: MessageDraft {
-                text: "@channel".to_owned(),
-                mentions: all,
-            },
+            draft: draft.clone(),
             now: NOW,
             confirmed: true,
         };
         command(&mut state, channel_id, confirmed);
         let [summary] = summaries(&sync).try_into().expect("one update");
         assert!(summary.mentions_all);
+        drain(&ui);
+
+        // A reply is held with its thread, so the view sends it back there.
+        let root = state.channels[&channel_id].messages(active).expect("held")[0].id;
+        let reply = MurmureCommand::Reply {
+            root,
+            draft: draft.clone(),
+            also_in_channel: true,
+            now: NOW,
+            confirmed: false,
+        };
+        command(&mut state, channel_id, reply);
+        let held = HeldSend {
+            draft,
+            reply: Some(HeldReply {
+                root,
+                also_in_channel: true,
+            }),
+        };
+        let asked = MurmureEvent::ConfirmChannelMention {
+            members: ambre_murmure::CONFIRM_CHANNEL_PAST + 1,
+            held,
+        };
+        assert_eq!(channel_events(&ui), [(channel_id, asked)]);
+        assert!(drain(&sync).is_empty(), "no reply leaves unconfirmed");
     }
 
     // --- The close of a full segment ---

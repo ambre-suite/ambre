@@ -112,8 +112,8 @@ pub enum Screened {
     Send(MessageDraft),
     /// The draft mentions the channel, which holds this many members, past
     /// [`CONFIRM_CHANNEL_PAST`]. Nothing is sent before the author confirms
-    /// (`MURMURE-231`).
-    Confirm { members: usize },
+    /// (`MURMURE-231`). The draft comes back to be held.
+    Confirm { members: usize, draft: MessageDraft },
 }
 
 /// Screen `draft` against `members`, the users of its channel. `None` before
@@ -132,6 +132,7 @@ pub fn screen(draft: MessageDraft, members: Option<&[UserId]>, confirmed: bool) 
     if all && !confirmed && members.len() > CONFIRM_CHANNEL_PAST {
         return Screened::Confirm {
             members: members.len(),
+            draft,
         };
     }
     Screened::Send(draft)

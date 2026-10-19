@@ -12,9 +12,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::commands::{
-    COMMANDS, KEYS, KeyPlace, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY, PALETTE,
-    PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, SEARCH, key_list, message_action,
-    message_actions,
+    AskedAll, COMMANDS, KEYS, KeyPlace, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY,
+    PALETTE, PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, SEARCH, asked_all_title, key_list,
+    message_action, message_actions,
 };
 use crate::mention_list::MentionList;
 use crate::{
@@ -363,6 +363,12 @@ pub struct MurmureRelay {
     pub editing: RwSignal<Option<PendingEdit>>,
     /// The list of keys shows (`MURMURE-540`).
     pub keys: RwSignal<bool>,
+    /// The `@channel` the dialog asks the author about (`MURMURE-557`).
+    /// `None` once sent or cancelled.
+    pub asking_all: RwSignal<Option<AskedAll>>,
+    /// The send the author cancelled, until its region takes the draft back
+    /// (`MURMURE-558`).
+    returned: RwSignal<Option<AskedAll>>,
 }
 
 /// The search box: whether it is open, the query typed, and the last answer
@@ -449,6 +455,8 @@ impl MurmureRelay {
             target: RwSignal::new(None),
             deleting: RwSignal::new(None),
             editing: RwSignal::new(None),
+            asking_all: RwSignal::new(None),
+            returned: RwSignal::new(None),
             keys: RwSignal::new(false),
         }
     }
@@ -487,6 +495,34 @@ impl MurmureRelay {
         let pending = self.deleting.get_untracked()?;
         self.deleting.set(None);
         Some(pending.command(now))
+    }
+
+    /// The send the author confirmed, stamped `now`, and the dialog closed
+    /// (`MURMURE-557`). `None` with none asked.
+    pub fn confirm_all(&self, now: Timestamp) -> Option<LogicCommand> {
+        let asked = self.asking_all.get_untracked()?;
+        self.asking_all.set(None);
+        Some(asked.command(now))
+    }
+
+    /// The author cancelled the send: the dialog closes, and the draft waits
+    /// for its region to take it back (`MURMURE-558`).
+    pub fn cancel_all(&self) {
+        if let Some(asked) = self.asking_all.get_untracked() {
+            self.asking_all.set(None);
+            self.returned.set(Some(asked));
+        }
+    }
+
+    /// The cancelled send, which one region takes once: the thread's region
+    /// a reply, the channel's region a message (`MURMURE-558`).
+    pub fn take_returned(&self, in_thread: bool) -> Option<AskedAll> {
+        let asked = self.returned.get_untracked()?;
+        if asked.in_thread() != in_thread {
+            return None;
+        }
+        self.returned.set(None);
+        Some(asked)
     }
 
     /// The edit the member asked for, which one region takes once
@@ -771,6 +807,17 @@ impl MurmureRelay {
                 self.channel_members.update(|m| {
                     m.insert(*channel_id, listed);
                 });
+                Vec::new()
+            }
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::ConfirmChannelMention { members, held },
+            } => {
+                self.asking_all.set(Some(AskedAll {
+                    channel: *channel_id,
+                    members: *members,
+                    held: held.clone(),
+                }));
                 Vec::new()
             }
             UiEvent::Channel {
@@ -1331,6 +1378,50 @@ pub fn DeleteConfirm(
                 <button class="murmure-delete-cancel" on:click=move |_| cancel()>"Cancel"</button>
                 <button class="ambre-btn-danger murmure-delete-confirm" on:click=confirm>
                     "Delete"
+                </button>
+            </div>
+        </ambre_chrome::Dialog>
+    }
+}
+
+/// The dialog an `@channel` past the member threshold opens (`MURMURE-557`).
+/// Nothing leaves before Send. Cancel, Escape and the backdrop give the
+/// draft back to its composer (`MURMURE-558`). `now` stamps the send.
+#[component]
+pub fn ChannelMentionConfirm(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    now: Callback<(), Timestamp>,
+) -> impl IntoView {
+    let open = RwSignal::new(false);
+    Effect::new(move |_| open.set(relay.asking_all.with(Option::is_some)));
+    let title = move || {
+        relay
+            .asking_all
+            .with(|asked| asked.as_ref().map(|a| asked_all_title(a.members)))
+    };
+    let confirm = move |_| {
+        if let Some(command) = relay.confirm_all(now.run(())) {
+            send.run(command);
+        }
+    };
+    view! {
+        <ambre_chrome::Dialog
+            open=open
+            on_close=Callback::new(move |()| relay.cancel_all())
+            class="murmure-all"
+            label="Mention the whole channel"
+        >
+            <h2>{title}</h2>
+            <p>"Each member of the channel is notified of this message."</p>
+            // Cancel comes first, so the focus the dialog opens on notifies
+            // nobody.
+            <div class="ambre-dialog-actions">
+                <button class="murmure-all-cancel" on:click=move |_| relay.cancel_all()>
+                    "Cancel"
+                </button>
+                <button class="ambre-btn-primary murmure-all-confirm" on:click=confirm>
+                    "Send"
                 </button>
             </div>
         </ambre_chrome::Dialog>

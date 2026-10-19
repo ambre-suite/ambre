@@ -202,6 +202,23 @@ pub struct MessageDraft {
     pub mentions: Vec<Mention>,
 }
 
+/// A send the Logic thread holds until its author confirms the `@channel`
+/// in it (`MURMURE-231`). The view sends it again, or gives the draft back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldSend {
+    pub draft: MessageDraft,
+    /// The thread a reply goes to, `None` for a message of the channel.
+    pub reply: Option<HeldReply>,
+}
+
+/// The thread of a held reply.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldReply {
+    pub root: MessageId,
+    /// The reply also goes to the channel (`MURMURE-109`).
+    pub also_in_channel: bool,
+}
+
 /// A command for an open channel, UI thread -> Logic thread.
 ///
 /// Carried by [`LogicCommand::Channel`](crate::LogicCommand::Channel). The
@@ -505,9 +522,9 @@ pub enum MurmureEvent {
     /// the composer offers them alone. Sent at the open and on every change.
     Members { members: Vec<crate::MemberInfo> },
     /// The draft mentions the whole channel, which holds `members` members.
-    /// Nothing was sent: the view asks the author, then sends it again
+    /// Nothing was sent: the view asks the author, then sends `held` again
     /// confirmed (`MURMURE-231`).
-    ConfirmChannelMention { members: usize },
+    ConfirmChannelMention { members: usize, held: HeldSend },
     /// A member reported the snapshot of `segment` as false, and the relay
     /// dropped it. The view names its author and the reporter; `None` for a
     /// key no member holds any more (`MURMURE-239`).

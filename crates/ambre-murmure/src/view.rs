@@ -26,7 +26,7 @@ use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::{
-    EDIT, FromThread, MessageAction, MessageTarget, PendingEdit, message_action,
+    AskedAll, EDIT, FromThread, MessageAction, MessageTarget, PendingEdit, message_action,
 };
 use crate::composer::{Composer, DraftOf, EDITING_LINE, also_said, typing_line};
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
@@ -80,6 +80,10 @@ pub struct PageReads {
     /// Take the entry a click picked in the `@` list. Given `true`, it takes
     /// a pick in the thread's list alone (`MURMURE-555`).
     pub take_pick: Rc<dyn Fn(bool) -> Option<usize>>,
+    /// Take the send its author cancelled at the `@channel` question, which
+    /// the composer gets back. Given `true`, it takes a reply alone
+    /// (`MURMURE-558`).
+    pub take_returned: Rc<dyn Fn(bool) -> Option<AskedAll>>,
 }
 
 /// The id of the content canvas, which the channel's region paints. The
@@ -808,6 +812,19 @@ impl MurmureView {
             self.typed();
             self.dirty = true;
         }
+        // A cancelled `@channel` gives its draft back, mentions and all
+        // (`MURMURE-558`).
+        if let Some(asked) = (self.reads.take_returned)(self.region == Region::Thread) {
+            let of = match &asked.held.reply {
+                Some(reply) => DraftOf::Thread(asked.channel, reply.root),
+                None => DraftOf::Channel(asked.channel),
+            };
+            let also = asked.held.reply.as_ref().is_some_and(|r| r.also_in_channel);
+            if self.composer.restore(of, asked.held.draft, also) {
+                self.reads.pipe.focus();
+                self.dirty = true;
+            }
+        }
         let dirty = std::mem::take(&mut self.dirty);
         RepaintPlan {
             content: if dirty {
@@ -1384,7 +1401,10 @@ mod tests {
     use std::cell::Cell;
 
     use ambre_bus::conduit::local;
-    use ambre_bus::{ChannelId, MentionTarget, MessageView, MurmureEvent, Unreadable};
+    use ambre_bus::{
+        ChannelId, HeldReply, HeldSend, Mention, MentionTarget, MessageView, MurmureEvent,
+        Unreadable,
+    };
     use ambre_canvas::theme::{FONT_UI, SPACE_2, SPACE_4, SPACE_8};
     use ambre_draw::kinetic::LONG_PRESS_MS;
     use ambre_draw::testing::RecordingSurface;
@@ -1415,6 +1435,8 @@ mod tests {
         lists: Rc<RefCell<Vec<Listed>>>,
         /// The entry a click picked, for the region it names.
         picked: Rc<Cell<Option<(bool, usize)>>>,
+        /// The send a cancelled `@channel` question gives back.
+        returned: Rc<RefCell<Option<AskedAll>>>,
     }
 
     /// An `@` list the view handed the page, and whether the thread's region
@@ -1443,6 +1465,8 @@ mod tests {
         let shown_lists = Rc::clone(&lists);
         let picked = Rc::new(Cell::new(None::<(bool, usize)>));
         let pick = Rc::clone(&picked);
+        let returned = Rc::new(RefCell::new(None::<AskedAll>));
+        let given = Rc::clone(&returned);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| Some("Ada".to_owned())),
@@ -1473,6 +1497,14 @@ mod tests {
                 }
                 _ => None,
             }),
+            take_returned: Rc::new(move |in_thread| {
+                let mut given = given.borrow_mut();
+                if given.as_ref()?.in_thread() == in_thread {
+                    given.take()
+                } else {
+                    None
+                }
+            }),
         };
         let size = (300.0, 400.0);
         let view = MurmureView::new(
@@ -1495,6 +1527,7 @@ mod tests {
             members,
             lists,
             picked,
+            returned,
         }
     }
 
@@ -3990,5 +4023,76 @@ mod tests {
         );
         assert_eq!(listed(&page), None, "the pick closed the list");
         assert!(page.view.composer().focused());
+    }
+
+    /// A cancelled `@channel` gives the channel's composer its draft back,
+    /// mentions and all, so the next Enter sends it whole. A draft typed
+    /// since stays (`MURMURE-558`).
+    #[test]
+    fn a_cancelled_at_channel_gives_its_draft_back() {
+        let channel = ChannelId::new();
+        let (mut page, bob, _) = mentioning(channel);
+        let draft = ambre_bus::MessageDraft {
+            text: "@channel @Bob hi".to_owned(),
+            mentions: vec![
+                Mention {
+                    target: MentionTarget::Channel,
+                    range: 0..8,
+                },
+                Mention {
+                    target: MentionTarget::User(bob),
+                    range: 9..13,
+                },
+            ],
+        };
+        let asked = AskedAll {
+            channel,
+            members: 12,
+            held: HeldSend {
+                draft: draft.clone(),
+                reply: None,
+            },
+        };
+        // A draft typed since keeps its place.
+        type_text(&mut page, "later");
+        *page.returned.borrow_mut() = Some(asked.clone());
+        frame_with_fonts(&mut page.view);
+        assert!(page.returned.borrow().is_none(), "taken once");
+        assert_eq!(
+            page.view.composer().draft(channel).as_deref(),
+            Some("later")
+        );
+        // An empty composer takes it back.
+        for _ in 0.."later".len() {
+            key(&mut page, "Backspace", false, 0.0);
+        }
+        frame_with_fonts(&mut page.view);
+        // A reply's return waits for the thread's region.
+        let reply = AskedAll {
+            held: HeldSend {
+                reply: Some(HeldReply {
+                    root: MessageId::new(),
+                    also_in_channel: false,
+                }),
+                ..asked.held.clone()
+            },
+            ..asked.clone()
+        };
+        *page.returned.borrow_mut() = Some(reply);
+        frame_with_fonts(&mut page.view);
+        assert!(
+            page.returned.borrow().is_some(),
+            "the thread's return waits"
+        );
+        *page.returned.borrow_mut() = Some(asked);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(
+            page.view.composer().draft(channel).as_deref(),
+            Some(draft.text.as_str())
+        );
+        assert!(page.view.composer().focused());
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(drafts_sent(&page), vec![draft]);
     }
 }

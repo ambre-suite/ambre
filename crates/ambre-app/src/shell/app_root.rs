@@ -10,8 +10,8 @@ use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
-    ChannelHeader, ChannelList, DeleteConfirm, InviteControl, KeyList, MemberList, MentionPanel,
-    MessageSearch, MurmureRelay,
+    ChannelHeader, ChannelList, ChannelMentionConfirm, DeleteConfirm, InviteControl, KeyList,
+    MemberList, MentionPanel, MessageSearch, MurmureRelay,
 };
 
 /// The table the command palette searches: the booted application's whole
@@ -67,6 +67,11 @@ pub(crate) fn MurmureShell(
         </AppShell>
         // The view stamps the deletion: the Logic thread reads no clock.
         <DeleteConfirm
+            relay=relay
+            send=send
+            now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))
+        />
+        <ChannelMentionConfirm
             relay=relay
             send=send
             now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))

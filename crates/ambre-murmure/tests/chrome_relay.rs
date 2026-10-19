@@ -15,15 +15,16 @@
 
 use ambre_bus::{
     CatalogueEntry, ChannelActivity, ChannelMatches, ChannelName, ChannelPlace, DirectMessageEvent,
-    LogicCommand, MemberChannel, MemberInfo, MemberStanding, MemberView, MessageAt, MessageView,
-    MurmureCommand, MurmureEvent, Presence, RequestId, RestCommand, RestEvent, Role, SearchMatch,
-    SpaceEvent, Timestamp, UiEvent,
+    HeldReply, HeldSend, LogicCommand, MemberChannel, MemberInfo, MemberStanding, MemberView,
+    MessageAt, MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence, RequestId,
+    RestCommand, RestEvent, Role, SearchMatch, SpaceEvent, Timestamp, UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId};
 use ambre_murmure::chrome::{
-    DeleteConfirm, KeyList, MentionPanel, MurmureHandler, MurmureRelay, SearchBox, coverage,
+    ChannelMentionConfirm, DeleteConfirm, KeyList, MentionPanel, MurmureHandler, MurmureRelay,
+    SearchBox, coverage,
 };
 use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
@@ -1275,5 +1276,96 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
     relay.show_mentions(false, None);
     leptos::task::tick().await;
     assert!(root.query_selector("[role=listbox]").unwrap().is_none());
+    root.remove();
+}
+
+/// The `@channel` question names the members it notifies and sends nothing
+/// before Send (`MURMURE-559`). Send sends the held draft once, confirmed
+/// (`MURMURE-557`). Cancel hands it to its region alone (`MURMURE-558`).
+#[wasm_bindgen_test]
+async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
+    use wasm_bindgen::JsCast;
+    let (_owner, relay, direct) = shown_direct();
+    let sent = RwSignal::new(Vec::<LogicCommand>::new());
+    let send = Callback::new(move |command| sent.update(|all| all.push(command)));
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let now = Timestamp(1_700_000_000_000);
+    let _handle = leptos::mount::mount_to(mount, move || {
+        view! { <ChannelMentionConfirm relay=relay send=send now=Callback::new(move |()| now) /> }
+    });
+    let dialog: web_sys::HtmlDialogElement = root
+        .query_selector("dialog")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    let click = |class: &str| {
+        let selector = format!(".{class}");
+        let button = root.query_selector(&selector).unwrap().unwrap();
+        button.dyn_into::<web_sys::HtmlElement>().unwrap().click();
+    };
+    let draft = MessageDraft {
+        text: "@channel hi".to_owned(),
+        mentions: Vec::new(),
+    };
+    let ask = |reply: Option<HeldReply>| UiEvent::Channel {
+        channel_id: direct,
+        event: MurmureEvent::ConfirmChannelMention {
+            members: 12,
+            held: HeldSend {
+                draft: draft.clone(),
+                reply,
+            },
+        },
+    };
+
+    // A reply asks, and Cancel gives it to the thread's region alone.
+    let root_id = MessageId::new();
+    relay.absorb(&ask(Some(HeldReply {
+        root: root_id,
+        also_in_channel: true,
+    })));
+    leptos::task::tick().await;
+    assert!(dialog.open(), "the question opens");
+    let title = root.query_selector("h2").unwrap().unwrap().text_content();
+    assert_eq!(
+        title.as_deref(),
+        Some("Notify all 12 members of this channel?")
+    );
+    assert!(sent.get_untracked().is_empty(), "nothing sent before Send");
+    click("murmure-all-cancel");
+    leptos::task::tick().await;
+    assert!(!dialog.open());
+    assert!(sent.get_untracked().is_empty(), "a cancel sends nothing");
+    assert_eq!(
+        relay.take_returned(false),
+        None,
+        "the channel takes no reply"
+    );
+    let back = relay.take_returned(true).expect("the thread takes it");
+    assert_eq!(back.held.draft, draft);
+    assert_eq!(relay.take_returned(true), None, "taken once");
+
+    // A message asks, and Send sends it once, confirmed.
+    relay.absorb(&ask(None));
+    leptos::task::tick().await;
+    assert!(dialog.open());
+    click("murmure-all-confirm");
+    leptos::task::tick().await;
+    assert!(!dialog.open());
+    assert!(matches!(
+        &sent.get_untracked()[..],
+        [LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::SendMessage { draft: d, now: t, confirmed: true },
+        }] if *channel_id == direct && *d == draft && *t == now
+    ));
+    assert_eq!(
+        relay.take_returned(false),
+        None,
+        "a send gives nothing back"
+    );
     root.remove();
 }
