@@ -116,12 +116,40 @@ fn a_root_found_opens_its_thread_in_the_channel_shown() {
     );
 }
 
+/// The text of each toast the Murmure notices raise for `events`, in the
+/// order the host draws them.
+fn toasts_for(events: &[UiEvent]) -> Vec<String> {
+    use wasm_bindgen::JsCast;
+
+    let toasts = ambre_chrome::Toasts::new();
+    for event in events {
+        ambre_murmure::chrome::notify_event(&toasts, event);
+    }
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let handle = leptos::mount::mount_to(
+        mount,
+        move || view! { <ambre_chrome::ToastHost toasts=toasts /> },
+    );
+    let shown = root.query_selector_all(".ambre-toast").unwrap();
+    let texts = (0..shown.length())
+        .map(|i| {
+            shown
+                .item(i)
+                .and_then(|t| t.text_content())
+                .unwrap_or_default()
+        })
+        .collect();
+    drop(handle);
+    root.remove();
+    texts
+}
+
 /// A root the seek could not reach reaches the user as a toast, and moves
 /// no pane (`MURMURE-548`).
 #[wasm_bindgen_test]
 fn a_root_lost_tells_the_user_the_thread_cannot_open() {
-    use wasm_bindgen::JsCast;
-
     let (_owner, relay, direct) = shown_direct();
     let lost = UiEvent::Channel {
         channel_id: direct,
@@ -131,30 +159,44 @@ fn a_root_lost_tells_the_user_the_thread_cannot_open() {
     };
     assert!(relay.absorb(&lost).is_empty());
     assert_eq!(relay.pane.get_untracked(), MurmurePane::channel(direct));
-    let toasts = ambre_chrome::Toasts::new();
-    ambre_murmure::chrome::notify_event(&toasts, &lost);
-    ambre_murmure::chrome::notify_event(
-        &toasts,
-        &UiEvent::Channel {
-            channel_id: direct,
-            event: MurmureEvent::Left,
+    let left = UiEvent::Channel {
+        channel_id: direct,
+        event: MurmureEvent::Left,
+    };
+    let texts = toasts_for(&[lost, left]);
+    assert_eq!(texts.len(), 1, "only the lost root is told: {texts:?}");
+    assert!(
+        texts[0].contains(ambre_murmure::chrome::ROOT_LOST),
+        "{texts:?}"
+    );
+}
+
+/// A channel that could not open is told, the pane goes back to the channel
+/// list, and the sidebar keeps it. The next selection opens it anew
+/// (`MURMURE-549`).
+#[wasm_bindgen_test]
+fn a_channel_that_cannot_open_is_told_and_opens_anew() {
+    let (_owner, relay, direct) = shown_direct();
+    let failed = UiEvent::Channel {
+        channel_id: direct,
+        event: MurmureEvent::OpenFailed {
+            message: "the relay refused it".to_owned(),
         },
+    };
+    assert!(relay.absorb(&failed).is_empty());
+    assert_eq!(relay.pane.get_untracked(), MurmurePane::ChannelList);
+    assert!(relay.sidebar.with_untracked(|s| s.is_member(direct)));
+    assert!(
+        matches!(relay.select(direct), Some(LogicCommand::OpenChannel { channel_id }) if channel_id == direct),
+        "the channel opens anew"
     );
-    let root = document().create_element("div").unwrap();
-    document().body().unwrap().append_child(&root).unwrap();
-    let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
-    let _handle = leptos::mount::mount_to(
-        mount,
-        move || view! { <ambre_chrome::ToastHost toasts=toasts /> },
+    let texts = toasts_for(&[failed]);
+    assert_eq!(texts.len(), 1, "{texts:?}");
+    assert!(
+        texts[0].contains(ambre_murmure::chrome::CHANNEL_NOT_OPENED),
+        "{texts:?}"
     );
-    let shown = root.query_selector_all(".ambre-toast").unwrap();
-    assert_eq!(shown.length(), 1, "only the lost root is told");
-    let text = shown
-        .item(0)
-        .and_then(|t| t.text_content())
-        .unwrap_or_default();
-    assert!(text.contains(ambre_murmure::chrome::ROOT_LOST), "{text}");
-    root.remove();
+    assert!(!texts[0].contains("refused"), "the cause stays out of it");
 }
 
 /// The name an open channel learns is the one its header reads

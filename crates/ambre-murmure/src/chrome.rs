@@ -36,15 +36,21 @@ use leptos::prelude::*;
 /// again starts a fresh seek (the Murmure threads spec).
 pub const ROOT_LOST: &str = "This thread cannot open: its first message could not be loaded.";
 
-/// Surface a root the seek could not reach as a toast (the Murmure threads
-/// spec). The launcher names no Murmure variant. A no-op for every other event.
+/// What the user reads when a channel could not open. The cause stays in the
+/// log, where Logic wrote it (`MURMURE-549`).
+pub const CHANNEL_NOT_OPENED: &str = "This channel could not open. Select it again to retry.";
+
+/// Surface a root the seek could not reach, and a channel that could not
+/// open, as a toast (the Murmure threads spec, `MURMURE-549`). The launcher
+/// names no Murmure variant. A no-op for every other event.
 pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
-    if let UiEvent::Channel {
-        event: MurmureEvent::RootLost { .. },
-        ..
-    } = ev
-    {
-        toasts.warning(ROOT_LOST);
+    let UiEvent::Channel { event, .. } = ev else {
+        return;
+    };
+    match event {
+        MurmureEvent::RootLost { .. } => toasts.warning(ROOT_LOST),
+        MurmureEvent::OpenFailed { .. } => toasts.warning(CHANNEL_NOT_OPENED),
+        _ => {}
     }
 }
 
@@ -770,6 +776,15 @@ impl MurmureRelay {
                         },
                     });
                 }
+                Vec::new()
+            }
+            // A channel that could not open stays in the sidebar, and the next
+            // selection opens it anew (`MURMURE-549`).
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::OpenFailed { .. },
+            } => {
+                self.drop_channels(&[*channel_id]);
                 Vec::new()
             }
             // A channel the user lost while it was open (`MURMURE-489`).
