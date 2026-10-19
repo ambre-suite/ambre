@@ -29,6 +29,8 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-004` | `INV` | A document not held in memory MUST cost only a light subscription: its key, its counters and its cursor. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_sync::light::tests::an_evicted_document_costs_only_a_light_subscription` -- it releases a document, finds its full session gone, and bounds the entry left by the budget row | none | verified |
 | `RESID-005` | `INV` | The activity counters of a document not held in memory MUST come from the activity summaries alone. | this spec section 3; `SYNC-113` | `ambre_sync::light::tests::a_light_update_moves_its_counters_from_the_summary` -- the counters it reads back are the ones the sealed summaries name | none | verified |
 | `RESID-020` | `INV` | The local store MUST be requested from the browser as persistent storage. | this spec section 3; `ambre-spec-launcher.md` | `ambre_belt::store::tests::the_local_store_is_asked_to_persist` -- browser tier: the store reads best-effort before the permission, and persistent once a document opens after it | none | verified |
+| `RESID-025` | `INV` | Every row of the local store, a document copy and a draft alike, MUST be sealed under a key the device never stores. | this spec section 3; `ambre-spec-zero-knowledge.md`, `ZK-002`; `MURMURE-211` | not built | unbuilt -- lands with the `The local store sealed at rest` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `RESID-026` | `INV` | The key that seals the local store MUST NOT reach the UI thread. | this spec section 3; `ambre-spec-launcher.md`, `CHROME-044` | not built | unbuilt -- lands with the `The local store sealed at rest` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Evict a document
 
@@ -70,12 +72,20 @@ The browser can refuse a write before the local store reaches its own budget.
 | `RESID-018` | `FAIL` | Given a change the relay has not acknowledged that the browser still refuses to store, the client MUST stop taking local edits and warn the user until the change is sent or space frees. | this spec section 3 | `ambre_logic::residency::tests::a_full_store_pauses_editing_until_the_change_is_safe` -- one warning, an edit refused, then taken again once space frees or the relay acknowledges | none | verified |
 | `RESID-019` | `FRAME` | Meeting the quota MUST NOT evict a change the relay has not acknowledged. | this spec section 3; `RESID-009` | `ambre_core::residency::tests::an_unsent_change_keeps_its_document`; `ambre_logic::store_ledger::tests::a_shown_or_unsent_copy_never_leaves` -- past the budget and under the quota alike; `ambre_sync::light::tests::a_release_waits_for_the_echo_of_every_frame_sent` -- the acknowledgement reaches the Logic thread only after the echo | none | verified |
 
+### 1.6 Read back a sealed row
+
+A row sealed under one session may meet another.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `RESID-027` | `FAIL` | Given a row that fails to open under the session's key, the client MUST drop it and treat its document as having no local copy. | this spec section 3; `RESID-012` | not built | unbuilt -- lands with the `The local store sealed at rest` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** three rows of `ambre-spec-budgets.md section 6`: the documents in memory, the local
   store, and one light subscription. All three wait on a measure.
 * **Boundary.** the summary rides inside the ciphertext (`SYNC-113`), so the relay learns nothing
   of it. The local store stays on the device, owned by the launcher (`ambre-spec-launcher.md`).
-* **Verification.** 24 `verified`, by host tests on the Logic, Sync and ledger states. The browser
-  tier holds the quota refusal and the persistent storage request.
+* **Verification.** 24 `verified`, 3 `unimplemented`, by host tests on the Logic, Sync and ledger
+  states. The browser tier holds the quota refusal and the persistent storage request.
 
 ---
 
@@ -156,6 +166,10 @@ subscription, and the open fetches the whole document (`RESID-012`).
 tells it which document a view shows and when the relay holds every change. Any write marks its
 document unsent, and only that acknowledgement clears it. One row per document keeps its bytes,
 its last view and its flags, so a reload restores the order (`RESID-008`).
+
+**At rest.** The store holds its rows in plaintext today. Each row is to be sealed under a key
+derived from the session's keys and never written down (`RESID-025`). The Main thread then moves
+sealed bytes it cannot read (`RESID-026`). A row that fails to open is a missing copy (`RESID-027`).
 
 **Code.** `ambre_core::activity` holds the summary and the counters. `ambre_sync::light` holds the
 light subscription, and `ambre_logic::residency` the close and the reopen. `ambre_core::residency`

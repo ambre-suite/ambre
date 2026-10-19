@@ -84,6 +84,15 @@ The provider says who the person is; a passphrase opens their keys, or a setup c
 | `CHROME-098` | `POST` | An account that owes its key setup MUST be shown the setup, never an error, whether the sign-in or a later refusal reveals it. | this spec section 2; `ambre-spec-sync.md`, `SYNC-134` | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `CHROME-100` | `FRAME` | A passphrase typed on this screen MUST NOT outlive its submission on the UI thread. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-010` | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
 
+### 1.7 Sign out
+
+The session ends where it was opened: on this screen.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-107` | `POST` | A sign-out control MUST end the session on the live threads and show the sign-in panel. | this spec section 3; `ambre-spec-session.md`, `SRV-026`; `ambre-spec-sync.md`, `SYNC-066` | not built | unbuilt -- lands with the `Signing out from the screen` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CHROME-108` | `FRAME` | A sign-out MUST leave nothing of the session it ended on screen: no list, no open document, no draft. | this spec section 3; `MURMURE-216` | not built | unbuilt -- lands with the `Signing out from the screen` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** none of its own: the list is a handful of rows of DOM and `ambre-spec-budgets.md`
   budgets no chrome operation. The frame the home screen does not draw is a saving, charged to
   `ambre-spec-frame.md`.
@@ -91,7 +100,7 @@ The provider says who the person is; a passphrase opens their keys, or a setup c
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
   unauthenticated same-origin read of the sign-in configuration, keeps the sign-in's own state and
   owns the local store. Each is an exception `UI-THREAD-004` names.
-* **Verification.** 21 `verified`, 4 `unimplemented`. What holds is what a pure function or one
+* **Verification.** 21 `verified`, 6 `unimplemented`. What holds is what a pure function or one
   mounted control carries, and what a scan of the source refuses. Creation is held by the gate that
   keeps the named command off the page. A composed name is held by its type, which converts to no
   `String` (`CHROME-080`).
@@ -203,6 +212,7 @@ monograms, their generic labels and the creatable list. The style is `crates/amb
 | a return this tab did not start | it is dropped, its address cleared, and the sign-in panel shows again (`CHROME-101`) |
 | a provider account holds its keys | a passphrase field opens them, then the list appears (`CHROME-097`) |
 | a provider account owes its keys, or the relay refuses it for that later | the setup: a passphrase, then the recovery words, shown once (`CHROME-098`, `CHROME-099`) |
+| the sign-out control | the session ends, and the sign-in panel shows over nothing of it (`CHROME-107`, `CHROME-108`) |
 | the list is empty | a placeholder invites creating one, rather than a bare empty list |
 | a card is clicked | the document opens, in place or after a reload depending on its kind |
 | the kind picker is opened | one entry per creatable kind, each under its generic label |
