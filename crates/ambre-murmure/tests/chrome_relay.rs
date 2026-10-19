@@ -622,6 +622,32 @@ fn the_invite_control_offers_no_member_of_the_channel() {
     assert_eq!(offered(), [bob, carol], "the list left with the channel");
 }
 
+/// Let the effects an action scheduled run before the DOM is read. A dialog
+/// opens and closes two effects away from its cause (the relay field, then
+/// the `open` signal), and a single `tick` may land between them.
+async fn settle() {
+    for _ in 0..2 {
+        let wait = js_sys::Promise::new(&mut |resolve, _| {
+            let _ = web_sys::window()
+                .unwrap()
+                .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 0);
+        });
+        wasm_bindgen_futures::JsFuture::from(wait).await.unwrap();
+    }
+}
+
+/// The next native `close` of `dialog`. Listen before the click that closes
+/// it: the event is a task of its own, and a `settle` may run before it, so
+/// the next question would open under a stale close that cancels it.
+fn next_close(dialog: &web_sys::HtmlDialogElement) -> wasm_bindgen_futures::JsFuture {
+    let closed = js_sys::Promise::new(&mut |resolve, _| {
+        dialog
+            .add_event_listener_with_callback("close", &resolve)
+            .unwrap();
+    });
+    wasm_bindgen_futures::JsFuture::from(closed)
+}
+
 /// The commands a handler sent through its sink.
 fn handler(relay: MurmureRelay) -> (MurmureHandler, RwSignal<Vec<LogicCommand>>) {
     let sent = RwSignal::new(Vec::new());
@@ -894,40 +920,38 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
     };
 
     assert!(handler.on_command(DELETE).is_empty());
-    leptos::task::tick().await;
+    settle().await;
     assert!(dialog.open(), "the action asks first");
     assert_eq!(relay.target.get_untracked(), None, "the menu closed");
     assert!(
         sent.get_untracked().is_empty(),
         "nothing sent before Delete"
     );
+    let closed = next_close(&dialog);
     click("murmure-delete-cancel");
-    leptos::task::tick().await;
+    closed.await.unwrap();
     assert!(!dialog.open());
     assert_eq!(relay.deleting.get_untracked(), None);
     assert!(sent.get_untracked().is_empty(), "a cancel sends nothing");
 
     relay.target.set(Some(target.clone()));
     handler.on_command(DELETE);
-    leptos::task::tick().await;
+    settle().await;
     assert!(dialog.open());
     // Escape closes the dialog natively, as this close does. Its event is
     // queued as a task, after the close returns.
-    let closed = js_sys::Promise::new(&mut |resolve, _| {
-        dialog
-            .add_event_listener_with_callback("close", &resolve)
-            .unwrap();
-    });
+    let closed = next_close(&dialog);
     dialog.close();
-    wasm_bindgen_futures::JsFuture::from(closed).await.unwrap();
+    closed.await.unwrap();
     assert_eq!(relay.deleting.get_untracked(), None, "a close cancels");
     assert!(sent.get_untracked().is_empty(), "a close sends nothing");
 
     relay.target.set(Some(target));
     handler.on_command(DELETE);
-    leptos::task::tick().await;
+    settle().await;
+    let closed = next_close(&dialog);
     click("murmure-delete-confirm");
-    leptos::task::tick().await;
+    closed.await.unwrap();
     assert!(!dialog.open());
     let at = MessageAt::Segment(segment);
     assert!(matches!(
@@ -1393,7 +1417,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
         root: root_id,
         also_in_channel: true,
     })));
-    leptos::task::tick().await;
+    settle().await;
     assert!(dialog.open(), "the question opens");
     let title = root.query_selector("h2").unwrap().unwrap().text_content();
     assert_eq!(
@@ -1401,8 +1425,9 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
         Some("Notify all 12 members of this channel?")
     );
     assert!(sent.get_untracked().is_empty(), "nothing sent before Send");
+    let closed = next_close(&dialog);
     click("murmure-all-cancel");
-    leptos::task::tick().await;
+    closed.await.unwrap();
     assert!(!dialog.open());
     assert!(sent.get_untracked().is_empty(), "a cancel sends nothing");
     assert_eq!(
@@ -1416,10 +1441,11 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
 
     // A message asks, and Send sends it once, confirmed.
     relay.absorb(&ask(None));
-    leptos::task::tick().await;
+    settle().await;
     assert!(dialog.open());
+    let closed = next_close(&dialog);
     click("murmure-all-confirm");
-    leptos::task::tick().await;
+    closed.await.unwrap();
     assert!(!dialog.open());
     assert!(matches!(
         &sent.get_untracked()[..],
