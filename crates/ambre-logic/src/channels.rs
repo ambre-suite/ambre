@@ -661,6 +661,7 @@ impl LogicState {
             self.send_to_ui(UiEvent::NewMessage {
                 channel_id,
                 mention,
+                message: None,
             });
         }
         true
@@ -1795,10 +1796,16 @@ impl LogicState {
             self.emit_count(channel_id);
         }
         if let Some(channel_id) = open {
+            // Taken on every batch, so a message never outlives its own.
+            let message = self
+                .channels
+                .get_mut(&channel_id)
+                .and_then(ChannelState::take_arrived);
             if let Some(mention) = fresh {
                 self.send_to_ui(UiEvent::NewMessage {
                     channel_id,
                     mention,
+                    message,
                 });
             }
             self.follow_close(channel_id);
@@ -2114,7 +2121,8 @@ mod tests {
     /// An open channel reads the news from the summary of each accepted
     /// delta (the Murmure notifications spec). A message of another member
     /// that names the user is a mention. The user's own message, from another device, is
-    /// none, and neither is a delta with no summary.
+    /// none, and neither is a delta with no summary. The news names the
+    /// segment of its message, so a click opens it there.
     #[test]
     fn a_message_of_another_member_is_news_and_names_a_mention() {
         let (mut alice, _, alice_sync) = harness();
@@ -2186,7 +2194,11 @@ mod tests {
                     UiEvent::NewMessage {
                         channel_id: c,
                         mention,
-                    } if c == channel_id => Some(mention),
+                        message,
+                    } if c == channel_id => {
+                        let segment = message.map(|(segment, _)| segment.document_id());
+                        Some((mention, segment == Some(document_id)))
+                    }
                     _ => None,
                 })
                 .collect::<Vec<_>>()
@@ -2200,9 +2212,9 @@ mod tests {
         assert_eq!(bob.news_of(&plain.1), Some(false));
         let (_, mut bare) = plain.clone();
         bare.summary = None;
-        assert_eq!(news(&mut bob, (doc, bare)), Vec::<bool>::new());
-        assert_eq!(news(&mut bob, plain), [false]);
-        assert_eq!(news(&mut bob, named), [true]);
+        assert_eq!(news(&mut bob, (doc, bare)), Vec::<(bool, bool)>::new());
+        assert_eq!(news(&mut bob, plain), [(false, true)]);
+        assert_eq!(news(&mut bob, named), [(true, true)]);
     }
 
     /// An open channel keeps its documents while its view shows it (the
@@ -2281,6 +2293,7 @@ mod tests {
                 UiEvent::NewMessage {
                     channel_id: c,
                     mention: false,
+                    message: None,
                 } if c == channel_id => {
                     news += 1;
                     None
@@ -2321,6 +2334,7 @@ mod tests {
             UiEvent::NewMessage {
                 channel_id: news,
                 mention: true,
+                message: None,
             },
         ] = shown.as_slice()
         else {
@@ -5541,6 +5555,7 @@ mod tests {
                 UiEvent::NewMessage {
                     channel_id: news,
                     mention: true,
+                    ..
                 },
             ] = shown.as_slice()
             else {

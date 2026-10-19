@@ -241,6 +241,9 @@ pub struct ChannelState {
     /// The band of the closing segment the channel opened without, until
     /// the caller takes it (`MURMURE-502`).
     closing_band: Option<MurmureEvent>,
+    /// The last message a remote delta brought to a segment, until the
+    /// caller takes it (`MURMURE-507`).
+    arrived: Option<(SegmentId, MessageId)>,
 }
 
 impl ChannelState {
@@ -409,6 +412,7 @@ impl ChannelState {
             threads: HashMap::new(),
             threads_pending: HashMap::new(),
             closing_band: None,
+            arrived: None,
         }
     }
 
@@ -1420,9 +1424,19 @@ impl ChannelState {
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
         delta::verdict(doc, rules, &update, signer)?;
+        let created = delta::created_messages(&update).pop();
         doc.import_json_updates(update)?;
+        if let (Rules::Segment, Some(message)) = (rules, created) {
+            self.arrived = Some((SegmentId::from_document(document_id), message));
+        }
         let note = move |sequence: &mut Sequence| sequence.note_range(seq, range);
         self.answer(document_id, true, Some(note))
+    }
+
+    /// The last message a remote delta brought to a segment since the last
+    /// call, so a notification opens at it (`MURMURE-507`).
+    pub fn take_arrived(&mut self) -> Option<(SegmentId, MessageId)> {
+        self.arrived.take()
     }
 
     /// What a document answers once a payload is in: `meta` its name, a

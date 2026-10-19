@@ -114,9 +114,12 @@ pub enum UiEvent {
     /// says (the Murmure notifications spec). `mention` holds when the
     /// summary names this user or the channel. The view decides whether it
     /// notifies: it alone knows the direct messages and what is on screen.
+    /// `message` names the message and its segment when the channel is open.
+    /// A closed channel is counted by the relay alone, so it names none.
     NewMessage {
         channel_id: ChannelId,
         mention: bool,
+        message: Option<(crate::SegmentId, crate::MessageId)>,
     },
 
     /// Every channel and every space this user is a member of, whole. It

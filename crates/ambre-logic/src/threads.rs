@@ -218,6 +218,7 @@ impl LogicState {
             self.send_to_ui(UiEvent::NewMessage {
                 channel_id,
                 mention: true,
+                message: None,
             });
         }
         true

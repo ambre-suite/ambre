@@ -39,8 +39,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-507` | `POST` | A click on a notification MUST open its channel at its message. | this spec section 3; `MURMURE-150` | not built | unbuilt -- lands with the `A notification opens its message` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-508` | `FRAME` | A click on a notification MUST NOT move the read cursor of another channel. | this spec section 3 | not built | unbuilt -- lands with the `A notification opens its message` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-507` | `POST` | A click on a notification of an open channel MUST open the channel at its message. | this spec section 3; `MURMURE-150` | `ambre_murmure::channel_tests::a_remote_delta_names_the_message_it_brought_once` -- the engine names the message a remote delta created, once, and none for the user's own; `ambre_logic::channels::tests::a_message_of_another_member_is_news_and_names_a_mention` -- the news names the segment of its message; `ambre_murmure::tests::chrome_relay::a_notice_opens_its_channel_at_its_message` -- browser tier, the notice carries the message and the click rests the list on it, a closed channel's notice on the latest one | none | verified |
+| `MURMURE-508` | `FRAME` | A click on a notification MUST NOT move the read cursor of another channel. | this spec section 3 | `ambre_murmure::tests::chrome_relay::a_notice_asks_nothing_of_another_channel` -- browser tier, the click asks Logic to open its own channel and nothing else | none | verified |
 
 ### 1.4 Set the level of a channel
 
@@ -65,9 +65,9 @@ The relay decides which device to wake, from a copy of the levels and from the m
 * **Boundary.** in an open tab the client decides from the sealed summary (`SYNC-113`), so the
   relay learns nothing. A push is the one path that tells the relay the levels and the members a
   message names, and `ZK-016` bounds it to those.
-* **Verification.** 6 `verified`, 13 `unimplemented`. Logic reads the news off the summaries, a
-  host test. The view decides which news notifies, and the page raises it: two browser-tier tests.
-  The levels and the push are not built.
+* **Verification.** 8 `verified`, 11 `unimplemented`. Logic reads the news off the summaries, a
+  host test. The view decides which news notifies, and the page raises it: browser-tier tests. The
+  levels and the push are not built.
 
 ---
 
@@ -78,6 +78,7 @@ The relay decides which device to wake, from a copy of the levels and from the m
 | mentions Bob | works in another tab | one message | a system notification for Bob (`MURMURE-143`) | `ambre_murmure::tests::chrome_relay::a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not` |
 | writes in a channel without mentioning Bob | works in another tab | one message | a badge, and no notification | `ambre_murmure::tests::chrome_relay::a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not` |
 | mentions Bob | reads that channel | one message | no notification (`MURMURE-146`) | `ambre_murmure::tests::chrome_relay::the_channel_being_read_notifies_nothing_until_the_page_is_hidden` |
+| writes to Bob directly | clicks the notification | one message | Bob's list resting on that message (`MURMURE-507`) | `ambre_murmure::tests::chrome_relay::a_notice_opens_its_channel_at_its_message` |
 
 ---
 
@@ -92,6 +93,11 @@ The relay decides which device to wake, from a copy of the levels and from the m
 3. The view raises a notification for a mention or a direct message, unless that channel is on a
    visible screen.
 4. The text shown is decrypted on the client, never by a server.
+
+**The message a click opens.** An open channel's engine reads the identity of the message a remote
+delta created, from the update itself. The news carries it with its segment, and a click rests the
+list on it (`MURMURE-507`). A closed channel is counted by the relay alone, which never learns a
+message. Its notification names none, and its list opens on the latest message.
 
 A hidden tab gets no animation frame, so a timer runs the relay instead (`CANVAS-075`).
 
@@ -144,8 +150,6 @@ decides in `MurmureRelay::notice` of `ambre-murmure`. The page raises it in `not
   They land with the `Push notifications` Story (`ambre-roadmap.md` E5).
 * **Each channel never opened costs a subscription per live segment.** No ceiling bounds them yet.
   It lands with the `A ceiling on the channels watched unopened` Story (`ambre-roadmap.md` E5).
-* **A click opens the channel, not the message.** The news names no message, so the list rests on
-  the latest one. It lands with the `A notification opens its message` Story (`ambre-roadmap.md` E5).
 * **A long-hidden tab may lag.** A browser may slow the timers of a tab hidden for minutes, which
   delays a notification. The `Wake a hidden tab from the worker` Story (`ambre-roadmap.md` E5)
   owns it.

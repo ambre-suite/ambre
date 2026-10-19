@@ -1072,13 +1072,13 @@ pub fn main() {
     let mut last_perf_push_ms: f64 = 0.0;
     let mut list_requested = false;
     let relay_tx = ui_to_logic_tx.clone();
-    // A click on a notification opens its channel (the Murmure
-    // notifications spec). The permission is asked once per page.
+    // A click on a notification opens its channel at its message (the
+    // Murmure notifications spec). The permission is asked once per page.
     let notice_asked = Rc::new(std::cell::Cell::new(false));
-    let open_noticed: Rc<dyn Fn(ambre_core::ChannelId)> = {
+    let open_noticed: notify::Opener = {
         let tx = ui_to_logic_tx.clone();
-        Rc::new(move |channel| {
-            if let Some(command) = murmure_relay.select(channel) {
+        Rc::new(move |channel, at| {
+            if let Some(command) = murmure_relay.open_at(channel, at) {
                 let _ = tx.try_send(command);
             }
         })

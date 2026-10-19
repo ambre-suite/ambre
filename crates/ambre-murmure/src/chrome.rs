@@ -345,6 +345,9 @@ pub fn coverage(channels: &[ChannelMatches]) -> String {
 pub struct Notice {
     /// The channel a click opens.
     pub channel_id: ChannelId,
+    /// The message a click rests the list on (`MURMURE-507`). A closed
+    /// channel names none, and opens at its latest message.
+    pub at: Option<MessageRef>,
     /// What the notification says.
     pub title: String,
 }
@@ -437,12 +440,16 @@ impl MurmureRelay {
     /// message (`MURMURE-150`).
     pub fn choose_result(&self, channel: ChannelId, at: MessageRef) -> Option<LogicCommand> {
         self.close_search();
+        self.open_at(channel, Some(at))
+    }
+
+    /// Open `channel` as a click on the sidebar opens it, its list resting
+    /// on `at` when the channel shows (`MURMURE-507`). No other channel's
+    /// cursor moves (`MURMURE-508`).
+    pub fn open_at(&self, channel: ChannelId, at: Option<MessageRef>) -> Option<LogicCommand> {
         let command = self.select(channel);
-        if self.pane.get_untracked().shown_channel() == Some(channel) {
-            self.pane.set(MurmurePane::Channel {
-                channel,
-                at: Some(at),
-            });
+        if at.is_some() && self.pane.get_untracked().shown_channel() == Some(channel) {
+            self.pane.set(MurmurePane::Channel { channel, at });
         }
         command
     }
@@ -455,10 +462,12 @@ impl MurmureRelay {
         let UiEvent::NewMessage {
             channel_id,
             mention,
+            message,
         } = *ev
         else {
             return None;
         };
+        let at = message.map(|(segment, message)| MessageRef { segment, message });
         let reading = visible && self.pane.get_untracked().shown_channel() == Some(channel_id);
         if reading {
             return None;
@@ -473,7 +482,11 @@ impl MurmureRelay {
                 (false, true, None) => "You were mentioned".to_owned(),
                 (false, false, _) => return None,
             };
-            Some(Notice { channel_id, title })
+            Some(Notice {
+                channel_id,
+                at,
+                title,
+            })
         })
     }
 

@@ -310,7 +310,7 @@ mod tests {
         assert!(
             matches!(shown.as_slice(), [
                 UiEvent::ChannelActivity { channels },
-                UiEvent::NewMessage { channel_id, mention: false },
+                UiEvent::NewMessage { channel_id, mention: false, message: None },
             ] if *channels == [mark] && *channel_id == channel),
             "got {shown:?}"
         );

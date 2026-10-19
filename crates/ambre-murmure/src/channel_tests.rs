@@ -567,6 +567,29 @@ fn a_sent_delta_brings_a_peer_to_the_same_messages() {
     );
 }
 
+/// A remote delta names the message it brought, once, and an own send
+/// names none (`MURMURE-507`).
+#[test]
+fn a_remote_delta_names_the_message_it_brought_once() {
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
+    let mut bob = peer_of(&alice);
+    let author = UserId::new();
+    let sent = alice.send(&draft("hi bob"), author, NOW).expect("send");
+    assert_eq!(alice.take_arrived(), None, "an own send");
+    bob.apply_signed(
+        sent.segment.document_id(),
+        Seq(1),
+        &sent.delta,
+        signer(&alice, sent.segment, author),
+    )
+    .expect("apply");
+    let id = alice.messages(alice.active_id()).expect("messages")[0].id;
+    assert_eq!(bob.take_arrived(), Some((sent.segment, id)));
+    assert_eq!(bob.take_arrived(), None, "taken");
+}
+
 // --- MURMURE-004, MURMURE-005 ---
 
 #[test]

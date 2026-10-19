@@ -21,11 +21,11 @@ use ambre_bus::{
 use ambre_chrome::{CommandHandler, KeyRoute, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId};
-use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{MurmureHandler, MurmureRelay, SearchBox, coverage};
 use ambre_murmure::commands::{
     COMMANDS, MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, SEARCH,
 };
+use ambre_murmure::{MessageRef, MurmurePane};
 use leptos::prelude::*;
 use wasm_bindgen_test::*;
 
@@ -622,7 +622,77 @@ fn news(channel_id: ChannelId, mention: bool) -> UiEvent {
     UiEvent::NewMessage {
         channel_id,
         mention,
+        message: None,
     }
+}
+
+/// The notice of an open channel's message names it, and a click opens the
+/// channel at it (`MURMURE-507`). A notice of a closed channel names none,
+/// and the list keeps its own resting place.
+#[wasm_bindgen_test]
+fn a_notice_opens_its_channel_at_its_message() {
+    let (_owner, relay, direct) = shown_direct();
+    relay.pane.set(MurmurePane::ChannelList);
+    let at = MessageRef {
+        segment: SegmentId::new(),
+        message: MessageId::new(),
+    };
+    let event = UiEvent::NewMessage {
+        channel_id: direct,
+        mention: false,
+        message: Some((at.segment, at.message)),
+    };
+    let notice = relay
+        .notice(&event, true)
+        .expect("a direct message notifies");
+    assert_eq!(notice.at, Some(at));
+    // The channel was opened once already: the click asks Logic nothing.
+    assert!(relay.open_at(notice.channel_id, notice.at).is_none());
+    assert_eq!(
+        relay.pane.get_untracked(),
+        MurmurePane::Channel {
+            channel: direct,
+            at: Some(at)
+        }
+    );
+    relay.pane.set(MurmurePane::ChannelList);
+    let closed = relay.notice(&news(direct, false), true).expect("notifies");
+    assert_eq!(closed.at, None);
+    assert!(relay.open_at(direct, closed.at).is_none());
+    assert_eq!(relay.pane.get_untracked(), MurmurePane::channel(direct));
+}
+
+/// A click on a notice opens its own channel and asks nothing of another
+/// one, so no other read cursor moves (`MURMURE-508`).
+#[wasm_bindgen_test]
+fn a_notice_asks_nothing_of_another_channel() {
+    let (_owner, relay, general, _) = a_space_with_members();
+    let other = ChannelId::new();
+    relay.absorb(&UiEvent::MemberChannels {
+        channels: vec![
+            MemberChannel {
+                channel_id: general,
+                place: ChannelPlace::Public(SpaceId::new()),
+            },
+            MemberChannel {
+                channel_id: other,
+                place: ChannelPlace::Direct,
+            },
+        ],
+        spaces: Vec::new(),
+        names: Vec::new(),
+        peers: Vec::new(),
+    });
+    let at = MessageRef {
+        segment: SegmentId::new(),
+        message: MessageId::new(),
+    };
+    let opened = relay.open_at(other, Some(at));
+    assert!(
+        matches!(opened, Some(LogicCommand::OpenChannel { channel_id }) if channel_id == other),
+        "{opened:?}"
+    );
+    assert!(relay.open_at(other, Some(at)).is_none());
 }
 
 /// A mention of the user notifies, and a plain message of a public channel
