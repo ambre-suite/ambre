@@ -324,6 +324,37 @@ fn a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread() {
     assert_eq!(message_at(&state, 0).also_in_thread, None);
 }
 
+// --- MURMURE-538 ---
+
+/// A copy is found from its reply, under an identifier of its own. A reply
+/// sent to its thread alone has none, and another root finds nothing.
+#[test]
+fn a_copy_is_found_from_its_reply() {
+    let alice = UserId::new();
+    let mut state = channel_with(&["root"], alice);
+    let root = message_at(&state, 0).id;
+    let (thread, _, _) = threaded(&mut state, root);
+    state
+        .reply(root, &draft("also here"), alice, NOW, true)
+        .expect("reply");
+    state
+        .reply(root, &draft("here alone"), alice, NOW, false)
+        .expect("reply");
+    let Some(MurmureEvent::ThreadMessages { messages, .. }) = state.thread_view(thread) else {
+        panic!("the thread is held");
+    };
+    let (copied, alone) = (messages[0].id, messages[1].id);
+    let copy = message_at(&state, 1).id;
+    assert_ne!(copy, copied, "the copy has an identifier of its own");
+    assert_eq!(state.copy_of(root, copied), Some((state.active_id(), copy)));
+    assert_eq!(state.copy_of(root, alone), None, "no copy was sent");
+    assert_eq!(
+        state.copy_of(MessageId::new(), copied),
+        None,
+        "no such thread"
+    );
+}
+
 // --- MURMURE-255 ---
 
 /// Another member sets the absent `thread` field of Alice's message, and

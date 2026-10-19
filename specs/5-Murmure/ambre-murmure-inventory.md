@@ -30,7 +30,7 @@
 | `murmure-notifications` | A member learns that someone mentioned them or wrote to them directly. | partial | 19 |  |
 | `murmure-search` | A member finds a message by its words, in the channels they have loaded. | partial | 18 |  |
 | `murmure-spaces` | A team gathers in a space. | partial | 34 |  |
-| `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | partial | 22 |  |
+| `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | partial | 24 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | partial | 16 |  |
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
 | `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
@@ -44,4 +44,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 7 implemented, 10 partial, 11 design-only. 515 contract rows, 0 loose.**
+**28 features: 7 implemented, 10 partial, 11 design-only. 517 contract rows, 0 loose.**

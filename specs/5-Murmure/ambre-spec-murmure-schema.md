@@ -74,7 +74,8 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 * Every **document** of a channel or a space has its own `document_id`, a UUID v7 minted by the
   client. Its `header` names its kind and the channel or the space it belongs to (`MURMURE-001`).
 * A **message** is identified by a `MessageId` minted by the peer that creates it (`MURMURE-002`). Its
-  position in a list moves with every concurrent append.
+  position in a list moves with every concurrent append. The copy of a reply also sent to the
+  channel takes its reply's identifier, the last bit turned (`MURMURE-538`).
 * A **segment** is identified by its `document_id`. A thread reply, a pin and an amendment reach a
   message through the pair of its segment and its `MessageId`.
 * A **thread** document names its channel, its root message and the segment of that root

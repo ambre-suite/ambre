@@ -18,8 +18,8 @@ use crate::delta::{self, Arrival, Rules};
 use crate::error::MurmureError;
 use crate::mention;
 use crate::schema::{
-    self, AMENDMENT_THREADS, DocumentKind, HEADER, HEADER_ROOT, HEADER_SEGMENT, MESSAGE_ID,
-    MESSAGE_THREAD, MESSAGES,
+    self, AMENDMENT_THREADS, DocumentKind, HEADER, HEADER_ROOT, HEADER_SEGMENT,
+    MESSAGE_ALSO_IN_THREAD, MESSAGE_ID, MESSAGE_THREAD, MESSAGES,
 };
 use crate::session::Session;
 
@@ -453,7 +453,7 @@ impl ChannelState {
         let segment = thread.segment;
         let document = thread.held.id;
         let (doc, session) = thread.held.session()?;
-        let (_, mentions) = super::write_message(doc, draft, author, now, channel, None)?;
+        let (id, mentions) = super::write_message(doc, draft, author, now, channel, None)?;
         let delta = session.export_json(doc)?;
         let event = self
             .thread_view(document)
@@ -466,7 +466,7 @@ impl ChannelState {
             event,
         };
         let copy = if also_in_channel {
-            Some(self.send_from(draft, author, now, Some(document))?)
+            Some(self.send_from(draft, author, now, Some((document, id)))?)
         } else {
             None
         };
@@ -475,6 +475,22 @@ impl ChannelState {
             reply,
             copy,
             head: MurmureEvent::Messages { segment, messages },
+        })
+    }
+
+    /// The copy in the channel of `reply`, a reply to `root`, with the held
+    /// segment it lies in (`MURMURE-538`). `None` for a reply sent to its
+    /// thread alone, or a thread the channel does not hold.
+    ///
+    /// The copy is written after its root. The held segments run from the
+    /// active one back, so a held root leaves its copy held too.
+    pub fn copy_of(&self, root: MessageId, reply: MessageId) -> Option<(SegmentId, MessageId)> {
+        let thread = self.thread_id(root)?.to_string();
+        let copy = copy_id(reply);
+        self.held_segments().into_iter().find_map(|segment| {
+            let map = message_map(self.doc(segment.document_id())?, copy)?;
+            (schema::string(&map, MESSAGE_ALSO_IN_THREAD).as_deref() == Some(thread.as_str()))
+                .then_some((segment, copy))
         })
     }
 
@@ -491,6 +507,15 @@ impl ChannelState {
             *head = thread_head(head.document, &thread.held.doc, self.channel_id);
         }
     }
+}
+
+/// The identifier of the copy of `reply` in the channel: the reply's own,
+/// its last bit turned (`MURMURE-538`). The turn is its own inverse, and it
+/// keeps the version, the variant and the instant of the identifier.
+pub(super) fn copy_id(reply: MessageId) -> MessageId {
+    let mut bytes = *reply.as_bytes();
+    bytes[15] ^= 1;
+    MessageId::from_bytes(bytes)
 }
 
 /// What a root shows of `thread`: its replies, deleted ones aside, and the

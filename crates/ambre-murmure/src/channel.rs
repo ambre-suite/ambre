@@ -905,19 +905,20 @@ impl ChannelState {
         self.send_from(draft, author, now, None)
     }
 
-    /// [`ChannelState::send`] with the draft checked, naming the thread a
-    /// copy of a reply came from (`MURMURE-109`).
+    /// [`ChannelState::send`] with the draft checked. A copy of a reply
+    /// names the thread it came from (`MURMURE-109`), and takes the
+    /// identifier its reply derives (`MURMURE-538`).
     fn send_from(
         &mut self,
         draft: &MessageDraft,
         author: UserId,
         now: Timestamp,
-        also_in_thread: Option<DocumentId>,
+        copy: Option<(DocumentId, MessageId)>,
     ) -> Result<Sent, MurmureError> {
         let channel = self.channel_id;
         let segment = self.active_id();
         let (doc, session) = self.active.session()?;
-        let (id, mentions) = write_message(doc, draft, author, now, channel, also_in_thread)?;
+        let (id, mentions) = write_message(doc, draft, author, now, channel, copy)?;
         let delta = session.export_json(doc)?;
         Ok(Sent {
             segment,
@@ -937,7 +938,7 @@ impl ChannelState {
                     edited: false,
                     deleted: false,
                     thread: None,
-                    also_in_thread,
+                    also_in_thread: copy.map(|(thread, _)| thread),
                 }],
             },
         })
@@ -1872,9 +1873,10 @@ fn document_of(map: &LoroMap, key: &str) -> Option<DocumentId> {
 /// Append one message of `author` to the `messages` list of `doc`: the
 /// active segment, or a thread (`MURMURE-080`).
 ///
-/// The identifier is minted here, by the sending peer (`MURMURE-002`). The
-/// send writes one new message map and nothing else (`MURMURE-083`).
-/// Returns the identifier and the marks as written.
+/// The identifier is minted here, by the sending peer (`MURMURE-002`). A
+/// copy of a reply in `thread` takes the one its reply derives instead
+/// (`MURMURE-538`). The send writes one new message map and nothing else
+/// (`MURMURE-083`). Returns the identifier and the marks as written.
 ///
 /// # Errors
 /// [`MurmureError::Crdt`] when Loro refuses a write.
@@ -1884,14 +1886,14 @@ fn write_message(
     author: UserId,
     now: Timestamp,
     channel: ChannelId,
-    also_in_thread: Option<DocumentId>,
+    copy: Option<(DocumentId, MessageId)>,
 ) -> Result<(MessageId, Vec<Mention>), MurmureError> {
-    let id = MessageId::new();
+    let id = copy.map_or_else(MessageId::new, |(_, reply)| threading::copy_id(reply));
     let message = doc.get_list(MESSAGES).push_container(LoroMap::new())?;
     message.insert(MESSAGE_ID, id.to_string())?;
     message.insert(MESSAGE_AUTHOR, author.to_string())?;
     message.insert(MESSAGE_TS, schema::ts_value(now.0))?;
-    if let Some(thread) = also_in_thread {
+    if let Some((thread, _)) = copy {
         message.insert(MESSAGE_ALSO_IN_THREAD, thread.to_string())?;
     }
     // The body is a char CRDT, so two peers typing in it keep both texts

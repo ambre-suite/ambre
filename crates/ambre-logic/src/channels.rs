@@ -1327,7 +1327,7 @@ impl LogicState {
                 at,
                 message,
                 draft,
-                now: _,
+                now,
             } => {
                 let Some(user) = self.my_user_id else {
                     tracing::warn!("Logic: edit on {channel_id} before the session; dropped");
@@ -1341,27 +1341,52 @@ impl LogicState {
                     .map(|rows| rows.iter().map(|row| row.user_id).collect());
                 let draft = members_only(draft, members.as_deref());
                 let edited = channel.edit(at, message, &draft, user);
+                let copy = match (&edited, at) {
+                    (Ok(Some(_)), MessageAt::Thread(root)) => channel.copy_of(root, message),
+                    _ => None,
+                };
                 self.send_change(channel_id, edited);
+                // The copy of a reply takes its edit, through the path of a
+                // message of its segment (the Murmure threads spec).
+                if let Some((segment, copy)) = copy {
+                    self.handle_channel_command(
+                        channel_id,
+                        MurmureCommand::EditMessage {
+                            at: segment.into(),
+                            message: copy,
+                            draft,
+                            now,
+                        },
+                    );
+                }
             }
-            MurmureCommand::DeleteMessage {
-                at,
-                message,
-                now: _,
-            } => {
+            MurmureCommand::DeleteMessage { at, message, now } => {
                 let Some(user) = self.my_user_id else {
                     tracing::warn!("Logic: delete on {channel_id} before the session; dropped");
                     return;
                 };
                 let deleted = channel.delete(at, message, user);
                 // A deleted reply leaves the count of its root (the Murmure
-                // threads spec).
-                let head = match (&deleted, at) {
-                    (Ok(_), MessageAt::Thread(root)) => channel.root_view(root),
-                    _ => None,
+                // threads spec), and its copy goes with it.
+                let (head, copy) = match (&deleted, at) {
+                    (Ok(_), MessageAt::Thread(root)) => {
+                        (channel.root_view(root), channel.copy_of(root, message))
+                    }
+                    _ => (None, None),
                 };
                 self.send_change(channel_id, deleted.map(Some));
                 if let Some(event) = head {
                     self.send_to_ui(UiEvent::Channel { channel_id, event });
+                }
+                if let Some((segment, copy)) = copy {
+                    self.handle_channel_command(
+                        channel_id,
+                        MurmureCommand::DeleteMessage {
+                            at: segment.into(),
+                            message: copy,
+                            now,
+                        },
+                    );
                 }
             }
             MurmureCommand::Reply {
@@ -5303,6 +5328,64 @@ mod tests {
         );
         assert!(drain(&sync).is_empty(), "a thread not held takes nothing");
         assert!(state.murmure_waiting.is_empty());
+    }
+
+    /// An edit and a delete of a reply also sent to the channel reach its
+    /// copy in the active segment as well. A reaction stays on the reply.
+    #[test]
+    fn a_copy_follows_the_edit_and_the_delete_of_its_reply() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, active, root) = rooted_channel(&mut state, &sync);
+        command(&mut state, channel_id, reply_to(root, "a reply", true));
+        let [(segment, _, thread)] = created_threads(&sync).try_into().expect("one create");
+        state.handle_logic_event(LogicEvent::ThreadLinked {
+            channel_id,
+            segment,
+            root,
+            thread,
+        });
+        state.grant_identity(thread);
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: thread,
+            role: ambre_bus::Role::Owner,
+        });
+        drain(&sync);
+        drain(&ui);
+        let Some(MurmureEvent::ThreadMessages { messages, .. }) =
+            state.channels[&channel_id].thread_view(thread)
+        else {
+            panic!("the thread is held");
+        };
+        let reply = messages[0].id;
+        let copy = |state: &LogicState| {
+            state.channels[&channel_id].messages(active).expect("held")[1].clone()
+        };
+        for (kind, written) in [
+            ("react", vec![thread]),
+            ("edit", vec![thread, active.document_id()]),
+            ("delete", vec![thread, active.document_id()]),
+        ] {
+            command(&mut state, channel_id, thread_change(root, reply, kind));
+            let sent: Vec<DocumentId> = drain(&sync)
+                .into_iter()
+                .filter_map(|c| match c {
+                    SyncCommand::SendUpdate { document_id, .. } => Some(document_id),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(sent, written, "{kind}");
+            if kind == "edit" {
+                assert_eq!(copy(&state).text, "edited", "the copy reads the edit");
+                assert!(copy(&state).edited);
+            }
+        }
+        assert!(copy(&state).deleted, "the copy is deleted with its reply");
+        assert!(copy(&state).text.is_empty());
+        assert!(
+            copy(&state).reactions.is_empty(),
+            "the reaction stayed on the reply"
+        );
     }
 
     /// A link that lost its race names another member's thread. What waited
