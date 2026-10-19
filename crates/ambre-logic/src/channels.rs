@@ -1428,15 +1428,15 @@ impl LogicState {
                 }
                 self.replay_owed(channel_id, now);
             }
-            MurmureCommand::Typing { now } => {
+            MurmureCommand::Typing { now, thread } => {
                 let meta = channel.meta_id().document_id();
                 if self
                     .channel_watchers
                     .entry(channel_id)
                     .or_default()
-                    .owes_typing(now)
+                    .owes_typing(now, thread)
                 {
-                    self.send_sample(meta, Sample::Typing);
+                    self.send_sample(meta, Sample::typing(thread));
                 }
             }
         }
@@ -1460,9 +1460,14 @@ impl LogicState {
             return;
         };
         let (watching, typing) = watchers.view();
+        let in_threads = watchers.in_threads();
         self.send_to_ui(UiEvent::Channel {
             channel_id,
-            event: MurmureEvent::Watchers { watching, typing },
+            event: MurmureEvent::Watchers {
+                watching,
+                typing,
+                in_threads,
+            },
         });
     }
 
@@ -3546,7 +3551,10 @@ mod tests {
             .filter_map(|event| match event {
                 UiEvent::Channel {
                     channel_id,
-                    event: MurmureEvent::Watchers { watching, typing },
+                    event:
+                        MurmureEvent::Watchers {
+                            watching, typing, ..
+                        },
                 } => Some((channel_id, watching, typing)),
                 _ => None,
             })
@@ -3612,7 +3620,10 @@ mod tests {
             command(
                 &mut state,
                 channel_id,
-                MurmureCommand::Typing { now: at(offset) },
+                MurmureCommand::Typing {
+                    now: at(offset),
+                    thread: None,
+                },
             );
         }
         assert_eq!(
@@ -3623,6 +3634,44 @@ mod tests {
             ]
         );
         assert_eq!(versions(&state), before);
+    }
+
+    /// A key in a thread's composer sends a sample naming its root, at once
+    /// after one in the channel. A member heard there shows under that root,
+    /// and out of the channel's list.
+    #[test]
+    fn typing_in_a_thread_names_its_root() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, _active) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
+        drain(&sync);
+        drain(&ui);
+        let root = MessageId::new();
+        for thread in [None, Some(root)] {
+            let typing = MurmureCommand::Typing { now: NOW, thread };
+            command(&mut state, channel_id, typing);
+        }
+        let sent = [Sample::Typing, Sample::TypingIn(root)].map(|s| (meta, s.bytes()));
+        assert_eq!(ephemerals(&sync), sent);
+
+        let bob = UserId::new();
+        hear(&mut state, meta, bob, Sample::TypingIn(root));
+        let shown: Vec<_> = drain(&ui)
+            .into_iter()
+            .filter_map(|event| match event {
+                UiEvent::Channel {
+                    event:
+                        MurmureEvent::Watchers {
+                            typing, in_threads, ..
+                        },
+                    ..
+                } => Some((typing, in_threads)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(shown, [(Vec::new(), vec![(root, vec![bob])])]);
     }
 
     /// A sample heard shows its member, and a newcomer gets this user's own

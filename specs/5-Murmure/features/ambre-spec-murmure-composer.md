@@ -199,7 +199,5 @@ changed text.
 * **`@` opens no panel.** The panel waits for the `The mention panel` Story (`ambre-roadmap.md` E5).
 * **The chord of the box is shown nowhere.** Its label names no key, and nothing lists the keys.
   That waits for the `The keys of a conversation listed` Story (`ambre-roadmap.md` E5).
-* **Typing in a thread names no one.** A key there sends no typing sample, and the thread's strip
-  stays empty. That waits for the `Typing seen in a thread` Story (`ambre-roadmap.md` E5).
 * **A screen reader does not hear the draft.** The pipe takes the text, and nothing reads the draft
   back. That waits for the `The composer read aloud` Story (`ambre-roadmap.md` E5).

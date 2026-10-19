@@ -494,9 +494,10 @@ pub struct Conversations {
     /// The first unread message of each channel, as the Logic thread last
     /// named it (`MURMURE-499`). Absent while its count is unknown.
     first_unread: HashMap<ChannelId, Option<MessageId>>,
-    /// The other members typing in each channel, as the Logic thread last
-    /// named them. A channel where nobody types is absent.
-    typing: HashMap<ChannelId, Vec<UserId>>,
+    /// The other members typing in each channel, in its composer or in a
+    /// thread's by its root, as the Logic thread last named them. A place
+    /// where nobody types is absent, and so is a channel with none.
+    typing: HashMap<ChannelId, HashMap<Option<MessageId>, Vec<UserId>>>,
 }
 
 impl Conversations {
@@ -541,12 +542,22 @@ impl Conversations {
             MurmureEvent::FirstUnread { message } => {
                 self.first_unread.insert(channel_id, message) != Some(message)
             }
-            MurmureEvent::Watchers { typing, .. } if typing.is_empty() => {
-                self.typing.remove(&channel_id).is_some()
-            }
-            MurmureEvent::Watchers { typing, .. } => {
-                let changed = self.typing.get(&channel_id) != Some(&typing);
-                self.typing.insert(channel_id, typing);
+            MurmureEvent::Watchers {
+                typing, in_threads, ..
+            } => {
+                let threads = in_threads
+                    .into_iter()
+                    .map(|(root, users)| (Some(root), users));
+                let places: HashMap<Option<MessageId>, Vec<UserId>> =
+                    std::iter::once((None, typing))
+                        .chain(threads)
+                        .filter(|(_, users)| !users.is_empty())
+                        .collect();
+                let held = self.typing.remove(&channel_id).unwrap_or_default();
+                let changed = held != places;
+                if !places.is_empty() {
+                    self.typing.insert(channel_id, places);
+                }
                 changed
             }
             MurmureEvent::Left => {
@@ -585,10 +596,14 @@ impl Conversations {
         self.first_unread.get(&channel).copied()
     }
 
-    /// The other members typing in `channel`, in the order the Logic thread
-    /// gave, so the line never reorders between two draws.
-    pub fn typing(&self, channel: ChannelId) -> &[UserId] {
-        self.typing.get(&channel).map_or(&[], Vec::as_slice)
+    /// The other members typing in `channel`, or in its thread under `root`
+    /// (`MURMURE-537`). In the order the Logic thread gave, so the line never
+    /// reorders between two draws.
+    pub fn typing(&self, channel: ChannelId, root: Option<MessageId>) -> &[UserId] {
+        self.typing
+            .get(&channel)
+            .and_then(|places| places.get(&root))
+            .map_or(&[], Vec::as_slice)
     }
 }
 
@@ -1151,6 +1166,7 @@ pub(crate) mod tests {
             MurmureEvent::Watchers {
                 watching: Vec::new(),
                 typing: Vec::new(),
+                in_threads: Vec::new(),
             }
         )));
         assert!(!talks.absorb(UiEvent::ChannelActivity {

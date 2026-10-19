@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3623 rows: 3046 shipped, of which 2 loose. 577 unbuilt.**
+**3625 rows: 3048 shipped, of which 2 loose. 577 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 858 | 418 | 816 | 609 | 343 | 3044 |
+| `verified` | 858 | 418 | 816 | 609 | 345 | 3046 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
@@ -176,7 +176,7 @@
 | `ambre-spec-murmure-segments.md` | 26 | 26 | 26 |  |  |
 | `ambre-spec-murmure-spaces.md` | 34 | 29 | 29 |  | 5 |
 | `ambre-spec-murmure-threads.md` | 22 | 16 | 16 |  | 6 |
-| `ambre-spec-murmure-typing-presence.md` | 14 | 12 | 12 |  | 2 |
+| `ambre-spec-murmure-typing-presence.md` | 16 | 14 | 14 |  | 2 |
 | `ambre-spec-murmure-unread.md` | 17 | 17 | 17 |  |  |
 
 ## WHICH DOCUMENT DECLARES AN ID
@@ -239,7 +239,7 @@
 | `ambre-spec-murmure-sidebar.md` | MURMURE-275..289,298 |
 | `ambre-spec-murmure-spaces.md` | MURMURE-031..045,234..237,247..250,254,258,301..304,317,466,479..480,487 |
 | `ambre-spec-murmure-threads.md` | MURMURE-105..112,260..261,290..295,415,484..485,497,532..533 |
-| `ambre-spec-murmure-typing-presence.md` | MURMURE-121..127,296..297,515..518,521 |
+| `ambre-spec-murmure-typing-presence.md` | MURMURE-121..127,296..297,515..518,521,536..537 |
 | `ambre-spec-murmure-unread.md` | MURMURE-113..120,154..156,460,470..471,477,495,499 |
 | `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079,121,138..141,158 |
 | `ambre-spec-op-authorship.md` | AUTHOR-001..029 |

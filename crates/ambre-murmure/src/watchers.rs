@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::Timestamp;
-use ambre_core::UserId;
+use ambre_core::{MessageId, UserId};
 
 use crate::{PRESENCE_EXPIRY_MS, REFRESH_PERIOD_MS};
 
@@ -30,9 +30,14 @@ pub const TYPING_EXPIRY_MS: u64 = 2 * TYPING_REFRESH_MS;
 /// neither reads as the other.
 const WATCHING_TAG: u8 = 0x57;
 const TYPING_TAG: u8 = 0x54;
+const TYPING_IN_TAG: u8 = 0x74;
 
 /// The state byte of a sample.
 const ON: u8 = 1;
+
+/// The length of every sample: a tag, the state, and a root or zeros. One
+/// length for all, so the sealed size never tells a thread from its channel.
+const SAMPLE_LEN: usize = 18;
 
 /// What a sample on the `meta` document of a channel says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,29 +46,52 @@ pub enum Sample {
     Watching,
     /// Its member types in the composer of the channel (`MURMURE-124`).
     Typing,
+    /// Its member types in the composer of the thread under this root
+    /// (`MURMURE-536`).
+    TypingIn(MessageId),
 }
 
 impl Sample {
-    /// The bytes of the sample: its tag, then the state, and nothing else.
-    /// They name no channel, so a sample cannot show which other channel a
-    /// member reads (`MURMURE-127`).
+    /// The sample a keystroke sends, in the thread under `thread` or in the
+    /// channel.
+    pub fn typing(thread: Option<MessageId>) -> Self {
+        thread.map_or(Self::Typing, Self::TypingIn)
+    }
+
+    /// The bytes of the sample: its tag, the state, then a thread's root or
+    /// zeros. They name no channel, so a sample cannot show which other
+    /// channel a member reads (`MURMURE-127`).
     pub fn bytes(self) -> Vec<u8> {
-        match self {
-            Self::Watching => vec![WATCHING_TAG, ON],
-            Self::Typing => vec![TYPING_TAG, ON],
-        }
+        let (tag, root) = match self {
+            Self::Watching => (WATCHING_TAG, [0; 16]),
+            Self::Typing => (TYPING_TAG, [0; 16]),
+            Self::TypingIn(root) => (TYPING_IN_TAG, *root.as_bytes()),
+        };
+        let mut bytes = Vec::with_capacity(SAMPLE_LEN);
+        bytes.extend([tag, ON]);
+        bytes.extend(root);
+        bytes
     }
 
     /// The sample `payload` holds. One that does not decode is `None`, and
     /// is dropped without an error (`PRESENCE-013`).
     pub fn read(payload: &[u8]) -> Option<Self> {
-        match payload {
-            [WATCHING_TAG, ON] => Some(Self::Watching),
-            [TYPING_TAG, ON] => Some(Self::Typing),
+        let [tag, ON, rest @ ..] = payload else {
+            return None;
+        };
+        let root: [u8; 16] = rest.try_into().ok()?;
+        let zeros = root == [0; 16];
+        match *tag {
+            WATCHING_TAG if zeros => Some(Self::Watching),
+            TYPING_TAG if zeros => Some(Self::Typing),
+            TYPING_IN_TAG if !zeros => Some(Self::TypingIn(MessageId::from_bytes(root))),
             _ => None,
         }
     }
 }
+
+/// Where a member types: the channel's composer, or a thread's by its root.
+type Place = Option<MessageId>;
 
 /// The other members who watch an open channel and who type in it, and when
 /// this client last sent its own samples.
@@ -72,13 +100,14 @@ pub struct Watchers {
     /// The members heard watching, with the tick that dates their last
     /// sample. `None` for a sample heard before the first tick.
     watching: HashMap<UserId, Option<Timestamp>>,
-    /// The members heard typing, dated the same way.
-    typing: HashMap<UserId, Option<Timestamp>>,
+    /// The members heard typing, dated the same way, with where they type.
+    /// A member types in one place, the last their samples named.
+    typing: HashMap<UserId, (Option<Timestamp>, Place)>,
     /// The latest tick of the view, `None` before the first.
     now: Option<Timestamp>,
-    /// When this client last sent each sample.
+    /// When this client last sent each sample, and where it typed.
     sent_watching: Option<Timestamp>,
-    sent_typing: Option<Timestamp>,
+    sent_typing: Option<(Timestamp, Place)>,
 }
 
 impl Watchers {
@@ -86,10 +115,13 @@ impl Watchers {
     /// member who types watches too.
     pub fn heard(&mut self, user: UserId, sample: Sample) -> bool {
         let came = self.watching.insert(user, self.now).is_none();
-        match sample {
-            Sample::Watching => came,
-            Sample::Typing => self.typing.insert(user, self.now).is_none() || came,
-        }
+        let place = match sample {
+            Sample::Watching => return came,
+            Sample::Typing => None,
+            Sample::TypingIn(root) => Some(root),
+        };
+        let before = self.typing.insert(user, (self.now, place));
+        before.is_none_or(|(_, was)| was != place) || came
     }
 
     /// Whether `user` was not heard watching before: the caller answers a
@@ -110,16 +142,16 @@ impl Watchers {
     /// changed.
     pub fn tick(&mut self, now: Timestamp) -> bool {
         self.now = Some(now);
-        let expire = |heard: &mut HashMap<UserId, Option<Timestamp>>, expiry: u64| {
-            let before = heard.len();
-            heard.retain(|_, stamp| {
-                let at = *stamp.get_or_insert(now);
-                now.0.saturating_sub(at.0) <= expiry
-            });
-            heard.len() != before
+        let fresh = |stamp: &mut Option<Timestamp>, expiry: u64| {
+            let at = *stamp.get_or_insert(now);
+            now.0.saturating_sub(at.0) <= expiry
         };
-        let typing = expire(&mut self.typing, TYPING_EXPIRY_MS);
-        expire(&mut self.watching, PRESENCE_EXPIRY_MS) || typing
+        let (watching, typing) = (self.watching.len(), self.typing.len());
+        self.typing
+            .retain(|_, (stamp, _)| fresh(stamp, TYPING_EXPIRY_MS));
+        self.watching
+            .retain(|_, stamp| fresh(stamp, PRESENCE_EXPIRY_MS));
+        self.watching.len() != watching || self.typing.len() != typing
     }
 
     /// Whether this client owes its watching sample at `now`: none sent yet,
@@ -129,22 +161,51 @@ impl Watchers {
         owed(&mut self.sent_watching, now, REFRESH_PERIOD_MS)
     }
 
-    /// Whether a keystroke at `now` owes a typing sample: none sent yet, or
-    /// one typing refresh period since the last (`MURMURE-124`). Records it
-    /// as sent when it is owed.
-    pub fn owes_typing(&mut self, now: Timestamp) -> bool {
-        owed(&mut self.sent_typing, now, TYPING_REFRESH_MS)
+    /// Whether a keystroke at `now` owes a typing sample. The place is the
+    /// thread under `thread`, or the channel with `None`. It is owed when
+    /// none was sent, a typing refresh period after the last (`MURMURE-124`),
+    /// or at once in a new place (`MURMURE-536`). Records it as sent when owed.
+    pub fn owes_typing(&mut self, now: Timestamp, thread: Option<MessageId>) -> bool {
+        let moved = self.sent_typing.is_some_and(|(_, place)| place != thread);
+        let mut sent = self.sent_typing.map(|(at, _)| at).filter(|_| !moved);
+        let due = owed(&mut sent, now, TYPING_REFRESH_MS);
+        if due {
+            self.sent_typing = Some((now, thread));
+        }
+        due
     }
 
-    /// The members who watch, then those who type, each in the order of
-    /// their identifiers, so the view never reorders between two draws.
+    /// The members who watch, then those who type in the channel. Each list
+    /// keeps the order of the identifiers, so the view never reorders between
+    /// two draws.
     pub fn view(&self) -> (Vec<UserId>, Vec<UserId>) {
-        let sorted = |heard: &HashMap<UserId, Option<Timestamp>>| {
-            let mut users: Vec<UserId> = heard.keys().copied().collect();
-            users.sort_by_key(|user| *user.as_bytes());
-            users
-        };
-        (sorted(&self.watching), sorted(&self.typing))
+        let mut watching: Vec<UserId> = self.watching.keys().copied().collect();
+        watching.sort_by_key(|user| *user.as_bytes());
+        (watching, self.typing_in(None))
+    }
+
+    /// The members who type in each thread, by its root, the roots and the
+    /// members in the order of their identifiers (`MURMURE-536`).
+    pub fn in_threads(&self) -> Vec<(MessageId, Vec<UserId>)> {
+        let mut roots: Vec<MessageId> = self.typing.values().filter_map(|(_, at)| *at).collect();
+        roots.sort_by_key(|root| *root.as_bytes());
+        roots.dedup();
+        roots
+            .into_iter()
+            .map(|root| (root, self.typing_in(Some(root))))
+            .collect()
+    }
+
+    /// The members who type at `place`, in the order of their identifiers.
+    fn typing_in(&self, place: Place) -> Vec<UserId> {
+        let mut users: Vec<UserId> = self
+            .typing
+            .iter()
+            .filter(|(_, (_, at))| *at == place)
+            .map(|(user, _)| *user)
+            .collect();
+        users.sort_by_key(|user| *user.as_bytes());
+        users
     }
 }
 
@@ -180,9 +241,9 @@ mod tests {
     #[test]
     fn typing_refreshes_while_it_lasts_and_expires_once_it_stops() {
         let mut watchers = ticked();
-        assert!(watchers.owes_typing(T0), "the first keystroke sends");
-        assert!(!watchers.owes_typing(at(TYPING_REFRESH_MS - 1)));
-        assert!(watchers.owes_typing(at(TYPING_REFRESH_MS)));
+        assert!(watchers.owes_typing(T0, None), "the first keystroke sends");
+        assert!(!watchers.owes_typing(at(TYPING_REFRESH_MS - 1), None));
+        assert!(watchers.owes_typing(at(TYPING_REFRESH_MS), None));
 
         let bob = UserId::new();
         assert!(watchers.heard(bob, Sample::Typing));
@@ -224,17 +285,55 @@ mod tests {
 
     // --- MURMURE-127 ---
 
-    /// A sample is its tag and its state: it names no channel. A payload of
-    /// any other shape reads as no sample.
+    /// A sample is its tag, its state, and a root or zeros: it names no
+    /// channel, and every one has the same length. A payload of any other
+    /// shape reads as no sample.
     #[test]
     fn a_sample_names_no_channel_and_nothing_else_reads_as_one() {
-        for sample in [Sample::Watching, Sample::Typing] {
-            assert_eq!(sample.bytes().len(), 2);
+        let root = MessageId::new();
+        for sample in [Sample::Watching, Sample::Typing, Sample::TypingIn(root)] {
+            assert_eq!(sample.bytes().len(), SAMPLE_LEN);
             assert_eq!(Sample::read(&sample.bytes()), Some(sample));
         }
         assert_ne!(Sample::Watching.bytes(), crate::presence_sample());
-        for payload in [&[][..], &[WATCHING_TAG], &[TYPING_TAG, ON, 0], &[0, ON]] {
+        let mut zero_root = Sample::Typing.bytes();
+        zero_root[0] = TYPING_IN_TAG;
+        let mut rooted_watch = Sample::TypingIn(root).bytes();
+        rooted_watch[0] = WATCHING_TAG;
+        let short = &Sample::Typing.bytes()[..SAMPLE_LEN - 1];
+        for payload in [
+            &[][..],
+            &[WATCHING_TAG, ON],
+            short,
+            &zero_root,
+            &rooted_watch,
+        ] {
             assert_eq!(Sample::read(payload), None);
         }
+    }
+
+    // --- MURMURE-536 ---
+
+    /// A member typing in a thread types there alone: the channel's list
+    /// leaves them out, and their move back to the channel changes both.
+    /// This client owes a sample at once on a new place.
+    #[test]
+    fn typing_in_a_thread_is_told_apart_from_the_channel() {
+        let mut watchers = ticked();
+        let (bob, carol, root) = (UserId::new(), UserId::new(), MessageId::new());
+        assert!(watchers.heard(bob, Sample::TypingIn(root)));
+        assert!(!watchers.heard(bob, Sample::TypingIn(root)), "no change");
+        assert!(watchers.heard(carol, Sample::Typing));
+        assert_eq!(watchers.view().1, [carol]);
+        assert_eq!(watchers.in_threads(), [(root, vec![bob])]);
+        assert!(watchers.heard(bob, Sample::Typing), "Bob moved");
+        assert!(watchers.in_threads().is_empty());
+
+        assert!(watchers.owes_typing(T0, None));
+        assert!(watchers.owes_typing(at(1), Some(root)), "a new place");
+        assert!(!watchers.owes_typing(at(2), Some(root)));
+        assert!(watchers.owes_typing(at(TYPING_REFRESH_MS + 1), Some(root)));
+        assert_eq!(Sample::typing(Some(root)), Sample::TypingIn(root));
+        assert_eq!(Sample::typing(None), Sample::Typing);
     }
 }

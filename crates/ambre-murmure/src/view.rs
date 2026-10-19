@@ -870,14 +870,16 @@ impl MurmureView {
         let palette = self.theme.palette();
         let shown_before = self.jump.is_some();
         self.jump = higher_up.then(|| paint_jump(surface, font_cx, text_cache, list_size, palette));
-        // Who types in the channel, by name (`MURMURE-517`). The thread's
-        // strip names nobody: typing is told per channel.
-        let names: Vec<String> = on_screen
-            .map(|channel| lists.conversations.typing(channel))
-            .unwrap_or_default()
-            .iter()
-            .map(|user| (self.reads.name_of)(*user).unwrap_or_else(|| "Someone".to_owned()))
-            .collect();
+        // Who types where this region writes, by name: the channel, or the
+        // thread (`MURMURE-517`, `MURMURE-537`).
+        let names: Vec<String> = match writes_in {
+            Some(DraftOf::Channel(channel)) => lists.conversations.typing(channel, None),
+            Some(DraftOf::Thread(channel, root)) => lists.conversations.typing(channel, Some(root)),
+            None => &[],
+        }
+        .iter()
+        .map(|user| (self.reads.name_of)(*user).unwrap_or_else(|| "Someone".to_owned()))
+        .collect();
         // An edit names itself in the strip, and how to leave it.
         let typing = match writes_in {
             Some(of) if self.composer.editing(of) => Some(EDITING_LINE.to_owned()),
@@ -992,17 +994,22 @@ impl MurmureView {
     }
 
     /// A key changed the draft: the engine refreshes the user's typing
-    /// indicator, once per typing period (`MURMURE-515`).
+    /// indicator, once per typing period (`MURMURE-515`). A thread's draft
+    /// names its root (`MURMURE-536`).
     fn typed(&mut self) {
-        if self.composer.take_typed()
-            && let Some(channel_id) = self.composer_channel()
-        {
-            let now = self.now();
-            self.send(LogicCommand::Channel {
-                channel_id,
-                command: MurmureCommand::Typing { now },
-            });
+        if !self.composer.take_typed() {
+            return;
         }
+        let (channel_id, thread) = match self.writes_in() {
+            Some(DraftOf::Channel(channel)) => (channel, None),
+            Some(DraftOf::Thread(channel, root)) => (channel, Some(root)),
+            None => return,
+        };
+        let now = self.now();
+        self.send(LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::Typing { now, thread },
+        });
     }
 
     /// Rest the list where the pane shows it: at the message it names, a
@@ -3200,6 +3207,7 @@ mod tests {
         let watchers = |typing: Vec<UserId>| MurmureEvent::Watchers {
             watching: vec![ada, bob],
             typing,
+            in_threads: Vec::new(),
         };
         send(&page, channel, watchers(vec![ada]));
         assert_eq!(strip_runs(&mut page), vec!["Ada is typing".len()]);
@@ -3211,6 +3219,56 @@ mod tests {
         let elsewhere = ChannelId::new();
         send(&page, elsewhere, watchers(vec![ada]));
         assert!(strip_runs(&mut page).is_empty(), "another channel's typing");
+        let in_a_thread = MurmureEvent::Watchers {
+            watching: vec![ada],
+            typing: Vec::new(),
+            in_threads: vec![(MessageId::new(), vec![ada])],
+        };
+        send(&page, channel, in_a_thread);
+        assert!(strip_runs(&mut page).is_empty(), "a thread's typing");
+    }
+
+    /// The thread's strip names who types in that thread, and nobody who
+    /// types in the channel or in another thread (`MURMURE-537`).
+    #[test]
+    fn the_threads_strip_names_who_types_there() {
+        let channel = ChannelId::new();
+        let (mut page, mut channel_view, root, _) = threaded(channel);
+        let (ada, bob) = (UserId::new(), UserId::new());
+        let watchers = |in_threads| MurmureEvent::Watchers {
+            watching: vec![ada, bob],
+            typing: vec![bob],
+            in_threads,
+        };
+        let elsewhere = vec![(MessageId::new(), vec![bob])];
+        send(&page, channel, watchers(elsewhere));
+        // The channel's region drains the queue into the shared lists.
+        frame_with_fonts(&mut channel_view);
+        assert!(strip_runs(&mut page).is_empty(), "nobody types here");
+        send(&page, channel, watchers(vec![(root, vec![ada])]));
+        frame_with_fonts(&mut channel_view);
+        assert_eq!(strip_runs(&mut page), vec!["Ada is typing".len()]);
+    }
+
+    /// A key in a thread's composer sends a typing sample that names the
+    /// thread's root, in its channel (`MURMURE-536`).
+    #[test]
+    fn a_key_in_a_threads_composer_names_its_root() {
+        let channel = ChannelId::new();
+        let (mut page, _channel_view, root, _) = threaded(channel);
+        assert!(press_composer(&mut page));
+        while page.commands.try_recv().is_ok() {}
+        type_text(&mut page, "a");
+        let typed: Vec<_> = std::iter::from_fn(|| page.commands.try_recv().ok())
+            .filter_map(|command| match command {
+                LogicCommand::Channel {
+                    channel_id,
+                    command: MurmureCommand::Typing { thread, .. },
+                } => Some((channel_id, thread)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(typed, [(channel, Some(root))]);
     }
 
     /// A thread under a root of `channel`, shown in the panel. Its region

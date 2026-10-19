@@ -20,6 +20,7 @@ pub fn watchers(channel_id: ChannelId, watching: Vec<UserId>) -> UiEvent {
         event: MurmureEvent::Watchers {
             watching,
             typing: Vec::new(),
+            in_threads: Vec::new(),
         },
     }
 }

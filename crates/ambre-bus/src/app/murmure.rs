@@ -295,9 +295,13 @@ pub enum MurmureCommand {
     /// it. It expires the indicators and refreshes this user's presence in
     /// the channel (the Murmure typing and presence spec).
     Tick { now: Timestamp },
-    /// A keystroke in the composer of the channel (`MURMURE-124`). An
-    /// ephemeral, never a document write (`MURMURE-125`).
-    Typing { now: Timestamp },
+    /// A keystroke in the composer of the channel (`MURMURE-124`), or of the
+    /// thread under `thread`, its root (`MURMURE-536`). An ephemeral, never
+    /// a document write (`MURMURE-125`).
+    Typing {
+        now: Timestamp,
+        thread: Option<MessageId>,
+    },
     /// Ask again for a segment the list shows as a band. Its key chain and
     /// its bytes are fetched again from the relay (`MURMURE-514`).
     Retry { segment: SegmentId },
@@ -474,12 +478,14 @@ pub enum MurmureEvent {
     /// another client, or the relay refused its open. Nothing of it is held
     /// any more (`MURMURE-468`, `MURMURE-469`).
     Left,
-    /// The other members who watch the channel, and those of them who type,
-    /// each in the order of their identifiers. Sent whenever either changes
-    /// (`MURMURE-124`, `MURMURE-126`).
+    /// The other members who watch the channel, those of them who type in
+    /// it, and those who type in each thread, by its root. Each list runs in
+    /// the order of the identifiers. Sent whenever one changes
+    /// (`MURMURE-124`, `MURMURE-126`, `MURMURE-536`).
     Watchers {
         watching: Vec<UserId>,
         typing: Vec<UserId>,
+        in_threads: Vec<(MessageId, Vec<UserId>)>,
     },
     /// The members of the channel, as the relay lists them: the `@` list of
     /// the composer offers them alone. Sent at the open and on every change.
