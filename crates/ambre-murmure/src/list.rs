@@ -10,7 +10,7 @@ use std::ops::Range;
 
 use ambre_bus::{
     ChannelId, DocumentId, LogicCommand, MessageId, MessageView, MurmureCommand, MurmureEvent,
-    Notice, SegmentId, TextStyle, Timestamp, UiEvent, Unreadable, UserId,
+    Notice, Reaction, SegmentId, TextStyle, Timestamp, UiEvent, Unreadable, UserId,
 };
 
 /// Consecutive messages of one author inside this span share one header:
@@ -280,6 +280,9 @@ pub struct RowWords {
     /// also sent to the channel, the line that names its thread
     /// (`MURMURE-532`).
     pub replies: Option<String>,
+    /// The reactions under the body, one chip per emoji in emoji order
+    /// (`MURMURE-137`). A notice and a band take none.
+    pub reactions: Vec<Reaction>,
 }
 
 impl<'a> Row<'a> {
@@ -327,12 +330,18 @@ impl<'a> Row<'a> {
                 n => format!("{n} replies"),
             })
             .or_else(|| message.also_in_thread.map(|_| FROM_THREAD.to_owned()));
+        let reactions = if message.notice.is_some() || message.deleted {
+            Vec::new()
+        } else {
+            message.reactions.clone()
+        };
         RowWords {
             header,
             body,
             muted,
             marks,
             replies,
+            reactions,
         }
     }
 
@@ -350,11 +359,22 @@ impl<'a> Row<'a> {
         let author = name_of(message.author).unwrap_or_else(|| UNKNOWN_MEMBER.to_owned());
         let time = time_of(message.ts);
         let words = self.words(&name_of, &time_of);
-        match words.replies {
+        let mut heard = match words.replies {
             Some(replies) => format!("{author}, {time}: {}. {replies}", words.body),
             None => format!("{author}, {time}: {}", words.body),
+        };
+        if !words.reactions.is_empty() {
+            let chips: Vec<String> = words.reactions.iter().map(chip_label).collect();
+            heard = format!("{heard}. Reactions: {}", chips.join(", "));
         }
+        heard
     }
+}
+
+/// What the chip of `reaction` reads: the emoji, and how many members chose
+/// it.
+pub fn chip_label(reaction: &Reaction) -> String {
+    format!("{} {}", reaction.emoji, reaction.users.len())
 }
 
 /// The words of a band: its span, its cause and its remedy, muted
@@ -379,6 +399,7 @@ fn band_words(band: &Band, time_of: impl Fn(Timestamp) -> String) -> RowWords {
         muted: true,
         marks: Vec::new(),
         replies: None,
+        reactions: Vec::new(),
     }
 }
 

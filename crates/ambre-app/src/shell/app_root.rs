@@ -10,8 +10,8 @@ use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
-    ChannelHeader, ChannelList, ChannelMentionConfirm, DeleteConfirm, InviteControl, KeyList,
-    MarkBarPanel, MemberList, MentionPanel, MessageSearch, MurmureRelay,
+    ChannelHeader, ChannelList, ChannelMentionConfirm, DeleteConfirm, EmojiPicker, InviteControl,
+    KeyList, MarkBarPanel, MemberList, MentionPanel, MessageSearch, MurmureRelay,
 };
 
 /// The table the command palette searches: the booted application's whole
@@ -72,6 +72,12 @@ pub(crate) fn MurmureShell(
             now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))
         />
         <ChannelMentionConfirm
+            relay=relay
+            send=send
+            now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))
+        />
+        // The view stamps a reaction, as it stamps a deletion.
+        <EmojiPicker
             relay=relay
             send=send
             now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))

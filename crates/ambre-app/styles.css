@@ -715,6 +715,33 @@ input[type="radio"] {
     padding: 1px var(--space-3);
 }
 
+/* The emoji picker (MURMURE-139, MURMURE-140). The buttons draw with the
+   system's emoji face: the DOM fetches no font for them. */
+.murmure-emoji-search {
+    width: 100%;
+    margin-bottom: var(--space-2);
+}
+
+.murmure-emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr));
+    gap: var(--space-1);
+    max-height: 16rem;
+    overflow-y: auto;
+}
+
+.murmure-emoji-pick {
+    font-size: 1.5rem;
+    line-height: 1;
+    padding: var(--space-1);
+    border-radius: var(--radius);
+}
+
+.murmure-emoji-pick:hover,
+.murmure-emoji-pick:focus-visible {
+    background: var(--surface-hover);
+}
+
 .murmure-members {
     display: flex;
     flex-direction: column;

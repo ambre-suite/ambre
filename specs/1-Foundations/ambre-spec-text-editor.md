@@ -138,9 +138,9 @@ Parley's `PlainEditor` lays its text out with one style. So the spans get a seco
 from the same text at the same wrap width (`CANVAS-079`). Every geometry is read from that layout:
 the caret, the band, the height, and the outcome of a click or a line move (`CANVAS-078`). With no
 span, the core takes the one-layout path it had before. A line move keeps its column (`CANVAS-080`).
-The core hands out the layout it draws, so a host can draw beside the text (`CANVAS-082`). It names
-the line drawn around the caret, read from the caret's own box, so a caret at a wrap belongs to the
-line it is drawn on (`CANVAS-083`).
+
+**What a host reads.** The core hands out its layout, so a host can draw beside the text
+(`CANVAS-082`). It names the caret's line from the caret's own box (`CANVAS-083`).
 
 **The coordinate frame.** The core lays out in a local frame whose origin is the text's top-left
 corner. The zoom is baked into the font size and the wrap width. The host translates by that

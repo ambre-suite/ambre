@@ -167,6 +167,13 @@ impl TextCache {
         faces
     }
 
+    /// Number of lazy scripts a fetch has been started for, over every string
+    /// shaped so far (test/diagnostic hook).
+    #[cfg(any(test, not(target_arch = "wasm32")))]
+    pub fn lazy_fonts_requested(&self) -> usize {
+        self.lazy_fonts.requested_count()
+    }
+
     pub fn reset_frame_stats(&mut self) {
         self.frame_hits = 0;
         self.frame_misses = 0;

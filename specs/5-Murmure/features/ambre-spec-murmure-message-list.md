@@ -273,8 +273,7 @@ both to each region, and `ambre_app::host::murmure` hands it the pane, the names
 * **A closing segment is asked again by a new opening.** The channel closes and opens, so its
   watchers and its typing go and come back. A retry in place waits for the
   `Retrying a closing segment in place` Story (`ambre-roadmap.md` E5).
-* **Only five actions are built.** Reply, mark unread, copy text, edit and delete.
-  React lands with the `Emoji` Story (`ambre-roadmap.md` E5).
+* **Only six actions are built.** Reply, react, mark unread, copy text, edit and delete.
   Pin and bookmark wait for the `Pin, bookmark and copy link` Story (`ambre-roadmap.md` E5).
   Remove waits for the `Moderation` Story (`ambre-roadmap.md` E5).
 * **A copy carries no private type.** The mirror alone reaches the clipboard, so a paste drops the

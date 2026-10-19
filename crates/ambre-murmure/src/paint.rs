@@ -16,7 +16,7 @@ use ambre_draw::{
     ParleyBrush, PositionedLayoutItem, Rect, Selection,
 };
 
-use crate::list::{JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, window};
+use crate::list::{JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, chip_label, window};
 use crate::look;
 use crate::select::{Selecting, Spot, TextSelection};
 
@@ -52,6 +52,9 @@ pub struct Painted {
     pub selection: Option<TextSelection>,
     /// The address of the link a click landed on (`MURMURE-567`).
     pub link: Option<String>,
+    /// The reaction chip a click landed on: the index of its row, and its
+    /// emoji.
+    pub chip: Option<(usize, String)>,
 }
 
 impl Painted {
@@ -77,6 +80,8 @@ pub struct Shown<'a> {
     pub focus: Option<usize>,
     /// The selection, and the points of a drag the paint resolves.
     pub selecting: Selecting,
+    /// The signed-in member, whose own reactions take the accent.
+    pub me: Option<UserId>,
 }
 
 /// Paint `shown` from its anchor, in a viewport of `size`.
@@ -136,6 +141,9 @@ pub fn paint_list<S: DrawSurface>(
     let link = selecting
         .click
         .and_then(|at| link_at(font_cx, cache, &reached.rows, &words, at, text_width));
+    let chip = selecting
+        .click
+        .and_then(|at| chip_at(font_cx, cache, &reached.rows, &words, at, text_width));
     let mut line_shown = false;
     let mut focus = None;
     for &(i, top, tall) in &reached.rows {
@@ -177,7 +185,9 @@ pub fn paint_list<S: DrawSurface>(
             line_shown = true;
             top = draw_line(surface, font_cx, cache, top, width, palette);
         }
-        draw_row(surface, font_cx, cache, row, top, text_width, palette);
+        draw_row(
+            surface, font_cx, cache, row, top, text_width, palette, shown.me,
+        );
         if shown.focus == Some(i) {
             let ring = Rect::new(
                 f64::from(SPACE_2),
@@ -205,6 +215,103 @@ pub fn paint_list<S: DrawSurface>(
             .collect(),
         selection,
         link,
+        chip,
+    }
+}
+
+/// The reaction chip drawn under `(x, y)`: the index of its row and its
+/// emoji. `None` off every chip.
+fn chip_at(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    rows: &[(usize, f32, f32)],
+    words: &HashMap<usize, (RowWords, bool)>,
+    (x, y): (f32, f32),
+    width: f32,
+) -> Option<(usize, String)> {
+    let &(i, top, _) = rows
+        .iter()
+        .find(|&&(_, top, tall)| top <= y && y < top + tall)?;
+    let (row, line) = words.get(&i)?;
+    if row.reactions.is_empty() {
+        return None;
+    }
+    let chips_y = body_top(font_cx, cache, row, *line, top, width)
+        + body(font_cx, cache, row, width).height();
+    let (boxes, _) = chips(font_cx, cache, row, width);
+    let (x, y) = (f64::from(x - SPACE_8), f64::from(y - chips_y));
+    boxes
+        .iter()
+        .zip(&row.reactions)
+        .find(|(b, _)| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1)
+        .map(|(_, reaction)| (i, reaction.emoji.clone()))
+}
+
+/// The box of each reaction chip of a row, from the top-left of the chips,
+/// and the height they take with the space above them. The chips run left
+/// to right and wrap past `width`.
+fn chips(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    row: &RowWords,
+    width: f32,
+) -> (Vec<Rect>, f32) {
+    if row.reactions.is_empty() {
+        return (Vec::new(), 0.0);
+    }
+    let mut boxes = Vec::with_capacity(row.reactions.len());
+    let (mut x, mut y, mut line) = (0.0_f32, SPACE_2, 0.0_f32);
+    for reaction in &row.reactions {
+        let layout = shape(font_cx, cache, &chip_label(reaction), FONT_UI, width, false);
+        let (wide, tall) = (
+            layout.width() + 2.0 * SPACE_4,
+            layout.height() + 2.0 * SPACE_2,
+        );
+        if x > 0.0 && x + wide > width {
+            (x, y) = (0.0, y + line + SPACE_2);
+            line = 0.0;
+        }
+        boxes.push(Rect::new(
+            f64::from(x),
+            f64::from(y),
+            f64::from(x + wide),
+            f64::from(y + tall),
+        ));
+        x += wide + SPACE_4;
+        line = line.max(tall);
+    }
+    (boxes, y + line)
+}
+
+/// Paint the reaction chips of a row, their top-left at `(x, y)`. A chip
+/// that holds `me` takes the accent (`MURMURE-137`).
+#[allow(clippy::too_many_arguments)]
+fn draw_chips<S: DrawSurface>(
+    surface: &mut S,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    row: &RowWords,
+    (x, y): (f32, f32),
+    width: f32,
+    palette: &Palette,
+    me: Option<UserId>,
+) {
+    let (boxes, _) = chips(font_cx, cache, row, width);
+    let (dx, dy) = (f64::from(x), f64::from(y));
+    for (reaction, b) in row.reactions.iter().zip(boxes) {
+        let at = Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
+        let mine = me.is_some_and(|me| reaction.users.contains(&me));
+        if mine {
+            surface.fill_rect(at, palette.selection.with_alpha(SELECTION_ALPHA));
+            surface.stroke_rect(at, palette.selection, 1.0);
+        } else {
+            surface.fill_rect(at, palette.header_bg);
+            surface.stroke_rect(at, palette.header_border, 1.0);
+        }
+        let layout = shape(font_cx, cache, &chip_label(reaction), FONT_UI, width, false);
+        #[allow(clippy::cast_possible_truncation)]
+        let (left, top) = (at.x0 as f32 + SPACE_4, at.y0 as f32 + SPACE_2);
+        draw(surface, layout, left, top, palette.cell_text);
     }
 }
 
@@ -410,6 +517,7 @@ fn fill_bytes<S: DrawSurface>(
 fn measure(font_cx: &mut FontContext, cache: &mut TextCache, row: &RowWords, width: f32) -> f32 {
     let mut tall = 2.0 * SPACE_2 + header_height(font_cx, cache, row, width);
     tall += body(font_cx, cache, row, width).height();
+    tall += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
         tall += shape(font_cx, cache, replies, FONT_UI, width, false).height();
     }
@@ -417,6 +525,7 @@ fn measure(font_cx: &mut FontContext, cache: &mut TextCache, row: &RowWords, wid
 }
 
 /// Paint one row whose top is at `top`.
+#[allow(clippy::too_many_arguments)]
 fn draw_row<S: DrawSurface>(
     surface: &mut S,
     font_cx: &mut FontContext,
@@ -425,6 +534,7 @@ fn draw_row<S: DrawSurface>(
     top: f32,
     width: f32,
     palette: &Palette,
+    me: Option<UserId>,
 ) {
     let x = SPACE_8;
     let mut y = top + SPACE_2;
@@ -447,6 +557,8 @@ fn draw_row<S: DrawSurface>(
     let body_tall = layout.height();
     draw_body(surface, layout, x, y, ink, palette);
     y += body_tall;
+    draw_chips(surface, font_cx, cache, row, (x, y), width, palette, me);
+    y += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
         let layout = shape(font_cx, cache, replies, FONT_UI, width, false);
         draw(surface, layout, x, y, palette.selection);
@@ -551,6 +663,7 @@ pub(crate) mod tests {
                 anchor: None,
                 focus: None,
                 selecting: Selecting::default(),
+                me: None,
             },
             height,
         )
@@ -631,6 +744,7 @@ pub(crate) mod tests {
             anchor: None,
             focus: Some(focus),
             selecting: Selecting::default(),
+            me: None,
         };
         let (surface, painted) = paint_from(focused(98), 300.0);
         let rings: Vec<Rect> = surface
@@ -687,6 +801,7 @@ pub(crate) mod tests {
             anchor: Some(anchor),
             focus: None,
             selecting: Selecting::default(),
+            me: None,
         };
         let (_, painted) = paint_from(at((10, 0.0)), 200.0);
         assert_eq!(painted.rest, Some((10, 0.0)));
@@ -737,6 +852,127 @@ pub(crate) mod tests {
         let muted: usize = runs(&surface, LIGHT.header_text).iter().map(|r| r.1).sum();
         assert_eq!(muted, 1 + crate::list::DELETED.chars().count());
         assert!(!runs(&surface, LIGHT.selection).is_empty());
+    }
+
+    /// The reactions of a message paint as one chip each under its body,
+    /// the member's own in the accent. The row grows to hold them. A click
+    /// on a chip names it; a deleted message shows none.
+    #[test]
+    fn the_reactions_paint_as_chips_under_the_body() {
+        use ambre_bus::Reaction;
+        let (me, ada) = (UserId::new(), UserId::new());
+        let mut reacted = message(ada, 0, "hello");
+        reacted.reactions = vec![
+            Reaction {
+                emoji: "\u{1F44D}".to_owned(),
+                users: vec![ada],
+            },
+            Reaction {
+                emoji: "\u{1F389}".to_owned(),
+                users: vec![ada, me],
+            },
+        ];
+        let mut list = MessageList::default();
+        list.absorb(SegmentId::new(), vec![reacted.clone()]);
+        let mut bare = MessageList::default();
+        bare.absorb(SegmentId::new(), vec![message(ada, 0, "hello")]);
+        let tall = |painted: &Painted| painted.rows[0].2 - painted.rows[0].1;
+        let (_, plain) = paint(&bare, 600.0);
+
+        let (_, at) = paint(&list, 600.0);
+        let bottom = at.rows[0].2;
+        let click = (SPACE_8 + 2.0, bottom - 2.0 * SPACE_2 - 2.0);
+        let selecting = Selecting {
+            click: Some(click),
+            ..Selecting::default()
+        };
+        let shown = Shown {
+            list: &list,
+            unread: None,
+            anchor: None,
+            focus: None,
+            selecting,
+            me: Some(me),
+        };
+        let (surface, painted) = paint_from(shown, 600.0);
+        assert!(tall(&painted) > tall(&plain), "the chips take room");
+        assert_eq!(painted.chip, Some((0, "\u{1F44D}".to_owned())));
+        let fills = |color: Color| -> Vec<Rect> {
+            surface
+                .ops()
+                .iter()
+                .filter_map(|op| match op {
+                    DrawOp::FillRect { rect, color: c } if *c == color => Some(*rect),
+                    _ => None,
+                })
+                .collect()
+        };
+        let theirs = fills(LIGHT.header_bg);
+        let mine = fills(LIGHT.selection.with_alpha(SELECTION_ALPHA));
+        let ([theirs], [mine]) = (theirs.as_slice(), mine.as_slice()) else {
+            panic!("one chip each: {theirs:?} {mine:?}");
+        };
+        assert!(theirs.x1 < mine.x0, "left to right");
+        assert_eq!(theirs.y0, mine.y0, "on one line");
+        assert!(mine.y1 <= f64::from(bottom));
+
+        reacted.deleted = true;
+        let mut gone = MessageList::default();
+        gone.absorb(SegmentId::new(), vec![reacted]);
+        let (surface, _) = paint(&gone, 600.0);
+        let chips = surface
+            .ops()
+            .iter()
+            .filter(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == LIGHT.header_bg))
+            .count();
+        assert_eq!(chips, 0, "a deleted message shows no chip");
+    }
+
+    /// The colour emoji face is fetched the first time a painted row holds
+    /// an emoji, in its body or on a chip. A list with none fetches nothing
+    /// (`MURMURE-138`). The count is a host hook of the cache.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn the_emoji_face_is_asked_for_on_first_use_only() {
+        let requested = |list: &MessageList| {
+            let (mut surface, mut font_cx) = (RecordingSurface::new(), fonts());
+            let mut cache = TextCache::new(1.0);
+            let shown = Shown {
+                list,
+                unread: None,
+                anchor: None,
+                focus: None,
+                selecting: Selecting::default(),
+                me: None,
+            };
+            let palette = &LIGHT;
+            paint_list(
+                &mut surface,
+                &mut font_cx,
+                &mut cache,
+                shown,
+                (400.0, 600.0),
+                palette,
+                &|_| Some("Ada".to_owned()),
+                &|_| "t".to_owned(),
+            );
+            cache.lazy_fonts_requested()
+        };
+        let ada = UserId::new();
+        let mut plain = MessageList::default();
+        plain.absorb(SegmentId::new(), vec![message(ada, 0, "no picture here")]);
+        assert_eq!(requested(&plain), 0, "nothing fetched at start");
+        let mut said = MessageList::default();
+        said.absorb(SegmentId::new(), vec![message(ada, 0, "ship it \u{1F680}")]);
+        assert_eq!(requested(&said), 1);
+        let mut reacted = message(ada, 0, "ship it");
+        reacted.reactions = vec![ambre_bus::Reaction {
+            emoji: "\u{1F389}".to_owned(),
+            users: vec![ada],
+        }];
+        let mut chipped = MessageList::default();
+        chipped.absorb(SegmentId::new(), vec![reacted]);
+        assert_eq!(requested(&chipped), 1, "a chip asks for it too");
     }
 
     /// A sent body draws its marks: bold shapes heavier, code sits on its
@@ -907,6 +1143,7 @@ pub(crate) mod tests {
                 drag: Some(drag),
                 click: None,
             },
+            me: None,
         };
         let press = (SPACE_8, first - SPACE_2 - 2.0);
         let (surface, painted) = paint_from(drag(press, (399.0, (top + second) / 2.0)), 600.0);
@@ -965,6 +1202,7 @@ pub(crate) mod tests {
                 rows: Vec::new(),
                 selection: None,
                 link: None,
+                chip: None,
             }
         );
         assert!(

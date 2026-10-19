@@ -26,7 +26,8 @@ use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::{
-    AskedAll, EDIT, FromThread, MessageAction, MessageTarget, PendingEdit, message_action,
+    AskedAll, EDIT, EMOJI_KEY, FromThread, MessageAction, MessageTarget, PendingEdit,
+    message_action,
 };
 use crate::composer::{Composer, DraftOf, EDITING_LINE, also_said, typing_line};
 use crate::drafts::DraftShelf;
@@ -98,6 +99,12 @@ pub struct PageReads {
     /// The drafts the device keeps, which every region reads before a paint
     /// and writes after it (`MURMURE-210`).
     pub drafts: DraftShelf,
+    /// Open the emoji picker on the composer of a region. The flag names
+    /// the thread's region (`MURMURE-139`).
+    pub ask_emoji: Rc<dyn Fn(bool)>,
+    /// Take the emoji the picker picked for the composer. Given `true`, it
+    /// takes a pick for the thread's composer alone (`MURMURE-139`).
+    pub take_emoji: Rc<dyn Fn(bool) -> Option<String>>,
 }
 
 /// The id of the content canvas, which the channel's region paints. The
@@ -424,6 +431,14 @@ impl MurmureView {
             return None;
         }
         let i = self.last.as_ref()?.row_at(y)?;
+        let mut target = self.target_of_row(i)?;
+        target.pressed = pressed.then_some((x, y));
+        Some(target)
+    }
+
+    /// The message of the row `i` of the list on screen, as the target of
+    /// its actions. `None` on a band.
+    fn target_of_row(&self, i: usize) -> Option<MessageTarget> {
         let pane = (self.reads.pane)();
         let lists = self.lists.borrow();
         let list = self.shown(&lists.conversations, pane)?;
@@ -438,9 +453,42 @@ impl MurmureView {
             ),
             (Region::Thread, _) => return None,
         };
-        let mut target = self.target_of(channel, at, message);
-        target.pressed = pressed.then_some((x, y));
-        Some(target)
+        Some(self.target_of(channel, at, message))
+    }
+
+    /// A click on the chip `emoji` of the row `i`: the member's own reaction
+    /// leaves (`MURMURE-096`), or theirs joins the others (`MURMURE-092`).
+    fn press_chip(&self, i: usize, emoji: String) {
+        let (Some(me), Some(target)) = ((self.reads.me)(), self.target_of_row(i)) else {
+            return;
+        };
+        let mine = {
+            let pane = (self.reads.pane)();
+            let lists = self.lists.borrow();
+            let message = self
+                .shown(&lists.conversations, pane)
+                .and_then(|list| list.rows().get(i)?.message());
+            message.is_some_and(|m| {
+                m.reactions
+                    .iter()
+                    .any(|r| r.emoji == emoji && r.users.contains(&me))
+            })
+        };
+        let (at, message) = (target.at, target.message);
+        let command = if mine {
+            MurmureCommand::Unreact { at, message, emoji }
+        } else {
+            MurmureCommand::React {
+                at,
+                message,
+                emoji,
+                now: self.now(),
+            }
+        };
+        self.send(LogicCommand::Channel {
+            channel_id: target.channel,
+            command,
+        });
     }
 
     /// `message`, lying at `at` in `channel`, as the target of its actions.
@@ -848,6 +896,16 @@ impl MurmureView {
             self.typed();
             self.dirty = true;
         }
+        // An emoji picked for the composer lands at its caret, as a paste
+        // does, and the keys come back to it (`MURMURE-139`).
+        if let Some(emoji) = (self.reads.take_emoji)(self.region == Region::Thread)
+            && let Some(of) = self.writes_in()
+        {
+            self.composer.text(of, &emoji);
+            self.reads.pipe.focus();
+            self.typed();
+            self.dirty = true;
+        }
         // A press on the format bar toggles its style as its chord does, and
         // the keys stay in the composer (`MURMURE-432`).
         if let Some(style) = (self.reads.take_press)(self.region == Region::Thread)
@@ -946,6 +1004,7 @@ impl MurmureView {
                 anchor,
                 focus,
                 selecting: self.selecting,
+                me: (self.reads.me)(),
             },
             list_size,
             self.theme.palette(),
@@ -955,6 +1014,9 @@ impl MurmureView {
         self.last = Some(painted.clone());
         if let Some(address) = &painted.link {
             (self.reads.open_link)(address);
+        }
+        if let Some((i, emoji)) = painted.chip.clone() {
+            self.press_chip(i, emoji);
         }
         // A selection moves no read cursor: only what the paint shows does
         // (`MURMURE-427`).
@@ -1421,6 +1483,10 @@ impl MurmureView {
                     self.composer.start_edit(edit);
                     return Some(true);
                 }
+                if ctrl && !(shift || alt) && key.chars().eq([EMOJI_KEY]) {
+                    (self.reads.ask_emoji)(self.region == Region::Thread);
+                    return Some(true);
+                }
                 if !self.composer.key(channel, key, shift, ctrl, alt) {
                     return None;
                 }
@@ -1516,6 +1582,10 @@ mod tests {
         bars: Rc<RefCell<Vec<Barred>>>,
         /// The style a press on the bar asked for, for the region it names.
         press: Rc<RefCell<Option<(bool, TextStyle)>>>,
+        /// Each region the view opened the emoji picker for, oldest first.
+        asked_emoji: Rc<RefCell<Vec<bool>>>,
+        /// The emoji the picker picked, for the region it names.
+        emoji: Rc<RefCell<Option<(bool, String)>>>,
     }
 
     /// A format bar the view handed the page, and whether the thread's
@@ -1556,6 +1626,10 @@ mod tests {
         let shown_bars = Rc::clone(&bars);
         let press = Rc::new(RefCell::new(None::<(bool, TextStyle)>));
         let pressed = Rc::clone(&press);
+        let asked_emoji = Rc::new(RefCell::new(Vec::new()));
+        let asks = Rc::clone(&asked_emoji);
+        let emoji = Rc::new(RefCell::new(None::<(bool, String)>));
+        let picked_emoji = Rc::clone(&emoji);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| Some("Ada".to_owned())),
@@ -1605,6 +1679,15 @@ mod tests {
             }),
             open_link: Rc::new(move |address: &str| opens.borrow_mut().push(address.to_owned())),
             drafts: DraftShelf::default(),
+            ask_emoji: Rc::new(move |in_thread| asks.borrow_mut().push(in_thread)),
+            take_emoji: Rc::new(move |in_thread| {
+                let mut picked = picked_emoji.borrow_mut();
+                if picked.as_ref()?.0 == in_thread {
+                    picked.take().map(|(_, emoji)| emoji)
+                } else {
+                    None
+                }
+            }),
         };
         let size = (300.0, 400.0);
         let view = MurmureView::new(
@@ -1631,6 +1714,8 @@ mod tests {
             opened,
             bars,
             press,
+            asked_emoji,
+            emoji,
         }
     }
 
@@ -1925,6 +2010,106 @@ mod tests {
         let opened = page.opened.borrow().clone();
         assert_eq!(opened, ["https://ambre.dev", "https://ambre.dev"]);
         assert!(page.commands.try_recv().is_err(), "the opens sent nothing");
+    }
+
+    /// A click on a reaction chip adds the member's reaction when theirs is
+    /// not in it, and takes it away when it is (`MURMURE-092`,
+    /// `MURMURE-096`).
+    #[test]
+    fn a_click_on_a_chip_adds_or_takes_away_the_members_reaction() {
+        let mut page = page();
+        let (me, ada) = (UserId::new(), UserId::new());
+        page.me.set(Some(me));
+        let channel = ChannelId::new();
+        let mut reacted = message(ada, 1, "hello");
+        reacted.reactions = vec![
+            ambre_bus::Reaction {
+                emoji: "\u{1F44D}".to_owned(),
+                users: vec![ada],
+            },
+            ambre_bus::Reaction {
+                emoji: "\u{1F389}".to_owned(),
+                users: vec![me],
+            },
+        ];
+        let id = reacted.id;
+        let segment = SegmentId::new();
+        let messages = vec![reacted];
+        send(&page, channel, MurmureEvent::Messages { segment, messages });
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        frame_with_fonts(&mut page.view);
+        reads(&page);
+        let rows = page.view.last_painted().expect("painted").rows;
+        let [(_, _, bottom)] = rows.as_slice() else {
+            panic!("one row: {rows:?}");
+        };
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let first = crate::paint::shape(
+            &mut font_cx,
+            &mut cache,
+            "\u{1F44D} 1",
+            FONT_UI,
+            284.0,
+            false,
+        );
+        let y = f64::from(bottom - 2.0 * SPACE_2 - 2.0);
+        let on_first = (f64::from(SPACE_8 + 2.0), y);
+        let on_second = (f64::from(SPACE_8 + first.width() + 4.0 * SPACE_4), y);
+        let mut clicked = Vec::new();
+        for at in [on_first, on_second] {
+            mouse(&mut page.view, at, at);
+            frame_with_fonts(&mut page.view);
+            while let Ok(command) = page.commands.try_recv() {
+                if let LogicCommand::Channel { command, .. } = command {
+                    clicked.push(command);
+                }
+            }
+        }
+        let at = MessageAt::Segment(segment);
+        let [
+            MurmureCommand::React {
+                at: added_at,
+                message: added,
+                emoji: thumbs,
+                ..
+            },
+            MurmureCommand::Unreact {
+                at: removed_at,
+                message: removed,
+                emoji: party,
+            },
+        ] = clicked.as_slice()
+        else {
+            panic!("one reaction added, one taken away: {clicked:?}");
+        };
+        assert_eq!((*added_at, *added, thumbs.as_str()), (at, id, "\u{1F44D}"));
+        assert_eq!(
+            (*removed_at, *removed, party.as_str()),
+            (at, id, "\u{1F389}")
+        );
+    }
+
+    /// Ctrl and `;` in the composer opens the picker for its region, and a
+    /// pick goes in at the caret of that region alone (`MURMURE-139`).
+    #[test]
+    fn a_picked_emoji_goes_in_at_the_caret() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "ab");
+        key(&mut page, "ArrowLeft", false, 0.0);
+        assert!(key(&mut page, ";", true, 0.0));
+        assert_eq!(*page.asked_emoji.borrow(), [false]);
+        *page.emoji.borrow_mut() = Some((true, "\u{1F680}".to_owned()));
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().draft(channel).as_deref(), Some("ab"));
+        *page.emoji.borrow_mut() = Some((false, "\u{1F680}".to_owned()));
+        frame_with_fonts(&mut page.view);
+        assert_eq!(
+            page.view.composer().draft(channel).as_deref(),
+            Some("a\u{1F680}b")
+        );
+        assert!(page.emoji.borrow().is_none(), "the pick is taken once");
     }
 
     /// A drag past the top of the list scrolls it under the pointer, and a
@@ -4469,8 +4654,8 @@ mod tests {
         assert_eq!(page.said.borrow().len(), count, "a key is said once");
     }
 
-    /// A line move on a draft wider than the field says the line it draws,
-    /// one wrapped part of a draft that holds no break (`MURMURE-576`).
+    /// A line move on a draft wider than the field says the line it draws.
+    /// That line is one wrapped part of a draft with no break (`MURMURE-576`).
     #[test]
     fn a_line_move_on_a_wrapped_draft_says_the_line_drawn() {
         let mut page = composing(ChannelId::new());
@@ -4519,8 +4704,8 @@ mod tests {
         page.view.reads.drafts.load(me, kept);
     }
 
-    /// A draft typed and not sent is in the store, and a page built anew
-    /// shows it in its composer once the rows are read, with no key pressed.
+    /// A draft typed and not sent is in the store. A page built anew shows it
+    /// in its composer once the rows are read, with no key pressed.
     /// No command carried it meanwhile (`MURMURE-210`, `MURMURE-211`).
     #[test]
     fn a_draft_comes_back_after_a_reload() {
@@ -4572,8 +4757,8 @@ mod tests {
         assert!(rows.borrow().is_empty(), "its draft went with it");
     }
 
-    /// A channel lost takes its draft from the store and from the composer,
-    /// which writes it back no more; another channel keeps its own
+    /// A channel lost takes its draft from the store and from the composer.
+    /// The composer writes it back no more; another channel keeps its own
     /// (`MURMURE-215`, `MURMURE-217`).
     #[test]
     fn a_lost_channel_takes_its_draft_from_the_composer() {

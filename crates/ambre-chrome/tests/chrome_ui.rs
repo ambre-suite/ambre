@@ -561,7 +561,7 @@ async fn a_key_that_closes_a_trigger_menu_returns_the_focus_to_its_trigger() {
             .unwrap()
             .unwrap();
         // A menu opened again takes the focus a task later than the first
-        // time: its list is built, then its node lands, then the effect runs.
+        // time. Its list is built, then its node lands, then the effect runs.
         leptos::task::tick().await;
         assert_ne!(active().as_ref(), btn.dyn_ref(), "{key}: the menu took it");
         press(&menu, key);
@@ -925,7 +925,7 @@ fn mount_modal(open: RwSignal<bool>) -> Modal {
 }
 
 /// A modal opened again before the `close` event of its last close lands
-/// stays open (`CHROME-106`): the stale event clears no signal, releases no
+/// stays open (`CHROME-106`). The stale event clears no signal, releases no
 /// hold and notifies no one.
 #[wasm_bindgen_test]
 async fn a_close_landing_after_a_reopen_leaves_the_modal_open() {

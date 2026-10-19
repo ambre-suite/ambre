@@ -615,9 +615,10 @@ impl Composer {
         }
     }
 
-    /// Read the shelf before a paint of the draft `shown`: drop what the
-    /// shelf lost since the last read, and take the draft it keeps `shown`
-    /// into a blank composer, the keys left where they are (`MURMURE-210`).
+    /// Read the shelf before a paint of the draft `shown`. Drop what the
+    /// shelf lost since the last read. Then take the draft it keeps for
+    /// `shown` into a blank composer, the keys left where they are
+    /// (`MURMURE-210`).
     pub fn unshelve(&mut self, shown: Option<DraftOf>, shelf: &DraftShelf) {
         let (losses, seen) = shelf.losses_since(self.losses_seen);
         self.losses_seen = seen;
@@ -641,8 +642,8 @@ impl Composer {
         }
     }
 
-    /// Hand the shelf the drafts after a paint: each one held, the one an
-    /// edit put aside in place of the edit, and the ones sent, which go
+    /// Hand the shelf the drafts after a paint. That is each one held, and
+    /// the one an edit put aside in place of the edit. The ones sent go
     /// (`MURMURE-212`). A draft this composer never held stays as the shelf
     /// keeps it, so another region's is safe.
     pub fn shelve(&mut self, shelf: &DraftShelf) {

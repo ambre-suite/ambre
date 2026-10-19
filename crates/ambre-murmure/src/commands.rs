@@ -53,6 +53,9 @@ pub const COPY_TEXT: CommandId = CommandId("murmure.message.copy_text");
 pub const EDIT: CommandId = CommandId("murmure.message.edit");
 /// Delete a message of the member, once a dialog confirms it (`MURMURE-512`).
 pub const DELETE: CommandId = CommandId("murmure.message.delete");
+/// Open the emoji picker on the message, to react with the emoji picked
+/// (`MURMURE-140`).
+pub const REACT: CommandId = CommandId("murmure.message.react");
 /// Open the list of the keys Murmure takes (`MURMURE-540`).
 pub const KEYS: CommandId = CommandId("murmure.general.keys");
 
@@ -89,6 +92,10 @@ fn reply_title(_: &Locale) -> String {
 
 fn mark_unread_title(_: &Locale) -> String {
     "Mark unread".into()
+}
+
+fn react_title(_: &Locale) -> String {
+    "Add reaction".into()
 }
 
 fn copy_text_title(_: &Locale) -> String {
@@ -160,6 +167,13 @@ pub const COMMANDS: &[Command] = &[
     Command {
         id: REPLY,
         title: reply_title,
+        icon: None,
+        keybindings: &[],
+        category: MESSAGE,
+    },
+    Command {
+        id: REACT,
+        title: react_title,
         icon: None,
         keybindings: &[],
         category: MESSAGE,
@@ -249,6 +263,46 @@ pub enum MessageAction {
     ConfirmDelete(PendingDelete),
     /// Load this message into the composer of its channel or its thread.
     Edit(PendingEdit),
+    /// Open the emoji picker, whose pick reacts to this message.
+    React(PendingReaction),
+}
+
+/// A message the emoji picker reacts to, once an emoji is picked
+/// (`MURMURE-140`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PendingReaction {
+    /// The channel the message lies in.
+    pub channel: ChannelId,
+    /// Where it lies: a segment of the channel, or the thread of a root.
+    pub at: MessageAt,
+    /// The message.
+    pub message: MessageId,
+}
+
+impl PendingReaction {
+    /// The command that reacts with `emoji`, stamped `now` by the view
+    /// (`MURMURE-092`).
+    pub fn command(self, emoji: String, now: Timestamp) -> LogicCommand {
+        LogicCommand::Channel {
+            channel_id: self.channel,
+            command: MurmureCommand::React {
+                at: self.at,
+                message: self.message,
+                emoji,
+                now,
+            },
+        }
+    }
+}
+
+/// What the emoji picker is open for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Picking {
+    /// The composer of a region, which inserts the pick at its caret
+    /// (`MURMURE-139`). The flag names the thread's region.
+    Composer { in_thread: bool },
+    /// A message, which the pick reacts to (`MURMURE-140`).
+    Reaction(PendingReaction),
 }
 
 /// A message the member asked to edit, which the composer of its channel
@@ -353,9 +407,12 @@ pub fn asked_all_title(members: usize) -> String {
 /// is edited in the composer of its thread (`MURMURE-526`).
 pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<CommandId> {
     let in_channel = matches!(target.at, MessageAt::Segment(_));
-    let mut ids = Vec::with_capacity(5);
+    let mut ids = Vec::with_capacity(6);
     if in_channel && !target.notice {
         ids.push(REPLY);
+    }
+    if !target.notice && !target.deleted {
+        ids.push(REACT);
     }
     if in_channel {
         ids.push(MARK_UNREAD);
@@ -413,6 +470,11 @@ pub fn message_action(
                 segment: segment?,
                 message: target.message,
             },
+        })),
+        REACT => Some(MessageAction::React(PendingReaction {
+            channel: target.channel,
+            at: target.at,
+            message: target.message,
         })),
         COPY_TEXT => Some(MessageAction::Copy(target.text.clone())),
         DELETE => Some(MessageAction::ConfirmDelete(PendingDelete {
@@ -484,6 +546,10 @@ const fn region_key(keys: KeyBinding, action: &'static str, place: KeyPlace) -> 
     }
 }
 
+/// The key that, with the primary modifier, opens the emoji picker on the
+/// composer (`MURMURE-139`).
+pub const EMOJI_KEY: char = ';';
+
 /// The keys inside a conversation, one row each (the Murmure keyboard spec).
 pub const REGION_KEYS: &[RegionKey] = &[
     region_key(
@@ -524,6 +590,13 @@ pub const REGION_KEYS: &[RegionKey] = &[
     region_key(
         KeyBinding::new(Modifiers::NONE, Key::Escape),
         "Cancel the edit",
+        KeyPlace::Composer,
+    ),
+    // Unshifted on a QWERTY and on a French keyboard alike, and a chord no
+    // browser services.
+    region_key(
+        KeyBinding::primary(EMOJI_KEY),
+        "Insert an emoji",
         KeyPlace::Composer,
     ),
     region_key(
@@ -648,7 +721,7 @@ mod tests {
     fn every_action_of_a_message_is_a_command_of_the_table() {
         let full = target(MessageAt::Segment(SegmentId::new()), "hi", false);
         let ids = message_actions(&full, Some(full.author));
-        assert_eq!(ids, [REPLY, MARK_UNREAD, COPY_TEXT, EDIT, DELETE]);
+        assert_eq!(ids, [REPLY, REACT, MARK_UNREAD, COPY_TEXT, EDIT, DELETE]);
         for id in ids {
             assert!(ambre_commands::find(COMMANDS, id).is_some(), "{}", id.0);
         }
@@ -662,7 +735,7 @@ mod tests {
         let notice = target(segment, "joined", true);
         assert_eq!(message_actions(&notice, None), [MARK_UNREAD, COPY_TEXT]);
         let reply = target(MessageAt::Thread(MessageId::new()), "one", false);
-        assert_eq!(message_actions(&reply, None), [COPY_TEXT]);
+        assert_eq!(message_actions(&reply, None), [REACT, COPY_TEXT]);
         let deleted = target(segment, "", false);
         assert_eq!(message_actions(&deleted, None), [REPLY, MARK_UNREAD]);
         assert!(message_action(REPLY, &reply, None).is_none(), "not offered");
@@ -692,7 +765,7 @@ mod tests {
         copy.from_thread = Some(FromThread::Unloaded(thread));
         assert_eq!(
             message_actions(&copy, None),
-            [REPLY, MARK_UNREAD, COPY_TEXT]
+            [REPLY, REACT, MARK_UNREAD, COPY_TEXT]
         );
         let Some(MessageAction::Send(LogicCommand::Channel {
             channel_id,
@@ -720,7 +793,7 @@ mod tests {
         );
         let reply = target(MessageAt::Thread(MessageId::new()), "one", false);
         let reply_ids = message_actions(&reply, Some(reply.author));
-        assert_eq!(reply_ids, [COPY_TEXT, EDIT, DELETE]);
+        assert_eq!(reply_ids, [REACT, COPY_TEXT, EDIT, DELETE]);
         let notice = target(segment, "joined", true);
         let notice_ids = message_actions(&notice, Some(notice.author));
         assert!(!notice_ids.contains(&DELETE), "a notice");
@@ -827,6 +900,32 @@ mod tests {
             panic!("copy hands the text over");
         };
         assert_eq!(text, "hi");
+        let Some(MessageAction::React(pending)) = message_action(REACT, &target, None) else {
+            panic!("react opens the picker");
+        };
+        let LogicCommand::Channel {
+            channel_id,
+            command:
+                MurmureCommand::React {
+                    at,
+                    message,
+                    emoji,
+                    now,
+                },
+        } = pending.command("\u{1F680}".to_owned(), Timestamp(9))
+        else {
+            panic!("a pick reacts to the message");
+        };
+        assert_eq!(
+            (channel_id, at, message, emoji.as_str(), now),
+            (
+                target.channel,
+                MessageAt::Segment(segment),
+                target.message,
+                "\u{1F680}",
+                Timestamp(9)
+            )
+        );
     }
 
     /// Each command is described once, with a title in every locale, a

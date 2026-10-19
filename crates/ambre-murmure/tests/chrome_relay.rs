@@ -23,12 +23,12 @@ use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteRow, ShellAction}
 use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId};
 use ambre_murmure::chrome::{
-    ChannelMentionConfirm, DeleteConfirm, KeyList, MarkBarPanel, MentionPanel, MurmureHandler,
-    MurmureRelay, SearchBox, coverage,
+    ChannelMentionConfirm, DeleteConfirm, EmojiPicker, KeyList, MarkBarPanel, MentionPanel,
+    MurmureHandler, MurmureRelay, SearchBox, coverage,
 };
 use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
-    NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REPLY, SEARCH, key_list,
+    NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REACT, REPLY, SEARCH, key_list,
 };
 use ambre_murmure::{MessageRef, MurmurePane};
 use leptos::prelude::*;
@@ -88,7 +88,7 @@ fn a_channel_lost_while_open_leaves_the_sidebar_and_the_pane() {
     );
 }
 
-/// The drafts of a channel lost go with it, those of a channel that only
+/// The drafts of a channel lost go with it. Those of a channel that only
 /// failed to open stay, and a sign-out takes every one (`MURMURE-215`,
 /// `MURMURE-216`, `MURMURE-217`).
 #[wasm_bindgen_test]
@@ -676,8 +676,8 @@ fn the_invite_control_offers_no_member_of_the_channel() {
 }
 
 /// Let the effects an action scheduled run before the DOM is read. A dialog
-/// opens and closes two effects away from its cause (the relay field, then
-/// the `open` signal), and a single `tick` may land between them.
+/// opens and closes two effects away from its cause: the relay field, then
+/// the `open` signal. A single `tick` may land between them.
 async fn settle() {
     for _ in 0..2 {
         let wait = js_sys::Promise::new(&mut |resolve, _| {
@@ -812,7 +812,12 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
     relay.target.set(Some(target.clone()));
     assert_eq!(
         menu_labels(relay),
-        ["Reply in thread", "Mark unread", "Copy text"]
+        [
+            "Reply in thread",
+            "Add reaction",
+            "Mark unread",
+            "Copy text"
+        ]
     );
 
     assert!(handler.on_command(REPLY).is_empty());
@@ -1057,6 +1062,116 @@ async fn the_keys_command_opens_the_list_of_every_key() {
     leptos::task::tick().await;
     assert!(!dialog.open());
     assert!(!relay.keys.get_untracked());
+    root.remove();
+}
+
+/// The react action opens the picker, and a pick sends the reaction to the
+/// message, stamped by the view (`MURMURE-140`). The search narrows the
+/// grid. A pick for a composer sends nothing and waits for its region,
+/// which takes it once (`MURMURE-139`).
+#[wasm_bindgen_test]
+async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
+    use wasm_bindgen::JsCast;
+
+    let (_owner, relay, direct) = shown_direct();
+    let (handler, sent) = handler(relay);
+    let segment = SegmentId::new();
+    let message = MessageId::new();
+    relay.target.set(Some(MessageTarget {
+        channel: direct,
+        at: MessageAt::Segment(segment),
+        message,
+        author: UserId::new(),
+        text: "ship it".to_owned(),
+        mentions: Vec::new(),
+        styles: Vec::new(),
+        notice: false,
+        deleted: false,
+        pressed: None,
+        canvas: "ambre-canvas",
+        from_thread: None,
+    }));
+    let send = handler.send;
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let now = Timestamp(1_700_000_000_000);
+    let _handle = leptos::mount::mount_to(mount, move || {
+        view! { <EmojiPicker relay=relay send=send now=Callback::new(move |()| now) /> }
+    });
+    let dialog: web_sys::HtmlDialogElement = root
+        .query_selector("dialog")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    let picks = || root.query_selector_all(".murmure-emoji-pick").unwrap();
+    let performance = web_sys::window().unwrap().performance().unwrap();
+    let fetched = || performance.get_entries_by_type("resource").length();
+    let before = fetched();
+
+    assert!(handler.on_command(REACT).is_empty());
+    settle().await;
+    assert!(dialog.open(), "the action opens the picker");
+    let title = root.query_selector("h2").unwrap().unwrap().text_content();
+    assert_eq!(title.as_deref(), Some("Add a reaction"));
+    let search: web_sys::HtmlInputElement = root
+        .query_selector(".murmure-emoji-search")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    search.set_value("rocket");
+    search
+        .dispatch_event(&web_sys::Event::new("input").unwrap())
+        .unwrap();
+    settle().await;
+    assert_eq!(picks().length(), 1, "the search narrows the grid");
+    let closed = next_close(&dialog);
+    let rocket: web_sys::Element = picks().item(0).unwrap().dyn_into().unwrap();
+    assert_eq!(
+        rocket.get_attribute("aria-label").as_deref(),
+        Some("rocket")
+    );
+    rocket.dyn_into::<web_sys::HtmlElement>().unwrap().click();
+    closed.await.unwrap();
+    assert!(matches!(
+        &sent.get_untracked()[..],
+        [LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::React { at, message: m, emoji, now: t },
+        }] if *channel_id == direct
+            && *at == MessageAt::Segment(segment)
+            && *m == message
+            && emoji == "\u{1F680}"
+            && *t == now
+    ));
+
+    relay.ask_emoji(true);
+    settle().await;
+    assert!(dialog.open());
+    assert_eq!(search.value(), "", "the search starts blank");
+    let closed = next_close(&dialog);
+    picks()
+        .item(0)
+        .unwrap()
+        .dyn_into::<web_sys::HtmlElement>()
+        .unwrap()
+        .click();
+    closed.await.unwrap();
+    assert_eq!(
+        sent.get_untracked().len(),
+        1,
+        "a composer pick sends nothing"
+    );
+    assert_eq!(relay.take_emoji(false), None, "not the channel's");
+    assert!(relay.take_emoji(true).is_some());
+    assert_eq!(relay.take_emoji(true), None, "taken once");
+    // The table is compiled in and the grid is text: the picker loads
+    // nothing (`MURMURE-141`).
+    let dialog_html = dialog.inner_html();
+    assert!(!dialog_html.contains("<img") && !dialog_html.contains("url("));
+    assert_eq!(fetched(), before, "the picker fetched nothing");
     root.remove();
 }
 

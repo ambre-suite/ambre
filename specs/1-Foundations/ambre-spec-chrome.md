@@ -147,9 +147,12 @@ why `CHROME-003` has five tests and no browser.
 **The modal.** The native dialog element supplies the focus trap and the inertness of the page
 behind it, along with Escape and the backdrop. The component adds two things and no more. It keeps
 the open signal and the element agreeing in both directions (`CHROME-012`). It also fires the
-callbacks that pause and resume the frame loop (`CHROME-011`). A blur over a frozen canvas then costs nothing.
-The element's close event is queued, so a modal can open again before the event of its last close
-lands. That event then describes a state already gone, and the component ignores it (`CHROME-106`).
+callbacks that pause and resume the frame loop (`CHROME-011`). A blur over a frozen canvas then
+costs nothing.
+
+**A late close.** The element's close event is queued, so a modal can open again before the event of
+its last close lands. That event then describes a state already gone, and the component ignores it
+(`CHROME-106`).
 
 **The application's own chrome.** An application builds its specific components on this toolkit, in
 its own crate. Those are a formula bar, a filter popover, a find panel, a selection toolbar and a

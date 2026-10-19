@@ -21,6 +21,7 @@ pub mod commands;
 pub mod composer;
 mod delta;
 pub mod drafts;
+pub mod emoji;
 mod error;
 mod layout;
 pub mod list;

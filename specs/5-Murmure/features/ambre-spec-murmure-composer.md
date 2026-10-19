@@ -98,8 +98,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   like any delta (`ZK-001`).
 * **Verification.** 44 `verified`, 1 `unimplemented`. The host tier drives the view with the events
   the page sends: a press, a tap, text, keys, a paste. The marks are built, drawn in the field and
-  sent, and the format bar shows. A stored draft is held by the host tier over a store in memory,
-  and its own store by the wasm tier in a real browser database.
+  sent, and the format bar shows. The host tier holds a stored draft over a store in memory. The
+  wasm tier holds its store in a real browser database.
 
 ---
 
@@ -118,7 +118,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 **CRDT containers.** none while drafting: a draft is local text with its marks, never shared. It
 is kept in the local store the launcher owns, so a reload finds it (`MURMURE-210`). Each draft is
-a row of a store of its own, keyed by the user, the channel and the thread, so a reload reads the
+a row of a store of its own, keyed by the user, the channel and the thread. A reload reads the
 rows of its user alone, and a lost channel takes its rows by their prefix (`MURMURE-217`). The row
 is plain text on the device, as a document copy is, and never travels (`MURMURE-211`).
 
@@ -146,9 +146,9 @@ shows, with the controls of the set alone (`MURMURE-432`). A press toggles its m
 does. The bar leaves with the selection, so nothing stays on screen (`MURMURE-196`).
 
 **A draft read aloud.** The pipe holds no text, so the composer says what a key did in the polite
-live region (`MURMURE-571` to `MURMURE-574`). The screen reader echoes a typed key itself (`MURMURE-575`).
-A line move says the line drawn, which the layout of the field names, so a wrapped draft says the
-part the caret is on (`MURMURE-576`).
+live region (`MURMURE-571` to `MURMURE-574`). The screen reader echoes a typed key itself
+(`MURMURE-575`). A line move says the line the layout of the field draws around the caret. So a
+wrapped draft says the part the caret is on (`MURMURE-576`).
 
 **A style on the body.** A sent style is a mark on the `content` text, beside the mentions
 (`MURMURE-562`). An edit, an amendment, a fold and a relocation carry it. A link holds an `http`

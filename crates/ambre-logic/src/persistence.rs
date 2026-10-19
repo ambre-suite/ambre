@@ -80,9 +80,9 @@ const STORE_TRUSTED_KEYS: &str = "trusted_keys";
 /// What the store's ledger knows of each document it holds, keyed by the
 /// document hex: one [`Meta`] row, read back at boot (`RESID-008`).
 const STORE_META: &str = "meta";
-/// The drafts the user has not sent, one text row per channel or thread,
-/// under a key the composer builds from the user (the Murmure composer
-/// spec, section 3). No document row names them, so no eviction reaches them
+/// The drafts the user has not sent, one text row per channel or thread. The
+/// composer builds the key from the user (the Murmure composer spec, section
+/// 3). No document row names them, so no eviction reaches them
 /// (`MURMURE-214`).
 const STORE_DRAFTS: &str = "drafts";
 

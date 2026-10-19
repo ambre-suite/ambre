@@ -13,10 +13,11 @@ use std::collections::{HashMap, HashSet};
 
 use crate::commands::{
     AskedAll, COMMANDS, KEYS, KeyPlace, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY,
-    PALETTE, PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, SEARCH, asked_all_title, key_list,
-    message_action, message_actions,
+    PALETTE, PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, Picking, SEARCH, asked_all_title,
+    key_list, message_action, message_actions,
 };
 use crate::drafts::DraftShelf;
+use crate::emoji;
 use crate::markers::{Cover, MarkBar};
 use crate::mention_list::MentionList;
 use crate::{
@@ -381,6 +382,11 @@ pub struct MurmureRelay {
     /// The drafts the device keeps. A lost channel takes its own, and a
     /// sign-out takes them all (`MURMURE-215`, `MURMURE-216`).
     drafts: StoredValue<DraftShelf, LocalStorage>,
+    /// What the emoji picker is open for, `None` while it is closed.
+    pub picking: RwSignal<Option<Picking>>,
+    /// The emoji the picker picked for a composer, until its region takes
+    /// it (`MURMURE-139`). The flag names the thread's region.
+    picked_emoji: RwSignal<Option<(bool, String)>>,
 }
 
 /// The search box: whether it is open, the query typed, and the last answer
@@ -473,7 +479,42 @@ impl MurmureRelay {
             returned: RwSignal::new(None),
             keys: RwSignal::new(false),
             drafts: StoredValue::new_local(DraftShelf::default()),
+            picking: RwSignal::new(None),
+            picked_emoji: RwSignal::new(None),
         }
+    }
+
+    /// Open the emoji picker on the composer of the region `in_thread`
+    /// (`MURMURE-139`).
+    pub fn ask_emoji(&self, in_thread: bool) {
+        self.picking.set(Some(Picking::Composer { in_thread }));
+    }
+
+    /// The member picked `emoji`, stamped `now`, and the picker closes. A
+    /// pick for a composer waits for its region, and a pick for a message
+    /// is the reaction to send (`MURMURE-139`, `MURMURE-140`). `None` with
+    /// the picker closed, or for a composer.
+    pub fn pick_emoji(&self, emoji: &str, now: Timestamp) -> Option<LogicCommand> {
+        let picking = self.picking.get_untracked()?;
+        self.picking.set(None);
+        match picking {
+            Picking::Composer { in_thread } => {
+                self.picked_emoji.set(Some((in_thread, emoji.to_owned())));
+                None
+            }
+            Picking::Reaction(pending) => Some(pending.command(emoji.to_owned(), now)),
+        }
+    }
+
+    /// The emoji picked for the composer of the region `in_thread`, taken
+    /// once.
+    pub fn take_emoji(&self, in_thread: bool) -> Option<String> {
+        let (region, emoji) = self.picked_emoji.get_untracked()?;
+        if region != in_thread {
+            return None;
+        }
+        self.picked_emoji.set(None);
+        Some(emoji)
     }
 
     /// The drafts the device keeps, which every region of the page shares.
@@ -1312,6 +1353,9 @@ impl CommandHandler for MurmureHandler {
             Some(MessageAction::Copy(text)) => return vec![ShellAction::CopyText(text)],
             Some(MessageAction::ConfirmDelete(pending)) => self.relay.deleting.set(Some(pending)),
             Some(MessageAction::Edit(pending)) => self.relay.editing.set(Some(pending)),
+            Some(MessageAction::React(pending)) => {
+                self.relay.picking.set(Some(Picking::Reaction(pending)));
+            }
             None => {
                 self.run(id);
             }
@@ -1590,6 +1634,89 @@ pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
                 .collect();
             view! { <FormatBar anchor=anchor controls=controls /> }
         })
+    }
+}
+
+/// The emoji picker, open on a composer or on a message (`MURMURE-139`,
+/// `MURMURE-140`). The field filters the table by name, and Enter picks the
+/// first match. Its emoji come from the table the client holds, so it sends
+/// no request (`MURMURE-141`). Escape, the backdrop and Cancel pick nothing.
+/// `now` stamps a reaction.
+#[component]
+pub fn EmojiPicker(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    now: Callback<(), Timestamp>,
+) -> impl IntoView {
+    let open = RwSignal::new(false);
+    let query = RwSignal::new(String::new());
+    Effect::new(move |_| {
+        let picking = relay.picking.with(Option::is_some);
+        if picking {
+            query.set(String::new());
+        }
+        open.set(picking);
+    });
+    let pick = move |emoji: &str| {
+        if let Some(command) = relay.pick_emoji(emoji, now.run(())) {
+            send.run(command);
+        }
+    };
+    let title = move || match relay.picking.get() {
+        Some(Picking::Reaction(_)) => "Add a reaction",
+        _ => "Insert an emoji",
+    };
+    view! {
+        <ambre_chrome::Dialog
+            open=open
+            on_close=Callback::new(move |()| relay.picking.set(None))
+            class="murmure-emoji"
+            label="Emoji"
+        >
+            <h2>{title}</h2>
+            <input
+                r#type="search"
+                class="murmure-emoji-search"
+                aria-label="Search emoji"
+                placeholder="Search emoji"
+                prop:value=move || query.get()
+                on:input=move |ev| query.set(event_target_value(&ev))
+                on:keydown=move |ev| {
+                    if ev.key() == "Enter" {
+                        ev.prevent_default();
+                        if let Some(first) = emoji::search(&query.get_untracked()).first() {
+                            pick(first);
+                        }
+                    }
+                }
+            />
+            <div class="murmure-emoji-grid" role="group" aria-label="Emoji">
+                {move || {
+                    emoji::search(&query.get())
+                        .into_iter()
+                        .map(|e| {
+                            let name = emoji::name_of(e).unwrap_or(e);
+                            view! {
+                                <button
+                                    r#type="button"
+                                    class="murmure-emoji-pick"
+                                    aria-label=name
+                                    title=name
+                                    on:click=move |_| pick(e)
+                                >
+                                    {e}
+                                </button>
+                            }
+                        })
+                        .collect_view()
+                }}
+            </div>
+            <div class="ambre-dialog-actions">
+                <button class="murmure-emoji-cancel" on:click=move |_| relay.picking.set(None)>
+                    "Cancel"
+                </button>
+            </div>
+        </ambre_chrome::Dialog>
     }
 }
 

@@ -7,8 +7,8 @@
 //! reaches them (`MURMURE-214`). Nothing here sends a draft anywhere else
 //! (`MURMURE-211`).
 //!
-//! The rows sit under a key that starts with the user's identifier, so a
-//! second person signed in on the device reads none of the first's.
+//! The key of a row starts with the user's identifier. So a second person
+//! signed in on the device reads none of the first's.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -51,7 +51,7 @@ struct Shelf {
     drafts: HashMap<DraftOf, MessageDraft>,
     /// Drafts written before the user was known, kept once they are.
     unsaved: Vec<DraftOf>,
-    /// Every loss so far, in order: a composer drops what it holds of each
+    /// Every loss so far, in order. A composer drops what it holds of each
     /// one it has not read yet, so it never writes a forgotten draft back.
     losses: Vec<Loss>,
     /// Counts the loads and the losses, which a view repaints for. A draft

@@ -40,12 +40,14 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput) -> PageReads {
         take_returned: Rc::new(move |in_thread| relay.take_returned(in_thread)),
         open_link: Rc::new(super::open_address),
         drafts: relay.drafts(),
+        ask_emoji: Rc::new(move |in_thread| relay.ask_emoji(in_thread)),
+        take_emoji: Rc::new(move |in_thread| relay.take_emoji(in_thread)),
     }
 }
 
 /// The page's drafts in the local store (`MURMURE-210`). The store opens and
-/// the session names the user in either order; the user's rows load once
-/// both did, and every write of the shelf lands in the store from then on.
+/// the session names the user in either order. The user's rows load once both
+/// did, and every write of the shelf lands in the store from then on.
 #[derive(Clone)]
 pub struct DraftKeeper(Rc<RefCell<Keeper>>);
 

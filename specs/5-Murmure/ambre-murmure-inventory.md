@@ -24,6 +24,7 @@
 | `murmure-unread` | The sidebar shows where something new is, and how much. | implemented | 17 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 53 |  |
 | `murmure-composer` | The field where a member writes. | partial | 45 |  |
+| `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | partial | 14 |  |
 | `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | partial | 26 |  |
 | `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 23 |  |
 | `murmure-message-list` | The conversation of a channel, newest at the bottom. | partial | 39 |  |
@@ -35,7 +36,6 @@
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
 | `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
 | `murmure-calls` | A member starts a video call from a channel in one click. | design-only | 7 |  |
-| `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | design-only | 14 |  |
 | `murmure-forums` | A forum is a channel of posts. | design-only | 11 |  |
 | `murmure-import` | A team moving from Slack or Discord brings its history along. | design-only | 11 |  |
 | `murmure-link-previews` | A link in a message shows a preview: the title and image of a web page, or the name of an Ambre document. | design-only | 8 |  |
@@ -44,4 +44,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 7 implemented, 10 partial, 11 design-only. 553 contract rows, 0 loose.**
+**28 features: 7 implemented, 11 partial, 10 design-only. 553 contract rows, 0 loose.**
