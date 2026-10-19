@@ -12,6 +12,18 @@ use ambre_canvas::{TextInput, ThemeControl};
 use crate::MurmurePane;
 use crate::view::{MurmureView, PageReads};
 
+/// The Logic thread's word that `watching` watch `channel_id`, and no one
+/// types in it.
+pub fn watchers(channel_id: ChannelId, watching: Vec<UserId>) -> UiEvent {
+    UiEvent::Channel {
+        channel_id,
+        event: MurmureEvent::Watchers {
+            watching,
+            typing: Vec::new(),
+        },
+    }
+}
+
 /// A channel view of `size` whose messages read `texts`, each by "Ada" at
 /// "t", and the queue that fed it. The messages land on the next update.
 pub fn channel_of(texts: &[&str], size: (f64, f64)) -> (MurmureView, Sender<UiEvent>) {

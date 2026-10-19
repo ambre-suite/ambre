@@ -1018,6 +1018,142 @@ async fn the_presence_marks_differ_in_shape_as_well_as_in_colour() {
     );
 }
 
+/// The list opened from a channel marks who watches that channel, this user
+/// included, whatever their mark in the space. Another channel's list marks
+/// none of them, and the mark leaves once the member stops watching
+/// (`MURMURE-519`).
+#[wasm_bindgen_test]
+async fn the_member_list_marks_who_watches_the_channel() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let (alice, bob, carol) = (UserId::new(), UserId::new(), UserId::new());
+    let member = |user_id, name: &str| MemberView {
+        user_id,
+        display_name: name.to_owned(),
+        presence: Presence::Offline,
+    };
+    let session = UiEvent::Rest {
+        id: ambre_bus::RequestId::next(),
+        evt: ambre_bus::RestEvent::SessionReady {
+            user_id: alice,
+            display_name: "Alice".to_owned(),
+            email: "alice@test.local".to_owned(),
+        },
+    };
+    assert!(frame.absorb(session).await.is_empty());
+    let members = UiEvent::Space {
+        space_id: acme.space,
+        event: SpaceEvent::Members {
+            members: vec![
+                member(alice, "Alice"),
+                member(bob, "Bob"),
+                member(carol, "Carol"),
+            ],
+        },
+    };
+    assert!(frame.absorb(members).await.is_empty());
+    let watchers = ambre_murmure::testing::watchers;
+    let marks = |frame: &Frame| -> Vec<Option<String>> {
+        let list = frame.inner.query_selector_all(".murmure-presence").unwrap();
+        (0..list.length())
+            .map(|i| {
+                let el: web_sys::Element = list.item(i).unwrap().dyn_into().unwrap();
+                el.get_attribute("data-presence")
+            })
+            .collect()
+    };
+    let (here, offline) = (Some("here".to_owned()), Some("offline".to_owned()));
+
+    assert!(
+        frame
+            .absorb(watchers(acme.sales, vec![bob]))
+            .await
+            .is_empty()
+    );
+    frame.select("sales").await;
+    frame.click(".murmure-members-toggle").await;
+    assert_eq!(
+        frame.texts(".murmure-member-name"),
+        ["Alice", "Bob", "Carol"]
+    );
+    assert_eq!(marks(&frame), [here.clone(), here.clone(), offline.clone()]);
+    let label = frame
+        .query(".murmure-presence[data-presence=\"here\"]")
+        .and_then(|el| el.get_attribute("aria-label"));
+    assert_eq!(label.as_deref(), Some("In this channel"));
+
+    frame.select("general").await;
+    frame.click(".murmure-members-toggle").await;
+    assert_eq!(
+        marks(&frame),
+        [here.clone(), offline.clone(), offline.clone()],
+        "the list of another channel marks this user alone"
+    );
+
+    frame.select("sales").await;
+    frame.click(".murmure-members-toggle").await;
+    assert_eq!(marks(&frame), [here.clone(), here.clone(), offline.clone()]);
+    assert!(
+        frame
+            .absorb(watchers(acme.sales, Vec::new()))
+            .await
+            .is_empty()
+    );
+    assert_eq!(marks(&frame), [here, offline.clone(), offline]);
+}
+
+/// A member in the channel is a dot inside a ring, unlike the filled dot of
+/// online and the hollow ring of offline (`MURMURE-520`).
+#[wasm_bindgen_test]
+async fn the_mark_of_the_channel_differs_in_shape_from_the_others() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let (_, members) = alice_and_bob(&acme);
+    let UiEvent::Space {
+        event: SpaceEvent::Members { members: rows },
+        ..
+    } = &members
+    else {
+        unreachable!("alice_and_bob lists members")
+    };
+    let carol = UserId::new();
+    let mut rows = rows.clone();
+    rows.push(MemberView {
+        user_id: carol,
+        display_name: "Carol".to_owned(),
+        presence: Presence::Online,
+    });
+    let members = UiEvent::Space {
+        space_id: acme.space,
+        event: SpaceEvent::Members { members: rows },
+    };
+    assert!(frame.absorb(members).await.is_empty());
+    let watching = ambre_murmure::testing::watchers(acme.general, vec![carol]);
+    assert!(frame.absorb(watching).await.is_empty());
+    frame.select("general").await;
+    frame.click(".murmure-members-toggle").await;
+    let here = ".murmure-presence[data-presence=\"here\"]";
+    let online = ".murmure-presence[data-presence=\"online\"]";
+    let offline = ".murmure-presence[data-presence=\"offline\"]";
+    assert_eq!(frame.style_of(here, "border-top-width"), "2px", "a ring");
+    assert_ne!(
+        frame.style_of(here, "background-color"),
+        "rgba(0, 0, 0, 0)",
+        "around a dot"
+    );
+    assert_ne!(frame.style_of(here, "box-shadow"), "none");
+    assert_eq!(frame.style_of(online, "border-top-width"), "0px");
+    assert_eq!(
+        frame.style_of(offline, "background-color"),
+        "rgba(0, 0, 0, 0)"
+    );
+    assert_ne!(
+        frame.style_of(here, "background-color"),
+        frame.style_of(online, "background-color"),
+        "and its colour is its own"
+    );
+}
+
 /// A private channel and a direct message have members of their own, so
 /// their header offers no member list of the space.
 #[wasm_bindgen_test]

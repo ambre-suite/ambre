@@ -1,6 +1,6 @@
 # AMBRE -- FEATURE: MURMURE TYPING AND PRESENCE
 **Type:** Vertical (feature)
-**Implementation:** partial -- typing is drawn; presence leaves undrawn, and the setting is not built
+**Implementation:** partial -- typing and presence are drawn; the setting is not built
 
 > A member sees who is in the channel and who is typing. Both indicators are on by default, and
 > both reach the members of the channel alone.
@@ -86,7 +86,8 @@ channel on screen from its frame loop (`MURMURE-516`). The thread's region ticks
 its channel already ticks.
 
 **On screen.** A key that changes the draft sends a typing sample (`MURMURE-515`), a caret move
-none (`MURMURE-518`). A strip that never leaves names who types (`MURMURE-517`).
+none (`MURMURE-518`). A strip that never leaves names who types (`MURMURE-517`). The member list
+opened from the channel marks who watches it (`MURMURE-519`).
 
 **The setting that turns them off** lives in the `presence` map of the user settings. With it off,
 the client sends no typing and no presence sample, on any device (`MURMURE-296`). The relay then
@@ -118,8 +119,6 @@ drawn by `crates/ambre-murmure/src/composer.rs`.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Presence is not drawn.** The samples leave and expire, and the members panel shows nobody as
-  present. That waits for the `Presence in the members panel` Story (`ambre-roadmap.md` E5).
 * **A hidden tab ticks nothing.** The browser stops the frame loop of a hidden tab, so its member
   shows absent once the presence expiry passes. A timer would tick it, as the
   `Presence from a hidden tab` Story (`ambre-roadmap.md` E5) plans.

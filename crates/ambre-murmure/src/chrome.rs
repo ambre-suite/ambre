@@ -109,7 +109,8 @@ pub fn ChannelHeader(
 
 /// The member list of the space the current channel lies in (the Murmure
 /// members spec). Each row shows the avatar, the display name and the
-/// presence mark of one member (`MURMURE-441`, `MURMURE-442`). The filter
+/// presence mark of one member (`MURMURE-441`, `MURMURE-442`). A member who
+/// watches the current channel takes the mark of it (`MURMURE-519`). The filter
 /// runs on what the page holds, and sends nothing (`MURMURE-454`). Choosing
 /// another member goes through the relay, as in the palette (`MURMURE-455`),
 /// and `send` carries what it answers.
@@ -117,6 +118,7 @@ pub fn ChannelHeader(
 pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl IntoView {
     let query = RwSignal::new(String::new());
     let rows = relay.shown_members();
+    let watchers = relay.shown_watchers();
     let found = move || {
         rows.with(|members| {
             query.with(|q| {
@@ -140,10 +142,12 @@ pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl Int
             <ul aria-label="Members">
                 {move || {
                     let me = relay.me.get();
+                    let here = watchers.get();
                     found()
                         .into_iter()
                         .map(|member| {
                             let user = member.user_id;
+                            let here = here.contains(&user);
                             let choose = (Some(user) != me)
                                 .then(|| {
                                     Callback::new(move |()| {
@@ -152,7 +156,7 @@ pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl Int
                                         }
                                     })
                                 });
-                            member_view(member, choose.map(|choose| (choose, "Message")))
+                            member_view(member, here, choose.map(|choose| (choose, "Message")))
                         })
                         .collect_view()
                 }}
@@ -219,7 +223,7 @@ pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
                                             open.set(false);
                                             query.set(String::new());
                                         });
-                                        member_view(member, Some((choose, "Invite")))
+                                        member_view(member, false, Some((choose, "Invite")))
                                     })
                                     .collect_view()
                             }}
@@ -231,12 +235,18 @@ pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
     }
 }
 
-/// One member: the avatar, the name, then the presence mark. The two marks
+/// One member: the avatar, the name, then the presence mark. The marks
 /// differ in shape as well as in colour, and each carries its word for a
-/// screen reader (`MURMURE-443`). A row the user may act on is a button,
-/// titled by the verb of what it does; the user's own row is not.
-fn member_view(member: MemberView, choose: Option<(Callback<()>, &'static str)>) -> impl IntoView {
+/// screen reader (`MURMURE-443`, `MURMURE-520`). A member `here` watches the
+/// current channel. A row the user may act on is a button, titled by the verb
+/// of what it does; the user's own row is not.
+fn member_view(
+    member: MemberView,
+    here: bool,
+    choose: Option<(Callback<()>, &'static str)>,
+) -> impl IntoView {
     let (state, word) = match member.presence {
+        _ if here => ("here", "In this channel"),
         Presence::Online => ("online", "Online"),
         Presence::Offline => ("offline", "Offline"),
     };
@@ -293,6 +303,9 @@ pub struct MurmureRelay {
     /// The members of each open channel, as the Logic thread last listed
     /// them. The invite control offers none of them.
     channel_members: RwSignal<HashMap<ChannelId, HashSet<UserId>>>,
+    /// The other members who watch each open channel, as the Logic thread
+    /// last heard them (`MURMURE-126`). A channel nobody watches has no entry.
+    watching: RwSignal<HashMap<ChannelId, HashSet<UserId>>>,
     /// The message the actions are open on, as the view last found it under
     /// a right-click or a long press. `None` once the menu closes.
     pub target: RwSignal<Option<MessageTarget>>,
@@ -379,6 +392,7 @@ impl MurmureRelay {
             search: RwSignal::new(SearchBox::default()),
             inviting: RwSignal::new(None),
             channel_members: RwSignal::new(HashMap::new()),
+            watching: RwSignal::new(HashMap::new()),
             target: RwSignal::new(None),
             deleting: RwSignal::new(None),
         }
@@ -563,6 +577,21 @@ impl MurmureRelay {
         })
     }
 
+    /// The members who watch the shown channel: the others the Logic thread
+    /// heard, and this user, who has it on screen. Empty with no channel
+    /// shown, so no list shows who reads another channel (`MURMURE-127`).
+    pub fn shown_watchers(&self) -> Signal<HashSet<UserId>> {
+        let (pane, watching, me) = (self.pane, self.watching, self.me);
+        Signal::derive(move || {
+            let Some(channel) = pane.get().shown_channel() else {
+                return HashSet::new();
+            };
+            let mut users = watching.with(|w| w.get(&channel).cloned().unwrap_or_default());
+            users.extend(me.get());
+            users
+        })
+    }
+
     /// What the view sends once per refresh period: this user's presence on
     /// every space of the sidebar. Each one also turns offline the members
     /// whose presence expired (`MURMURE-445`). `now` is the view's clock.
@@ -658,6 +687,19 @@ impl MurmureRelay {
                 });
                 Vec::new()
             }
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::Watchers { watching, .. },
+            } => {
+                self.watching.update(|w| {
+                    if watching.is_empty() {
+                        w.remove(channel_id);
+                    } else {
+                        w.insert(*channel_id, watching.iter().copied().collect());
+                    }
+                });
+                Vec::new()
+            }
             // A channel the user lost while it was open (`MURMURE-489`).
             UiEvent::Channel {
                 channel_id,
@@ -734,6 +776,8 @@ impl MurmureRelay {
         self.opened.update(|o| o.retain(|c| !channels.contains(c)));
         self.channel_members
             .update(|m| m.retain(|c, _| !channels.contains(c)));
+        self.watching
+            .update(|w| w.retain(|c, _| !channels.contains(c)));
         let shown = self.pane.get_untracked().shown_channel();
         if shown.is_some_and(|c| channels.contains(&c)) {
             self.pane.set(MurmurePane::ChannelList);

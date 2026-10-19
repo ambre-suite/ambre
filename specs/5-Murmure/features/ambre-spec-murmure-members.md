@@ -1,7 +1,8 @@
 # AMBRE -- FEATURE: THE MEMBERS OF A SPACE
 **Type:** Vertical (feature)
-**Implementation:** partial -- the member rows, the presence of each member, the filter and the list
-beside a channel ship. So does the direct message to a member. The away and busy states do not.
+**Implementation:** partial -- the member rows, the presence, the filter and the list beside a
+channel with its watchers ship. So does the direct message to a member. The away and busy states
+do not.
 
 > A member sees who else belongs to the space, who is online, and writes to any of them in one
 > gesture. The list and its search stay on the client: what the user types never leaves it.
@@ -22,6 +23,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-441` | `OBS` | The member list MUST show each member by display name and avatar. | this spec section 3; `PROFILE-001` | `ambre_app::shell::murmure_regions::the_member_list_shows_each_member_by_name_initials_and_presence` -- browser tier, the list opened from a channel header shows two members by name, each with their initials on their identity colour | none | verified |
 | `MURMURE-442` | `OBS` | The member list MUST mark each member as online or offline. | this spec section 3 | `ambre_app::shell::murmure_regions::the_member_list_shows_each_member_by_name_initials_and_presence` -- browser tier, an online and an offline member each carry their mark and its word | none | verified |
 | `MURMURE-443` | `OBS` | Each presence state MUST differ from the others in shape as well as in colour. | this spec section 3; `ambre-spec-accessibility.md` | `ambre_app::shell::murmure_regions::the_presence_marks_differ_in_shape_as_well_as_in_colour` -- browser tier, the computed style reads a filled dot online and a hollow ring offline, in two colours | none | verified |
+| `MURMURE-519` | `OBS` | The member list opened from a channel MUST mark the members who watch that channel, and only while they watch it. | this spec section 3; `MURMURE-126`; `MURMURE-127` | `ambre_app::shell::murmure_regions::the_member_list_marks_who_watches_the_channel` -- browser tier, a member watching and this user carry the mark, the list of another channel marks this user alone, and the mark leaves with the watcher | none | verified |
+| `MURMURE-520` | `OBS` | The mark of a member in the channel MUST differ in shape from the online and offline marks. | this spec section 3; `MURMURE-443` | `ambre_app::shell::murmure_regions::the_mark_of_the_channel_differs_in_shape_from_the_others` -- browser tier, the computed style reads a dot inside a ring, in a colour of its own | none | verified |
 | `MURMURE-444` | `INV` | The presence of a member in a space MUST ride the ephemerals of the space document. | this spec section 3; `ambre-spec-presence.md`; `ZK-005` | `ambre_logic::spaces::tests::opening_a_space_sends_this_users_presence_on_its_document_alone` -- the one sample goes on the space document, which the Sync worker seals under its key | none | verified |
 | `MURMURE-445` | `INV` | A member MUST show as offline once no connection of theirs refreshes their presence within the presence expiry. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_murmure::members::tests::a_member_turns_offline_once_no_sample_refreshes_them_within_the_expiry` -- online at the expiry, offline one millisecond past it; `ambre_logic::spaces::tests::a_member_with_no_sample_within_the_expiry_shows_offline` -- the view's tick turns the member offline; `ambre_app::shell::murmure_regions::a_refresh_reaches_every_space_and_a_space_lost_drops_its_members` -- browser tier, the page's refresh asks it of every space of the sidebar | none | verified |
 | `MURMURE-446` | `INV` | The presence in a space MUST NOT show which channel a member reads. | this spec section 3; `MURMURE-127` | `ambre_murmure::members::tests::the_sample_holds_the_state_alone` -- the sample is two bytes, its tag and the state, and nothing else decodes | none | verified |
@@ -71,9 +74,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   (`ambre-spec-budgets.md section 8`). Each picture costs the avatar row of its section 6.
 * **Boundary.** the presence sample is sealed under the key of the space document (`ZK-005`). The
   relay learns the member list and the display names it already holds (`ZK-018`).
-* **Verification.** 16 `verified`, 5 `unimplemented`. The engine and the Logic thread hold the
-  list, the presence and the filter. The browser tier draws the list beside a channel, and a
-  member chosen there or in the palette opens a direct message.
+* **Verification.** 18 `verified`, 5 `unimplemented`. The engine and the Logic thread hold the
+  list, the presence and the filter. The browser tier draws the list beside a channel, with its
+  watchers marked. A member chosen there or in the palette opens a direct message.
 
 ---
 
@@ -129,7 +132,10 @@ with its sample, and the other members see the user online again.
 | away | no input past the idle delay of `ambre-spec-budgets.md section 8` | an amber half-filled dot |
 | busy | the member | a red dot with a bar |
 | offline | no connection, whatever the member set | a hollow grey ring |
+| in the channel | a connection watches the channel the list opened from | an accent dot inside a ring |
 
+The last mark takes the place of the others in the list opened from that channel (`MURMURE-519`).
+This user carries it too, since the channel is on their screen.
 The colours come from the design tokens (`ambre-spec-design-tokens.md`). The shape carries the
 state for a user who does not see the colour.
 
