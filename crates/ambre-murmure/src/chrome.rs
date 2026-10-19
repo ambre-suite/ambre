@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::commands::{
     COMMANDS, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY, PALETTE,
-    PREVIOUS_ACTIVITY, PendingDelete, SEARCH, message_action, message_actions,
+    PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, SEARCH, message_action, message_actions,
 };
 use crate::{
     Activity, MessageRef, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
@@ -313,6 +313,9 @@ pub struct MurmureRelay {
     /// The deletion the dialog asks the member to confirm (`MURMURE-512`).
     /// `None` once confirmed or cancelled.
     pub deleting: RwSignal<Option<PendingDelete>>,
+    /// The message the member asked to edit, until the channel's region
+    /// loads it into the composer (`MURMURE-203`).
+    pub editing: RwSignal<Option<PendingEdit>>,
 }
 
 /// The search box: whether it is open, the query typed, and the last answer
@@ -396,6 +399,7 @@ impl MurmureRelay {
             watching: RwSignal::new(HashMap::new()),
             target: RwSignal::new(None),
             deleting: RwSignal::new(None),
+            editing: RwSignal::new(None),
         }
     }
 
@@ -433,6 +437,14 @@ impl MurmureRelay {
         let pending = self.deleting.get_untracked()?;
         self.deleting.set(None);
         Some(pending.command(now))
+    }
+
+    /// The edit the member asked for, which the channel's region takes once
+    /// (`MURMURE-203`). `None` with none asked.
+    pub fn take_edit(&self) -> Option<PendingEdit> {
+        let pending = self.editing.get_untracked()?;
+        self.editing.set(None);
+        Some(pending)
     }
 
     /// Open the search box, on the find chord (`MURMURE-213`). An open box
@@ -1034,6 +1046,7 @@ impl CommandHandler for MurmureHandler {
             Some(MessageAction::Send(command)) => self.send.run(command),
             Some(MessageAction::Copy(text)) => return vec![ShellAction::CopyText(text)],
             Some(MessageAction::ConfirmDelete(pending)) => self.relay.deleting.set(Some(pending)),
+            Some(MessageAction::Edit(pending)) => self.relay.editing.set(Some(pending)),
             None => {
                 self.run(id);
             }

@@ -15,8 +15,8 @@ use std::rc::Rc;
 
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
-    ChannelId, DocumentId, LogicCommand, MessageAt, MessageDraft, MessageId, MurmureCommand,
-    SegmentId, Timestamp, UiEvent, UserId,
+    ChannelId, DocumentId, LogicCommand, MessageAt, MessageId, MurmureCommand, SegmentId,
+    Timestamp, UiEvent, UserId,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, TextInput,
@@ -26,8 +26,8 @@ use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::MurmurePane;
-use crate::commands::MessageTarget;
-use crate::composer::{Composer, typing_line};
+use crate::commands::{MessageTarget, PendingEdit};
+use crate::composer::{Composer, EDITING_LINE, typing_line};
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 use crate::select::Selecting;
@@ -55,6 +55,9 @@ pub struct PageReads {
     /// `None` off any message. The page opens its actions; nothing is sent
     /// (`MURMURE-424`).
     pub act_on: Rc<dyn Fn(Option<MessageTarget>)>,
+    /// Take the edit the member asked for from the actions of a message,
+    /// which the channel's composer loads (`MURMURE-203`).
+    pub take_edit: Rc<dyn Fn() -> Option<PendingEdit>>,
     /// The page's input pipe. A press in the composer gives it the keyboard
     /// focus, and its caret follows the composer's (`MURMURE-430`).
     pub pipe: TextInput,
@@ -359,6 +362,7 @@ impl MurmureView {
             message: message.id,
             author: message.author,
             text: message.text.clone(),
+            mentions: message.mentions.clone(),
             notice: message.notice.is_some(),
             deleted: message.deleted,
             pressed: pressed.then_some((x, y)),
@@ -612,6 +616,15 @@ impl MurmureView {
             (self.reads.act_on)(self.target_at(x, y, true));
         }
         self.tick();
+        // An edit asked from the actions of a message loads the channel's
+        // composer, which takes the keys (`MURMURE-203`).
+        if self.region == Region::Channel
+            && let Some(edit) = (self.reads.take_edit)()
+        {
+            self.composer.start_edit(edit);
+            self.reads.pipe.focus();
+            self.dirty = true;
+        }
         let dirty = std::mem::take(&mut self.dirty);
         RepaintPlan {
             content: if dirty {
@@ -637,20 +650,11 @@ impl MurmureView {
         let pane = (self.reads.pane)();
         let writes_in = self.composer_channel();
         let (size, palette) = (self.size, self.theme.palette());
-        if let Some((channel_id, text)) = self.composer.flush(font_cx, writes_in, size, palette) {
-            // The view stamps the time of the message (`MURMURE-199`).
+        if let Some(sent) = self.composer.flush(font_cx, writes_in, size, palette) {
+            // The view stamps the time of the message or the edit
+            // (`MURMURE-199`, `MURMURE-203`).
             let now = self.now();
-            self.send(LogicCommand::Channel {
-                channel_id,
-                command: MurmureCommand::SendMessage {
-                    draft: MessageDraft {
-                        text,
-                        mentions: Vec::new(),
-                    },
-                    now,
-                    confirmed: false,
-                },
-            });
+            self.send(sent.command(now));
         }
         let list_size = (self.size.0, self.list_height());
         let lists = Rc::clone(&self.lists);
@@ -715,7 +719,11 @@ impl MurmureView {
             .iter()
             .map(|user| (self.reads.name_of)(*user).unwrap_or_else(|| "Someone".to_owned()))
             .collect();
-        let typing = typing_line(&names);
+        // An edit names itself in the strip, and how to leave it.
+        let typing = match writes_in {
+            Some(channel) if self.composer.editing(channel) => Some(EDITING_LINE.to_owned()),
+            _ => typing_line(&names),
+        };
         let caret = self.composer.paint(
             surface,
             font_cx,
@@ -1138,6 +1146,8 @@ mod tests {
         said: Rc<RefCell<Vec<String>>>,
         /// Each target the view handed the page, oldest first.
         acted: Rc<RefCell<Vec<Option<MessageTarget>>>>,
+        /// The edit the page holds for the view to take.
+        editing: Rc<RefCell<Option<PendingEdit>>>,
     }
 
     fn page() -> Page {
@@ -1151,6 +1161,8 @@ mod tests {
         let said = Rc::clone(&said_log);
         let acted_log = Rc::new(RefCell::new(Vec::new()));
         let acted = Rc::clone(&acted_log);
+        let editing = Rc::new(RefCell::new(None));
+        let asked = Rc::clone(&editing);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| Some("Ada".to_owned())),
@@ -1158,6 +1170,7 @@ mod tests {
             now_ms: Rc::new(move || now.get()),
             announce: Rc::new(move |text: &str| said.borrow_mut().push(text.to_owned())),
             act_on: Rc::new(move |target| acted.borrow_mut().push(target)),
+            take_edit: Rc::new(move || asked.borrow_mut().take()),
             pipe: TextInput::detached(),
         };
         let size = (300.0, 400.0);
@@ -1176,6 +1189,7 @@ mod tests {
             commands,
             said: said_log,
             acted: acted_log,
+            editing,
         }
     }
 
@@ -2066,6 +2080,7 @@ mod tests {
             message: second,
             author: ada,
             text: "b".to_owned(),
+            mentions: Vec::new(),
             notice: false,
             deleted: false,
             pressed: None,
@@ -2124,6 +2139,7 @@ mod tests {
             message: reply.id,
             author: ada,
             text: "one".to_owned(),
+            mentions: Vec::new(),
             notice: false,
             deleted: false,
             pressed: Some((10.0, y)),
@@ -2544,6 +2560,120 @@ mod tests {
         chord(&mut page, "Z", true);
         assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
         assert!(sent(&page).is_empty(), "no undo reaches the sent message");
+    }
+
+    /// The edits sent since the last call, and how many new messages.
+    fn edits(page: &Page) -> (Vec<(MessageAt, MessageId, ambre_bus::MessageDraft)>, usize) {
+        let (mut edits, mut messages) = (Vec::new(), 0);
+        while let Ok(command) = page.commands.try_recv() {
+            match command {
+                LogicCommand::Channel {
+                    command:
+                        MurmureCommand::EditMessage {
+                            at, message, draft, ..
+                        },
+                    ..
+                } => edits.push((at, message, draft)),
+                LogicCommand::Channel {
+                    command: MurmureCommand::SendMessage { .. },
+                    ..
+                } => messages += 1,
+                _ => {}
+            }
+        }
+        (edits, messages)
+    }
+
+    /// An edit of `message`, reading `text`, as the actions of a message
+    /// hand it to the page.
+    fn ask_edit(page: &Page, channel: ChannelId, message: MessageId, text: &str) -> MessageAt {
+        let at = MessageAt::Segment(SegmentId::new());
+        let ada = ambre_bus::Mention {
+            target: ambre_bus::MentionTarget::User(UserId::new()),
+            range: 3..7,
+        };
+        *page.editing.borrow_mut() = Some(PendingEdit {
+            channel,
+            at,
+            message,
+            text: text.to_owned(),
+            mentions: vec![ada],
+        });
+        at
+    }
+
+    /// The edit loads the message into the composer, with the draft put
+    /// aside. Enter sends an edit of that message and no new one, and the
+    /// draft comes back. A blank edit sends nothing, and an unchanged one
+    /// ends sending nothing (`MURMURE-203`).
+    #[test]
+    fn an_edit_loads_the_message_and_sends_an_edit_never_a_new_one() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "draft");
+        let message = MessageId::new();
+        let at = ask_edit(&page, channel, message, "hi @ada there");
+        assert_eq!(
+            painted(&mut page, channel).as_deref(),
+            Some("hi @ada there")
+        );
+        assert!(page.view.composer().editing(channel));
+        for _ in 0.."there".len() {
+            key(&mut page, "Backspace", false, 0.0);
+        }
+        type_text(&mut page, "you");
+        key(&mut page, "Enter", false, 0.0);
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
+        let (sent_edits, messages) = edits(&page);
+        assert_eq!(messages, 0, "an edit sends no new message");
+        let [(edit_at, edited, draft)] = &sent_edits[..] else {
+            panic!("one edit, got {sent_edits:?}");
+        };
+        assert_eq!((*edit_at, *edited), (at, message));
+        assert_eq!(draft.text, "hi @ada you");
+        assert_eq!(draft.mentions.len(), 1, "the mention the edit left stays");
+        assert!(!page.view.composer().editing(channel));
+
+        ask_edit(&page, channel, message, "hi");
+        frame_with_fonts(&mut page.view);
+        key(&mut page, "a", true, 0.0);
+        key(&mut page, "Backspace", false, 0.0);
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert!(page.view.composer().editing(channel), "a blank edit stays");
+        type_text(&mut page, "hi");
+        key(&mut page, "Enter", false, 0.0);
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
+        assert_eq!(
+            edits(&page),
+            (Vec::new(), 0),
+            "nothing changed, nothing sent"
+        );
+    }
+
+    /// Escape ends an edit and sends nothing, and the draft comes back. The
+    /// composer keeps the keys until a second Escape (`MURMURE-204`).
+    #[test]
+    fn escape_cancels_an_edit_and_leaves_the_message() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "draft");
+        ask_edit(&page, channel, MessageId::new(), "hello");
+        frame_with_fonts(&mut page.view);
+        type_text(&mut page, " world");
+        frame_with_fonts(&mut page.view);
+        assert!(key(&mut page, "Escape", false, 0.0));
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
+        assert!(!page.view.composer().editing(channel));
+        assert!(
+            page.view.composer().focused(),
+            "the composer keeps the keys"
+        );
+        assert_eq!(edits(&page), (Vec::new(), 0), "nothing sent");
+        key(&mut page, "Escape", false, 0.0);
+        assert!(!page.view.composer().focused());
     }
 
     /// A tap in the band puts the caret there and gives the pipe the

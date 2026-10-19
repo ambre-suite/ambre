@@ -8,7 +8,9 @@
 //! The actions of a message are commands of the same table, with no chord
 //! (`MURMURE-419`). The menu of a message offers the ones its target allows.
 
-use ambre_bus::{ChannelId, LogicCommand, MessageAt, MessageId, MurmureCommand, Timestamp};
+use ambre_bus::{
+    ChannelId, LogicCommand, Mention, MessageAt, MessageId, MurmureCommand, Timestamp,
+};
 use ambre_commands::{
     Command, CommandCategory, CommandId, Key, KeyBinding, Keymap, Locale, Modifiers,
 };
@@ -45,6 +47,9 @@ pub const REPLY: CommandId = CommandId("murmure.message.reply");
 pub const MARK_UNREAD: CommandId = CommandId("murmure.message.mark_unread");
 /// Put the text of the message on the clipboard.
 pub const COPY_TEXT: CommandId = CommandId("murmure.message.copy_text");
+/// Load a message of the member into the composer, to send it edited
+/// (`MURMURE-203`).
+pub const EDIT: CommandId = CommandId("murmure.message.edit");
 /// Delete a message of the member, once a dialog confirms it (`MURMURE-512`).
 pub const DELETE: CommandId = CommandId("murmure.message.delete");
 
@@ -85,6 +90,10 @@ fn mark_unread_title(_: &Locale) -> String {
 
 fn copy_text_title(_: &Locale) -> String {
     "Copy text".into()
+}
+
+fn edit_title(_: &Locale) -> String {
+    "Edit message".into()
 }
 
 fn delete_title(_: &Locale) -> String {
@@ -154,6 +163,13 @@ pub const COMMANDS: &[Command] = &[
         category: MESSAGE,
     },
     Command {
+        id: EDIT,
+        title: edit_title,
+        icon: None,
+        keybindings: &[],
+        category: MESSAGE,
+    },
+    Command {
         id: DELETE,
         title: delete_title,
         icon: None,
@@ -176,6 +192,8 @@ pub struct MessageTarget {
     pub author: UserId,
     /// Its text, empty for a deleted message or a notice.
     pub text: String,
+    /// Who its text names, as the list holds them.
+    pub mentions: Vec<Mention>,
     /// The message is a notice the channel wrote, not a member.
     pub notice: bool,
     /// The message reads deleted already.
@@ -198,6 +216,24 @@ pub enum MessageAction {
     Copy(String),
     /// Ask the member to confirm this deletion before it is sent.
     ConfirmDelete(PendingDelete),
+    /// Load this message into the composer of its channel.
+    Edit(PendingEdit),
+}
+
+/// A message the member asked to edit, which the composer of its channel
+/// loads (`MURMURE-203`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingEdit {
+    /// The channel the message lies in.
+    pub channel: ChannelId,
+    /// Where it lies. Only a segment's message is edited from the composer.
+    pub at: MessageAt,
+    /// The message.
+    pub message: MessageId,
+    /// Its text as the list holds it.
+    pub text: String,
+    /// Who that text names.
+    pub mentions: Vec<Mention>,
 }
 
 /// A deletion the member asked for and has not confirmed yet
@@ -229,10 +265,11 @@ impl PendingDelete {
 
 /// The actions offered on `target` to the member `me`, in menu order. A
 /// notice takes no reply, a reply takes no thread of its own, and a message
-/// with no text no copy. Only the author deletes a message, once.
+/// with no text no copy. Only the author deletes a message, once. Only the
+/// author edits one, and only in the channel, where the composer stands.
 pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<CommandId> {
     let in_channel = matches!(target.at, MessageAt::Segment(_));
-    let mut ids = Vec::with_capacity(4);
+    let mut ids = Vec::with_capacity(5);
     if in_channel && !target.notice {
         ids.push(REPLY);
     }
@@ -242,7 +279,11 @@ pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<Comman
     if !target.text.is_empty() {
         ids.push(COPY_TEXT);
     }
-    if me == Some(target.author) && !target.notice && !target.deleted {
+    let own = me == Some(target.author) && !target.notice && !target.deleted;
+    if own && in_channel {
+        ids.push(EDIT);
+    }
+    if own {
         ids.push(DELETE);
     }
     ids
@@ -283,6 +324,13 @@ pub fn message_action(
             at: target.at,
             message: target.message,
         })),
+        EDIT => Some(MessageAction::Edit(PendingEdit {
+            channel: target.channel,
+            at: target.at,
+            message: target.message,
+            text: target.text.clone(),
+            mentions: target.mentions.clone(),
+        })),
         _ => None,
     }
 }
@@ -305,6 +353,7 @@ mod tests {
             message: MessageId::new(),
             author: UserId::new(),
             text: text.to_owned(),
+            mentions: Vec::new(),
             notice,
             deleted: text.is_empty(),
             pressed: None,
@@ -318,7 +367,7 @@ mod tests {
     fn every_action_of_a_message_is_a_command_of_the_table() {
         let full = target(MessageAt::Segment(SegmentId::new()), "hi", false);
         let ids = message_actions(&full, Some(full.author));
-        assert_eq!(ids, [REPLY, MARK_UNREAD, COPY_TEXT, DELETE]);
+        assert_eq!(ids, [REPLY, MARK_UNREAD, COPY_TEXT, EDIT, DELETE]);
         for id in ids {
             assert!(ambre_commands::find(COMMANDS, id).is_some(), "{}", id.0);
         }
@@ -390,6 +439,36 @@ mod tests {
             (channel_id, at, message, t),
             (own.channel, own.at, own.message, now)
         );
+    }
+
+    /// Only the author is offered the edit of a message, and only in the
+    /// channel. The action hands the message to the composer and sends
+    /// nothing (`MURMURE-203`).
+    #[test]
+    fn only_the_author_edits_a_message_and_only_in_the_channel() {
+        let segment = MessageAt::Segment(SegmentId::new());
+        let own = target(segment, "hi", false);
+        let me = Some(own.author);
+        assert!(!message_actions(&own, Some(UserId::new())).contains(&EDIT));
+        let reply = target(MessageAt::Thread(MessageId::new()), "one", false);
+        let reply_ids = message_actions(&reply, Some(reply.author));
+        assert!(!reply_ids.contains(&EDIT), "a thread has no composer yet");
+        let notice = target(segment, "joined", true);
+        assert!(!message_actions(&notice, Some(notice.author)).contains(&EDIT));
+        let gone = target(segment, "", false);
+        assert!(!message_actions(&gone, Some(gone.author)).contains(&EDIT));
+
+        let Some(MessageAction::Edit(pending)) = message_action(EDIT, &own, me) else {
+            panic!("edit loads the composer");
+        };
+        let asked = PendingEdit {
+            channel: own.channel,
+            at: own.at,
+            message: own.message,
+            text: "hi".to_owned(),
+            mentions: Vec::new(),
+        };
+        assert_eq!(pending, asked);
     }
 
     /// Reply opens the thread of the message, mark unread sends the cursor

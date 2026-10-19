@@ -166,7 +166,7 @@ inside the tap slop of `ambre-spec-kinetic-scroll.md`, past the delay of the pla
 
 A right-click or a long press hands the page the message under it. The page opens the shared
 floating menu at that point (`MURMURE-422`, `MURMURE-423`). The menu lists the actions the
-message offers now: reply, mark unread, copy text and delete. The keyboard opens the same menu on
+message offers now: reply, mark unread, copy text, edit and delete. The keyboard opens the same menu on
 the focused message (`MURMURE-511`).
 
 A delete takes the message from every member, and no edit brings it back. So the action sends
@@ -273,9 +273,9 @@ both to each region, and `ambre_app::host::murmure` hands it the pane, the names
 * **A closing segment is asked again by a new opening.** The channel closes and opens, so its
   watchers and its typing go and come back. A retry in place waits for the
   `Retrying a closing segment in place` Story (`ambre-roadmap.md` E5).
-* **Only four actions are built.** Reply, mark unread, copy text and delete.
+* **Only five actions are built.** Reply, mark unread, copy text, edit and delete.
   React lands with the `Emoji` Story (`ambre-roadmap.md` E5).
-  Edit lands with the `Editing a message from the composer` Story (`ambre-roadmap.md` E5).
+  A reply is not edited from its thread until the `Replying in a thread` Story (`ambre-roadmap.md` E5).
   Pin and bookmark wait for the `Pin, bookmark and copy link` Story (`ambre-roadmap.md` E5).
   Remove waits for the `Moderation` Story (`ambre-roadmap.md` E5).
 * **A copy carries no private type.** The mirror alone reaches the clipboard, so a paste drops the

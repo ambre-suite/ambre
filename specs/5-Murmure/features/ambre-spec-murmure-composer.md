@@ -49,9 +49,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-203` | `POST` | Editing MUST load the message into the composer and send an edit, never a new message. | this spec section 3; `MURMURE-084` | not built | unbuilt -- lands with the `Editing a message from the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-204` | `FRAME` | Cancelling an edit MUST NOT change the message. | this spec section 3 | not built | unbuilt -- lands with the `Editing a message from the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-259` | `FRAME` | Editing a message MUST NOT drop the draft of the channel: the draft MUST return once the edit is sent or cancelled. | this spec section 3; `MURMURE-195` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-203` | `POST` | Editing MUST load the message into the composer and send an edit, never a new message. | this spec section 3; `MURMURE-084` | `ambre_murmure::view::tests::an_edit_loads_the_message_and_sends_an_edit_never_a_new_one` -- the message loads, Enter sends an edit of it and no message, and a blank or unchanged edit sends nothing; `ambre_murmure::composer::tests::an_edit_keeps_the_mentions_it_leaves_whole` -- the mentions the edit leaves whole stay; `ambre_murmure::commands::tests::only_the_author_edits_a_message_and_only_in_the_channel` -- only the author is offered the action; `ambre_murmure::tests::chrome_relay::an_edit_is_handed_to_the_region_and_sends_nothing` -- the action hands the message to the region once | none | verified |
+| `MURMURE-204` | `FRAME` | Cancelling an edit MUST NOT change the message. | this spec section 3 | `ambre_murmure::view::tests::escape_cancels_an_edit_and_leaves_the_message` -- Escape ends the edit and sends nothing | none | verified |
+| `MURMURE-259` | `FRAME` | Editing a message MUST NOT drop the draft of the channel: the draft MUST return once the edit is sent or cancelled. | this spec section 3; `MURMURE-195` | `ambre_murmure::view::tests::an_edit_loads_the_message_and_sends_an_edit_never_a_new_one` -- the draft returns once the edit is sent; `ambre_murmure::view::tests::escape_cancels_an_edit_and_leaves_the_message` -- and once it is cancelled | none | verified |
 
 ### 1.5 Lose access to a channel, or sign out
 
@@ -71,9 +71,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 9 `verified`, 16 `unimplemented`. The host tier drives the view with the
-  events the page sends: a press, a tap, text, keys, a paste. The marks, the edit and the stored
-  draft are not built.
+* **Verification.** 12 `verified`, 13 `unimplemented`. The host tier drives the view with the
+  events the page sends: a press, a tap, text, keys, a paste. The marks and the stored draft are
+  not built.
 
 ---
 
@@ -126,14 +126,16 @@ pub enum MurmureMark { Bold, Italic, InlineCode, CodeBlock, Link, List, Quote, M
 **Markdown, as typed.** The markers close on their second half: `**`, `_`, a backtick, three
 backticks, `>` and `-` at the start of a line. A link is written `[text](address)`.
 
-**The plain-text slice.** The composer built today holds no mark. It stands on the inline editor
-the canvas crate shares, the one a board's text and a sheet's cell already use. Each channel holds
-one draft, in memory. Keys reach the draft between frames, and the next paint applies them, so
-Enter only asks for the send. That paint reads the draft, sends it unless it is blank, and drops it.
+**The plain-text slice.** The composer built today holds no mark and stands on the inline editor
+of the canvas crate. Each channel holds one draft, in memory. The next paint applies the keys, so
+Enter only asks for the send.
 
-**The history of the slice.** The inline editor keeps no history, so the composer keeps one per
-draft. A step gathers the edits of one way, and a caret move, a space or a line break closes it. A
-paste and a cut are a step each. The history leaves with the sent draft (`MURMURE-434`).
+**The history of the slice.** The composer keeps one history per draft. A caret move, a space or a
+line break closes a step, and a paste or a cut is a step of its own.
+
+**An edit in the slice.** The edit action puts the draft aside and loads the message. Either way
+the edit ends, the draft comes back (`MURMURE-259`). The edit keeps each mention outside the
+changed text.
 
 **Code.** `crates/ambre-murmure/src/composer.rs` holds the drafts and the band. The view in
 `crates/ambre-murmure/src/view.rs` routes the pipe's events to it and sends the message.
@@ -172,8 +174,6 @@ paste and a cut are a step each. The history leaves with the sent draft (`MURMUR
 * **A draft holds no mark.** Whether the marks come from the Prose editor or from a rich text
   layer the inline editor would share is not ruled. The marks wait for the
   `Marks in a message` Story (`ambre-roadmap.md` E5).
-* **No message is edited from the composer.** The edit waits for the
-  `Editing a message from the composer` Story (`ambre-roadmap.md` E5).
 * **An undo puts the caret at the end.** The history keeps the text of each step, not its caret.
   That waits for the `The caret after an undo` Story (`ambre-roadmap.md` E5).
 * **A draft lives in memory.** A reload loses it, until the `Drafts` Story (`ambre-roadmap.md` E5).

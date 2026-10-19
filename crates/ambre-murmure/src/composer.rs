@@ -16,15 +16,24 @@
 //! Each draft keeps its own history, read at paint like its edits: `Ctrl+Z`
 //! and `Ctrl+Shift+Z` walk it (`MURMURE-433`). A send drops it, so no undo
 //! reaches a message sent (`MURMURE-434`).
+//!
+//! An edit loads a message of the member into the composer, and puts the
+//! draft and its history aside until the edit ends (`MURMURE-203`).
 
 use std::collections::HashMap;
 
-use ambre_bus::ChannelId;
+use ambre_bus::{
+    ChannelId, LogicCommand, Mention, MessageAt, MessageDraft, MessageId, MurmureCommand, Timestamp,
+};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle};
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
+use crate::commands::PendingEdit;
 use crate::paint::{draw, shape};
+
+/// The strip above the field while the composer holds an edit.
+pub const EDITING_LINE: &str = "Editing a message. Escape cancels.";
 
 /// The words an empty composer shows.
 pub const COMPOSER_HINT: &str = "Write a message";
@@ -149,6 +158,100 @@ impl History {
     }
 }
 
+/// A message the composer of a channel holds for an edit.
+struct Editing {
+    at: MessageAt,
+    message: MessageId,
+    /// The text the message read when the edit began.
+    original: String,
+    /// Who that text names.
+    mentions: Vec<Mention>,
+    /// The draft and its history the edit put aside, `None` with no draft.
+    kept: Option<(TextEditor, History)>,
+}
+
+/// What the composer hands the view to send, once a paint read it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Sent {
+    /// A new message in the channel (`MURMURE-199`).
+    Message {
+        channel: ChannelId,
+        draft: MessageDraft,
+    },
+    /// An edit of a message of the member (`MURMURE-203`).
+    Edit {
+        channel: ChannelId,
+        at: MessageAt,
+        message: MessageId,
+        draft: MessageDraft,
+    },
+}
+
+impl Sent {
+    /// The command to the Logic thread, stamped `now` by the view.
+    pub fn command(self, now: Timestamp) -> LogicCommand {
+        match self {
+            Self::Message { channel, draft } => LogicCommand::Channel {
+                channel_id: channel,
+                command: MurmureCommand::SendMessage {
+                    draft,
+                    now,
+                    confirmed: false,
+                },
+            },
+            Self::Edit {
+                channel,
+                at,
+                message,
+                draft,
+            } => LogicCommand::Channel {
+                channel_id: channel,
+                command: MurmureCommand::EditMessage {
+                    at,
+                    message,
+                    draft,
+                    now,
+                },
+            },
+        }
+    }
+}
+
+/// The mentions of `old` that an edit to `new` leaves whole. The edit
+/// changed the chars between the common head and the common tail. A mention
+/// before the change keeps its range, one after it moves with the tail, and
+/// one the change touches goes.
+fn kept_mentions(old: &str, new: &str, mentions: &[Mention]) -> Vec<Mention> {
+    let (old, new): (Vec<char>, Vec<char>) = (old.chars().collect(), new.chars().collect());
+    let head = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
+    let room = old.len().min(new.len()) - head;
+    let tail = old
+        .iter()
+        .rev()
+        .zip(new.iter().rev())
+        .take(room)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let (old_end, new_end) = (old.len() - tail, new.len() - tail);
+    mentions
+        .iter()
+        .filter_map(|mention| {
+            let range = &mention.range;
+            if range.end <= head {
+                Some(mention.clone())
+            } else if range.start >= old_end {
+                let start = range.start - old_end + new_end;
+                Some(Mention {
+                    target: mention.target,
+                    range: start..start + range.len(),
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 /// The composer of the channel region, and the draft of every channel.
 #[derive(Default)]
 pub struct Composer {
@@ -156,6 +259,8 @@ pub struct Composer {
     drafts: HashMap<ChannelId, TextEditor>,
     /// The history of each draft, which leaves with it.
     histories: HashMap<ChannelId, History>,
+    /// The edit each channel's composer holds, in place of its draft.
+    editing: HashMap<ChannelId, Editing>,
     /// The keys reach the composer, not the list.
     focused: bool,
     /// An input method composes: its keys are its own.
@@ -219,6 +324,57 @@ impl Composer {
         self.histories.entry(channel).or_default()
     }
 
+    /// Load the message of `edit` into the composer of its channel, with the
+    /// caret at its end. The draft there and its history wait for the edit
+    /// to end. A second edit replaces the first and keeps the same draft.
+    pub fn start_edit(&mut self, edit: PendingEdit) {
+        let channel = edit.channel;
+        let kept = match self.editing.remove(&channel) {
+            Some(open) => open.kept,
+            None => self
+                .drafts
+                .remove(&channel)
+                .map(|editor| (editor, self.histories.remove(&channel).unwrap_or_default())),
+        };
+        let editor = TextEditor::new(&edit.text, body_style(Color::BLACK));
+        self.drafts.insert(channel, editor);
+        let history = History {
+            last: edit.text.clone(),
+            ..History::default()
+        };
+        self.histories.insert(channel, history);
+        self.editing.insert(
+            channel,
+            Editing {
+                at: edit.at,
+                message: edit.message,
+                original: edit.text,
+                mentions: edit.mentions,
+                kept,
+            },
+        );
+        self.focused = true;
+    }
+
+    /// Whether the composer of `channel` holds an edit.
+    pub fn editing(&self, channel: ChannelId) -> bool {
+        self.editing.contains_key(&channel)
+    }
+
+    /// End the edit of `channel`: the draft put aside comes back with its
+    /// history, and the edited text goes (`MURMURE-204`).
+    fn end_edit(&mut self, channel: ChannelId) {
+        let Some(open) = self.editing.remove(&channel) else {
+            return;
+        };
+        self.drafts.remove(&channel);
+        self.histories.remove(&channel);
+        if let Some((editor, history)) = open.kept {
+            self.drafts.insert(channel, editor);
+            self.histories.insert(channel, history);
+        }
+    }
+
     /// Text the pipe committed: a typed key, a paste, a word an input
     /// method chose. A paste is a step of its own, and a space ends a word's.
     pub fn text(&mut self, channel: ChannelId, text: &str) {
@@ -257,8 +413,9 @@ impl Composer {
 
     /// A key while the composer holds the focus. Enter sends and Shift+Enter
     /// breaks the line (`MURMURE-199`, `MURMURE-200`). `Ctrl+Z` undoes, and
-    /// `Ctrl+Shift+Z` or `Ctrl+Y` redoes (`MURMURE-433`). Escape gives the keys
-    /// back to the list. Answers whether the composer took the key.
+    /// `Ctrl+Shift+Z` or `Ctrl+Y` redoes (`MURMURE-433`). Escape cancels an
+    /// edit (`MURMURE-204`), and otherwise gives the keys back to the list.
+    /// Answers whether the composer took the key.
     pub fn key(
         &mut self,
         channel: ChannelId,
@@ -275,6 +432,10 @@ impl Composer {
             "Enter" if shift => EditIntent::Newline,
             "Enter" => {
                 self.send = Some(channel);
+                return true;
+            }
+            "Escape" if self.editing(channel) => {
+                self.end_edit(channel);
                 return true;
             }
             "Escape" => {
@@ -354,16 +515,17 @@ impl Composer {
     }
 
     /// Apply the edits since the last paint, and size the band for the draft
-    /// of `channel` in a region of `size`. Answers the draft Enter sent, and
-    /// its channel. An empty draft sends nothing (`MURMURE-201`). Only the
-    /// sent draft leaves, so another channel keeps its own (`MURMURE-202`).
+    /// of `channel` in a region of `size`. Answers what Enter sent. An empty
+    /// draft sends nothing (`MURMURE-201`). Only the sent draft leaves, so
+    /// another channel keeps its own (`MURMURE-202`). An edit sends an edit
+    /// of its message, and one that changed nothing just ends (`MURMURE-203`).
     pub fn flush(
         &mut self,
         font_cx: &mut FontContext,
         channel: Option<ChannelId>,
         size: (f32, f32),
         palette: &Palette,
-    ) -> Option<(ChannelId, String)> {
+    ) -> Option<Sent> {
         let wrap = (size.0 - 2.0 * SPACE_8).max(1.0);
         let style = body_style(palette.cell_text);
         let mut sent = None;
@@ -373,12 +535,33 @@ impl Composer {
             editor.set_style(style.clone());
             editor.flush(font_cx, wrap, 1.0);
             let text = editor.text();
-            if !text.trim().is_empty() {
+            if let Some(open) = self.editing.get(&asked) {
+                if !text.trim().is_empty() {
+                    if text != open.original {
+                        sent = Some(Sent::Edit {
+                            channel: asked,
+                            at: open.at,
+                            message: open.message,
+                            draft: MessageDraft {
+                                mentions: kept_mentions(&open.original, &text, &open.mentions),
+                                text,
+                            },
+                        });
+                    }
+                    self.end_edit(asked);
+                }
+            } else if !text.trim().is_empty() {
                 self.drafts.remove(&asked);
                 // The history leaves with the draft: no undo reaches a
                 // message sent (`MURMURE-434`).
                 self.histories.remove(&asked);
-                sent = Some((asked, text));
+                sent = Some(Sent::Message {
+                    channel: asked,
+                    draft: MessageDraft {
+                        text,
+                        mentions: Vec::new(),
+                    },
+                });
             }
         }
         let Some(channel) = channel else {
@@ -497,6 +680,26 @@ mod tests {
         assert_eq!(two.as_deref(), Some("Ada and Bob are typing"));
         let three = typing_line(&names(&["Ada", "Bob", "Cy"]));
         assert_eq!(three.as_deref(), Some("Several people are typing"));
+    }
+
+    /// A mention before the change keeps its range, one after it moves with
+    /// the text, and one the change touches goes (`MURMURE-203`).
+    #[test]
+    fn an_edit_keeps_the_mentions_it_leaves_whole() {
+        let at = |range: std::ops::Range<usize>| Mention {
+            target: ambre_bus::MentionTarget::Channel,
+            range,
+        };
+        // "@a hi @b": "hi" becomes "hello".
+        let mentions = [at(0..2), at(6..8)];
+        let kept = kept_mentions("@a hi @b", "@a hello @b", &mentions);
+        assert_eq!(kept, [at(0..2), at(9..11)]);
+        let kept = kept_mentions("@a hi @b", "@x hi @b", &mentions);
+        assert_eq!(kept, [at(6..8)], "the first one was edited");
+        let same = kept_mentions("@a hi @b", "@a hi @b", &mentions);
+        assert_eq!(same, mentions, "no change keeps them all");
+        let wide = kept_mentions("é @b", "éé @b", &[at(2..4)]);
+        assert_eq!(wide, [at(3..5)], "ranges count chars, not bytes");
     }
 
     /// A seal with no edit waiting starts the next step, and does not close

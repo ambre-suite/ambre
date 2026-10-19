@@ -24,8 +24,8 @@ use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId};
 use ambre_murmure::chrome::{DeleteConfirm, MurmureHandler, MurmureRelay, SearchBox, coverage};
 use ambre_murmure::commands::{
-    COMMANDS, COPY_TEXT, DELETE, MARK_ALL_READ, MARK_UNREAD, MessageTarget, NEXT_ACTIVITY, PALETTE,
-    PREVIOUS_ACTIVITY, REPLY, SEARCH,
+    COMMANDS, COPY_TEXT, DELETE, EDIT, MARK_ALL_READ, MARK_UNREAD, MessageTarget, NEXT_ACTIVITY,
+    PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REPLY, SEARCH,
 };
 use ambre_murmure::{MessageRef, MurmurePane};
 use leptos::prelude::*;
@@ -566,6 +566,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         message,
         author: UserId::new(),
         text: "hello".to_owned(),
+        mentions: Vec::new(),
         notice: false,
         deleted: false,
         pressed: None,
@@ -606,6 +607,49 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
     assert_eq!(sent.get_untracked().len(), 1, "copy sends nothing");
 }
 
+/// The member's own message offers its edit. The action sends nothing and
+/// hands the message to the channel's region, which takes it once
+/// (`MURMURE-203`).
+#[wasm_bindgen_test]
+fn an_edit_is_handed_to_the_region_and_sends_nothing() {
+    let (_owner, relay, direct) = shown_direct();
+    let me = UserId::new();
+    relay.absorb(&UiEvent::Rest {
+        id: RequestId::next(),
+        evt: RestEvent::SessionReady {
+            user_id: me,
+            display_name: "Alice".to_owned(),
+            email: "alice@test.local".to_owned(),
+        },
+    });
+    let (handler, sent) = handler(relay);
+    let target = MessageTarget {
+        channel: direct,
+        at: MessageAt::Segment(SegmentId::new()),
+        message: MessageId::new(),
+        author: me,
+        text: "typo".to_owned(),
+        mentions: Vec::new(),
+        notice: false,
+        deleted: false,
+        pressed: None,
+        canvas: "ambre-canvas",
+    };
+    relay.target.set(Some(target.clone()));
+    assert!(menu_labels(relay).contains(&"Edit message".to_owned()));
+    assert!(handler.on_command(EDIT).is_empty());
+    assert!(sent.get_untracked().is_empty(), "the edit sends nothing");
+    let asked = PendingEdit {
+        channel: direct,
+        at: target.at,
+        message: target.message,
+        text: "typo".to_owned(),
+        mentions: Vec::new(),
+    };
+    assert_eq!(relay.take_edit(), Some(asked));
+    assert_eq!(relay.take_edit(), None, "taken once");
+}
+
 /// The member's own message offers its deletion, last. The action sends
 /// nothing and opens the dialog. Cancel and a close of the dialog send
 /// nothing, and Delete sends the deletion, stamped by the view
@@ -633,6 +677,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         message,
         author: me,
         text: "oops".to_owned(),
+        mentions: Vec::new(),
         notice: false,
         deleted: false,
         pressed: None,

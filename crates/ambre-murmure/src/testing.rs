@@ -38,6 +38,7 @@ pub fn channel_of(texts: &[&str], size: (f64, f64)) -> (MurmureView, Sender<UiEv
         now_ms: Rc::new(|| 0.0),
         announce: Rc::new(|_| {}),
         act_on: Rc::new(|_| {}),
+        take_edit: Rc::new(|| None),
         pipe: TextInput::detached(),
     };
     let (events, from_logic) = local(8);
