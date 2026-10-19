@@ -85,6 +85,14 @@ enum Region {
     Thread,
 }
 
+/// The list a region shows: a channel, or the thread under one of its
+/// messages. Two threads of one channel are two lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ListOf {
+    Channel(ChannelId),
+    Thread(ChannelId, MessageId),
+}
+
 /// The canvas view of a Murmure message region.
 pub struct MurmureView {
     /// The events of the Logic thread. The content canvas holds the page's
@@ -129,9 +137,9 @@ pub struct MurmureView {
     focus: Option<RowKey>,
     /// The focus moved: the next paint brings its row into view.
     reveal: bool,
-    /// The channel and the latest message this region last heard, so a new
-    /// one is announced once (`MURMURE-208`).
-    heard: (Option<ChannelId>, Option<(MessageId, Timestamp)>),
+    /// The list and the latest message this region last heard, so a new one
+    /// is announced once (`MURMURE-208`).
+    heard: (Option<ListOf>, Option<(MessageId, Timestamp)>),
     dirty: bool,
 }
 
@@ -464,14 +472,12 @@ impl MurmureView {
         let palette = self.theme.palette();
         let shown_before = self.jump.is_some();
         self.jump = higher_up.then(|| paint_jump(surface, font_cx, text_cache, self.size, palette));
-        if self.region == Region::Channel {
-            if higher_up && !shown_before {
-                // The control shows: End reaches it from the keyboard
-                // (`MURMURE-509`).
-                (self.reads.announce)(JUMP_HINT);
-            }
-            self.hear_latest(on_screen, list, at_bottom && painted.latest_shown);
+        if higher_up && !shown_before {
+            // The control shows: End reaches it from the keyboard
+            // (`MURMURE-509`).
+            (self.reads.announce)(JUMP_HINT);
         }
+        self.hear_latest(self.list_of(pane), list, at_bottom && painted.latest_shown);
         if self.region == Region::Channel
             && painted.oldest_shown
             && let Some((channel, oldest)) = on_screen.zip(list.oldest_segment())
@@ -505,14 +511,14 @@ impl MurmureView {
     /// Announce a message newer than the latest one this region heard, when
     /// the list was at the bottom (`MURMURE-208`). The first list a channel
     /// shows is not news, and the focus stays where it was (`MURMURE-209`).
-    fn hear_latest(&mut self, channel: Option<ChannelId>, list: &MessageList, at_bottom: bool) {
+    fn hear_latest(&mut self, of: Option<ListOf>, list: &MessageList, at_bottom: bool) {
         let latest = list.latest().map(|m| (m.id, m.ts));
-        let (heard_in, heard) = std::mem::replace(&mut self.heard, (channel, latest));
+        let (heard_in, heard) = std::mem::replace(&mut self.heard, (of, latest));
         let news = match (heard, latest) {
             (Some((old, old_ts)), Some((new, ts))) => old != new && ts >= old_ts,
             _ => false,
         };
-        if !(news && at_bottom && heard_in == channel) {
+        if !(news && at_bottom && heard_in == of) {
             return;
         }
         let rows = list.rows();
@@ -571,6 +577,17 @@ impl MurmureView {
             self.kinetic.stop();
         }
         self.heading = 0.0;
+    }
+
+    /// Which list the pane shows in this region, `None` when it shows none.
+    fn list_of(&self, pane: MurmurePane) -> Option<ListOf> {
+        match (self.region, pane) {
+            (Region::Channel, pane) => pane.shown_channel().map(ListOf::Channel),
+            (Region::Thread, MurmurePane::Thread { channel, root }) => {
+                Some(ListOf::Thread(channel, root.message))
+            }
+            (Region::Thread, _) => None,
+        }
     }
 
     /// The list of what the pane shows in this region: the channel's in the
@@ -1292,6 +1309,79 @@ mod tests {
         key(&mut page, "PageUp", false, 40.0);
         frame_at(&mut page.view, 40.0);
         assert_eq!(*page.said.borrow(), [JUMP_HINT, JUMP_HINT]);
+    }
+
+    /// The thread's list takes the keys the channel's list takes, and says
+    /// what it reaches. Its keys leave the channel's focus alone
+    /// (`MURMURE-510`).
+    #[test]
+    fn the_thread_takes_the_keys_of_the_channel() {
+        let mut page = page();
+        let channel = ChannelId::new();
+        let ada = UserId::new();
+        let root = message(ada, 0, "root");
+        let segment = SegmentId::new();
+        let messages = vec![root.clone()];
+        send(&page, channel, MurmureEvent::Messages { segment, messages });
+        let thread = DocumentId::new();
+        let replies: Vec<_> = (1..=200).map(|ts| message(ada, ts, "hello")).collect();
+        let ev = MurmureEvent::ThreadMessages {
+            root: root.id,
+            thread,
+            messages: replies.clone(),
+        };
+        send(&page, channel, ev);
+        let at = MessageRef {
+            segment,
+            message: root.id,
+        };
+        page.pane.set(MurmurePane::Thread { channel, root: at });
+        let mut view = page.view.region(300.0, 200.0);
+        frame(&mut page.view);
+        frame(&mut view);
+        assert!(page.said.borrow().is_empty(), "the first list is not news");
+
+        let clock = Rc::clone(&page.clock);
+        let press = |view: &mut MurmureView, key: &str, now_ms: f64| {
+            clock.set(now_ms);
+            let taken = view.handle_input(&InputEvent::Key {
+                key: key.to_owned(),
+                ctrl: false,
+                alt: false,
+                shift: false,
+                meta: false,
+            });
+            frame_at(view, now_ms);
+            taken
+        };
+        assert!(press(&mut view, "ArrowUp", 10.0));
+        assert_eq!(view.focused(), row(&replies, 199), "the last reply");
+        assert_eq!(*page.said.borrow(), ["Ada, t: hello"]);
+        assert!(press(&mut view, "PageUp", 20.0));
+        press(&mut view, "PageUp", 30.0);
+        assert!(!shown(&view).latest_shown, "the pages moved the thread");
+        assert_eq!(
+            page.said.borrow().last().map(String::as_str),
+            Some(JUMP_HINT)
+        );
+        assert!(press(&mut view, "End", 40.0));
+        assert!(shown(&view).latest_shown, "End is back at the latest reply");
+        assert_eq!(page.view.focused(), None, "the channel kept its own focus");
+
+        page.said.borrow_mut().clear();
+        let ev = MurmureEvent::ThreadMessages {
+            root: root.id,
+            thread,
+            messages: vec![message(ada, 500, "hello")],
+        };
+        send(&page, channel, ev);
+        frame(&mut page.view);
+        frame(&mut view);
+        assert_eq!(
+            *page.said.borrow(),
+            ["Ada, t: hello"],
+            "a new reply is said"
+        );
     }
 
     /// A finger drags the list, and one that never left the slop is a tap

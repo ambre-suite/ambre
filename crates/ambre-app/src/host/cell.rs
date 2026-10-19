@@ -14,13 +14,16 @@
 
 use super::*;
 
-/// The listeners a cell takes its input from, on its own canvas.
-const INPUTS: [&str; 5] = [
+/// The listeners a cell takes its input from, on its own canvas. The canvas
+/// takes the focus, so its keys reach its own view (the Murmure message list
+/// spec).
+const INPUTS: [&str; 6] = [
     "pointerdown",
     "pointermove",
     "pointerup",
     "pointercancel",
     "wheel",
+    "keydown",
 ];
 
 /// A DOM listener a cell holds, with the event it listens to.
@@ -155,6 +158,9 @@ impl Bound {
                         && view.borrow_mut().handle_input(&input)
                     {
                         event.prevent_default();
+                        // A key the cell took is not the page's: the document
+                        // listener would hand it to the content view as well.
+                        event.stop_propagation();
                     }
                 });
             listeners.push((kind, on_input));
@@ -310,6 +316,15 @@ fn touch_of(event: &web_sys::Event) -> Option<(TouchPhase, f32, f32)> {
 
 /// The input event a DOM event on a cell carries, in the cell's own pixels.
 fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
+    if let Some(key) = event.dyn_ref::<web_sys::KeyboardEvent>() {
+        return Some(InputEvent::Key {
+            key: key.key(),
+            ctrl: key.ctrl_key(),
+            alt: key.alt_key(),
+            shift: key.shift_key(),
+            meta: key.meta_key(),
+        });
+    }
     if let Some(wheel) = event.dyn_ref::<web_sys::WheelEvent>() {
         return Some(InputEvent::Wheel {
             dx: wheel.delta_x(),
@@ -536,6 +551,46 @@ mod tests {
         let mouse = web_sys::PointerEvent::new("pointermove").unwrap();
         canvas.dispatch_event(&mouse).unwrap();
         assert!(murmure(&view.borrow()).hover().is_some(), "a mouse points");
+    }
+
+    /// A key on the thread's canvas reaches its own view, and one it took
+    /// goes no further, so the channel never hears it. A key it leaves still
+    /// reaches the page (the Murmure message list spec).
+    #[wasm_bindgen_test]
+    fn a_key_on_a_cell_reaches_its_view_and_not_the_page() {
+        let (_cell, canvas) = thread_cell(160, 90);
+        let page = page();
+        let mut cells = Cells::default();
+        cells.sync(&page);
+        let document = web_sys::window().and_then(|w| w.document()).unwrap();
+        let heard = Rc::new(std::cell::Cell::new(0));
+        let count = Rc::clone(&heard);
+        let listener = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
+            count.set(count.get() + 1);
+        });
+        let callback = listener.as_ref().unchecked_ref();
+        document
+            .add_event_listener_with_callback("keydown", callback)
+            .unwrap();
+        let press = |key: &str| {
+            let init = web_sys::KeyboardEventInit::new();
+            init.set_key(key);
+            init.set_bubbles(true);
+            init.set_cancelable(true);
+            let event = web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &init)
+                .unwrap();
+            canvas.dispatch_event(&event).unwrap();
+            event.default_prevented()
+        };
+
+        assert!(press("PageUp"), "the thread took the key");
+        assert!(press("ArrowUp"));
+        assert_eq!(heard.get(), 0, "the page never heard them");
+        assert!(!press("a"), "a key the thread leaves");
+        assert_eq!(heard.get(), 1, "reaches the page");
+        document
+            .remove_event_listener_with_callback("keydown", callback)
+            .unwrap();
     }
 
     /// `CANVAS-070`: a cell plans its frame apart from the page. A frame

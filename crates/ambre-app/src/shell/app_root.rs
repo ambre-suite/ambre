@@ -58,7 +58,7 @@ pub(crate) fn MurmureShell(
                     when=move || matches!(pane.get(), MurmurePane::Members { .. })
                     // The thread is a canvas of its own, in the panel's cell
                     // (the Murmure message list spec). The host binds it by id.
-                    fallback=|| view! { <CanvasCell id=crate::host::THREAD_CANVAS /> }
+                    fallback=|| view! { <CanvasCell id=crate::host::THREAD_CANVAS label="Thread" /> }
                 >
                     <MemberList relay=relay send=send />
                 </Show>

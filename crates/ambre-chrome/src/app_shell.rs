@@ -97,14 +97,21 @@ impl ShellRegion {
 /// A canvas of its own beside the central one, filling the rest of the region
 /// that holds it. The canvas host binds it by `id` while it is in the page
 /// (`CANVAS-070`), so a view can show a second region on a canvas.
+///
+/// The canvas takes the focus and handles its own keys. So it is an
+/// application to assistive technology, which then hands it the arrows. What
+/// it shows reaches a screen reader through the live region (`CHROME-023`).
 #[component]
 pub fn CanvasCell(
     /// Id of the canvas element, the one the canvas host looks up.
     id: &'static str,
+    /// The name a screen reader gives the region.
+    label: &'static str,
 ) -> impl IntoView {
     view! {
         <div class="ambre-canvas-cell">
-            <canvas id=id class="ambre-canvas" tabindex="0"></canvas>
+            <canvas id=id class="ambre-canvas" tabindex="0" role="application" aria-label=label>
+            </canvas>
         </div>
     }
 }

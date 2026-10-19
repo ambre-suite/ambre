@@ -329,6 +329,15 @@ async fn the_channel_and_the_thread_are_each_a_canvas_of_their_cell() {
         "less its border"
     );
     assert_ne!(regions.content, regions.panel);
+    // The thread takes its own keys, so a screen reader hands it the arrows
+    // (`MURMURE-510`).
+    let thread = frame.query(&panel).expect("the thread's canvas");
+    assert_eq!(thread.get_attribute("tabindex").as_deref(), Some("0"));
+    assert_eq!(thread.get_attribute("role").as_deref(), Some("application"));
+    assert_eq!(
+        thread.get_attribute("aria-label").as_deref(),
+        Some("Thread")
+    );
 
     let channel = ChannelId::new();
     frame.pane.set(MurmurePane::Members { channel });

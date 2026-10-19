@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-420` | `INV` | A thread MUST show its messages through the same list as a channel. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::list::tests::a_thread_fills_its_own_list_and_leaving_drops_the_channel` -- a thread fills a list of the same type as a channel; `ambre_murmure::view::tests::the_thread_region_shows_the_thread_through_the_same_list` -- the thread's region paints the thread through the same painter, on a recording surface | none | verified |
 | `MURMURE-421` | `INV` | Each region that shows messages MUST be a canvas of its own, one cell of the chrome layout. | this spec section 3; `CHROME-009`; `CANVAS-070` | `ambre_app::shell::murmure_regions::tests::the_channel_and_the_thread_are_each_a_canvas_of_their_cell` -- the channel and the thread each hold a canvas of their cell's width; `ambre_app::host::cell::tests::the_thread_is_a_canvas_of_its_own_sized_by_its_cell` -- the thread's canvas takes its own size, input and resize, in the browser tier | none | verified |
 | `MURMURE-509` | `OBS` | The control back to the latest message MUST be reachable from the keyboard and announced to a screen reader. | this spec section 3; `ambre-spec-accessibility.md section 2` | `ambre_murmure::view::tests::the_control_is_said_with_its_key_each_time_it_shows` -- each time the control shows, the words name End, the key that answers it | none | verified |
-| `MURMURE-510` | `OBS` | The list of a thread MUST take Up, Down, Page Up, Page Down and End as the list of a channel does. | this spec section 3; `MURMURE-205`; `MURMURE-504` | not built | unbuilt -- lands with the `Focus in a thread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-510` | `OBS` | The list of a thread MUST take Up, Down, Page Up, Page Down and End as the list of a channel does. | this spec section 3; `MURMURE-205`; `MURMURE-504` | `ambre_murmure::view::tests::the_thread_takes_the_keys_of_the_channel` -- the thread moves its focus, pages, comes back with End and says a new reply, and the channel's focus stays; `ambre_app::host::cell::tests::a_key_on_a_cell_reaches_its_view_and_not_the_page` -- a key the thread's canvas took never reaches the page, in the browser tier; `ambre_app::shell::murmure_regions::the_channel_and_the_thread_are_each_a_canvas_of_their_cell` -- the thread's canvas takes the focus as a named application | none | verified |
 
 ### 1.2 A message arrives
 
@@ -97,7 +97,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
   only what `meta` already tells every member: the span of a segment.
-* **Verification.** 27 `verified`, 9 `unimplemented`. The host tier holds the order, the groups,
+* **Verification.** 28 `verified`, 8 `unimplemented`. The host tier holds the order, the groups,
   the words and the paint of the rows and the bands. It holds the scroll, the jumps, the focus and
   the thread's list too. The browser tier holds each canvas, the finger, the local time and the live
   region.
@@ -181,7 +181,9 @@ bottom is announced there too, politely, and the focus stays put (`MURMURE-209`)
 
 The control back to the latest message is painted. So its words are said each time it shows, with
 End, the key that answers it (`MURMURE-509`). The view holds only a closure that writes the live
-region, never the element that takes the focus.
+region, never the element that takes the focus. The thread's canvas takes these keys in its own
+region, and keeps a key it took from the channel (`MURMURE-510`). It is an application to assistive
+technology, so a screen reader hands it the arrows rather than reading the page with them.
 
 **A segment that cannot be opened** keeps its place. Its entry in the `segments` list of `meta`
 gives its start, and the next entry its end. So the band says which messages it stands for. The
@@ -243,9 +245,6 @@ both to each region, and `ambre_app::host::murmure` hands it the pane, the names
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The list of a thread takes no key.** Its canvas listens to the pointer only, so it has no
-  focus, no page keys and no announcement (`MURMURE-510`). It lands with the
-  `Focus in a thread` Story (`ambre-roadmap.md` E5).
 * **A band names its remedy in words.** It says to reopen the channel; no control on it asks again.
 * **Only the focused message reaches a screen reader.** The list is not mirrored whole, by the rule
   of `ambre-spec-accessibility.md section 2`, so a reader moves through it message by message.
