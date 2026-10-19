@@ -22,10 +22,12 @@ use ambre_bus::{
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId};
-use ambre_murmure::chrome::{DeleteConfirm, MurmureHandler, MurmureRelay, SearchBox, coverage};
+use ambre_murmure::chrome::{
+    DeleteConfirm, KeyList, MurmureHandler, MurmureRelay, SearchBox, coverage,
+};
 use ambre_murmure::commands::{
-    COMMANDS, COPY_TEXT, DELETE, EDIT, MARK_ALL_READ, MARK_UNREAD, MessageTarget, NEXT_ACTIVITY,
-    PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REPLY, SEARCH,
+    COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
+    NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REPLY, SEARCH, key_list,
 };
 use ambre_murmure::{MessageRef, MurmurePane};
 use leptos::prelude::*;
@@ -276,7 +278,7 @@ fn the_palette_lists_the_other_members_of_the_space_after_the_channels() {
         "{entries:?}"
     );
     assert_eq!(entries[1].hint, Some("Member"));
-    let shown: Vec<String> = ambre_chrome::palette_rows(&entries, COMMANDS, "bo", &Locale::En)
+    let shown: Vec<String> = ambre_chrome::palette_rows(&entries, COMMANDS, "bob", &Locale::En)
         .into_iter()
         .map(|row| match row {
             PaletteRow::Entry(e) => e.label.clone(),
@@ -776,6 +778,50 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
             command: MurmureCommand::DeleteMessage { at: a, message: m, now: t },
         }] if channel_id == direct && a == at && m == message && t == now
     ));
+    root.remove();
+}
+
+/// The keys command opens the list, a row per chord of the table and per
+/// key of a conversation, and sends nothing. The chord of the box in a
+/// thread is one of them. Close closes it (`MURMURE-540`, `MURMURE-543`).
+#[wasm_bindgen_test]
+async fn the_keys_command_opens_the_list_of_every_key() {
+    use wasm_bindgen::JsCast;
+
+    let (_owner, relay, _) = shown_direct();
+    let (handler, sent) = handler(relay);
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let _handle = leptos::mount::mount_to(mount, move || view! { <KeyList relay=relay /> });
+    let dialog: web_sys::HtmlDialogElement = root
+        .query_selector("dialog")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    assert!(!dialog.open());
+
+    let found = COMMANDS.iter().find(|c| c.id == KEYS).unwrap();
+    assert!(found.keybindings.is_empty(), "the palette reaches it");
+    assert!(handler.on_command(KEYS).is_empty());
+    leptos::task::tick().await;
+    assert!(dialog.open());
+    assert!(sent.get_untracked().is_empty(), "the list sends nothing");
+    let rows = root.query_selector_all("tbody tr").unwrap();
+    assert_eq!(rows.length() as usize, key_list(&Locale::En).len());
+    let cells: Vec<String> = (0..rows.length())
+        .map(|i| rows.item(i).unwrap().text_content().unwrap_or_default())
+        .collect();
+    assert_eq!(cells[0], "Ctrl+KCommand paletteAnywhere");
+    let also = "Alt+EnterAlso send the reply to the channelThe composer of a thread";
+    assert!(cells.iter().any(|row| row == also), "{cells:?}");
+
+    let close = root.query_selector(".murmure-keys-close").unwrap().unwrap();
+    close.dyn_into::<web_sys::HtmlElement>().unwrap().click();
+    leptos::task::tick().await;
+    assert!(!dialog.open());
+    assert!(!relay.keys.get_untracked());
     root.remove();
 }
 

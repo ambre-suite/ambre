@@ -1309,3 +1309,25 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
     leptos::task::tick().await;
     assert!(frame.query(".murmure-search").is_none(), "Escape closes it");
 }
+
+/// The list of keys shows its keys on a phone as on a desktop. The chip of
+/// a menu hides there, but the member opened this list to read them
+/// (`MURMURE-542`).
+#[wasm_bindgen_test]
+async fn the_list_of_keys_shows_its_keys_at_every_width() {
+    for width in [400, 1025] {
+        let frame = Frame::new(width, channel()).await;
+        assert_eq!(
+            frame.width_of(".murmure-keys-key"),
+            0.0,
+            "closed at {width}"
+        );
+        frame.relay.keys.set(true);
+        leptos::task::tick().await;
+        assert!(
+            frame.width_of(".murmure-keys-key") > 0.0,
+            "shown at {width}"
+        );
+        assert_eq!(frame.texts(".murmure-keys-key")[0], "Ctrl+K");
+    }
+}

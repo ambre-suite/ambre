@@ -21,6 +21,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-170` | `INV` | Every Murmure shortcut MUST be a command with one description in the command table. | this spec section 3; `UI-THREAD-019` | `ambre_murmure::commands::tests::the_table_has_no_defect` -- no defect in the table, and the keymap binds every chord it declares and no other | none | verified |
 | `MURMURE-171` | `INV` | No Murmure chord MUST take a chord the browser services. | this spec section 3; `UI-THREAD-011` | `ambre_murmure::commands::tests::no_chord_is_one_the_browser_services` -- the shared clipboard, undo and redo chords, and the chords the browser keeps from the page | none | verified |
 | `MURMURE-213` | `INV` | A Murmure chord MUST keep the meaning the other applications give it: the palette chord opens the palette, the find chord opens the search. | this spec section 3; `UI-THREAD-037` | `ambre_murmure::tests::chrome_relay::the_find_chord_opens_the_search_and_its_answer_lists_the_matches` -- the find chord of every application opens the search, from a text field too; `ambre_murmure::tests::chrome_relay::the_mark_all_read_chord_runs_the_command_of_the_unread_feature` -- the palette chord opens the palette; `ambre_app::shell::murmure_regions::the_search_box_asks_lists_and_opens_a_match` -- browser tier, the box opens in the command bar and takes the caret | none | verified |
+| `MURMURE-541` | `INV` | No key a region takes MUST be a chord of the command table. | this spec section 3; `UI-THREAD-026` | `ambre_murmure::commands::tests::no_key_of_a_conversation_is_a_chord_of_the_table` -- the keymap resolves no key of the region table | none | verified |
+| `MURMURE-542` | `OBS` | The list of keys MUST show its keys at every width. | this spec section 3; `CHROME-057` | `ambre_app::shell::murmure_regions::the_list_of_keys_shows_its_keys_at_every_width` -- the shell stylesheet in a frame of 400 and 1025 pixels, closed then open | none | verified |
 
 ### 1.2 Switch channel from the palette
 
@@ -56,10 +58,17 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-528` | `POST` | Escape in the message list of a thread MUST close the thread and show its channel at the root. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::view::tests::escape_in_a_threads_list_closes_the_thread` -- the channel shows at the root, while the composer's Escape first gives the keys back | none | verified |
 | `MURMURE-529` | `FRAME` | Closing a thread with Escape MUST NOT mark its channel or the thread read. | this spec section 3; `MURMURE-115` | `ambre_murmure::view::tests::closing_a_thread_with_escape_marks_nothing_read` -- no read command for the channel or the thread | none | verified |
 
+### 1.6 The list of keys
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-540` | `POST` | The keys command MUST open a list of every chord of the command table and every key a region takes, each with what it does and where. | this spec section 3 | `ambre_murmure::commands::tests::the_key_list_holds_every_chord_and_every_key_of_a_conversation` -- each chord where it acts anywhere, then each key of a region, Alt+Enter among them; `ambre_murmure::tests::chrome_relay::the_keys_command_opens_the_list_of_every_key` -- the command opens a row per key, sends nothing, and Close closes it | none | verified |
+| `MURMURE-543` | `FRAME` | Opening the list of keys MUST NOT send anything to the Logic thread. | this spec section 3 | `ambre_murmure::tests::chrome_relay::the_keys_command_opens_the_list_of_every_key` -- nothing sent once the list shows | none | verified |
+
 * **Budget.** none of its own: each shortcut runs a command another feature budgets.
 * **Boundary.** none: the palette filters names the client holds, and nothing it types leaves.
-* **Verification.** 17 `verified`. The table, the palette, the jumps, the find chord and the keys
-  inside a conversation hold.
+* **Verification.** 21 `verified`. The table, the palette, the jumps, the find chord, the keys
+  inside a conversation and their list hold.
 
 ---
 
@@ -72,6 +81,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | presses the next-unread chord | the next channel with activity, in sidebar order (`MURMURE-176`) | none |
 | presses up in an empty composer | her last message, open for edit (`MURMURE-178`) | `ambre_murmure::view::tests::up_in_an_empty_composer_edits_the_last_own_message` |
 | presses the mark-all-read chord while drafting | every badge cleared, and her draft kept (`MURMURE-181`) | `ambre_murmure::view::tests::marking_everything_read_keeps_the_draft` |
+| picks "Keyboard shortcuts" in the palette, on a phone | every key, what it does and where (`MURMURE-540`, `MURMURE-542`) | `ambre_app::shell::murmure_regions::the_list_of_keys_shows_its_keys_at_every_width` |
 
 ---
 
@@ -95,6 +105,7 @@ Page Up. It acts on the list or the composer that holds the focus, which the she
 | close the thread | Escape, in the message list of a thread | the thread's list |
 | send the next reply to the channel too | Alt+Enter, in the composer of a thread (`MURMURE-534`) | the thread's composer |
 | mark everything read | Alt+Shift+A | anywhere in Murmure |
+| list the keys | none: the palette offers it | anywhere in Murmure |
 
 ```rust
 pub struct PaletteEntry { pub key: [u8; 16], pub label: String, pub hint: Option<&'static str> }
@@ -116,6 +127,11 @@ there (`MURMURE-527`). Escape in the list marks the channel read (`MURMURE-522`)
 and marks nothing (`MURMURE-528`, `MURMURE-529`). Shift+Page Up does nothing there, since a
 thread's list draws no unread line.
 
+**The list of keys.** It reads two tables: the chords of the command table, then the keys of a
+region (`MURMURE-540`). A key no table holds is a key no list shows. A key of a region is no chord,
+or the shell would take it first (`MURMURE-541`). Its keys show at every width, since the member
+asked to read them (`MURMURE-542`).
+
 **One palette, two lists.** The channels and the direct messages are entries Murmure supplies to
 the palette of the suite, so they come before the commands (`CHROME-093`). A query that starts with
 `>` lists the commands alone (`CHROME-094`). The palette takes its size at each width
@@ -125,7 +141,8 @@ the palette of the suite, so they come before the commands (`CHROME-093`). A que
 **Code.** `ambre_murmure::commands` holds the table. `Sidebar::next_with_activity` picks the channel
 of a jump. `ambre_murmure::chrome::MurmureHandler` runs the commands and `MurmureRelay` supplies
 the entries of the palette. `ambre_murmure::chrome::MessageSearch` is the search box the find
-chord opens.
+chord opens. `ambre_murmure::commands::REGION_KEYS` holds the keys of a region, and
+`ambre_murmure::chrome::KeyList` draws the list.
 
 ---
 
@@ -148,6 +165,8 @@ chord opens.
 | Chords of the command table | key handlers in each view | two views would bind one chord to two actions, which `UI-THREAD-026` refuses |
 | Alt+Shift+A marks everything read | Shift+Escape, as a desktop client binds it | Chrome opens its task manager on Shift+Escape, and the page never sees the key (`MURMURE-171`) |
 | The find chord opens the Murmure search | the find of the browser | the messages are drawn on a canvas, so the find of the page reads none of them |
+| The palette offers the list of keys | Ctrl+/, as a desktop client binds it | the keymap matches the character a key types, and `/` needs Shift on a French keyboard |
+| The list shows its keys at every width | the chord chip of a menu, hidden below the desktop width (`CHROME-057`) | a list of keys with no keys reads nothing. The chip is a hint beside a label, and the list is asked for |
 
 ---
 

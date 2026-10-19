@@ -16,7 +16,7 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | implemented | 14 |  |
-| `murmure-keyboard` | No frequent action in Murmure needs the mouse. | implemented | 17 |  |
+| `murmure-keyboard` | No frequent action in Murmure needs the mouse. | implemented | 21 |  |
 | `murmure-mentions` | A member names another in a message with `@`. | implemented | 13 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | implemented | 22 |  |
 | `murmure-reactions` | A member answers a message with an emoji. | implemented | 7 |  |
@@ -44,4 +44,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 7 implemented, 10 partial, 11 design-only. 517 contract rows, 0 loose.**
+**28 features: 7 implemented, 10 partial, 11 design-only. 521 contract rows, 0 loose.**

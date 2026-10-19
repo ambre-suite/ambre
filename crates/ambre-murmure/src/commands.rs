@@ -52,6 +52,8 @@ pub const COPY_TEXT: CommandId = CommandId("murmure.message.copy_text");
 pub const EDIT: CommandId = CommandId("murmure.message.edit");
 /// Delete a message of the member, once a dialog confirms it (`MURMURE-512`).
 pub const DELETE: CommandId = CommandId("murmure.message.delete");
+/// Open the list of the keys Murmure takes (`MURMURE-540`).
+pub const KEYS: CommandId = CommandId("murmure.general.keys");
 
 /// Alt and Shift together, the modifiers of the jumps.
 const ALT_SHIFT: Modifiers = Modifiers {
@@ -100,6 +102,10 @@ fn delete_title(_: &Locale) -> String {
     "Delete message".into()
 }
 
+fn keys_title(_: &Locale) -> String {
+    "Keyboard shortcuts".into()
+}
+
 /// Every command Murmure contributes, described once.
 pub const COMMANDS: &[Command] = &[
     Command {
@@ -138,6 +144,15 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[KeyBinding::primary('f')],
         category: SEARCH_CATEGORY,
+    },
+    // No chord: the keymap matches the character a key types, and Ctrl+/
+    // needs Shift on a French keyboard. The palette reaches it.
+    Command {
+        id: KEYS,
+        title: keys_title,
+        icon: None,
+        keybindings: &[],
+        category: GENERAL,
     },
     // The actions of a message take no chord: a chord needs a message to
     // act on, and the keyboard reaches them through the focused one.
@@ -354,6 +369,131 @@ pub fn bind_keys(keymap: &mut Keymap) {
     keymap.bind_table(COMMANDS);
 }
 
+/// Where a key of the list acts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyPlace {
+    /// Anywhere in Murmure: a chord of the command table.
+    Anywhere,
+    /// The message list of a channel.
+    List,
+    /// The message list of a thread.
+    ThreadList,
+    /// The composer of a channel or of a thread.
+    Composer,
+    /// The composer of a thread alone.
+    ThreadComposer,
+}
+
+impl KeyPlace {
+    /// The words the list shows for the place.
+    pub fn words(self) -> &'static str {
+        match self {
+            Self::Anywhere => "Anywhere",
+            Self::List => "The message list",
+            Self::ThreadList => "The list of a thread",
+            Self::Composer => "The composer",
+            Self::ThreadComposer => "The composer of a thread",
+        }
+    }
+}
+
+/// One key a region takes, which the shell never sees.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RegionKey {
+    /// The key and its modifiers.
+    pub keys: KeyBinding,
+    /// What it does.
+    pub action: &'static str,
+    /// Where it acts.
+    pub place: KeyPlace,
+}
+
+const fn region_key(keys: KeyBinding, action: &'static str, place: KeyPlace) -> RegionKey {
+    RegionKey {
+        keys,
+        action,
+        place,
+    }
+}
+
+/// The keys inside a conversation, one row each (the Murmure keyboard spec).
+pub const REGION_KEYS: &[RegionKey] = &[
+    region_key(
+        KeyBinding::shift(Key::PageUp),
+        "Jump to the first unread message",
+        KeyPlace::List,
+    ),
+    region_key(
+        KeyBinding::new(Modifiers::NONE, Key::Escape),
+        "Mark the channel read",
+        KeyPlace::List,
+    ),
+    region_key(
+        KeyBinding::new(Modifiers::NONE, Key::Escape),
+        "Close the thread",
+        KeyPlace::ThreadList,
+    ),
+    region_key(
+        KeyBinding::shift(Key::F(10)),
+        "Open the actions of the focused message",
+        KeyPlace::List,
+    ),
+    region_key(
+        KeyBinding::new(Modifiers::NONE, Key::Enter),
+        "Send",
+        KeyPlace::Composer,
+    ),
+    region_key(
+        KeyBinding::shift(Key::Enter),
+        "Break the line",
+        KeyPlace::Composer,
+    ),
+    region_key(
+        KeyBinding::new(Modifiers::NONE, Key::ArrowUp),
+        "Edit your last message, from an empty composer",
+        KeyPlace::Composer,
+    ),
+    region_key(
+        KeyBinding::new(Modifiers::NONE, Key::Escape),
+        "Cancel the edit",
+        KeyPlace::Composer,
+    ),
+    region_key(
+        KeyBinding::new(Modifiers::ALT, Key::Enter),
+        "Also send the reply to the channel",
+        KeyPlace::ThreadComposer,
+    ),
+];
+
+/// One row of the list of keys.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyRow {
+    /// The key and its modifiers.
+    pub keys: KeyBinding,
+    /// What it does.
+    pub action: String,
+    /// Where it acts.
+    pub place: KeyPlace,
+}
+
+/// The list of keys: each chord of the command table, then each key of a
+/// conversation (`MURMURE-540`). Both come from their one table.
+pub fn key_list(locale: &Locale) -> Vec<KeyRow> {
+    let chords = COMMANDS.iter().flat_map(|command| {
+        command.keybindings.iter().map(|keys| KeyRow {
+            keys: *keys,
+            action: (command.title)(locale),
+            place: KeyPlace::Anywhere,
+        })
+    });
+    let region = REGION_KEYS.iter().map(|key| KeyRow {
+        keys: key.keys,
+        action: key.action.to_owned(),
+        place: key.place,
+    });
+    chords.chain(region).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -560,6 +700,43 @@ mod tests {
         bind_keys(&mut keymap);
         let bound = COMMANDS.iter().flat_map(|c| c.keybindings).count();
         assert_eq!(keymap.len(), bound);
+    }
+
+    /// The list holds each chord of the table where it acts anywhere, then
+    /// each key of a conversation where its region takes it (`MURMURE-540`).
+    #[test]
+    fn the_key_list_holds_every_chord_and_every_key_of_a_conversation() {
+        let list = key_list(&Locale::En);
+        let chords = COMMANDS.iter().flat_map(|c| c.keybindings).count();
+        assert_eq!(list.len(), chords + REGION_KEYS.len());
+        let palette = KeyRow {
+            keys: KeyBinding::primary('k'),
+            action: "Command palette".to_owned(),
+            place: KeyPlace::Anywhere,
+        };
+        assert_eq!(list[0], palette);
+        let (anywhere, region) = list.split_at(chords);
+        assert!(anywhere.iter().all(|row| row.place == KeyPlace::Anywhere));
+        assert!(region.iter().all(|row| row.place != KeyPlace::Anywhere));
+        let also = KeyRow {
+            keys: KeyBinding::new(Modifiers::ALT, Key::Enter),
+            action: "Also send the reply to the channel".to_owned(),
+            place: KeyPlace::ThreadComposer,
+        };
+        assert!(region.contains(&also), "the chord of the box");
+        assert_eq!(also.keys.to_string(), "Alt+Enter");
+        assert!(ambre_commands::find(COMMANDS, KEYS).is_some());
+    }
+
+    /// The shell resolves its chords before a region sees a key. A key of a
+    /// conversation that a chord held would never reach it (`MURMURE-541`).
+    #[test]
+    fn no_key_of_a_conversation_is_a_chord_of_the_table() {
+        let mut keymap = Keymap::new();
+        bind_keys(&mut keymap);
+        for key in REGION_KEYS {
+            assert_eq!(keymap.resolve(key.keys), None, "{}", key.keys);
+        }
     }
 
     /// No chord of the table is one the browser services. Those are the

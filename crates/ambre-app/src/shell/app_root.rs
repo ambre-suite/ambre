@@ -10,7 +10,7 @@ use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
-    ChannelHeader, ChannelList, DeleteConfirm, InviteControl, MemberList, MessageSearch,
+    ChannelHeader, ChannelList, DeleteConfirm, InviteControl, KeyList, MemberList, MessageSearch,
     MurmureRelay,
 };
 
@@ -71,6 +71,7 @@ pub(crate) fn MurmureShell(
             send=send
             now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))
         />
+        <KeyList relay=relay />
     }
 }
 

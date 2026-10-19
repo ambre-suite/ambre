@@ -659,6 +659,30 @@ input[type="radio"] {
     background: var(--surface-hover);
 }
 
+/* The list of keys (MURMURE-540). Its keys show at every width, unlike the
+   chip of a menu (MURMURE-542). */
+.murmure-keys-table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.murmure-keys-table th,
+.murmure-keys-table td {
+    padding: var(--space-1) var(--space-2);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+.murmure-keys-key {
+    display: inline-block;
+    font: var(--font-xs) ui-monospace, monospace;
+    white-space: nowrap;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1px var(--space-3);
+}
+
 .murmure-members {
     display: flex;
     flex-direction: column;

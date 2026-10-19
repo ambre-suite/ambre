@@ -12,8 +12,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::commands::{
-    COMMANDS, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY, PALETTE,
-    PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, SEARCH, message_action, message_actions,
+    COMMANDS, KEYS, KeyPlace, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY, PALETTE,
+    PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, SEARCH, key_list, message_action,
+    message_actions,
 };
 use crate::{
     Activity, MessageRef, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
@@ -316,6 +317,8 @@ pub struct MurmureRelay {
     /// The message the member asked to edit, until the channel's region
     /// loads it into the composer (`MURMURE-203`).
     pub editing: RwSignal<Option<PendingEdit>>,
+    /// The list of keys shows (`MURMURE-540`).
+    pub keys: RwSignal<bool>,
 }
 
 /// The search box: whether it is open, the query typed, and the last answer
@@ -400,6 +403,7 @@ impl MurmureRelay {
             target: RwSignal::new(None),
             deleting: RwSignal::new(None),
             editing: RwSignal::new(None),
+            keys: RwSignal::new(false),
         }
     }
 
@@ -1032,6 +1036,10 @@ impl MurmureHandler {
                 self.relay.open_search();
                 None
             }
+            KEYS => {
+                self.relay.keys.set(true);
+                None
+            }
             _ => return false,
         };
         if let Some(command) = command {
@@ -1194,6 +1202,54 @@ pub fn DeleteConfirm(
                 <button class="murmure-delete-cancel" on:click=move |_| cancel()>"Cancel"</button>
                 <button class="ambre-btn-danger murmure-delete-confirm" on:click=confirm>
                     "Delete"
+                </button>
+            </div>
+        </ambre_chrome::Dialog>
+    }
+}
+
+/// The list of the keys Murmure takes, open on the keys command
+/// (`MURMURE-540`). Each row names a key, what it does and where. Its keys
+/// show at every width (`MURMURE-542`). Escape, the backdrop and Close close
+/// it.
+#[component]
+pub fn KeyList(relay: MurmureRelay) -> impl IntoView {
+    let rows = key_list(&Locale::En);
+    view! {
+        <ambre_chrome::Dialog open=relay.keys class="murmure-keys" label="Keyboard shortcuts">
+            <h2>"Keyboard shortcuts"</h2>
+            <table class="murmure-keys-table">
+                <thead>
+                    <tr>
+                        <th scope="col">"Key"</th>
+                        <th scope="col">"Action"</th>
+                        <th scope="col">"Where"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows
+                        .clone()
+                        .into_iter()
+                        .map(|row| {
+                            view! {
+                                <tr>
+                                    // Not the chip of a menu, which hides below
+                                    // the desktop width: here the keys are what
+                                    // the member asked to read.
+                                    <td>
+                                        <kbd class="murmure-keys-key">{row.keys.to_string()}</kbd>
+                                    </td>
+                                    <td>{row.action}</td>
+                                    <td>{KeyPlace::words(row.place)}</td>
+                                </tr>
+                            }
+                        })
+                        .collect_view()}
+                </tbody>
+            </table>
+            <div class="ambre-dialog-actions">
+                <button class="murmure-keys-close" on:click=move |_| relay.keys.set(false)>
+                    "Close"
                 </button>
             </div>
         </ambre_chrome::Dialog>

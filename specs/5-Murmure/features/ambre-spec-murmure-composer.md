@@ -197,7 +197,7 @@ changed text.
   That waits for the `The caret after an undo` Story (`ambre-roadmap.md` E5).
 * **A draft lives in memory.** A reload loses it, until the `Drafts` Story (`ambre-roadmap.md` E5).
 * **`@` opens no panel.** The panel waits for the `The mention panel` Story (`ambre-roadmap.md` E5).
-* **The chord of the box is shown nowhere.** Its label names no key, and nothing lists the keys.
-  That waits for the `The keys of a conversation listed` Story (`ambre-roadmap.md` E5).
+* **The label of the box names no chord.** The list of keys names Alt+Enter (`MURMURE-540`). The
+  label waits for the `The chord on the box of a thread` Story (`ambre-roadmap.md` E5).
 * **A screen reader does not hear the draft.** The pipe takes the text, and nothing reads the draft
   back. That waits for the `The composer read aloud` Story (`ambre-roadmap.md` E5).
