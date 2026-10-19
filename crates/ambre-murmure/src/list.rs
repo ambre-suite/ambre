@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
     ChannelId, DocumentId, LogicCommand, MessageId, MessageView, MurmureCommand, MurmureEvent,
-    Notice, SegmentId, Timestamp, UiEvent, UserId,
+    Notice, SegmentId, Timestamp, UiEvent, Unreadable, UserId,
 };
 
 /// Consecutive messages of one author inside this span share one header:
@@ -40,7 +40,39 @@ pub struct MessageList {
 struct Segment {
     id: SegmentId,
     messages: Vec<MessageView>,
+    /// The band that stands for the segment while it could not open
+    /// (`MURMURE-218`). Its messages, once they arrive, take its place.
+    band: Option<Band>,
 }
+
+impl Segment {
+    /// The time the segment starts at, which places it in the list.
+    fn start(&self) -> Option<Timestamp> {
+        self.band
+            .map(|b| b.from)
+            .or_else(|| self.messages.first().map(|m| m.ts))
+    }
+}
+
+/// A segment that could not open, shown as one row (`MURMURE-218`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Band {
+    pub cause: Unreadable,
+    pub from: Timestamp,
+    /// The start of the next segment: `None` when none is listed after it.
+    pub to: Option<Timestamp>,
+}
+
+/// What a band names when the keys of its segment never reached this
+/// device (`MURMURE-218`).
+pub const BAND_KEYS: &str = "the keys for these messages have not reached this device.";
+
+/// What a band names when its segment opened under its key and failed
+/// its check (`MURMURE-220`).
+pub const BAND_DAMAGED: &str = "these messages could not be verified.";
+
+/// The remedy a band names for a cause that asking again may clear.
+pub const BAND_RETRY: &str = "Reopen the channel to try again.";
 
 impl MessageList {
     /// Take the new or changed messages of `segment`, as
@@ -59,26 +91,13 @@ impl MessageList {
         for other in self.segments.iter_mut().filter(|s| s.id != segment) {
             other.messages.retain(|m| !incoming.contains(&m.id));
         }
-        self.segments.retain(|s| !s.messages.is_empty());
-        let at = match self.segments.iter().position(|s| s.id == segment) {
-            Some(at) => at,
-            None => {
-                let at = self
-                    .segments
-                    .iter()
-                    .position(|s| s.messages.first().is_some_and(|m| m.ts > first))
-                    .unwrap_or(self.segments.len());
-                self.segments.insert(
-                    at,
-                    Segment {
-                        id: segment,
-                        messages: Vec::new(),
-                    },
-                );
-                at
-            }
-        };
-        let Some(held) = self.segments.get_mut(at).map(|s| &mut s.messages) else {
+        self.segments
+            .retain(|s| !s.messages.is_empty() || s.band.is_some());
+        let at = self.place(segment, first);
+        let Some(held) = self.segments.get_mut(at).map(|s| {
+            s.band = None;
+            &mut s.messages
+        }) else {
             return;
         };
         let mut index: HashMap<MessageId, usize> =
@@ -94,6 +113,39 @@ impl MessageList {
         }
     }
 
+    /// Show `segment`, which could not open, as one band (`MURMURE-218`).
+    /// A segment whose messages the list holds keeps them.
+    pub fn unreadable(&mut self, segment: SegmentId, band: Band) {
+        let at = self.place(segment, band.from);
+        if let Some(held) = self.segments.get_mut(at)
+            && held.messages.is_empty()
+        {
+            held.band = Some(band);
+        }
+    }
+
+    /// Where `segment` sits: where the list holds it, or a new empty slot
+    /// placed by `start`, so an older segment lands above.
+    fn place(&mut self, segment: SegmentId, start: Timestamp) -> usize {
+        if let Some(at) = self.segments.iter().position(|s| s.id == segment) {
+            return at;
+        }
+        let at = self
+            .segments
+            .iter()
+            .position(|s| s.start().is_some_and(|ts| ts > start))
+            .unwrap_or(self.segments.len());
+        self.segments.insert(
+            at,
+            Segment {
+                id: segment,
+                messages: Vec::new(),
+                band: None,
+            },
+        );
+        at
+    }
+
     /// How many messages the list holds.
     pub fn len(&self) -> usize {
         self.segments.iter().map(|s| s.messages.len()).sum()
@@ -106,18 +158,26 @@ impl MessageList {
 
     /// The newest message, at the bottom of the list.
     pub fn latest(&self) -> Option<&MessageView> {
-        self.segments.last()?.messages.last()
+        self.segments.iter().rev().find_map(|s| s.messages.last())
     }
 
-    /// The rows, oldest first, each marked with whether it opens a group
-    /// under a header of its own (`MURMURE-183`).
+    /// The rows, oldest first, each message marked with whether it opens a
+    /// group under a header of its own (`MURMURE-183`). A band is one row,
+    /// and the message after it opens a group.
     pub fn rows(&self) -> Vec<Row<'_>> {
         let mut rows = Vec::with_capacity(self.len());
         let mut previous: Option<&MessageView> = None;
-        for message in self.segments.iter().flat_map(|s| &s.messages) {
-            let header = message.notice.is_none() && previous.is_none_or(|p| !grouped(p, message));
-            rows.push(Row { message, header });
-            previous = Some(message);
+        for segment in &self.segments {
+            if let Some(band) = &segment.band {
+                rows.push(Row::Band(band));
+                previous = None;
+            }
+            for message in &segment.messages {
+                let header =
+                    message.notice.is_none() && previous.is_none_or(|p| !grouped(p, message));
+                rows.push(Row::Message { message, header });
+                previous = Some(message);
+            }
         }
         rows
     }
@@ -132,11 +192,16 @@ fn grouped(previous: &MessageView, next: &MessageView) -> bool {
         && next.ts.0.saturating_sub(previous.ts.0) <= GROUP_SPAN_MS
 }
 
-/// One row of the list: a message, and whether a header opens its group.
+/// One row of the list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Row<'a> {
-    pub message: &'a MessageView,
-    pub header: bool,
+pub enum Row<'a> {
+    /// A message, and whether a header opens its group.
+    Message {
+        message: &'a MessageView,
+        header: bool,
+    },
+    /// A segment that could not open.
+    Band(&'a Band),
 }
 
 /// What a row shows, in words.
@@ -152,7 +217,15 @@ pub struct RowWords {
     pub replies: Option<String>,
 }
 
-impl Row<'_> {
+impl<'a> Row<'a> {
+    /// The message of this row, `None` on a band.
+    pub fn message(&self) -> Option<&'a MessageView> {
+        match *self {
+            Self::Message { message, .. } => Some(message),
+            Self::Band(_) => None,
+        }
+    }
+
     /// The words of this row. `name_of` names a member, `time_of` writes a
     /// time in the reader's language and zone (`MURMURE-418`).
     pub fn words(
@@ -160,11 +233,12 @@ impl Row<'_> {
         name_of: impl Fn(UserId) -> Option<String>,
         time_of: impl Fn(Timestamp) -> String,
     ) -> RowWords {
-        let message = self.message;
+        let (message, header) = match *self {
+            Self::Message { message, header } => (message, header),
+            Self::Band(band) => return band_words(band, time_of),
+        };
         let name = |user| name_of(user).unwrap_or_else(|| UNKNOWN_MEMBER.to_owned());
-        let header = self
-            .header
-            .then(|| (name(message.author), time_of(message.ts)));
+        let header = header.then(|| (name(message.author), time_of(message.ts)));
         let (body, muted) = match message.notice {
             Some(Notice::MemberAdded { member }) => {
                 (format!("{} joined the conversation", name(member)), true)
@@ -186,6 +260,30 @@ impl Row<'_> {
             muted,
             replies,
         }
+    }
+}
+
+/// The words of a band: its span, its cause and its remedy, muted
+/// (`MURMURE-218`). A segment before the history boundary is the start of
+/// the channel, so it names no failure and no remedy (`MURMURE-219`).
+fn band_words(band: &Band, time_of: impl Fn(Timestamp) -> String) -> RowWords {
+    let span = match band.to {
+        Some(to) => format!("Messages from {} to {}", time_of(band.from), time_of(to)),
+        None => format!("Messages since {}", time_of(band.from)),
+    };
+    let body = match band.cause {
+        Unreadable::KeyNotReceived => format!("{span}: {BAND_KEYS} {BAND_RETRY}"),
+        Unreadable::Damaged => format!("{span}: {BAND_DAMAGED} {BAND_RETRY}"),
+        Unreadable::BeforeHistoryBoundary => format!(
+            "The history before {} was not shared with you.",
+            time_of(band.to.unwrap_or(band.from))
+        ),
+    };
+    RowWords {
+        header: None,
+        body,
+        muted: true,
+        replies: None,
     }
 }
 
@@ -249,6 +347,18 @@ impl Conversations {
                     .entry((channel_id, root))
                     .or_insert_with(|| (thread, MessageList::default()));
                 list.absorb(SegmentId::from_document(thread), messages);
+                true
+            }
+            MurmureEvent::Unreadable {
+                segment,
+                cause,
+                from,
+                to,
+            } => {
+                self.channels
+                    .entry(channel_id)
+                    .or_default()
+                    .unreadable(segment, Band { cause, from, to });
                 true
             }
             MurmureEvent::FirstUnread { message } => {
@@ -376,20 +486,98 @@ pub(crate) mod tests {
         }
     }
 
+    /// The text of each row; a band reads as `#`.
     fn texts(list: &MessageList) -> Vec<&str> {
         list.rows()
             .iter()
-            .map(|r| r.message.text.as_str())
+            .map(|r| r.message().map_or("#", |m| m.text.as_str()))
             .collect()
     }
 
     fn headers(list: &MessageList) -> Vec<bool> {
-        list.rows().iter().map(|r| r.header).collect()
+        list.rows()
+            .iter()
+            .map(|r| matches!(r, Row::Message { header: true, .. }))
+            .collect()
     }
 
     fn words(message: &MessageView, header: bool) -> RowWords {
-        let row = Row { message, header };
+        let row = Row::Message { message, header };
         row.words(|_| Some("Ada".to_owned()), |ts| format!("t{}", ts.0))
+    }
+
+    fn band(cause: Unreadable, from: u64, to: Option<u64>) -> Band {
+        Band {
+            cause,
+            from: Timestamp(from),
+            to: to.map(Timestamp),
+        }
+    }
+
+    fn band_body(band: &Band) -> String {
+        Row::Band(band)
+            .words(|_| None, |ts| format!("t{}", ts.0))
+            .body
+    }
+
+    /// A segment that could not open shows as one muted row, placed by its
+    /// span, naming the span, the cause and the remedy (`MURMURE-218`,
+    /// `MURMURE-220`).
+    #[test]
+    fn an_unreadable_segment_shows_as_one_band_in_its_place() {
+        let author = UserId::new();
+        let (older, unread, newer) = (SegmentId::new(), SegmentId::new(), SegmentId::new());
+        let mut list = MessageList::default();
+        list.absorb(newer, vec![message(author, 30, "c")]);
+        list.absorb(older, vec![message(author, 10, "a")]);
+        list.unreadable(unread, band(Unreadable::KeyNotReceived, 20, Some(30)));
+        assert_eq!(texts(&list), ["a", "#", "c"]);
+        assert_eq!(
+            headers(&list),
+            [true, false, true],
+            "a band breaks the group"
+        );
+        assert_eq!(list.len(), 2);
+        assert_eq!(list.latest().map(|m| m.text.as_str()), Some("c"));
+
+        let keys = band(Unreadable::KeyNotReceived, 20, Some(30));
+        let words = Row::Band(&keys).words(|_| None, |ts| format!("t{}", ts.0));
+        assert_eq!(
+            words.body,
+            format!("Messages from t20 to t30: {BAND_KEYS} {BAND_RETRY}")
+        );
+        assert!(words.muted && words.header.is_none() && words.replies.is_none());
+        assert_eq!(
+            band_body(&band(Unreadable::Damaged, 20, None)),
+            format!("Messages since t20: {BAND_DAMAGED} {BAND_RETRY}")
+        );
+        assert_eq!(
+            band_body(&band(Unreadable::BeforeHistoryBoundary, 20, Some(30))),
+            "The history before t30 was not shared with you."
+        );
+    }
+
+    /// The messages of a segment take the place of its band, and a band
+    /// never hides messages the list holds.
+    #[test]
+    fn messages_replace_the_band_of_their_segment() {
+        let author = UserId::new();
+        let (segment, read) = (SegmentId::new(), SegmentId::new());
+        let mut list = MessageList::default();
+        list.unreadable(segment, band(Unreadable::Damaged, 10, None));
+        assert!(!list.is_empty());
+        assert_eq!(list.latest(), None);
+        list.unreadable(segment, band(Unreadable::KeyNotReceived, 10, None));
+        assert_eq!(
+            list.rows(),
+            [Row::Band(&band(Unreadable::KeyNotReceived, 10, None))],
+            "a later cause replaces the earlier one"
+        );
+        list.absorb(segment, vec![message(author, 10, "a")]);
+        assert_eq!(texts(&list), ["a"]);
+        list.absorb(read, vec![message(author, 20, "b")]);
+        list.unreadable(read, band(Unreadable::Damaged, 20, None));
+        assert_eq!(texts(&list), ["a", "b"]);
     }
 
     /// The messages of the closing segment and of the active one read oldest
@@ -509,7 +697,7 @@ pub(crate) mod tests {
         let row = words(&notice, false);
         assert_eq!(row.body, "Ada joined the conversation");
         assert!(row.muted);
-        let unknown = Row {
+        let unknown = Row::Message {
             message: &notice,
             header: true,
         }
@@ -554,6 +742,28 @@ pub(crate) mod tests {
         assert_eq!(shown.first(), Some(&(9_999, 80.0)));
         assert_eq!(shown.last(), Some(&(9_995, 0.0)));
         assert!(from_bottom(0, 100.0, |_| 1.0).is_empty());
+    }
+
+    /// The band the Logic thread names lands in the list of its channel.
+    #[test]
+    fn an_unreadable_event_lands_as_a_band() {
+        let channel = ChannelId::new();
+        let mut talks = Conversations::default();
+        let segment = SegmentId::new();
+        assert!(talks.absorb(UiEvent::Channel {
+            channel_id: channel,
+            event: MurmureEvent::Unreadable {
+                segment,
+                cause: Unreadable::Damaged,
+                from: Timestamp(5),
+                to: None,
+            },
+        }));
+        let list = talks.channel(channel).expect("a list");
+        assert_eq!(
+            list.rows(),
+            [Row::Band(&band(Unreadable::Damaged, 5, None))]
+        );
     }
 
     /// A channel and a thread each fill their own list, and a channel left

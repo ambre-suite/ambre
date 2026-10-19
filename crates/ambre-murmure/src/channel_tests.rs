@@ -3,7 +3,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_bus::{Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Timestamp};
+use ambre_bus::{
+    Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Timestamp, Unreadable,
+};
 use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, SchemaError};
 use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
@@ -1038,6 +1040,87 @@ fn an_older_segment_asked_for_arrives_then_loads() {
         None,
         "already loaded"
     );
+}
+
+// --- MURMURE-218 and MURMURE-221: a segment that cannot open ---
+
+/// A stored channel with two final segments, spanning `from` to the next
+/// one, then an active one. Returns it with the two finals, oldest first.
+fn two_finals() -> (Stored, SegmentId, SegmentId) {
+    let mut stored = stored_channel();
+    let (older, newer) = (SegmentId::new(), SegmentId::new());
+    let meta = LoroDoc::new();
+    schema::write_header(&meta, DocumentKind::Meta, stored.channel, NOW.0).expect("header");
+    for (id, from, state) in [
+        (older, 10, SegmentState::Final),
+        (newer, 20, SegmentState::Final),
+        (stored.active_id, 30, SegmentState::Active),
+    ] {
+        push_segment_entry(&meta, id, Timestamp(from), state).expect("entry");
+    }
+    meta.commit();
+    stored.meta = snapshot(&meta);
+    stored.segments.retain(|id, _| *id == stored.active_id);
+    (stored, older, newer)
+}
+
+/// The band of a final segment spans its own start to the start of the
+/// next one. It names the cause it is handed.
+#[test]
+fn a_band_spans_its_segment_up_to_the_next_one() {
+    let (stored, older, newer) = two_finals();
+    let state = open(&stored);
+    assert_eq!(
+        state.band(newer.document_id(), Unreadable::KeyNotReceived),
+        Some(MurmureEvent::Unreadable {
+            segment: newer,
+            cause: Unreadable::KeyNotReceived,
+            from: Timestamp(20),
+            to: Some(Timestamp(30)),
+        })
+    );
+    assert!(matches!(
+        state.band(older.document_id(), Unreadable::Damaged),
+        Some(MurmureEvent::Unreadable {
+            cause: Unreadable::Damaged,
+            from: Timestamp(10),
+            to: Some(Timestamp(20)),
+            ..
+        })
+    ));
+    assert_eq!(
+        state.band(stored.active_id.document_id(), Unreadable::Damaged),
+        None,
+        "a live segment is no band"
+    );
+    assert_eq!(
+        state.band(DocumentId::new(), Unreadable::Damaged),
+        None,
+        "nor is a document meta does not list"
+    );
+}
+
+/// A loaded segment shows its messages, never a band.
+#[test]
+fn a_loaded_segment_is_no_band() {
+    let stored = stored_channel();
+    let mut state = open(&stored);
+    let bytes = stored.segments.get(&stored.final_id).expect("bytes");
+    state.load_older(stored.final_id, bytes).expect("load");
+    assert_eq!(
+        state.band(stored.final_id.document_id(), Unreadable::Damaged),
+        None
+    );
+}
+
+/// A segment given up still leads to the one before it (`MURMURE-221`).
+#[test]
+fn a_segment_given_up_still_leads_to_the_one_before() {
+    let (stored, older, newer) = two_finals();
+    let mut state = open(&stored);
+    assert_eq!(state.request_older(stored.active_id), Some(newer));
+    assert!(state.cancel_older(newer.document_id()));
+    assert_eq!(state.request_older(newer), Some(older));
 }
 
 #[test]

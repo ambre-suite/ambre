@@ -60,7 +60,7 @@ pub fn paint_list<S: DrawSurface>(
         let Some(row) = rows.get(i) else {
             return 0.0;
         };
-        let line = shown.unread == Some(row.message.id);
+        let line = shown.unread.is_some() && shown.unread == row.message().map(|m| m.id);
         let row = row.words(name_of, time_of);
         let mut tall = measure(font_cx, cache, &row, text_width);
         if line {
@@ -340,6 +340,32 @@ mod tests {
             .filter(|c| **c == LIGHT.selection)
             .count();
         assert_eq!(rules, 1);
+    }
+
+    /// A band paints as one muted row, with no header, and the message
+    /// after it paints under a header of its own (`MURMURE-218`).
+    #[test]
+    fn a_band_paints_as_one_muted_row() {
+        let ada = UserId::new();
+        let mut list = MessageList::default();
+        list.absorb(SegmentId::new(), vec![message(ada, 30, "abcd")]);
+        let band = crate::list::Band {
+            cause: ambre_bus::Unreadable::Damaged,
+            from: Timestamp(10),
+            to: Some(Timestamp(30)),
+        };
+        list.unreadable(SegmentId::new(), band);
+        let (surface, painted) = paint(&list, 600.0);
+        assert_eq!(painted.laid_out, 2);
+        let muted = runs(&surface, LIGHT.header_text);
+        let body = runs(&surface, LIGHT.cell_text);
+        let [(band_y, _), .., (time_y, 1)] = muted.as_slice() else {
+            panic!("the band, then the time of the header, got {muted:?}");
+        };
+        let [(author_y, 3), (body_y, 4)] = body.as_slice() else {
+            panic!("the author, then the body, got {body:?}");
+        };
+        assert!(band_y < author_y && author_y <= time_y && time_y < body_y);
     }
 
     /// An empty list paints its backdrop and shows no latest message.

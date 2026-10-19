@@ -345,6 +345,7 @@ impl SyncState {
                 self.replay_stops.remove(&document_id);
                 self.send_to_logic(LogicEvent::DocumentOpenFailed {
                     document_id,
+                    cause: OpenFailure::Transient,
                     message,
                 });
             } else {
@@ -764,11 +765,13 @@ impl SyncState {
             }
             SyncEvent::OpenDocumentFailed {
                 document_id,
+                cause,
                 message,
             } => {
                 tracing::error!("Sync: open document {document_id:?} failed: {message}");
                 self.send_to_logic(LogicEvent::DocumentOpenFailed {
                     document_id,
+                    cause,
                     message,
                 });
             }
@@ -2107,8 +2110,12 @@ mod tests {
         }
         let told: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(
-            matches!(told[..], [LogicEvent::DocumentOpenFailed { document_id, .. }] if document_id == id),
-            "{told:?}"
+            matches!(
+                told[..],
+                [LogicEvent::DocumentOpenFailed { document_id, cause: ambre_bus::OpenFailure::Transient, .. }]
+                    if document_id == id
+            ),
+            "a stopped replay is no missing key (`SYNC-173`): {told:?}"
         );
         assert!(!state.documents.contains_key(&id), "nothing of it is kept");
         assert!(matches!(

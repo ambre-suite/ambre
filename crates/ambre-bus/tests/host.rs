@@ -24,8 +24,8 @@ use ambre_bus::{
     ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelMeta,
     ChannelName, ChannelPlace, ClipboardCell, ClipboardPayload, DirectPeers, DocType, DocumentId,
     FoldAnswer, LeaseAnswer, LeaseId, LogicEvent, MemberChannel, MemberInfo, MemberStanding,
-    MessageId, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, Timestamp,
-    TrameCommand, UserId,
+    MessageId, OpenFailure, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand,
+    Timestamp, TrameCommand, UserId,
 };
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -804,6 +804,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::DocumentOpenFailed {
             document_id: doc,
+            cause: OpenFailure::KeyNotReceived,
             message: "unwrap".to_owned(),
         },
         LogicEvent::AuthError {

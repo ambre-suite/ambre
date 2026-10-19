@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3586 rows: 2971 shipped, of which 2 loose. 615 unbuilt.**
+**3587 rows: 2975 shipped, of which 2 loose. 612 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 854 | 418 | 816 | 609 | 272 | 2969 |
+| `verified` | 855 | 418 | 816 | 609 | 275 | 2973 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 193 | 55 | 29 | 109 | 229 | 615 |
+| `unimplemented` | 193 | 55 | 29 | 109 | 226 | 612 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -58,7 +58,7 @@
 | `ambre-spec-kinetic-scroll.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-launcher.md` | 25 | 21 | 21 |  | 4 |
 | `ambre-spec-media.md` | 15 | 15 | 15 |  |  |
-| `ambre-spec-membership.md` | 34 | 34 | 34 |  |  |
+| `ambre-spec-membership.md` | 35 | 35 | 35 |  |  |
 | `ambre-spec-message-bus.md` | 30 | 30 | 30 |  |  |
 | `ambre-spec-object-store.md` | 18 | 13 | 13 |  | 5 |
 | `ambre-spec-op-authorship.md` | 29 | 29 | 29 |  |  |
@@ -167,7 +167,7 @@
 | `ambre-spec-murmure-layout.md` | 24 | 19 | 19 |  | 5 |
 | `ambre-spec-murmure-members.md` | 21 | 16 | 16 |  | 5 |
 | `ambre-spec-murmure-mentions.md` | 13 | 13 | 13 |  |  |
-| `ambre-spec-murmure-message-list.md` | 31 | 10 | 10 |  | 21 |
+| `ambre-spec-murmure-message-list.md` | 31 | 13 | 13 |  | 18 |
 | `ambre-spec-murmure-messages.md` | 22 | 22 | 22 |  |  |
 | `ambre-spec-murmure-notifications.md` | 17 | 6 | 6 |  | 11 |
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
@@ -209,7 +209,7 @@
 | `ambre-spec-machine-access.md` | MACH-001..034 |
 | `ambre-spec-macros.md` | MACRO-001..054 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146 |
-| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172 |
+| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173 |
 | `ambre-spec-message-bus.md` | BUS-001..030 |
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |

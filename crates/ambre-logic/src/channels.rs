@@ -10,7 +10,10 @@ use ambre_bus::{
     ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, ChannelMatches,
     DocumentActivity, MessageAt, MetaId, MurmureCommand, MurmureEvent,
 };
-use ambre_bus::{MemberInfo, MentionCount, MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
+use ambre_bus::{
+    MemberInfo, MentionCount, MessageId, OpenFailure, SegmentId, Seq, SignedDelta, UnreadCount,
+    Unreadable,
+};
 use ambre_murmure::{
     ChangeTarget, ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample,
     Screened, Sent, Signer, ThreadTarget, members_only, screen,
@@ -735,8 +738,14 @@ impl LogicState {
                         self.open_threads(channel_id);
                     }
                     Err(error) => {
+                        // Its key opened it, so the segment itself is
+                        // damaged, never a missing key.
+                        let band = channel.band(document_id, Unreadable::Damaged);
                         tracing::warn!("Logic: older segment {document_id} refused: {error}");
                         self.send_to_sync(SyncCommand::CloseDocument { document_id });
+                        if let Some(event) = band {
+                            self.send_to_ui(UiEvent::Channel { channel_id, event });
+                        }
                     }
                 }
             }
@@ -798,13 +807,27 @@ impl LogicState {
     pub(crate) fn channel_document_failed(
         &mut self,
         document_id: DocumentId,
+        cause: OpenFailure,
         message: &str,
     ) -> bool {
-        if let Some(channel) = self.channels.values_mut().find(|c| c.holds(document_id)) {
+        if let Some((&channel_id, channel)) =
+            self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
+        {
+            // A missing key earns a band in the list. A transient failure
+            // earns none: asking again may open it.
+            let band = match cause {
+                OpenFailure::KeyNotReceived => {
+                    channel.band(document_id, Unreadable::KeyNotReceived)
+                }
+                OpenFailure::Transient => None,
+            };
             // An older segment is given up, so the view can ask again. A live
             // document of an open channel keeps what it holds.
             channel.cancel_older(document_id);
             tracing::warn!("Logic: channel document {document_id} failed to open: {message}");
+            if let Some(event) = band {
+                self.send_to_ui(UiEvent::Channel { channel_id, event });
+            }
             return true;
         }
         let Some(channel_id) = self.opening.iter().find_map(|(id, o)| {
@@ -2650,6 +2673,7 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: stored.meta_id().document_id(),
+            cause: OpenFailure::KeyNotReceived,
             message: "cannot unwrap document key".to_owned(),
         });
         assert_eq!(sent(&sync), [Sent::Close(stored.meta_id().document_id())]);
@@ -3963,6 +3987,111 @@ mod tests {
         });
     }
 
+    // --- A segment that cannot open: a band in the list ---
+
+    /// A channel whose one final segment this client has not loaded, with
+    /// the view's ask for it already sent. Returns the final segment.
+    fn unloaded_final(
+        state: &mut LogicState,
+        sync: &Receiver<SyncCommand>,
+    ) -> (ChannelId, SegmentId, SegmentId) {
+        let (channel_id, closed) = closed_channel(state, sync);
+        state.record_channel_seq(closed.document_id(), 1, None);
+        finalize_at_one(state, sync, channel_id, closed, NOW);
+        let channel = &state.channels[&channel_id];
+        let (meta, active) = (channel.meta_id(), channel.active_id());
+        let meta_bytes = channel.snapshot(meta.document_id()).expect("meta");
+        let segments = HashMap::from([(
+            active,
+            channel.snapshot(active.document_id()).expect("active"),
+        )]);
+        let reopened = ChannelState::open(channel_id, meta, &meta_bytes, &segments).expect("open");
+        state.hold_channel(crate::identified(reopened));
+        drain(sync);
+        command(
+            state,
+            channel_id,
+            MurmureCommand::LoadOlder { segment: active },
+        );
+        assert_eq!(sent(sync), [Sent::Open(closed.document_id())]);
+        (channel_id, closed, active)
+    }
+
+    fn bands(ui: &Receiver<UiEvent>) -> Vec<(SegmentId, Unreadable)> {
+        drain(ui)
+            .into_iter()
+            .filter_map(|e| match e {
+                UiEvent::Channel {
+                    event: MurmureEvent::Unreadable { segment, cause, .. },
+                    ..
+                } => Some((segment, cause)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A key that never reached this device shows the segment as one band,
+    /// and the segment can be asked for again.
+    #[test]
+    fn a_key_not_received_shows_one_band_for_the_segment() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, segment, active) = unloaded_final(&mut state, &sync);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: segment.document_id(),
+            cause: OpenFailure::KeyNotReceived,
+            message: "cannot unwrap document key".to_owned(),
+        });
+        assert_eq!(bands(&ui), [(segment, Unreadable::KeyNotReceived)]);
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::LoadOlder { segment: active },
+        );
+        assert_eq!(sent(&sync), [Sent::Open(segment.document_id())]);
+    }
+
+    /// A relay out of reach is no missing key: no band, and the segment can
+    /// be asked for again.
+    #[test]
+    fn a_transient_failure_shows_no_band() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, segment, active) = unloaded_final(&mut state, &sync);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: segment.document_id(),
+            cause: OpenFailure::Transient,
+            message: "the server could not be reached".to_owned(),
+        });
+        assert!(bands(&ui).is_empty());
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::LoadOlder { segment: active },
+        );
+        assert_eq!(sent(&sync), [Sent::Open(segment.document_id())]);
+    }
+
+    /// Bytes that opened under their key and then fail the check show the
+    /// segment as damaged, never as a missing key.
+    #[test]
+    fn a_segment_that_fails_its_check_shows_as_damaged() {
+        let (mut state, ui, sync) = harness();
+        let (_, segment, _) = unloaded_final(&mut state, &sync);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: segment.document_id(),
+            covered_seq: 1,
+            payload: vec![0xff; 8],
+        });
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: segment.document_id(),
+            role: ambre_bus::Role::Editor,
+        });
+        assert_eq!(bands(&ui), [(segment, Unreadable::Damaged)]);
+        assert!(sent(&sync).contains(&Sent::Close(segment.document_id())));
+    }
+
     /// A report dropped the final snapshot of a segment. The view names who
     /// sealed it and who reported it, and this client seals the segment
     /// again with no `meta` delta (the Murmure segments spec).
@@ -4650,6 +4779,7 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: successor.document_id(),
+            cause: OpenFailure::KeyNotReceived,
             message: "no update yet".to_owned(),
         });
         let tick = |ms: u64| MurmureCommand::Tick {

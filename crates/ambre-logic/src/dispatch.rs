@@ -676,9 +676,10 @@ impl LogicState {
             // -- Errors --------------------------------------------------------
             LogicEvent::DocumentOpenFailed {
                 document_id,
+                cause,
                 message,
             } => {
-                if !self.channel_document_failed(document_id, &message)
+                if !self.channel_document_failed(document_id, cause, &message)
                     && !self.space_document_failed(document_id, &message)
                 {
                     self.send_to_ui(UiEvent::DocumentOpenFailed {
@@ -2328,6 +2329,7 @@ mod tests {
         let failed = DocumentId::new();
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: failed,
+            cause: ambre_bus::OpenFailure::Transient,
             message: "replay stopped".to_owned(),
         });
         let told: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();

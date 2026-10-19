@@ -492,6 +492,27 @@ pub enum MurmureEvent {
         author: Option<UserId>,
         reporter: Option<UserId>,
     },
+    /// The older segment the view asked for cannot be read, for `cause`. It
+    /// holds the messages from `from` until `to`; `to` is `None` when no
+    /// later segment starts (`MURMURE-218`).
+    Unreadable {
+        segment: SegmentId,
+        cause: Unreadable,
+        from: Timestamp,
+        to: Option<Timestamp>,
+    },
+}
+
+/// Why a segment cannot be read. The engine names the cause, and the list
+/// names the remedy (the Murmure message list spec).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unreadable {
+    /// The key chain did not reach the key of this segment.
+    KeyNotReceived,
+    /// The member was invited without this history.
+    BeforeHistoryBoundary,
+    /// The key it names is held, and the segment does not open.
+    Damaged,
 }
 
 /// A channel key sealed under the key of its space (`MURMURE-157`).

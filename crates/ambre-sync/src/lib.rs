@@ -44,8 +44,8 @@ use web_sys::{CloseEvent, MessageEvent};
 use ambre_bus::ActivitySummary;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, MetaId, RequestId,
-    RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotId,
+    ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, MetaId, OpenFailure,
+    RequestId, RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotId,
     SnapshotPurpose, SnapshotVerdict, SpaceId, SyncCommand, UserId, UserInfo,
 };
 use ambre_core::{KeyId, PublicKey, SessionNonce};
@@ -448,6 +448,7 @@ enum SyncEvent {
     /// silently opening with a random key (H3).
     OpenDocumentFailed {
         document_id: DocumentId,
+        cause: OpenFailure,
         message: String,
     },
     /// A local-only document was lazily materialized server-side. Flushes the

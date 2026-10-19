@@ -60,10 +60,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-218` | `FAIL` | Given a segment whose key this client does not hold, the list MUST show one band in its place, naming its time span, the cause and the remedy. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Unreadable segments in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-219` | `FAIL` | Given a segment older than the member's history boundary, the list MUST show the boundary as the start of the channel, never as a failure. | this spec section 3; `features/ambre-spec-murmure-channels.md` | not built | unbuilt -- lands with the `Unreadable segments in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-220` | `FAIL` | Given a segment that fails to open under the key it names, the list MUST show it as damaged, never as a missing key. | this spec section 3; `SYNC-045` | not built | unbuilt -- lands with the `Unreadable segments in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-221` | `FRAME` | A segment the client cannot open MUST NOT stop the list from loading the segments before it. | this spec section 3 | not built | unbuilt -- lands with the `Unreadable segments in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-218` | `FAIL` | Given a segment whose key this client does not hold, the list MUST show one band in its place, naming its time span, the cause and the remedy. | this spec section 3; `ambre-spec-murmure-schema.md section 3`; `SYNC-173` | `ambre_logic::channels::tests::a_key_not_received_shows_one_band_for_the_segment` -- a key not received hands the view one band, and the segment can be asked again; `ambre_logic::channels::tests::a_transient_failure_shows_no_band` -- a relay out of reach hands none; `ambre_murmure::channel_tests::a_band_spans_its_segment_up_to_the_next_one` -- the band spans its segment up to the next listed one; `ambre_murmure::list::tests::an_unreadable_segment_shows_as_one_band_in_its_place` -- one muted row in its place names the span, the cause and the remedy; `ambre_murmure::paint::tests::a_band_paints_as_one_muted_row` -- it paints muted, with no header | none | verified |
+| `MURMURE-219` | `FAIL` | Given a segment older than the member's history boundary, the list MUST show the boundary as the start of the channel, never as a failure. | this spec section 3; `features/ambre-spec-murmure-channels.md` | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-220` | `FAIL` | Given a segment that fails to open under the key it names, the list MUST show it as damaged, never as a missing key. | this spec section 3; `SYNC-045` | `ambre_logic::channels::tests::a_segment_that_fails_its_check_shows_as_damaged` -- bytes that fail the check hand the view a damaged band, and the document closes; `ambre_murmure::list::tests::an_unreadable_segment_shows_as_one_band_in_its_place` -- a damaged band names no missing key | none | verified |
+| `MURMURE-221` | `FRAME` | A segment the client cannot open MUST NOT stop the list from loading the segments before it. | this spec section 3 | `ambre_murmure::channel_tests::a_segment_given_up_still_leads_to_the_one_before` -- a segment given up still leads to the one listed before it; `ambre_murmure::list::tests::messages_replace_the_band_of_their_segment` -- the band holds one row, and the messages of its segment replace it | none | verified |
 
 ### 1.6 Act on a message
 
@@ -86,9 +86,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** the frame budget of `ambre-spec-budgets.md section 2` holds the scroll, and the
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
-  only what `meta` already tells every member: the span and the count of a segment.
-* **Verification.** 10 `verified`, 21 `unimplemented`. The host tier holds the order, the groups,
-  the words and the paint of the rows, and the thread's list. The browser tier holds each canvas
+  only what `meta` already tells every member: the span of a segment.
+* **Verification.** 13 `verified`, 18 `unimplemented`. The host tier holds the order, the groups,
+  the words and the paint of the rows, the bands, and the thread's list. The browser tier holds each canvas
   and the local time.
 
 ---
@@ -101,7 +101,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | reads last week, higher up | posts | the list stays where she reads (`MURMURE-190`) | none |
 | scrolls past the oldest loaded message | -- | older messages appear above, and nothing on screen jumps (`MURMURE-192`) | none |
 | posts three messages within a minute | -- | one header over the three (`MURMURE-183`) | none |
-| opens a channel on a new phone, before its keys arrive | -- | one band per unreadable segment, with its dates and whom to ask (`MURMURE-218`) | none |
+| opens a channel on a new phone, before its keys arrive | -- | one band per unreadable segment, with its dates, its cause and how to try again (`MURMURE-218`) | none |
 | joins a channel invited without history | -- | the boundary at the top, and no error (`MURMURE-219`) | none |
 
 ---
@@ -162,8 +162,9 @@ A copy writes the `text/plain` mirror and the private type of `ambre-spec-clipbo
 the live region carries the focused message, with its author and its time (`MURMURE-207`). A new
 message at the bottom is announced there too, politely, and the focus stays put (`MURMURE-209`).
 
-**A segment that cannot be opened** keeps its place. The `segments` list of `meta` gives its time
-span and its message count, so the band says which messages it stands for. The engine names the
+**A segment that cannot be opened** keeps its place. Its entry in the `segments` list of `meta`
+gives its start, and the next entry its end. So the band says which messages it stands for. The
+Sync worker tells a missing key from a failure that may clear (`SYNC-173`). The engine names the
 cause; the list names the remedy.
 
 ```rust
@@ -222,5 +223,6 @@ both to each region, and `ambre_app::host::murmure` hands it the pane, the names
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **The list rests on its latest message.** No scroll, no focus and no selection exist yet.
+* **A band names its remedy in words.** It says to reopen the channel; no control on it asks again.
 * **Only the focused message reaches a screen reader.** The list is not mirrored whole, by the rule
   of `ambre-spec-accessibility.md section 2`, so a reader moves through it message by message.

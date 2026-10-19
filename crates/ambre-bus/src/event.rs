@@ -419,6 +419,7 @@ pub enum LogicEvent {
     /// to the UI.
     DocumentOpenFailed {
         document_id: DocumentId,
+        cause: OpenFailure,
         message: String,
     },
     /// Authentication error (incorrect passphrase, corrupted data, network).
@@ -447,6 +448,17 @@ pub enum LogicEvent {
     /// The relay speaks a newer wire version than this build. Only an update
     /// cures it, so the socket stays closed (`ambre-spec-sync.md`, `SYNC-137`).
     UpdateRequired,
+}
+
+/// Why a document could not open (`SYNC-173`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OpenFailure {
+    /// The key of the document has not reached this device. The wrap for
+    /// this user does not open, or the chain does not reach the named key.
+    KeyNotReceived,
+    /// The relay could not be reached, the session was not ready, or the
+    /// replay stopped. A later open may succeed.
+    Transient,
 }
 
 /// The relay's answer to a finalize lease request (the Murmure segments

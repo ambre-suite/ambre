@@ -45,11 +45,11 @@ pub use app::murmure::{
     DocumentActivity, MemberChannel, MemberView, Mention, MentionCount, MentionTarget, MessageAt,
     MessageDraft, MessageView, MurmureCommand, MurmureEvent, Notice, Presence, PrivateChannelDraft,
     PublicChannelDraft, Reaction, SealedChannelKey, SearchMatch, SpaceCommand, SpaceEvent,
-    ThreadHead, Timestamp, Topic, UnreadCount,
+    ThreadHead, Timestamp, Topic, UnreadCount, Unreadable,
 };
 pub use command::SyncCommand;
 pub use event::{
-    FoldAnswer, LeaseAnswer, LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict,
+    FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, SignedDelta, SnapshotPurpose, SnapshotVerdict,
 };
 // Trame data plane (command + event + value types) lives under `app::trame`;
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.

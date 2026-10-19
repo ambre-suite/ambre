@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use ambre_bus::{
     ActivityKind, ActivitySummary, ChannelMatches, Mention, MentionCount, MentionTarget, MessageAt,
     MessageDraft, MessageView, MurmureEvent, Notice, SearchMatch, ThreadHead, Timestamp,
-    UnreadCount,
+    UnreadCount, Unreadable,
 };
 use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
 use loro::{
@@ -1466,6 +1466,26 @@ impl ChannelState {
             .map(|(id, _)| *id)
     }
 
+    /// The band that stands for the final segment `document_id`, which could
+    /// not open for `cause` (`MURMURE-218`, `MURMURE-220`).
+    ///
+    /// `None` for a document that is no final segment `meta` lists, for one
+    /// already loaded, and for the successor. Its span runs from its `from_ts`
+    /// to the `from_ts` of the next listed segment.
+    pub fn band(&self, document_id: DocumentId, cause: Unreadable) -> Option<MurmureEvent> {
+        let segment = SegmentId::from_document(document_id);
+        if self.loaded.contains_key(&segment) || self.is_successor(segment) {
+            return None;
+        }
+        let (from, to) = segment_span(&self.meta.doc, segment)?;
+        Some(MurmureEvent::Unreadable {
+            segment,
+            cause,
+            from,
+            to,
+        })
+    }
+
     /// Every final segment `meta` lists, in list order, loaded or not.
     ///
     /// Reaching the latest message reads them all (`MURMURE-115`). Their
@@ -1676,6 +1696,37 @@ fn segment_entries(meta: &LoroDoc) -> Vec<(SegmentId, SegmentState)> {
         }
     });
     entries
+}
+
+/// The span of the final segment `segment`: its `from_ts`, and the `from_ts`
+/// of the segment listed after it. `None` when `meta` lists no final segment
+/// of that identifier, or its `from_ts` is unreadable.
+fn segment_span(meta: &LoroDoc, segment: SegmentId) -> Option<(Timestamp, Option<Timestamp>)> {
+    let list: LoroList = meta.get_list(SEGMENTS);
+    let mut spans: Vec<(SegmentId, SegmentState, Option<u64>)> = Vec::with_capacity(list.len());
+    list.for_each(|item| {
+        let ValueOrContainer::Container(Container::Map(entry)) = item else {
+            return;
+        };
+        let id =
+            schema::string(&entry, SEGMENT_DOCUMENT).and_then(|s| SegmentId::parse_str(&s).ok());
+        let state = schema::string(&entry, SEGMENT_STATE).and_then(|s| SegmentState::parse(&s));
+        if let (Some(id), Some(state)) = (id, state)
+            && !spans.iter().any(|(listed, _, _)| *listed == id)
+        {
+            spans.push((id, state, schema::unsigned(&entry, SEGMENT_FROM)));
+        }
+    });
+    let position = spans.iter().position(|(id, _, _)| *id == segment)?;
+    let (_, state, from) = spans.get(position)?;
+    if *state != SegmentState::Final {
+        return None;
+    }
+    let to = spans
+        .get(position + 1)
+        .and_then(|(_, _, next)| *next)
+        .map(Timestamp);
+    Some((Timestamp((*from)?), to))
 }
 
 /// The messages of a segment, in list order. A malformed message is skipped
