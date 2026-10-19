@@ -5,6 +5,8 @@
 //! It paints them on any drawing surface: the page's canvas, or the
 //! recording surface of a host test.
 
+use std::collections::HashMap;
+
 use ambre_bus::{MessageId, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, TextCache};
@@ -13,29 +15,37 @@ use ambre_draw::{
     PositionedLayoutItem, Rect,
 };
 
-use crate::list::{MessageList, RowWords, UNREAD_LINE, from_bottom};
+use crate::list::{MessageList, RowWords, UNREAD_LINE, window};
 
 /// What one paint of the list did.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Painted {
     /// The rows laid out: the ones the viewport reaches, never the whole
     /// list.
     pub laid_out: usize,
-    /// The latest message is on screen.
+    /// The latest row is on screen.
     pub latest_shown: bool,
+    /// The oldest row the list holds is on screen (`MURMURE-191`).
+    pub oldest_shown: bool,
     /// The unread line is on screen (`MURMURE-184`).
     pub line_shown: bool,
+    /// The row the list rests on and its top, `None` on the latest row.
+    pub rest: Option<(usize, f32)>,
+    /// The first row on screen and its top, wherever the list rests.
+    pub top: Option<(usize, f32)>,
 }
 
-/// What the list paints: the messages, and the first unread one, which the
-/// unread line sits above (`MURMURE-184`).
+/// What the list paints: the messages, the first unread one, which the
+/// unread line sits above (`MURMURE-184`), and the row it rests on.
 #[derive(Debug, Clone, Copy)]
 pub struct Shown<'a> {
     pub list: &'a MessageList,
     pub unread: Option<MessageId>,
+    /// The row at the top and its top, `None` to rest on the latest row.
+    pub anchor: Option<(usize, f32)>,
 }
 
-/// Paint `shown` resting on its latest message, in a viewport of `size`.
+/// Paint `shown` from its anchor, in a viewport of `size`.
 ///
 /// `name_of` names a member, and `time_of` writes a time in the reader's
 /// language and zone (`MURMURE-418`).
@@ -55,8 +65,8 @@ pub fn paint_list<S: DrawSurface>(
     surface.fill_rect(backdrop, palette.content_bg);
     let rows = shown.list.rows();
     let text_width = (width - 2.0 * SPACE_8).max(1.0);
-    let mut words: Vec<(RowWords, bool)> = Vec::new();
-    let reached = from_bottom(rows.len(), height, |i| {
+    let mut words: HashMap<usize, (RowWords, bool)> = HashMap::new();
+    let reached = window(rows.len(), height, shown.anchor, |i| {
         let Some(row) = rows.get(i) else {
             return 0.0;
         };
@@ -66,20 +76,28 @@ pub fn paint_list<S: DrawSurface>(
         if line {
             tall += line_height(font_cx, cache, text_width);
         }
-        words.push((row, line));
+        words.insert(i, (row, line));
         tall
     });
-    for (&(_, top), (row, line)) in reached.iter().zip(&words) {
+    let mut line_shown = false;
+    for &(i, top, _) in &reached.rows {
+        let Some((row, line)) = words.get(&i) else {
+            continue;
+        };
         let mut top = top;
         if *line {
+            line_shown = true;
             top = draw_line(surface, font_cx, cache, top, width, palette);
         }
         draw_row(surface, font_cx, cache, row, top, text_width, palette);
     }
     Painted {
         laid_out: words.len(),
-        latest_shown: !reached.is_empty(),
-        line_shown: words.iter().any(|(_, line)| *line),
+        latest_shown: reached.latest,
+        oldest_shown: reached.oldest,
+        line_shown,
+        rest: reached.anchor,
+        top: reached.rows.first().map(|&(i, top, _)| (i, top)),
     }
 }
 
@@ -222,13 +240,24 @@ mod tests {
         unread: Option<MessageId>,
         height: f32,
     ) -> (RecordingSurface, Painted) {
+        paint_from(
+            Shown {
+                list,
+                unread,
+                anchor: None,
+            },
+            height,
+        )
+    }
+
+    fn paint_from(shown: Shown<'_>, height: f32) -> (RecordingSurface, Painted) {
         let (mut surface, mut font_cx) = (RecordingSurface::new(), fonts());
         let mut cache = TextCache::new(1.0);
         let painted = paint_list(
             &mut surface,
             &mut font_cx,
             &mut cache,
-            Shown { list, unread },
+            shown,
             (400.0, height),
             &LIGHT,
             &|_| Some("Ada".to_owned()),
@@ -267,6 +296,30 @@ mod tests {
         assert!(painted.latest_shown);
         assert!(painted.laid_out > 1 && painted.laid_out < 20, "{painted:?}");
         assert_eq!(surface.fill_colors().first(), Some(&LIGHT.content_bg));
+    }
+
+    /// A list resting on a row paints from that row and says so, and one
+    /// at the top shows its oldest row (`MURMURE-190`, `MURMURE-191`).
+    #[test]
+    fn a_list_resting_on_a_row_paints_from_it() {
+        let ada = UserId::new();
+        let mut list = MessageList::default();
+        let messages = (0..100).map(|i| message(ada, i, "hello")).collect();
+        list.absorb(SegmentId::new(), messages);
+        let at = |anchor| Shown {
+            list: &list,
+            unread: None,
+            anchor: Some(anchor),
+        };
+        let (_, painted) = paint_from(at((10, 0.0)), 200.0);
+        assert_eq!(painted.rest, Some((10, 0.0)));
+        assert!(!painted.latest_shown && !painted.oldest_shown);
+        assert!(painted.laid_out < 20, "{painted:?}");
+        let (_, top) = paint_from(at((0, 0.0)), 200.0);
+        assert!(top.oldest_shown && !top.latest_shown);
+        let (_, bottom) = paint(&list, 200.0);
+        assert_eq!(bottom.rest, None);
+        assert!(bottom.latest_shown && !bottom.oldest_shown);
     }
 
     /// The rows paint top to bottom in the order of the list, under one
@@ -377,7 +430,10 @@ mod tests {
             Painted {
                 laid_out: 0,
                 latest_shown: false,
+                oldest_shown: false,
                 line_shown: false,
+                rest: None,
+                top: None,
             }
         );
         assert!(

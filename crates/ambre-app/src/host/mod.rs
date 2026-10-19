@@ -389,7 +389,19 @@ impl AppView {
                 true
             }
             AppView::Prose(v) => v.touch(phase, x, y, now_ms),
-            AppView::Murmure(_) => false,
+            AppView::Murmure(v) => {
+                match phase {
+                    TouchPhase::Down => v.touch_down(x, y, now_ms),
+                    TouchPhase::Move => {
+                        v.touch_move(x, y, now_ms);
+                    }
+                    TouchPhase::Up => {
+                        v.touch_up(now_ms);
+                    }
+                    TouchPhase::Cancel => v.touch_cancel(),
+                }
+                true
+            }
         }
     }
 

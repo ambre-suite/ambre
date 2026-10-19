@@ -35,14 +35,21 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-145` | `FAIL` | Given a permission the browser refuses, the client MUST keep the badges and raise nothing. | this spec section 3 | `ambre_app::notify::tests::a_refused_permission_raises_nothing_and_an_open_one_is_asked_once` -- browser tier, a refused permission raises nothing, and an unanswered one is asked once | none | verified |
 | `MURMURE-146` | `FRAME` | A notification MUST NOT be raised for a message of the channel the user is reading. | this spec section 3 | `ambre_murmure::tests::chrome_relay::the_channel_being_read_notifies_nothing_until_the_page_is_hidden` -- the channel on screen notifies nothing, and the same channel behind a hidden page does | none | verified |
 
-### 1.3 Set the level of a channel
+### 1.3 Open a notification
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-507` | `POST` | A click on a notification MUST open its channel at its message. | this spec section 3; `MURMURE-150` | not built | unbuilt -- lands with the `A notification opens its message` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-508` | `FRAME` | A click on a notification MUST NOT move the read cursor of another channel. | this spec section 3 | not built | unbuilt -- lands with the `A notification opens its message` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.4 Set the level of a channel
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-268` | `POST` | Changing the level of a channel MUST write the setting, then its copy on the relay. | this spec section 3; `SETTINGS-004` | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-269` | `FRAME` | Changing the level of a channel MUST NOT change the level of another. | this spec section 3 | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
 
-### 1.4 Push with every tab closed
+### 1.5 Push with every tab closed
 
 The relay decides which device to wake, from a copy of the levels and from the members a message names.
 
@@ -58,7 +65,7 @@ The relay decides which device to wake, from a copy of the levels and from the m
 * **Boundary.** in an open tab the client decides from the sealed summary (`SYNC-113`), so the
   relay learns nothing. A push is the one path that tells the relay the levels and the members a
   message names, and `ZK-016` bounds it to those.
-* **Verification.** 6 `verified`, 11 `unimplemented`. Logic reads the news off the summaries, a
+* **Verification.** 6 `verified`, 13 `unimplemented`. Logic reads the news off the summaries, a
   host test. The view decides which news notifies, and the page raises it: two browser-tier tests.
   The levels and the push are not built.
 
@@ -137,8 +144,8 @@ decides in `MurmureRelay::notice` of `ambre-murmure`. The page raises it in `not
   They land with the `Push notifications` Story (`ambre-roadmap.md` E5).
 * **Each channel never opened costs a subscription per live segment.** No ceiling bounds them yet.
   It lands with the `A ceiling on the channels watched unopened` Story (`ambre-roadmap.md` E5).
-* **A click opens the channel, not the message.** The list scrolls to it once the message list
-  lands, the `Scrolling the message list` Story (`ambre-roadmap.md` E5).
+* **A click opens the channel, not the message.** The news names no message, so the list rests on
+  the latest one. It lands with the `A notification opens its message` Story (`ambre-roadmap.md` E5).
 * **A long-hidden tab may lag.** A browser may slow the timers of a tab hidden for minutes, which
   delays a notification. The `Wake a hidden tab from the worker` Story (`ambre-roadmap.md` E5)
   owns it.

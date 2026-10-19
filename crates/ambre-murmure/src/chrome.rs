@@ -12,7 +12,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::commands::{MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, SEARCH};
-use crate::{Activity, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection};
+use crate::{
+    Activity, MessageRef, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
+};
 use ambre_bus::AppCommand;
 use ambre_bus::{
     ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MurmureEvent,
@@ -309,8 +311,9 @@ pub struct SearchGroup {
     pub channel_id: ChannelId,
     /// The name the sidebar shows.
     pub name: String,
-    /// The texts of the matching messages, in channel order.
-    pub texts: Vec<String>,
+    /// Each matching message, where a click opens it, and its text, in
+    /// channel order.
+    pub matches: Vec<(MessageRef, String)>,
     /// Which part of its history was read, as "2 of 14 segments".
     pub coverage: String,
 }
@@ -411,7 +414,17 @@ impl MurmureRelay {
                         name: sidebar
                             .with(|side| side.name_of(c.channel_id))
                             .unwrap_or_else(|| "Unnamed channel".to_owned()),
-                        texts: c.matches.iter().map(|m| m.message.text.clone()).collect(),
+                        matches: c
+                            .matches
+                            .iter()
+                            .map(|m| {
+                                let at = MessageRef {
+                                    segment: m.segment,
+                                    message: m.message.id,
+                                };
+                                (at, m.message.text.clone())
+                            })
+                            .collect(),
                         coverage: format!("{} of {}", c.covered.len(), segments(c.listed)),
                     })
                     .collect()
@@ -419,12 +432,19 @@ impl MurmureRelay {
         })
     }
 
-    /// Choose a match of `channel`: the box closes, and the channel opens as
-    /// a click on the sidebar opens it. The jump to the message itself lands
-    /// with the message list (`MURMURE-150`).
-    pub fn choose_result(&self, channel: ChannelId) -> Option<LogicCommand> {
+    /// Choose the match `at` of `channel`: the box closes, and the channel
+    /// opens as a click on the sidebar opens it. Its list rests on the
+    /// message (`MURMURE-150`).
+    pub fn choose_result(&self, channel: ChannelId, at: MessageRef) -> Option<LogicCommand> {
         self.close_search();
-        self.select(channel)
+        let command = self.select(channel);
+        if self.pane.get_untracked().shown_channel() == Some(channel) {
+            self.pane.set(MurmurePane::Channel {
+                channel,
+                at: Some(at),
+            });
+        }
+        command
     }
 
     /// The notification an event calls for, if any (`MURMURE-143`). A
@@ -1008,16 +1028,16 @@ fn search_group_view(
             </h3>
             <ul>
                 {group
-                    .texts
+                    .matches
                     .into_iter()
-                    .map(|text| {
+                    .map(|(at, text)| {
                         view! {
                             <li>
                                 <button
                                     r#type="button"
                                     class="murmure-search-match"
                                     on:click=move |_| {
-                                        if let Some(command) = relay.choose_result(channel) {
+                                        if let Some(command) = relay.choose_result(channel, at) {
                                             send.run(command);
                                         }
                                     }

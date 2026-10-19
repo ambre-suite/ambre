@@ -456,9 +456,10 @@ SCROLL_SETTERS = {
     "crates/ambre-prose/src/view/mod.rs": re.compile(r"^(\s*)pub fn scroll_by\(&mut self, \w+: ScrollStep\)"),
     "crates/ambre-toile/src/ui/viewport.rs": re.compile(r"^(\s*)pub fn pan_by_screen\(&mut self, \w+: ScrollStep\)"),
     "crates/ambre-trame/src/ui/view/scroll.rs": re.compile(r"^(\s*)fn accumulate\(&mut self, \w+: ScrollStep\)"),
+    "crates/ambre-murmure/src/view.rs": re.compile(r"^(\s*)pub fn scroll_by\(&mut self, \w+: ScrollStep\)"),
 }
-SCROLL_APPS = ("crates/ambre-prose/src", "crates/ambre-toile/src", "crates/ambre-trame/src")
-SCROLL_OFFSET = re.compile(r"\b(?:scroll_y|center)\s*(?:[+-]=|[+-](?!=))")
+SCROLL_APPS = ("crates/ambre-prose/src", "crates/ambre-toile/src", "crates/ambre-trame/src", "crates/ambre-murmure/src")
+SCROLL_OFFSET = re.compile(r"\b(?:scroll_y|center|anchor_y)\s*(?:[+-]=|[+-](?!=))")
 GRID_SCROLL = "crates/ambre-trame/src/ui/view/scroll.rs"
 GRID_PAN = re.compile(r"\.scroll_by\(")
 # A mouse drag is the one step built from two pointer positions, so only the

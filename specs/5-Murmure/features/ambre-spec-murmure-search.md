@@ -28,8 +28,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-149` | `POST` | A result list MUST state which segments it covered. | this spec section 3 | `ambre_murmure::channel_tests::a_search_reads_the_held_segments_and_lists_the_rest`; `ambre_logic::channels::tests::a_search_covers_every_open_channel_and_leaves_nothing` -- each channel names the segments read and the count listed; `ambre_app::shell::murmure_regions::the_search_box_asks_lists_and_opens_a_match` -- browser tier, the box shows the coverage above the matches | none | verified |
-| `MURMURE-496` | `POST` | A result list MUST show the answer to the words the search box holds, and drop an answer to older words. | this spec section 3 | `ambre_murmure::tests::chrome_relay::the_find_chord_opens_the_search_and_its_answer_lists_the_matches` -- an answer to an older query shows nothing; `ambre_murmure::tests::chrome_relay::a_match_opens_its_channel_and_closes_the_search` -- nor one after the box closed | none | verified |
-| `MURMURE-150` | `POST` | A result MUST open its message in its channel. | this spec section 3 | not built | unbuilt -- lands with the `Scrolling the message list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-496` | `POST` | A result list MUST show the answer to the words the search box holds, and drop an answer to older words. | this spec section 3 | `ambre_murmure::tests::chrome_relay::the_find_chord_opens_the_search_and_its_answer_lists_the_matches` -- an answer to an older query shows nothing; `ambre_murmure::tests::chrome_relay::a_match_opens_its_message_in_its_channel_and_closes_the_search` -- nor one after the box closed | none | verified |
+| `MURMURE-150` | `POST` | A result MUST open its message in its channel. | this spec section 3 | `ambre_murmure::tests::chrome_relay::a_match_opens_its_message_in_its_channel_and_closes_the_search` -- the pane names the channel and the message; `ambre_murmure::view::tests::a_pane_at_a_message_rests_the_list_on_it` -- the list rests on the message, once it is in the list | none | verified |
 | `MURMURE-478` | `POST` | A search MUST fold the precomposed Latin, Greek and Cyrillic accents, and drop the combining marks of every script. | this spec section 3 | `ambre_murmure::search::tests::every_script_folds_its_diacritics`; `ambre_murmure::search::tests::a_query_matches_its_words_with_diacritics_folded` -- Vietnamese, pinyin, polytonic Greek, Hebrew points and Arabic vowel signs | none | verified |
 | `MURMURE-151` | `FRAME` | A search MUST NOT load a segment that holds no match. | this spec section 3; `RESID-016` | type-level -- `ChannelState::search` takes `&self` and cannot load; `ambre_murmure::channel_tests::a_search_reads_the_held_segments_and_lists_the_rest` | none | verified |
 
@@ -57,7 +57,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a search over the loaded segments reads memory the client holds, inside the rows
   of `ambre-spec-budgets.md section 6`.
 * **Boundary.** none: the query never leaves the client, and the relay searches nothing.
-* **Verification.** 6 `verified`, 12 `unimplemented`: the search over the loaded segments and its
+* **Verification.** 7 `verified`, 11 `unimplemented`: the search over the loaded segments and its
   box are built, and no index exists.
 
 ---
@@ -67,7 +67,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | Alice does | Bob does | The channel holds | Each user sees | Test |
 |---|---|---|---|---|
 | searches "budget" | -- | the loaded segments | the matches, and "searched 2 of 14 segments" (`MURMURE-149`) | `ambre_app::shell::murmure_regions::the_search_box_asks_lists_and_opens_a_match` |
-| opens a result | -- | the segment of the match | the channel, at the message (`MURMURE-150`) | none |
+| opens a result | -- | the segment of the match | the channel, at the message (`MURMURE-150`) | `ambre_murmure::view::tests::a_pane_at_a_message_rests_the_list_on_it` |
 
 ---
 

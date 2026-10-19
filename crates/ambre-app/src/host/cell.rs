@@ -144,6 +144,13 @@ impl Bound {
             let on_input =
                 Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
                     let Some(view) = view.upgrade() else { return };
+                    // A finger pans the cell's view rather than pointing.
+                    if let Some((phase, x, y)) = touch_of(&event) {
+                        if view.borrow_mut().touch(phase, x, y, event.time_stamp()) {
+                            event.prevent_default();
+                        }
+                        return;
+                    }
                     if let Some(input) = input_of(&event)
                         && view.borrow_mut().handle_input(&input)
                     {
@@ -282,6 +289,23 @@ fn plan_frame(view: &mut AppView, size: SurfaceSize, relayout: bool, now_ms: f64
     let mut plan = view.plan_repaint(now_ms, false);
     size.shift_in_physical(&mut plan);
     plan
+}
+
+/// The phase and the point of a finger on a cell, in its own pixels. `None`
+/// for a mouse, a pen or a wheel.
+fn touch_of(event: &web_sys::Event) -> Option<(TouchPhase, f32, f32)> {
+    let pointer = event.dyn_ref::<web_sys::PointerEvent>()?;
+    if pointer.pointer_type() != "touch" {
+        return None;
+    }
+    let phase = match event.type_().as_str() {
+        "pointerdown" => TouchPhase::Down,
+        "pointermove" => TouchPhase::Move,
+        "pointerup" => TouchPhase::Up,
+        "pointercancel" => TouchPhase::Cancel,
+        _ => return None,
+    };
+    Some((phase, pointer.offset_x() as f32, pointer.offset_y() as f32))
 }
 
 /// The input event a DOM event on a cell carries, in the cell's own pixels.
@@ -478,6 +502,37 @@ mod tests {
         resize(&cell.0, 200, 120);
         sleep(50).await;
         assert_eq!(murmure(&first.borrow()).size(), (200.0, 120.0));
+    }
+
+    /// A finger on a cell holds its list rather than pointing at it, and a
+    /// mouse still points.
+    #[wasm_bindgen_test]
+    fn a_finger_on_a_cell_holds_its_list_and_points_at_nothing() {
+        let (_cell, canvas) = thread_cell(160, 90);
+        let page = page();
+        let mut cells = Cells::default();
+        cells.sync(&page);
+        let view = Rc::clone(&cells.bound[THREAD_CANVAS].view);
+        let finger = |kind: &str| {
+            let init = web_sys::PointerEventInit::new();
+            init.set_pointer_type("touch");
+            web_sys::PointerEvent::new_with_event_init_dict(kind, &init).unwrap()
+        };
+
+        canvas.dispatch_event(&finger("pointerdown")).unwrap();
+        assert!(murmure(&view.borrow()).finger_down());
+        canvas.dispatch_event(&finger("pointermove")).unwrap();
+        assert!(murmure(&view.borrow()).hover().is_none(), "no hover");
+        canvas.dispatch_event(&finger("pointerup")).unwrap();
+        assert!(!murmure(&view.borrow()).finger_down());
+
+        canvas.dispatch_event(&finger("pointerdown")).unwrap();
+        canvas.dispatch_event(&finger("pointercancel")).unwrap();
+        assert!(!murmure(&view.borrow()).finger_down(), "cancelled");
+
+        let mouse = web_sys::PointerEvent::new("pointermove").unwrap();
+        canvas.dispatch_event(&mouse).unwrap();
+        assert!(murmure(&view.borrow()).hover().is_some(), "a mouse points");
     }
 
     /// `CANVAS-070`: a cell plans its frame apart from the page. A frame

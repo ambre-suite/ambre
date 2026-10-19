@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3589 rows: 2977 shipped, of which 2 loose. 612 unbuilt.**
+**3594 rows: 2983 shipped, of which 2 loose. 611 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 855 | 418 | 816 | 609 | 277 | 2975 |
+| `verified` | 855 | 418 | 816 | 609 | 283 | 2981 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 193 | 55 | 29 | 109 | 226 | 612 |
+| `unimplemented` | 193 | 55 | 29 | 109 | 225 | 611 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -167,11 +167,11 @@
 | `ambre-spec-murmure-layout.md` | 24 | 19 | 19 |  | 5 |
 | `ambre-spec-murmure-members.md` | 21 | 16 | 16 |  | 5 |
 | `ambre-spec-murmure-mentions.md` | 13 | 13 | 13 |  |  |
-| `ambre-spec-murmure-message-list.md` | 31 | 13 | 13 |  | 18 |
+| `ambre-spec-murmure-message-list.md` | 34 | 18 | 18 |  | 16 |
 | `ambre-spec-murmure-messages.md` | 22 | 22 | 22 |  |  |
-| `ambre-spec-murmure-notifications.md` | 17 | 6 | 6 |  | 11 |
+| `ambre-spec-murmure-notifications.md` | 19 | 6 | 6 |  | 13 |
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
-| `ambre-spec-murmure-search.md` | 18 | 6 | 6 |  | 12 |
+| `ambre-spec-murmure-search.md` | 18 | 7 | 7 |  | 11 |
 | `ambre-spec-murmure-segments.md` | 26 | 26 | 26 |  |  |
 | `ambre-spec-murmure-spaces.md` | 34 | 29 | 29 |  | 5 |
 | `ambre-spec-murmure-threads.md` | 20 | 14 | 14 |  | 6 |
@@ -226,10 +226,10 @@
 | `ambre-spec-murmure-members.md` | MURMURE-440..459,472 |
 | `ambre-spec-murmure-mentions.md` | MURMURE-098..104,152,229..233 |
 | `ambre-spec-murmure-message-links.md` | MURMURE-348..354,414 |
-| `ambre-spec-murmure-message-list.md` | MURMURE-182..192,205..209,218..221,417..427 |
+| `ambre-spec-murmure-message-list.md` | MURMURE-182..192,205..209,218..221,417..427,504..506 |
 | `ambre-spec-murmure-messages.md` | MURMURE-078..090,223..228,253,255..256 |
 | `ambre-spec-murmure-moderation.md` | MURMURE-299..300,305..312 |
-| `ambre-spec-murmure-notifications.md` | MURMURE-142..146,265..274,493..494 |
+| `ambre-spec-murmure-notifications.md` | MURMURE-142..146,265..274,493..494,507..508 |
 | `ambre-spec-murmure-pins.md` | MURMURE-338..347 |
 | `ambre-spec-murmure-reactions.md` | MURMURE-091..097 |
 | `ambre-spec-murmure-schema.md` | MURMURE-001..020,157,437 |

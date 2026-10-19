@@ -5,7 +5,7 @@
 //! header and the words of each row. Pure, so the host tests hold it. The painter in
 //! `paint` lays the rows out and draws them.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use ambre_bus::{
     ChannelId, DocumentId, LogicCommand, MessageId, MessageView, MurmureCommand, MurmureEvent,
@@ -161,6 +161,25 @@ impl MessageList {
         self.segments.iter().rev().find_map(|s| s.messages.last())
     }
 
+    /// The oldest segment the list holds, read or shown as a band. The one
+    /// before it is the next to load (`MURMURE-191`).
+    pub fn oldest_segment(&self) -> Option<SegmentId> {
+        self.segments.first().map(|s| s.id)
+    }
+
+    /// What names each row, in the order of [`MessageList::rows`]. A key
+    /// outlives a load above, where an index does not (`MURMURE-192`).
+    pub fn keys(&self) -> Vec<RowKey> {
+        let mut keys = Vec::with_capacity(self.len());
+        for segment in &self.segments {
+            if segment.band.is_some() {
+                keys.push(RowKey::Band(segment.id));
+            }
+            keys.extend(segment.messages.iter().map(|m| RowKey::Message(m.id)));
+        }
+        keys
+    }
+
     /// The rows, oldest first, each message marked with whether it opens a
     /// group under a header of its own (`MURMURE-183`). A band is one row,
     /// and the message after it opens a group.
@@ -202,6 +221,13 @@ pub enum Row<'a> {
     },
     /// A segment that could not open.
     Band(&'a Band),
+}
+
+/// What names a row across loads: its message, or the segment of its band.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RowKey {
+    Message(MessageId),
+    Band(SegmentId),
 }
 
 /// What a row shows, in words.
@@ -308,6 +334,104 @@ pub fn from_bottom(
         bottom = top;
     }
     shown
+}
+
+/// How close to the bottom of the viewport the last row may end and still
+/// rest the list on its latest message.
+const FLUSH_PX: f32 = 0.5;
+
+/// The rows a viewport shows, top first, and where the list rests.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Window {
+    /// Each row shown, top first: its index, its top and its height.
+    pub rows: Vec<(usize, f32, f32)>,
+    /// The oldest row is on screen.
+    pub oldest: bool,
+    /// The latest row is on screen.
+    pub latest: bool,
+    /// The row the list rests on, and its top: the first row on screen.
+    /// `None` when the list rests on its latest message.
+    pub anchor: Option<(usize, f32)>,
+}
+
+/// The rows a viewport `height` tall shows with the row `anchor` names at
+/// its top, or resting on the latest row with no anchor.
+///
+/// The list keeps a row in place, never a pixel offset, so rows loaded
+/// above leave the screen still (`MURMURE-192`). A last row that ends
+/// inside the viewport rests the list on its latest row. Each row is
+/// measured once, and only the rows the walk reaches (`MURMURE-187`).
+pub fn window(
+    count: usize,
+    height: f32,
+    anchor: Option<(usize, f32)>,
+    mut measure: impl FnMut(usize) -> f32,
+) -> Window {
+    let mut known: HashMap<usize, f32> = HashMap::new();
+    let mut tall = |i: usize| *known.entry(i).or_insert_with(|| measure(i));
+    let Some((at, top)) = anchor.filter(|&(at, _)| at < count) else {
+        return at_bottom(count, height, &mut tall);
+    };
+    let mut rows = VecDeque::new();
+    let (mut next, mut y) = (at, top);
+    if fill_down(&mut rows, (&mut next, &mut y), (count, height), &mut tall) {
+        return at_bottom(count, height, &mut tall);
+    }
+    let (mut first, mut above) = (at, top);
+    while first > 0 && above > 0.0 {
+        first -= 1;
+        let h = tall(first);
+        above -= h;
+        rows.push_front((first, above, h));
+    }
+    if above > 0.0 {
+        // The oldest row came down past the top: it rests there instead.
+        for row in &mut rows {
+            row.1 -= above;
+        }
+        y -= above;
+        if fill_down(&mut rows, (&mut next, &mut y), (count, height), &mut tall) {
+            return at_bottom(count, height, &mut tall);
+        }
+    }
+    rows.retain(|&(_, top, h)| top + h > 0.0 && top < height);
+    Window {
+        oldest: rows.front().is_some_and(|r| r.0 == 0),
+        latest: rows.back().is_some_and(|r| r.0 + 1 == count),
+        anchor: rows.front().map(|&(i, top, _)| (i, top)),
+        rows: rows.into(),
+    }
+}
+
+/// Lay rows out from row `next`, whose top is `y`, down to the bottom of the
+/// viewport. Answers whether the last row ends inside it, which rests the
+/// list on its latest row.
+fn fill_down(
+    rows: &mut VecDeque<(usize, f32, f32)>,
+    (next, y): (&mut usize, &mut f32),
+    (count, height): (usize, f32),
+    tall: &mut impl FnMut(usize) -> f32,
+) -> bool {
+    while *next < count && *y < height {
+        let h = tall(*next);
+        rows.push_back((*next, *y, h));
+        *y += h;
+        *next += 1;
+    }
+    *next == count && *y < height + FLUSH_PX
+}
+
+/// The window of a list resting on its latest row.
+fn at_bottom(count: usize, height: f32, tall: &mut impl FnMut(usize) -> f32) -> Window {
+    let mut shown = from_bottom(count, height, &mut *tall);
+    shown.reverse();
+    let rows: Vec<(usize, f32, f32)> = shown.iter().map(|&(i, top)| (i, top, tall(i))).collect();
+    Window {
+        oldest: rows.first().is_some_and(|r| r.0 == 0),
+        latest: !rows.is_empty(),
+        anchor: None,
+        rows,
+    }
 }
 
 /// The message lists of a page: each open channel, and each thread its view
@@ -742,6 +866,103 @@ pub(crate) mod tests {
         assert_eq!(shown.first(), Some(&(9_999, 80.0)));
         assert_eq!(shown.last(), Some(&(9_995, 0.0)));
         assert!(from_bottom(0, 100.0, |_| 1.0).is_empty());
+    }
+
+    /// The indices and tops of a window's rows.
+    fn tops(window: &Window) -> Vec<(usize, f32)> {
+        window.rows.iter().map(|&(i, top, _)| (i, top)).collect()
+    }
+
+    /// A list resting on a row keeps that row where it is, and rows added
+    /// below move nothing on screen (`MURMURE-190`).
+    #[test]
+    fn a_window_on_a_row_keeps_it_in_place_as_rows_arrive_below() {
+        let rested = window(10, 100.0, Some((3, -5.0)), |_| 20.0);
+        let expected = [
+            (3, -5.0),
+            (4, 15.0),
+            (5, 35.0),
+            (6, 55.0),
+            (7, 75.0),
+            (8, 95.0),
+        ];
+        assert_eq!(tops(&rested), expected);
+        assert_eq!(rested.anchor, Some((3, -5.0)));
+        assert!(!rested.oldest && !rested.latest);
+        let grown = window(12, 100.0, Some((3, -5.0)), |_| 20.0);
+        assert_eq!(grown, rested);
+    }
+
+    /// A row pushed past the bottom rests the list on its latest row, so
+    /// the next message scrolls into view (`MURMURE-189`).
+    #[test]
+    fn a_window_past_the_bottom_rests_on_the_latest_row() {
+        let rested = window(10, 100.0, Some((8, 0.0)), |_| 20.0);
+        assert_eq!(rested.anchor, None);
+        assert_eq!(tops(&rested).first(), Some(&(5, 0.0)));
+        assert_eq!(tops(&rested).last(), Some(&(9, 80.0)));
+        assert!(rested.latest);
+        let flush = window(10, 100.0, Some((5, 0.0)), |_| 20.0);
+        assert_eq!(
+            flush.anchor, None,
+            "a last row flush with the bottom rests there"
+        );
+        assert_eq!(window(10, 100.0, Some((10, 0.0)), |_| 20.0).anchor, None);
+        let short = window(2, 100.0, Some((0, 0.0)), |_| 20.0);
+        assert_eq!(
+            tops(&short),
+            [(0, 60.0), (1, 80.0)],
+            "a short list sits at the bottom"
+        );
+        assert!(short.oldest && short.latest);
+    }
+
+    /// The oldest row pulled down past the top rests at the top.
+    #[test]
+    fn a_window_past_the_top_rests_the_oldest_row_at_the_top() {
+        let rested = window(10, 100.0, Some((1, 30.0)), |_| 20.0);
+        assert_eq!(rested.anchor, Some((0, 0.0)));
+        assert_eq!(tops(&rested).last(), Some(&(4, 80.0)));
+        assert!(rested.oldest && !rested.latest);
+        let short = window(4, 100.0, Some((1, 30.0)), |_| 20.0);
+        assert_eq!(
+            short.anchor, None,
+            "a list shorter than the viewport rests on its latest"
+        );
+    }
+
+    /// A window far up the list measures only the rows it shows, each once,
+    /// and a flick that leaves rows above drops them (`MURMURE-187`).
+    #[test]
+    fn a_window_measures_only_the_rows_it_reaches_once_each() {
+        let mut measured = Vec::new();
+        let rested = window(10_000, 100.0, Some((5_000, 0.0)), |i| {
+            measured.push(i);
+            20.0
+        });
+        assert_eq!(measured, [5_000, 5_001, 5_002, 5_003, 5_004]);
+        assert_eq!(rested.rows.len(), 5);
+        let flung = window(10_000, 100.0, Some((5_000, -45.0)), |_| 20.0);
+        assert_eq!(flung.anchor, Some((5_002, -5.0)));
+    }
+
+    /// Each row has a key, a band's being its segment, and the oldest
+    /// segment is the first the list holds, read or not (`MURMURE-191`).
+    #[test]
+    fn each_row_has_a_key_and_the_oldest_segment_leads() {
+        let author = UserId::new();
+        let (older, newer) = (SegmentId::new(), SegmentId::new());
+        let mut list = MessageList::default();
+        assert_eq!(list.oldest_segment(), None);
+        let later = message(author, 30, "c");
+        list.absorb(newer, vec![later.clone()]);
+        assert_eq!(list.oldest_segment(), Some(newer));
+        list.unreadable(older, band(Unreadable::Damaged, 10, Some(30)));
+        assert_eq!(list.oldest_segment(), Some(older));
+        assert_eq!(
+            list.keys(),
+            [RowKey::Band(older), RowKey::Message(later.id)]
+        );
     }
 
     /// The band the Logic thread names lands in the list of its channel.

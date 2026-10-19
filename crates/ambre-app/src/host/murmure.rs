@@ -18,6 +18,7 @@ pub fn page_reads(relay: MurmureRelay) -> PageReads {
         pane: Rc::new(move || relay.pane.get_untracked()),
         name_of: Rc::new(move |user| relay.member_name(user)),
         time_of: Rc::new(move |ts| clock.format(ts)),
+        now_ms: Rc::new(super::probe::now_ms),
     }
 }
 

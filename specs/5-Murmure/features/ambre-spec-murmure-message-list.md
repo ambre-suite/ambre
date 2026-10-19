@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE MURMURE MESSAGE LIST
 **Type:** Vertical (feature)
 **Implementation:** partial -- the channel and the thread each paint on a canvas of their own.
-Each list rests on its latest message, and neither scrolls nor takes focus yet.
+Each list scrolls by the wheel and a finger, and takes no focus yet.
 
 > The conversation of a channel, newest at the bottom. It scrolls through years of history without
 > a pause, and shows where the unread messages start.
@@ -23,11 +23,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-184` | `OBS` | The first unread message MUST follow a separator that marks it. | this spec section 3; `features/ambre-spec-murmure-unread.md`; `MURMURE-499` | `ambre_murmure::list::tests::the_unread_line_holds_while_its_channel_stays_on_screen` -- the line keeps the first message known while its channel stays on screen, and starts over on another; `ambre_murmure::paint::tests::the_unread_line_paints_above_the_first_unread_message` -- the label paints between the read rows and the first unread one; `ambre_murmure::view::tests::the_unread_line_stays_after_the_channel_is_marked_read` -- the view marks the channel read and the line still paints | none | verified |
 | `MURMURE-185` | `OBS` | A deleted message MUST show as deleted, with no text. | this spec section 3; `MURMURE-087` | `ambre_murmure::list::tests::a_deleted_message_shows_a_muted_line` -- a deleted message shows a muted stand-in line; `ambre_murmure::paint::tests::a_deleted_body_paints_muted_and_a_reply_count_in_the_accent` -- the stand-in paints in the muted colour, and no body text paints | none | verified |
 | `MURMURE-186` | `OBS` | An edited message MUST show that it was edited. | this spec section 3; `MURMURE-084` | `ambre_murmure::list::tests::an_edited_message_carries_the_marker` -- an edited body ends with the marker, a plain one does not | none | verified |
-| `MURMURE-187` | `INV` | The list MUST paint only the messages near the viewport. | this spec section 3; `ambre-spec-budgets.md section 2` | `ambre_murmure::list::tests::the_walk_from_the_bottom_measures_only_the_rows_it_reaches` -- five rows of ten thousand are measured; `ambre_murmure::paint::tests::ten_thousand_messages_lay_out_only_one_viewport` -- ten thousand messages lay out one viewport of rows | none | verified |
+| `MURMURE-187` | `INV` | The list MUST paint only the messages near the viewport. | this spec section 3; `ambre-spec-budgets.md section 2` | `ambre_murmure::list::tests::the_walk_from_the_bottom_measures_only_the_rows_it_reaches` -- five rows of ten thousand are measured; `ambre_murmure::list::tests::a_window_measures_only_the_rows_it_reaches_once_each` -- a window far up measures only its rows, each once; `ambre_murmure::paint::tests::ten_thousand_messages_lay_out_only_one_viewport` -- ten thousand messages lay out one viewport of rows | none | verified |
 | `MURMURE-188` | `INV` | The list MUST be canvas content, its text shaped by the shared text pipeline. | this spec section 3; `ambre-spec-ui.md section 2` | `ambre_murmure::paint::tests::ten_thousand_messages_lay_out_only_one_viewport` -- the list paints on a drawing surface, its text shaped by the shared text cache; `ambre_murmure::paint::tests::the_rows_paint_top_to_bottom_under_one_header` -- each text paints as shaped glyph runs | none | verified |
 | `MURMURE-207` | `OBS` | The focused message MUST be announced to a screen reader with its author, its time and its text. | this spec section 3; `ambre-spec-accessibility.md section 2`; `CHROME-023` | not built | unbuilt -- lands with the `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-208` | `OBS` | A new message MUST be announced to a screen reader when the user was at the bottom of the list. | this spec section 3; `ambre-spec-accessibility.md section 2` | not built | unbuilt -- lands with the `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-417` | `INV` | The list MUST scroll through the shared kinetic model, never through a speed or a decay of its own. | this spec section 3; `KINETIC-001` | not built | unbuilt -- lands with the `Scrolling the message list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-417` | `INV` | The list MUST scroll through the shared kinetic model, never through a speed or a decay of its own. | this spec section 3; `KINETIC-001` | type-level -- the list's `scroll_by` takes a `ScrollStep`, which only the model builds; `ambre_murmure::view::tests::a_paused_glide_coasts_and_a_notch_never_does` -- a paused glide coasts on the model's ticks, a notch never does; `ambre_murmure::view::tests::a_finger_drags_the_list_and_a_still_one_taps` -- a finger drags past the slop, a still one taps; ci-gate -- `scripts/crate_boundaries.py` refuses an anchor moved by a distance outside `scroll_by`, and a friction or a decay outside the model | none | verified |
 | `MURMURE-418` | `OBS` | The time of a message MUST show in the reader's own language and time zone. | this spec section 3 | `ambre_app::host::murmure::tests::the_time_reads_in_the_readers_language_and_zone` -- the time reads as the browser writes it in its own language and zone, in the browser tier | none | verified |
 | `MURMURE-419` | `INV` | Every action on a message MUST be a command of the command table. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-420` | `INV` | A thread MUST show its messages through the same list as a channel. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::list::tests::a_thread_fills_its_own_list_and_leaving_drops_the_channel` -- a thread fills a list of the same type as a channel; `ambre_murmure::view::tests::the_thread_region_shows_the_thread_through_the_same_list` -- the thread's region paints the thread through the same painter, on a recording surface | none | verified |
@@ -37,16 +37,16 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-189` | `POST` | A new message MUST scroll into view when the user was at the bottom of the list. | this spec section 3 | not built | unbuilt -- lands with the `Scrolling the message list` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-190` | `FRAME` | A new message MUST NOT move the list when the user was reading higher up. | this spec section 3 | not built | unbuilt -- lands with the `Scrolling the message list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-189` | `POST` | A new message MUST scroll into view when the user was at the bottom of the list. | this spec section 3 | `ambre_murmure::list::tests::a_window_past_the_bottom_rests_on_the_latest_row` -- a row pushed past the bottom rests the list on its latest row; `ambre_murmure::view::tests::a_new_message_scrolls_into_view_at_the_bottom` -- at the bottom the new message paints, and is read | none | verified |
+| `MURMURE-190` | `FRAME` | A new message MUST NOT move the list when the user was reading higher up. | this spec section 3 | `ambre_murmure::list::tests::a_window_on_a_row_keeps_it_in_place_as_rows_arrive_below` -- rows added below keep the resting row in place; `ambre_murmure::paint::tests::a_list_resting_on_a_row_paints_from_it` -- the paint starts at the resting row; `ambre_murmure::view::tests::a_new_message_leaves_a_reader_higher_up_in_place` -- higher up the same rows paint, and nothing is read | none | verified |
 | `MURMURE-209` | `FRAME` | Announcing a message MUST NOT move the focus. | this spec section 3; `CHROME-065` | not built | unbuilt -- lands with the `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Scroll up
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-191` | `POST` | Reaching the oldest loaded message MUST ask the engine for the previous segment. | this spec section 3; `MURMURE-023` | not built | unbuilt -- lands with the `Scrolling the message list` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-192` | `FRAME` | Loading older messages MUST NOT move the messages on screen. | this spec section 3 | not built | unbuilt -- lands with the `Scrolling the message list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-191` | `POST` | Reaching the oldest loaded message MUST ask the engine for the previous segment. | this spec section 3; `MURMURE-023` | `ambre_murmure::list::tests::each_row_has_a_key_and_the_oldest_segment_leads` -- the oldest segment is the first the list holds; `ambre_murmure::paint::tests::a_list_resting_on_a_row_paints_from_it` -- the paint says when the oldest row shows; `ambre_murmure::view::tests::the_oldest_row_asks_for_the_segment_before_and_its_rows_move_nothing` -- the view asks once per segment | none | verified |
+| `MURMURE-192` | `FRAME` | Loading older messages MUST NOT move the messages on screen. | this spec section 3 | `ambre_murmure::view::tests::the_oldest_row_asks_for_the_segment_before_and_its_rows_move_nothing` -- the rows of the older segment land above, and the rows on screen paint where they were | none | verified |
 
 
 ### 1.4 Move through the messages
@@ -83,13 +83,21 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 **Frame:** `UI-THREAD-044`
 
+### 1.8 Jump through the list
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-504` | `POST` | Page Up and Page Down in the list MUST move it by one viewport, through the shared kinetic model. | this spec section 3; `MURMURE-417` | not built | unbuilt -- lands with the `Jumping through the message list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-505` | `POST` | End, or the control a list read higher up shows, MUST bring the list back to its latest message. | this spec section 3; `MURMURE-189` | not built | unbuilt -- lands with the `Jumping through the message list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-506` | `FRAME` | A jump through the list MUST NOT mark read a message it did not show. | this spec section 3; `MURMURE-206` | not built | unbuilt -- lands with the `Jumping through the message list` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** the frame budget of `ambre-spec-budgets.md section 2` holds the scroll, and the
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
   only what `meta` already tells every member: the span of a segment.
-* **Verification.** 13 `verified`, 18 `unimplemented`. The host tier holds the order, the groups,
-  the words and the paint of the rows, the bands, and the thread's list. The browser tier holds each canvas
-  and the local time.
+* **Verification.** 18 `verified`, 16 `unimplemented`. The host tier holds the order, the groups,
+  the words and the paint of the rows, the bands, the scroll and the thread's list. The browser tier
+  holds each canvas, the finger on it and the local time.
 
 ---
 
@@ -97,9 +105,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | Alice does | Bob does | Alice sees | Test |
 |---|---|---|---|
-| reads the bottom of the channel | posts | Bob's message scrolls into view (`MURMURE-189`) | none |
-| reads last week, higher up | posts | the list stays where she reads (`MURMURE-190`) | none |
-| scrolls past the oldest loaded message | -- | older messages appear above, and nothing on screen jumps (`MURMURE-192`) | none |
+| reads the bottom of the channel | posts | Bob's message scrolls into view (`MURMURE-189`) | `ambre_murmure::view::tests::a_new_message_scrolls_into_view_at_the_bottom` |
+| reads last week, higher up | posts | the list stays where she reads (`MURMURE-190`) | `ambre_murmure::view::tests::a_new_message_leaves_a_reader_higher_up_in_place` |
+| scrolls past the oldest loaded message | -- | older messages appear above, and nothing on screen jumps (`MURMURE-192`) | `ambre_murmure::view::tests::the_oldest_row_asks_for_the_segment_before_and_its_rows_move_nothing` |
 | posts three messages within a minute | -- | one header over the three (`MURMURE-183`) | none |
 | opens a channel on a new phone, before its keys arrive | -- | one band per unreadable segment, with its dates, its cause and how to try again (`MURMURE-218`) | none |
 | joins a channel invited without history | -- | the boundary at the top, and no error (`MURMURE-219`) | none |
@@ -134,7 +142,8 @@ list costs nothing. The DOM around a list holds its header and its controls, nev
 
 **The scroll.** The list takes its pan, its flick, its wheel momentum and its edge scroll from
 `ambre-spec-kinetic-scroll.md` (`MURMURE-417`). The list owns step 4 of that model alone: it moves
-its anchor by the distance of each tick.
+its anchor by the distance of each tick. A page key steps it by a viewport (`MURMURE-504`), and
+End or the control over the list rests it on the latest message (`MURMURE-505`).
 
 **The time of a message.** The `ts` of a message is Unix milliseconds. The list formats it in the
 language and the time zone of the reader (`MURMURE-418`). A channel carries no locale: two members
@@ -222,7 +231,8 @@ both to each region, and `ambre_app::host::murmure` hands it the pane, the names
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The list rests on its latest message.** No scroll, no focus and no selection exist yet.
+* **The list scrolls by the wheel and a finger.** No key scrolls it, no control jumps back to the
+  latest message, and no focus and no selection exist yet.
 * **A band names its remedy in words.** It says to reopen the channel; no control on it asks again.
 * **Only the focused message reaches a screen reader.** The list is not mirrored whole, by the rule
   of `ambre-spec-accessibility.md section 2`, so a reader moves through it message by message.

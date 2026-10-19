@@ -571,7 +571,8 @@ fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
     let groups = relay.search_groups().get_untracked();
     assert_eq!(groups.len(), 1, "a channel with no match shows no group");
     assert_eq!(groups[0].name, "budget");
-    assert_eq!(groups[0].texts, ["the budget for May"]);
+    let texts: Vec<&str> = groups[0].matches.iter().map(|(_, t)| t.as_str()).collect();
+    assert_eq!(texts, ["the budget for May"]);
     assert_eq!(groups[0].coverage, "1 of 2 segments");
     let channels = relay.search.get_untracked().channels;
     assert_eq!(
@@ -586,22 +587,31 @@ fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
     assert!(relay.search.get_untracked().channels.is_empty());
 }
 
-/// A match opens its channel and closes the box. An answer that arrives
-/// after the box closed shows nothing.
+/// A match opens its channel at its message, and closes the box
+/// (`MURMURE-150`). An answer that arrives after the box closed shows
+/// nothing.
 #[wasm_bindgen_test]
-fn a_match_opens_its_channel_and_closes_the_search() {
+fn a_match_opens_its_message_in_its_channel_and_closes_the_search() {
     let (_owner, relay, [budget, zeta, _]) = three_named();
     let (handler, _) = handler(relay);
     handler.on_command(SEARCH);
     relay.search_for("budget".to_owned());
     relay.absorb(&found("budget", budget, zeta));
 
-    let opened = relay.choose_result(budget);
+    let groups = relay.search_groups().get_untracked();
+    let (at, _) = groups[0].matches[0].clone();
+    let opened = relay.choose_result(budget, at);
     assert!(
         matches!(opened, Some(LogicCommand::OpenChannel { channel_id }) if channel_id == budget),
         "{opened:?}"
     );
-    assert_eq!(relay.pane.get_untracked().shown_channel(), Some(budget));
+    assert_eq!(
+        relay.pane.get_untracked(),
+        MurmurePane::Channel {
+            channel: budget,
+            at: Some(at)
+        }
+    );
     assert_eq!(relay.search.get_untracked(), SearchBox::default());
     relay.absorb(&found("", budget, zeta));
     relay.absorb(&found("budget", budget, zeta));
