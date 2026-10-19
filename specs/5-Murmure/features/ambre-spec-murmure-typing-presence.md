@@ -54,14 +54,16 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-516` | `INV` | The channel on screen MUST be ticked once per tick period of `ambre-spec-budgets.md section 8`. | this spec section 3; `MURMURE-126` | `ambre_murmure::view::tests::the_channel_on_screen_ticks_once_per_period` -- one tick per period, one at once for a channel new on screen, none from the thread's region or with no channel | none | verified |
+| `MURMURE-521` | `INV` | The channel on screen in a hidden tab MUST still be ticked once per refresh period of `ambre-spec-budgets.md section 8`. | this spec section 3; `MURMURE-516` | `ambre_murmure::tests::chrome_relay::the_refresh_ticks_the_shown_channel_as_well_as_every_space` -- the page's refresh, which runs on a timer and not on frames, ticks the shown channel and none with no channel shown | none | verified |
 | `MURMURE-517` | `OBS` | The channel's region MUST name the members typing in it while their indicator lasts. | this spec section 3; `features/ambre-spec-murmure-composer.md` | `ambre_murmure::view::tests::the_band_names_who_types` -- the strip above the field names who types, and empties once they stop; `ambre_murmure::composer::tests::the_typing_line_names_one_or_two_and_counts_no_more` -- one or two names, then a count of no one | none | verified |
 
 * **Budget.** the presence write of `ambre-spec-budgets.md section 3`, per heartbeat.
 * **Boundary.** both indicators are sealed ephemerals (`ZK-005`). The relay learns when a
   member is active, which it knows from the connection anyway.
-* **Verification.** 11 `verified`, 2 `unimplemented`. The watcher tests of `crates/ambre-murmure`
+* **Verification.** 12 `verified`, 2 `unimplemented`. The watcher tests of `crates/ambre-murmure`
   and the channel tests of `crates/ambre-logic` hold both indicators. The view tests hold the tick,
-  the typing sample and the line. The setting is not built.
+  the typing sample and the line, and the relay test the tick of a hidden tab. The setting is not
+  built.
 
 ---
 
@@ -80,10 +82,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 **CRDT containers.** none. Both indicators are ephemerals of the `meta` document. A sample is a
 tag and a state byte, and names no channel (`MURMURE-127`).
 
-**The clock.** The view ticks an open channel, and each tick drops the samples past their
-expiry. Every period is a row of `ambre-spec-budgets.md section 8`. The channel's region ticks the
-channel on screen from its frame loop (`MURMURE-516`). The thread's region ticks nothing, since
-its channel already ticks.
+**The clock.** Each tick drops the samples past their expiry, and every period is a row of
+`ambre-spec-budgets.md section 8`. The channel's region ticks the channel on screen from its
+frames (`MURMURE-516`), the thread's region not at all. The page's refresh timer ticks it too, as
+a hidden tab draws no frame (`MURMURE-521`). One sample leaves per period, whoever ticks.
 
 **On screen.** A key that changes the draft sends a typing sample (`MURMURE-515`), a caret move
 none (`MURMURE-518`). A strip that never leaves names who types (`MURMURE-517`). The member list
@@ -119,7 +121,4 @@ drawn by `crates/ambre-murmure/src/composer.rs`.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A hidden tab ticks nothing.** The browser stops the frame loop of a hidden tab, so its member
-  shows absent once the presence expiry passes. A timer would tick it, as the
-  `Presence from a hidden tab` Story (`ambre-roadmap.md` E5) plans.
 * **The setting is not built.** Turning the indicators off waits on the user settings.

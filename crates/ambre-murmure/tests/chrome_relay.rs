@@ -233,6 +233,35 @@ fn a_space_with_members() -> (Owner, MurmureRelay, ChannelId, [UserId; 3]) {
     (owner, relay, general, users)
 }
 
+/// The page's refresh, which a hidden tab still runs, ticks the shown
+/// channel beside every space. With no channel shown it ticks none
+/// (`MURMURE-521`).
+#[wasm_bindgen_test]
+fn the_refresh_ticks_the_shown_channel_as_well_as_every_space() {
+    let (_owner, relay, general, _) = a_space_with_members();
+    let now = Timestamp(1_700_000_000_000);
+    let refresh = relay.refresh_presence(now);
+    assert!(
+        matches!(
+            refresh[..],
+            [
+                LogicCommand::Space { .. },
+                LogicCommand::Channel {
+                    channel_id,
+                    command: MurmureCommand::Tick { now: at },
+                },
+            ] if channel_id == general && at == now
+        ),
+        "{refresh:?}"
+    );
+    relay.pane.set(MurmurePane::ChannelList);
+    let refresh = relay.refresh_presence(now);
+    assert!(
+        matches!(refresh[..], [LogicCommand::Space { .. }]),
+        "{refresh:?}"
+    );
+}
+
 /// After the channels, the palette lists the other members of the space of
 /// the shown channel, and the query keeps those whose name matches. This
 /// user is not among them (`MURMURE-452`).

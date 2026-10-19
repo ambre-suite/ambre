@@ -1084,9 +1084,10 @@ pub fn main() {
         })
     };
     // A Murmure page refreshes this user's presence on each of its spaces once
-    // per refresh period (the Murmure members spec). An interval, not the frame loop: a
-    // hidden tab pauses its frames, yet holds its spaces open. The interval
-    // lives as long as the page.
+    // per refresh period (the Murmure members spec). It ticks the shown channel
+    // too (the Murmure typing spec). An interval, not the frame loop: a hidden
+    // tab pauses its frames, yet holds its spaces open. The interval lives as
+    // long as the page.
     if boot_is_murmure {
         let presence_tx = ui_to_logic_tx.clone();
         let refresh = Closure::<dyn FnMut()>::new(move || {

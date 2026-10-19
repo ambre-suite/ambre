@@ -20,8 +20,9 @@ use crate::{
 };
 use ambre_bus::AppCommand;
 use ambre_bus::{
-    ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MurmureEvent,
-    Presence, RequestId, RestCommand, RestEvent, SpaceCommand, SpaceEvent, Timestamp, UiEvent,
+    ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MurmureCommand,
+    MurmureEvent, Presence, RequestId, RestCommand, RestEvent, SpaceCommand, SpaceEvent, Timestamp,
+    UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteEntry, ShellAction, ShellRegion};
 use ambre_commands::{CommandId, Locale};
@@ -595,8 +596,12 @@ impl MurmureRelay {
     /// What the view sends once per refresh period: this user's presence on
     /// every space of the sidebar. Each one also turns offline the members
     /// whose presence expired (`MURMURE-445`). `now` is the view's clock.
+    ///
+    /// The shown channel is ticked too, since a hidden tab draws no frame
+    /// (`MURMURE-521`). A visible tab ticks it from its frames as well: the
+    /// Logic thread sends one sample per period whoever ticks.
     pub fn refresh_presence(&self, now: Timestamp) -> Vec<LogicCommand> {
-        self.sidebar.with_untracked(|s| {
+        let mut commands: Vec<LogicCommand> = self.sidebar.with_untracked(|s| {
             s.spaces()
                 .iter()
                 .map(|&space_id| LogicCommand::Space {
@@ -604,7 +609,14 @@ impl MurmureRelay {
                     command: SpaceCommand::RefreshPresence { now },
                 })
                 .collect()
-        })
+        });
+        if let Some(channel_id) = self.pane.get_untracked().shown_channel() {
+            commands.push(LogicCommand::Channel {
+                channel_id,
+                command: MurmureCommand::Tick { now },
+            });
+        }
+        commands
     }
 
     /// What a Murmure page asks once its session is ready: the channels of
