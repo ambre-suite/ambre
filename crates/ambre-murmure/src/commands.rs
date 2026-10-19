@@ -14,7 +14,7 @@ use ambre_bus::{
 use ambre_commands::{
     Command, CommandCategory, CommandId, Key, KeyBinding, Keymap, Locale, Modifiers,
 };
-use ambre_core::UserId;
+use ambre_core::{DocumentId, UserId};
 
 use crate::{MessageRef, MurmurePane};
 
@@ -228,8 +228,9 @@ pub struct MessageTarget {
 pub enum FromThread {
     /// In a segment the list holds.
     Root(MessageRef),
-    /// In a segment the list has not loaded.
-    Unloaded,
+    /// In a segment the list has not loaded. The copy names its thread
+    /// document, whose header names the segment to load down to.
+    Unloaded(DocumentId),
 }
 
 /// What an action of a message asks the page to do.
@@ -293,12 +294,11 @@ impl PendingDelete {
 /// The actions offered on `target` to the member `me`, in menu order. A
 /// notice takes no reply, a reply takes no thread of its own, and a message
 /// with no text no copy. Only the author deletes or edits a message. A reply
-/// is edited in the composer of its thread (`MURMURE-526`). A copy whose
-/// root is not loaded takes no reply, which would open a thread of its own.
+/// is edited in the composer of its thread (`MURMURE-526`).
 pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<CommandId> {
     let in_channel = matches!(target.at, MessageAt::Segment(_));
     let mut ids = Vec::with_capacity(5);
-    if in_channel && !target.notice && target.from_thread != Some(FromThread::Unloaded) {
+    if in_channel && !target.notice {
         ids.push(REPLY);
     }
     if in_channel {
@@ -329,17 +329,28 @@ pub fn message_action(
         MessageAt::Thread(_) => None,
     };
     match id {
-        // A copy opens the thread it came from (`MURMURE-533`).
-        REPLY => Some(MessageAction::Open(MurmurePane::Thread {
-            channel: target.channel,
-            root: match target.from_thread {
-                Some(FromThread::Root(root)) => root,
-                _ => MessageRef {
+        // A copy opens the thread it came from (`MURMURE-533`). Its root
+        // unloaded, Logic loads the segments down to it first, then answers
+        // with the root (`MURMURE-545`).
+        REPLY => match target.from_thread {
+            Some(FromThread::Unloaded(thread)) => {
+                Some(MessageAction::Send(LogicCommand::Channel {
+                    channel_id: target.channel,
+                    command: MurmureCommand::SeekRoot { thread },
+                }))
+            }
+            Some(FromThread::Root(root)) => Some(MessageAction::Open(MurmurePane::Thread {
+                channel: target.channel,
+                root,
+            })),
+            None => Some(MessageAction::Open(MurmurePane::Thread {
+                channel: target.channel,
+                root: MessageRef {
                     segment: segment?,
                     message: target.message,
                 },
-            },
-        })),
+            })),
+        },
         MARK_UNREAD => Some(MessageAction::Send(LogicCommand::Channel {
             channel_id: target.channel,
             command: MurmureCommand::MarkUnread {
@@ -545,8 +556,8 @@ mod tests {
     }
 
     /// The reply action on a copy opens the thread it came from, never one
-    /// of its own. A copy whose root is not loaded takes no reply
-    /// (`MURMURE-533`).
+    /// of its own (`MURMURE-533`). A copy whose root is not loaded asks
+    /// Logic to seek it (`MURMURE-545`).
     #[test]
     fn the_reply_on_a_copy_opens_the_thread_it_came_from() {
         let segment = MessageAt::Segment(SegmentId::new());
@@ -562,8 +573,20 @@ mod tests {
             panic!("the reply opens a thread");
         };
         assert_eq!((channel, at), (copy.channel, root));
-        copy.from_thread = Some(FromThread::Unloaded);
-        assert_eq!(message_actions(&copy, None), [MARK_UNREAD, COPY_TEXT]);
+        let thread = DocumentId::new();
+        copy.from_thread = Some(FromThread::Unloaded(thread));
+        assert_eq!(
+            message_actions(&copy, None),
+            [REPLY, MARK_UNREAD, COPY_TEXT]
+        );
+        let Some(MessageAction::Send(LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::SeekRoot { thread: sought },
+        })) = message_action(REPLY, &copy, None)
+        else {
+            panic!("the reply seeks the root");
+        };
+        assert_eq!((channel_id, sought), (copy.channel, thread));
     }
 
     /// Only the author is offered the deletion of a message, in a channel or

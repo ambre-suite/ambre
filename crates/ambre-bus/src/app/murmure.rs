@@ -305,6 +305,9 @@ pub enum MurmureCommand {
     /// Ask again for a segment the list shows as a band. Its key chain and
     /// its bytes are fetched again from the relay (`MURMURE-514`).
     Retry { segment: SegmentId },
+    /// Find the root of `thread`, which a copy names, down the older
+    /// segments, and answer [`MurmureEvent::RootFound`] once it is loaded.
+    SeekRoot { thread: DocumentId },
 }
 
 impl MurmureCommand {
@@ -327,7 +330,8 @@ impl MurmureCommand {
             | Self::MarkThreadRead { .. }
             | Self::Tick { .. }
             | Self::Typing { .. }
-            | Self::Retry { .. } => false,
+            | Self::Retry { .. }
+            | Self::SeekRoot { .. } => false,
         }
     }
 }
@@ -462,6 +466,13 @@ pub enum MurmureEvent {
         root: MessageId,
         thread: DocumentId,
         messages: Vec<MessageView>,
+    },
+    /// The root of `thread`, which a copy names, lies in `segment`, now
+    /// loaded (the Murmure threads spec). Its thread is to open.
+    RootFound {
+        thread: DocumentId,
+        segment: SegmentId,
+        root: MessageId,
     },
     /// The first message past the read cursors, in list order, that another
     /// member wrote. `None` when every held message is read. Sent each time

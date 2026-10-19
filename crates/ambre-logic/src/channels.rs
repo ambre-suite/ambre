@@ -16,7 +16,7 @@ use ambre_bus::{
 };
 use ambre_murmure::{
     ChangeTarget, ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample,
-    Screened, Sent, Signer, ThreadTarget, members_only, screen,
+    Screened, SeekStep, Sent, Signer, ThreadTarget, members_only, screen,
 };
 
 /// This user's read cursor on one channel document (the Murmure unread spec).
@@ -723,6 +723,17 @@ impl LogicState {
         if let Some((&channel_id, channel)) =
             self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
         {
+            // A probe is read for the segment its header names, then
+            // closed: nothing holds it.
+            if channel.is_probe(document_id) {
+                if let Err(error) = channel.probe_ready(document_id) {
+                    tracing::warn!("Logic: thread {document_id} names no root: {error}");
+                }
+                self.forget_murmure_session(document_id);
+                self.send_to_sync(SyncCommand::CloseDocument { document_id });
+                self.advance_seek(channel_id);
+                return true;
+            }
             // An older segment the view asked for. A second
             // ready for a live document, after a reconnect, changes nothing.
             if channel.is_pending(document_id) {
@@ -749,6 +760,7 @@ impl LogicState {
                         }
                     }
                 }
+                self.advance_seek(channel_id);
             }
             return true;
         }
@@ -826,6 +838,40 @@ impl LogicState {
         }
     }
 
+    /// Move the seek for the root of a copy one step (the Murmure threads
+    /// spec). It opens the next older segment, or tells the view the root.
+    fn advance_seek(&mut self, channel_id: ChannelId) {
+        let Some(step) = self
+            .channels
+            .get_mut(&channel_id)
+            .and_then(ChannelState::seek_step)
+        else {
+            return;
+        };
+        match step {
+            SeekStep::Found {
+                thread,
+                segment,
+                root,
+            } => self.send_to_ui(UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::RootFound {
+                    thread,
+                    segment,
+                    root,
+                },
+            }),
+            SeekStep::Load(segment) => self.send_to_sync(SyncCommand::OpenDocument {
+                document_id: segment.document_id(),
+                doc_type: DocType::Murmure,
+            }),
+            SeekStep::Wait => {}
+            SeekStep::Lost => {
+                tracing::warn!("Logic: channel {channel_id} holds no root for the copy");
+            }
+        }
+    }
+
     /// A document of a channel could not open. Returns `false` when no
     /// channel asked for it.
     pub(crate) fn channel_document_failed(
@@ -852,6 +898,7 @@ impl LogicState {
             if let Some(event) = band {
                 self.send_to_ui(UiEvent::Channel { channel_id, event });
             }
+            self.advance_seek(channel_id);
             return true;
         }
         let Some(channel_id) = self.opening.iter().find_map(|(id, o)| {
@@ -1119,6 +1166,7 @@ impl LogicState {
                 Some(id)
             }
             MurmureCommand::LoadOlder { .. }
+            | MurmureCommand::SeekRoot { .. }
             | MurmureCommand::MarkRead
             | MurmureCommand::MarkUnread { .. }
             | MurmureCommand::MarkThreadRead { .. }
@@ -1197,6 +1245,17 @@ impl LogicState {
                         doc_type: DocType::Murmure,
                     });
                 }
+            }
+            MurmureCommand::SeekRoot { thread } => {
+                // The thread's header names the segment of its root. A
+                // probe reads it, then the older segments load down to it.
+                if let Some(probe) = channel.seek_root(thread) {
+                    self.send_to_sync(SyncCommand::OpenDocument {
+                        document_id: probe,
+                        doc_type: DocType::Murmure,
+                    });
+                }
+                self.advance_seek(channel_id);
             }
             MurmureCommand::Retry { segment } => {
                 // Sync walks the key chain again at each open, so a new open
@@ -5478,6 +5537,87 @@ mod tests {
                     if *t == thread && messages[0].text == "a reply")),
             "bob's view was told {shown:?}"
         );
+    }
+
+    /// The reply on a copy whose root lies in a final segment not loaded.
+    /// The probe is read and closed, the segment loads, and the view is told
+    /// the root. A thread the client never reached ends the seek.
+    #[test]
+    fn the_reply_on_a_far_copy_loads_its_root_then_names_it() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, closed) = closed_channel(&mut state, &sync);
+        let channel = state.channels.get_mut(&channel_id).expect("open");
+        let root = channel.messages(closed).expect("held")[0].id;
+        let ThreadTarget::Create(thread) = channel.reply_target(root, NOW).expect("target") else {
+            panic!("a root with no thread creates one");
+        };
+        let peer = crate::test_peer();
+        channel
+            .adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+            .expect("adopt");
+        channel.thread_linked(closed, root, thread).expect("link");
+        let probe = channel.snapshot(thread).expect("thread");
+        state.record_channel_seq(closed.document_id(), 1, None);
+        finalize_at_one(&mut state, &sync, channel_id, closed, NOW);
+        let channel = &state.channels[&channel_id];
+        let (meta, active) = (channel.meta_id(), channel.active_id());
+        let meta_bytes = channel.snapshot(meta.document_id()).expect("meta");
+        let closed_bytes = channel.snapshot(closed.document_id()).expect("closed");
+        let segments = HashMap::from([(
+            active,
+            channel.snapshot(active.document_id()).expect("active"),
+        )]);
+        let reopened = ChannelState::open(channel_id, meta, &meta_bytes, &segments).expect("open");
+        state.hold_channel(crate::identified(reopened));
+        drain(&sync);
+        drain(&ui);
+        let deliver = |state: &mut LogicState, document_id, payload: &[u8]| {
+            state.handle_logic_event(LogicEvent::RemoteSnapshot {
+                document_id,
+                covered_seq: 1,
+                payload: payload.to_vec(),
+            });
+            state.handle_logic_event(LogicEvent::DocumentReady {
+                document_id,
+                role: ambre_bus::Role::Editor,
+            });
+        };
+
+        command(&mut state, channel_id, MurmureCommand::SeekRoot { thread });
+        assert_eq!(sent(&sync), [Sent::Open(thread)], "the probe");
+        deliver(&mut state, thread, &probe);
+        assert_eq!(
+            sent(&sync),
+            [Sent::Close(thread), Sent::Open(closed.document_id())]
+        );
+        deliver(&mut state, closed.document_id(), &closed_bytes);
+        assert!(
+            sent(&sync).contains(&Sent::Open(thread)),
+            "the thread opens"
+        );
+        let found = channel_events(&ui).into_iter().any(|(_, event)| {
+            event
+                == MurmureEvent::RootFound {
+                    thread,
+                    segment: closed,
+                    root,
+                }
+        });
+        assert!(found, "the view is told the root");
+
+        let unknown = DocumentId::new();
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::SeekRoot { thread: unknown },
+        );
+        assert_eq!(sent(&sync), [Sent::Open(unknown)]);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: unknown,
+            cause: OpenFailure::Transient,
+            message: "gone".to_owned(),
+        });
+        assert!(sent(&sync).is_empty(), "the seek ends");
     }
 
     /// A reply that mentions me in a thread the open channel holds counts

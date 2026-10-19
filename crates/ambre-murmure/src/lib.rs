@@ -72,7 +72,7 @@ mod unread_tests;
 pub use channel::{
     ChangeTarget, ChannelState, Closed, FINALIZE_RETRY_MS, FOLD_DELAY_MS, FinalSnapshot,
     FoldSnapshot, Linked, Named, Relocated, Replay, Replied, SEGMENT_BYTES, SEGMENT_MESSAGES,
-    SUCCESSOR_RETRY_MS, Sent, Settled, ThreadLinked, ThreadTarget,
+    SUCCESSOR_RETRY_MS, SeekStep, Sent, Settled, ThreadLinked, ThreadTarget,
 };
 pub use delta::{JSON_SCHEMA_VERSION, Refusal, Signer};
 pub use error::MurmureError;

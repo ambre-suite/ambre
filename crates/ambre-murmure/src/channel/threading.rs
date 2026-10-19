@@ -12,7 +12,7 @@ use loro::{Container, LoroDoc, ValueOrContainer};
 
 use super::{
     ChannelState, Created, Held, Sent, amending, message_map, reaction_summary, read_messages,
-    summary_of,
+    segment_entries, summary_of,
 };
 use crate::delta::{self, Arrival, Rules};
 use crate::error::MurmureError;
@@ -34,10 +34,9 @@ pub(super) struct Thread {
 /// A thread document whose bytes are still arriving.
 #[derive(Debug)]
 pub(super) struct Pending {
-    /// The segment of its root.
-    segment: SegmentId,
-    /// The message it holds the replies to.
-    root: MessageId,
+    /// The segment of its root and that root, as a held segment names them.
+    /// `None` for a probe: a seek reads its header, and nothing holds it.
+    named: Option<(SegmentId, MessageId)>,
     /// Its payloads, in the order they came.
     pub(super) arrivals: Vec<Arrival>,
     /// The identity issued for it, adopted once it is admitted.
@@ -47,12 +46,49 @@ pub(super) struct Pending {
 impl Pending {
     fn of(segment: SegmentId, root: MessageId) -> Self {
         Self {
-            segment,
-            root,
+            named: Some((segment, root)),
             arrivals: Vec::new(),
             session: None,
         }
     }
+
+    fn probe() -> Self {
+        Self {
+            named: None,
+            arrivals: Vec::new(),
+            session: None,
+        }
+    }
+}
+
+/// A reply on a copy whose root lies in no held segment. The channel loads
+/// its older segments, one at a time, down to the one the thread names.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Seek {
+    /// The thread document the copy names.
+    thread: DocumentId,
+    /// The segment its header names, once its probe is read.
+    target: Option<SegmentId>,
+    /// The older segment the seek last asked for.
+    asked: Option<SegmentId>,
+}
+
+/// Where a seek for the root of a copy stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SeekStep {
+    /// A held segment holds the root, and names the thread.
+    Found {
+        thread: DocumentId,
+        segment: SegmentId,
+        root: MessageId,
+    },
+    /// Open this older segment, then step again.
+    Load(SegmentId),
+    /// A probe or a segment is on its way.
+    Wait,
+    /// No segment down to the one the header names holds the root. The
+    /// seek ends, and nothing opens.
+    Lost,
 }
 
 /// The document a reply writes.
@@ -156,10 +192,9 @@ impl ChannelState {
     ) -> Result<ThreadTarget, MurmureError> {
         let (segment, named) = self.root_slot(root).ok_or(MurmureError::NoMessage(root))?;
         if let Some(id) = named {
-            if self.thread_id(root) == Some(id) || self.threads_pending.contains_key(&id) {
+            if self.thread_id(root) == Some(id) || !self.ask_thread(id, segment, root) {
                 return Ok(ThreadTarget::Write(id));
             }
-            self.threads_pending.insert(id, Pending::of(segment, root));
             return Ok(ThreadTarget::Open(id));
         }
         if let Some(id) = self.thread_id(root) {
@@ -201,11 +236,7 @@ impl ChannelState {
             self.threads.remove(&root);
         }
         let own = self.threads.contains_key(&root);
-        let open = own || !self.threads_pending.contains_key(&thread);
-        if !own && open {
-            self.threads_pending
-                .insert(thread, Pending::of(segment, root));
-        }
+        let open = own || self.ask_thread(thread, segment, root);
         let root = self.name_thread(segment, root, thread)?;
         Ok(ThreadLinked {
             root,
@@ -302,10 +333,9 @@ impl ChannelState {
                 named.extend(amending::recorded_threads(&amendments.doc));
             }
             for (root, id) in named {
-                if self.threads.contains_key(&root) || self.threads_pending.contains_key(&id) {
+                if self.threads.contains_key(&root) || !self.ask_thread(id, segment, root) {
                     continue;
                 }
-                self.threads_pending.insert(id, Pending::of(segment, root));
                 asked.push(id);
             }
         }
@@ -341,21 +371,183 @@ impl ChannelState {
         let doc = schema::admit_with(DocumentKind::Thread, self.channel_id, document_id, |doc| {
             delta::import_arrivals(doc, pending.arrivals, document_id, Rules::Thread)
         })?;
-        let header = doc.get_map(HEADER);
-        let root = schema::string(&header, HEADER_ROOT).and_then(|s| MessageId::parse_str(&s).ok());
-        let segment =
-            schema::string(&header, HEADER_SEGMENT).and_then(|s| SegmentId::parse_str(&s).ok());
-        if root != Some(pending.root) || segment != Some(pending.segment) {
+        let named = pending.named.ok_or(MurmureError::NotHeld(document_id))?;
+        if header_root(&doc) != (Some(named.0), Some(named.1)) {
             return Err(MurmureError::ForeignRoot(document_id));
         }
         let mut held = Held::served(document_id, doc);
         if let Some((peer, entry)) = pending.session {
             held.session = Some(Session::adopt(&held.doc, peer, entry)?);
         }
-        let segment = pending.segment;
-        self.threads.insert(pending.root, Thread { segment, held });
+        let (segment, root) = named;
+        self.threads.insert(root, Thread { segment, held });
         let messages = self.read_segment(segment).unwrap_or_default();
         Ok(MurmureEvent::Messages { segment, messages })
+    }
+
+    /// Ask for `id` as the thread of `root`, a message of `segment`. A probe
+    /// of it becomes this ask, so its header is checked against the root.
+    /// `false` when it was on its way already.
+    fn ask_thread(&mut self, id: DocumentId, segment: SegmentId, root: MessageId) -> bool {
+        match self.threads_pending.get_mut(&id) {
+            Some(pending) => {
+                pending.named.get_or_insert((segment, root));
+                false
+            }
+            None => {
+                self.threads_pending.insert(id, Pending::of(segment, root));
+                true
+            }
+        }
+    }
+
+    /// The held segment whose root names `thread`, with that root.
+    pub fn root_naming(&self, thread: DocumentId) -> Option<(SegmentId, MessageId)> {
+        self.held_segments().into_iter().find_map(|segment| {
+            let mut named = named_threads(self.doc(segment.document_id())?);
+            if let Some(amendments) = self.amendments.get(&segment) {
+                named.extend(amending::recorded_threads(&amendments.doc));
+            }
+            named
+                .into_iter()
+                .find(|(_, id)| *id == thread)
+                .map(|(root, _)| (segment, root))
+        })
+    }
+
+    /// Look for the root of `thread`, which a copy names
+    /// (the Murmure threads spec). A new seek replaces the last one.
+    ///
+    /// Returns the probe to open, `None` when none is to open: a held
+    /// segment names the thread, or the thread is on its way already.
+    pub fn seek_root(&mut self, thread: DocumentId) -> Option<DocumentId> {
+        self.seek = Some(Seek {
+            thread,
+            target: None,
+            asked: None,
+        });
+        if self.root_naming(thread).is_some()
+            || self.is_thread(thread)
+            || self.threads_pending.contains_key(&thread)
+        {
+            return None;
+        }
+        self.threads_pending.insert(thread, Pending::probe());
+        Some(thread)
+    }
+
+    /// Whether `document_id` is a probe still arriving: a seek reads its
+    /// header, and nothing holds it.
+    pub fn is_probe(&self, document_id: DocumentId) -> bool {
+        self.threads_pending
+            .get(&document_id)
+            .is_some_and(|pending| pending.named.is_none())
+    }
+
+    /// The probe `document_id` has all its bytes: its header names the
+    /// segment the seek loads down to. The probe is then dropped.
+    ///
+    /// # Errors
+    /// [`MurmureError::NotHeld`] for no such probe, every refusal of the
+    /// header check, and [`MurmureError::ForeignRoot`] for a header naming no
+    /// segment `meta` lists. The seek then ends.
+    pub fn probe_ready(&mut self, document_id: DocumentId) -> Result<(), MurmureError> {
+        let read = self.read_probe(document_id);
+        let seek = self.seek.as_mut().filter(|seek| seek.thread == document_id);
+        match (&read, seek) {
+            (Ok(segment), Some(seek)) => seek.target = Some(*segment),
+            (Err(_), Some(_)) => self.seek = None,
+            _ => {}
+        }
+        read.map(|_| ())
+    }
+
+    fn read_probe(&mut self, document_id: DocumentId) -> Result<SegmentId, MurmureError> {
+        if !self.is_probe(document_id) {
+            return Err(MurmureError::NotHeld(document_id));
+        }
+        let pending = self
+            .threads_pending
+            .remove(&document_id)
+            .ok_or(MurmureError::NotHeld(document_id))?;
+        self.sequences.remove(&document_id);
+        let doc = schema::admit_with(DocumentKind::Thread, self.channel_id, document_id, |doc| {
+            delta::import_arrivals(doc, pending.arrivals, document_id, Rules::Thread)
+        })?;
+        header_root(&doc)
+            .0
+            .filter(|segment| self.listed_as(*segment).is_some())
+            .ok_or(MurmureError::ForeignRoot(document_id))
+    }
+
+    /// The next move of the seek, `None` with no seek. A found root and a
+    /// lost one end it.
+    ///
+    /// It asks for one older segment at a time, so the list stays whole,
+    /// and never one older than the segment the header names. A segment
+    /// that failed is not asked for twice.
+    pub fn seek_step(&mut self) -> Option<SeekStep> {
+        let seek = self.seek?;
+        let step = if let Some((segment, root)) = self.root_naming(seek.thread) {
+            SeekStep::Found {
+                thread: seek.thread,
+                segment,
+                root,
+            }
+        } else if let Some(target) = seek.target {
+            self.seek_older(target, seek.asked)
+        } else {
+            SeekStep::Wait
+        };
+        match step {
+            SeekStep::Found { .. } | SeekStep::Lost => self.seek = None,
+            SeekStep::Load(segment) => {
+                if let Some(seek) = self.seek.as_mut() {
+                    seek.asked = Some(segment);
+                }
+            }
+            SeekStep::Wait => {}
+        }
+        Some(step)
+    }
+
+    fn seek_older(&mut self, target: SegmentId, asked: Option<SegmentId>) -> SeekStep {
+        if self.held_segments().contains(&target) {
+            return SeekStep::Lost;
+        }
+        if !self.pending.is_empty() {
+            return SeekStep::Wait;
+        }
+        let Some(oldest) = self.oldest_held() else {
+            return SeekStep::Lost;
+        };
+        match self.older_than(oldest) {
+            Some(older) if Some(older) != asked => {
+                self.request_older(oldest);
+                SeekStep::Load(older)
+            }
+            _ => SeekStep::Lost,
+        }
+    }
+
+    /// The thread `document_id` could not open: a seek still waiting on its
+    /// probe ends.
+    pub(super) fn end_seek_of(&mut self, document_id: DocumentId) {
+        if self
+            .seek
+            .is_some_and(|seek| seek.thread == document_id && seek.target.is_none())
+        {
+            self.seek = None;
+        }
+    }
+
+    /// The held segment `meta` lists first: the oldest the list shows.
+    fn oldest_held(&self) -> Option<SegmentId> {
+        let held = self.held_segments();
+        segment_entries(&self.meta.doc)
+            .into_iter()
+            .map(|(id, _)| id)
+            .find(|id| held.contains(id))
     }
 
     /// The replies of the held thread document `document_id`, for the view.
@@ -538,6 +730,15 @@ fn thread_head(
 
 /// Every message of a segment whose `thread` field names a document, with
 /// that document, in list order.
+/// The segment and the root a thread document's header names.
+fn header_root(doc: &LoroDoc) -> (Option<SegmentId>, Option<MessageId>) {
+    let header = doc.get_map(HEADER);
+    let segment =
+        schema::string(&header, HEADER_SEGMENT).and_then(|s| SegmentId::parse_str(&s).ok());
+    let root = schema::string(&header, HEADER_ROOT).and_then(|s| MessageId::parse_str(&s).ok());
+    (segment, root)
+}
+
 fn named_threads(doc: &LoroDoc) -> Vec<(MessageId, DocumentId)> {
     let mut named = Vec::new();
     doc.get_list(MESSAGES).for_each(|item| {

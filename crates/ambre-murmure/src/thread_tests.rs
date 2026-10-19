@@ -8,13 +8,16 @@ use ambre_bus::{
     ActivityKind, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView,
     MurmureEvent, Timestamp,
 };
-use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId, Seq, UserId};
+use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
 use loro::json::{JsonOpContent, MapOp};
-use loro::{Container, LoroDoc, ValueOrContainer, VersionVector};
+use loro::{Container, ExportMode, LoroDoc, ValueOrContainer, VersionVector};
 
-use crate::schema::{MESSAGE_EDITED, MESSAGE_THREAD, MESSAGES};
+use crate::channel::push_segment_entry;
+use crate::schema::{self, DocumentKind, MESSAGE_EDITED, MESSAGE_THREAD, MESSAGES, SegmentState};
 use crate::session::next_peer;
-use crate::{ChannelState, ChannelType, MurmureError, Refusal, Sent, Signer, ThreadTarget};
+use crate::{
+    ChannelState, ChannelType, MurmureError, Refusal, SeekStep, Sent, Signer, ThreadTarget,
+};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
@@ -712,5 +715,137 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
     assert_eq!(
         state.thread_mentions(segment, Seq::ZERO, alice),
         Err(MurmureError::NotHeld(segment))
+    );
+}
+
+// --- MURMURE-545, MURMURE-546 and MURMURE-547 ---
+
+/// The bytes of an empty segment of `channel`.
+fn empty_segment(channel: ChannelId) -> Vec<u8> {
+    let doc = LoroDoc::new();
+    schema::write_header(&doc, DocumentKind::Segment, channel, NOW.0).expect("header");
+    doc.commit();
+    doc.export(ExportMode::Snapshot).expect("snapshot")
+}
+
+/// Bob's copy of the channel of `alice`, opened from a new active segment
+/// alone. `meta` lists `oldest` first when given, then an empty final
+/// segment, which is returned.
+fn far_copy(alice: &ChannelState, oldest: Option<SegmentId>) -> (ChannelState, SegmentId) {
+    let channel = alice.channel_id();
+    let (middle, active) = (SegmentId::new(), SegmentId::new());
+    let meta = LoroDoc::new();
+    schema::write_header(&meta, DocumentKind::Meta, channel, NOW.0).expect("header");
+    let entries = [
+        oldest.map(|id| (id, 10, SegmentState::Final)),
+        Some((middle, 20, SegmentState::Final)),
+        Some((active, 30, SegmentState::Active)),
+    ];
+    for (id, from, state) in entries.into_iter().flatten() {
+        push_segment_entry(&meta, id, Timestamp(from), state).expect("entry");
+    }
+    meta.commit();
+    let meta = meta.export(ExportMode::Snapshot).expect("snapshot");
+    let segments = HashMap::from([(active, empty_segment(channel))]);
+    let bob = ChannelState::open(channel, MetaId::new(), &meta, &segments)
+        .expect("open")
+        .identify();
+    (bob, middle)
+}
+
+/// Load the older segment `segment` from `bytes`, as the Sync worker
+/// delivers it.
+fn load(state: &mut ChannelState, segment: SegmentId, bytes: &[u8]) {
+    let _ = state
+        .apply_remote(segment.document_id(), bytes)
+        .expect("kept");
+    state.older_ready(segment.document_id()).expect("loaded");
+}
+
+/// A copy whose root lies two segments back. A probe reads the thread's
+/// header. The segments then load one at a time, never past the one it
+/// names, until the root is found. A held root is found at once.
+#[test]
+fn the_reply_on_a_far_copy_loads_down_to_its_root() {
+    let alice_user = UserId::new();
+    let mut alice = channel_with(&["root"], alice_user);
+    let root = message_at(&alice, 0).id;
+    let (thread, first, _) = threaded(&mut alice, root);
+    let old = alice.active_id();
+    assert_eq!(alice.seek_root(thread), None, "the root is held");
+    let found = SeekStep::Found {
+        thread,
+        segment: old,
+        root,
+    };
+    assert_eq!(alice.seek_step(), Some(found));
+
+    let (mut bob, middle) = far_copy(&alice, Some(old));
+    assert_eq!(bob.seek_step(), None, "no seek");
+    assert_eq!(bob.seek_root(thread), Some(thread));
+    assert_eq!(bob.seek_root(thread), None, "the probe is on its way");
+    assert!(bob.is_probe(thread));
+    assert_eq!(bob.seek_step(), Some(SeekStep::Wait));
+    bob.apply_signed(thread, Seq(1), &first, signer(&alice, thread, alice_user))
+        .expect("waits");
+    assert_eq!(bob.probe_ready(thread), Ok(()));
+    assert!(!bob.holds(thread), "the probe is dropped");
+    assert_eq!(bob.seek_step(), Some(SeekStep::Load(middle)));
+    assert_eq!(bob.seek_step(), Some(SeekStep::Wait), "one at a time");
+    load(&mut bob, middle, &empty_segment(alice.channel_id()));
+    assert_eq!(bob.seek_step(), Some(SeekStep::Load(old)));
+    let bytes = alice.snapshot(old.document_id()).expect("bytes");
+    load(&mut bob, old, &bytes);
+    assert_eq!(bob.seek_step(), Some(found));
+    assert_eq!(bob.seek_step(), None, "a found root ends the seek");
+    assert_eq!(bob.threads_to_open(), [thread], "the thread opens anew");
+}
+
+/// A header naming no listed segment, a segment that failed, a probe that
+/// failed and a segment with no such root each end the seek. Nothing older
+/// is asked for.
+#[test]
+fn a_seek_ends_on_what_it_cannot_follow() {
+    let alice_user = UserId::new();
+    let mut alice = channel_with(&["root"], alice_user);
+    let root = message_at(&alice, 0).id;
+    let (thread, first, _) = threaded(&mut alice, root);
+    let old = alice.active_id();
+    let probed = |bob: &mut ChannelState| {
+        assert_eq!(bob.seek_root(thread), Some(thread));
+        bob.apply_signed(thread, Seq(1), &first, signer(&alice, thread, alice_user))
+            .expect("waits");
+        bob.probe_ready(thread)
+    };
+
+    let (mut unlisted, _) = far_copy(&alice, None);
+    assert_eq!(
+        probed(&mut unlisted),
+        Err(MurmureError::ForeignRoot(thread))
+    );
+    assert_eq!(unlisted.seek_step(), None);
+
+    let (mut failed, middle) = far_copy(&alice, Some(old));
+    assert_eq!(probed(&mut failed), Ok(()));
+    assert_eq!(failed.seek_step(), Some(SeekStep::Load(middle)));
+    assert!(failed.cancel_older(middle.document_id()));
+    assert_eq!(failed.seek_step(), Some(SeekStep::Lost), "asked once");
+    assert_eq!(failed.seek_step(), None);
+
+    let (mut gone, _) = far_copy(&alice, Some(old));
+    assert_eq!(gone.seek_root(thread), Some(thread));
+    assert!(gone.cancel_older(thread));
+    assert_eq!(gone.seek_step(), None, "the probe failed");
+
+    let (mut empty, middle) = far_copy(&alice, Some(old));
+    assert_eq!(probed(&mut empty), Ok(()));
+    let _ = empty.seek_step();
+    load(&mut empty, middle, &empty_segment(alice.channel_id()));
+    assert_eq!(empty.seek_step(), Some(SeekStep::Load(old)));
+    load(&mut empty, old, &empty_segment(alice.channel_id()));
+    assert_eq!(empty.seek_step(), Some(SeekStep::Lost), "no such root");
+    assert_eq!(
+        empty.probe_ready(thread),
+        Err(MurmureError::NotHeld(thread))
     );
 }

@@ -87,6 +87,35 @@ fn a_channel_lost_while_open_leaves_the_sidebar_and_the_pane() {
     );
 }
 
+/// The root a reply on a copy sought opens its thread in the channel shown,
+/// and moves no pane once the user went elsewhere (`MURMURE-545`).
+#[wasm_bindgen_test]
+fn a_root_found_opens_its_thread_in_the_channel_shown() {
+    let (_owner, relay, direct) = shown_direct();
+    let root = MessageRef {
+        segment: SegmentId::new(),
+        message: MessageId::new(),
+    };
+    let found = |channel_id| UiEvent::Channel {
+        channel_id,
+        event: MurmureEvent::RootFound {
+            thread: ambre_core::DocumentId::new(),
+            segment: root.segment,
+            root: root.message,
+        },
+    };
+    assert!(relay.absorb(&found(ChannelId::new())).is_empty());
+    assert_eq!(relay.pane.get_untracked(), MurmurePane::channel(direct));
+    assert!(relay.absorb(&found(direct)).is_empty());
+    assert_eq!(
+        relay.pane.get_untracked(),
+        MurmurePane::Thread {
+            channel: direct,
+            root
+        }
+    );
+}
+
 /// The name an open channel learns is the one its header reads
 /// (`MURMURE-428`).
 #[wasm_bindgen_test]

@@ -737,6 +737,23 @@ impl MurmureRelay {
                 });
                 Vec::new()
             }
+            // The root a reply on a copy sought is loaded: its thread opens,
+            // unless the user went to another channel since (`MURMURE-545`).
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::RootFound { segment, root, .. },
+            } => {
+                if self.pane.get_untracked().shown_channel() == Some(*channel_id) {
+                    self.pane.set(MurmurePane::Thread {
+                        channel: *channel_id,
+                        root: MessageRef {
+                            segment: *segment,
+                            message: *root,
+                        },
+                    });
+                }
+                Vec::new()
+            }
             // A channel the user lost while it was open (`MURMURE-489`).
             UiEvent::Channel {
                 channel_id,

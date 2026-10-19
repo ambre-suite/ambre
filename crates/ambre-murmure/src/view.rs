@@ -427,7 +427,7 @@ impl MurmureView {
     fn root_of(&self, channel: ChannelId, thread: DocumentId) -> FromThread {
         let lists = self.lists.borrow();
         let Some(list) = lists.conversations.channel(channel) else {
-            return FromThread::Unloaded;
+            return FromThread::Unloaded(thread);
         };
         let rows = list.rows();
         rows.iter()
@@ -440,7 +440,7 @@ impl MurmureView {
                     message: root.id,
                 }))
             })
-            .unwrap_or(FromThread::Unloaded)
+            .unwrap_or(FromThread::Unloaded(thread))
     }
 
     /// The edit of the latest message of the member in the channel or the

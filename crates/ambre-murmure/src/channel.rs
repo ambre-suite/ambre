@@ -44,7 +44,7 @@ pub use closing::{Closed, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS};
 pub use finalizing::{FINALIZE_RETRY_MS, FinalSnapshot};
 pub use folding::{FOLD_DELAY_MS, FoldSnapshot, Settled};
 pub use relocating::{Relocated, Replay};
-pub use threading::{Replied, ThreadLinked, ThreadTarget};
+pub use threading::{Replied, SeekStep, ThreadLinked, ThreadTarget};
 #[cfg(test)]
 pub(crate) use {amending::folded_amendments, folding::header_fold};
 
@@ -238,6 +238,8 @@ pub struct ChannelState {
     threads: HashMap<MessageId, threading::Thread>,
     /// The thread documents whose bytes are still arriving.
     threads_pending: HashMap<DocumentId, threading::Pending>,
+    /// The root a reply on a copy looks for, down the older segments.
+    seek: Option<threading::Seek>,
     /// The band of the closing segment the channel opened without, until
     /// the caller takes it (`MURMURE-502`).
     closing_band: Option<MurmureEvent>,
@@ -411,6 +413,7 @@ impl ChannelState {
             locked: HashSet::new(),
             threads: HashMap::new(),
             threads_pending: HashMap::new(),
+            seek: None,
             closing_band: None,
             arrived: None,
         }
@@ -1613,6 +1616,7 @@ impl ChannelState {
         }
         if self.threads_pending.remove(&document_id).is_some() {
             self.sequences.remove(&document_id);
+            self.end_seek_of(document_id);
             return true;
         }
         let segment = SegmentId::from_document(document_id);

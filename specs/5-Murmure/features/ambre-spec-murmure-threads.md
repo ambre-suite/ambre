@@ -35,7 +35,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-485` | `POST` | An edit, a delete or a reaction on a reply MUST write in its thread document. | this spec section 3; `MURMURE-084`, `MURMURE-091` | `ambre_murmure::thread_tests::an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread` -- each change writes the thread, and a delete leaves the count; `::another_member_reacts_to_a_reply_and_never_edits_it` -- the check takes a reaction, and an edit is refused; `ambre_logic::channels::tests::a_change_on_a_reply_leaves_for_its_thread` -- each change leaves under the thread | none | verified |
 | `MURMURE-538` | `POST` | An edit of a reply also sent to the channel MUST write the same edit to its copy. | this spec section 3; `MURMURE-109`; `MURMURE-084` | `ambre_logic::channels::tests::a_copy_follows_the_edit_and_the_delete_of_its_reply` -- the edit leaves under the thread, then under the copy's segment, where the copy reads it; `ambre_murmure::thread_tests::a_copy_is_found_from_its_reply` -- the copy is found from its reply, and a reply sent alone has none | none | verified |
 | `MURMURE-539` | `POST` | A delete of a reply also sent to the channel MUST delete its copy too. | this spec section 3; `MURMURE-109`; `MURMURE-087` | `ambre_logic::channels::tests::a_copy_follows_the_edit_and_the_delete_of_its_reply` -- the copy reads deleted and empty, and a reaction stayed on the reply | none | verified |
-| `MURMURE-533` | `POST` | The reply action on a reply also sent to the channel MUST open the thread it was sent in, at its root. | this spec section 3; `MURMURE-109` | `ambre_murmure::view::tests::the_reply_on_a_copy_opens_its_thread` -- the copy under the pointer names the root its list holds; `ambre_murmure::commands::tests::the_reply_on_a_copy_opens_the_thread_it_came_from` -- that root's thread opens, and a copy whose root is not loaded offers no reply | none | verified |
+| `MURMURE-533` | `POST` | The reply action on a reply also sent to the channel MUST open the thread it was sent in, at its root. | this spec section 3; `MURMURE-109` | `ambre_murmure::view::tests::the_reply_on_a_copy_opens_its_thread` -- the copy under the pointer names the root its list holds; `ambre_murmure::commands::tests::the_reply_on_a_copy_opens_the_thread_it_came_from` -- that root's thread opens, never one of the copy's own | none | verified |
+| `MURMURE-545` | `POST` | The reply action on a copy whose root lies in no loaded segment MUST load the segments down to the root's, then open its thread at its root. | this spec section 3; `MURMURE-533`; `MURMURE-023` | `ambre_murmure::thread_tests::the_reply_on_a_far_copy_loads_down_to_its_root` -- a probe reads the header, the segments load one at a time, and the root is found; `ambre_logic::channels::tests::the_reply_on_a_far_copy_loads_its_root_then_names_it` -- the probe is closed, the segment opens, and the view is told the root; `ambre_murmure::commands::tests::the_reply_on_a_copy_opens_the_thread_it_came_from` -- such a copy asks Logic to seek its root; `ambre_murmure::tests::chrome_relay::a_root_found_opens_its_thread_in_the_channel_shown` -- the found root opens its thread in the channel still shown | none | verified |
+| `MURMURE-546` | `FRAME` | Seeking the root of a copy MUST NOT load a segment older than the one its thread's header names. | this spec section 3; `MURMURE-545` | `ambre_murmure::thread_tests::the_reply_on_a_far_copy_loads_down_to_its_root` -- the seek stops at the named segment, and a found root ends it; `::a_seek_ends_on_what_it_cannot_follow` -- a named segment without the root asks nothing older | none | verified |
+| `MURMURE-547` | `FAIL` | Given a thread whose header names no segment `meta` lists, or a segment on the way that fails, the seek MUST end with no thread opened. | this spec section 3; `MURMURE-545`; `MURMURE-221` | `ambre_murmure::thread_tests::a_seek_ends_on_what_it_cannot_follow` -- an unlisted segment, a failed segment, a failed probe and a missing root each end it; `ambre_logic::channels::tests::the_reply_on_a_far_copy_loads_its_root_then_names_it` -- a probe that fails asks nothing more | none | verified |
 
 ### 1.3 Follow a thread that is not open
 
@@ -62,7 +65,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, the identifier of its root, and when it
   changes (`ZK-015`, `SRV-162`).
-* **Verification.** 18 `verified`, 6 `unimplemented`. The engine tests hold the thread document,
+* **Verification.** 21 `verified`, 6 `unimplemented`. The engine tests hold the thread document,
   the link, the count, the changes on a reply, a locked root and the mentions. The Logic tests
   hold the waits, the race, the watch and the read cursor. The Sync tests hold the signal, the
   light thread and the number a read reaches. The view's host tests hold the read a thread shown sends.
@@ -97,6 +100,10 @@ Any other member opens the thread the root names (`MURMURE-106`).
 **A reply sent to the channel too.** Its copy reads a line saying so (`MURMURE-532`). Its reply
 action opens the thread of the loaded root that names its thread document, and no other
 (`MURMURE-533`).
+
+**A copy of a far root.** A probe reads the segment the thread's header names, then closes. The
+older segments load one at a time, so the list keeps no gap, down to that one (`MURMURE-545`,
+`MURMURE-546`, `MURMURE-547`). The cost is the thread fetched twice, and each segment between.
 
 **A copy follows its reply.** Its identifier is the reply's, the last bit turned. An edit of the
 reply reaches the copy (`MURMURE-538`), and so does a delete (`MURMURE-539`), as an amendment once
@@ -160,7 +167,7 @@ is `crates/ambre-logic/src/threads.rs`, and the Sync side is `thread_task` in
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A copy whose root is not loaded offers no reply.** Its action would load the root's segment
-  first. That waits for the `The reply on a copy of a far root` Story (`ambre-roadmap.md` E5).
+* **A seek that ends with no root shows nothing.** The reply then does nothing visible. Saying so
+  waits for the `A far root not reached` Story (`ambre-roadmap.md` E5).
 * **An open channel holds every thread its loaded segments name.** A root scrolled off screen
   keeps its thread held. Releasing it is not ruled.
