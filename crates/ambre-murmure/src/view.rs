@@ -27,10 +27,11 @@ use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::MurmurePane;
 use crate::commands::MessageTarget;
-use crate::composer::Composer;
+use crate::composer::{Composer, typing_line};
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 use crate::select::Selecting;
+use crate::watchers::TICK_MS;
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the
 /// host binds a cell to it while it is in the page.
@@ -167,6 +168,8 @@ pub struct MurmureView {
     drag: Option<bool>,
     /// The composer at the foot of the channel's region, `MURMURE-199`.
     composer: Composer,
+    /// The channel on screen this region last ticked, and when.
+    ticked: Option<(ChannelId, f64)>,
     dirty: bool,
 }
 
@@ -206,6 +209,7 @@ impl MurmureView {
             selecting: Selecting::default(),
             drag: None,
             composer: Composer::default(),
+            ticked: None,
             dirty: true,
         }
     }
@@ -607,6 +611,7 @@ impl MurmureView {
             // went down (`MURMURE-423`).
             (self.reads.act_on)(self.target_at(x, y, true));
         }
+        self.tick();
         let dirty = std::mem::take(&mut self.dirty);
         RepaintPlan {
             content: if dirty {
@@ -634,7 +639,7 @@ impl MurmureView {
         let (size, palette) = (self.size, self.theme.palette());
         if let Some((channel_id, text)) = self.composer.flush(font_cx, writes_in, size, palette) {
             // The view stamps the time of the message (`MURMURE-199`).
-            let now = Timestamp((self.reads.now_ms)().max(0.0) as u64);
+            let now = self.now();
             self.send(LogicCommand::Channel {
                 channel_id,
                 command: MurmureCommand::SendMessage {
@@ -703,9 +708,23 @@ impl MurmureView {
         let palette = self.theme.palette();
         let shown_before = self.jump.is_some();
         self.jump = higher_up.then(|| paint_jump(surface, font_cx, text_cache, list_size, palette));
-        let caret = self
-            .composer
-            .paint(surface, font_cx, text_cache, writes_in, self.size, palette);
+        // Who types in the channel, by name (`MURMURE-517`).
+        let names: Vec<String> = writes_in
+            .map(|channel| lists.conversations.typing(channel))
+            .unwrap_or_default()
+            .iter()
+            .map(|user| (self.reads.name_of)(*user).unwrap_or_else(|| "Someone".to_owned()))
+            .collect();
+        let typing = typing_line(&names);
+        let caret = self.composer.paint(
+            surface,
+            font_cx,
+            text_cache,
+            writes_in,
+            typing.as_deref(),
+            self.size,
+            palette,
+        );
         if let Some((x, y, tall)) = caret {
             // The input method opens where the caret is (`MURMURE-430`).
             self.reads
@@ -775,6 +794,47 @@ impl MurmureView {
             && let Err(e) = to_logic.try_send(command)
         {
             tracing::warn!("Murmure view command dropped, Logic channel full ({e:?})");
+        }
+    }
+
+    /// The page's clock, as the engine dates a sample or a message.
+    fn now(&self) -> Timestamp {
+        Timestamp((self.reads.now_ms)().max(0.0) as u64)
+    }
+
+    /// Tick the channel on screen once per tick period: the engine sends
+    /// the user's watching sample and drops the samples past their expiry
+    /// (`MURMURE-516`). A channel new on screen ticks at once.
+    fn tick(&mut self) {
+        let Some(channel_id) = self.composer_channel() else {
+            self.ticked = None;
+            return;
+        };
+        let now = (self.reads.now_ms)();
+        let due = self
+            .ticked
+            .is_none_or(|(ticked, at)| ticked != channel_id || now - at >= TICK_MS as f64);
+        if due {
+            self.ticked = Some((channel_id, now));
+            let now = self.now();
+            self.send(LogicCommand::Channel {
+                channel_id,
+                command: MurmureCommand::Tick { now },
+            });
+        }
+    }
+
+    /// A key changed the draft: the engine refreshes the user's typing
+    /// indicator, once per typing period (`MURMURE-515`).
+    fn typed(&mut self) {
+        if self.composer.take_typed()
+            && let Some(channel_id) = self.composer_channel()
+        {
+            let now = self.now();
+            self.send(LogicCommand::Channel {
+                channel_id,
+                command: MurmureCommand::Typing { now },
+            });
         }
     }
 
@@ -877,6 +937,7 @@ impl MurmureView {
     /// Down still move the list.
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
         if let Some(consumed) = self.composer_input(ev) {
+            self.typed();
             self.dirty = true;
             return consumed;
         }
@@ -1027,12 +1088,13 @@ impl MurmureView {
         if let Some(channel) = self.composer_channel()
             && self.composer.focused()
         {
-            self.dirty |= cut;
-            return if cut {
-                self.composer.cut(channel)
-            } else {
-                self.composer.selected(channel)
-            };
+            if !cut {
+                return self.composer.selected(channel);
+            }
+            let text = self.composer.cut(channel);
+            self.typed();
+            self.dirty = true;
+            return text;
         }
         self.copy().filter(|_| !cut)
     }
@@ -1043,6 +1105,7 @@ impl MurmureView {
             && !text.is_empty()
         {
             self.composer.text(channel, text);
+            self.typed();
             self.dirty = true;
         }
     }
@@ -1057,7 +1120,7 @@ mod tests {
 
     use ambre_bus::conduit::local;
     use ambre_bus::{ChannelId, MessageView, MurmureEvent, Unreadable};
-    use ambre_canvas::theme::{SPACE_2, SPACE_8};
+    use ambre_canvas::theme::{FONT_UI, SPACE_2, SPACE_4, SPACE_8};
     use ambre_draw::kinetic::LONG_PRESS_MS;
     use ambre_draw::testing::RecordingSurface;
 
@@ -2409,5 +2472,142 @@ mod tests {
         };
         page.view.handle_input(&press);
         assert!(!page.view.composer().focused(), "the list has it back");
+    }
+
+    /// The typing samples and the ticks sent since the last call.
+    fn samples(page: &Page) -> (usize, usize) {
+        let mut sent = (0, 0);
+        while let Ok(command) = page.commands.try_recv() {
+            match command {
+                LogicCommand::Channel {
+                    command: MurmureCommand::Typing { .. },
+                    ..
+                } => sent.0 += 1,
+                LogicCommand::Channel {
+                    command: MurmureCommand::Tick { .. },
+                    ..
+                } => sent.1 += 1,
+                _ => {}
+            }
+        }
+        sent
+    }
+
+    /// A key that changes the draft refreshes the typing indicator
+    /// (`MURMURE-515`). A move of the caret or a selection sends nothing
+    /// (`MURMURE-518`).
+    #[test]
+    fn a_key_that_changes_the_draft_sends_a_typing_sample() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        samples(&page);
+        type_text(&mut page, "ab");
+        assert_eq!(samples(&page).0, 1, "a typed key");
+        key(&mut page, "ArrowLeft", false, 0.0);
+        shift_key(&mut page, "ArrowLeft");
+        key(&mut page, "a", true, 0.0);
+        key(&mut page, "End", false, 0.0);
+        assert_eq!(
+            samples(&page).0,
+            0,
+            "the caret and the selection type nothing"
+        );
+        key(&mut page, "Backspace", false, 0.0);
+        assert_eq!(samples(&page).0, 1, "a deleted character");
+        shift_key(&mut page, "Enter");
+        assert_eq!(samples(&page).0, 1, "a line break");
+        page.view.paste("pasted");
+        assert_eq!(samples(&page).0, 1, "a paste");
+        key(&mut page, "a", true, 0.0);
+        frame_with_fonts(&mut page.view);
+        samples(&page);
+        assert!(page.view.clipboard(false).is_some());
+        assert_eq!(samples(&page).0, 0, "a copy changes nothing");
+        assert!(page.view.clipboard(true).is_some());
+        assert_eq!(samples(&page).0, 1, "a cut");
+    }
+
+    /// The channel on screen ticks once per tick period, and a channel new
+    /// on screen at once. The thread's region never ticks, nor a pane with
+    /// no channel (`MURMURE-516`).
+    #[test]
+    fn the_channel_on_screen_ticks_once_per_period() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        assert_eq!(samples(&page).1, 1, "the first paint ticks");
+        page.clock.set(TICK_MS as f64 - 1.0);
+        frame(&mut page.view);
+        assert_eq!(samples(&page).1, 0, "inside the period");
+        page.clock.set(TICK_MS as f64);
+        frame(&mut page.view);
+        assert_eq!(samples(&page).1, 1, "one period later");
+
+        let other = ChannelId::new();
+        page.pane.set(MurmurePane::Channel {
+            channel: other,
+            at: None,
+        });
+        frame(&mut page.view);
+        assert_eq!(samples(&page).1, 1, "a channel new on screen ticks at once");
+        let mut thread_view = page.view.region(300.0, 400.0);
+        page.clock.set(10.0 * TICK_MS as f64);
+        frame(&mut thread_view);
+        assert_eq!(samples(&page).1, 0, "the thread's region ticks nothing");
+        page.pane.set(MurmurePane::ChannelList);
+        frame(&mut page.view);
+        assert_eq!(samples(&page).1, 0, "no channel, no tick");
+    }
+
+    /// The glyph runs painted in the strip above the field.
+    fn strip_runs(page: &mut Page) -> Vec<usize> {
+        page.view.update();
+        page.view.plan_repaint(0.0, false);
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let mut surface = RecordingSurface::new();
+        page.view
+            .paint_content(&mut surface, &mut font_cx, &mut cache, None);
+        let top = f64::from(400.0 - page.view.composer().band());
+        let field = top + f64::from(FONT_UI + SPACE_4);
+        surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                ambre_draw::testing::DrawOp::Glyphs {
+                    glyph_count,
+                    transform,
+                    ..
+                } => {
+                    let y = transform.translation().y;
+                    (y >= top && y < field).then_some(*glyph_count)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The band names the members typing in the channel while their
+    /// indicator lasts, and the line leaves when they stop (`MURMURE-517`).
+    #[test]
+    fn the_band_names_who_types() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        let band = page.view.composer().band();
+        assert!(strip_runs(&mut page).is_empty(), "nobody types");
+        let (ada, bob) = (UserId::new(), UserId::new());
+        let watchers = |typing: Vec<UserId>| MurmureEvent::Watchers {
+            watching: vec![ada, bob],
+            typing,
+        };
+        send(&page, channel, watchers(vec![ada]));
+        assert_eq!(strip_runs(&mut page), vec!["Ada is typing".len()]);
+        assert_eq!(page.view.composer().band(), band, "the list did not move");
+        send(&page, channel, watchers(vec![ada, bob]));
+        assert_eq!(strip_runs(&mut page), vec!["Ada and Ada are typing".len()]);
+        send(&page, channel, watchers(vec![]));
+        assert!(strip_runs(&mut page).is_empty(), "the indicator expired");
+        let elsewhere = ChannelId::new();
+        send(&page, elsewhere, watchers(vec![ada]));
+        assert!(strip_runs(&mut page).is_empty(), "another channel's typing");
     }
 }

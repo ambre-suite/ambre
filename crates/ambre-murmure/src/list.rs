@@ -487,6 +487,9 @@ pub struct Conversations {
     /// The first unread message of each channel, as the Logic thread last
     /// named it (`MURMURE-499`). Absent while its count is unknown.
     first_unread: HashMap<ChannelId, Option<MessageId>>,
+    /// The other members typing in each channel, as the Logic thread last
+    /// named them. A channel where nobody types is absent.
+    typing: HashMap<ChannelId, Vec<UserId>>,
 }
 
 impl Conversations {
@@ -531,9 +534,18 @@ impl Conversations {
             MurmureEvent::FirstUnread { message } => {
                 self.first_unread.insert(channel_id, message) != Some(message)
             }
+            MurmureEvent::Watchers { typing, .. } if typing.is_empty() => {
+                self.typing.remove(&channel_id).is_some()
+            }
+            MurmureEvent::Watchers { typing, .. } => {
+                let changed = self.typing.get(&channel_id) != Some(&typing);
+                self.typing.insert(channel_id, typing);
+                changed
+            }
             MurmureEvent::Left => {
                 self.channels.remove(&channel_id);
                 self.first_unread.remove(&channel_id);
+                self.typing.remove(&channel_id);
                 self.threads
                     .retain(|(channel, _), _| *channel != channel_id);
                 true
@@ -564,6 +576,12 @@ impl Conversations {
     /// read, `None` while the Logic thread named none yet.
     pub fn first_unread(&self, channel: ChannelId) -> Option<Option<MessageId>> {
         self.first_unread.get(&channel).copied()
+    }
+
+    /// The other members typing in `channel`, in the order the Logic thread
+    /// gave, so the line never reorders between two draws.
+    pub fn typing(&self, channel: ChannelId) -> &[UserId] {
+        self.typing.get(&channel).map_or(&[], Vec::as_slice)
     }
 }
 

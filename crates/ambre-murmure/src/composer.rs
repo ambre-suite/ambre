@@ -9,11 +9,14 @@
 //! The editor applies its edits at paint, where the font context lives. So
 //! Enter only asks to send, and the next paint reads the draft once every key
 //! typed before it has landed.
+//!
+//! A strip above the field names the members typing in the channel. It is
+//! always there, so the list never moves when someone starts or stops.
 
 use std::collections::HashMap;
 
 use ambre_bus::ChannelId;
-use ambre_canvas::theme::{FONT_BODY, SPACE_2, SPACE_4, SPACE_8};
+use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle};
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
@@ -27,6 +30,20 @@ const MIN_LINE_PX: f32 = FONT_BODY + SPACE_4;
 
 /// The family label of the composer's text, the one of the message bodies.
 const FAMILY: &str = "Sans";
+
+/// The height of the strip that names who types, above the field.
+const TYPING_PX: f32 = FONT_UI + SPACE_4;
+
+/// The line that names the members typing, `None` when nobody types. Past
+/// two names it counts no one, so the line stays one short line.
+pub fn typing_line(names: &[String]) -> Option<String> {
+    match names {
+        [] => None,
+        [one] => Some(format!("{one} is typing")),
+        [one, two] => Some(format!("{one} and {two} are typing")),
+        _ => Some("Several people are typing".to_owned()),
+    }
+}
 
 /// The style of a draft: the face and the size of a message body.
 fn body_style(color: Color) -> TextEditorStyle {
@@ -52,6 +69,8 @@ pub struct Composer {
     composing: bool,
     /// Enter asked to send the draft of this channel.
     send: Option<ChannelId>,
+    /// A key changed a draft since the view last asked.
+    typed: bool,
     /// A press in the field holds a drag.
     dragging: bool,
     /// The height of the band at the last paint, `0` with no channel.
@@ -88,6 +107,12 @@ impl Composer {
         self.drafts.get(&channel)?.selected_text()
     }
 
+    /// Whether a key changed a draft since the last call. A move of the
+    /// caret or a selection changes none.
+    pub fn take_typed(&mut self) -> bool {
+        std::mem::take(&mut self.typed)
+    }
+
     /// The editor of the draft of `channel`, opened empty on first use.
     fn editor(&mut self, channel: ChannelId) -> &mut TextEditor {
         self.focused = true;
@@ -99,12 +124,14 @@ impl Composer {
     /// Text the pipe committed: a typed key, a paste, a word an input
     /// method chose.
     pub fn text(&mut self, channel: ChannelId, text: &str) {
+        self.typed |= !text.is_empty();
         self.editor(channel).insert(text);
     }
 
     /// The preview of an input method, or its final word once `end`.
     pub fn compose(&mut self, channel: ChannelId, text: &str, end: bool) {
         self.composing = !end && !text.is_empty();
+        self.typed |= !text.is_empty();
         let editor = self.editor(channel);
         if end {
             editor.commit_compose(text);
@@ -118,6 +145,7 @@ impl Composer {
         let editor = self.drafts.get_mut(&channel)?;
         let text = editor.selected_text()?;
         editor.delete_selection();
+        self.typed = true;
         Some(text)
     }
 
@@ -163,6 +191,10 @@ impl Composer {
             "End" => EditIntent::LineEnd { select: shift },
             _ => return false,
         };
+        self.typed |= matches!(
+            intent,
+            EditIntent::Newline | EditIntent::Backspace | EditIntent::Delete
+        );
         self.editor(channel).push(intent);
         true
     }
@@ -235,29 +267,43 @@ impl Composer {
             None => 0.0,
         };
         let most = (size.1 / 2.0 - 2.0 * SPACE_4).max(MIN_LINE_PX);
-        self.band = tall.clamp(MIN_LINE_PX, most) + 2.0 * SPACE_4;
+        self.band = TYPING_PX + tall.clamp(MIN_LINE_PX, most) + 2.0 * SPACE_4;
         sent
     }
 
     /// Paint the band of `channel` at the foot of a region of `size`, over
-    /// any row that reached it. Answers the caret, its top-left and its
-    /// height, while the composer holds the focus.
+    /// any row that reached it. The line of who types sits above the field.
+    /// Answers the caret, its top-left and its height, while the composer
+    /// holds the focus.
+    #[allow(clippy::too_many_arguments)]
     pub fn paint<S: DrawSurface>(
         &mut self,
         surface: &mut S,
         font_cx: &mut FontContext,
         cache: &mut TextCache,
         channel: Option<ChannelId>,
+        typing: Option<&str>,
         size: (f32, f32),
         palette: &Palette,
     ) -> Option<(f32, f32, f32)> {
         let channel = channel?;
         let (width, height) = size;
-        let top = height - self.band;
         let rect = |x0: f32, y0: f32, x1: f32, y1: f32| {
             Rect::new(x0.into(), y0.into(), x1.into(), y1.into())
         };
-        surface.fill_rect(rect(0.0, top, width, height), palette.content_bg);
+        let strip = height - self.band;
+        surface.fill_rect(rect(0.0, strip, width, height), palette.content_bg);
+        if let Some(line) = typing {
+            let shaped = shape(font_cx, cache, line, FONT_UI, width - 2.0 * SPACE_8, false);
+            draw(
+                surface,
+                shaped,
+                SPACE_8,
+                strip + SPACE_2,
+                palette.header_text,
+            );
+        }
+        let top = strip + TYPING_PX;
         let field = rect(SPACE_4, top + SPACE_2, width - SPACE_4, height - SPACE_2);
         surface.fill_rect(field, palette.header_bg);
         let edge = if self.focused {
@@ -289,5 +335,26 @@ impl Composer {
             (origin.y + caret.y0) as f32,
             caret.height() as f32,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One or two names read in full, more read as a count of no one, and
+    /// nobody typing shows no line (`MURMURE-517`).
+    #[test]
+    fn the_typing_line_names_one_or_two_and_counts_no_more() {
+        let names = |list: &[&str]| list.iter().map(|n| (*n).to_owned()).collect::<Vec<_>>();
+        assert_eq!(typing_line(&[]), None);
+        assert_eq!(
+            typing_line(&names(&["Ada"])).as_deref(),
+            Some("Ada is typing")
+        );
+        let two = typing_line(&names(&["Ada", "Bob"]));
+        assert_eq!(two.as_deref(), Some("Ada and Bob are typing"));
+        let three = typing_line(&names(&["Ada", "Bob", "Cy"]));
+        assert_eq!(three.as_deref(), Some("Several people are typing"));
     }
 }

@@ -1,6 +1,6 @@
 # AMBRE -- FEATURE: MURMURE TYPING AND PRESENCE
 **Type:** Vertical (feature)
-**Implementation:** partial -- both indicators are built; the setting that turns them off is not
+**Implementation:** partial -- typing is drawn; presence leaves undrawn, and the setting is not built
 
 > A member sees who is in the channel and who is typing. Both indicators are on by default, and
 > both reach the members of the channel alone.
@@ -42,11 +42,26 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-296` | `POST` | Turning the indicators off MUST stop the client from sending typing and presence samples. | this spec section 3; `SETTINGS-004` | not built | unbuilt -- lands with the `Presence settings` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-297` | `FRAME` | Turning the indicators off MUST NOT hide the indicators of other members. | this spec section 3 | not built | unbuilt -- lands with the `Presence settings` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.5 Type in the composer
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-515` | `POST` | A key that changes the draft MUST refresh the typing indicator of the draft's channel. | this spec section 3; `MURMURE-124` | `ambre_murmure::view::tests::a_key_that_changes_the_draft_sends_a_typing_sample` -- a typed key, a deletion, a line break, a paste and a cut each send a typing sample | none | verified |
+| `MURMURE-518` | `FRAME` | A move of the caret or a selection in the composer MUST NOT send a typing sample. | this spec section 3 | `ambre_murmure::view::tests::a_key_that_changes_the_draft_sends_a_typing_sample` -- the arrows, `Ctrl+A`, End and a copy send nothing | none | verified |
+
+### 1.6 The indicators on screen
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-516` | `INV` | The channel on screen MUST be ticked once per tick period of `ambre-spec-budgets.md section 8`. | this spec section 3; `MURMURE-126` | `ambre_murmure::view::tests::the_channel_on_screen_ticks_once_per_period` -- one tick per period, one at once for a channel new on screen, none from the thread's region or with no channel | none | verified |
+| `MURMURE-517` | `OBS` | The channel's region MUST name the members typing in it while their indicator lasts. | this spec section 3; `features/ambre-spec-murmure-composer.md` | `ambre_murmure::view::tests::the_band_names_who_types` -- the strip above the field names who types, and empties once they stop; `ambre_murmure::composer::tests::the_typing_line_names_one_or_two_and_counts_no_more` -- one or two names, then a count of no one | none | verified |
+
 * **Budget.** the presence write of `ambre-spec-budgets.md section 3`, per heartbeat.
 * **Boundary.** both indicators are sealed ephemerals (`ZK-005`). The relay learns when a
   member is active, which it knows from the connection anyway.
-* **Verification.** 7 `verified`, 2 `unimplemented`. The watcher tests of `crates/ambre-murmure`
-  and the channel tests of `crates/ambre-logic` hold both indicators. The setting is not built.
+* **Verification.** 11 `verified`, 2 `unimplemented`. The watcher tests of `crates/ambre-murmure`
+  and the channel tests of `crates/ambre-logic` hold both indicators. The view tests hold the tick,
+  the typing sample and the line. The setting is not built.
 
 ---
 
@@ -66,13 +81,20 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 tag and a state byte, and names no channel (`MURMURE-127`).
 
 **The clock.** The view ticks an open channel, and each tick drops the samples past their
-expiry. Every period is a row of `ambre-spec-budgets.md section 8`.
+expiry. Every period is a row of `ambre-spec-budgets.md section 8`. The channel's region ticks the
+channel on screen from its frame loop (`MURMURE-516`). The thread's region ticks nothing, since
+its channel already ticks.
+
+**On screen.** A key that changes the draft sends a typing sample (`MURMURE-515`), a caret move
+none (`MURMURE-518`). A strip that never leaves names who types (`MURMURE-517`).
 
 **The setting that turns them off** lives in the `presence` map of the user settings. With it off,
 the client sends no typing and no presence sample, on any device (`MURMURE-296`). The relay then
 learns nothing of when the member is active. The member still sees the others (`MURMURE-297`).
 
 **Code.** `crates/ambre-murmure/src/watchers.rs`, and the channel commands of the Logic thread.
+The tick and the typing sample leave from `crates/ambre-murmure/src/view.rs`, and the line is
+drawn by `crates/ambre-murmure/src/composer.rs`.
 
 ---
 
@@ -96,6 +118,9 @@ learns nothing of when the member is active. The member still sees the others (`
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No surface is built.** A keystroke in the composer sends no typing sample, and the list draws
-  no indicator. Both wait for the `Typing seen in a channel` Story (`ambre-roadmap.md` E5).
+* **Presence is not drawn.** The samples leave and expire, and the members panel shows nobody as
+  present. That waits for the `Presence in the members panel` Story (`ambre-roadmap.md` E5).
+* **A hidden tab ticks nothing.** The browser stops the frame loop of a hidden tab, so its member
+  shows absent once the presence expiry passes. A timer would tick it, as the
+  `Presence from a hidden tab` Story (`ambre-roadmap.md` E5) plans.
 * **The setting is not built.** Turning the indicators off waits on the user settings.
