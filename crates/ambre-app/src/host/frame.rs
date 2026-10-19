@@ -292,6 +292,11 @@ impl FrameHost {
     /// Forward an input event to the view. Returns `true` if the caller should
     /// `preventDefault()` on the originating DOM event.
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+        // A cell beside the content canvas that holds the text pipe takes
+        // what the pipe hears (`CANVAS-076`).
+        if let Some(consumed) = self.cells.route(ev) {
+            return consumed;
+        }
         // The top-level view runs first: it settles embed focus and decides
         // whether this event belongs to a focused child ("Input focus").
         let consumed = self.view.handle_input(ev);
@@ -363,13 +368,19 @@ impl FrameHost {
     /// waits for the next frame to drain the payload, `Nothing` lets the
     /// browser default proceed.
     pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
-        self.view.clipboard_write(cut)
+        match self.cells.typist() {
+            Some(cell) => cell.borrow_mut().clipboard_write(cut),
+            None => self.view.clipboard_write(cut),
+        }
     }
 
     /// Service a `paste` event with the shared clipboard transport blob.
     /// `own_copy` signals the clipboard still holds this tab's ownership token.
     pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
-        self.view.paste_clipboard(blob, own_copy);
+        match self.cells.typist() {
+            Some(cell) => cell.borrow_mut().paste_clipboard(blob, own_copy),
+            None => self.view.paste_clipboard(blob, own_copy),
+        }
     }
 
     /// Text dropped on the canvas at a point, in canvas pixels. Only Prose
@@ -466,6 +477,7 @@ impl FrameHost {
         // The canvases beside this one, each under its own plan (`CANVAS-070`).
         // A view of one canvas names none, and costs no lookup.
         self.cells.sync(&self.view);
+        self.cells.settle(&mut self.view);
         self.cells.render(raf_timestamp);
 
         let t_drain = self.perf.now();

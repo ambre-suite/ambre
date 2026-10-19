@@ -19,6 +19,10 @@
 //!
 //! An edit loads a message of the member into the composer, and puts the
 //! draft and its history aside until the edit ends (`MURMURE-203`).
+//!
+//! The thread's region has a composer of its own, whose drafts are kept per
+//! thread (`MURMURE-525`). Enter there sends a reply to the root
+//! (`MURMURE-523`).
 
 use std::collections::HashMap;
 
@@ -158,6 +162,37 @@ impl History {
     }
 }
 
+/// Whose draft a composer holds: a channel's, or the thread's under a root
+/// of the channel. A thread's draft is not its channel's (`MURMURE-525`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DraftOf {
+    Channel(ChannelId),
+    Thread(ChannelId, MessageId),
+}
+
+impl DraftOf {
+    /// The channel the draft writes in.
+    pub fn channel(self) -> ChannelId {
+        match self {
+            Self::Channel(channel) | Self::Thread(channel, _) => channel,
+        }
+    }
+
+    /// The draft whose composer loads `edit`: its thread's for a reply.
+    pub fn of_edit(edit: &PendingEdit) -> Self {
+        match edit.at {
+            MessageAt::Segment(_) => Self::Channel(edit.channel),
+            MessageAt::Thread(root) => Self::Thread(edit.channel, root),
+        }
+    }
+}
+
+impl From<ChannelId> for DraftOf {
+    fn from(channel: ChannelId) -> Self {
+        Self::Channel(channel)
+    }
+}
+
 /// A message the composer of a channel holds for an edit.
 struct Editing {
     at: MessageAt,
@@ -173,11 +208,9 @@ struct Editing {
 /// What the composer hands the view to send, once a paint read it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Sent {
-    /// A new message in the channel (`MURMURE-199`).
-    Message {
-        channel: ChannelId,
-        draft: MessageDraft,
-    },
+    /// A new message in the channel (`MURMURE-199`), or a reply to the root
+    /// of the thread (`MURMURE-523`).
+    Message { to: DraftOf, draft: MessageDraft },
     /// An edit of a message of the member (`MURMURE-203`).
     Edit {
         channel: ChannelId,
@@ -191,12 +224,23 @@ impl Sent {
     /// The command to the Logic thread, stamped `now` by the view.
     pub fn command(self, now: Timestamp) -> LogicCommand {
         match self {
-            Self::Message { channel, draft } => LogicCommand::Channel {
-                channel_id: channel,
-                command: MurmureCommand::SendMessage {
-                    draft,
-                    now,
-                    confirmed: false,
+            Self::Message { to, draft } => LogicCommand::Channel {
+                channel_id: to.channel(),
+                command: match to {
+                    DraftOf::Channel(_) => MurmureCommand::SendMessage {
+                        draft,
+                        now,
+                        confirmed: false,
+                    },
+                    // The reply stays in its thread: no copy is asked for
+                    // the channel.
+                    DraftOf::Thread(_, root) => MurmureCommand::Reply {
+                        root,
+                        draft,
+                        also_in_channel: false,
+                        now,
+                        confirmed: false,
+                    },
                 },
             },
             Self::Edit {
@@ -252,21 +296,23 @@ fn kept_mentions(old: &str, new: &str, mentions: &[Mention]) -> Vec<Mention> {
         .collect()
 }
 
-/// The composer of the channel region, and the draft of every channel.
+/// The composer of a region, and the draft of every channel or thread it
+/// showed.
 #[derive(Default)]
 pub struct Composer {
-    /// The draft of each channel the member wrote in. A sent draft leaves it.
-    drafts: HashMap<ChannelId, TextEditor>,
+    /// The draft of each channel or thread the member wrote in. A sent draft
+    /// leaves it.
+    drafts: HashMap<DraftOf, TextEditor>,
     /// The history of each draft, which leaves with it.
-    histories: HashMap<ChannelId, History>,
-    /// The edit each channel's composer holds, in place of its draft.
-    editing: HashMap<ChannelId, Editing>,
+    histories: HashMap<DraftOf, History>,
+    /// The edit each composer holds, in place of its draft.
+    editing: HashMap<DraftOf, Editing>,
     /// The keys reach the composer, not the list.
     focused: bool,
     /// An input method composes: its keys are its own.
     composing: bool,
-    /// Enter asked to send the draft of this channel.
-    send: Option<ChannelId>,
+    /// Enter asked to send this draft.
+    send: Option<DraftOf>,
     /// A key changed a draft since the view last asked.
     typed: bool,
     /// A press in the field holds a drag.
@@ -294,29 +340,30 @@ impl Composer {
         self.dragging = false;
     }
 
-    /// The draft of `channel` as its editor holds it, `None` when the member
-    /// wrote nothing there. A key typed since the last paint is not in it.
-    pub fn draft(&self, channel: ChannelId) -> Option<String> {
-        self.drafts.get(&channel).map(TextEditor::text)
+    /// The draft `of` a channel or a thread as its editor holds it, `None`
+    /// when the member wrote nothing there. A key typed since the last paint
+    /// is not in it.
+    pub fn draft(&self, of: impl Into<DraftOf>) -> Option<String> {
+        self.drafts.get(&of.into()).map(TextEditor::text)
     }
 
-    /// Whether the composer of `channel` holds nothing: no edit, no text, and
-    /// no key or undo waiting for the next paint.
-    pub fn blank(&self, channel: ChannelId) -> bool {
+    /// Whether the composer `of` a channel or a thread holds nothing: no
+    /// edit, no text, and no key or undo waiting for the next paint.
+    pub fn blank(&self, of: DraftOf) -> bool {
         let idle = self
             .drafts
-            .get(&channel)
+            .get(&of)
             .is_none_or(|editor| editor.text().is_empty() && !editor.queued());
         let asked = self
             .histories
-            .get(&channel)
+            .get(&of)
             .is_some_and(|history| !history.asked.is_empty());
-        idle && !asked && !self.composing && !self.editing(channel)
+        idle && !asked && !self.composing && !self.editing(of)
     }
 
-    /// The text selected in the draft of `channel`.
-    pub fn selected(&self, channel: ChannelId) -> Option<String> {
-        self.drafts.get(&channel)?.selected_text()
+    /// The text selected in the draft `of` a channel or a thread.
+    pub fn selected(&self, of: DraftOf) -> Option<String> {
+        self.drafts.get(&of)?.selected_text()
     }
 
     /// Whether a key changed a draft since the last call. A move of the
@@ -325,40 +372,41 @@ impl Composer {
         std::mem::take(&mut self.typed)
     }
 
-    /// The editor of the draft of `channel`, opened empty on first use.
-    fn editor(&mut self, channel: ChannelId) -> &mut TextEditor {
+    /// The editor of the draft `of`, opened empty on first use.
+    fn editor(&mut self, of: DraftOf) -> &mut TextEditor {
         self.focused = true;
         self.drafts
-            .entry(channel)
+            .entry(of)
             .or_insert_with(|| TextEditor::new("", body_style(Color::BLACK)))
     }
 
-    /// The history of the draft of `channel`, opened empty on first use.
-    fn history(&mut self, channel: ChannelId) -> &mut History {
-        self.histories.entry(channel).or_default()
+    /// The history of the draft `of`, opened empty on first use.
+    fn history(&mut self, of: DraftOf) -> &mut History {
+        self.histories.entry(of).or_default()
     }
 
-    /// Load the message of `edit` into the composer of its channel, with the
-    /// caret at its end. The draft there and its history wait for the edit
-    /// to end. A second edit replaces the first and keeps the same draft.
+    /// Load the message of `edit` into the composer of its channel, or of
+    /// its thread for a reply, with the caret at its end. The draft there and
+    /// its history wait for the edit to end. A second edit replaces the first
+    /// and keeps the same draft.
     pub fn start_edit(&mut self, edit: PendingEdit) {
-        let channel = edit.channel;
-        let kept = match self.editing.remove(&channel) {
+        let of = DraftOf::of_edit(&edit);
+        let kept = match self.editing.remove(&of) {
             Some(open) => open.kept,
             None => self
                 .drafts
-                .remove(&channel)
-                .map(|editor| (editor, self.histories.remove(&channel).unwrap_or_default())),
+                .remove(&of)
+                .map(|editor| (editor, self.histories.remove(&of).unwrap_or_default())),
         };
         let editor = TextEditor::new(&edit.text, body_style(Color::BLACK));
-        self.drafts.insert(channel, editor);
+        self.drafts.insert(of, editor);
         let history = History {
             last: edit.text.clone(),
             ..History::default()
         };
-        self.histories.insert(channel, history);
+        self.histories.insert(of, history);
         self.editing.insert(
-            channel,
+            of,
             Editing {
                 at: edit.at,
                 message: edit.message,
@@ -370,44 +418,44 @@ impl Composer {
         self.focused = true;
     }
 
-    /// Whether the composer of `channel` holds an edit.
-    pub fn editing(&self, channel: ChannelId) -> bool {
-        self.editing.contains_key(&channel)
+    /// Whether the composer `of` a channel or a thread holds an edit.
+    pub fn editing(&self, of: impl Into<DraftOf>) -> bool {
+        self.editing.contains_key(&of.into())
     }
 
-    /// End the edit of `channel`: the draft put aside comes back with its
-    /// history, and the edited text goes (`MURMURE-204`).
-    fn end_edit(&mut self, channel: ChannelId) {
-        let Some(open) = self.editing.remove(&channel) else {
+    /// End the edit `of`: the draft put aside comes back with its history,
+    /// and the edited text goes (`MURMURE-204`).
+    fn end_edit(&mut self, of: DraftOf) {
+        let Some(open) = self.editing.remove(&of) else {
             return;
         };
-        self.drafts.remove(&channel);
-        self.histories.remove(&channel);
+        self.drafts.remove(&of);
+        self.histories.remove(&of);
         if let Some((editor, history)) = open.kept {
-            self.drafts.insert(channel, editor);
-            self.histories.insert(channel, history);
+            self.drafts.insert(of, editor);
+            self.histories.insert(of, history);
         }
     }
 
     /// Text the pipe committed: a typed key, a paste, a word an input
     /// method chose. A paste is a step of its own, and a space ends a word's.
-    pub fn text(&mut self, channel: ChannelId, text: &str) {
+    pub fn text(&mut self, of: DraftOf, text: &str) {
         self.typed |= !text.is_empty();
-        let history = self.history(channel);
+        let history = self.history(of);
         if text.chars().count() > 1 {
             history.apart();
         }
         history.edit();
         history.seal_after |= text.ends_with(char::is_whitespace);
-        self.editor(channel).insert(text);
+        self.editor(of).insert(text);
     }
 
     /// The preview of an input method, or its final word once `end`.
-    pub fn compose(&mut self, channel: ChannelId, text: &str, end: bool) {
+    pub fn compose(&mut self, of: DraftOf, text: &str, end: bool) {
         self.composing = !end && !text.is_empty();
         self.typed |= !text.is_empty();
-        self.history(channel).edit();
-        let editor = self.editor(channel);
+        self.history(of).edit();
+        let editor = self.editor(of);
         if end {
             editor.commit_compose(text);
         } else {
@@ -415,13 +463,13 @@ impl Composer {
         }
     }
 
-    /// Cut the selection of the draft of `channel`, and answer its text.
-    pub fn cut(&mut self, channel: ChannelId) -> Option<String> {
-        let editor = self.drafts.get_mut(&channel)?;
+    /// Cut the selection of the draft `of`, and answer its text.
+    pub fn cut(&mut self, of: DraftOf) -> Option<String> {
+        let editor = self.drafts.get_mut(&of)?;
         let text = editor.selected_text()?;
         editor.delete_selection();
         self.typed = true;
-        self.history(channel).apart();
+        self.history(of).apart();
         Some(text)
     }
 
@@ -430,14 +478,7 @@ impl Composer {
     /// `Ctrl+Shift+Z` or `Ctrl+Y` redoes (`MURMURE-433`). Escape cancels an
     /// edit (`MURMURE-204`), and otherwise gives the keys back to the list.
     /// Answers whether the composer took the key.
-    pub fn key(
-        &mut self,
-        channel: ChannelId,
-        key: &str,
-        shift: bool,
-        ctrl: bool,
-        alt: bool,
-    ) -> bool {
+    pub fn key(&mut self, of: DraftOf, key: &str, shift: bool, ctrl: bool, alt: bool) -> bool {
         if self.composing {
             return false;
         }
@@ -445,11 +486,11 @@ impl Composer {
         let intent = match key {
             "Enter" if shift => EditIntent::Newline,
             "Enter" => {
-                self.send = Some(channel);
+                self.send = Some(of);
                 return true;
             }
-            "Escape" if self.editing(channel) => {
-                self.end_edit(channel);
+            "Escape" if self.editing(of) => {
+                self.end_edit(of);
                 return true;
             }
             "Escape" => {
@@ -459,8 +500,8 @@ impl Composer {
             "z" | "Z" | "y" | "Y" if ctrl => {
                 let redo = shift || key.eq_ignore_ascii_case("y");
                 self.typed = true;
-                self.editor(channel);
-                self.history(channel).asked.push(redo);
+                self.editor(of);
+                self.history(of).asked.push(redo);
                 return true;
             }
             "a" | "A" if ctrl => EditIntent::SelectAll,
@@ -486,33 +527,33 @@ impl Composer {
         );
         self.typed |= edits;
         // A caret move ends the step, and a line break is one of its own.
-        let history = self.history(channel);
+        let history = self.history(of);
         match intent {
             EditIntent::Newline => history.apart(),
             EditIntent::Backspace | EditIntent::Delete => history.edit(),
             _ => history.seal(),
         }
-        self.editor(channel).push(intent);
+        self.editor(of).push(intent);
         true
     }
 
     /// A press at `(x, y)` in the band: the caret goes there, and a drag
     /// from it selects.
-    pub fn press(&mut self, channel: ChannelId, x: f32, y: f32) {
+    pub fn press(&mut self, of: DraftOf, x: f32, y: f32) {
         let (dx, dy) = self.origin;
-        self.history(channel).seal();
-        self.editor(channel).point_down(x - dx, y - dy);
+        self.history(of).seal();
+        self.editor(of).point_down(x - dx, y - dy);
         self.dragging = true;
     }
 
     /// A pointer moved: a drag from the field extends the selection.
     /// Answers whether the composer held a drag.
-    pub fn drag_to(&mut self, channel: ChannelId, x: f32, y: f32) -> bool {
+    pub fn drag_to(&mut self, of: DraftOf, x: f32, y: f32) -> bool {
         if !self.dragging {
             return false;
         }
         let (dx, dy) = self.origin;
-        self.editor(channel).point_drag(x - dx, y - dy);
+        self.editor(of).point_drag(x - dx, y - dy);
         true
     }
 
@@ -522,21 +563,22 @@ impl Composer {
     }
 
     /// A double click in the field selects the word under it.
-    pub fn word_at(&mut self, channel: ChannelId, x: f32, y: f32) {
+    pub fn word_at(&mut self, of: DraftOf, x: f32, y: f32) {
         let (dx, dy) = self.origin;
-        self.history(channel).seal();
-        self.editor(channel).word_at(x - dx, y - dy);
+        self.history(of).seal();
+        self.editor(of).word_at(x - dx, y - dy);
     }
 
-    /// Apply the edits since the last paint, and size the band for the draft
-    /// of `channel` in a region of `size`. Answers what Enter sent. An empty
+    /// Apply the edits since the last paint, and size the band for the
+    /// draft `shown` in a region of `size`. Answers what Enter sent. An empty
     /// draft sends nothing (`MURMURE-201`). Only the sent draft leaves, so
-    /// another channel keeps its own (`MURMURE-202`). An edit sends an edit
-    /// of its message, and one that changed nothing just ends (`MURMURE-203`).
+    /// another channel or thread keeps its own (`MURMURE-202`, `MURMURE-524`).
+    /// An edit sends an edit of its message, and one that changed nothing
+    /// just ends (`MURMURE-203`).
     pub fn flush(
         &mut self,
         font_cx: &mut FontContext,
-        channel: Option<ChannelId>,
+        shown: Option<DraftOf>,
         size: (f32, f32),
         palette: &Palette,
     ) -> Option<Sent> {
@@ -553,7 +595,7 @@ impl Composer {
                 if !text.trim().is_empty() {
                     if text != open.original {
                         sent = Some(Sent::Edit {
-                            channel: asked,
+                            channel: asked.channel(),
                             at: open.at,
                             message: open.message,
                             draft: MessageDraft {
@@ -570,7 +612,7 @@ impl Composer {
                 // message sent (`MURMURE-434`).
                 self.histories.remove(&asked);
                 sent = Some(Sent::Message {
-                    channel: asked,
+                    to: asked,
                     draft: MessageDraft {
                         text,
                         mentions: Vec::new(),
@@ -578,17 +620,17 @@ impl Composer {
                 });
             }
         }
-        let Some(channel) = channel else {
+        let Some(shown) = shown else {
             self.band = 0.0;
             return sent;
         };
-        let tall = match self.drafts.get_mut(&channel) {
+        let tall = match self.drafts.get_mut(&shown) {
             Some(editor) => {
                 editor.set_style(style);
                 editor.flush(font_cx, wrap, 1.0);
                 // Record the edits that landed, then walk the steps asked
                 // after them. A step puts the caret at the end of the draft.
-                let history = self.histories.entry(channel).or_default();
+                let history = self.histories.entry(shown).or_default();
                 history.record(&editor.text());
                 let mut walked = false;
                 for redo in std::mem::take(&mut history.asked) {
@@ -609,22 +651,22 @@ impl Composer {
         sent
     }
 
-    /// Paint the band of `channel` at the foot of a region of `size`, over
-    /// any row that reached it. The line of who types sits above the field.
-    /// Answers the caret, its top-left and its height, while the composer
-    /// holds the focus.
+    /// Paint the band of the draft `shown` at the foot of a region of
+    /// `size`, over any row that reached it. The line of who types sits above
+    /// the field. Answers the caret, its top-left and its height, while the
+    /// composer holds the focus.
     #[allow(clippy::too_many_arguments)]
     pub fn paint<S: DrawSurface>(
         &mut self,
         surface: &mut S,
         font_cx: &mut FontContext,
         cache: &mut TextCache,
-        channel: Option<ChannelId>,
+        shown: Option<DraftOf>,
         typing: Option<&str>,
         size: (f32, f32),
         palette: &Palette,
     ) -> Option<(f32, f32, f32)> {
-        let channel = channel?;
+        let shown = shown?;
         let (width, height) = size;
         let rect = |x0: f32, y0: f32, x1: f32, y1: f32| {
             Rect::new(x0.into(), y0.into(), x1.into(), y1.into())
@@ -652,7 +694,7 @@ impl Composer {
         surface.stroke_rect(field, edge, 1.0);
         let inner = (top + SPACE_4, height - SPACE_4);
         self.origin = (SPACE_8, inner.0);
-        let editor = self.drafts.get_mut(&channel);
+        let editor = self.drafts.get_mut(&shown);
         let empty = editor.as_ref().is_none_or(|e| e.text().is_empty()) && !self.composing;
         if empty {
             let hint = shape(font_cx, cache, COMPOSER_HINT, FONT_BODY, width, false);

@@ -27,7 +27,7 @@ use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::MurmurePane;
 use crate::commands::{EDIT, MessageAction, MessageTarget, PendingEdit, message_action};
-use crate::composer::{Composer, EDITING_LINE, typing_line};
+use crate::composer::{Composer, DraftOf, EDITING_LINE, typing_line};
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 use crate::select::Selecting;
@@ -56,8 +56,9 @@ pub struct PageReads {
     /// (`MURMURE-424`).
     pub act_on: Rc<dyn Fn(Option<MessageTarget>)>,
     /// Take the edit the member asked for from the actions of a message,
-    /// which the channel's composer loads (`MURMURE-203`).
-    pub take_edit: Rc<dyn Fn() -> Option<PendingEdit>>,
+    /// which the channel's composer loads (`MURMURE-203`). Given `true`, it
+    /// takes a reply alone, for the thread's composer (`MURMURE-526`).
+    pub take_edit: Rc<dyn Fn(bool) -> Option<PendingEdit>>,
     /// The signed-in member, whose last message the up arrow edits
     /// (`MURMURE-178`).
     pub me: Rc<dyn Fn() -> Option<UserId>>,
@@ -172,7 +173,8 @@ pub struct MurmureView {
     selecting: Selecting,
     /// A mouse button holds a drag: `true` once it moved.
     drag: Option<bool>,
-    /// The composer at the foot of the channel's region, `MURMURE-199`.
+    /// The composer at the foot of the region, `MURMURE-199`. The thread's
+    /// region holds one of its own (`MURMURE-523`).
     composer: Composer,
     /// The channel on screen this region last ticked, and when.
     ticked: Option<(ChannelId, f64)>,
@@ -241,12 +243,21 @@ impl MurmureView {
         (self.size.1 - self.composer.band()).max(0.0)
     }
 
-    /// The channel whose composer this region shows, `None` in the thread's
+    /// The channel on screen in the channel's region, `None` in the thread's
     /// region or with no channel on screen.
     fn composer_channel(&self) -> Option<ChannelId> {
         let pane = (self.reads.pane)();
         pane.shown_channel()
             .filter(|_| self.region == Region::Channel)
+    }
+
+    /// The draft the composer of this region shows: the channel's, or the
+    /// thread's in the panel. `None` with nothing on screen.
+    fn writes_in(&self) -> Option<DraftOf> {
+        match self.list_of((self.reads.pane)())? {
+            ListOf::Channel(channel) => Some(DraftOf::Channel(channel)),
+            ListOf::Thread(channel, root) => Some(DraftOf::Thread(channel, root)),
+        }
     }
 
     /// Whether the height `y` falls in the composer's band.
@@ -383,21 +394,29 @@ impl MurmureView {
         }
     }
 
-    /// The edit of the latest message of the member in `channel` that the
-    /// edit action takes, `None` with none. Another member's message, a
-    /// notice and a deleted message are passed over (`MURMURE-179`).
-    fn last_own_edit(&self, channel: ChannelId) -> Option<PendingEdit> {
+    /// The edit of the latest message of the member in the channel or the
+    /// thread `of`, that the edit action takes, `None` with none. Another
+    /// member's message, a notice and a deleted message are passed over
+    /// (`MURMURE-179`). In a thread, the latest reply (`MURMURE-527`).
+    fn last_own_edit(&self, of: DraftOf) -> Option<PendingEdit> {
         let me = (self.reads.me)()?;
         let lists = self.lists.borrow();
-        let list = lists.conversations.channel(channel)?;
+        let talks = &lists.conversations;
+        let list = match of {
+            DraftOf::Channel(channel) => talks.channel(channel)?,
+            DraftOf::Thread(channel, root) => talks.thread(channel, root)?,
+        };
         let rows = list.rows();
         rows.iter()
             .rev()
             .filter_map(|row| row.message())
             .filter(|message| message.author == me)
             .find_map(|message| {
-                let at = MessageAt::Segment(list.segment_of(message.id)?);
-                let target = self.target_of(channel, at, message);
+                let at = match of {
+                    DraftOf::Channel(_) => MessageAt::Segment(list.segment_of(message.id)?),
+                    DraftOf::Thread(_, root) => MessageAt::Thread(root),
+                };
+                let target = self.target_of(of.channel(), at, message);
                 match message_action(EDIT, &target, Some(me)) {
                     Some(MessageAction::Edit(edit)) => Some(edit),
                     _ => None,
@@ -595,8 +614,8 @@ impl MurmureView {
                 None
             }
             Release::Tap { x, y } if self.in_composer(y.into()) => {
-                if let Some(channel) = self.composer_channel() {
-                    self.composer.press(channel, x, y);
+                if let Some(of) = self.writes_in() {
+                    self.composer.press(of, x, y);
                     self.composer.release();
                     self.reads.pipe.focus();
                     self.dirty = true;
@@ -627,6 +646,15 @@ impl MurmureView {
     /// its moves past the canvas edge, where the list scrolls under it.
     pub fn drags_text(&self) -> bool {
         self.drag.is_some()
+    }
+
+    /// Another region of the page took the keys: they go back to the list,
+    /// and the caret leaves the composer.
+    pub fn leave_composer(&mut self) {
+        if self.composer.focused() {
+            self.composer.blur();
+            self.dirty = true;
+        }
     }
 
     /// The text a copy puts on the clipboard: each selected message under
@@ -680,10 +708,9 @@ impl MurmureView {
         }
         self.tick();
         // An edit asked from the actions of a message loads the channel's
-        // composer, which takes the keys (`MURMURE-203`).
-        if self.region == Region::Channel
-            && let Some(edit) = (self.reads.take_edit)()
-        {
+        // composer, or the thread's for a reply, which takes the keys
+        // (`MURMURE-203`, `MURMURE-526`).
+        if let Some(edit) = (self.reads.take_edit)(self.region == Region::Thread) {
             self.composer.start_edit(edit);
             self.reads.pipe.focus();
             self.dirty = true;
@@ -711,7 +738,7 @@ impl MurmureView {
         _strip: Option<Rect>,
     ) {
         let pane = (self.reads.pane)();
-        let writes_in = self.composer_channel();
+        let writes_in = self.writes_in();
         let (size, palette) = (self.size, self.theme.palette());
         if let Some(sent) = self.composer.flush(font_cx, writes_in, size, palette) {
             // The view stamps the time of the message or the edit
@@ -775,8 +802,9 @@ impl MurmureView {
         let palette = self.theme.palette();
         let shown_before = self.jump.is_some();
         self.jump = higher_up.then(|| paint_jump(surface, font_cx, text_cache, list_size, palette));
-        // Who types in the channel, by name (`MURMURE-517`).
-        let names: Vec<String> = writes_in
+        // Who types in the channel, by name (`MURMURE-517`). The thread's
+        // strip names nobody: typing is told per channel.
+        let names: Vec<String> = on_screen
             .map(|channel| lists.conversations.typing(channel))
             .unwrap_or_default()
             .iter()
@@ -784,7 +812,7 @@ impl MurmureView {
             .collect();
         // An edit names itself in the strip, and how to leave it.
         let typing = match writes_in {
-            Some(channel) if self.composer.editing(channel) => Some(EDITING_LINE.to_owned()),
+            Some(of) if self.composer.editing(of) => Some(EDITING_LINE.to_owned()),
             _ => typing_line(&names),
         };
         let caret = self.composer.paint(
@@ -1113,7 +1141,7 @@ impl MurmureView {
     /// The share of `ev` the composer takes, and whether its default is
     /// prevented. `None` leaves it to the list.
     fn composer_input(&mut self, ev: &InputEvent) -> Option<bool> {
-        let channel = self.composer_channel()?;
+        let channel = self.writes_in()?;
         match *ev {
             InputEvent::Text { ref text } => self.composer.text(channel, text),
             InputEvent::CompositionUpdate { ref text } => {
@@ -1148,8 +1176,9 @@ impl MurmureView {
                 alt,
                 meta: false,
             } if self.composer.focused() => {
-                // Up in an empty composer edits the member's latest message
-                // (`MURMURE-178`). With none, it moves the caret as ever.
+                // Up in an empty composer edits the member's latest message,
+                // or reply in a thread (`MURMURE-178`, `MURMURE-527`). With
+                // none, it moves the caret as ever.
                 let bare = !(shift || ctrl || alt);
                 if key == "ArrowUp"
                     && bare
@@ -1172,7 +1201,7 @@ impl MurmureView {
     /// selection, while it holds the focus, else the list's (`MURMURE-426`).
     /// A cut takes the text out of the draft. The list's text stays.
     pub fn clipboard(&mut self, cut: bool) -> Option<String> {
-        if let Some(channel) = self.composer_channel()
+        if let Some(channel) = self.writes_in()
             && self.composer.focused()
         {
             if !cut {
@@ -1186,9 +1215,9 @@ impl MurmureView {
         self.copy().filter(|_| !cut)
     }
 
-    /// A paste lands in the composer of the channel on screen, as text.
+    /// A paste lands in the composer of the region, as text.
     pub fn paste(&mut self, text: &str) {
-        if let Some(channel) = self.composer_channel()
+        if let Some(channel) = self.writes_in()
             && !text.is_empty()
         {
             self.composer.text(channel, text);
@@ -1242,7 +1271,7 @@ mod tests {
         let said = Rc::clone(&said_log);
         let acted_log = Rc::new(RefCell::new(Vec::new()));
         let acted = Rc::clone(&acted_log);
-        let editing = Rc::new(RefCell::new(None));
+        let editing = Rc::new(RefCell::new(None::<PendingEdit>));
         let asked = Rc::clone(&editing);
         let me = Rc::new(Cell::new(None));
         let signed_in = Rc::clone(&me);
@@ -1253,7 +1282,15 @@ mod tests {
             now_ms: Rc::new(move || now.get()),
             announce: Rc::new(move |text: &str| said.borrow_mut().push(text.to_owned())),
             act_on: Rc::new(move |target| acted.borrow_mut().push(target)),
-            take_edit: Rc::new(move || asked.borrow_mut().take()),
+            take_edit: Rc::new(move |in_thread| {
+                let mut asked = asked.borrow_mut();
+                let reply = matches!(asked.as_ref()?.at, MessageAt::Thread(_));
+                if reply == in_thread {
+                    asked.take()
+                } else {
+                    None
+                }
+            }),
             me: Rc::new(move || signed_in.get()),
             pipe: TextInput::detached(),
         };
@@ -2574,10 +2611,10 @@ mod tests {
         }
     }
 
-    /// The draft of `channel` once the keys before it landed.
-    fn painted(page: &mut Page, channel: ChannelId) -> Option<String> {
+    /// The draft of a channel or a thread once the keys before it landed.
+    fn painted(page: &mut Page, of: impl Into<DraftOf>) -> Option<String> {
         frame_with_fonts(&mut page.view);
-        page.view.composer().draft(channel)
+        page.view.composer().draft(of)
     }
 
     /// `Ctrl+Z` takes back a word at a time, and `Ctrl+Shift+Z` or `Ctrl+Y`
@@ -3075,5 +3112,182 @@ mod tests {
         let elsewhere = ChannelId::new();
         send(&page, elsewhere, watchers(vec![ada]));
         assert!(strip_runs(&mut page).is_empty(), "another channel's typing");
+    }
+
+    /// A thread under a root of `channel`, shown in the panel. Its region
+    /// stands in `page.view`, and the channel's region, which drains the
+    /// queue, comes back beside it. The thread holds a reply of the member,
+    /// then one of another member. Answers the root and the own reply.
+    fn threaded(channel: ChannelId) -> (Page, MurmureView, MessageId, MessageId) {
+        let mut page = page();
+        let (me, bob) = (UserId::new(), UserId::new());
+        page.me.set(Some(me));
+        let root = message(me, 0, "root");
+        let segment = SegmentId::new();
+        let messages = vec![root.clone()];
+        send(&page, channel, MurmureEvent::Messages { segment, messages });
+        let own = message(me, 1, "mine");
+        let ev = MurmureEvent::ThreadMessages {
+            root: root.id,
+            thread: DocumentId::new(),
+            messages: vec![own.clone(), message(bob, 2, "theirs")],
+        };
+        send(&page, channel, ev);
+        let at = MessageRef {
+            segment,
+            message: root.id,
+        };
+        page.pane.set(MurmurePane::Thread { channel, root: at });
+        let thread = page.view.region(300.0, 400.0);
+        let mut channel_view = std::mem::replace(&mut page.view, thread);
+        frame_with_fonts(&mut channel_view);
+        frame_with_fonts(&mut page.view);
+        (page, channel_view, root.id, own.id)
+    }
+
+    /// The replies sent since the last call, as root, text and time. A
+    /// message sent to the channel fails the test.
+    fn replies(page: &Page) -> Vec<(MessageId, String, u64)> {
+        let mut replies = Vec::new();
+        while let Ok(command) = page.commands.try_recv() {
+            let LogicCommand::Channel { command, .. } = command else {
+                continue;
+            };
+            match command {
+                MurmureCommand::Reply {
+                    root,
+                    draft,
+                    also_in_channel,
+                    now,
+                    confirmed,
+                } => {
+                    assert!(!also_in_channel, "the reply stays in its thread");
+                    assert!(!confirmed, "a plain reply asks no confirmation");
+                    replies.push((root, draft.text, now.0));
+                }
+                MurmureCommand::SendMessage { .. } => panic!("a message in the channel"),
+                _ => {}
+            }
+        }
+        replies
+    }
+
+    /// The thread's region shows a composer of its own. Enter there sends
+    /// the draft as a reply to the root, at the clock's time, and posts
+    /// nothing in the channel (`MURMURE-523`).
+    #[test]
+    fn enter_in_a_thread_sends_a_reply_to_its_root() {
+        let channel = ChannelId::new();
+        let (mut page, _channel_view, root, _) = threaded(channel);
+        assert!(
+            page.view.composer().band() > 0.0,
+            "the thread has a composer"
+        );
+        assert!(press_composer(&mut page));
+        type_slowly(&mut page, "ok");
+        assert!(key(&mut page, "Enter", false, 1_234.0));
+        frame_with_fonts(&mut page.view);
+        assert_eq!(replies(&page), [(root, "ok".to_owned(), 1_234)]);
+        let of = DraftOf::Thread(channel, root);
+        assert_eq!(page.view.composer().draft(of), None, "the draft is gone");
+    }
+
+    /// Each thread keeps a draft of its own, apart from its channel's. A
+    /// reply sent leaves the channel's draft and another thread's
+    /// (`MURMURE-524`, `MURMURE-525`).
+    #[test]
+    fn a_thread_keeps_its_own_draft_apart_from_the_channels() {
+        let channel = ChannelId::new();
+        let (mut page, mut channel_view, root, own) = threaded(channel);
+        std::mem::swap(&mut page.view, &mut channel_view);
+        press_composer(&mut page);
+        type_slowly(&mut page, "in channel");
+        std::mem::swap(&mut page.view, &mut channel_view);
+        press_composer(&mut page);
+        type_slowly(&mut page, "in thread");
+        let of = DraftOf::Thread(channel, root);
+        assert_eq!(painted(&mut page, of).as_deref(), Some("in thread"));
+        assert_eq!(
+            page.view.composer().draft(channel),
+            None,
+            "not the channel's"
+        );
+
+        // Another thread of the channel opens on a draft of its own.
+        let pane = page.pane.get();
+        let MurmurePane::Thread { root: at, .. } = pane else {
+            panic!("a thread is shown");
+        };
+        let other = MessageRef { message: own, ..at };
+        page.pane.set(MurmurePane::Thread {
+            channel,
+            root: other,
+        });
+        let elsewhere = DraftOf::Thread(channel, own);
+        assert_eq!(painted(&mut page, elsewhere), None, "an empty draft");
+        type_slowly(&mut page, "aside");
+        page.pane.set(pane);
+        assert_eq!(painted(&mut page, of).as_deref(), Some("in thread"));
+
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(replies(&page).len(), 1);
+        let kept = page.view.composer().draft(elsewhere);
+        assert_eq!(kept.as_deref(), Some("aside"), "the other thread's stays");
+        frame_with_fonts(&mut channel_view);
+        let draft = channel_view.composer().draft(channel);
+        assert_eq!(draft.as_deref(), Some("in channel"), "the channel's stays");
+    }
+
+    /// The edit action on a reply of the member loads it into the thread's
+    /// composer, never the channel's. Enter sends an edit of the reply in
+    /// its thread, and no new message (`MURMURE-526`).
+    #[test]
+    fn the_edit_of_a_reply_loads_the_threads_composer() {
+        let channel = ChannelId::new();
+        let (mut page, mut channel_view, root, own) = threaded(channel);
+        *page.editing.borrow_mut() = Some(PendingEdit {
+            channel,
+            at: MessageAt::Thread(root),
+            message: own,
+            text: "mine".to_owned(),
+            mentions: Vec::new(),
+        });
+        frame_with_fonts(&mut channel_view);
+        assert!(
+            !channel_view.composer().editing(channel),
+            "the channel leaves it"
+        );
+        assert!(page.editing.borrow().is_some(), "still asked");
+        let of = DraftOf::Thread(channel, root);
+        assert_eq!(painted(&mut page, of).as_deref(), Some("mine"));
+        assert!(page.view.composer().editing(of));
+        assert!(page.view.composer().focused(), "the thread takes the keys");
+
+        type_text(&mut page, "!");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        let (sent_edits, messages) = edits(&page);
+        let [(at, message, draft)] = &sent_edits[..] else {
+            panic!("one edit, got {sent_edits:?}");
+        };
+        assert_eq!((*at, *message), (MessageAt::Thread(root), own));
+        assert_eq!((draft.text.as_str(), messages), ("mine!", 0));
+    }
+
+    /// Up in the thread's empty composer opens the member's latest reply for
+    /// edit, past another member's. The channel's composer stays as it was
+    /// (`MURMURE-527`).
+    #[test]
+    fn up_in_a_threads_empty_composer_edits_the_last_own_reply() {
+        let channel = ChannelId::new();
+        let (mut page, channel_view, root, _) = threaded(channel);
+        press_composer(&mut page);
+        frame_with_fonts(&mut page.view);
+        assert!(key(&mut page, "ArrowUp", false, 0.0));
+        let of = DraftOf::Thread(channel, root);
+        assert_eq!(painted(&mut page, of).as_deref(), Some("mine"));
+        assert!(page.view.composer().editing(of));
+        assert!(!channel_view.composer().editing(channel));
     }
 }

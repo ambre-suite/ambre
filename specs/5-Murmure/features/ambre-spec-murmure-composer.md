@@ -20,6 +20,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-193` | `INV` | The composer MUST be an instance of the Prose editor, restricted to the Murmure mark set. | this spec section 3; `features/ambre-spec-prose-engine.md` | not built | unbuilt -- lands with the `Marks in a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-194` | `INV` | The Murmure mark set MUST be bold, italic, inline code, code block, link, list, quote, mention and custom emoji. | this spec section 3; `MURMURE-008` | not built | unbuilt -- lands with the `Marks in a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-195` | `INV` | A draft MUST be kept per channel while the user moves between channels. | this spec section 3 | `ambre_murmure::view::tests::each_channel_keeps_its_own_draft` -- a draft typed in one channel is there when the user comes back from another | none | verified |
+| `MURMURE-525` | `INV` | A draft MUST be kept per thread, apart from the draft of its channel. | this spec section 3; `MURMURE-195` | `ambre_murmure::view::tests::a_thread_keeps_its_own_draft_apart_from_the_channels` -- the thread's draft is not the channel's, and another thread opens on an empty one | none | verified |
 | `MURMURE-196` | `OBS` | The composer MUST show no permanent formatting toolbar. | this spec section 3 | `ambre_murmure::view::tests::the_band_holds_a_field_and_no_toolbar` -- the band paints its fill, the field and its outline, and no other shape, under a list cut to the band's top | none | verified |
 | `MURMURE-210` | `INV` | A draft MUST survive a reload of the page. | this spec section 3; `ambre-spec-launcher.md` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-211` | `INV` | A draft MUST NOT leave the device before it is sent. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -44,14 +45,17 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-201` | `FAIL` | Given an empty draft, Enter MUST send nothing. | this spec section 3 | `ambre_murmure::view::tests::an_empty_or_blank_draft_sends_nothing` -- an empty draft, and one of white space alone, send nothing and stay | none | verified |
 | `MURMURE-212` | `POST` | Sending a message MUST delete its stored draft. | this spec section 3 | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-202` | `FRAME` | Sending MUST NOT clear the draft of another channel. | this spec section 3 | `ambre_murmure::view::tests::each_channel_keeps_its_own_draft` -- a send in one channel leaves the draft of the other as it was, unsent | none | verified |
+| `MURMURE-523` | `POST` | Enter in the composer of a thread MUST send the draft as a reply to the thread's root. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::view::tests::enter_in_a_thread_sends_a_reply_to_its_root` -- the thread shows a composer, and Enter sends a reply to the root at the page's clock and posts nothing in the channel | none | verified |
+| `MURMURE-524` | `FRAME` | Sending a reply MUST NOT clear the draft of the channel. | this spec section 3; `MURMURE-202` | `ambre_murmure::view::tests::a_thread_keeps_its_own_draft_apart_from_the_channels` -- a reply sent leaves the channel's draft as it was | none | verified |
 
 ### 1.4 Edit a message
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-203` | `POST` | Editing MUST load the message into the composer and send an edit, never a new message. | this spec section 3; `MURMURE-084` | `ambre_murmure::view::tests::an_edit_loads_the_message_and_sends_an_edit_never_a_new_one` -- the message loads, Enter sends an edit of it and no message, and a blank or unchanged edit sends nothing; `ambre_murmure::composer::tests::an_edit_keeps_the_mentions_it_leaves_whole` -- the mentions the edit leaves whole stay; `ambre_murmure::commands::tests::only_the_author_edits_a_message_and_only_in_the_channel` -- only the author is offered the action; `ambre_murmure::tests::chrome_relay::an_edit_is_handed_to_the_region_and_sends_nothing` -- the action hands the message to the region once | none | verified |
+| `MURMURE-203` | `POST` | Editing MUST load the message into the composer and send an edit, never a new message. | this spec section 3; `MURMURE-084` | `ambre_murmure::view::tests::an_edit_loads_the_message_and_sends_an_edit_never_a_new_one` -- the message loads, Enter sends an edit of it and no message, and a blank or unchanged edit sends nothing; `ambre_murmure::composer::tests::an_edit_keeps_the_mentions_it_leaves_whole` -- the mentions the edit leaves whole stay; `ambre_murmure::commands::tests::only_the_author_edits_a_message_or_a_reply` -- only the author is offered the action; `ambre_murmure::tests::chrome_relay::an_edit_is_handed_to_the_region_and_sends_nothing` -- the action hands the message to the region once | none | verified |
 | `MURMURE-204` | `FRAME` | Cancelling an edit MUST NOT change the message. | this spec section 3 | `ambre_murmure::view::tests::escape_cancels_an_edit_and_leaves_the_message` -- Escape ends the edit and sends nothing | none | verified |
 | `MURMURE-259` | `FRAME` | Editing a message MUST NOT drop the draft of the channel: the draft MUST return once the edit is sent or cancelled. | this spec section 3; `MURMURE-195` | `ambre_murmure::view::tests::an_edit_loads_the_message_and_sends_an_edit_never_a_new_one` -- the draft returns once the edit is sent; `ambre_murmure::view::tests::escape_cancels_an_edit_and_leaves_the_message` -- and once it is cancelled | none | verified |
+| `MURMURE-526` | `POST` | The edit action on an own reply MUST load it into the composer of its thread. | this spec section 3; `MURMURE-203` | `ambre_murmure::view::tests::the_edit_of_a_reply_loads_the_threads_composer` -- the channel leaves the edit, the thread's composer loads it and takes the keys, and Enter sends an edit of the reply; `ambre_murmure::commands::tests::only_the_author_edits_a_message_or_a_reply` -- a reply offers the action to its author; `ambre_murmure::tests::chrome_relay::an_edit_is_handed_to_the_region_and_sends_nothing` -- a reply goes to the thread's region alone | none | verified |
 
 ### 1.5 Lose access to a channel, or sign out
 
@@ -71,7 +75,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 12 `verified`, 13 `unimplemented`. The host tier drives the view with the
+* **Verification.** 16 `verified`, 13 `unimplemented`. The host tier drives the view with the
   events the page sends: a press, a tap, text, keys, a paste. The marks and the stored draft are
   not built.
 
@@ -130,6 +134,11 @@ backticks, `>` and `-` at the start of a line. A link is written `[text](address
 of the canvas crate. Each channel holds one draft, in memory. The next paint applies the keys, so
 Enter only asks for the send.
 
+**A reply in the slice.** The thread's region has a composer of its own, and each thread holds a
+draft apart from its channel's (`MURMURE-525`). Enter there sends a reply to the root
+(`MURMURE-523`). The page has one pipe, and it writes into the region whose composer last took
+the keys (`CANVAS-076`).
+
 **The history of the slice.** The composer keeps one history per draft. A caret move, a space or a
 line break closes a step, and a paste or a cut is a step of its own.
 
@@ -178,6 +187,9 @@ changed text.
   That waits for the `The caret after an undo` Story (`ambre-roadmap.md` E5).
 * **A draft lives in memory.** A reload loses it, until the `Drafts` Story (`ambre-roadmap.md` E5).
 * **`@` opens no panel.** The panel waits for the `The mention panel` Story (`ambre-roadmap.md` E5).
-* **A thread has no composer.** A reply waits for the `Replying in a thread` Story (`ambre-roadmap.md` E5).
+* **A reply never reaches the channel.** The thread's composer has no "also send to the channel"
+  box. That waits for the `A reply sent to the channel too` Story (`ambre-roadmap.md` E5).
+* **Typing in a thread names no one.** A key there sends no typing sample, and the thread's strip
+  stays empty. That waits for the `Typing seen in a thread` Story (`ambre-roadmap.md` E5).
 * **A screen reader does not hear the draft.** The pipe takes the text, and nothing reads the draft
   back. That waits for the `The composer read aloud` Story (`ambre-roadmap.md` E5).

@@ -609,7 +609,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
 
 /// The member's own message offers its edit. The action sends nothing and
 /// hands the message to the channel's region, which takes it once
-/// (`MURMURE-203`).
+/// (`MURMURE-203`). A reply goes to the thread's region (`MURMURE-526`).
 #[wasm_bindgen_test]
 fn an_edit_is_handed_to_the_region_and_sends_nothing() {
     let (_owner, relay, direct) = shown_direct();
@@ -646,8 +646,22 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         text: "typo".to_owned(),
         mentions: Vec::new(),
     };
-    assert_eq!(relay.take_edit(), Some(asked));
-    assert_eq!(relay.take_edit(), None, "taken once");
+    assert_eq!(relay.take_edit(true), None, "the thread's region leaves it");
+    assert_eq!(relay.take_edit(false), Some(asked.clone()));
+    assert_eq!(relay.take_edit(false), None, "taken once");
+
+    // A reply goes to the thread's region alone (`MURMURE-526`).
+    let reply = PendingEdit {
+        at: MessageAt::Thread(MessageId::new()),
+        ..asked
+    };
+    relay.editing.set(Some(reply.clone()));
+    assert_eq!(
+        relay.take_edit(false),
+        None,
+        "the channel's region leaves it"
+    );
+    assert_eq!(relay.take_edit(true), Some(reply));
 }
 
 /// The member's own message offers its deletion, last. The action sends

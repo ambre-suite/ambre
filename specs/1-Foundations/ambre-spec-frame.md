@@ -31,6 +31,7 @@ one numbering over the four documents the rendering layer produces.
 | `CANVAS-009` | `INV` | The canvas element MUST NOT be the end of the accessibility tree: what it draws MUST also have a presence in the page. | this spec section 3; `ambre-spec-accessibility.md` | `ambre_app::host::pipe::tests::the_canvas_content_has_a_presence_in_the_page` -- the pipe takes the focus and the live region carries an announcement, in the browser tier | none | verified |
 | `CANVAS-016` | `INV` | The frame read-out MUST be available in every application, not in one. | this spec section 3 | not built | unbuilt -- lands with the `One performance read-out` Story (`ambre-roadmap.md` E8). `PerfPublisher` ships and Trame is its only consumer | unimplemented |
 | `CANVAS-070` | `INV` | A frame MUST paint every canvas the active view shows, each under its own repaint plan. | this spec section 2; `ambre-spec-chrome.md section 2` | `ambre_app::host::cell::tests::a_cell_plans_its_frame_apart_from_the_page` -- a cell's plan moves apart from the page's, and a frame before its GPU spends none, in the browser tier. The paint and the present run the content canvas's own code | none | verified |
+| `CANVAS-076` | `INV` | Text typed MUST reach the one canvas whose field last took the keys, and no other canvas of the page. | this spec section 2; `ambre-spec-chrome.md section 2` | `ambre_app::host::cell::tests::the_pipe_writes_into_the_cell_whose_field_took_the_keys` -- a press in a cell's field takes text and keys and the content's field lets go, and a press on the content or its field taking the keys again takes the pipe back, in the browser tier | none | verified |
 
 ### 1.2 The loop runs a frame
 
@@ -72,7 +73,7 @@ one numbering over the four documents the rendering layer produces.
 * **Boundary.** none: this loop opens no socket, holds no key and writes nothing. The one network
   path the layer opens is the same-origin font fetch of `ambre-spec-render-assets.md`, which
   `UI-THREAD-004` names as the single exception.
-* **Verification.** 18 `verified`, 1 `qa-manual`, 1 `unimplemented`. The frame's decisions are pure
+* **Verification.** 19 `verified`, 1 `qa-manual`, 1 `unimplemented`. The frame's decisions are pure
   functions a host test drives: the phases of each plan, the pause, the hidden page, the fatal
   screen, the clear.
   The browser tier drives the loop and the page beside the canvas. A count holds the content walk
@@ -140,6 +141,11 @@ the page.
 The one `requestAnimationFrame` callback runs steps 3 to 6 once per canvas, each with its own plan
 (`CANVAS-070`). A canvas planned `Reuse` on both layers costs one
 present. Trame, Toile and Prose show one canvas, and the loop runs the steps once for them.
+
+The page has one text pipe, whichever canvas shows the field. A canvas whose field takes the keys
+claims the pipe, by a press, a tap or an edit loaded from a menu. The other field lets the keys go.
+Text, keys, compositions and the clipboard then reach that canvas alone (`CANVAS-076`). A press on
+the content canvas takes the pipe back.
 
 **The GPU backend, and the two browser quirks that decide it.**
 

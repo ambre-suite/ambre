@@ -216,7 +216,7 @@ pub enum MessageAction {
     Copy(String),
     /// Ask the member to confirm this deletion before it is sent.
     ConfirmDelete(PendingDelete),
-    /// Load this message into the composer of its channel.
+    /// Load this message into the composer of its channel or its thread.
     Edit(PendingEdit),
 }
 
@@ -226,7 +226,7 @@ pub enum MessageAction {
 pub struct PendingEdit {
     /// The channel the message lies in.
     pub channel: ChannelId,
-    /// Where it lies. Only a segment's message is edited from the composer.
+    /// Where it lies. A reply loads into the composer of its thread.
     pub at: MessageAt,
     /// The message.
     pub message: MessageId,
@@ -265,8 +265,8 @@ impl PendingDelete {
 
 /// The actions offered on `target` to the member `me`, in menu order. A
 /// notice takes no reply, a reply takes no thread of its own, and a message
-/// with no text no copy. Only the author deletes a message, once. Only the
-/// author edits one, and only in the channel, where the composer stands.
+/// with no text no copy. Only the author deletes or edits a message. A reply
+/// is edited in the composer of its thread (`MURMURE-526`).
 pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<CommandId> {
     let in_channel = matches!(target.at, MessageAt::Segment(_));
     let mut ids = Vec::with_capacity(5);
@@ -280,11 +280,8 @@ pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<Comman
         ids.push(COPY_TEXT);
     }
     let own = me == Some(target.author) && !target.notice && !target.deleted;
-    if own && in_channel {
-        ids.push(EDIT);
-    }
     if own {
-        ids.push(DELETE);
+        ids.extend([EDIT, DELETE]);
     }
     ids
 }
@@ -405,7 +402,7 @@ mod tests {
         );
         let reply = target(MessageAt::Thread(MessageId::new()), "one", false);
         let reply_ids = message_actions(&reply, Some(reply.author));
-        assert_eq!(reply_ids, [COPY_TEXT, DELETE]);
+        assert_eq!(reply_ids, [COPY_TEXT, EDIT, DELETE]);
         let notice = target(segment, "joined", true);
         let notice_ids = message_actions(&notice, Some(notice.author));
         assert!(!notice_ids.contains(&DELETE), "a notice");
@@ -441,18 +438,23 @@ mod tests {
         );
     }
 
-    /// Only the author is offered the edit of a message, and only in the
-    /// channel. The action hands the message to the composer and sends
-    /// nothing (`MURMURE-203`).
+    /// Only the author is offered the edit of a message, in the channel and
+    /// in a thread. The action hands the message to the composer and sends
+    /// nothing (`MURMURE-203`, `MURMURE-526`).
     #[test]
-    fn only_the_author_edits_a_message_and_only_in_the_channel() {
+    fn only_the_author_edits_a_message_or_a_reply() {
         let segment = MessageAt::Segment(SegmentId::new());
         let own = target(segment, "hi", false);
         let me = Some(own.author);
         assert!(!message_actions(&own, Some(UserId::new())).contains(&EDIT));
         let reply = target(MessageAt::Thread(MessageId::new()), "one", false);
-        let reply_ids = message_actions(&reply, Some(reply.author));
-        assert!(!reply_ids.contains(&EDIT), "a thread has no composer yet");
+        let Some(MessageAction::Edit(of_reply)) = message_action(EDIT, &reply, Some(reply.author))
+        else {
+            panic!("a reply is edited in its thread");
+        };
+        assert_eq!((of_reply.at, of_reply.message), (reply.at, reply.message));
+        let others = message_actions(&reply, Some(UserId::new()));
+        assert!(!others.contains(&EDIT), "nor another member's reply");
         let notice = target(segment, "joined", true);
         assert!(!message_actions(&notice, Some(notice.author)).contains(&EDIT));
         let gone = target(segment, "", false);

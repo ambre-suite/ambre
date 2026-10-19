@@ -20,9 +20,9 @@ use crate::{
 };
 use ambre_bus::AppCommand;
 use ambre_bus::{
-    ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MurmureCommand,
-    MurmureEvent, Presence, RequestId, RestCommand, RestEvent, SpaceCommand, SpaceEvent, Timestamp,
-    UiEvent,
+    ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MessageAt,
+    MurmureCommand, MurmureEvent, Presence, RequestId, RestCommand, RestEvent, SpaceCommand,
+    SpaceEvent, Timestamp, UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteEntry, ShellAction, ShellRegion};
 use ambre_commands::{CommandId, Locale};
@@ -439,10 +439,14 @@ impl MurmureRelay {
         Some(pending.command(now))
     }
 
-    /// The edit the member asked for, which the channel's region takes once
-    /// (`MURMURE-203`). `None` with none asked.
-    pub fn take_edit(&self) -> Option<PendingEdit> {
+    /// The edit the member asked for, which one region takes once
+    /// (`MURMURE-203`). The thread's region takes a reply, and the channel's
+    /// region the rest (`MURMURE-526`). `None` with none asked there.
+    pub fn take_edit(&self, in_thread: bool) -> Option<PendingEdit> {
         let pending = self.editing.get_untracked()?;
+        if matches!(pending.at, MessageAt::Thread(_)) != in_thread {
+            return None;
+        }
         self.editing.set(None);
         Some(pending)
     }

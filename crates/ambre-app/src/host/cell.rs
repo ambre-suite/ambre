@@ -29,10 +29,34 @@ const INPUTS: [&str; 6] = [
 /// A DOM listener a cell holds, with the event it listens to.
 type Listener = (&'static str, Closure<dyn FnMut(web_sys::Event)>);
 
+/// The id of the cell whose field last took the keys, shared with the
+/// listeners of every cell.
+type Typist = Rc<std::cell::Cell<Option<&'static str>>>;
+
+/// A cell's claim on the text pipe. A press, a tap or an edit loaded from a
+/// menu focuses its field. Whoever takes the pipe back lets that field go.
+#[derive(Clone)]
+struct Claim {
+    id: &'static str,
+    typist: Typist,
+}
+
+impl Claim {
+    /// Claim the pipe when the field of `view` holds the keys.
+    fn note(&self, view: &AppView) {
+        if view.takes_text() {
+            self.typist.set(Some(self.id));
+        }
+    }
+}
+
 /// The cells a view shows beside its content canvas, keyed by canvas id.
 #[derive(Default)]
 pub(super) struct Cells {
     bound: HashMap<&'static str, Bound>,
+    typist: Typist,
+    /// Whether the content view's field held the keys at the last settle.
+    content_held: bool,
 }
 
 impl Cells {
@@ -65,10 +89,65 @@ impl Cells {
             let (width, height) = size.logical();
             if let Some(cell) = view
                 .cell_view(id, f64::from(width), f64::from(height))
-                .and_then(|region| Bound::bind(canvas, size, region))
+                .and_then(|region| Bound::bind(id, canvas, size, region, &self.typist))
             {
                 self.bound.insert(id, cell);
             }
+        }
+    }
+
+    /// The view of the cell that holds the page's text pipe, `None` when the
+    /// content view holds it. A cell holds it from the moment its field took
+    /// the keys until its field lets go (`CANVAS-076`).
+    pub(super) fn typist(&self) -> Option<Rc<RefCell<AppView>>> {
+        let cell = self.bound.get(self.typist.get()?)?;
+        cell.view
+            .borrow()
+            .takes_text()
+            .then(|| Rc::clone(&cell.view))
+    }
+
+    /// The content view took the text pipe back: the cell that held it lets
+    /// its field go.
+    pub(super) fn release(&self) {
+        if let Some(view) = self.typist() {
+            view.borrow_mut().leave_text();
+        }
+        self.typist.set(None);
+    }
+
+    /// Settle who holds the text pipe before the cells render. A content
+    /// view whose field just took the keys, as an edit from a menu does,
+    /// takes the pipe back. A cell that holds it takes the caret from the
+    /// content view (`CANVAS-076`).
+    pub(super) fn settle(&mut self, content: &mut AppView) {
+        if content.takes_text() && !self.content_held {
+            self.release();
+        }
+        if self.typist().is_some() {
+            content.leave_text();
+        }
+        self.content_held = content.takes_text();
+    }
+
+    /// Route an event of the text pipe. A press on the content canvas takes
+    /// the pipe back from the cell that held it. A key, a character or a
+    /// composition goes to the cell that holds it, and answers whether the
+    /// cell consumed it. `None` leaves the event to the content view.
+    pub(super) fn route(&self, ev: &InputEvent) -> Option<bool> {
+        match ev {
+            InputEvent::PointerDown { .. } => {
+                self.release();
+                None
+            }
+            InputEvent::Key { .. }
+            | InputEvent::KeyUp { .. }
+            | InputEvent::Text { .. }
+            | InputEvent::CompositionUpdate { .. }
+            | InputEvent::CompositionEnd { .. } => {
+                Some(self.typist()?.borrow_mut().handle_input(ev))
+            }
+            _ => None,
         }
     }
 
@@ -103,12 +182,20 @@ struct Bound {
     observer: web_sys::ResizeObserver,
     _observe: Closure<dyn FnMut(js_sys::Array, web_sys::ResizeObserver)>,
     listeners: Vec<Listener>,
+    claim: Claim,
 }
 
 impl Bound {
     /// Bind `canvas`, measured at `size`, to `view`, and bring its GPU up.
-    /// `None` when the page cannot observe the canvas box.
-    fn bind(canvas: HtmlCanvasElement, size: SurfaceSize, view: AppView) -> Option<Self> {
+    /// A press that focuses the view's field names `id` the `typist`. `None`
+    /// when the page cannot observe the canvas box.
+    fn bind(
+        id: &'static str,
+        canvas: HtmlCanvasElement,
+        size: SurfaceSize,
+        view: AppView,
+        typist: &Typist,
+    ) -> Option<Self> {
         let view = Rc::new(RefCell::new(view));
         let gpu: Rc<RefCell<Option<GpuState>>> = Rc::new(RefCell::new(None));
         let restored = Rc::new(std::cell::Cell::new(false));
@@ -142,8 +229,13 @@ impl Bound {
         observer.observe(&canvas);
 
         let mut listeners = Vec::with_capacity(INPUTS.len() + 3);
+        let claim = Claim {
+            id,
+            typist: Rc::clone(typist),
+        };
         for kind in INPUTS {
             let view = Rc::downgrade(&view);
+            let claim = claim.clone();
             let on_input =
                 Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
                     let Some(view) = view.upgrade() else { return };
@@ -152,6 +244,7 @@ impl Bound {
                         if view.borrow_mut().touch(phase, x, y, event.time_stamp()) {
                             event.prevent_default();
                         }
+                        claim.note(&view.borrow());
                         return;
                     }
                     let Some(input) = input_of(&event) else {
@@ -163,6 +256,9 @@ impl Bound {
                         // listener would hand it to the content view as well.
                         event.stop_propagation();
                     }
+                    // A press that focused the field takes the pipe
+                    // (`CANVAS-076`).
+                    claim.note(&view.borrow());
                     // A drag across the text keeps its moves past the edge.
                     if matches!(input, InputEvent::PointerDown { .. })
                         && view.borrow().drags_text()
@@ -228,6 +324,7 @@ impl Bound {
             observer,
             _observe: observe,
             listeners,
+            claim,
         })
     }
 
@@ -253,6 +350,8 @@ impl Bound {
         // canvas. The content canvas alone hands faces to the Logic thread.
         let faces = !gpu.text_cache.poll_lazy_fonts(&mut gpu.font_cx).is_empty();
         let plan = plan_frame(&mut view, size, refit || faces, now_ms);
+        // An edit asked from a menu loads the field as its plan runs.
+        self.claim.note(&view);
         let phases = Phases::of(plan.content, plan.overlay);
         if phases.any_build() {
             gpu.text_cache.reset_frame_stats();
@@ -654,7 +753,15 @@ mod tests {
             ambre_murmure::testing::channel_of(&["hello", "world"], (300.0, 200.0));
         paint(&mut view);
         let size = size_backing_store(&canvas).unwrap();
-        let bound = Bound::bind(canvas.clone(), size, AppView::Murmure(view)).unwrap();
+        let typist = Typist::default();
+        let bound = Bound::bind(
+            THREAD_CANVAS,
+            canvas.clone(),
+            size,
+            AppView::Murmure(view),
+            &typist,
+        )
+        .unwrap();
         let copy = || {
             let init = web_sys::ClipboardEventInit::new();
             init.set_cancelable(true);
@@ -715,6 +822,98 @@ mod tests {
             matches!(cut, ambre_bus::CopyOutcome::Nothing),
             "a cut leaves read-only text"
         );
+    }
+
+    /// A point in the field of `view`, a view `height` pixels tall.
+    fn field_of(view: &MurmureView, height: f64) -> (f64, f64) {
+        (40.0, height - f64::from(view.composer().band()) / 2.0)
+    }
+
+    /// `CANVAS-076`: the text pipe writes into the cell whose field took the
+    /// keys, and the content view's field lets them go. A press on the
+    /// content canvas, or its field taking the keys again, takes the pipe
+    /// back.
+    #[wasm_bindgen_test]
+    fn the_pipe_writes_into_the_cell_whose_field_took_the_keys() {
+        let (_cell, canvas) = thread_cell(300, 200);
+        let (mut thread, _thread_events) =
+            ambre_murmure::testing::channel_of(&["hello"], (300.0, 200.0));
+        paint(&mut thread);
+        let (x, y) = field_of(&thread, 200.0);
+        let (mut channel, _channel_events) =
+            ambre_murmure::testing::channel_of(&["hi"], (300.0, 200.0));
+        paint(&mut channel);
+        let mut content = AppView::Murmure(channel);
+        let press_content = |content: &mut AppView| {
+            let (cx, cy) = match content {
+                AppView::Murmure(v) => field_of(v, 200.0),
+                _ => unreachable!(),
+            };
+            content.handle_input(&InputEvent::PointerDown {
+                x: cx,
+                y: cy,
+                button: 0,
+                shift: false,
+                ctrl: false,
+            });
+        };
+        let mut cells = Cells::default();
+        let size = size_backing_store(&canvas).unwrap();
+        let bound = Bound::bind(
+            THREAD_CANVAS,
+            canvas.clone(),
+            size,
+            AppView::Murmure(thread),
+            &cells.typist,
+        )
+        .unwrap();
+        let view = Rc::clone(&bound.view);
+        cells.bound.insert(THREAD_CANVAS, bound);
+        let typed = InputEvent::Text {
+            text: "yo".to_owned(),
+        };
+
+        press_content(&mut content);
+        cells.settle(&mut content);
+        assert!(content.takes_text(), "the content's field holds the keys");
+        assert_eq!(cells.route(&typed), None, "no cell holds the pipe");
+
+        let rect = canvas.get_bounding_client_rect();
+        let init = web_sys::PointerEventInit::new();
+        init.set_client_x((rect.left() + x) as i32);
+        init.set_client_y((rect.top() + y) as i32);
+        let down = web_sys::PointerEvent::new_with_event_init_dict("pointerdown", &init).unwrap();
+        canvas.dispatch_event(&down).unwrap();
+        assert!(cells.typist().is_some(), "the cell's field took the keys");
+        cells.settle(&mut content);
+        assert!(!content.takes_text(), "the content's field let them go");
+        assert_eq!(cells.route(&typed), Some(true), "the cell takes the text");
+        let key = InputEvent::Key {
+            key: "a".to_owned(),
+            ctrl: false,
+            alt: false,
+            shift: false,
+            meta: false,
+        };
+        assert!(cells.route(&key).is_some(), "and the keys");
+
+        press_content(&mut content);
+        cells.settle(&mut content);
+        assert!(cells.typist().is_none(), "the content's field took it back");
+        assert!(!view.borrow().takes_text(), "the cell's field let go");
+
+        canvas.dispatch_event(&down).unwrap();
+        assert!(cells.typist().is_some());
+        let press = InputEvent::PointerDown {
+            x: 10.0,
+            y: 10.0,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        };
+        assert_eq!(cells.route(&press), None, "the press is the content's");
+        assert!(cells.typist().is_none(), "a press on the content takes it");
+        assert!(!view.borrow().takes_text());
     }
 
     /// `CANVAS-070`: a cell plans its frame apart from the page. A frame

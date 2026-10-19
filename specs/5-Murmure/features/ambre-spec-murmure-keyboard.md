@@ -43,6 +43,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-178` | `POST` | The up arrow in an empty composer MUST open the last message of the user in this channel for edit. | this spec section 3; `features/ambre-spec-murmure-composer.md` | `ambre_murmure::view::tests::up_in_an_empty_composer_edits_the_last_own_message` -- the latest own message opens past a deleted one and an other's, Enter sends its edit, and a draft keeps Up | none | verified |
+| `MURMURE-527` | `POST` | The up arrow in the empty composer of a thread MUST open the last reply of the user in this thread for edit. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::view::tests::up_in_a_threads_empty_composer_edits_the_last_own_reply` -- the latest own reply opens past another member's, and the channel's composer stays as it was | none | verified |
 | `MURMURE-179` | `FRAME` | The up arrow MUST NOT open a message of another member. | this spec section 3; `MURMURE-085` | `ambre_murmure::view::tests::up_never_opens_another_members_message` -- with no own message, or no member signed in, Up opens nothing and sends nothing | none | verified |
 
 ### 1.5 Mark everything read
@@ -55,7 +56,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 * **Budget.** none of its own: each shortcut runs a command another feature budgets.
 * **Boundary.** none: the palette filters names the client holds, and nothing it types leaves.
-* **Verification.** 14 `verified`. The table, the palette, the jumps, the find chord and the keys
+* **Verification.** 15 `verified`. The table, the palette, the jumps, the find chord and the keys
   inside a conversation hold.
 
 ---
@@ -104,7 +105,8 @@ opens the search from any field, or the find of the browser would take it.
 
 **The keys of a conversation.** Shift+Page Up rests the list on the unread line, a quarter down
 (`MURMURE-175`). Up in an empty composer loads the member's latest message the edit action takes
-(`MURMURE-178`, `MURMURE-179`). Escape in the list marks the channel read (`MURMURE-522`).
+(`MURMURE-178`, `MURMURE-179`). In the composer of a thread it loads the member's latest reply
+there (`MURMURE-527`). Escape in the list marks the channel read (`MURMURE-522`).
 
 **One palette, two lists.** The channels and the direct messages are entries Murmure supplies to
 the palette of the suite, so they come before the commands (`CHROME-093`). A query that starts with
@@ -143,7 +145,8 @@ chord opens.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The thread's region takes none of these keys.** Its composer waits for the
-  `Replying in a thread` Story (`ambre-roadmap.md` E5).
+* **Escape and Shift+Page Up do nothing in a thread.** A thread holds no read cursor of its own,
+  and Escape does not close it.
+  That waits for the `The keys of a thread` Story (`ambre-roadmap.md` E5).
 * **Nothing checks the shared meanings across tables.** `UI-THREAD-037` reads one application's
   table at a time.

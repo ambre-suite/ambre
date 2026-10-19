@@ -427,6 +427,23 @@ impl AppView {
         }
     }
 
+    /// Whether the page's text pipe writes into this view now. Only a Murmure
+    /// region shares the pipe with another canvas.
+    fn takes_text(&self) -> bool {
+        match self {
+            AppView::Murmure(v) => v.composer().focused(),
+            AppView::Trame(_) | AppView::Toile(_) | AppView::Prose(_) => false,
+        }
+    }
+
+    /// Another canvas of the page took the text pipe.
+    fn leave_text(&mut self) {
+        match self {
+            AppView::Murmure(v) => v.leave_composer(),
+            AppView::Trame(_) | AppView::Toile(_) | AppView::Prose(_) => {}
+        }
+    }
+
     /// Swap the active document in place, keeping the GPU surface.
     fn set_document(&mut self, document_id: DocumentId) {
         match self {
