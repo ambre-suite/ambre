@@ -203,6 +203,18 @@ pub struct MessageTarget {
     pub pressed: Option<(f32, f32)>,
     /// The id of the canvas the region paints.
     pub canvas: &'static str,
+    /// The thread a reply also sent to the channel came from, `None` on any
+    /// other message (`MURMURE-533`).
+    pub from_thread: Option<FromThread>,
+}
+
+/// Where the root of the thread a copy came from lies, as the list holds it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FromThread {
+    /// In a segment the list holds.
+    Root(MessageRef),
+    /// In a segment the list has not loaded.
+    Unloaded,
 }
 
 /// What an action of a message asks the page to do.
@@ -266,11 +278,12 @@ impl PendingDelete {
 /// The actions offered on `target` to the member `me`, in menu order. A
 /// notice takes no reply, a reply takes no thread of its own, and a message
 /// with no text no copy. Only the author deletes or edits a message. A reply
-/// is edited in the composer of its thread (`MURMURE-526`).
+/// is edited in the composer of its thread (`MURMURE-526`). A copy whose
+/// root is not loaded takes no reply, which would open a thread of its own.
 pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<CommandId> {
     let in_channel = matches!(target.at, MessageAt::Segment(_));
     let mut ids = Vec::with_capacity(5);
-    if in_channel && !target.notice {
+    if in_channel && !target.notice && target.from_thread != Some(FromThread::Unloaded) {
         ids.push(REPLY);
     }
     if in_channel {
@@ -301,11 +314,15 @@ pub fn message_action(
         MessageAt::Thread(_) => None,
     };
     match id {
+        // A copy opens the thread it came from (`MURMURE-533`).
         REPLY => Some(MessageAction::Open(MurmurePane::Thread {
             channel: target.channel,
-            root: MessageRef {
-                segment: segment?,
-                message: target.message,
+            root: match target.from_thread {
+                Some(FromThread::Root(root)) => root,
+                _ => MessageRef {
+                    segment: segment?,
+                    message: target.message,
+                },
             },
         })),
         MARK_UNREAD => Some(MessageAction::Send(LogicCommand::Channel {
@@ -355,6 +372,7 @@ mod tests {
             deleted: text.is_empty(),
             pressed: None,
             canvas: "ambre-canvas",
+            from_thread: None,
         }
     }
 
@@ -384,6 +402,28 @@ mod tests {
         assert!(message_action(REPLY, &reply, None).is_none(), "not offered");
         let not_one = message_action(SEARCH, &deleted, None);
         assert!(not_one.is_none(), "not an action");
+    }
+
+    /// The reply action on a copy opens the thread it came from, never one
+    /// of its own. A copy whose root is not loaded takes no reply
+    /// (`MURMURE-533`).
+    #[test]
+    fn the_reply_on_a_copy_opens_the_thread_it_came_from() {
+        let segment = MessageAt::Segment(SegmentId::new());
+        let mut copy = target(segment, "ok", false);
+        let root = MessageRef {
+            segment: SegmentId::new(),
+            message: MessageId::new(),
+        };
+        copy.from_thread = Some(FromThread::Root(root));
+        let Some(MessageAction::Open(MurmurePane::Thread { channel, root: at })) =
+            message_action(REPLY, &copy, None)
+        else {
+            panic!("the reply opens a thread");
+        };
+        assert_eq!((channel, at), (copy.channel, root));
+        copy.from_thread = Some(FromThread::Unloaded);
+        assert_eq!(message_actions(&copy, None), [MARK_UNREAD, COPY_TEXT]);
     }
 
     /// Only the author is offered the deletion of a message, in a channel or

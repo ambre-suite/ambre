@@ -25,6 +25,10 @@ pub const EDITED: &str = "(edited)";
 /// What the line above the first unread message reads (`MURMURE-184`).
 pub const UNREAD_LINE: &str = "New messages";
 
+/// What the line under a reply also sent to the channel reads
+/// (`MURMURE-532`).
+pub const FROM_THREAD: &str = "Replied in a thread";
+
 /// What the control of a list read higher up reads (`MURMURE-505`).
 pub const JUMP_TO_LATEST: &str = "Jump to latest";
 
@@ -262,7 +266,9 @@ pub struct RowWords {
     pub body: String,
     /// The body is no text a member wrote: a deleted message or a notice.
     pub muted: bool,
-    /// How many replies its thread holds, once it holds one.
+    /// How many replies its thread holds, once it holds one. On a reply
+    /// also sent to the channel, the line that names its thread
+    /// (`MURMURE-532`).
     pub replies: Option<String>,
 }
 
@@ -302,7 +308,8 @@ impl<'a> Row<'a> {
             .map(|t| match t.replies {
                 1 => "1 reply".to_owned(),
                 n => format!("{n} replies"),
-            });
+            })
+            .or_else(|| message.also_in_thread.map(|_| FROM_THREAD.to_owned()));
         RowWords {
             header,
             body,
@@ -955,6 +962,22 @@ pub(crate) mod tests {
         assert_eq!(words(&root, false).replies.as_deref(), Some("1 reply"));
         root.thread = Some(head(3));
         assert_eq!(words(&root, false).replies.as_deref(), Some("3 replies"));
+    }
+
+    /// A reply also sent to the channel reads a line that names its thread,
+    /// and a screen reader hears it after the text (`MURMURE-532`).
+    #[test]
+    fn a_reply_sent_to_the_channel_too_names_its_thread() {
+        let mut copy = message(UserId::new(), 0, "ok");
+        assert_eq!(words(&copy, false).replies, None);
+        copy.also_in_thread = Some(DocumentId::new());
+        assert_eq!(words(&copy, false).replies.as_deref(), Some(FROM_THREAD));
+        let row = Row::Message {
+            message: &copy,
+            header: false,
+        };
+        let heard = row.announcement(|_| Some("Ada".to_owned()), |_| "t".to_owned());
+        assert_eq!(heard, format!("Ada, t: ok. {FROM_THREAD}"));
     }
 
     /// Resting on the latest message, the walk measures only the rows the

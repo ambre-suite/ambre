@@ -25,13 +25,15 @@ use ambre_canvas::{
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
-use crate::MurmurePane;
-use crate::commands::{EDIT, MessageAction, MessageTarget, PendingEdit, message_action};
+use crate::commands::{
+    EDIT, FromThread, MessageAction, MessageTarget, PendingEdit, message_action,
+};
 use crate::composer::{Composer, DraftOf, EDITING_LINE, typing_line};
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 use crate::select::Selecting;
 use crate::watchers::TICK_MS;
+use crate::{MessageRef, MurmurePane};
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the
 /// host binds a cell to it while it is in the page.
@@ -414,7 +416,31 @@ impl MurmureView {
                 Region::Channel => CHANNEL_CANVAS,
                 Region::Thread => THREAD_CANVAS,
             },
+            from_thread: message
+                .also_in_thread
+                .map(|thread| self.root_of(channel, thread)),
         }
+    }
+
+    /// Where the root of `thread` lies in the list of `channel`, so the
+    /// reply action on its copy opens it (`MURMURE-533`).
+    fn root_of(&self, channel: ChannelId, thread: DocumentId) -> FromThread {
+        let lists = self.lists.borrow();
+        let Some(list) = lists.conversations.channel(channel) else {
+            return FromThread::Unloaded;
+        };
+        let rows = list.rows();
+        rows.iter()
+            .filter_map(|row| row.message())
+            .find(|message| message.thread.is_some_and(|t| t.document == thread))
+            .and_then(|root| {
+                let segment = list.segment_of(root.id)?;
+                Some(FromThread::Root(MessageRef {
+                    segment,
+                    message: root.id,
+                }))
+            })
+            .unwrap_or(FromThread::Unloaded)
     }
 
     /// The edit of the latest message of the member in the channel or the
@@ -646,6 +672,13 @@ impl MurmureView {
         match self.kinetic.release(now_ms) {
             Release::Tap { x, y } if self.on_jump(Point::new(x.into(), y.into())) => {
                 self.rest_at_latest();
+                None
+            }
+            Release::Tap { y, .. } if self.composer.on_also(y) => {
+                if let Some(of) = self.writes_in() {
+                    self.composer.toggle_also(of);
+                    self.dirty = true;
+                }
                 None
             }
             Release::Tap { x, y } if self.in_composer(y.into()) => {
@@ -1183,6 +1216,14 @@ impl MurmureView {
                 self.composer.compose(channel, text, false);
             }
             InputEvent::CompositionEnd { ref text } => self.composer.compose(channel, text, true),
+            // A press on the box under a thread's field checks it, and
+            // leaves the keys where they were (`MURMURE-531`).
+            InputEvent::PointerDown { y, button, .. }
+                if button == PRIMARY_BUTTON && self.composer.on_also(y as f32) =>
+            {
+                self.composer.toggle_also(channel);
+            }
+            InputEvent::DoubleClick { y, .. } if self.composer.on_also(y as f32) => {}
             InputEvent::PointerDown { x, y, button, .. } if self.in_composer(y) => {
                 self.hover = Some(Point::new(x, y));
                 if button != PRIMARY_BUTTON {
@@ -1276,8 +1317,10 @@ mod tests {
     use ambre_draw::testing::RecordingSurface;
 
     use super::*;
-    use crate::MessageRef;
+    use crate::commands::REPLY;
+    use crate::composer::ALSO_PX;
     use crate::list::tests::message;
+    use ambre_bus::ThreadHead;
 
     struct Page {
         view: MurmureView,
@@ -2244,6 +2287,7 @@ mod tests {
             deleted: false,
             pressed: None,
             canvas: CHANNEL_CANVAS,
+            from_thread: None,
         };
         assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
         // The list rests on its latest row: the top of the region is empty.
@@ -2303,6 +2347,7 @@ mod tests {
             deleted: false,
             pressed: Some((10.0, y)),
             canvas: THREAD_CANVAS,
+            from_thread: None,
         };
         assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
         assert_eq!(thread_view.touch_up(LONG_PRESS_MS + 100.0), None, "no tap");
@@ -2415,11 +2460,22 @@ mod tests {
         page
     }
 
-    /// A primary press in the composer's band, near the region's bottom.
+    /// A primary press in the composer's field, near the region's bottom,
+    /// above the box of a thread.
     fn press_composer(page: &mut Page) -> bool {
+        let y = if page.view.composer().on_also(395.0) {
+            395.0 - ALSO_PX
+        } else {
+            395.0
+        };
+        press_at(page, y)
+    }
+
+    /// A primary press and its release in the composer's band at `y`.
+    fn press_at(page: &mut Page, y: f32) -> bool {
         let press = InputEvent::PointerDown {
             x: 40.0,
-            y: 395.0,
+            y: y.into(),
             button: 0,
             shift: false,
             ctrl: false,
@@ -2427,7 +2483,7 @@ mod tests {
         let consumed = page.view.handle_input(&press);
         let up = InputEvent::PointerUp {
             x: 40.0,
-            y: 395.0,
+            y: y.into(),
             button: 0,
             ctrl: false,
         };
@@ -3381,5 +3437,106 @@ mod tests {
         let of = DraftOf::Thread(channel, root);
         assert_eq!(painted(&mut page, of).as_deref(), Some("later"));
         assert!(!page.view.composer().focused(), "the keys stay put");
+    }
+
+    /// Whether each reply sent since the last call asked for a copy in the
+    /// channel.
+    fn copies(page: &Page) -> Vec<bool> {
+        let mut copies = Vec::new();
+        while let Ok(command) = page.commands.try_recv() {
+            if let LogicCommand::Channel {
+                command:
+                    MurmureCommand::Reply {
+                        also_in_channel, ..
+                    },
+                ..
+            } = command
+            {
+                copies.push(also_in_channel);
+            }
+        }
+        copies
+    }
+
+    /// A press on the box under the thread's field checks it and leaves the
+    /// keys in the field. Enter then sends the reply to the channel too, and
+    /// the box unchecks (`MURMURE-531`). The channel's band has no box.
+    #[test]
+    fn the_box_sends_the_reply_to_the_channel_too_once() {
+        let channel = ChannelId::new();
+        let (mut page, channel_view, root, _) = threaded(channel);
+        let of = DraftOf::Thread(channel, root);
+        let bottom = page.view.size().1 - ALSO_PX / 2.0;
+        assert!(press_composer(&mut page));
+        assert!(press_at(&mut page, bottom), "the press on the box is taken");
+        assert!(page.view.composer().also_in_channel(of));
+        assert!(page.view.composer().focused(), "the field keeps the keys");
+        type_slowly(&mut page, "ok");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(copies(&page), [true]);
+        assert!(!page.view.composer().also_in_channel(of), "unchecked");
+        type_slowly(&mut page, "again");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(copies(&page), [false], "the next reply stays");
+        assert!(!channel_view.composer().on_also(bottom), "no box there");
+    }
+
+    /// A tap on the box checks it too, and a second one unchecks it
+    /// (`MURMURE-531`).
+    #[test]
+    fn a_tap_on_the_box_checks_it() {
+        let channel = ChannelId::new();
+        let (mut page, _channel_view, root, _) = threaded(channel);
+        let of = DraftOf::Thread(channel, root);
+        let bottom = page.view.size().1 - ALSO_PX / 2.0;
+        for checked in [true, false] {
+            page.view.touch_down(10.0, bottom, 0.0);
+            assert_eq!(page.view.touch_up(20.0), None, "the tap is taken");
+            assert_eq!(page.view.composer().also_in_channel(of), checked);
+        }
+    }
+
+    /// The reply action on a reply also sent to the channel opens its
+    /// thread at the root the list holds (`MURMURE-533`).
+    #[test]
+    fn the_reply_on_a_copy_opens_its_thread() {
+        let mut page = page();
+        let channel = ChannelId::new();
+        let ada = UserId::new();
+        let thread = DocumentId::new();
+        let root = MessageView {
+            thread: Some(ThreadHead {
+                document: thread,
+                replies: 1,
+                last_replier: Some(ada),
+            }),
+            ..message(ada, 0, "root")
+        };
+        let copy = MessageView {
+            also_in_thread: Some(thread),
+            ..message(ada, 1, "ok")
+        };
+        let segment = SegmentId::new();
+        let messages = vec![root.clone(), copy];
+        send(&page, channel, MurmureEvent::Messages { segment, messages });
+        page.pane.set(MurmurePane::channel(channel));
+        frame_with_fonts(&mut page.view);
+        let _ = reads(&page);
+
+        let y = middle_of(&page.view, 1);
+        button(&mut page, 2, y);
+        let acted = page.acted.borrow_mut().pop().flatten();
+        let target = acted.expect("the copy is the target");
+        let at = MessageRef {
+            segment,
+            message: root.id,
+        };
+        assert_eq!(target.from_thread, Some(FromThread::Root(at)));
+        let Some(MessageAction::Open(pane)) = message_action(REPLY, &target, None) else {
+            panic!("the reply opens a thread");
+        };
+        assert_eq!(pane, MurmurePane::Thread { channel, root: at });
     }
 }

@@ -48,6 +48,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-202` | `FRAME` | Sending MUST NOT clear the draft of another channel. | this spec section 3 | `ambre_murmure::view::tests::each_channel_keeps_its_own_draft` -- a send in one channel leaves the draft of the other as it was, unsent | none | verified |
 | `MURMURE-523` | `POST` | Enter in the composer of a thread MUST send the draft as a reply to the thread's root. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::view::tests::enter_in_a_thread_sends_a_reply_to_its_root` -- the thread shows a composer, and Enter sends a reply to the root at the page's clock and posts nothing in the channel | none | verified |
 | `MURMURE-524` | `FRAME` | Sending a reply MUST NOT clear the draft of the channel. | this spec section 3; `MURMURE-202` | `ambre_murmure::view::tests::a_thread_keeps_its_own_draft_apart_from_the_channels` -- a reply sent leaves the channel's draft as it was | none | verified |
+| `MURMURE-531` | `POST` | With the box under the thread's composer checked, Enter MUST send the reply to the channel as well, then uncheck the box. | this spec section 3; `MURMURE-109` | `ambre_murmure::view::tests::the_box_sends_the_reply_to_the_channel_too_once` -- a press checks it and keeps the keys in the field, one reply asks for the copy, and the next one does not; `::a_tap_on_the_box_checks_it` -- a tap checks it and a second one unchecks it | none | verified |
 
 ### 1.4 Edit a message
 
@@ -76,7 +77,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 17 `verified`, 13 `unimplemented`. The host tier drives the view with the
+* **Verification.** 18 `verified`, 13 `unimplemented`. The host tier drives the view with the
   events the page sends: a press, a tap, text, keys, a paste. The marks and the stored draft are
   not built.
 
@@ -139,7 +140,8 @@ Enter only asks for the send.
 draft apart from its channel's (`MURMURE-525`). Enter there sends a reply to the root
 (`MURMURE-523`). The page has one pipe, and it writes into the region whose composer last took
 the keys (`CANVAS-076`). The channel's region keeps the thread's composer while the panel is shut,
-so a draft outlives it (`MURMURE-530`).
+so a draft outlives it (`MURMURE-530`). A box under the thread's field sends the next reply to
+the channel as well, and unchecks once it left (`MURMURE-531`).
 
 **The history of the slice.** The composer keeps one history per draft. A caret move, a space or a
 line break closes a step, and a paste or a cut is a step of its own.
@@ -189,8 +191,8 @@ changed text.
   That waits for the `The caret after an undo` Story (`ambre-roadmap.md` E5).
 * **A draft lives in memory.** A reload loses it, until the `Drafts` Story (`ambre-roadmap.md` E5).
 * **`@` opens no panel.** The panel waits for the `The mention panel` Story (`ambre-roadmap.md` E5).
-* **A reply never reaches the channel.** The thread's composer has no "also send to the channel"
-  box. That waits for the `A reply sent to the channel too` Story (`ambre-roadmap.md` E5).
+* **The box takes no key.** A press or a tap checks it, and no key does. That waits for the
+  `The box from the keyboard` Story (`ambre-roadmap.md` E5).
 * **Typing in a thread names no one.** A key there sends no typing sample, and the thread's strip
   stays empty. That waits for the `Typing seen in a thread` Story (`ambre-roadmap.md` E5).
 * **A screen reader does not hear the draft.** The pipe takes the text, and nothing reads the draft

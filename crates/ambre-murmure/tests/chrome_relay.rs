@@ -571,6 +571,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         deleted: false,
         pressed: None,
         canvas: "ambre-canvas",
+        from_thread: None,
     };
     relay.target.set(Some(target.clone()));
     assert_eq!(
@@ -634,6 +635,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         deleted: false,
         pressed: None,
         canvas: "ambre-canvas",
+        from_thread: None,
     };
     relay.target.set(Some(target.clone()));
     assert!(menu_labels(relay).contains(&"Edit message".to_owned()));
@@ -696,6 +698,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         deleted: false,
         pressed: None,
         canvas: "ambre-canvas",
+        from_thread: None,
     };
     let other = MessageTarget {
         author: UserId::new(),

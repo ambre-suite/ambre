@@ -21,6 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-106` | `INV` | The reply count and the last replier of a root MUST be read from its thread document. | this spec section 3 | `ambre_murmure::thread_tests::the_root_reads_its_reply_count_and_last_replier_from_its_thread` -- a deleted reply aside, and a peer without the thread reads none; `ambre_logic::channels::tests::a_first_reply_waits_for_the_thread_it_creates` -- the root's head counts the reply; `::a_root_another_member_threaded_opens_its_thread` -- a member who did not link the thread opens it and reads its replies | none | verified |
 | `MURMURE-108` | `CONC` | Two peers sending the first reply at once MUST converge on one thread document. | this spec section 3; `ambre-spec-murmure-schema.md section 6`; `SRV-214` | `ambre_murmure::thread_tests::two_first_replies_converge_on_the_thread_the_relay_linked` -- the loser drops its own, and both roots name one document; `ambre_logic::channels::tests::a_lost_or_failed_thread_link_moves_the_reply_to_another_document` -- the reply waits on the winner, and a failed link creates again | none | verified |
 | `MURMURE-261` | `INV` | A mention in a reply MUST count on the channel of its thread. | this spec section 3; `MURMURE-233` | `ambre_murmure::thread_tests::a_mention_in_a_held_thread_counts_past_its_read_cursor` -- a reply naming me counts past my cursor, never at it; `ambre_logic::channels::tests::a_mention_in_a_held_thread_counts_on_its_open_channel` -- the mention marks the open channel, unread unmoved; `::a_mention_in_a_watched_thread_counts_on_its_channel` -- a watched thread marks its open and its closed channel | none | verified |
+| `MURMURE-532` | `OBS` | A reply also sent to the channel MUST read, in the channel, a line saying it was sent in a thread. | this spec section 3; `MURMURE-109` | `ambre_murmure::list::tests::a_reply_sent_to_the_channel_too_names_its_thread` -- the line under the copy, which a screen reader hears after the text | none | verified |
 | `MURMURE-290` | `INV` | A followed thread MUST stay in the Threads view until the user unfollows it, never leaving on a delay. | this spec section 3 | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Reply in a thread
@@ -32,6 +33,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-110` | `FRAME` | Replying MUST NOT change the root message beyond its `thread` field. | this spec section 3 | `ambre_murmure::thread_tests::the_link_sets_the_root_thread_field_and_nothing_else` -- the delta of the link holds one operation, on that field | none | verified |
 | `MURMURE-484` | `POST` | The first reply to a message of a locked segment MUST record its thread in the amendments of that segment. | this spec section 3; `MURMURE-013` | `ambre_murmure::amending_tests::a_thread_of_a_locked_root_is_recorded_in_its_amendments` -- the reply waits for the amendments, which record the thread; `::another_member_finds_the_thread_of_a_locked_root` -- a second member reads the record and opens the thread; `::a_thread_record_outside_the_rule_is_refused` -- the check refuses a foreign key, a second thread, a bad value and a removal; `::a_fold_carries_the_thread_of_a_locked_root` -- the fold writes the root's field; `ambre_logic::channels::tests::a_reply_to_a_locked_root_waits_for_its_amendments` -- the link leaves under the amendments | none | verified |
 | `MURMURE-485` | `POST` | An edit, a delete or a reaction on a reply MUST write in its thread document. | this spec section 3; `MURMURE-084`, `MURMURE-091` | `ambre_murmure::thread_tests::an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread` -- each change writes the thread, and a delete leaves the count; `::another_member_reacts_to_a_reply_and_never_edits_it` -- the check takes a reaction, and an edit is refused; `ambre_logic::channels::tests::a_change_on_a_reply_leaves_for_its_thread` -- each change leaves under the thread | none | verified |
+| `MURMURE-533` | `POST` | The reply action on a reply also sent to the channel MUST open the thread it was sent in, at its root. | this spec section 3; `MURMURE-109` | `ambre_murmure::view::tests::the_reply_on_a_copy_opens_its_thread` -- the copy under the pointer names the root its list holds; `ambre_murmure::commands::tests::the_reply_on_a_copy_opens_the_thread_it_came_from` -- that root's thread opens, and a copy whose root is not loaded offers no reply | none | verified |
 
 ### 1.3 Follow a thread that is not open
 
@@ -58,7 +60,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, the identifier of its root, and when it
   changes (`ZK-015`, `SRV-162`).
-* **Verification.** 14 `verified`, 6 `unimplemented`. The engine tests hold the thread document,
+* **Verification.** 16 `verified`, 6 `unimplemented`. The engine tests hold the thread document,
   the link, the count, the changes on a reply, a locked root and the mentions. The Logic tests
   hold the waits, the race, the watch and the read cursor. The Sync tests hold the signal, the
   light thread and the number a read reaches. The view's host tests hold the read a thread shown sends.
@@ -88,6 +90,10 @@ there as in the channel, with no second renderer (`MURMURE-485`).
 root (`SRV-213`). The reply waits until the document went up whole. The link sets the `thread`
 field of the root (`MURMURE-107`). Of two first replies, the loser deletes its own (`MURMURE-108`).
 Any other member opens the thread the root names (`MURMURE-106`).
+
+**A reply sent to the channel too.** Its copy reads a line saying so (`MURMURE-532`). Its reply
+action opens the thread of the loaded root that names its thread document, and no other
+(`MURMURE-533`).
 
 **A locked root.** No delta may set its `thread` field. The first reply waits for the amendments
 of its segment, and the link records the thread there, under the root's identifier
@@ -145,5 +151,7 @@ is `crates/ambre-logic/src/threads.rs`, and the Sync side is `thread_task` in
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
+* **A copy follows its reply in nothing.** An edit or a delete leaves the copy as it was. That
+  waits for the `A copy that follows its reply` Story (`ambre-roadmap.md` E5).
 * **An open channel holds every thread its loaded segments name.** A root scrolled off screen
   keeps its thread held. Releasing it is not ruled.

@@ -22,9 +22,10 @@
 //!
 //! The thread's region has a composer of its own, whose drafts are kept per
 //! thread (`MURMURE-525`). Enter there sends a reply to the root
-//! (`MURMURE-523`).
+//! (`MURMURE-523`). A box under its field sends the reply to the channel as
+//! well, and unchecks once sent (`MURMURE-531`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
     ChannelId, LogicCommand, Mention, MessageAt, MessageDraft, MessageId, MurmureCommand, Timestamp,
@@ -50,6 +51,15 @@ const FAMILY: &str = "Sans";
 
 /// The height of the strip that names who types, above the field.
 const TYPING_PX: f32 = FONT_UI + SPACE_4;
+
+/// The words beside the box under a thread's field (`MURMURE-531`).
+pub const ALSO_IN_CHANNEL: &str = "Also send to the channel";
+
+/// The height of the row of that box, under the field.
+pub(crate) const ALSO_PX: f32 = FONT_UI + SPACE_8;
+
+/// The side of the box.
+const BOX_PX: f32 = FONT_UI;
 
 /// The line that names the members typing, `None` when nobody types. Past
 /// two names it counts no one, so the line stays one short line.
@@ -209,8 +219,13 @@ struct Editing {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Sent {
     /// A new message in the channel (`MURMURE-199`), or a reply to the root
-    /// of the thread (`MURMURE-523`).
-    Message { to: DraftOf, draft: MessageDraft },
+    /// of the thread (`MURMURE-523`). A checked box sends the reply to the
+    /// channel as well (`MURMURE-531`).
+    Message {
+        to: DraftOf,
+        draft: MessageDraft,
+        also_in_channel: bool,
+    },
     /// An edit of a message of the member (`MURMURE-203`).
     Edit {
         channel: ChannelId,
@@ -224,7 +239,11 @@ impl Sent {
     /// The command to the Logic thread, stamped `now` by the view.
     pub fn command(self, now: Timestamp) -> LogicCommand {
         match self {
-            Self::Message { to, draft } => LogicCommand::Channel {
+            Self::Message {
+                to,
+                draft,
+                also_in_channel,
+            } => LogicCommand::Channel {
                 channel_id: to.channel(),
                 command: match to {
                     DraftOf::Channel(_) => MurmureCommand::SendMessage {
@@ -232,12 +251,10 @@ impl Sent {
                         now,
                         confirmed: false,
                     },
-                    // The reply stays in its thread: no copy is asked for
-                    // the channel.
                     DraftOf::Thread(_, root) => MurmureCommand::Reply {
                         root,
                         draft,
-                        also_in_channel: false,
+                        also_in_channel,
                         now,
                         confirmed: false,
                     },
@@ -321,6 +338,10 @@ pub struct Composer {
     band: f32,
     /// Where the text of the field started at the last paint.
     origin: (f32, f32),
+    /// The threads whose box asks for the reply in the channel too.
+    also: HashSet<DraftOf>,
+    /// The row of that box at the last paint, as its top and bottom.
+    also_row: Option<(f32, f32)>,
 }
 
 impl Composer {
@@ -364,6 +385,26 @@ impl Composer {
     /// The text selected in the draft `of` a channel or a thread.
     pub fn selected(&self, of: DraftOf) -> Option<String> {
         self.drafts.get(&of)?.selected_text()
+    }
+
+    /// Whether the box of the thread `of` asks for the reply in the channel
+    /// too (`MURMURE-531`).
+    pub fn also_in_channel(&self, of: DraftOf) -> bool {
+        self.also.contains(&of)
+    }
+
+    /// Check the box of the thread `of`, or uncheck it. A channel's draft
+    /// has no box.
+    pub fn toggle_also(&mut self, of: DraftOf) {
+        if matches!(of, DraftOf::Thread(..)) && !self.also.remove(&of) {
+            self.also.insert(of);
+        }
+    }
+
+    /// Whether the height `y` falls on the row of the box at the last paint.
+    pub fn on_also(&self, y: f32) -> bool {
+        self.also_row
+            .is_some_and(|(top, bottom)| (top..bottom).contains(&y))
     }
 
     /// Whether a key changed a draft since the last call. A move of the
@@ -611,12 +652,14 @@ impl Composer {
                 // The history leaves with the draft: no undo reaches a
                 // message sent (`MURMURE-434`).
                 self.histories.remove(&asked);
+                // The box unchecks once the reply leaves (`MURMURE-531`).
                 sent = Some(Sent::Message {
                     to: asked,
                     draft: MessageDraft {
                         text,
                         mentions: Vec::new(),
                     },
+                    also_in_channel: self.also.remove(&asked),
                 });
             }
         }
@@ -648,6 +691,9 @@ impl Composer {
         };
         let most = (size.1 / 2.0 - 2.0 * SPACE_4).max(MIN_LINE_PX);
         self.band = TYPING_PX + tall.clamp(MIN_LINE_PX, most) + 2.0 * SPACE_4;
+        if matches!(shown, DraftOf::Thread(..)) {
+            self.band += ALSO_PX;
+        }
         sent
     }
 
@@ -684,6 +730,35 @@ impl Composer {
             );
         }
         let top = strip + TYPING_PX;
+        // A thread's field leaves the row of its box under it.
+        self.also_row = None;
+        let height = match shown {
+            DraftOf::Thread(..) => {
+                let row = height - ALSO_PX;
+                self.also_row = Some((row, height));
+                let side = f64::from(BOX_PX);
+                let (x, y) = (
+                    f64::from(SPACE_8),
+                    f64::from(row + (ALSO_PX - BOX_PX) / 2.0),
+                );
+                let square = Rect::new(x, y, x + side, y + side);
+                if self.also.contains(&shown) {
+                    surface.fill_rect(square, palette.selection);
+                }
+                surface.stroke_rect(square, palette.cell_border, 1.0);
+                let words = shape(font_cx, cache, ALSO_IN_CHANNEL, FONT_UI, width, false);
+                let label_y = row + (ALSO_PX - words.height()) / 2.0;
+                draw(
+                    surface,
+                    words,
+                    SPACE_8 + BOX_PX + SPACE_4,
+                    label_y,
+                    palette.header_text,
+                );
+                row
+            }
+            DraftOf::Channel(_) => height,
+        };
         let field = rect(SPACE_4, top + SPACE_2, width - SPACE_4, height - SPACE_2);
         surface.fill_rect(field, palette.header_bg);
         let edge = if self.focused {
