@@ -24,8 +24,9 @@
 )]
 
 use ambre_chrome::{
-    AppShell, CommandStates, FONT_SIZES, FontSizeSelect, FormatToggle, Header, PerfChip,
-    PerfDetail, StatusBar, ToastHost, ToastKind, Toasts, Toolbar, ZoomChip, ZoomFactor,
+    AppShell, CommandStates, ContextMenu, FONT_SIZES, FontSizeSelect, FormatToggle, Header,
+    MenuEntry, PerfChip, PerfDetail, StatusBar, ToastHost, ToastKind, Toasts, Toolbar, ZoomChip,
+    ZoomFactor,
 };
 use ambre_commands::CommandId;
 use leptos::mount::mount_to;
@@ -482,6 +483,98 @@ async fn a_menu_is_operable_by_keyboard_alone() {
             .is_none()
     );
     assert_eq!(zoom.get_untracked().get(), 0.5, "Escape chose nothing");
+    root.remove();
+}
+
+/// A key that closes a menu opened from a trigger, Escape or Enter, gives
+/// the focus back to the trigger (`CHROME-027`).
+#[wasm_bindgen_test]
+async fn a_key_that_closes_a_trigger_menu_returns_the_focus_to_its_trigger() {
+    let owner = Owner::new();
+    owner.set();
+    let zoom = RwSignal::new(ZoomFactor::ONE);
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let btn: web_sys::HtmlElement = root
+        .query_selector(".statusbar-zoom-btn")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    for key in ["Escape", "Enter"] {
+        btn.focus().unwrap();
+        btn.click();
+        leptos::task::tick().await;
+        let menu = root
+            .query_selector(".statusbar-zoom-menu")
+            .unwrap()
+            .unwrap();
+        assert_ne!(active().as_ref(), btn.dyn_ref(), "{key}: the menu took it");
+        press(&menu, key);
+        leptos::task::tick().await;
+        assert_eq!(
+            active().as_ref(),
+            btn.dyn_ref(),
+            "{key}: the trigger has it"
+        );
+    }
+    root.remove();
+}
+
+/// The floating menu gives the focus back to what held it when it opened,
+/// unless the user moved it elsewhere meanwhile (`CHROME-027`).
+#[wasm_bindgen_test]
+async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
+    let owner = Owner::new();
+    owner.set();
+    let pos = RwSignal::new(None::<(f64, f64)>);
+    let item = ambre_commands::Command {
+        id: CommandId("test.item"),
+        title: |_| "Item".to_owned(),
+        icon: None,
+        keybindings: &[],
+        category: ambre_commands::CommandCategory(""),
+    };
+    let entries = vec![MenuEntry::command(&item, &ambre_commands::Locale::En)];
+    let root = mount_in_container(move || {
+        view! {
+            <button class="test-opener">"Opener"</button>
+            <input class="test-elsewhere"/>
+            <ContextMenu pos=pos entries=entries on_command=Callback::new(|_| {})/>
+        }
+    });
+    let opener: web_sys::HtmlElement = root
+        .query_selector(".test-opener")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    opener.focus().unwrap();
+    pos.set(Some((10.0, 10.0)));
+    leptos::task::tick().await;
+    let menu = root.query_selector(".ambre-ctx-menu").unwrap().unwrap();
+    let inside = active().is_some_and(|el| menu.contains(Some(&el)));
+    assert!(inside, "the menu took the focus");
+    press(&menu, "Escape");
+    leptos::task::tick().await;
+    assert!(root.query_selector(".ambre-ctx-menu").unwrap().is_none());
+    assert_eq!(active().as_ref(), opener.dyn_ref(), "the focus came back");
+
+    pos.set(Some((10.0, 10.0)));
+    leptos::task::tick().await;
+    let elsewhere: web_sys::HtmlElement = root
+        .query_selector(".test-elsewhere")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    elsewhere.focus().unwrap();
+    pos.set(None);
+    leptos::task::tick().await;
+    assert_eq!(
+        active().as_ref(),
+        elsewhere.dyn_ref(),
+        "a focus moved by the user stays"
+    );
     root.remove();
 }
 

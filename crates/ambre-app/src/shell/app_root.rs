@@ -349,10 +349,18 @@ pub(crate) fn AppRoot() -> impl IntoView {
             (boot_is_toile && present_toile.get().is_presenting())
                 || (boot_is_murmure && murmure_relay.target.with(Option::is_none))
         }),
+        // A long press or a key names the point of the menu itself.
+        Signal::derive(move || {
+            boot_is_murmure
+                && murmure_relay
+                    .target
+                    .with(|t| t.as_ref().is_some_and(|t| t.pressed.is_some()))
+        }),
     );
     if boot_is_murmure {
-        // A long press opens the same menu where the finger held. The view
-        // names that point in its canvas, and the menu needs the client's.
+        // A long press opens the same menu where the finger held, and a key
+        // below the focused row. The view names that point in its canvas, and
+        // the menu needs the client's.
         Effect::new(move |_| {
             let Some((target, (x, y))) = murmure_relay
                 .target

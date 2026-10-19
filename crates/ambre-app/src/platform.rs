@@ -405,20 +405,26 @@ pub(crate) const MENU_CANVASES: [&str; 2] = ["ambre-canvas", crate::host::THREAD
 /// browser menu stays shut. The document holds the listener, since a panel
 /// mounts its canvas later. While `silent` holds, a right-click opens nothing:
 /// a presenting board shows no editing surface.
+///
+/// While `placed` holds, the page already placed the menu at a point of its
+/// own, from a long press or a key. The event then only keeps the browser
+/// menu shut, since its point is not the page's. A key's event lands on
+/// whatever holds the focus, the text pipe or the body as well as a canvas.
 pub(crate) fn install_canvas_context_menu(
     ctx_menu: RwSignal<Option<(f64, f64)>>,
     silent: Signal<bool>,
+    placed: Signal<bool>,
 ) {
     let cb = Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |e: web_sys::MouseEvent| {
         let on_canvas = e
             .target()
             .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
             .is_some_and(|el| MENU_CANVASES.contains(&el.id().as_str()));
-        if !on_canvas {
+        if !on_canvas && !placed.get_untracked() {
             return;
         }
         e.prevent_default();
-        if silent.get_untracked() {
+        if silent.get_untracked() || placed.get_untracked() {
             return;
         }
         ctx_menu.set(Some((e.client_x() as f64, e.client_y() as f64)));
@@ -757,9 +763,26 @@ mod tests {
     /// A right-click on `id` at (12, 34): whether the browser menu stayed
     /// shut. The element lives in the body for the click alone.
     fn right_click(id: &str) -> bool {
-        let document = leptos::prelude::document();
-        let el = document.create_element("canvas").expect("a canvas");
+        let el = leptos::prelude::document()
+            .create_element("canvas")
+            .expect("a canvas");
         el.set_id(id);
+        menu_event_on(el)
+    }
+
+    /// The menu event a key raises on the text pipe that holds the focus:
+    /// whether the browser menu stayed shut.
+    fn menu_key_on_the_pipe() -> bool {
+        let el = leptos::prelude::document()
+            .create_element("textarea")
+            .expect("a textarea");
+        el.set_class_name("ambre-input");
+        menu_event_on(el)
+    }
+
+    /// A `contextmenu` at (12, 34) on `el`, in the body for the event alone.
+    fn menu_event_on(el: web_sys::Element) -> bool {
+        let document = leptos::prelude::document();
         document
             .body()
             .expect("a body")
@@ -791,7 +814,7 @@ mod tests {
     fn right_clicks_open_the_menu() {
         let ctx_menu = RwSignal::new(None);
         let silent = RwSignal::new(false);
-        install_canvas_context_menu(ctx_menu, silent.into());
+        install_canvas_context_menu(ctx_menu, silent.into(), Signal::stored(false));
         for id in MENU_CANVASES {
             ctx_menu.set(None);
             assert!(right_click(id), "{id}: the browser menu stays shut");
@@ -804,6 +827,35 @@ mod tests {
         silent.set(false);
         assert!(!right_click("elsewhere"), "the browser menu of the page");
         assert_eq!(ctx_menu.get_untracked(), None);
+    }
+
+    /// A menu the page placed from a key keeps its point. The event the key
+    /// raises on a canvas or on the text pipe only keeps the browser menu
+    /// shut. With nothing placed, the pipe keeps its browser menu (the
+    /// Murmure message list spec).
+    ///
+    /// The pipe stands for any element outside the canvases.
+    #[wasm_bindgen_test]
+    fn a_menu_the_page_placed_keeps_its_point_and_the_browsers_stays_shut() {
+        Owner::new().with(a_placed_menu_keeps_its_point);
+    }
+
+    fn a_placed_menu_keeps_its_point() {
+        let ctx_menu = RwSignal::new(None);
+        let placed = RwSignal::new(false);
+        install_canvas_context_menu(ctx_menu, Signal::stored(false), placed.into());
+        assert!(!menu_key_on_the_pipe(), "nothing placed: the browser's");
+        assert_eq!(ctx_menu.get_untracked(), None);
+
+        placed.set(true);
+        ctx_menu.set(Some((1.0, 2.0)));
+        assert!(menu_key_on_the_pipe(), "the pipe's browser menu stays shut");
+        assert!(right_click(crate::host::THREAD_CANVAS), "and the canvas's");
+        assert_eq!(
+            ctx_menu.get_untracked(),
+            Some((1.0, 2.0)),
+            "the point stays"
+        );
     }
 
     /// `CHROME-103`: a pipe that is not typed text gives a bare key to the

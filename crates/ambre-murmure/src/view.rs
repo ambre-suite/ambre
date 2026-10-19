@@ -320,6 +320,16 @@ impl MurmureView {
         })
     }
 
+    /// The focused message as the target of its actions, held at the foot
+    /// of its row, where the menu opens below it (`MURMURE-511`). `None`
+    /// with no focus on screen, or on a band.
+    fn target_of_focus(&self) -> Option<MessageTarget> {
+        let (top, bottom) = self.last.as_ref()?.focus?;
+        let mut target = self.target_at(0.0, (top + bottom) / 2.0, false)?;
+        target.pressed = Some((0.0, bottom));
+        Some(target)
+    }
+
     /// The row that holds the focus, `None` before Up or Down.
     pub fn focused(&self) -> Option<RowKey> {
         self.focus
@@ -679,7 +689,8 @@ impl MurmureView {
     /// pinch chord is the page's zoom, so the list leaves it. Page Up, Page
     /// Down and End jump through the list. Up and Down move the focus, and a
     /// key with a modifier is the browser's (`MURMURE-504`, `MURMURE-505`,
-    /// `MURMURE-205`).
+    /// `MURMURE-205`). The ContextMenu key and Shift+F10 open the actions of
+    /// the focused message (`MURMURE-511`).
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
         match *ev {
             InputEvent::PointerDown { x, y, button, .. } => {
@@ -703,12 +714,14 @@ impl MurmureView {
             }
             InputEvent::Key {
                 ref key,
+                shift,
                 ctrl: false,
                 alt: false,
                 meta: false,
-                ..
             } => {
                 match key.as_str() {
+                    "ContextMenu" => (self.reads.act_on)(self.target_of_focus()),
+                    "F10" if shift => (self.reads.act_on)(self.target_of_focus()),
                     "PageDown" => self.page(1.0),
                     "PageUp" => self.page(-1.0),
                     "End" => self.rest_at_latest(),
@@ -1595,6 +1608,46 @@ mod tests {
         assert_eq!(thread_view.touch_up(LONG_PRESS_MS + 100.0), None, "no tap");
         frame_at(&mut thread_view, LONG_PRESS_MS + 200.0);
         assert_eq!(page.acted.borrow().len(), 1, "said once");
+        assert!(page.commands.try_recv().is_err(), "nothing was sent");
+    }
+
+    /// The ContextMenu key and Shift+F10 hand the page the focused message,
+    /// held at the foot of its row (`MURMURE-511`). With no focus they hand
+    /// none, a plain F10 stays the browser's, and no command leaves.
+    #[test]
+    fn the_menu_key_hands_the_page_the_focused_message_at_its_row() {
+        let (mut page, channel, rows) = long_channel(400);
+        frame(&mut page.view);
+        assert!(key(&mut page, "ContextMenu", false, 10.0));
+        assert_eq!(page.acted.borrow().as_slice(), [None], "no focus yet");
+
+        assert!(key(&mut page, "ArrowUp", false, 20.0));
+        frame(&mut page.view);
+        let (_, bottom) = shown(&page.view).focus.expect("the focus on screen");
+        // The paints at the bottom marked the latest message read.
+        while page.commands.try_recv().is_ok() {}
+        assert!(key(&mut page, "ContextMenu", false, 30.0));
+        let shift_f10 = InputEvent::Key {
+            key: "F10".to_owned(),
+            ctrl: false,
+            alt: false,
+            shift: true,
+            meta: false,
+        };
+        assert!(page.view.handle_input(&shift_f10));
+        assert!(
+            !key(&mut page, "F10", false, 40.0),
+            "a plain F10 is the browser's"
+        );
+        let acted = page.acted.borrow();
+        assert_eq!(acted.len(), 3);
+        for target in acted.iter().skip(1) {
+            let target = target.as_ref().expect("the focused message");
+            assert_eq!(target.channel, channel);
+            assert_eq!(target.message, rows[399].id);
+            assert_eq!(target.pressed, Some((0.0, bottom)));
+            assert_eq!(target.canvas, CHANNEL_CANVAS);
+        }
         assert!(page.commands.try_recv().is_err(), "nothing was sent");
     }
 

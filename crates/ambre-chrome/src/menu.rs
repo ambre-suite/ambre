@@ -91,10 +91,46 @@ fn items(menu: &web_sys::Element) -> Vec<web_sys::HtmlElement> {
         .collect()
 }
 
-/// Focus the first item of a menu that has just opened.
+thread_local! {
+    /// The menu that took the focus last, and what held it before. One slot
+    /// is enough: the focus sits in one menu at a time.
+    static OPENER: std::cell::RefCell<Option<(web_sys::Element, web_sys::HtmlElement)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Focus the first item of a menu that has just opened. What held the focus
+/// gets it back when a key closes the menu (`CHROME-027`).
 pub fn focus_first_item(menu: &web_sys::Element) {
+    let active = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.active_element())
+        .filter(|el| !menu.contains(Some(el)))
+        .and_then(|el| el.dyn_into::<web_sys::HtmlElement>().ok());
+    if let Some(active) = active {
+        OPENER.with(|slot| *slot.borrow_mut() = Some((menu.clone(), active)));
+    }
     if let Some(first) = items(menu).first() {
         let _ = first.focus();
+    }
+}
+
+/// Give the focus back to what held it before `menu` opened, if it is still
+/// on the page.
+fn return_focus(menu: &web_sys::Element) {
+    let opener = OPENER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        match slot.take() {
+            Some((opened, opener)) if opened == *menu => Some(opener),
+            other => {
+                *slot = other;
+                None
+            }
+        }
+    });
+    if let Some(opener) = opener
+        && opener.is_connected()
+    {
+        let _ = opener.focus();
     }
 }
 
@@ -139,11 +175,13 @@ pub fn on_menu_keydown(
                 && item.get_attribute("aria-disabled").as_deref() != Some("true")
             {
                 item.click();
+                return_focus(menu);
             }
         }
         MenuKey::Dismiss => {
             ev.prevent_default();
             dismiss();
+            return_focus(menu);
         }
         MenuKey::Pass => {}
     }
