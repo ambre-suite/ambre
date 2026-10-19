@@ -65,15 +65,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-433` | `POST` | An undo in the composer MUST revert the last edit of the draft. | this spec section 3; `UNDO-010` | not built | unbuilt -- lands with the `Undo in the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-434` | `FRAME` | An undo in the composer MUST NOT reach a message already sent. | this spec section 3; `UNDO-001` | not built | unbuilt -- lands with the `Undo in the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-433` | `POST` | An undo in the composer MUST revert the last edit of the draft. | this spec section 3; `UNDO-010` | `ambre_murmure::view::tests::undo_and_redo_walk_the_draft_a_word_at_a_time` -- a word, a run of deletions and a paste are each one step, a redo brings them back, and an edit drops the redo; `ambre_murmure::composer::tests::a_seal_closes_the_waiting_edit_and_never_the_next_one` -- a caret move closes the step and never the next | none | verified |
+| `MURMURE-434` | `FRAME` | An undo in the composer MUST NOT reach a message already sent. | this spec section 3; `UNDO-001` | `ambre_murmure::view::tests::an_undo_after_a_send_reaches_no_message` -- after a send, an undo and a redo leave the draft empty and send nothing | none | verified |
 
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 7 `verified`, 18 `unimplemented`. The host tier drives the view with the
-  events the page sends: a press, a tap, text, keys, a paste. The marks, the edit, the undo and the
-  stored draft are not built.
+* **Verification.** 9 `verified`, 16 `unimplemented`. The host tier drives the view with the
+  events the page sends: a press, a tap, text, keys, a paste. The marks, the edit and the stored
+  draft are not built.
 
 ---
 
@@ -131,6 +131,10 @@ the canvas crate shares, the one a board's text and a sheet's cell already use. 
 one draft, in memory. Keys reach the draft between frames, and the next paint applies them, so
 Enter only asks for the send. That paint reads the draft, sends it unless it is blank, and drops it.
 
+**The history of the slice.** The inline editor keeps no history, so the composer keeps one per
+draft. A step gathers the edits of one way, and a caret move, a space or a line break closes it. A
+paste and a cut are a step each. The history leaves with the sent draft (`MURMURE-434`).
+
 **Code.** `crates/ambre-murmure/src/composer.rs` holds the drafts and the band. The view in
 `crates/ambre-murmure/src/view.rs` routes the pipe's events to it and sends the message.
 
@@ -170,7 +174,8 @@ Enter only asks for the send. That paint reads the draft, sends it unless it is 
   `Marks in a message` Story (`ambre-roadmap.md` E5).
 * **No message is edited from the composer.** The edit waits for the
   `Editing a message from the composer` Story (`ambre-roadmap.md` E5).
-* **A draft has no undo.** The history waits for the `Undo in the composer` Story (`ambre-roadmap.md` E5).
+* **An undo puts the caret at the end.** The history keeps the text of each step, not its caret.
+  That waits for the `The caret after an undo` Story (`ambre-roadmap.md` E5).
 * **A draft lives in memory.** A reload loses it, until the `Drafts` Story (`ambre-roadmap.md` E5).
 * **`@` opens no panel.** The panel waits for the `The mention panel` Story (`ambre-roadmap.md` E5).
 * **A thread has no composer.** A reply waits for the `Replying in a thread` Story (`ambre-roadmap.md` E5).

@@ -2453,6 +2453,99 @@ mod tests {
         assert_eq!(page.view.clipboard(true), None, "the list's text stays");
     }
 
+    /// A `Ctrl` chord, with Shift when `shift`.
+    fn chord(page: &mut Page, key: &str, shift: bool) -> bool {
+        let ev = InputEvent::Key {
+            key: key.to_owned(),
+            ctrl: true,
+            alt: false,
+            shift,
+            meta: false,
+        };
+        page.view.handle_input(&ev)
+    }
+
+    /// Type `text` one key per frame, as a member does.
+    fn type_slowly(page: &mut Page, text: &str) {
+        for c in text.chars() {
+            type_text(page, &c.to_string());
+            frame_with_fonts(&mut page.view);
+        }
+    }
+
+    /// The draft of `channel` once the keys before it landed.
+    fn painted(page: &mut Page, channel: ChannelId) -> Option<String> {
+        frame_with_fonts(&mut page.view);
+        page.view.composer().draft(channel)
+    }
+
+    /// `Ctrl+Z` takes back a word at a time, and `Ctrl+Shift+Z` or `Ctrl+Y`
+    /// brings it again. A run of deletions is one step, a paste is one, and
+    /// an edit drops what a redo held (`MURMURE-433`).
+    #[test]
+    fn undo_and_redo_walk_the_draft_a_word_at_a_time() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "hi yo");
+        assert!(chord(&mut page, "z", false), "the composer takes the chord");
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
+        chord(&mut page, "z", false);
+        assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
+        chord(&mut page, "z", false);
+        assert_eq!(
+            painted(&mut page, channel).as_deref(),
+            Some(""),
+            "nothing left to undo"
+        );
+        assert!(chord(&mut page, "Z", true));
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
+        assert!(chord(&mut page, "y", false));
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("hi yo"));
+
+        for _ in 0..2 {
+            key(&mut page, "Backspace", false, 0.0);
+            frame_with_fonts(&mut page.view);
+        }
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
+        chord(&mut page, "z", false);
+        assert_eq!(
+            painted(&mut page, channel).as_deref(),
+            Some("hi yo"),
+            "two deletions are one step"
+        );
+
+        page.view.paste("there");
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("hi yothere"));
+        chord(&mut page, "z", false);
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("hi yo"));
+        type_slowly(&mut page, "x");
+        chord(&mut page, "Z", true);
+        assert_eq!(
+            painted(&mut page, channel).as_deref(),
+            Some("hi yox"),
+            "the edit dropped the redo"
+        );
+    }
+
+    /// A send ends the history: an undo after it brings back no message
+    /// sent, and sends nothing (`MURMURE-434`).
+    #[test]
+    fn an_undo_after_a_send_reaches_no_message() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "hello");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(sent(&page).len(), 1);
+        chord(&mut page, "z", false);
+        assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
+        chord(&mut page, "Z", true);
+        assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
+        assert!(sent(&page).is_empty(), "no undo reaches the sent message");
+    }
+
     /// A tap in the band puts the caret there and gives the pipe the
     /// keyboard; a press in the list takes it back (`MURMURE-430`).
     #[test]

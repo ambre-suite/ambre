@@ -12,6 +12,10 @@
 //!
 //! A strip above the field names the members typing in the channel. It is
 //! always there, so the list never moves when someone starts or stops.
+//!
+//! Each draft keeps its own history, read at paint like its edits: `Ctrl+Z`
+//! and `Ctrl+Shift+Z` walk it (`MURMURE-433`). A send drops it, so no undo
+//! reaches a message sent (`MURMURE-434`).
 
 use std::collections::HashMap;
 
@@ -58,11 +62,100 @@ fn body_style(color: Color) -> TextEditorStyle {
     }
 }
 
+/// Which way a step of the history moved the draft.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Change {
+    Grow,
+    Shrink,
+}
+
+/// The history of one draft: the texts an undo goes back to, and those a redo
+/// goes forward to. A step gathers the edits of one way. A caret move, a line
+/// break, a paste or a space seals it, so one undo takes back a word.
+#[derive(Debug, Default)]
+struct History {
+    undo: Vec<String>,
+    redo: Vec<String>,
+    /// The draft as the last paint left it.
+    last: String,
+    /// The way of the step still open, `None` once sealed.
+    open: Option<Change>,
+    /// Seal the step once the next paint records the edit that asked it.
+    seal_after: bool,
+    /// An edit waits for the next paint.
+    pending: bool,
+    /// The steps asked since the last paint, `true` for a redo.
+    asked: Vec<bool>,
+}
+
+impl History {
+    /// An edit landed, which the next paint records.
+    fn edit(&mut self) {
+        self.pending = true;
+    }
+
+    /// The next edit starts a step of its own. An edit not yet painted still
+    /// joins the step it lands in, and closes it.
+    fn seal(&mut self) {
+        if self.pending {
+            self.seal_after = true;
+        } else {
+            self.open = None;
+        }
+    }
+
+    /// The edit about to land is a step of its own: a paste, a cut, a line
+    /// break.
+    fn apart(&mut self) {
+        self.open = None;
+        self.seal_after = true;
+        self.pending = true;
+    }
+
+    /// The draft reads `text` after a paint. A change opens a step, or joins
+    /// the open one when it goes the same way. Any change drops the redo.
+    fn record(&mut self, text: &str) {
+        if text != self.last {
+            let change = if text.len() > self.last.len() {
+                Change::Grow
+            } else {
+                Change::Shrink
+            };
+            let before = std::mem::replace(&mut self.last, text.to_owned());
+            if self.open != Some(change) {
+                self.undo.push(before);
+            }
+            self.redo.clear();
+            self.open = Some(change);
+        }
+        if std::mem::take(&mut self.seal_after) {
+            self.open = None;
+        }
+        self.pending = false;
+    }
+
+    /// Walk one step back, or forward for a `redo`, and answer the text the
+    /// draft takes. `None` with nothing to walk.
+    fn step(&mut self, redo: bool) -> Option<String> {
+        let (from, to) = if redo {
+            (&mut self.redo, &mut self.undo)
+        } else {
+            (&mut self.undo, &mut self.redo)
+        };
+        let text = from.pop()?;
+        to.push(std::mem::replace(&mut self.last, text.clone()));
+        self.open = None;
+        Some(text)
+    }
+}
+
 /// The composer of the channel region, and the draft of every channel.
 #[derive(Default)]
 pub struct Composer {
     /// The draft of each channel the member wrote in. A sent draft leaves it.
     drafts: HashMap<ChannelId, TextEditor>,
+    /// The history of each draft, which leaves with it.
+    histories: HashMap<ChannelId, History>,
     /// The keys reach the composer, not the list.
     focused: bool,
     /// An input method composes: its keys are its own.
@@ -121,10 +214,21 @@ impl Composer {
             .or_insert_with(|| TextEditor::new("", body_style(Color::BLACK)))
     }
 
+    /// The history of the draft of `channel`, opened empty on first use.
+    fn history(&mut self, channel: ChannelId) -> &mut History {
+        self.histories.entry(channel).or_default()
+    }
+
     /// Text the pipe committed: a typed key, a paste, a word an input
-    /// method chose.
+    /// method chose. A paste is a step of its own, and a space ends a word's.
     pub fn text(&mut self, channel: ChannelId, text: &str) {
         self.typed |= !text.is_empty();
+        let history = self.history(channel);
+        if text.chars().count() > 1 {
+            history.apart();
+        }
+        history.edit();
+        history.seal_after |= text.ends_with(char::is_whitespace);
         self.editor(channel).insert(text);
     }
 
@@ -132,6 +236,7 @@ impl Composer {
     pub fn compose(&mut self, channel: ChannelId, text: &str, end: bool) {
         self.composing = !end && !text.is_empty();
         self.typed |= !text.is_empty();
+        self.history(channel).edit();
         let editor = self.editor(channel);
         if end {
             editor.commit_compose(text);
@@ -146,11 +251,13 @@ impl Composer {
         let text = editor.selected_text()?;
         editor.delete_selection();
         self.typed = true;
+        self.history(channel).apart();
         Some(text)
     }
 
     /// A key while the composer holds the focus. Enter sends and Shift+Enter
-    /// breaks the line (`MURMURE-199`, `MURMURE-200`). Escape gives the keys
+    /// breaks the line (`MURMURE-199`, `MURMURE-200`). `Ctrl+Z` undoes, and
+    /// `Ctrl+Shift+Z` or `Ctrl+Y` redoes (`MURMURE-433`). Escape gives the keys
     /// back to the list. Answers whether the composer took the key.
     pub fn key(
         &mut self,
@@ -174,6 +281,13 @@ impl Composer {
                 self.blur();
                 return true;
             }
+            "z" | "Z" | "y" | "Y" if ctrl => {
+                let redo = shift || key.eq_ignore_ascii_case("y");
+                self.typed = true;
+                self.editor(channel);
+                self.history(channel).asked.push(redo);
+                return true;
+            }
             "a" | "A" if ctrl => EditIntent::SelectAll,
             "Backspace" => EditIntent::Backspace,
             "Delete" => EditIntent::Delete,
@@ -191,10 +305,18 @@ impl Composer {
             "End" => EditIntent::LineEnd { select: shift },
             _ => return false,
         };
-        self.typed |= matches!(
+        let edits = matches!(
             intent,
             EditIntent::Newline | EditIntent::Backspace | EditIntent::Delete
         );
+        self.typed |= edits;
+        // A caret move ends the step, and a line break is one of its own.
+        let history = self.history(channel);
+        match intent {
+            EditIntent::Newline => history.apart(),
+            EditIntent::Backspace | EditIntent::Delete => history.edit(),
+            _ => history.seal(),
+        }
         self.editor(channel).push(intent);
         true
     }
@@ -203,6 +325,7 @@ impl Composer {
     /// from it selects.
     pub fn press(&mut self, channel: ChannelId, x: f32, y: f32) {
         let (dx, dy) = self.origin;
+        self.history(channel).seal();
         self.editor(channel).point_down(x - dx, y - dy);
         self.dragging = true;
     }
@@ -226,6 +349,7 @@ impl Composer {
     /// A double click in the field selects the word under it.
     pub fn word_at(&mut self, channel: ChannelId, x: f32, y: f32) {
         let (dx, dy) = self.origin;
+        self.history(channel).seal();
         self.editor(channel).word_at(x - dx, y - dy);
     }
 
@@ -251,6 +375,9 @@ impl Composer {
             let text = editor.text();
             if !text.trim().is_empty() {
                 self.drafts.remove(&asked);
+                // The history leaves with the draft: no undo reaches a
+                // message sent (`MURMURE-434`).
+                self.histories.remove(&asked);
                 sent = Some((asked, text));
             }
         }
@@ -262,6 +389,20 @@ impl Composer {
             Some(editor) => {
                 editor.set_style(style);
                 editor.flush(font_cx, wrap, 1.0);
+                // Record the edits that landed, then walk the steps asked
+                // after them. A step puts the caret at the end of the draft.
+                let history = self.histories.entry(channel).or_default();
+                history.record(&editor.text());
+                let mut walked = false;
+                for redo in std::mem::take(&mut history.asked) {
+                    if let Some(text) = history.step(redo) {
+                        editor.set_text(&text);
+                        walked = true;
+                    }
+                }
+                if walked {
+                    editor.flush(font_cx, wrap, 1.0);
+                }
                 editor.layout_height().unwrap_or(0.0)
             }
             None => 0.0,
@@ -356,5 +497,27 @@ mod tests {
         assert_eq!(two.as_deref(), Some("Ada and Bob are typing"));
         let three = typing_line(&names(&["Ada", "Bob", "Cy"]));
         assert_eq!(three.as_deref(), Some("Several people are typing"));
+    }
+
+    /// A seal with no edit waiting starts the next step, and does not close
+    /// it on its first key. A seal with an edit waiting closes the step that
+    /// edit joins (`MURMURE-433`).
+    #[test]
+    fn a_seal_closes_the_waiting_edit_and_never_the_next_one() {
+        let mut history = History::default();
+        history.seal();
+        for text in ["h", "hi"] {
+            history.edit();
+            history.record(text);
+        }
+        history.edit();
+        history.seal();
+        history.record("hi!");
+        history.edit();
+        history.record("hi!?");
+        assert_eq!(history.step(false).as_deref(), Some("hi!"));
+        assert_eq!(history.step(false).as_deref(), Some(""));
+        assert_eq!(history.step(false), None, "nothing left to walk");
+        assert_eq!(history.step(true).as_deref(), Some("hi!"));
     }
 }
