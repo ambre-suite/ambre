@@ -310,8 +310,10 @@ impl MurmureView {
             channel,
             at,
             message: message.id,
+            author: message.author,
             text: message.text.clone(),
             notice: message.notice.is_some(),
+            deleted: message.deleted,
             pressed: pressed.then_some((x, y)),
             canvas: match self.region {
                 Region::Channel => CHANNEL_CANVAS,
@@ -1522,20 +1524,14 @@ mod tests {
     fn a_right_click_hands_the_page_its_message_and_sends_nothing() {
         let mut page = page();
         let channel = ChannelId::new();
-        let segment = list(&page, channel, &["a", "b"]);
+        let ada = UserId::new();
+        let segment = SegmentId::new();
+        let messages = vec![message(ada, 0, "a"), message(ada, 1, "b")];
+        let second = messages[1].id;
+        send(&page, channel, MurmureEvent::Messages { segment, messages });
         page.pane.set(MurmurePane::channel(channel));
         frame(&mut page.view);
         let _ = reads(&page);
-        let rows = page
-            .view
-            .lists
-            .borrow()
-            .conversations
-            .channel(channel)
-            .map(|l| l.keys());
-        let Some(RowKey::Message(second)) = rows.and_then(|keys| keys.get(1).copied()) else {
-            panic!("two messages listed");
-        };
 
         let y = middle_of(&page.view, 1);
         assert!(!button(&mut page, 2, y));
@@ -1543,8 +1539,10 @@ mod tests {
             channel,
             at: MessageAt::Segment(segment),
             message: second,
+            author: ada,
             text: "b".to_owned(),
             notice: false,
+            deleted: false,
             pressed: None,
             canvas: CHANNEL_CANVAS,
         };
@@ -1599,8 +1597,10 @@ mod tests {
             channel,
             at: MessageAt::Thread(root.id),
             message: reply.id,
+            author: ada,
             text: "one".to_owned(),
             notice: false,
+            deleted: false,
             pressed: Some((10.0, y)),
             canvas: THREAD_CANVAS,
         };

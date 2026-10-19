@@ -74,7 +74,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-422` | `POST` | A right-click on a message MUST open its actions in the shared floating menu. | this spec section 3; `CHROME-004` | `ambre_murmure::view::tests::a_right_click_hands_the_page_its_message_and_sends_nothing` -- a right-click on a message hands the page that message, and one off any message hands none; `ambre_app::platform::tests::a_right_click_on_either_canvas_opens_the_menu_at_its_point` -- a right-click on the channel or the thread canvas opens the shared menu at its point, in the browser tier | none | verified |
 | `MURMURE-423` | `POST` | A long press on a message MUST open its actions on a touch screen. | this spec section 3; `KINETIC-003`; `KINETIC-014` | `ambre_murmure::view::tests::a_long_press_hands_the_page_its_message_where_it_held` -- a finger held still past the delay hands the page its message and the point it held; `ambre_draw::kinetic::tests::a_press_held_inside_the_slop_is_a_long_press_and_no_tap` -- the model calls a press held inside the slop a long press, and its release no tap | none | verified |
 | `MURMURE-511` | `POST` | The ContextMenu key, or Shift+F10, on the focused message MUST open its actions in the shared floating menu. | this spec section 3; `MURMURE-205`; `MURMURE-422`; `CHROME-027` | `ambre_murmure::view::tests::the_menu_key_hands_the_page_the_focused_message_at_its_row` -- both keys hand the page the focused message at the foot of its row, none with no focus, and a plain F10 stays the browser's; `ambre_app::platform::tests::a_menu_the_page_placed_keeps_its_point_and_the_browsers_stays_shut` -- the menu the page placed keeps its point, and the browser menu of the focused element stays shut, in the browser tier | none | verified |
-| `MURMURE-512` | `POST` | Deleting a message of the member from its actions MUST ask for a confirmation first, since a deletion cannot be undone. | this spec section 3; `MURMURE-087` | not built | unbuilt -- lands with the `Deleting a message from the list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-512` | `POST` | Deleting a message of the member from its actions MUST ask for a confirmation first, since a deletion cannot be undone. | this spec section 3; `MURMURE-087` | `ambre_murmure::commands::tests::only_the_author_deletes_a_message_and_only_once_confirmed` -- only the author is offered the delete, once, and the action asks for a confirmation; `ambre_murmure::chrome_relay::a_deletion_is_sent_only_once_the_dialog_confirms_it` -- the dialog opens, Cancel and a close send nothing, and Delete sends the stamped deletion | none | verified |
 | `MURMURE-424` | `FRAME` | Opening the actions of a message MUST NOT change the message. | this spec section 3 | `ambre_murmure::view::tests::a_right_click_hands_the_page_its_message_and_sends_nothing` -- a right-click sends the engine nothing; `ambre_murmure::view::tests::a_long_press_hands_the_page_its_message_where_it_held` -- a long press sends the engine nothing | none | verified |
 
 ### 1.7 Select and copy text
@@ -99,10 +99,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
   only what `meta` already tells every member: the span of a segment.
-* **Verification.** 33 `verified`, 5 `unimplemented`. The host tier holds the order, the groups,
+* **Verification.** 34 `verified`, 4 `unimplemented`. The host tier holds the order, the groups,
   the words and the paint of the rows and the bands. It holds the scroll, the jumps, the focus and
   the thread's list too, and the actions of a message. The browser tier holds each canvas, the
-  finger, the local time, the live region and the menu's listener.
+  finger, the local time, the live region, the menu's listener and the dialog of a delete.
 
 ---
 
@@ -164,8 +164,13 @@ inside the tap slop of `ambre-spec-kinetic-scroll.md`, past the delay of the pla
 
 A right-click or a long press hands the page the message under it. The page opens the shared
 floating menu at that point (`MURMURE-422`, `MURMURE-423`). The menu lists the actions the
-message offers now: reply, mark unread and copy text. The keyboard opens the same menu on the
-focused message (`MURMURE-511`). A delete asks for a confirmation first (`MURMURE-512`).
+message offers now: reply, mark unread, copy text and delete. The keyboard opens the same menu on
+the focused message (`MURMURE-511`).
+
+A delete takes the message from every member, and no edit brings it back. So the action sends
+nothing: it opens a dialog, and only its Delete button sends the deletion (`MURMURE-512`). The
+dialog opens on Cancel, and Cancel, Escape or the backdrop send nothing. The view stamps the
+deletion, since the Logic thread reads no clock.
 
 | Command | Offered on |
 |---|---|
@@ -253,7 +258,7 @@ both to each region, and `ambre_app::host::murmure` hands it the pane, the names
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **A band names its remedy in words.** It says to reopen the channel; no control on it asks again.
-* **Only three actions are built.** Reply, mark unread and copy text.
+* **Only four actions are built.** Reply, mark unread, copy text and delete.
   React lands with the `Emoji` Story (`ambre-roadmap.md` E5).
   Edit lands with the `The composer` Story (`ambre-roadmap.md` E5).
   Pin and bookmark wait for the `Pin, bookmark and copy link` Story (`ambre-roadmap.md` E5).

@@ -562,17 +562,22 @@ mod tests {
         let page = page();
         let mut cells = Cells::default();
         cells.sync(&page);
-        let document = web_sys::window().and_then(|w| w.document()).unwrap();
-        let heard = Rc::new(std::cell::Cell::new(0));
-        let count = Rc::clone(&heard);
-        let listener = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
-            count.set(count.get() + 1);
+        // The body hears a key before the document, whose listeners other
+        // tests leave behind: the probe reads the key as the cell left it.
+        let body = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.body())
+            .unwrap();
+        let heard = Rc::new(std::cell::Cell::new(None));
+        let sink = Rc::clone(&heard);
+        let listener = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
+            sink.set(Some(event.default_prevented()));
         });
         let callback = listener.as_ref().unchecked_ref();
-        document
-            .add_event_listener_with_callback("keydown", callback)
+        body.add_event_listener_with_callback("keydown", callback)
             .unwrap();
         let press = |key: &str| {
+            heard.set(None);
             let init = web_sys::KeyboardEventInit::new();
             init.set_key(key);
             init.set_bubbles(true);
@@ -584,12 +589,16 @@ mod tests {
         };
 
         assert!(press("PageUp"), "the thread took the key");
+        assert_eq!(heard.get(), None, "the page never heard it");
         assert!(press("ArrowUp"));
-        assert_eq!(heard.get(), 0, "the page never heard them");
-        assert!(!press("a"), "a key the thread leaves");
-        assert_eq!(heard.get(), 1, "reaches the page");
-        document
-            .remove_event_listener_with_callback("keydown", callback)
+        assert_eq!(heard.get(), None, "nor this one");
+        press("a");
+        assert_eq!(
+            heard.get(),
+            Some(false),
+            "a key the thread leaves reaches the page"
+        );
+        body.remove_event_listener_with_callback("keydown", callback)
             .unwrap();
     }
 

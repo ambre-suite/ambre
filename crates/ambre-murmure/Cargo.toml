@@ -42,6 +42,11 @@ serde_json = { workspace = true }
 # (`tests/chrome_relay.rs`, `just test-wasm`), as ambre-prose's do.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+# The confirmation of a deletion is clicked in a real dialog.
+wasm-bindgen         = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys               = { workspace = true }
+web-sys              = { workspace = true }
 
 [[bench]]
 name = "segment"

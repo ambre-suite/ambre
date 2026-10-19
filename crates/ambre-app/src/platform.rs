@@ -416,15 +416,21 @@ pub(crate) fn install_canvas_context_menu(
     placed: Signal<bool>,
 ) {
     let cb = Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |e: web_sys::MouseEvent| {
+        // The document keeps the listener past the owner of the signals.
+        // Once they are gone, the browser keeps its menu.
+        let (Some(placed), Some(silent)) = (placed.try_get_untracked(), silent.try_get_untracked())
+        else {
+            return;
+        };
         let on_canvas = e
             .target()
             .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
             .is_some_and(|el| MENU_CANVASES.contains(&el.id().as_str()));
-        if !on_canvas && !placed.get_untracked() {
+        if !on_canvas && !placed {
             return;
         }
         e.prevent_default();
-        if silent.get_untracked() || placed.get_untracked() {
+        if silent || placed {
             return;
         }
         ctx_menu.set(Some((e.client_x() as f64, e.client_y() as f64)));

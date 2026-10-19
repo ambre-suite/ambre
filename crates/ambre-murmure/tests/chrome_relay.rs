@@ -22,9 +22,9 @@ use ambre_bus::{
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId};
-use ambre_murmure::chrome::{MurmureHandler, MurmureRelay, SearchBox, coverage};
+use ambre_murmure::chrome::{DeleteConfirm, MurmureHandler, MurmureRelay, SearchBox, coverage};
 use ambre_murmure::commands::{
-    COMMANDS, COPY_TEXT, MARK_ALL_READ, MARK_UNREAD, MessageTarget, NEXT_ACTIVITY, PALETTE,
+    COMMANDS, COPY_TEXT, DELETE, MARK_ALL_READ, MARK_UNREAD, MessageTarget, NEXT_ACTIVITY, PALETTE,
     PREVIOUS_ACTIVITY, REPLY, SEARCH,
 };
 use ambre_murmure::{MessageRef, MurmurePane};
@@ -535,8 +535,10 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         channel: direct,
         at: MessageAt::Segment(segment),
         message,
+        author: UserId::new(),
         text: "hello".to_owned(),
         notice: false,
+        deleted: false,
         pressed: None,
         canvas: "ambre-canvas",
     };
@@ -573,6 +575,117 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         [ShellAction::CopyText(text)] if text == "hello"
     ));
     assert_eq!(sent.get_untracked().len(), 1, "copy sends nothing");
+}
+
+/// The member's own message offers its deletion, last. The action sends
+/// nothing and opens the dialog. Cancel and a close of the dialog send
+/// nothing, and Delete sends the deletion, stamped by the view
+/// (`MURMURE-512`).
+#[wasm_bindgen_test]
+async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
+    use wasm_bindgen::JsCast;
+
+    let (_owner, relay, direct) = shown_direct();
+    let me = UserId::new();
+    relay.absorb(&UiEvent::Rest {
+        id: RequestId::next(),
+        evt: RestEvent::SessionReady {
+            user_id: me,
+            display_name: "Alice".to_owned(),
+            email: "alice@test.local".to_owned(),
+        },
+    });
+    let (handler, sent) = handler(relay);
+    let segment = SegmentId::new();
+    let message = MessageId::new();
+    let target = MessageTarget {
+        channel: direct,
+        at: MessageAt::Segment(segment),
+        message,
+        author: me,
+        text: "oops".to_owned(),
+        notice: false,
+        deleted: false,
+        pressed: None,
+        canvas: "ambre-canvas",
+    };
+    let other = MessageTarget {
+        author: UserId::new(),
+        ..target.clone()
+    };
+    relay.target.set(Some(other));
+    assert!(!menu_labels(relay).contains(&"Delete message".to_owned()));
+    relay.target.set(Some(target.clone()));
+    assert_eq!(
+        menu_labels(relay).last().map(String::as_str),
+        Some("Delete message")
+    );
+
+    let send = handler.send;
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let now = Timestamp(1_700_000_000_000);
+    let _handle = leptos::mount::mount_to(mount, move || {
+        view! { <DeleteConfirm relay=relay send=send now=Callback::new(move |()| now) /> }
+    });
+    let dialog: web_sys::HtmlDialogElement = root
+        .query_selector("dialog")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    let click = |class: &str| {
+        let selector = format!(".{class}");
+        let button = root.query_selector(&selector).unwrap().unwrap();
+        button.dyn_into::<web_sys::HtmlElement>().unwrap().click();
+    };
+
+    assert!(handler.on_command(DELETE).is_empty());
+    leptos::task::tick().await;
+    assert!(dialog.open(), "the action asks first");
+    assert_eq!(relay.target.get_untracked(), None, "the menu closed");
+    assert!(
+        sent.get_untracked().is_empty(),
+        "nothing sent before Delete"
+    );
+    click("murmure-delete-cancel");
+    leptos::task::tick().await;
+    assert!(!dialog.open());
+    assert_eq!(relay.deleting.get_untracked(), None);
+    assert!(sent.get_untracked().is_empty(), "a cancel sends nothing");
+
+    relay.target.set(Some(target.clone()));
+    handler.on_command(DELETE);
+    leptos::task::tick().await;
+    assert!(dialog.open());
+    // Escape closes the dialog natively, as this close does. Its event is
+    // queued as a task, after the close returns.
+    let closed = js_sys::Promise::new(&mut |resolve, _| {
+        dialog
+            .add_event_listener_with_callback("close", &resolve)
+            .unwrap();
+    });
+    dialog.close();
+    wasm_bindgen_futures::JsFuture::from(closed).await.unwrap();
+    assert_eq!(relay.deleting.get_untracked(), None, "a close cancels");
+    assert!(sent.get_untracked().is_empty(), "a close sends nothing");
+
+    relay.target.set(Some(target));
+    handler.on_command(DELETE);
+    leptos::task::tick().await;
+    click("murmure-delete-confirm");
+    leptos::task::tick().await;
+    assert!(!dialog.open());
+    let at = MessageAt::Segment(segment);
+    assert!(matches!(
+        sent.get_untracked()[..],
+        [LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::DeleteMessage { at: a, message: m, now: t },
+        }] if channel_id == direct && a == at && m == message && t == now
+    ));
+    root.remove();
 }
 
 /// What a search of `query` found: `budget` holds one match in the one

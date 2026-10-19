@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::commands::{
     COMMANDS, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY, PALETTE,
-    PREVIOUS_ACTIVITY, SEARCH, message_action, message_actions,
+    PREVIOUS_ACTIVITY, PendingDelete, SEARCH, message_action, message_actions,
 };
 use crate::{
     Activity, MessageRef, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
@@ -296,6 +296,9 @@ pub struct MurmureRelay {
     /// The message the actions are open on, as the view last found it under
     /// a right-click or a long press. `None` once the menu closes.
     pub target: RwSignal<Option<MessageTarget>>,
+    /// The deletion the dialog asks the member to confirm (`MURMURE-512`).
+    /// `None` once confirmed or cancelled.
+    pub deleting: RwSignal<Option<PendingDelete>>,
 }
 
 /// The search box: whether it is open, the query typed, and the last answer
@@ -377,19 +380,21 @@ impl MurmureRelay {
             inviting: RwSignal::new(None),
             channel_members: RwSignal::new(HashMap::new()),
             target: RwSignal::new(None),
+            deleting: RwSignal::new(None),
         }
     }
 
     /// The menu of the target: one entry per action it offers, each a
     /// command of the table (`MURMURE-419`). Empty with no target.
     pub fn menu_entries(&self) -> Signal<Vec<MenuEntry>> {
-        let target = self.target;
+        let (target, me) = (self.target, self.me);
         Signal::derive(move || {
+            let me = me.get();
             target.with(|target| {
                 let Some(target) = target else {
                     return Vec::new();
                 };
-                message_actions(target)
+                message_actions(target, me)
                     .into_iter()
                     .filter_map(|id| ambre_commands::find(COMMANDS, id))
                     .map(|command| MenuEntry::command(command, &Locale::En))
@@ -402,9 +407,17 @@ impl MurmureRelay {
     /// `None` with no target, or for an id it does not offer.
     pub fn act(&self, id: CommandId) -> Option<MessageAction> {
         let target = self.target.get_untracked()?;
-        let action = message_action(id, &target)?;
+        let action = message_action(id, &target, self.me.get_untracked())?;
         self.target.set(None);
         Some(action)
+    }
+
+    /// The command of the deletion the member confirmed, stamped `now`, and
+    /// the dialog closed (`MURMURE-512`). `None` with none asked.
+    pub fn confirm_delete(&self, now: Timestamp) -> Option<LogicCommand> {
+        let pending = self.deleting.get_untracked()?;
+        self.deleting.set(None);
+        Some(pending.command(now))
     }
 
     /// Open the search box, on the find chord (`MURMURE-213`). An open box
@@ -964,6 +977,7 @@ impl CommandHandler for MurmureHandler {
             Some(MessageAction::Open(pane)) => self.relay.pane.set(pane),
             Some(MessageAction::Send(command)) => self.send.run(command),
             Some(MessageAction::Copy(text)) => return vec![ShellAction::CopyText(text)],
+            Some(MessageAction::ConfirmDelete(pending)) => self.relay.deleting.set(Some(pending)),
             None => {
                 self.run(id);
             }
@@ -1067,6 +1081,44 @@ pub fn MessageSearch(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
                 </Show>
             </div>
         </Show>
+    }
+}
+
+/// The dialog that confirms the deletion the actions of a message asked for
+/// (`MURMURE-512`). A deletion cannot be undone, so nothing is sent before
+/// Delete. Cancel, Escape and the backdrop send nothing. `now` stamps it.
+#[component]
+pub fn DeleteConfirm(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    now: Callback<(), Timestamp>,
+) -> impl IntoView {
+    let open = RwSignal::new(false);
+    Effect::new(move |_| open.set(relay.deleting.with(Option::is_some)));
+    let cancel = move || relay.deleting.set(None);
+    let confirm = move |_| {
+        if let Some(command) = relay.confirm_delete(now.run(())) {
+            send.run(command);
+        }
+    };
+    view! {
+        <ambre_chrome::Dialog
+            open=open
+            on_close=Callback::new(move |()| cancel())
+            class="murmure-delete"
+            label="Delete message"
+        >
+            <h2>"Delete this message?"</h2>
+            <p>"It is deleted for every member of the channel. This cannot be undone."</p>
+            // Cancel comes first, so the focus the dialog opens on is never
+            // the irreversible choice.
+            <div class="ambre-dialog-actions">
+                <button class="murmure-delete-cancel" on:click=move |_| cancel()>"Cancel"</button>
+                <button class="ambre-btn-danger murmure-delete-confirm" on:click=confirm>
+                    "Delete"
+                </button>
+            </div>
+        </ambre_chrome::Dialog>
     }
 }
 
