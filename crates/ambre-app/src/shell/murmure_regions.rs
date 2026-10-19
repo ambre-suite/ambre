@@ -1331,3 +1331,19 @@ async fn the_list_of_keys_shows_its_keys_at_every_width() {
         assert_eq!(frame.texts(".murmure-keys-key")[0], "Ctrl+K");
     }
 }
+
+/// The host tells the canvas it is on a desktop exactly where the stylesheet
+/// shows a chord. The box of a thread names Alt+Enter only there (`MURMURE-544`).
+#[wasm_bindgen_test]
+async fn the_canvas_reads_the_desktop_width_as_the_stylesheet_does() {
+    for (width, wide) in [(1024, false), (1025, true)] {
+        let frame = Frame::new(width, channel()).await;
+        let chip = frame.inner.create_element("kbd").unwrap();
+        chip.set_class_name("ambre-kbd");
+        chip.set_text_content(Some("Alt+Enter"));
+        frame.inner.body().unwrap().append_child(&chip).unwrap();
+        let window = frame.frame.content_window().unwrap();
+        assert_eq!(crate::host::desktop_in(&window), wide, "at {width}");
+        assert_eq!(frame.width_of(".ambre-kbd") > 0.0, wide, "chip at {width}");
+    }
+}

@@ -1092,6 +1092,14 @@ impl MurmureView {
         self.dirty = true;
     }
 
+    /// The window is as wide as a desktop, or no longer is. The box under a
+    /// thread's composer names its chord only then (`MURMURE-544`).
+    pub fn set_desktop(&mut self, desktop: bool) {
+        if self.composer.show_chords(desktop) {
+            self.dirty = true;
+        }
+    }
+
     /// The region follows the pointer, and the wheel scrolls it. A trackpad
     /// glide that pauses coasts on; a notch never does (`KINETIC-002`). The
     /// pinch chord is the page's zoom, so the list leaves it. Page Up, Page
@@ -3592,6 +3600,45 @@ mod tests {
         assert!(alt_enter(&mut page));
         assert!(alt_enter(&mut page));
         assert!(!page.view.composer().also_in_channel(of), "unchecked");
+    }
+
+    /// Every run of glyphs the view paints, as glyph counts.
+    fn glyph_runs(page: &mut Page) -> Vec<usize> {
+        page.view.update();
+        page.view.plan_repaint(0.0, false);
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let mut surface = RecordingSurface::new();
+        page.view
+            .paint_content(&mut surface, &mut font_cx, &mut cache, None);
+        surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                ambre_draw::testing::DrawOp::Glyphs { glyph_count, .. } => Some(*glyph_count),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The box under a thread's composer names Alt+Enter at the desktop
+    /// width only, and drops it again below (`MURMURE-544`).
+    #[test]
+    fn the_box_names_its_chord_at_the_desktop_width_only() {
+        let channel = ChannelId::new();
+        let (mut page, _channel_view, _, _) = threaded(channel);
+        assert!(press_composer(&mut page));
+        let narrow = glyph_runs(&mut page);
+        page.view.set_desktop(true);
+        let mut wide = glyph_runs(&mut page);
+        let at = wide
+            .iter()
+            .zip(narrow.iter().chain(std::iter::repeat(&0)))
+            .position(|(w, n)| w != n)
+            .expect("one more run at the desktop width");
+        assert_eq!(wide.remove(at), crate::composer::ALSO_CHORD.chars().count());
+        assert_eq!(wide, narrow, "only the chord is added");
+        page.view.set_desktop(false);
+        assert_eq!(glyph_runs(&mut page), narrow);
     }
 
     /// Alt+Enter in a channel's composer sends, as Enter does, since a

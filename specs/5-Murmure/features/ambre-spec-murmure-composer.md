@@ -29,6 +29,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-430` | `INV` | The composer MUST be canvas content, fed by the shared input pipe. | this spec section 3; `UI-THREAD-014`; `ambre-spec-text-input.md` | `ambre_murmure::view::tests::the_composer_takes_the_pipe_until_escape` -- a press in the band focuses the pipe, and its text and keys reach the draft, never the list, until Escape; `ambre_murmure::view::tests::paste_copy_and_cut_go_through_the_draft` -- a paste lands in the draft, and a copy or a cut reads its selection; `ambre_murmure::view::tests::a_tap_in_the_band_focuses_the_composer` -- a tap focuses the pipe, and a press in the list takes the focus back | none | verified |
 | `MURMURE-431` | `INV` | A formatting chord of the composer MUST invoke the Prose command of the same mark. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `Marks in a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-432` | `OBS` | A selection in the composer MUST show the Prose format bar, with the Murmure marks alone. | this spec section 3; `MURMURE-194` | not built | unbuilt -- lands with the `Marks in a message` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-544` | `OBS` | The box under a thread's composer MUST name Alt+Enter at the desktop width, and only there. | this spec section 3; `MURMURE-534`; `CHROME-057` | `ambre_murmure::view::tests::the_box_names_its_chord_at_the_desktop_width_only` -- the desktop width adds one run of the chord's glyphs, and a narrow window drops it; `ambre_app::shell::murmure_regions::the_canvas_reads_the_desktop_width_as_the_stylesheet_does` -- the host reads a desktop at 1025 pixels and not at 1024, where the stylesheet shows and hides a chord | none | verified |
 
 ### 1.2 Type Markdown
 
@@ -79,7 +80,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 20 `verified`, 13 `unimplemented`. The host tier drives the view with the
+* **Verification.** 21 `verified`, 13 `unimplemented`. The host tier drives the view with the
   events the page sends: a press, a tap, text, keys, a paste. The marks and the stored draft are
   not built.
 
@@ -146,7 +147,9 @@ so a draft outlives it (`MURMURE-530`).
 
 **The box of a thread.** A box under the thread's field sends the next reply to the channel as
 well, and unchecks once it left (`MURMURE-531`). Alt+Enter turns it from the keys, and the turn
-is announced, since the box is drawn (`MURMURE-534`, `MURMURE-535`).
+is announced, since the box is drawn (`MURMURE-534`, `MURMURE-535`). At the desktop width, the
+label names the chord (`MURMURE-544`). The host reads a token the stylesheet sets at that width, so
+no width lives outside the sheet.
 
 **The history of the slice.** The composer keeps one history per draft. A caret move, a space or a
 line break closes a step, and a paste or a cut is a step of its own.
@@ -197,7 +200,5 @@ changed text.
   That waits for the `The caret after an undo` Story (`ambre-roadmap.md` E5).
 * **A draft lives in memory.** A reload loses it, until the `Drafts` Story (`ambre-roadmap.md` E5).
 * **`@` opens no panel.** The panel waits for the `The mention panel` Story (`ambre-roadmap.md` E5).
-* **The label of the box names no chord.** The list of keys names Alt+Enter (`MURMURE-540`). The
-  label waits for the `The chord on the box of a thread` Story (`ambre-roadmap.md` E5).
 * **A screen reader does not hear the draft.** The pipe takes the text, and nothing reads the draft
   back. That waits for the `The composer read aloud` Story (`ambre-roadmap.md` E5).

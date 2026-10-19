@@ -55,6 +55,10 @@ const TYPING_PX: f32 = FONT_UI + SPACE_4;
 /// The words beside the box under a thread's field (`MURMURE-531`).
 pub const ALSO_IN_CHANNEL: &str = "Also send to the channel";
 
+/// The chord that turns the box, named after its words at the desktop width
+/// (`MURMURE-544`).
+pub const ALSO_CHORD: &str = "Alt+Enter";
+
 /// The height of the row of that box, under the field.
 pub(crate) const ALSO_PX: f32 = FONT_UI + SPACE_8;
 
@@ -348,6 +352,9 @@ pub struct Composer {
     also: HashSet<DraftOf>,
     /// The row of that box at the last paint, as its top and bottom.
     also_row: Option<(f32, f32)>,
+    /// The window is as wide as a desktop, so the box names its chord
+    /// (`MURMURE-544`).
+    chords: bool,
 }
 
 impl Composer {
@@ -359,6 +366,11 @@ impl Composer {
     /// Whether the keys reach the composer.
     pub fn focused(&self) -> bool {
         self.focused
+    }
+
+    /// Show the chord of the box, or hide it. `true` when it changed.
+    pub fn show_chords(&mut self, on: bool) -> bool {
+        std::mem::replace(&mut self.chords, on) != on
     }
 
     /// The keys go back to the list.
@@ -759,13 +771,14 @@ impl Composer {
                 surface.stroke_rect(square, palette.cell_border, 1.0);
                 let words = shape(font_cx, cache, ALSO_IN_CHANNEL, FONT_UI, width, false);
                 let label_y = row + (ALSO_PX - words.height()) / 2.0;
-                draw(
-                    surface,
-                    words,
-                    SPACE_8 + BOX_PX + SPACE_4,
-                    label_y,
-                    palette.header_text,
-                );
+                let label_x = SPACE_8 + BOX_PX + SPACE_4;
+                let chord_x = label_x + words.width() + SPACE_8;
+                draw(surface, words, label_x, label_y, palette.header_text);
+                // Below the desktop width, no chord shows (`CHROME-057`).
+                if self.chords {
+                    let chord = shape(font_cx, cache, ALSO_CHORD, FONT_UI, width, false);
+                    draw(surface, chord, chord_x, label_y, palette.cell_border);
+                }
                 row
             }
             DraftOf::Channel(_) => height,

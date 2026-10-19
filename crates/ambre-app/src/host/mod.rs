@@ -127,6 +127,26 @@ pub(crate) fn base64_decode(s: &str) -> Option<Vec<u8>> {
     BASE64.decode(s).ok()
 }
 
+/// The window is as wide as a desktop. The stylesheet decides, so a chord
+/// shows on the canvas exactly where the shell shows one (`CHROME-057`).
+pub(crate) fn desktop() -> bool {
+    web_sys::window().is_some_and(|w| desktop_in(&w))
+}
+
+/// [`desktop`] for a given window, so a test can ask a frame of its own width.
+/// It reads the sheet's `--desktop` token, which holds 1 at the desktop width.
+pub(crate) fn desktop_in(window: &web_sys::Window) -> bool {
+    let Some(root) = window.document().and_then(|d| d.document_element()) else {
+        return false;
+    };
+    window
+        .get_computed_style(&root)
+        .ok()
+        .flatten()
+        .and_then(|style| style.get_property_value("--desktop").ok())
+        .is_some_and(|value| value.trim() == "1")
+}
+
 /// Best-effort asynchronous publish of a copied range to the OS clipboard via
 /// `navigator.clipboard.write`. It carries the tab-separated `text/plain`, the
 /// `text/html` a view wrote for another editor, the private `web ` payload type
@@ -303,7 +323,10 @@ impl AppView {
             AppView::Trame(v) => v.resize(width, height),
             AppView::Toile(v) => v.resize(width, height),
             AppView::Prose(v) => v.resize(width, height),
-            AppView::Murmure(v) => v.resize(width, height),
+            AppView::Murmure(v) => {
+                v.resize(width, height);
+                v.set_desktop(desktop());
+            }
         }
     }
 

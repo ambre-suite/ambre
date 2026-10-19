@@ -17,6 +17,9 @@
     --sidebar-w: 260px;
     --sidebar-strip: 44px;
     --panel-w: 380px;
+    /* 1 at the desktop width, where a chord shows. The host reads it for the
+       canvas, so no width lives outside this sheet. */
+    --desktop: 0;
 }
 
 /* Native form controls: tint the checked fill with the accent, and render the
@@ -1691,6 +1694,10 @@ input[type="radio"] {
 
 /* -- Desktop (> 1024 dp): icons + labels + shortcuts -- restore Kbd hints. -- */
 @media (min-width: 1025px) {
+    :root {
+        --desktop: 1;
+    }
+
     .ambre-kbd {
         display: inline-block;
     }
