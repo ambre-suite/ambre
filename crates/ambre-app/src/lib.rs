@@ -1813,10 +1813,11 @@ pub fn main() {
             // navigation is out of Phase 0: the `DocSwitcher` only swaps the id
             // within one `AppView`, so a Trame<->Toile hop reloads via the route.
             if boot_is_murmure {
+                text_input.name_content(ambre_canvas::ContentKind::Conversation);
                 AppView::Murmure(host::MurmureView::new(
                     Some(view_rx),
                     Some(view_tx_logic),
-                    host::page_reads(murmure_relay),
+                    host::page_reads(murmure_relay, text_input),
                     (w, h),
                     theme_ctl,
                 ))

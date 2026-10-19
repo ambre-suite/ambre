@@ -28,6 +28,9 @@ pub const UNREAD_LINE: &str = "New messages";
 /// What the control of a list read higher up reads (`MURMURE-505`).
 pub const JUMP_TO_LATEST: &str = "Jump to latest";
 
+/// What a screen reader hears when that control shows (`MURMURE-509`).
+pub const JUMP_HINT: &str = "Newer messages below. Press End to jump to latest.";
+
 /// The name a member shows before the view knows theirs.
 pub const UNKNOWN_MEMBER: &str = "A member";
 
@@ -288,6 +291,26 @@ impl<'a> Row<'a> {
             body,
             muted,
             replies,
+        }
+    }
+
+    /// What a screen reader hears of this row: the author, the time and the
+    /// text of a message, under a header or not (`MURMURE-207`). A band says
+    /// its words.
+    pub fn announcement(
+        &self,
+        name_of: impl Fn(UserId) -> Option<String>,
+        time_of: impl Fn(Timestamp) -> String,
+    ) -> String {
+        let Some(message) = self.message() else {
+            return self.words(name_of, time_of).body;
+        };
+        let author = name_of(message.author).unwrap_or_else(|| UNKNOWN_MEMBER.to_owned());
+        let time = time_of(message.ts);
+        let words = self.words(&name_of, &time_of);
+        match words.replies {
+            Some(replies) => format!("{author}, {time}: {}. {replies}", words.body),
+            None => format!("{author}, {time}: {}", words.body),
         }
     }
 }
@@ -811,6 +834,40 @@ pub(crate) mod tests {
         assert_eq!(plain.body, "plain");
         assert!(!plain.muted);
         assert_eq!(plain.header, None);
+    }
+
+    /// A screen reader hears the author, the time and the text of a message,
+    /// even one under the header of another. A band says its own words
+    /// (`MURMURE-207`).
+    #[test]
+    fn a_message_is_announced_with_its_author_its_time_and_its_text() {
+        let name_of = |_| Some("Ada".to_owned());
+        let time_of = |ts: Timestamp| format!("t{}", ts.0);
+        let mut grouped = message(UserId::new(), 7, "hello");
+        let row = Row::Message {
+            message: &grouped,
+            header: false,
+        };
+        assert_eq!(row.announcement(name_of, time_of), "Ada, t7: hello");
+        grouped.thread = Some(ThreadHead {
+            document: DocumentId::new(),
+            replies: 2,
+            last_replier: None,
+        });
+        let row = Row::Message {
+            message: &grouped,
+            header: true,
+        };
+        assert_eq!(
+            row.announcement(name_of, time_of),
+            "Ada, t7: hello. 2 replies"
+        );
+        let band = band(Unreadable::Damaged, 1, None);
+        let row = Row::Band(&band);
+        assert_eq!(
+            row.announcement(name_of, time_of),
+            row.words(name_of, time_of).body
+        );
     }
 
     /// A notice names the member who joins, muted, and a member the view

@@ -33,6 +33,11 @@ pub struct Painted {
     pub rest: Option<(usize, f32)>,
     /// The first row on screen and its top, wherever the list rests.
     pub top: Option<(usize, f32)>,
+    /// The last row on screen, wherever the list rests.
+    pub bottom: Option<usize>,
+    /// The top and the bottom of the focused row, `None` when it is off
+    /// screen (`MURMURE-205`).
+    pub focus: Option<(f32, f32)>,
 }
 
 /// What the list paints: the messages, the first unread one, which the
@@ -43,6 +48,8 @@ pub struct Shown<'a> {
     pub unread: Option<MessageId>,
     /// The row at the top and its top, `None` to rest on the latest row.
     pub anchor: Option<(usize, f32)>,
+    /// The row that holds the focus, ringed in the accent (`MURMURE-205`).
+    pub focus: Option<usize>,
 }
 
 /// Paint `shown` from its anchor, in a viewport of `size`.
@@ -80,16 +87,28 @@ pub fn paint_list<S: DrawSurface>(
         tall
     });
     let mut line_shown = false;
-    for &(i, top, _) in &reached.rows {
+    let mut focus = None;
+    for &(i, top, tall) in &reached.rows {
         let Some((row, line)) = words.get(&i) else {
             continue;
         };
+        let bottom = top + tall;
         let mut top = top;
         if *line {
             line_shown = true;
             top = draw_line(surface, font_cx, cache, top, width, palette);
         }
         draw_row(surface, font_cx, cache, row, top, text_width, palette);
+        if shown.focus == Some(i) {
+            let ring = Rect::new(
+                f64::from(SPACE_2),
+                f64::from(top),
+                f64::from(width - SPACE_2),
+                f64::from(bottom),
+            );
+            surface.stroke_rect(ring, palette.selection, 2.0);
+            focus = Some((top, bottom));
+        }
     }
     Painted {
         laid_out: words.len(),
@@ -98,6 +117,8 @@ pub fn paint_list<S: DrawSurface>(
         line_shown,
         rest: reached.anchor,
         top: reached.rows.first().map(|&(i, top, _)| (i, top)),
+        bottom: reached.rows.last().map(|&(i, _, _)| i),
+        focus,
     }
 }
 
@@ -282,6 +303,7 @@ mod tests {
                 list,
                 unread,
                 anchor: None,
+                focus: None,
             },
             height,
         )
@@ -346,6 +368,49 @@ mod tests {
         assert_eq!(surface.fill_colors().first(), Some(&LIGHT.header_bg));
     }
 
+    /// The focused row is ringed in the accent, around its own words, and a
+    /// focus off screen paints no ring (`MURMURE-205`).
+    #[test]
+    fn the_focused_row_is_ringed_and_one_off_screen_is_not() {
+        let ada = UserId::new();
+        let mut list = MessageList::default();
+        let messages = (0..100)
+            .map(|i| message(ada, i * 600_000, "hello"))
+            .collect();
+        list.absorb(SegmentId::new(), messages);
+        let focused = |focus| Shown {
+            list: &list,
+            unread: None,
+            anchor: None,
+            focus: Some(focus),
+        };
+        let (surface, painted) = paint_from(focused(98), 300.0);
+        let rings: Vec<Rect> = surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::StrokeRect { rect, color, .. } if *color == LIGHT.selection => Some(*rect),
+                _ => None,
+            })
+            .collect();
+        let [ring] = rings.as_slice() else {
+            panic!("one ring: {rings:?}");
+        };
+        let (top, bottom) = painted.focus.expect("the focused row is on screen");
+        assert_eq!((ring.y0, ring.y1), (f64::from(top), f64::from(bottom)));
+        assert!(top >= 0.0 && bottom <= 300.0 && bottom > top);
+        assert_eq!(painted.bottom, Some(99), "the latest row is the last one");
+        let body = runs(&surface, LIGHT.cell_text);
+        assert!(body.iter().any(|&(y, _)| y > ring.y0 && y < ring.y1));
+        let (surface, painted) = paint_from(focused(3), 300.0);
+        assert_eq!(painted.focus, None);
+        assert!(
+            !surface.ops().iter().any(
+                |op| matches!(op, DrawOp::StrokeRect { color, .. } if *color == LIGHT.selection)
+            )
+        );
+    }
+
     /// Ten thousand messages lay out only the rows of one viewport, and the
     /// latest of them is on screen (`MURMURE-187`, `MURMURE-188`).
     #[test]
@@ -372,6 +437,7 @@ mod tests {
             list: &list,
             unread: None,
             anchor: Some(anchor),
+            focus: None,
         };
         let (_, painted) = paint_from(at((10, 0.0)), 200.0);
         assert_eq!(painted.rest, Some((10, 0.0)));
@@ -496,6 +562,8 @@ mod tests {
                 line_shown: false,
                 rest: None,
                 top: None,
+                bottom: None,
+                focus: None,
             }
         );
         assert!(

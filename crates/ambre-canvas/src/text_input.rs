@@ -39,6 +39,8 @@ pub enum ContentKind {
     Board,
     /// A Prose page: the pipe stands for the text at the caret.
     Page,
+    /// A Murmure conversation: the pipe stands for the focused message.
+    Conversation,
 }
 
 impl ContentKind {
@@ -49,6 +51,7 @@ impl ContentKind {
             Self::Spreadsheet => "Spreadsheet cell",
             Self::Board => "Whiteboard",
             Self::Page => "Document text",
+            Self::Conversation => "Messages",
         }
     }
 
@@ -59,6 +62,7 @@ impl ContentKind {
             Self::Spreadsheet => "spreadsheet cell",
             Self::Board => "whiteboard",
             Self::Page => "document",
+            Self::Conversation => "conversation",
         }
     }
 }
@@ -275,6 +279,7 @@ mod tests {
             ContentKind::Spreadsheet,
             ContentKind::Board,
             ContentKind::Page,
+            ContentKind::Conversation,
         ];
         for kind in kinds {
             let says_cell = kind.label().to_lowercase().contains("cell")
@@ -283,6 +288,6 @@ mod tests {
         }
         let mut labels: Vec<_> = kinds.iter().map(|k| k.label()).collect();
         labels.dedup();
-        assert_eq!(labels.len(), 3, "no two kinds share a name");
+        assert_eq!(labels.len(), 4, "no two kinds share a name");
     }
 }

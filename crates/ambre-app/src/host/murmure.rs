@@ -6,19 +6,21 @@
 use std::rc::Rc;
 
 use ambre_bus::Timestamp;
+use ambre_canvas::TextInput;
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::view::PageReads;
 use leptos::prelude::GetUntracked;
 use wasm_bindgen::JsValue;
 
 /// What the page tells a Murmure region, read from the shell's relay.
-pub fn page_reads(relay: MurmureRelay) -> PageReads {
+pub fn page_reads(relay: MurmureRelay, pipe: TextInput) -> PageReads {
     let clock = LocalTime::new();
     PageReads {
         pane: Rc::new(move || relay.pane.get_untracked()),
         name_of: Rc::new(move |user| relay.member_name(user)),
         time_of: Rc::new(move |ts| clock.format(ts)),
         now_ms: Rc::new(super::probe::now_ms),
+        announce: Rc::new(move |text| pipe.announce(text)),
     }
 }
 
@@ -51,6 +53,7 @@ impl LocalTime {
 mod tests {
     use ambre_murmure::MurmurePane;
     use leptos::prelude::Set;
+    use wasm_bindgen::JsCast;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use super::*;
@@ -73,11 +76,37 @@ mod tests {
         assert!(written.chars().any(|c| c.is_ascii_digit()));
     }
 
+    /// An announcement is the text of the content's live region, and the
+    /// focus stays on what held it (`MURMURE-208`, `MURMURE-209`).
+    #[wasm_bindgen_test]
+    fn an_announcement_writes_the_live_region_and_leaves_the_focus() {
+        let document = web_sys::window().unwrap().document().unwrap();
+        let body = document.body().unwrap();
+        let cell = document.create_element("div").unwrap();
+        body.append_child(&cell).unwrap();
+        let button: web_sys::HtmlElement =
+            document.create_element("button").unwrap().unchecked_into();
+        body.append_child(&button).unwrap();
+        button.focus().unwrap();
+        let reads = page_reads(MurmureRelay::new(), TextInput::create(&document, &cell));
+        (reads.announce)("Ada, 10:42: hello");
+        let live = cell.query_selector(".ambre-a11y-live").unwrap().unwrap();
+        assert_eq!(live.text_content().as_deref(), Some("Ada, 10:42: hello"));
+        assert_eq!(live.get_attribute("aria-live").as_deref(), Some("polite"));
+        let focused = document.active_element().unwrap();
+        assert!(
+            focused.is_same_node(Some(&button)),
+            "the focus did not move"
+        );
+        cell.remove();
+        button.remove();
+    }
+
     /// The page reads the pane the shell shows now, and the same clock.
     #[wasm_bindgen_test]
     fn the_page_reads_follow_the_relay() {
         let relay = MurmureRelay::new();
-        let reads = page_reads(relay);
+        let reads = page_reads(relay, TextInput::detached());
         assert_eq!((reads.pane)(), MurmurePane::ChannelList);
         relay.pane.set(MurmurePane::Members {
             channel: ambre_bus::ChannelId::new(),

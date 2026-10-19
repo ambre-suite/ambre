@@ -25,14 +25,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-186` | `OBS` | An edited message MUST show that it was edited. | this spec section 3; `MURMURE-084` | `ambre_murmure::list::tests::an_edited_message_carries_the_marker` -- an edited body ends with the marker, a plain one does not | none | verified |
 | `MURMURE-187` | `INV` | The list MUST paint only the messages near the viewport. | this spec section 3; `ambre-spec-budgets.md section 2` | `ambre_murmure::list::tests::the_walk_from_the_bottom_measures_only_the_rows_it_reaches` -- five rows of ten thousand are measured; `ambre_murmure::list::tests::a_window_measures_only_the_rows_it_reaches_once_each` -- a window far up measures only its rows, each once; `ambre_murmure::paint::tests::ten_thousand_messages_lay_out_only_one_viewport` -- ten thousand messages lay out one viewport of rows | none | verified |
 | `MURMURE-188` | `INV` | The list MUST be canvas content, its text shaped by the shared text pipeline. | this spec section 3; `ambre-spec-ui.md section 2` | `ambre_murmure::paint::tests::ten_thousand_messages_lay_out_only_one_viewport` -- the list paints on a drawing surface, its text shaped by the shared text cache; `ambre_murmure::paint::tests::the_rows_paint_top_to_bottom_under_one_header` -- each text paints as shaped glyph runs | none | verified |
-| `MURMURE-207` | `OBS` | The focused message MUST be announced to a screen reader with its author, its time and its text. | this spec section 3; `ambre-spec-accessibility.md section 2`; `CHROME-023` | not built | unbuilt -- lands with the `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-208` | `OBS` | A new message MUST be announced to a screen reader when the user was at the bottom of the list. | this spec section 3; `ambre-spec-accessibility.md section 2` | not built | unbuilt -- lands with the `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-207` | `OBS` | The focused message MUST be announced to a screen reader with its author, its time and its text. | this spec section 3; `ambre-spec-accessibility.md section 2`; `CHROME-023` | `ambre_murmure::list::tests::a_message_is_announced_with_its_author_its_time_and_its_text` -- a message reads its author, its time, its text and its replies, a band its words; `ambre_murmure::view::tests::up_and_down_move_the_focus_and_say_each_message` -- each move says the focused message | none | verified |
+| `MURMURE-208` | `OBS` | A new message MUST be announced to a screen reader when the user was at the bottom of the list. | this spec section 3; `ambre-spec-accessibility.md section 2` | `ambre_murmure::view::tests::a_new_message_is_said_at_the_bottom_and_leaves_the_focus` -- at the bottom a new message is said, higher up it is not; `ambre_app::host::murmure::tests::an_announcement_writes_the_live_region_and_leaves_the_focus` -- the words land in the polite live region, in the browser tier | none | verified |
 | `MURMURE-417` | `INV` | The list MUST scroll through the shared kinetic model, never through a speed or a decay of its own. | this spec section 3; `KINETIC-001` | type-level -- the list's `scroll_by` takes a `ScrollStep`, which only the model builds; `ambre_murmure::view::tests::a_paused_glide_coasts_and_a_notch_never_does` -- a paused glide coasts on the model's ticks, a notch never does; `ambre_murmure::view::tests::a_finger_drags_the_list_and_a_still_one_taps` -- a finger drags past the slop, a still one taps; ci-gate -- `scripts/crate_boundaries.py` refuses an anchor moved by a distance outside `scroll_by`, and a friction or a decay outside the model | none | verified |
 | `MURMURE-418` | `OBS` | The time of a message MUST show in the reader's own language and time zone. | this spec section 3 | `ambre_app::host::murmure::tests::the_time_reads_in_the_readers_language_and_zone` -- the time reads as the browser writes it in its own language and zone, in the browser tier | none | verified |
 | `MURMURE-419` | `INV` | Every action on a message MUST be a command of the command table. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `The actions and the selection of a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-420` | `INV` | A thread MUST show its messages through the same list as a channel. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::list::tests::a_thread_fills_its_own_list_and_leaving_drops_the_channel` -- a thread fills a list of the same type as a channel; `ambre_murmure::view::tests::the_thread_region_shows_the_thread_through_the_same_list` -- the thread's region paints the thread through the same painter, on a recording surface | none | verified |
 | `MURMURE-421` | `INV` | Each region that shows messages MUST be a canvas of its own, one cell of the chrome layout. | this spec section 3; `CHROME-009`; `CANVAS-070` | `ambre_app::shell::murmure_regions::tests::the_channel_and_the_thread_are_each_a_canvas_of_their_cell` -- the channel and the thread each hold a canvas of their cell's width; `ambre_app::host::cell::tests::the_thread_is_a_canvas_of_its_own_sized_by_its_cell` -- the thread's canvas takes its own size, input and resize, in the browser tier | none | verified |
-| `MURMURE-509` | `OBS` | The control back to the latest message MUST be reachable from the keyboard and announced to a screen reader. | this spec section 3; `ambre-spec-accessibility.md section 2` | not built | unbuilt -- lands with the `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-509` | `OBS` | The control back to the latest message MUST be reachable from the keyboard and announced to a screen reader. | this spec section 3; `ambre-spec-accessibility.md section 2` | `ambre_murmure::view::tests::the_control_is_said_with_its_key_each_time_it_shows` -- each time the control shows, the words name End, the key that answers it | none | verified |
+| `MURMURE-510` | `OBS` | The list of a thread MUST take Up, Down, Page Up, Page Down and End as the list of a channel does. | this spec section 3; `MURMURE-205`; `MURMURE-504` | not built | unbuilt -- lands with the `Focus in a thread` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 A message arrives
 
@@ -40,7 +41,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-189` | `POST` | A new message MUST scroll into view when the user was at the bottom of the list. | this spec section 3 | `ambre_murmure::list::tests::a_window_past_the_bottom_rests_on_the_latest_row` -- a row pushed past the bottom rests the list on its latest row; `ambre_murmure::view::tests::a_new_message_scrolls_into_view_at_the_bottom` -- at the bottom the new message paints, and is read | none | verified |
 | `MURMURE-190` | `FRAME` | A new message MUST NOT move the list when the user was reading higher up. | this spec section 3 | `ambre_murmure::list::tests::a_window_on_a_row_keeps_it_in_place_as_rows_arrive_below` -- rows added below keep the resting row in place; `ambre_murmure::paint::tests::a_list_resting_on_a_row_paints_from_it` -- the paint starts at the resting row; `ambre_murmure::view::tests::a_new_message_leaves_a_reader_higher_up_in_place` -- higher up the same rows paint, and nothing is read | none | verified |
-| `MURMURE-209` | `FRAME` | Announcing a message MUST NOT move the focus. | this spec section 3; `CHROME-065` | not built | unbuilt -- lands with the `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-209` | `FRAME` | Announcing a message MUST NOT move the focus. | this spec section 3; `CHROME-065` | type-level -- the view holds only an announce closure, never the pipe, so it cannot move the focus; `ambre_murmure::view::tests::a_new_message_is_said_at_the_bottom_and_leaves_the_focus` -- a new message is said and the focused row stays; `ambre_app::host::murmure::tests::an_announcement_writes_the_live_region_and_leaves_the_focus` -- the focused button keeps the focus, in the browser tier | none | verified |
 
 ### 1.3 Scroll up
 
@@ -54,8 +55,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-205` | `POST` | Up and Down in the list MUST move the focus from one message to the next. | this spec section 3 | not built | unbuilt -- lands with the `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-206` | `FRAME` | Moving the focus MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-205` | `POST` | Up and Down in the list MUST move the focus from one message to the next. | this spec section 3 | `ambre_murmure::view::tests::up_and_down_move_the_focus_and_say_each_message` -- Up starts at the last row on screen, Down moves to the next, and the list scrolls to show it; `ambre_murmure::paint::tests::the_focused_row_is_ringed_and_one_off_screen_is_not` -- the focused row paints one ring around its text, and one off screen paints none | none | verified |
+| `MURMURE-206` | `FRAME` | Moving the focus MUST NOT move a read cursor. | this spec section 3 | `ambre_murmure::view::tests::moving_the_focus_moves_no_read_cursor` -- moving the focus up and down asks the engine for no mark | none | verified |
 
 ### 1.5 A segment cannot be opened
 
@@ -96,9 +97,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
   only what `meta` already tells every member: the span of a segment.
-* **Verification.** 21 `verified`, 14 `unimplemented`. The host tier holds the order, the groups,
-  the words and the paint of the rows and the bands. It holds the scroll, the jumps and the thread's
-  list too. The browser tier holds each canvas, the finger on it and the local time.
+* **Verification.** 27 `verified`, 9 `unimplemented`. The host tier holds the order, the groups,
+  the words and the paint of the rows and the bands. It holds the scroll, the jumps, the focus and
+  the thread's list too. The browser tier holds each canvas, the finger, the local time and the live
+  region.
 
 ---
 
@@ -110,6 +112,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | reads last week, higher up | posts | the list stays where she reads (`MURMURE-190`) | `ambre_murmure::view::tests::a_new_message_leaves_a_reader_higher_up_in_place` |
 | scrolls past the oldest loaded message | -- | older messages appear above, and nothing on screen jumps (`MURMURE-192`) | `ambre_murmure::view::tests::the_oldest_row_asks_for_the_segment_before_and_its_rows_move_nothing` |
 | reads higher up, then presses End or the control | posts | Bob's message at the bottom, read once shown (`MURMURE-505`, `MURMURE-506`) | `ambre_murmure::view::tests::a_jump_marks_read_only_what_it_showed` |
+| presses Up, then Down, with a screen reader | -- | a ring on each message in turn, read with its author and its time (`MURMURE-205`, `MURMURE-207`) | `ambre_murmure::view::tests::up_and_down_move_the_focus_and_say_each_message` |
+| reads the bottom with a screen reader | posts | Bob's message is read out, and her focus stays put (`MURMURE-208`, `MURMURE-209`) | `ambre_murmure::view::tests::a_new_message_is_said_at_the_bottom_and_leaves_the_focus` |
 | posts three messages within a minute | -- | one header over the three (`MURMURE-183`) | none |
 | opens a channel on a new phone, before its keys arrive | -- | one band per unreadable segment, with its dates, its cause and how to try again (`MURMURE-218`) | none |
 | joins a channel invited without history | -- | the boundary at the top, and no error (`MURMURE-219`) | none |
@@ -170,8 +174,14 @@ A copy writes the `text/plain` mirror and the private type of `ambre-spec-clipbo
 (`MURMURE-426`). The mirror puts each message under its author and its time.
 
 **A screen reader** reaches the list through the mirror of `ambre-spec-accessibility.md section 2`:
-the live region carries the focused message, with its author and its time (`MURMURE-207`). A new
-message at the bottom is announced there too, politely, and the focus stays put (`MURMURE-209`).
+the live region carries the focused message, with its author and its time (`MURMURE-207`). Up and
+Down move a ring from one message to the next, and the list scrolls to keep it in view
+(`MURMURE-205`). The first press starts from the last message on screen. A new message at the
+bottom is announced there too, politely, and the focus stays put (`MURMURE-209`).
+
+The control back to the latest message is painted. So its words are said each time it shows, with
+End, the key that answers it (`MURMURE-509`). The view holds only a closure that writes the live
+region, never the element that takes the focus.
 
 **A segment that cannot be opened** keeps its place. Its entry in the `segments` list of `meta`
 gives its start, and the next entry its end. So the band says which messages it stands for. The
@@ -233,10 +243,9 @@ both to each region, and `ambre_app::host::murmure` hands it the pane, the names
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The control back to the latest message is painted, not focusable.** No key reaches it and no
-  screen reader announces it (`MURMURE-509`). Page Up, Page Down and End stand in for it. No focus
-  and no selection exist yet. It lands with the
-  `Focus and the screen reader in the list` Story (`ambre-roadmap.md` E5).
+* **The list of a thread takes no key.** Its canvas listens to the pointer only, so it has no
+  focus, no page keys and no announcement (`MURMURE-510`). It lands with the
+  `Focus in a thread` Story (`ambre-roadmap.md` E5).
 * **A band names its remedy in words.** It says to reopen the channel; no control on it asks again.
 * **Only the focused message reaches a screen reader.** The list is not mirrored whole, by the rule
   of `ambre-spec-accessibility.md section 2`, so a reader moves through it message by message.

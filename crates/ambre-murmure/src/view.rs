@@ -14,7 +14,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use ambre_bus::conduit::{Receiver, Sender};
-use ambre_bus::{DocumentId, LogicCommand, MurmureCommand, SegmentId, Timestamp, UiEvent, UserId};
+use ambre_bus::{
+    ChannelId, DocumentId, LogicCommand, MessageId, MurmureCommand, SegmentId, Timestamp, UiEvent,
+    UserId,
+};
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, Theme,
     ThemeControl,
@@ -23,7 +26,7 @@ use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::MurmurePane;
-use crate::list::{Conversations, MessageList, ReadMarks, RowKey, UnreadLine};
+use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, RowKey, UnreadLine};
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the
@@ -41,6 +44,9 @@ pub struct PageReads {
     pub time_of: Rc<dyn Fn(Timestamp) -> String>,
     /// The page's clock, in milliseconds: the wheel reads it.
     pub now_ms: Rc<dyn Fn() -> f64>,
+    /// Say a text to a screen reader, through the polite live region of the
+    /// content (`CHROME-023`). It holds no element that takes the focus.
+    pub announce: Rc<dyn Fn(&str)>,
 }
 
 /// The height of one line of a wheel that steps by lines.
@@ -48,6 +54,10 @@ const WHEEL_LINE_PX: f32 = 40.0;
 
 /// How far down the viewport a message the pane names comes to rest.
 const AT_FRACTION: f32 = 0.25;
+
+/// How far a focused row may pass an edge of the viewport before the list
+/// moves to show it: a rounding, not a scroll.
+const REVEAL_SLACK_PX: f32 = 0.5;
 
 /// Where the list of a region rests (`MURMURE-189`, `MURMURE-190`).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -114,6 +124,14 @@ pub struct MurmureView {
     /// Where the last paint drew the control back to the latest message,
     /// `None` when the latest message showed (`MURMURE-505`).
     jump: Option<Rect>,
+    /// The row that holds the focus, `None` before Up or Down
+    /// (`MURMURE-205`).
+    focus: Option<RowKey>,
+    /// The focus moved: the next paint brings its row into view.
+    reveal: bool,
+    /// The channel and the latest message this region last heard, so a new
+    /// one is announced once (`MURMURE-208`).
+    heard: (Option<ChannelId>, Option<(MessageId, Timestamp)>),
     dirty: bool,
 }
 
@@ -147,6 +165,9 @@ impl MurmureView {
             kinetic: Kinetic::default(),
             asked_older: None,
             jump: None,
+            focus: None,
+            reveal: false,
+            heard: (None, None),
             dirty: true,
         }
     }
@@ -240,6 +261,73 @@ impl MurmureView {
     /// Whether `at` falls on the control back to the latest message.
     fn on_jump(&self, at: Point) -> bool {
         self.jump.is_some_and(|rect| rect.contains(at))
+    }
+
+    /// The row that holds the focus, `None` before Up or Down.
+    pub fn focused(&self) -> Option<RowKey> {
+        self.focus
+    }
+
+    /// Move the focus by `by` rows, towards the latest for a positive one,
+    /// and announce the row it reaches (`MURMURE-205`, `MURMURE-207`). A
+    /// focus off screen starts again from the last row on screen. No read
+    /// cursor moves: only a paint that shows a message reads it
+    /// (`MURMURE-206`).
+    fn move_focus(&mut self, by: isize) {
+        let lists = Rc::clone(&self.lists);
+        let lists = lists.borrow();
+        let Some(list) = self.shown(&lists.conversations, (self.reads.pane)()) else {
+            return;
+        };
+        let keys = list.keys();
+        // A focus just moved is on its way into view.
+        let on_screen = self.reveal || self.last.is_some_and(|painted| painted.focus.is_some());
+        let from = self
+            .focus
+            .and_then(|key| keys.iter().position(|k| *k == key));
+        let at = match from {
+            Some(i) if on_screen => i
+                .checked_add_signed(by)
+                .filter(|&next| next < keys.len())
+                .unwrap_or(i),
+            _ => match self.last.and_then(|painted| painted.bottom) {
+                Some(bottom) => bottom.min(keys.len().saturating_sub(1)),
+                None => return,
+            },
+        };
+        let (Some(&key), Some(row)) = (keys.get(at), list.rows().get(at).copied()) else {
+            return;
+        };
+        self.focus = Some(key);
+        self.reveal = true;
+        self.dirty = true;
+        (self.reads.announce)(&row.announcement(&*self.reads.name_of, &*self.reads.time_of));
+    }
+
+    /// Bring the focused row into view, once the paint placed it. A row off
+    /// screen comes to rest at the top, and the next paint checks it again.
+    fn reveal_focus(&mut self, painted: &Painted, at: Option<usize>, keys: &[RowKey]) {
+        let Some(key) = at.and_then(|i| keys.get(i).copied()) else {
+            self.reveal = false;
+            return;
+        };
+        let Some((top, bottom)) = painted.focus else {
+            self.rest = Rest::Row { key, anchor_y: 0.0 };
+            self.pending = false;
+            self.dirty = true;
+            return;
+        };
+        self.reveal = false;
+        let over = if top < -REVEAL_SLACK_PX {
+            top
+        } else if bottom > self.size.1 + REVEAL_SLACK_PX {
+            (bottom - self.size.1).min(top)
+        } else {
+            return;
+        };
+        let now_ms = (self.reads.now_ms)();
+        let step = self.kinetic.wheel(0.0, over, true, now_ms);
+        self.scroll_by(step);
     }
 
     /// A finger went down: it stops any motion left.
@@ -345,6 +433,13 @@ impl MurmureView {
             Rest::Latest => None,
         };
         self.pending = matches!(self.rest, Rest::Row { .. }) && anchor.is_none();
+        let at_bottom = self.rest == Rest::Latest;
+        let focus = self
+            .focus
+            .and_then(|key| keys.iter().position(|k| *k == key));
+        if focus.is_none() {
+            self.focus = None;
+        }
         let painted = paint_list(
             surface,
             font_cx,
@@ -353,6 +448,7 @@ impl MurmureView {
                 list,
                 unread,
                 anchor,
+                focus,
             },
             self.size,
             self.theme.palette(),
@@ -361,9 +457,21 @@ impl MurmureView {
         );
         self.last = Some(painted);
         self.settle(&painted, &keys);
+        if self.reveal {
+            self.reveal_focus(&painted, focus, &keys);
+        }
         let higher_up = !painted.latest_shown && !list.is_empty();
         let palette = self.theme.palette();
+        let shown_before = self.jump.is_some();
         self.jump = higher_up.then(|| paint_jump(surface, font_cx, text_cache, self.size, palette));
+        if self.region == Region::Channel {
+            if higher_up && !shown_before {
+                // The control shows: End reaches it from the keyboard
+                // (`MURMURE-509`).
+                (self.reads.announce)(JUMP_HINT);
+            }
+            self.hear_latest(on_screen, list, at_bottom && painted.latest_shown);
+        }
         if self.region == Region::Channel
             && painted.oldest_shown
             && let Some((channel, oldest)) = on_screen.zip(list.oldest_segment())
@@ -394,6 +502,26 @@ impl MurmureView {
         }
     }
 
+    /// Announce a message newer than the latest one this region heard, when
+    /// the list was at the bottom (`MURMURE-208`). The first list a channel
+    /// shows is not news, and the focus stays where it was (`MURMURE-209`).
+    fn hear_latest(&mut self, channel: Option<ChannelId>, list: &MessageList, at_bottom: bool) {
+        let latest = list.latest().map(|m| (m.id, m.ts));
+        let (heard_in, heard) = std::mem::replace(&mut self.heard, (channel, latest));
+        let news = match (heard, latest) {
+            (Some((old, old_ts)), Some((new, ts))) => old != new && ts >= old_ts,
+            _ => false,
+        };
+        if !(news && at_bottom && heard_in == channel) {
+            return;
+        }
+        let rows = list.rows();
+        let Some(row) = rows.iter().rev().find(|row| row.message().is_some()) else {
+            return;
+        };
+        (self.reads.announce)(&row.announcement(&*self.reads.name_of, &*self.reads.time_of));
+    }
+
     /// Hand `command` to the Logic thread. A full channel drops it, and the
     /// next paint that calls for it asks again.
     fn send(&self, command: LogicCommand) {
@@ -416,6 +544,8 @@ impl MurmureView {
         };
         self.top_row = None;
         self.asked_older = None;
+        self.focus = None;
+        self.reveal = false;
         self.kinetic.stop();
     }
 
@@ -472,8 +602,9 @@ impl MurmureView {
     /// The region follows the pointer, and the wheel scrolls it. A trackpad
     /// glide that pauses coasts on; a notch never does (`KINETIC-002`). The
     /// pinch chord is the page's zoom, so the list leaves it. Page Up, Page
-    /// Down and End jump through the list; a key with a modifier is the
-    /// browser's (`MURMURE-504`, `MURMURE-505`).
+    /// Down and End jump through the list. Up and Down move the focus, and a
+    /// key with a modifier is the browser's (`MURMURE-504`, `MURMURE-505`,
+    /// `MURMURE-205`).
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
         match *ev {
             InputEvent::PointerDown { x, y, .. } | InputEvent::PointerMove { x, y } => {
@@ -498,6 +629,8 @@ impl MurmureView {
                     "PageDown" => self.page(1.0),
                     "PageUp" => self.page(-1.0),
                     "End" => self.rest_at_latest(),
+                    "ArrowDown" => self.move_focus(1),
+                    "ArrowUp" => self.move_focus(-1),
                     _ => return false,
                 }
                 return true;
@@ -547,6 +680,8 @@ mod tests {
         clock: Rc<Cell<f64>>,
         events: Sender<UiEvent>,
         commands: Receiver<LogicCommand>,
+        /// What the view said to a screen reader, oldest first.
+        said: Rc<RefCell<Vec<String>>>,
     }
 
     fn page() -> Page {
@@ -556,11 +691,14 @@ mod tests {
         let shown = Rc::clone(&pane);
         let clock = Rc::new(Cell::new(0.0));
         let now = Rc::clone(&clock);
+        let said_log = Rc::new(RefCell::new(Vec::new()));
+        let said = Rc::clone(&said_log);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| Some("Ada".to_owned())),
             time_of: Rc::new(|_| "t".to_owned()),
             now_ms: Rc::new(move || now.get()),
+            announce: Rc::new(move |text: &str| said.borrow_mut().push(text.to_owned())),
         };
         let size = (300.0, 400.0);
         let view = MurmureView::new(
@@ -576,6 +714,7 @@ mod tests {
             clock,
             events,
             commands,
+            said: said_log,
         }
     }
 
@@ -1032,6 +1171,127 @@ mod tests {
         assert_eq!(reads(&page).0, 0, "nothing is read before it paints");
         frame_at(&mut page.view, 50.0);
         assert_eq!(reads(&page).0, 1, "the new message showed, and is read");
+    }
+
+    /// The key of the message at `index` of `rows`.
+    fn row(rows: &[MessageView], index: usize) -> Option<RowKey> {
+        rows.get(index).map(|m| RowKey::Message(m.id))
+    }
+
+    /// Up and Down move the focus one message at a time, from the last row
+    /// on screen. A screen reader hears each one it reaches. The list
+    /// follows the focus up, and keeps the focused row on screen
+    /// (`MURMURE-205`, `MURMURE-207`).
+    #[test]
+    fn up_and_down_move_the_focus_and_say_each_message() {
+        let (mut page, _, rows) = long_channel(400);
+        frame(&mut page.view);
+        assert_eq!(page.view.focused(), None);
+        assert!(key(&mut page, "ArrowUp", false, 10.0), "the key is taken");
+        assert_eq!(
+            page.view.focused(),
+            row(&rows, 399),
+            "the last row on screen"
+        );
+        assert_eq!(
+            page.said.borrow().last().map(String::as_str),
+            Some("Ada, t: hello")
+        );
+        key(&mut page, "ArrowUp", false, 20.0);
+        assert_eq!(page.view.focused(), row(&rows, 398));
+        key(&mut page, "ArrowDown", false, 30.0);
+        key(&mut page, "ArrowDown", false, 40.0);
+        assert_eq!(
+            page.view.focused(),
+            row(&rows, 399),
+            "the latest is the end"
+        );
+        assert_eq!(page.said.borrow().len(), 4, "each move is said");
+        for step in 0..60 {
+            key(&mut page, "ArrowUp", false, 50.0 + f64::from(step));
+            frame(&mut page.view);
+            frame(&mut page.view);
+            let (top, bottom) = shown(&page.view).focus.expect("the focus on screen");
+            assert!(top >= -1.0 && bottom <= 401.0, "{step}: {top} {bottom}");
+        }
+        assert_eq!(page.view.focused(), row(&rows, 339));
+        assert!(
+            !shown(&page.view).latest_shown,
+            "the list followed the focus up"
+        );
+    }
+
+    /// Moving the focus moves no read cursor: a list higher up, short of a
+    /// new message, reads nothing however the focus moves (`MURMURE-206`).
+    #[test]
+    fn moving_the_focus_moves_no_read_cursor() {
+        let (mut page, channel, _) = long_channel(400);
+        frame(&mut page.view);
+        assert_eq!(reads(&page).0, 1);
+        for now in [10.0, 20.0] {
+            key(&mut page, "PageUp", false, now);
+            frame_at(&mut page.view, now);
+        }
+        segment(&page, channel, 5_000, 1);
+        for (step, arrow) in ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowDown"]
+            .into_iter()
+            .enumerate()
+        {
+            key(&mut page, arrow, false, 30.0 + step as f64);
+            frame(&mut page.view);
+        }
+        assert!(page.view.focused().is_some());
+        assert!(!shown(&page.view).latest_shown);
+        assert_eq!(reads(&page).0, 0, "the focus read nothing");
+    }
+
+    /// At the bottom a new message is said, and the focus stays where it
+    /// was. The list a channel first shows is not news, and a reader higher
+    /// up hears no message (`MURMURE-208`, `MURMURE-209`).
+    #[test]
+    fn a_new_message_is_said_at_the_bottom_and_leaves_the_focus() {
+        let (mut page, channel, _) = long_channel(50);
+        frame(&mut page.view);
+        assert!(page.said.borrow().is_empty(), "the first list is not news");
+        key(&mut page, "ArrowUp", false, 10.0);
+        frame(&mut page.view);
+        let focus = page.view.focused();
+        page.said.borrow_mut().clear();
+        segment(&page, channel, 5_000, 1);
+        frame(&mut page.view);
+        assert_eq!(*page.said.borrow(), ["Ada, t: hello"]);
+        assert_eq!(page.view.focused(), focus, "the focus did not move");
+        assert_eq!(page.view.resting_on(), None);
+
+        key(&mut page, "PageUp", false, 20.0);
+        frame_at(&mut page.view, 20.0);
+        page.said.borrow_mut().clear();
+        segment(&page, channel, 6_000, 1);
+        frame(&mut page.view);
+        assert!(
+            page.said.borrow().is_empty(),
+            "a reader higher up hears none"
+        );
+    }
+
+    /// The control back to the latest message is said once each time it
+    /// shows, with the key that reaches it (`MURMURE-509`).
+    #[test]
+    fn the_control_is_said_with_its_key_each_time_it_shows() {
+        let (mut page, _, _) = long_channel(400);
+        frame(&mut page.view);
+        assert!(page.said.borrow().is_empty());
+        key(&mut page, "PageUp", false, 10.0);
+        frame_at(&mut page.view, 10.0);
+        key(&mut page, "PageUp", false, 20.0);
+        frame_at(&mut page.view, 20.0);
+        assert_eq!(*page.said.borrow(), [JUMP_HINT]);
+        assert!(JUMP_HINT.contains("End"));
+        assert!(key(&mut page, "End", false, 30.0));
+        frame_at(&mut page.view, 30.0);
+        key(&mut page, "PageUp", false, 40.0);
+        frame_at(&mut page.view, 40.0);
+        assert_eq!(*page.said.borrow(), [JUMP_HINT, JUMP_HINT]);
     }
 
     /// A finger drags the list, and one that never left the slop is a tap

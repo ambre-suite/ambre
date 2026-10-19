@@ -445,7 +445,10 @@ mod tests {
         AppView::Murmure(MurmureView::new(
             None,
             None,
-            crate::host::page_reads(ambre_murmure::chrome::MurmureRelay::new()),
+            crate::host::page_reads(
+                ambre_murmure::chrome::MurmureRelay::new(),
+                TextInput::detached(),
+            ),
             (300.0, 200.0),
             ThemeControl::default(),
         ))
