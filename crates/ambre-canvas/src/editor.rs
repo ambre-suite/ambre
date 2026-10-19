@@ -148,6 +148,14 @@ struct Styled {
     layout: Layout<Brush>,
 }
 
+/// The selection the last line move over the spans left, with the column it
+/// aims at, and the text and geometry it was read from.
+struct LineGoal {
+    text: String,
+    geometry: (f32, f64),
+    selection: Selection,
+}
+
 /// A shared inline text edit over one text unit (a Toile element body or a Trame
 /// cell). App-specific concerns live in the host wrapper: which unit, how the
 /// style / geometry is derived, how a commit is dispatched. This core owns only
@@ -174,6 +182,8 @@ pub struct TextEditor {
     wrap_w: f32,
     zoom: f64,
     align: Alignment,
+    /// The column a run of line moves over the spans keeps (`CANVAS-080`).
+    line_goal: Option<LineGoal>,
 }
 
 impl TextEditor {
@@ -195,6 +205,7 @@ impl TextEditor {
             wrap_w: 1.0,
             zoom: 1.0,
             align: Alignment::Start,
+            line_goal: None,
         }
     }
 
@@ -613,9 +624,19 @@ impl TextEditor {
         };
         let layout = &styled.layout;
         let held = laid_on(self.editor.raw_selection(), layout);
+        // A line move from where the last one left keeps its column. Any other
+        // move, an edit or a new geometry starts a fresh one (`CANVAS-080`).
+        let geometry = (self.wrap_w, self.zoom);
+        let goal = self.line_goal.take().filter(|goal| {
+            let ends = |s: &Selection| (s.anchor().index(), s.focus().index());
+            goal.text == styled.text
+                && goal.geometry == geometry
+                && ends(&goal.selection) == ends(&held)
+        });
+        let from = goal.map_or(held, |goal| goal.selection);
         let next = match *intent {
-            EditIntent::Up { select } => held.previous_line(layout, select),
-            EditIntent::Down { select } => held.next_line(layout, select),
+            EditIntent::Up { select } => from.previous_line(layout, select),
+            EditIntent::Down { select } => from.next_line(layout, select),
             EditIntent::LineStart { select } => held.line_start(layout, select),
             EditIntent::LineEnd { select } => held.line_end(layout, select),
             EditIntent::PointerDown { x, y } => Selection::from_point(layout, x, y),
@@ -623,6 +644,13 @@ impl TextEditor {
             EditIntent::WordAt { x, y } => Selection::word_from_point(layout, x, y),
             _ => return,
         };
+        if matches!(intent, EditIntent::Up { .. } | EditIntent::Down { .. }) {
+            self.line_goal = Some(LineGoal {
+                text: styled.text.clone(),
+                geometry,
+                selection: next,
+            });
+        }
         let (anchor, focus) = (next.anchor().index(), next.focus().index());
         let mut drv = self.editor.driver(font_cx, &mut self.layout_cx);
         if anchor == focus {
@@ -1113,6 +1141,37 @@ mod tests {
             (caret_x(&mut ed) - sixteenth.x0 * plain / wide).abs() < 1.0,
             "with no span, the plain layout serves again"
         );
+    }
+
+    /// Over the spans, a run of line moves keeps its column through a short
+    /// line, in one flush or across several. A move of another kind aims at
+    /// a new column (`CANVAS-080`).
+    #[test]
+    fn a_line_move_over_spans_keeps_its_column() {
+        let mut fcx = shipped();
+        let ten = "w".repeat(10);
+        let mut ed = TextEditor::new(&format!("{ten}\nw\n{ten}"), style());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        ed.set_spans(&mut fcx, vec![span(0..23)]);
+        assert_eq!(ed.caret(), Some(23));
+        ed.move_up();
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.caret(), Some(12), "the short line holds the caret");
+        ed.move_up();
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.caret(), Some(10), "the column survived the short line");
+        ed.move_down();
+        ed.move_down();
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.caret(), Some(23), "two moves in one flush keep it too");
+        // A move of another kind aims at its own column.
+        for _ in 0..9 {
+            ed.move_left();
+        }
+        ed.move_up();
+        ed.move_up();
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.caret(), Some(1));
     }
 
     /// Each span draws its range in its own look. That is a face of its

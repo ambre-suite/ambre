@@ -509,7 +509,7 @@ owns the subsystem.
 | `[ ]` One undo bound | V1 | a bounded undo depth in every app. What merges into one step stays per app |
 | `[x]` One keymap | MVP | the `Ctrl` and `Cmd` fold, both redo chords, and the legacy copy and paste chords, decided once |
 | `[x]` One kinetic scroll | MVP | one momentum model under every app: a flick's release speed, its slowdown and its stop, the slop that tells a tap from a pan, and the speed a drag held near an edge scrolls at. Prose moves onto it. Trame coasts on a trackpad glide where Prose leaves it to the platform, with a different curve: which one holds is decided here, once. Trame and Toile adopt it in their own rows |
-| `[ ]` Line moves keep their column over spans | MVP | with spans pinned, the inline editor reads Up and Down from the layout of the spans, which keeps no goal x, so two moves through a short line drift left. Carry the goal x across line moves, and write the row that holds it in `ambre-spec-text-editor.md` |
+| `[x]` Line moves keep their column over spans | MVP | with spans pinned, the inline editor reads Up and Down from the layout of the spans, which keeps no goal x, so two moves through a short line drift left. Carry the goal x across line moves. Done when `CANVAS-080` reads `verified` |
 | `[ ]` One name for the moving selection end | V1 | `focus` everywhere; the fixed end stays `anchor`. A rename |
 | `[ ]` One floating-menu shell | V1 | one placement, flip and keyboard model under every popover and floating bar |
 | `[ ]` One performance read-out | V1 | the frame read-out available in every app, not in Trame alone |

@@ -28,6 +28,7 @@ rules live beside the design they constrain, rather than in the thread's own doc
 | `CANVAS-042` | `INV` | The core MUST hold one style for the whole unit, and only the spans its host pinned: an edit MUST NOT move, add or drop a span. | this spec section 2 | `ambre_canvas::editor::tests::an_edit_moves_no_span` -- two backspaces leave the pinned spans as they were, and a range the edit left past the buffer renders with no panic | none | verified |
 | `CANVAS-078` | `INV` | With spans pinned, the caret, the selection, a click and a line move MUST read where the spans draw the text. | this spec section 2 | `ambre_canvas::editor::tests::a_click_lands_on_the_char_a_span_draws_under_it` -- a bold span widens twenty chars: the caret, End and a click land at the wide x, and with no span the plain layout serves again | none | verified |
 | `CANVAS-079` | `OBS` | A span MUST draw its range in its own weight, slant, family, ink, underline and tint. | this spec section 2 | `ambre_canvas::editor::tests::a_span_draws_its_range_in_its_own_look` -- each of weight, slant and family shapes a second face, and a recorded render finds the span ink, the underline and the tint | none | verified |
+| `CANVAS-080` | `INV` | With spans pinned, a run of line moves MUST keep its column through a shorter line. | this spec section 2 | `ambre_canvas::editor::tests::a_line_move_over_spans_keeps_its_column` -- two moves up through a one-char line land at the column they left, in one flush or across two, and a move left first aims at a new column | none | verified |
 | `CANVAS-048` | `INV` | A composition preview MUST be replaceable in place. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- after the composition ends, its second assertion reads the buffer back as the composed run alone, so a preview appended beside its own commit fails | none | verified |
 | `CANVAS-040` | `OBS` | A composition preview MUST read as unconfirmed text. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- its first assertion finds the underline on the composing run, and its last asserts the committed run has lost it | none | verified |
 | `CANVAS-041` | `INV` | The caret and the selection MUST be drawn as paths, so a caller's transform carries them. | this spec section 2; `ambre-spec-drawing-surface.md` | `ambre_canvas::editor::tests::the_caret_and_selection_are_drawn_as_paths` -- it renders a selection and a caret under a pushed rotation and finds both as path fills and no rect fill, which a rotation maps by its bounding box alone | none | verified |
@@ -71,7 +72,7 @@ The host compares the body it captured when the edit opened against the one the 
 * **Boundary.** none: the core holds a string in memory, reaches no relay and opens no socket. What
   the user types leaves it as a commit the application turns into a document operation, and the
   keyboard path that feeds it is `ambre-spec-text-input.md`.
-* **Verification.** 14 `verified`, 2 `unimplemented`. Host-tier tests hold the queue, the drain at
+* **Verification.** 15 `verified`, 2 `unimplemented`. Host-tier tests hold the queue, the drain at
   paint time, the drawn paths and the no-op close. A parity belt per wrapper proves each one
   delegates to the core. What is loose is the two rules nothing has built yet.
 
@@ -134,7 +135,7 @@ nothing.
 Parley's `PlainEditor` lays its text out with one style. So the spans get a second layout, built
 from the same text at the same wrap width (`CANVAS-079`). Every geometry is read from that layout:
 the caret, the band, the height, and the outcome of a click or a line move (`CANVAS-078`). With no
-span, the core takes the one-layout path it had before.
+span, the core takes the one-layout path it had before. A line move keeps its column (`CANVAS-080`).
 
 **The coordinate frame.** The core lays out in a local frame whose origin is the text's top-left
 corner. The zoom is baked into the font size and the wrap width. The host translates by that
@@ -215,9 +216,6 @@ reports, so an input method opens its window in the right place.
   pipe, the composition state machine, the caret and the selection model for every editor. That
   includes Prose's, which does not use this core at all. This document is the built part of it,
   and the two are reconciled when `One text-editing substrate` lands.
-* **A line move over spans forgets its column.** With spans, Up and Down are read from the second
-  layout, which keeps no goal x. Two moves through a short line therefore drift left. The fix lands
-  with the `Line moves keep their column over spans` Story (`ambre-roadmap.md` E8).
 * **Nothing bounds the buffer.** A unit holds a `String` with no cap, and no row says what a
   hundred-thousand-character cell does to the re-shape on every keystroke.
 
