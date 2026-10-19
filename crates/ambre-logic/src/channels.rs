@@ -758,19 +758,43 @@ impl LogicState {
         }) else {
             return false;
         };
-        match opening.ready(document_id) {
+        let asked = opening.document_ids();
+        let result = opening.ready(document_id);
+        self.advance_opening(channel_id, asked, result);
+        true
+    }
+
+    /// Act on where an opening stands. `asked` lists every document it asked
+    /// for: those the open channel does not hold are closed.
+    fn advance_opening(
+        &mut self,
+        channel_id: ChannelId,
+        asked: Vec<DocumentId>,
+        result: Result<Opening, MurmureError>,
+    ) {
+        match result {
             Ok(Opening::Waiting) => {}
             Ok(Opening::OpenSegments(segments)) => {
                 for segment in segments {
                     self.open_channel_document(channel_id, segment.document_id());
                 }
             }
-            Ok(Opening::Open(state)) => {
+            Ok(Opening::Open(mut state)) => {
                 self.opening.remove(&channel_id);
                 self.send_to_ui(UiEvent::Channel {
                     channel_id,
                     event: MurmureEvent::Named { name: state.name() },
                 });
+                // A closing segment the channel opened without shows as a
+                // band, and its session ends.
+                if let Some(event) = state.take_closing_band() {
+                    self.send_to_ui(UiEvent::Channel { channel_id, event });
+                }
+                let held = state.document_ids();
+                for document_id in asked.into_iter().filter(|id| !held.contains(id)) {
+                    self.forget_murmure_session(document_id);
+                    self.send_to_sync(SyncCommand::CloseDocument { document_id });
+                }
                 // The closing segment first, so the view draws the history in
                 // order.
                 for segment in [state.closing_id(), Some(state.active_id())]
@@ -799,7 +823,6 @@ impl LogicState {
             }
             Err(error) => self.end_opening(channel_id, error.to_string()),
         }
-        true
     }
 
     /// A document of a channel could not open. Returns `false` when no
@@ -837,7 +860,24 @@ impl LogicState {
         }) else {
             return false;
         };
-        self.end_opening(channel_id, message.to_owned());
+        // A closing segment whose key never came is given up, and the channel
+        // opens without it. Any other failure ends the opening.
+        let given_up = match (cause, self.opening.get_mut(&channel_id)) {
+            (OpenFailure::KeyNotReceived, Some(Some(opening))) => {
+                let asked = opening.document_ids();
+                opening.give_up(document_id).map(|result| (asked, result))
+            }
+            _ => None,
+        };
+        let Some((asked, result)) = given_up else {
+            self.end_opening(channel_id, message.to_owned());
+            return true;
+        };
+        tracing::warn!("Logic: closing segment {document_id} given up: {message}");
+        self.forget_murmure_session(document_id);
+        self.send_to_sync(SyncCommand::CloseDocument { document_id });
+        let asked = asked.into_iter().filter(|id| *id != document_id).collect();
+        self.advance_opening(channel_id, asked, result);
         true
     }
 
@@ -4015,6 +4055,68 @@ mod tests {
         );
         assert_eq!(sent(sync), [Sent::Open(closed.document_id())]);
         (channel_id, closed, active)
+    }
+
+    /// A channel whose closing segment is listed, opening in a second
+    /// client: `meta` and the active segment are in, the closing one not.
+    fn opening_past_closing() -> (
+        LogicState,
+        Receiver<UiEvent>,
+        Receiver<SyncCommand>,
+        ChannelId,
+        SegmentId,
+    ) {
+        let (mut first, _first_ui, first_sync) = harness();
+        let (channel_id, closing) = closed_channel(&mut first, &first_sync);
+        let stored = first.channels.remove(&channel_id).expect("channel");
+        let (mut state, ui, sync) = harness();
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        serve(&mut state, &stored, stored.meta_id().document_id());
+        serve(&mut state, &stored, stored.active_id().document_id());
+        drain(&sync);
+        drain(&ui);
+        (state, ui, sync, channel_id, closing)
+    }
+
+    /// A closing segment whose key never came is given up: the channel opens
+    /// without it, shows it as a band, and ends its session.
+    #[test]
+    fn a_closing_segment_with_no_key_still_opens_the_channel() {
+        let (mut state, ui, sync, channel_id, closing) = opening_past_closing();
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: closing.document_id(),
+            cause: OpenFailure::KeyNotReceived,
+            message: "cannot unwrap document key".to_owned(),
+        });
+        assert_eq!(sent(&sync), [Sent::Close(closing.document_id())]);
+        assert!(state.opening.is_empty());
+        assert_eq!(state.channels[&channel_id].closing_id(), None);
+        assert_eq!(bands(&ui), [(closing, Unreadable::KeyNotReceived)]);
+    }
+
+    /// A transient failure of the closing segment still ends the opening: a
+    /// later open can clear it.
+    #[test]
+    fn a_transient_failure_of_the_closing_segment_ends_the_opening() {
+        let (mut state, ui, _sync, channel_id, closing) = opening_past_closing();
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: closing.document_id(),
+            cause: OpenFailure::Transient,
+            message: "server unreachable".to_owned(),
+        });
+        assert!(state.opening.is_empty());
+        assert!(!state.channels.contains_key(&channel_id));
+        assert!(drain(&ui).iter().any(|e| matches!(
+            e,
+            UiEvent::Channel {
+                event: MurmureEvent::OpenFailed { .. },
+                ..
+            }
+        )));
     }
 
     fn bands(ui: &Receiver<UiEvent>) -> Vec<(SegmentId, Unreadable)> {

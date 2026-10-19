@@ -41,6 +41,9 @@ pub struct OpeningChannel {
     meta: Option<LoroDoc>,
     /// The live segments `meta` named that are not ready yet.
     awaiting: HashSet<DocumentId>,
+    /// The closing segment `meta` named, the one live segment the channel
+    /// can open without.
+    closing: Option<DocumentId>,
     /// What the relay numbered of each segment so far, handed to the channel
     /// once it opens.
     sequences: HashMap<DocumentId, Sequence>,
@@ -56,6 +59,7 @@ impl OpeningChannel {
             payloads: HashMap::from([(meta_id, Vec::new())]),
             meta: None,
             awaiting: HashSet::new(),
+            closing: None,
             sequences: HashMap::new(),
         }
     }
@@ -177,6 +181,25 @@ impl OpeningChannel {
                 Err(MurmureError::NotHeld(document_id))
             };
         }
+        self.finish()
+    }
+
+    /// The closing segment could not open for want of its key: the channel
+    /// opens without it, and shows it as a band.
+    ///
+    /// Returns `None` for any other document, whose failure ends the opening.
+    /// Otherwise as [`OpeningChannel::ready`].
+    pub fn give_up(&mut self, document_id: DocumentId) -> Option<Result<Opening, MurmureError>> {
+        if self.closing != Some(document_id) || !self.awaiting.remove(&document_id) {
+            return None;
+        }
+        self.payloads.remove(&document_id);
+        self.sequences.remove(&document_id);
+        Some(self.finish())
+    }
+
+    /// Open the channel once no live segment is awaited.
+    fn finish(&mut self) -> Result<Opening, MurmureError> {
         if !self.awaiting.is_empty() {
             return Ok(Opening::Waiting);
         }
@@ -215,6 +238,7 @@ impl OpeningChannel {
             self.payloads.insert(segment.document_id(), Vec::new());
             self.awaiting.insert(segment.document_id());
         }
+        self.closing = live.closing.map(|segment| segment.document_id());
         self.meta = Some(meta);
         // The entry of `meta` stays, emptied, so `expects` still names it.
         if let Some(held) = self.payloads.get_mut(&self.meta_id) {

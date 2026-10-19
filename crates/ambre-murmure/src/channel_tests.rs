@@ -997,6 +997,107 @@ fn an_opening_refuses_a_document_it_did_not_ask_for() {
     );
 }
 
+// --- MURMURE-502, MURMURE-503: a closing segment that cannot open ---
+
+/// An opening past `meta`, with the active segment in and ready.
+fn opening_with_active(stored: &Stored) -> OpeningChannel {
+    let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
+    opening.receive(stored.meta_id.document_id(), &stored.meta);
+    let _ = opening.ready(stored.meta_id.document_id()).expect("meta");
+    opening.receive(
+        stored.active_id.document_id(),
+        &stored.segments[&stored.active_id],
+    );
+    opening
+}
+
+/// A closing segment whose key never came is given up: the channel opens
+/// without it, and its band is handed once.
+#[test]
+fn a_closing_segment_with_no_key_opens_the_channel_without_it() {
+    let stored = stored_channel();
+    let mut opening = opening_with_active(&stored);
+    assert!(
+        opening.give_up(stored.active_id.document_id()).is_none(),
+        "the active segment is never given up"
+    );
+    assert!(matches!(
+        opening.give_up(stored.closing_id.document_id()),
+        Some(Ok(Opening::Waiting))
+    ));
+    assert!(!opening.expects(stored.closing_id.document_id()));
+    let Ok(Opening::Open(mut state)) = opening.ready(stored.active_id.document_id()) else {
+        panic!("the active segment opens the channel");
+    };
+    assert_eq!(state.closing_id(), None);
+    assert_eq!(
+        state.take_closing_band(),
+        Some(MurmureEvent::Unreadable {
+            segment: stored.closing_id,
+            cause: Unreadable::KeyNotReceived,
+            from: NOW,
+            to: Some(NOW),
+        })
+    );
+    assert_eq!(state.take_closing_band(), None, "handed once");
+}
+
+/// A closing segment whose bytes fail the check opens as a damaged band.
+#[test]
+fn a_damaged_closing_segment_opens_the_channel_without_it() {
+    let stored = stored_channel();
+    let mut opening = opening_with_active(&stored);
+    opening.receive(stored.closing_id.document_id(), &[0xff; 8]);
+    let _ = opening
+        .ready(stored.closing_id.document_id())
+        .expect("closing");
+    let Ok(Opening::Open(mut state)) = opening.ready(stored.active_id.document_id()) else {
+        panic!("the active segment opens the channel");
+    };
+    assert_eq!(state.closing_id(), None);
+    assert!(matches!(
+        state.take_closing_band(),
+        Some(MurmureEvent::Unreadable {
+            cause: Unreadable::Damaged,
+            ..
+        })
+    ));
+}
+
+/// The active segment has no such leniency: its failure ends the opening.
+#[test]
+fn a_damaged_active_segment_still_ends_the_opening() {
+    let stored = stored_channel();
+    let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
+    opening.receive(stored.meta_id.document_id(), &stored.meta);
+    let _ = opening.ready(stored.meta_id.document_id()).expect("meta");
+    opening.receive(stored.active_id.document_id(), &[0xff; 8]);
+    let _ = opening.give_up(stored.closing_id.document_id());
+    assert!(opening.ready(stored.active_id.document_id()).is_err());
+}
+
+/// A closing segment the channel does not hold still occupies the slot: the
+/// active segment never asks to close past it.
+#[test]
+fn a_closing_segment_not_held_blocks_the_next_close() {
+    let stored = stored_channel();
+    let mut opening = opening_with_active(&stored);
+    let _ = opening.give_up(stored.closing_id.document_id());
+    let Ok(Opening::Open(state)) = opening.ready(stored.active_id.document_id()) else {
+        panic!("the active segment opens the channel");
+    };
+    let mut state = (*state).with_segment_size(0);
+    assert_eq!(state.wants_close(), None);
+}
+
+/// The same channel holding no closing segment asks at once.
+#[test]
+fn a_channel_with_no_closing_segment_asks_to_close_at_the_size() {
+    let (stored, _, _) = two_finals();
+    let mut state = open(&stored).with_segment_size(0);
+    assert_eq!(state.wants_close(), Some(stored.active_id));
+}
+
 // --- MURMURE-023: an older segment over the relay ---
 
 #[test]

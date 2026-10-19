@@ -238,6 +238,9 @@ pub struct ChannelState {
     threads: HashMap<MessageId, threading::Thread>,
     /// The thread documents whose bytes are still arriving.
     threads_pending: HashMap<DocumentId, threading::Pending>,
+    /// The band of the closing segment the channel opened without, until
+    /// the caller takes it (`MURMURE-502`).
+    closing_band: Option<MurmureEvent>,
 }
 
 impl ChannelState {
@@ -405,6 +408,7 @@ impl ChannelState {
             locked: HashSet::new(),
             threads: HashMap::new(),
             threads_pending: HashMap::new(),
+            closing_band: None,
         }
     }
 
@@ -471,9 +475,25 @@ impl ChannelState {
             Ok(Held::served(id, doc))
         };
         let active = admit_live(live.active)?;
-        let closing = live.closing.map(admit_live).transpose()?;
+        // The closing segment alone can stay out: the channel opens without
+        // it and shows it as a band (`MURMURE-502`).
+        let mut unread = None;
+        let closing = live.closing.and_then(|segment| match admit_live(segment) {
+            Ok(held) => Some(held),
+            Err(MurmureError::SegmentMissing(_)) => {
+                unread = Some((segment, Unreadable::KeyNotReceived));
+                None
+            }
+            Err(error) => {
+                tracing::warn!("[Murmure] closing segment {segment} refused: {error}");
+                unread = Some((segment, Unreadable::Damaged));
+                None
+            }
+        });
         let meta = Held::served(meta_id, meta_doc);
         let mut state = Self::assemble(channel_id, meta, active, closing);
+        state.closing_band =
+            unread.and_then(|(segment, cause)| state.band(segment.document_id(), cause));
         for (document_id, mut sequence) in sequences {
             // Only a held segment keeps its numbers: `meta` has no message,
             // and a segment no longer live was not admitted.
@@ -563,6 +583,12 @@ impl ChannelState {
         self.closing
             .as_ref()
             .map(|held| SegmentId::from_document(held.id))
+    }
+
+    /// The band of the closing segment the channel opened without, once
+    /// (`MURMURE-502`). `None` when the channel holds its closing segment.
+    pub fn take_closing_band(&mut self) -> Option<MurmureEvent> {
+        self.closing_band.take()
     }
 
     /// Whether the channel holds the document of that identifier in memory,
@@ -1467,14 +1493,18 @@ impl ChannelState {
     }
 
     /// The band that stands for the final segment `document_id`, which could
-    /// not open for `cause` (`MURMURE-218`, `MURMURE-220`).
+    /// not open for `cause` (`MURMURE-218`, `MURMURE-220`). A closing segment
+    /// the channel opened without has one too (`MURMURE-502`).
     ///
-    /// `None` for a document that is no final segment `meta` lists, for one
-    /// already loaded, and for the successor. Its span runs from its `from_ts`
-    /// to the `from_ts` of the next listed segment.
+    /// `None` for a document that is no final or closing segment `meta` lists,
+    /// for one held or loaded, and for the successor. Its span runs from its
+    /// `from_ts` to the `from_ts` of the next listed segment.
     pub fn band(&self, document_id: DocumentId, cause: Unreadable) -> Option<MurmureEvent> {
         let segment = SegmentId::from_document(document_id);
-        if self.loaded.contains_key(&segment) || self.is_successor(segment) {
+        if self.loaded.contains_key(&segment)
+            || self.is_successor(segment)
+            || self.closing_id() == Some(segment)
+        {
             return None;
         }
         let (from, to) = segment_span(&self.meta.doc, segment)?;
@@ -1719,7 +1749,7 @@ fn segment_span(meta: &LoroDoc, segment: SegmentId) -> Option<(Timestamp, Option
     });
     let position = spans.iter().position(|(id, _, _)| *id == segment)?;
     let (_, state, from) = spans.get(position)?;
-    if *state != SegmentState::Final {
+    if !matches!(state, SegmentState::Final | SegmentState::Closing) {
         return None;
     }
     let to = spans

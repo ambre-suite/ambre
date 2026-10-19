@@ -76,13 +76,19 @@ impl ChannelState {
     /// rotation it is answered whatever the segment holds (`MURMURE-060`).
     ///
     /// `None` while a segment is still closing: the relay refuses a second
-    /// close then (`SRV-196`), and the finalization frees the slot.
+    /// close then (`SRV-196`), and the finalization frees the slot. A closing
+    /// segment `meta` lists but the channel opened without counts too
+    /// (`MURMURE-503`).
     pub fn wants_close(&mut self) -> Option<SegmentId> {
         if self.close_asked || self.closing.is_some() || self.successor.is_some() {
             return None;
         }
         let messages = self.active.doc.get_list(MESSAGES).len();
         if !self.key_rotated && messages < self.segment_size && !self.passes_bytes(messages) {
+            return None;
+        }
+        let listed = live_segments(&self.meta.doc, self.channel_id).ok();
+        if listed.and_then(|live| live.closing).is_some() {
             return None;
         }
         self.close_asked = true;
