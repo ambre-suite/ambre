@@ -1237,6 +1237,56 @@ fn a_loaded_segment_is_no_band() {
     );
 }
 
+// --- MURMURE-514: a band asked for again ---
+
+/// A final segment shown as a band is asked for once more, then loads in
+/// place: its messages take the place of the band.
+#[test]
+fn a_final_band_asked_again_loads_in_place() {
+    let stored = stored_channel();
+    let mut state = open(&stored);
+    assert_eq!(state.retry(stored.final_id), Some(stored.final_id));
+    assert_eq!(state.retry(stored.final_id), None, "asked for once");
+    let bytes = &stored.segments[&stored.final_id];
+    let _ = state
+        .apply_remote(stored.final_id.document_id(), bytes)
+        .expect("kept");
+    assert_eq!(
+        state.older_ready(stored.final_id.document_id()),
+        Ok(MurmureEvent::Messages {
+            segment: stored.final_id,
+            messages: Vec::new()
+        })
+    );
+    assert_eq!(state.retry(stored.final_id), None, "already loaded");
+}
+
+/// Only a final segment `meta` lists is asked for again this way.
+#[test]
+fn only_a_listed_final_segment_is_asked_again() {
+    let stored = stored_channel();
+    let mut state = open(&stored);
+    assert_eq!(state.retry(stored.active_id), None);
+    assert_eq!(state.retry(stored.closing_id), None);
+    assert_eq!(state.retry(SegmentId::new()), None);
+    assert!(!state.lacks_closing(stored.closing_id), "held");
+    assert!(!state.lacks_closing(stored.final_id), "no closing segment");
+}
+
+/// A closing segment the channel opened without is no final segment: only
+/// a new opening fetches it again.
+#[test]
+fn a_closing_segment_opened_without_is_lacking() {
+    let stored = stored_channel();
+    let mut opening = opening_with_active(&stored);
+    let _ = opening.give_up(stored.closing_id.document_id());
+    let Ok(Opening::Open(mut state)) = opening.ready(stored.active_id.document_id()) else {
+        panic!("the active segment opens the channel");
+    };
+    assert!(state.lacks_closing(stored.closing_id));
+    assert_eq!(state.retry(stored.closing_id), None);
+}
+
 /// A segment given up still leads to the one before it (`MURMURE-221`).
 #[test]
 fn a_segment_given_up_still_leads_to_the_one_before() {

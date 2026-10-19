@@ -66,6 +66,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-219` | `FAIL` | Given a segment older than the member's history boundary, the list MUST show the boundary as the start of the channel, never as a failure. | this spec section 3; `features/ambre-spec-murmure-channels.md` | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-220` | `FAIL` | Given a segment that fails to open under the key it names, the list MUST show it as damaged, never as a missing key. | this spec section 3; `SYNC-045` | `ambre_logic::channels::tests::a_segment_that_fails_its_check_shows_as_damaged` -- bytes that fail the check hand the view a damaged band, and the document closes; `ambre_murmure::list::tests::an_unreadable_segment_shows_as_one_band_in_its_place` -- a damaged band names no missing key | none | verified |
 | `MURMURE-221` | `FRAME` | A segment the client cannot open MUST NOT stop the list from loading the segments before it. | this spec section 3 | `ambre_murmure::channel_tests::a_segment_given_up_still_leads_to_the_one_before` -- a segment given up still leads to the one listed before it; `ambre_murmure::list::tests::messages_replace_the_band_of_their_segment` -- the band holds one row, and the messages of its segment replace it | none | verified |
+| `MURMURE-513` | `POST` | A click, a tap or Enter on a band that names a remedy MUST ask for its segment again (`MURMURE-514`); a band before the history boundary MUST ask for nothing. | this spec section 3; `MURMURE-218`; `MURMURE-220` | `ambre_murmure::view::tests::a_click_a_tap_or_enter_on_a_band_asks_for_it_again` -- each of the three asks once for the band's segment, and a click on a message asks for nothing; `ambre_murmure::view::tests::a_band_before_the_history_boundary_asks_for_nothing` -- its tap passes on; `ambre_murmure::list::tests::an_unreadable_segment_shows_as_one_band_in_its_place` -- the band names the three gestures | none | verified |
 
 ### 1.6 Act on a message
 
@@ -99,7 +100,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
   only what `meta` already tells every member: the span of a segment.
-* **Verification.** 37 `verified`, 1 `unimplemented`. The host tier holds the order, the groups,
+* **Verification.** 38 `verified`, 1 `unimplemented`. The host tier holds the order, the groups,
   the words and the paint of the rows and the bands. It holds the scroll, the jumps, the focus and
   the thread's list too, the actions of a message and the selection. The browser tier holds each
   canvas, the finger, the local time and the live region. It holds the menu's listener, the dialog
@@ -223,6 +224,11 @@ pub enum Unreadable {
 | `BeforeHistoryBoundary` | the history before this date was not shared with you | none: the band is the start of the channel |
 | `Damaged` | these messages could not be verified | retry, which fetches the segment again from the relay |
 
+A click, a tap or Enter on a band applies its remedy (`MURMURE-513`). The Sync worker walks the
+key chain again at each open, so one new open serves a missing key and damaged bytes alike. A
+final segment loads in place, and its messages replace the band. The closing segment has no place
+to load into, so the channel opens anew from its local copies (`MURMURE-514`).
+
 A bare "unable to decrypt" names no cause and no remedy, so no band shows it (`MURMURE-218`).
 A band is one row of the list, whatever the segment holds, so scrolling goes on past it
 (`MURMURE-221`).
@@ -264,7 +270,9 @@ both to each region, and `ambre_app::host::murmure` hands it the pane, the names
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A band names its remedy in words.** It says to reopen the channel; no control on it asks again.
+* **A closing segment is asked again by a new opening.** The channel closes and opens, so its
+  watchers and its typing go and come back. A retry in place waits for the
+  `Retrying a closing segment in place` Story (`ambre-roadmap.md` E5).
 * **Only four actions are built.** Reply, mark unread, copy text and delete.
   React lands with the `Emoji` Story (`ambre-roadmap.md` E5).
   Edit lands with the `The composer` Story (`ambre-roadmap.md` E5).

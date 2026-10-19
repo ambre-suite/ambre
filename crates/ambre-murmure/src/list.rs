@@ -78,7 +78,15 @@ pub const BAND_KEYS: &str = "the keys for these messages have not reached this d
 pub const BAND_DAMAGED: &str = "these messages could not be verified.";
 
 /// The remedy a band names for a cause that asking again may clear.
-pub const BAND_RETRY: &str = "Reopen the channel to try again.";
+pub const BAND_RETRY: &str = "Click, tap or press Enter to try again.";
+
+impl Band {
+    /// Whether asking again may clear its cause (`MURMURE-513`). A segment
+    /// before the history boundary stays closed to this member.
+    pub fn retries(&self) -> bool {
+        self.cause != Unreadable::BeforeHistoryBoundary
+    }
+}
 
 impl MessageList {
     /// Take the new or changed messages of `segment`, as

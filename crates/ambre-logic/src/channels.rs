@@ -1123,7 +1123,8 @@ impl LogicState {
             | MurmureCommand::MarkUnread { .. }
             | MurmureCommand::MarkThreadRead { .. }
             | MurmureCommand::Tick { .. }
-            | MurmureCommand::Typing { .. } => None,
+            | MurmureCommand::Typing { .. }
+            | MurmureCommand::Retry { .. } => None,
         };
         if let Some(document_id) = target {
             let identified = self
@@ -1195,6 +1196,22 @@ impl LogicState {
                         document_id: older.document_id(),
                         doc_type: DocType::Murmure,
                     });
+                }
+            }
+            MurmureCommand::Retry { segment } => {
+                // Sync walks the key chain again at each open, so a new open
+                // serves a missing key and damaged bytes alike (the Murmure
+                // engine spec).
+                if let Some(segment) = channel.retry(segment) {
+                    self.send_to_sync(SyncCommand::OpenDocument {
+                        document_id: segment.document_id(),
+                        doc_type: DocType::Murmure,
+                    });
+                } else if channel.lacks_closing(segment) {
+                    // The closing segment has no place to load into: the
+                    // channel opens anew, from its local copies.
+                    self.close_channel(channel_id);
+                    self.open_channel(channel_id);
                 }
             }
             MurmureCommand::MarkRead => {
@@ -4186,6 +4203,54 @@ mod tests {
             MurmureCommand::LoadOlder { segment: active },
         );
         assert_eq!(sent(&sync), [Sent::Open(segment.document_id())]);
+    }
+
+    /// A band asked for again opens its segment once more, and only once
+    /// while it is on its way (the Murmure engine spec).
+    #[test]
+    fn a_final_band_asked_again_opens_its_segment() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, segment, active) = unloaded_final(&mut state, &sync);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: segment.document_id(),
+            cause: OpenFailure::KeyNotReceived,
+            message: "cannot unwrap document key".to_owned(),
+        });
+        drain(&ui);
+        drain(&sync);
+        for _ in 0..2 {
+            command(&mut state, channel_id, MurmureCommand::Retry { segment });
+        }
+        assert_eq!(sent(&sync), [Sent::Open(segment.document_id())]);
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Retry { segment: active },
+        );
+        assert!(sent(&sync).is_empty(), "a live segment is no band");
+    }
+
+    /// The closing segment the channel opened without is fetched again by a
+    /// new opening of the channel (the Murmure engine spec).
+    #[test]
+    fn a_closing_band_asked_again_opens_the_channel_anew() {
+        let (mut state, ui, sync, channel_id, closing) = opening_past_closing();
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: closing.document_id(),
+            cause: OpenFailure::KeyNotReceived,
+            message: "cannot unwrap document key".to_owned(),
+        });
+        drain(&ui);
+        drain(&sync);
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Retry { segment: closing },
+        );
+        assert!(!state.channels.contains_key(&channel_id));
+        assert!(state.opening.contains_key(&channel_id));
+        let asked = sent(&sync);
+        assert!(asked.contains(&Sent::List(channel_id)), "{asked:?}");
     }
 
     /// Bytes that opened under their key and then fail the check show the

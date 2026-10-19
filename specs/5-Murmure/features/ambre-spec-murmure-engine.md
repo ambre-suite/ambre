@@ -35,6 +35,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-028` | `FRAME` | Opening a channel MUST NOT load a final segment. | this spec section 3 | `ambre_murmure::channel_tests::opening_a_channel_never_loads_a_final_segment` -- the final segment's bytes are handed to the open, and it still holds none of it | none | verified |
 | `MURMURE-502` | `FAIL` | Given a closing segment whose key this client lacks, or whose bytes fail the check, the channel MUST open without it and show it as one band. | this spec section 3; `MURMURE-218` | `ambre_murmure::channel_tests::a_closing_segment_with_no_key_opens_the_channel_without_it` -- the band is handed once; `::a_damaged_closing_segment_opens_the_channel_without_it`; `::a_damaged_active_segment_still_ends_the_opening`; `ambre_logic::channels::tests::a_closing_segment_with_no_key_still_opens_the_channel` -- its session ends; `ambre_logic::channels::tests::a_transient_failure_of_the_closing_segment_ends_the_opening` | none | verified |
 | `MURMURE-503` | `FRAME` | A closing segment the channel opened without MUST NOT let the active segment ask to close. | this spec section 3; `SRV-196` | `ambre_murmure::channel_tests::a_closing_segment_not_held_blocks_the_next_close` -- past the segment size, nothing is asked; `ambre_murmure::channel_tests::a_channel_with_no_closing_segment_asks_to_close_at_the_size` -- the same size asks when `meta` lists no closing segment | none | verified |
+| `MURMURE-514` | `POST` | A band asked for again MUST fetch its key chain and its bytes anew: a final segment loads in place, and a closing segment the channel opened without reopens the channel. | this spec section 3; `MURMURE-502`; `MURMURE-513`; `SYNC-173` | `ambre_murmure::channel_tests::a_final_band_asked_again_loads_in_place` -- asked once, its messages replace the band; `ambre_murmure::channel_tests::only_a_listed_final_segment_is_asked_again`; `ambre_murmure::channel_tests::a_closing_segment_opened_without_is_lacking`; `ambre_logic::channels::tests::a_final_band_asked_again_opens_its_segment` -- one open while it is on its way, none for a live segment; `ambre_logic::channels::tests::a_closing_band_asked_again_opens_the_channel_anew` | none | verified |
 
 ### 1.3 Apply a remote delta
 
@@ -48,7 +49,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   JSON check row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** every document here travels sealed through the document pipeline (`ZK-001`). What
   the relay learns of the grouping is `ZK-015`.
-* **Verification.** 13 `verified`, 0 `unimplemented`. The open is held on both sides of the Logic
+* **Verification.** 14 `verified`, 0 `unimplemented`. The open is held on both sides of the Logic
   thread: the engine's staged open, and the dispatcher that drives it over the relay. A close
   hands each document's copy to the local store and releases it to a light subscription. A
   reopen starts each document from its copy.
@@ -96,6 +97,11 @@ A refusal at any step closes every document the open asked for, and the view get
 bytes that fail the check, leave it out. The channel opens, and the view gets a band for it
 (`MURMURE-502`). A transient failure still ends the open. The active segment asks no close while
 the closing one stays listed (`MURMURE-503`).
+
+A band asked for again opens its segment anew, and Sync walks the key chain again. A final
+segment takes the path of an older one, and its messages replace the band. A closing segment
+the channel opened without has no place to load into, so the channel closes and opens again
+(`MURMURE-514`).
 
 Threads join the state with the threads Story.
 

@@ -27,7 +27,7 @@ use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::MurmurePane;
 use crate::commands::MessageTarget;
-use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, RowKey, UnreadLine};
+use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 use crate::select::Selecting;
 
@@ -333,6 +333,57 @@ impl MurmureView {
         })
     }
 
+    /// Ask again for the segment of the band under `y` at the last paint, if
+    /// its cause may clear (`MURMURE-513`). Answers whether one was asked.
+    fn retry_at(&self, y: f32) -> bool {
+        let Some(i) = self.last.as_ref().and_then(|painted| painted.row_at(y)) else {
+            return false;
+        };
+        self.retry_row(|_| Some(i))
+    }
+
+    /// Ask again for the segment of the focused band (`MURMURE-513`).
+    fn retry_focus(&self) -> bool {
+        let Some(focus) = self.focus else {
+            return false;
+        };
+        self.retry_row(|keys| keys.iter().position(|key| *key == focus))
+    }
+
+    /// Ask again for the row `pick` finds among the keys of the list shown,
+    /// when it is a band whose cause may clear. Only the channel region shows
+    /// bands.
+    fn retry_row(&self, pick: impl Fn(&[RowKey]) -> Option<usize>) -> bool {
+        let pane = (self.reads.pane)();
+        let Some(channel_id) = pane
+            .shown_channel()
+            .filter(|_| self.region == Region::Channel)
+        else {
+            return false;
+        };
+        let lists = self.lists.borrow();
+        let Some(list) = self.shown(&lists.conversations, pane) else {
+            return false;
+        };
+        let keys = list.keys();
+        let Some(i) = pick(&keys) else {
+            return false;
+        };
+        let (Some(RowKey::Band(segment)), Some(Row::Band(band))) =
+            (keys.get(i).copied(), list.rows().get(i).copied())
+        else {
+            return false;
+        };
+        if !band.retries() {
+            return false;
+        }
+        self.send(LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::Retry { segment },
+        });
+        true
+    }
+
     /// The focused message as the target of its actions, held at the foot
     /// of its row, where the menu opens below it (`MURMURE-511`). `None`
     /// with no focus on screen, or on a band.
@@ -430,15 +481,16 @@ impl MurmureView {
     }
 
     /// A finger lifted: a pan released with speed leaves a flick. Answers
-    /// the point of a tap, unless it fell on the control back to the latest
-    /// message, which it presses.
+    /// the point of a tap, save one the view takes. A tap on the control back
+    /// to the latest message presses it, and one on a band asks for its
+    /// segment again (`MURMURE-513`).
     pub fn touch_up(&mut self, now_ms: f64) -> Option<(f32, f32)> {
         match self.kinetic.release(now_ms) {
             Release::Tap { x, y } if self.on_jump(Point::new(x.into(), y.into())) => {
                 self.rest_at_latest();
                 None
             }
-            Release::Tap { x, y } => Some((x, y)),
+            Release::Tap { x, y } => (!self.retry_at(y)).then_some((x, y)),
             Release::Fling | Release::Rest => None,
         }
     }
@@ -745,6 +797,9 @@ impl MurmureView {
     /// `MURMURE-205`). The ContextMenu key and Shift+F10 open the actions of
     /// the focused message (`MURMURE-511`).
     ///
+    /// A click on a band, or Enter on a focused one, asks for its segment
+    /// again (`MURMURE-513`).
+    ///
     /// A drag of the main button selects text, and leaves the press to the
     /// page, so the canvas takes the focus (`MURMURE-425`).
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
@@ -777,13 +832,19 @@ impl MurmureView {
             InputEvent::PointerUp { x, y, .. } => {
                 let at = Point::new(x, y);
                 self.hover = Some(at);
-                if self.drag.take() == Some(true) {
+                let drag = self.drag.take();
+                if drag == Some(true) {
                     self.selecting.drag = Some((x as f32, y as f32));
                     self.dirty = true;
                     return false;
                 }
                 if self.on_jump(at) {
                     self.rest_at_latest();
+                    return true;
+                }
+                // A click of the main button on a band asks for its segment
+                // again (`MURMURE-513`).
+                if drag == Some(false) && self.retry_at(y as f32) {
                     return true;
                 }
             }
@@ -802,6 +863,7 @@ impl MurmureView {
                     "End" => self.rest_at_latest(),
                     "ArrowDown" => self.move_focus(1),
                     "ArrowUp" => self.move_focus(-1),
+                    "Enter" if self.retry_focus() => {}
                     _ => return false,
                 }
                 return true;
@@ -838,7 +900,7 @@ mod tests {
     use std::cell::Cell;
 
     use ambre_bus::conduit::local;
-    use ambre_bus::{ChannelId, MessageView, MurmureEvent};
+    use ambre_bus::{ChannelId, MessageView, MurmureEvent, Unreadable};
     use ambre_canvas::theme::{SPACE_2, SPACE_8};
     use ambre_draw::kinetic::LONG_PRESS_MS;
     use ambre_draw::testing::RecordingSurface;
@@ -1674,6 +1736,90 @@ mod tests {
             ctrl: false,
         };
         page.view.handle_input(&ev)
+    }
+
+    /// A channel shown with a band for `cause` at its top, then two messages.
+    /// Returns the page, the channel and the segment of the band.
+    fn banded(cause: Unreadable) -> (Page, ChannelId, SegmentId) {
+        let mut page = page();
+        let channel = ChannelId::new();
+        let ada = UserId::new();
+        let messages = vec![message(ada, 10, "a"), message(ada, 11, "b")];
+        let segment = SegmentId::new();
+        send(&page, channel, MurmureEvent::Messages { segment, messages });
+        let older = SegmentId::new();
+        let band = MurmureEvent::Unreadable {
+            segment: older,
+            cause,
+            from: Timestamp(0),
+            to: Some(Timestamp(10)),
+        };
+        send(&page, channel, band);
+        page.pane.set(MurmurePane::channel(channel));
+        frame(&mut page.view);
+        let _ = reads(&page);
+        (page, channel, older)
+    }
+
+    /// The segments the view asked for again since the last call.
+    fn retried(page: &Page) -> Vec<(ChannelId, SegmentId)> {
+        let mut asked = Vec::new();
+        while let Ok(command) = page.commands.try_recv() {
+            if let LogicCommand::Channel {
+                channel_id,
+                command: MurmureCommand::Retry { segment },
+            } = command
+            {
+                asked.push((channel_id, segment));
+            }
+        }
+        asked
+    }
+
+    /// A click, a tap or Enter on a band asks for its segment again, and a
+    /// click on a message asks for nothing (`MURMURE-513`).
+    #[test]
+    fn a_click_a_tap_or_enter_on_a_band_asks_for_it_again() {
+        let (mut page, channel, older) = banded(Unreadable::KeyNotReceived);
+        let band_y = middle_of(&page.view, 0);
+        let release = |y: f32| InputEvent::PointerUp {
+            x: 10.0,
+            y: y.into(),
+            button: PRIMARY_BUTTON,
+            ctrl: false,
+        };
+        button(&mut page, PRIMARY_BUTTON, band_y);
+        assert!(page.view.handle_input(&release(band_y)));
+        assert_eq!(retried(&page), [(channel, older)]);
+
+        let message_y = middle_of(&page.view, 1);
+        button(&mut page, PRIMARY_BUTTON, message_y);
+        assert!(!page.view.handle_input(&release(message_y)));
+        assert!(retried(&page).is_empty(), "a message is no band");
+
+        page.view.touch_down(10.0, band_y, 0.0);
+        assert_eq!(page.view.touch_up(50.0), None, "the tap is taken");
+        assert_eq!(retried(&page), [(channel, older)]);
+
+        assert!(!key(&mut page, "Enter", false, 0.0), "no focus yet");
+        while page.view.focused() != Some(RowKey::Band(older)) {
+            assert!(key(&mut page, "ArrowUp", false, 0.0));
+            frame(&mut page.view);
+        }
+        let _ = reads(&page);
+        assert!(key(&mut page, "Enter", false, 0.0));
+        assert_eq!(retried(&page), [(channel, older)]);
+    }
+
+    /// A segment before the history boundary stays closed: its band asks for
+    /// nothing, and the tap passes on (`MURMURE-513`).
+    #[test]
+    fn a_band_before_the_history_boundary_asks_for_nothing() {
+        let (mut page, _, _) = banded(Unreadable::BeforeHistoryBoundary);
+        let band_y = middle_of(&page.view, 0);
+        page.view.touch_down(10.0, band_y, 0.0);
+        assert_eq!(page.view.touch_up(50.0), Some((10.0, band_y)));
+        assert!(retried(&page).is_empty());
     }
 
     /// A right-click on a message hands the page that message, where it lies

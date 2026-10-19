@@ -298,6 +298,9 @@ pub enum MurmureCommand {
     /// A keystroke in the composer of the channel (`MURMURE-124`). An
     /// ephemeral, never a document write (`MURMURE-125`).
     Typing { now: Timestamp },
+    /// Ask again for a segment the list shows as a band. Its key chain and
+    /// its bytes are fetched again from the relay (`MURMURE-514`).
+    Retry { segment: SegmentId },
 }
 
 impl MurmureCommand {
@@ -319,7 +322,8 @@ impl MurmureCommand {
             | Self::MarkUnread { .. }
             | Self::MarkThreadRead { .. }
             | Self::Tick { .. }
-            | Self::Typing { .. } => false,
+            | Self::Typing { .. }
+            | Self::Retry { .. } => false,
         }
     }
 }
@@ -766,7 +770,18 @@ pub enum SpaceEvent {
 
 #[cfg(test)]
 mod tests {
-    use super::Topic;
+    use super::{MurmureCommand, Topic};
+    use ambre_core::SegmentId;
+
+    /// A retry fetches again what the channel already holds: it writes no
+    /// document, so a read-only member sends it too.
+    #[test]
+    fn a_retry_writes_no_document() {
+        let retry = MurmureCommand::Retry {
+            segment: SegmentId::from_bytes([7; 16]),
+        };
+        assert!(!retry.is_mutating());
+    }
 
     /// An empty topic is no topic: it cannot be built, nor decoded from the
     /// wire, so the catalogue never stores an empty string.

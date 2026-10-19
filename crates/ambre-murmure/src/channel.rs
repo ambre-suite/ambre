@@ -1559,6 +1559,39 @@ impl ChannelState {
         Some(older)
     }
 
+    /// Ask again for the final segment `segment`, which the list shows as a
+    /// band (`MURMURE-514`).
+    ///
+    /// Returns the document to open, or `None` when `meta` lists no such
+    /// final segment, or when it is already loaded or on its way. Its bytes
+    /// then take the path of [`ChannelState::request_older`].
+    pub fn retry(&mut self, segment: SegmentId) -> Option<SegmentId> {
+        if self.listed_as(segment) != Some(SegmentState::Final)
+            || self.loaded.contains_key(&segment)
+            || self.pending.contains_key(&segment)
+        {
+            return None;
+        }
+        self.pending.insert(segment, Vec::new());
+        Some(segment)
+    }
+
+    /// Whether `segment` is the closing segment `meta` lists and the channel
+    /// opened without (`MURMURE-502`). Only a new opening fetches it again
+    /// (`MURMURE-514`).
+    pub fn lacks_closing(&self, segment: SegmentId) -> bool {
+        self.listed_as(segment) == Some(SegmentState::Closing) && self.closing_id() != Some(segment)
+    }
+
+    /// The state `meta` lists `segment` in, or `None` when it lists no such
+    /// segment.
+    fn listed_as(&self, segment: SegmentId) -> Option<SegmentState> {
+        segment_entries(&self.meta.doc)
+            .into_iter()
+            .find(|(id, _)| *id == segment)
+            .map(|(_, state)| state)
+    }
+
     /// Whether `document_id` is an older segment still arriving.
     ///
     /// Takes the routing address, which names no kind: a document this
