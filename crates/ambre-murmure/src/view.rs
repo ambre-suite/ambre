@@ -24,7 +24,7 @@ use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::MurmurePane;
 use crate::list::{Conversations, MessageList, ReadMarks, RowKey, UnreadLine};
-use crate::paint::{Painted, Shown, paint_list};
+use crate::paint::{Painted, Shown, paint_jump, paint_list};
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the
 /// host binds a cell to it while it is in the page.
@@ -111,6 +111,9 @@ pub struct MurmureView {
     kinetic: Kinetic,
     /// The oldest segment whose predecessor this region asked for.
     asked_older: Option<SegmentId>,
+    /// Where the last paint drew the control back to the latest message,
+    /// `None` when the latest message showed (`MURMURE-505`).
+    jump: Option<Rect>,
     dirty: bool,
 }
 
@@ -143,6 +146,7 @@ impl MurmureView {
             heading: 0.0,
             kinetic: Kinetic::default(),
             asked_older: None,
+            jump: None,
             dirty: true,
         }
     }
@@ -216,6 +220,28 @@ impl MurmureView {
         self.dirty = true;
     }
 
+    /// Move the list by one viewport, towards the latest row for a positive
+    /// `pages`. The model takes it as a wheel step of a page (`MURMURE-504`).
+    fn page(&mut self, pages: f32) {
+        let now_ms = (self.reads.now_ms)();
+        let step = self.kinetic.wheel(0.0, pages * self.size.1, true, now_ms);
+        self.scroll_by(step);
+    }
+
+    /// Bring the list back to its latest message (`MURMURE-505`). The next
+    /// paint shows it, and only then is it read (`MURMURE-506`).
+    fn rest_at_latest(&mut self) {
+        self.rest = Rest::Latest;
+        self.pending = false;
+        self.kinetic.stop();
+        self.dirty = true;
+    }
+
+    /// Whether `at` falls on the control back to the latest message.
+    fn on_jump(&self, at: Point) -> bool {
+        self.jump.is_some_and(|rect| rect.contains(at))
+    }
+
     /// A finger went down: it stops any motion left.
     pub fn touch_down(&mut self, x: f32, y: f32, now_ms: f64) {
         self.kinetic.press(x, y, now_ms);
@@ -232,9 +258,14 @@ impl MurmureView {
     }
 
     /// A finger lifted: a pan released with speed leaves a flick. Answers
-    /// the point of a tap.
+    /// the point of a tap, unless it fell on the control back to the latest
+    /// message, which it presses.
     pub fn touch_up(&mut self, now_ms: f64) -> Option<(f32, f32)> {
         match self.kinetic.release(now_ms) {
+            Release::Tap { x, y } if self.on_jump(Point::new(x.into(), y.into())) => {
+                self.rest_at_latest();
+                None
+            }
             Release::Tap { x, y } => Some((x, y)),
             Release::Fling | Release::Rest => None,
         }
@@ -330,6 +361,9 @@ impl MurmureView {
         );
         self.last = Some(painted);
         self.settle(&painted, &keys);
+        let higher_up = !painted.latest_shown && !list.is_empty();
+        let palette = self.theme.palette();
+        self.jump = higher_up.then(|| paint_jump(surface, font_cx, text_cache, self.size, palette));
         if self.region == Region::Channel
             && painted.oldest_shown
             && let Some((channel, oldest)) = on_screen.zip(list.oldest_segment())
@@ -437,12 +471,37 @@ impl MurmureView {
 
     /// The region follows the pointer, and the wheel scrolls it. A trackpad
     /// glide that pauses coasts on; a notch never does (`KINETIC-002`). The
-    /// pinch chord is the page's zoom, so the list leaves it.
+    /// pinch chord is the page's zoom, so the list leaves it. Page Up, Page
+    /// Down and End jump through the list; a key with a modifier is the
+    /// browser's (`MURMURE-504`, `MURMURE-505`).
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
         match *ev {
-            InputEvent::PointerDown { x, y, .. }
-            | InputEvent::PointerMove { x, y }
-            | InputEvent::PointerUp { x, y, .. } => self.hover = Some(Point::new(x, y)),
+            InputEvent::PointerDown { x, y, .. } | InputEvent::PointerMove { x, y } => {
+                self.hover = Some(Point::new(x, y));
+            }
+            InputEvent::PointerUp { x, y, .. } => {
+                let at = Point::new(x, y);
+                self.hover = Some(at);
+                if self.on_jump(at) {
+                    self.rest_at_latest();
+                    return true;
+                }
+            }
+            InputEvent::Key {
+                ref key,
+                ctrl: false,
+                alt: false,
+                meta: false,
+                ..
+            } => {
+                match key.as_str() {
+                    "PageDown" => self.page(1.0),
+                    "PageUp" => self.page(-1.0),
+                    "End" => self.rest_at_latest(),
+                    _ => return false,
+                }
+                return true;
+            }
             InputEvent::Wheel {
                 dy,
                 delta_mode,
@@ -856,6 +915,123 @@ mod tests {
         }
         assert_eq!(page.view.resting_on(), None);
         assert!(!page.view.scrolling(), "the edge stops the motion");
+    }
+
+    /// A key pressed at `now_ms`, with `ctrl` held or not.
+    fn key(page: &mut Page, key: &str, ctrl: bool, now_ms: f64) -> bool {
+        page.clock.set(now_ms);
+        let ev = InputEvent::Key {
+            key: key.to_owned(),
+            ctrl,
+            alt: false,
+            shift: false,
+            meta: false,
+        };
+        page.view.handle_input(&ev)
+    }
+
+    /// Page Up rests the list where a wheel step of one page does, through
+    /// the same model, and Page Down brings it back (`MURMURE-504`). A key
+    /// with a modifier stays the browser's.
+    #[test]
+    fn page_up_and_page_down_move_the_list_by_one_viewport() {
+        let (mut paged, _, paged_rows) = long_channel(400);
+        let (mut wheeled, _, wheeled_rows) = long_channel(400);
+        frame(&mut paged.view);
+        frame(&mut wheeled.view);
+        assert!(key(&mut paged, "PageUp", false, 10.0));
+        assert!(wheel(&mut wheeled, -1.0, 2, 10.0));
+        frame_at(&mut paged.view, 10.0);
+        frame_at(&mut wheeled.view, 10.0);
+        // The two lists hold the same rows under other ids: compare places.
+        let place = |view: &MurmureView, rows: &[MessageView]| {
+            let (key, y) = view.resting_on().expect("a page up leaves the latest row");
+            let index = rows.iter().position(|m| RowKey::Message(m.id) == key);
+            (index.expect("a message row"), y)
+        };
+        assert_eq!(
+            place(&paged.view, &paged_rows),
+            place(&wheeled.view, &wheeled_rows)
+        );
+        assert!(!paged.view.scrolling(), "a page leaves no motion");
+
+        assert!(key(&mut paged, "PageDown", false, 20.0));
+        frame_at(&mut paged.view, 20.0);
+        assert!(shown(&paged.view).latest_shown);
+        assert!(
+            !key(&mut paged, "PageUp", true, 30.0),
+            "the browser's chord"
+        );
+        assert!(!key(&mut paged, "a", false, 30.0));
+    }
+
+    /// End, a click on the control or a tap on it brings back the latest
+    /// message. The control shows only while the list rests higher up
+    /// (`MURMURE-505`).
+    #[test]
+    fn end_or_the_control_brings_back_the_latest_message() {
+        let (mut page, _, _) = long_channel(400);
+        frame(&mut page.view);
+        assert_eq!(page.view.jump, None, "no control at the latest message");
+        let centre = |view: &MurmureView| view.jump.expect("a control").center();
+        let up = |page: &mut Page| {
+            key(page, "PageUp", false, 10.0);
+            frame(&mut page.view);
+            assert!(!shown(&page.view).latest_shown);
+        };
+
+        up(&mut page);
+        assert!(key(&mut page, "End", false, 20.0));
+        frame(&mut page.view);
+        assert!(shown(&page.view).latest_shown);
+        assert_eq!(page.view.resting_on(), None);
+        assert_eq!(page.view.jump, None);
+
+        up(&mut page);
+        let at = centre(&page.view);
+        let click = InputEvent::PointerUp {
+            x: at.x,
+            y: at.y,
+            button: 0,
+            ctrl: false,
+        };
+        assert!(page.view.handle_input(&click), "the click is taken");
+        frame(&mut page.view);
+        assert!(shown(&page.view).latest_shown);
+
+        up(&mut page);
+        let at = centre(&page.view);
+        page.view.touch_down(at.x as f32, at.y as f32, 100.0);
+        assert_eq!(page.view.touch_up(150.0), None, "the tap is taken");
+        frame(&mut page.view);
+        assert!(shown(&page.view).latest_shown);
+    }
+
+    /// A jump marks read only the latest message it showed. Pages that stop
+    /// short of a new message mark nothing, and End marks it once it paints
+    /// (`MURMURE-506`).
+    #[test]
+    fn a_jump_marks_read_only_what_it_showed() {
+        let (mut page, channel, _) = long_channel(400);
+        frame(&mut page.view);
+        assert_eq!(reads(&page).0, 1);
+        for now in [10.0, 20.0, 30.0] {
+            key(&mut page, "PageUp", false, now);
+            frame_at(&mut page.view, now);
+        }
+        segment(&page, channel, 5_000, 1);
+        key(&mut page, "PageDown", false, 40.0);
+        frame_at(&mut page.view, 40.0);
+        assert!(!shown(&page.view).latest_shown);
+        assert_eq!(
+            reads(&page).0,
+            0,
+            "the page stopped short of the new message"
+        );
+        key(&mut page, "End", false, 50.0);
+        assert_eq!(reads(&page).0, 0, "nothing is read before it paints");
+        frame_at(&mut page.view, 50.0);
+        assert_eq!(reads(&page).0, 1, "the new message showed, and is read");
     }
 
     /// A finger drags the list, and one that never left the slop is a tap

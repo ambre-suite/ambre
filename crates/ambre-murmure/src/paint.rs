@@ -15,7 +15,7 @@ use ambre_draw::{
     PositionedLayoutItem, Rect,
 };
 
-use crate::list::{MessageList, RowWords, UNREAD_LINE, window};
+use crate::list::{JUMP_TO_LATEST, MessageList, RowWords, UNREAD_LINE, window};
 
 /// What one paint of the list did.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -99,6 +99,43 @@ pub fn paint_list<S: DrawSurface>(
         rest: reached.anchor,
         top: reached.rows.first().map(|&(i, top, _)| (i, top)),
     }
+}
+
+/// Paint the control that brings the list back to its latest message, at
+/// the foot of a viewport of `size` (`MURMURE-505`). Returns the rectangle
+/// a press on it hits.
+pub fn paint_jump<S: DrawSurface>(
+    surface: &mut S,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    size: (f32, f32),
+    palette: &Palette,
+) -> Rect {
+    let (width, height) = size;
+    let layout = shape(
+        font_cx,
+        cache,
+        JUMP_TO_LATEST,
+        FONT_UI,
+        width.max(1.0),
+        true,
+    );
+    let (wide, tall) = (
+        2.0 * SPACE_8 + layout.width(),
+        2.0 * SPACE_4 + layout.height(),
+    );
+    let x = ((width - wide) / 2.0).max(0.0);
+    let y = (height - tall - SPACE_8).max(0.0);
+    let rect = Rect::new(
+        f64::from(x),
+        f64::from(y),
+        f64::from(x + wide),
+        f64::from(y + tall),
+    );
+    surface.fill_rect(rect, palette.header_bg);
+    surface.stroke_rect(rect, palette.header_border, 1.0);
+    draw(surface, layout, x + SPACE_8, y + SPACE_4, palette.selection);
+    rect
 }
 
 /// The height of the unread line: its words and the space above them.
@@ -282,6 +319,31 @@ mod tests {
             .collect();
         runs.sort_by(|a, b| a.0.total_cmp(&b.0));
         runs
+    }
+
+    /// The control back to the latest message paints its words in the
+    /// accent, inside the rectangle it answers, at the foot of the viewport
+    /// (`MURMURE-505`).
+    #[test]
+    fn the_jump_control_paints_its_words_inside_what_it_answers() {
+        let (mut surface, mut font_cx) = (RecordingSurface::new(), fonts());
+        let mut cache = TextCache::new(1.0);
+        let rect = paint_jump(
+            &mut surface,
+            &mut font_cx,
+            &mut cache,
+            (400.0, 300.0),
+            &LIGHT,
+        );
+        assert!(
+            rect.x0 > 0.0 && rect.x1 < 400.0 && rect.y1 < 300.0,
+            "{rect:?}"
+        );
+        assert!(rect.y0 > 150.0, "at the foot of the viewport: {rect:?}");
+        let words = runs(&surface, LIGHT.selection);
+        assert!(!words.is_empty());
+        assert!(words.iter().all(|&(y, _)| y > rect.y0 && y < rect.y1));
+        assert_eq!(surface.fill_colors().first(), Some(&LIGHT.header_bg));
     }
 
     /// Ten thousand messages lay out only the rows of one viewport, and the

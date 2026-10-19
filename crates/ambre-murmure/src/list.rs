@@ -25,6 +25,9 @@ pub const EDITED: &str = "(edited)";
 /// What the line above the first unread message reads (`MURMURE-184`).
 pub const UNREAD_LINE: &str = "New messages";
 
+/// What the control of a list read higher up reads (`MURMURE-505`).
+pub const JUMP_TO_LATEST: &str = "Jump to latest";
+
 /// The name a member shows before the view knows theirs.
 pub const UNKNOWN_MEMBER: &str = "A member";
 
