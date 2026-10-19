@@ -1172,6 +1172,19 @@ impl SyncState {
                     },
                 );
             }
+            SyncEvent::MediaErased {
+                id,
+                document_id,
+                content_hash,
+            } => {
+                self.reply(
+                    id,
+                    RestEvent::MediaErased {
+                        document_id,
+                        content_hash,
+                    },
+                );
+            }
             SyncEvent::MediaDownloaded {
                 id,
                 document_id,

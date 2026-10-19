@@ -528,6 +528,15 @@ pub(crate) async fn delete_auth(url: &str, auth: AuthContext) -> Result<(), Stri
     expect_ok(&request, &resp)
 }
 
+/// Sends an authenticated `DELETE` and answers the status the relay gave. Only
+/// a request that reached no answer is an error.
+pub(crate) async fn delete_status_auth(url: &str, auth: AuthContext) -> Result<u16, String> {
+    let mut request = Outgoing::new(Method::Delete, url);
+    exchange_auth(&Fetch, &auth, &mut request)
+        .await
+        .map(|resp| resp.status)
+}
+
 /// PUTs a sealed blob to a presigned object-storage URL. It takes what the seal
 /// built and nothing else, so no plaintext reaches object storage (`SYNC-049`,
 /// `ZK-001`).

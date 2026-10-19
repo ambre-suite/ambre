@@ -216,6 +216,37 @@ impl SyncState {
             download_media(&http, &base, id, content_hash, &keyring, &tx, &logic_tx).await;
         });
     }
+
+    /// Erases this user's upload of a blob. It needs no key and no open
+    /// document: the relay checks the uploader, and the object holds nothing
+    /// it could read (`SRV-139`).
+    pub(crate) fn handle_erase_media(
+        &self,
+        id: RequestId,
+        document_id: DocumentId,
+        content_hash: String,
+    ) {
+        let Some(tx) = self.event_tx.clone() else {
+            self.reply(
+                id,
+                RestEvent::MediaErased {
+                    document_id,
+                    content_hash,
+                },
+            );
+            return;
+        };
+        let logic_tx = self.logic_tx.clone();
+        let auth = self.auth_context();
+        let base = format!(
+            "{}://{}/api/documents/{document_id}",
+            self.url_scheme, self.api_base
+        );
+        wasm_bindgen_futures::spawn_local(async move {
+            let http = GlooHttp { auth };
+            erase_media(&http, &base, id, document_id, content_hash, &tx, &logic_tx).await;
+        });
+    }
 }
 
 /// The requests the two media legs make, abstracted over the transport so
@@ -232,6 +263,8 @@ pub(crate) trait MediaHttp {
     async fn put_sealed(&self, url: &str, blob: &pipeline::SealedBlob) -> Result<(), String>;
     /// A blob from a presigned object-storage link.
     async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, String>;
+    /// An authenticated `DELETE` to the relay, answering its status.
+    async fn delete(&self, url: &str) -> Result<u16, String>;
 }
 
 impl MediaHttp for GlooHttp {
@@ -247,6 +280,9 @@ impl MediaHttp for GlooHttp {
     }
     async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, String> {
         http::fetch_bytes(url).await
+    }
+    async fn delete(&self, url: &str) -> Result<u16, String> {
+        http::delete_status_auth(url, self.auth.clone()).await
     }
 }
 
@@ -328,6 +364,33 @@ async fn download_media(
             });
         }
         Err(message) => report(logic_tx, id, "DownloadMedia", message),
+    }
+}
+
+/// Asks the relay to erase this user's upload, then answers the caller.
+///
+/// A yes erased it. A refusal (403) or an absent document (404) leaves nothing
+/// of this user's to erase. A retry after a lost yes meets the same, so both
+/// answer as erased. Anything else is reported, and the caller retries it.
+async fn erase_media(
+    http: &impl MediaHttp,
+    base: &str,
+    id: RequestId,
+    document_id: DocumentId,
+    content_hash: String,
+    tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
+    logic_tx: &LogicSink,
+) {
+    match http.delete(&format!("{base}/media/{content_hash}")).await {
+        Ok(status) if (200..300).contains(&status) || status == 403 || status == 404 => {
+            let _ = tx.send(SyncEvent::MediaErased {
+                id,
+                document_id,
+                content_hash,
+            });
+        }
+        Ok(status) => report(logic_tx, id, "EraseMedia", format!("erase: {status}")),
+        Err(message) => report(logic_tx, id, "EraseMedia", message),
     }
 }
 
@@ -474,6 +537,8 @@ mod tests {
     struct FakeMedia {
         fail: &'static str,
         served: Vec<u8>,
+        /// The status a `DELETE` answers, when it is not the failing step.
+        erase_status: u16,
         steps: std::cell::RefCell<Vec<&'static str>>,
     }
 
@@ -482,6 +547,7 @@ mod tests {
             Self {
                 fail,
                 served,
+                erase_status: 200,
                 steps: Default::default(),
             }
         }
@@ -517,6 +583,45 @@ mod tests {
         async fn fetch_bytes(&self, _url: &str) -> Result<Vec<u8>, String> {
             self.step("fetch")?;
             Ok(self.served.clone())
+        }
+        async fn delete(&self, url: &str) -> Result<u16, String> {
+            assert!(url.ends_with("/media/hash"), "{url}");
+            self.step("delete")?;
+            Ok(self.erase_status)
+        }
+    }
+
+    /// Holds `SYNC-174`: an erase the relay answered, yes or refusal, reaches
+    /// the caller as erased, since nothing of this user's is left either way.
+    /// One that failed to reach an answer, or met a server error, is reported
+    /// for a retry (`SYNC-176`, `MURMURE-241`).
+    #[tokio::test]
+    async fn an_erase_answers_erased_unless_it_must_be_retried() {
+        let (logic, logic_rx) = LogicSink::channel();
+        let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();
+        let document_id = DocumentId::new();
+        for (fail, status, erased) in [
+            ("", 200, true),
+            ("", 403, true),
+            ("", 404, true),
+            ("", 503, false),
+            ("delete", 200, false),
+        ] {
+            let mut http = FakeMedia::new(fail, Vec::new());
+            http.erase_status = status;
+            let id = RequestId::next();
+            erase_media(&http, "base", id, document_id, "hash".into(), &tx, &logic).await;
+            let (errors, sent) = answers(&logic_rx, &events);
+            if erased {
+                assert!(errors.is_empty(), "{status}");
+                assert!(matches!(
+                    &sent[..],
+                    [SyncEvent::MediaErased { id: answered, .. }] if *answered == id
+                ));
+            } else {
+                assert_eq!(errors, [(Some(id), "EraseMedia".to_owned())], "{status}");
+                assert!(sent.is_empty());
+            }
         }
     }
 

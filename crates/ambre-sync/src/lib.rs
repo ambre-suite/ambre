@@ -580,6 +580,12 @@ enum SyncEvent {
         document_id: DocumentId,
         content_hash: String,
     },
+    /// The relay holds no upload of this user's for the blob any more.
+    MediaErased {
+        id: RequestId,
+        document_id: DocumentId,
+        content_hash: String,
+    },
     /// Snapshot upload completed: the sealed blob was PUT to S3 and the server
     /// confirmed the insertion (and broadcast `SnapshotAvailable`). The returned
     /// `snapshot_id` becomes this document's current parent for future deltas.
@@ -1616,6 +1622,12 @@ impl SyncState {
                 content_hash,
             } => {
                 self.handle_download_media(id, document_id, content_hash);
+            }
+            RestCommand::EraseMedia {
+                document_id,
+                content_hash,
+            } => {
+                self.handle_erase_media(id, document_id, content_hash);
             }
 
             // -- The native file (`.ambre`) ------------------------------------

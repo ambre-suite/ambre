@@ -359,6 +359,15 @@ pub enum RestCommand {
         document_id: DocumentId,
         content_hash: String,
     },
+    /// Erase this user's upload of a media file. -> `MediaErased`.
+    ///
+    /// The relay removes the object once its last uploader asks
+    /// (`SRV-139`). A refusal leaves nothing of this user's to erase, so it
+    /// answers `MediaErased` too; only a failure to reach the relay is an error.
+    EraseMedia {
+        document_id: DocumentId,
+        content_hash: String,
+    },
 
     // -- The native file (`.ambre`) ----------------------------------------------
     //
@@ -512,6 +521,10 @@ pub enum RestEvent {
         content_hash: String,
         /// Decrypted raw media bytes, ready for display.
         data: Vec<u8>,
+    },
+    MediaErased {
+        document_id: DocumentId,
+        content_hash: String,
     },
 
     // -- The native file (`.ambre`) ----------------------------------------------

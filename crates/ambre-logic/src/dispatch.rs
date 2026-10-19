@@ -1994,6 +1994,10 @@ mod tests {
                 document_id: doc,
                 content_hash: "h".to_owned(),
             },
+            RestCommand::EraseMedia {
+                document_id: doc,
+                content_hash: "h".to_owned(),
+            },
             RestCommand::SealDocFile {
                 plaintext: secret(),
                 passphrase: secret(),
@@ -2044,6 +2048,7 @@ mod tests {
                 | RestCommand::SearchUsers { .. }
                 | RestCommand::UploadMedia { .. }
                 | RestCommand::DownloadMedia { .. }
+                | RestCommand::EraseMedia { .. }
                 | RestCommand::SealDocFile { .. }
                 | RestCommand::OpenDocFile { .. }
                 | RestCommand::CreateMeeting { .. }

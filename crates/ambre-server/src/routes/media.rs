@@ -176,3 +176,52 @@ pub struct MediaConfirmed {
     pub status: ambre_core::WriteStatus,
     pub content_hash: String,
 }
+
+/// Erases the caller's upload of a blob (`SRV-139`).
+///
+/// Only a member who uploaded the blob may erase it (`SRV-140`). The object
+/// goes with the last uploader's claim, so a second member who attached the
+/// same file keeps it. Nothing else of the document is touched (`SRV-141`).
+/// A failed object delete rolls the claim back, so the client's retry finds
+/// it again.
+pub async fn media_erase(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path((document_id, content_hash)): Path<(String, String)>,
+) -> Result<impl IntoResponse, AppError> {
+    let s = auth;
+    let doc_id = parse_doc_id(&document_id)?;
+    db::get_document_member(&state.db, &doc_id, &s.user_id)
+        .await?
+        .ok_or(AppError::Forbidden)?;
+    if !s3::is_valid_content_hash(&content_hash) {
+        return Err(AppError::BadRequest("invalid content_hash".into()));
+    }
+    let mut tx = state.db.begin().await?;
+    match db::erase_media_claim(&mut tx, &doc_id, &s.user_id, &content_hash).await? {
+        db::MediaErase::NotUploader => return Err(AppError::Forbidden),
+        db::MediaErase::Kept => {}
+        db::MediaErase::Last { s3_key } => {
+            state
+                .s3
+                .delete_object()
+                .bucket(&state.s3_bucket)
+                .key(&s3_key)
+                .send()
+                .await
+                .map_err(|e| AppError::S3(format!("delete {s3_key}: {e}")))?;
+        }
+    }
+    tx.commit().await?;
+    Ok(axum::Json(MediaErased {
+        status: ambre_core::WriteStatus::Confirmed,
+        content_hash,
+    }))
+}
+
+/// The answer of an erase, naming the media the caller no longer holds.
+#[derive(serde::Serialize)]
+pub struct MediaErased {
+    pub status: ambre_core::WriteStatus,
+    pub content_hash: String,
+}

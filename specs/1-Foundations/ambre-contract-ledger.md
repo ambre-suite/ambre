@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3673 rows: 3112 shipped, of which 2 loose. 561 unbuilt.**
+**3676 rows: 3119 shipped, of which 2 loose. 557 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 867 | 418 | 816 | 609 | 400 | 3110 |
+| `verified` | 874 | 418 | 816 | 609 | 400 | 3117 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 192 | 55 | 29 | 109 | 176 | 561 |
+| `unimplemented` | 188 | 55 | 29 | 109 | 176 | 557 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -57,10 +57,10 @@
 | `ambre-spec-key-verification.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-kinetic-scroll.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-launcher.md` | 25 | 21 | 21 |  | 4 |
-| `ambre-spec-media.md` | 15 | 15 | 15 |  |  |
+| `ambre-spec-media.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-membership.md` | 35 | 35 | 35 |  |  |
 | `ambre-spec-message-bus.md` | 30 | 30 | 30 |  |  |
-| `ambre-spec-object-store.md` | 18 | 13 | 13 |  | 5 |
+| `ambre-spec-object-store.md` | 18 | 17 | 17 |  | 1 |
 | `ambre-spec-op-authorship.md` | 29 | 29 | 29 |  |  |
 | `ambre-spec-organizations.md` | 11 | 9 | 9 |  | 2 |
 | `ambre-spec-pdf-export.md` | 17 | 6 | 6 |  | 11 |
@@ -210,7 +210,7 @@
 | `ambre-spec-locale.md` | LOCALE-001..013 |
 | `ambre-spec-machine-access.md` | MACH-001..034 |
 | `ambre-spec-macros.md` | MACRO-001..054 |
-| `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146 |
+| `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146,174..176 |
 | `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173 |
 | `ambre-spec-message-bus.md` | BUS-001..030 |
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242 |

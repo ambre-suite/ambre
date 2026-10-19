@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-052` | `INV` | A presigned link MUST expire within fifteen minutes. | `ambre-spec-zero-knowledge.md`, `ZK-014` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- the signer caps any configured lifetime at 900 s, and the test reads the expiry back out of both links | none | verified |
 | `SRV-059` | `INV` | The relay MUST NOT hold an address it could compute from a blob's plaintext. | `ZK-007`; `ambre-spec-media.md`, `SYNC-050` | `ambre_sync::media::tests::an_upload_is_addressed_under_the_document_key` -- the relay stores the address the Sync worker names, and the worker names one keyed by the document key, which the relay never holds; `ambre_crypto::tests::a_media_address_needs_the_document_key` -- without that key, the bytes alone do not give it | none | verified |
 | `SRV-121` | `INV` | A Murmure channel MUST add no branch to the layout: each of its documents MUST take the layout of a document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | structural -- a channel document is a row of `documents`, so the store keys it as any document | none | verified |
-| `SRV-138` | `INV` | A media row MUST record the member who uploaded its blob. | this spec section 3 | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-138` | `INV` | A media row MUST record the member who uploaded its blob. | this spec section 3 | `ambre_server::routes::tests::handler_tests::an_erase_removes_a_blob_once_its_last_uploader_asks` -- each confirmation records a claim, so two members who upload one address each hold one, and the erase of either reads it, database tier | none | verified |
 
 ### 1.2 Issue a presigned link
 
@@ -59,10 +59,10 @@ A member takes back a file they uploaded, such as the attachment of a message th
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-139` | `POST` | An erase request MUST remove the blob from object storage, with its media row. | this spec section 3; `SRV-057` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-140` | `FAIL` | Given an erase request from a member who did not upload the blob, the relay MUST refuse it. | this spec section 3; `SRV-138` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-139` | `POST` | An erase request MUST remove the blob from object storage, with its media row, once no other uploader still holds it. | this spec section 3; `SRV-057` | `ambre_server::routes::tests::handler_tests::an_erase_removes_a_blob_once_its_last_uploader_asks` -- the first uploader's erase leaves the row and the object to the second, whose erase removes both, database tier against a fake store | none | verified |
+| `SRV-140` | `FAIL` | Given an erase request from a member who did not upload the blob, the relay MUST refuse it. | this spec section 3; `SRV-138` | `ambre_server::routes::tests::handler_tests::an_erase_removes_a_blob_once_its_last_uploader_asks` -- a member who uploaded nothing is refused, and so is an uploader whose claim is already erased | none | verified |
 | `SRV-158` | `POST` | The owner of a channel, or an admin of its space, MUST be able to erase a file of that channel. | this spec section 3; `SRV-140` | not built | unbuilt -- lands with the `Moderation` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-141` | `FRAME` | Erasing a blob MUST NOT remove another object of the document. | this spec section 3; `SRV-079` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-141` | `FRAME` | Erasing a blob MUST NOT remove another object of the document. | this spec section 3; `SRV-079` | `ambre_server::routes::tests::handler_tests::an_erase_removes_a_blob_once_its_last_uploader_asks` -- the snapshot object of the same document is all the fake store holds after the last erase | none | verified |
 
 * **Budget.** the presigned link of `ambre-spec-budgets.md section 3`, under 50 ms, and the
   document cold start of the same table, under 500 ms. The cold start's download half is here and
@@ -70,7 +70,7 @@ A member takes back a file they uploaded, such as the attachment of a message th
 * **Boundary.** every object here is sealed by the client and opaque to the relay (`ZK-001`), which
   reads only a name and a size. A picture's name is keyed by the document key (`SRV-059`); the
   bytes never enter this process.
-* **Verification.** 13 `verified`, 5 `unimplemented`. What holds is the name: the scoping, the
+* **Verification.** 17 `verified`, 1 `unimplemented`. What holds is the name: the scoping, the
   shapes refused, the size bound into an upload link, and who may hold a link. What is loose is a
   link that touches no object, and the cap per blob kind.
 ---
@@ -146,6 +146,7 @@ element with no separator. An address must be sixty-four lowercase hexadecimal c
 | a snapshot beyond the ten most recent | the hourly pass removes the object, then the row; a failure on the object still removes the row |
 | a delta the trim covers | the row goes and the object stays (`ambre-spec-sequencer.md`, `SRV-039`) |
 | a document deleted | a mark in the register comes first, so a pass finishes a delete a failure stopped (`ambre-spec-server.md`, `SRV-165`); a tombstone fences its keys, every object under its prefix goes, then the relay state, then the rows; once the late-write window has passed, a second sweep removes what a late writer put (`SRV-057`) |
+| a file its uploaders erase | each erase drops one claim under a lock on the row; the last one removes the object, then the row, and a failure on the object keeps both (`SRV-139`) |
 | a picture removed from a document | nothing: no rule says who collects it (`ambre-spec-media.md`) |
 
 **What the relay knows about a picture.** Its address and its size, against the document. The
@@ -153,12 +154,17 @@ address is keyed by the document key. The relay cannot hash a file it already ho
 this document contains it (`SRV-059`). It still sees that two uploads of one document share
 an address. The media type never reaches it.
 
+**Who holds a blob.** One address is one object, so two members who upload the same file in one
+document share it. Each confirmation records a claim for its member (`SRV-138`). An erase drops the
+caller's claim alone, and refuses a caller who holds none (`SRV-140`). The object goes with the
+last claim, so one member taking back a file never breaks the copy another member attached.
+
 **Code.**
 
 * `crates/ambre-server/src/s3.rs` -- the three names, the two validators and the signing;
-* `crates/ambre-server/src/routes/media.rs` -- the two media links and the confirmation;
+* `crates/ambre-server/src/routes/media.rs` -- the two media links, the confirmation and the erase;
 * `crates/ambre-server/src/routes/sync.rs` -- the two snapshot links and the record;
-* `crates/ambre-server/src/db/content.rs` -- the media index, and the snapshot removal.
+* `crates/ambre-server/src/db/content.rs` -- the media index, its claims, and the snapshot removal.
 
 ---
 
@@ -172,6 +178,7 @@ The store has no surface of its own: every trigger belongs to the document that 
 | a client opens a document | it asks for a download link for the current snapshot, then gets the bytes |
 | a client adds a picture | it asks for an upload link, puts the bytes, then confirms the address |
 | a client meets an address it does not hold | it asks for a download link, once per address |
+| a member takes back a file they uploaded | the relay drops their claim, and the object with the last one |
 | a link expires before the transfer completes | the client asks for another: a link names one object and nothing else |
 
 ---
@@ -188,6 +195,7 @@ The store has no surface of its own: every trigger belongs to the document that 
 | An upload is confirmed in a second request | recording the blob when the link is issued | it indexes every abandoned upload, leaving rows that point at nothing. The relay never sees the transfer, so the only moment it can record a blob is when the client says it landed |
 | Storage lifetimes are a bucket policy, not relay code | a collector inside the relay | it would put a retention policy in a binary, for an operational decision that differs per deployment -- and it would still not close `SRV-057`, the object of a deleted document, which is a defect rather than a policy |
 | Only the uploader erases a blob | any member of the document | a member could erase the files of everyone else, and the relay cannot read which message a blob belongs to |
+| One claim per uploader, the object going with the last | one uploader per row, the first | two members who attach the same file share one address, so the first uploader's erase would break the other's attachment, and the second could never erase it |
 
 ---
 
