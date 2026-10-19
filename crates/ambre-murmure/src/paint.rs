@@ -11,11 +11,15 @@ use ambre_bus::{MessageId, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
-    Affine, Alignment, Brush, Color, DrawSurface, FontContext, Layout, ParleyBrush,
-    PositionedLayoutItem, Rect,
+    Affine, Affinity, Alignment, Brush, Color, Cursor, DrawSurface, FontContext, Layout,
+    ParleyBrush, PositionedLayoutItem, Rect, Selection,
 };
 
-use crate::list::{JUMP_TO_LATEST, MessageList, RowWords, UNREAD_LINE, window};
+use crate::list::{JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, window};
+use crate::select::{Selecting, Spot, TextSelection};
+
+/// How strongly a selection tints the text under it.
+const SELECTION_ALPHA: f32 = 0.3;
 
 /// What one paint of the list did.
 #[derive(Debug, Clone, PartialEq)]
@@ -41,6 +45,9 @@ pub struct Painted {
     /// Each row on screen, top first: its index, its top and its bottom. A
     /// press finds the row under it here.
     pub rows: Vec<(usize, f32, f32)>,
+    /// The selection, with the points the paint resolved into it
+    /// (`MURMURE-425`).
+    pub selection: Option<TextSelection>,
 }
 
 impl Painted {
@@ -64,6 +71,8 @@ pub struct Shown<'a> {
     pub anchor: Option<(usize, f32)>,
     /// The row that holds the focus, ringed in the accent (`MURMURE-205`).
     pub focus: Option<usize>,
+    /// The selection, and the points of a drag the paint resolves.
+    pub selecting: Selecting,
 }
 
 /// Paint `shown` from its anchor, in a viewport of `size`.
@@ -100,12 +109,43 @@ pub fn paint_list<S: DrawSurface>(
         words.insert(i, (row, line));
         tall
     });
+    let selecting = shown.selecting;
+    let active = selecting != Selecting::default();
+    let keys = if active {
+        shown.list.keys()
+    } else {
+        Vec::new()
+    };
+    let mut selection = selecting.selection;
+    let mut spot_at = |at| spot_at(font_cx, cache, &reached.rows, &words, &keys, at, text_width);
+    if let Some(at) = selecting.press {
+        selection = spot_at(at).map(|spot| TextSelection {
+            anchor: spot,
+            focus: spot,
+        });
+    }
+    if let (Some(at), Some(selection)) = (selecting.drag, selection.as_mut())
+        && let Some(spot) = spot_at(at)
+    {
+        selection.focus = spot;
+    }
     let mut line_shown = false;
     let mut focus = None;
     for &(i, top, tall) in &reached.rows {
         let Some((row, line)) = words.get(&i) else {
             continue;
         };
+        if let Some((start, end)) = selection.and_then(|s| s.range_in(&keys, i, row.body.len())) {
+            let body_y = body_top(font_cx, cache, row, *line, top, text_width);
+            let tint = palette.selection.with_alpha(SELECTION_ALPHA);
+            let layout = shape(font_cx, cache, &row.body, FONT_BODY, text_width, false);
+            let from = Cursor::from_byte_index(layout, start, Affinity::Downstream);
+            let to = Cursor::from_byte_index(layout, end, Affinity::Upstream);
+            for (bb, _) in Selection::new(from, to).geometry(layout) {
+                let (x, y) = (f64::from(SPACE_8), f64::from(body_y));
+                surface.fill_rect(Rect::new(bb.x0 + x, bb.y0 + y, bb.x1 + x, bb.y1 + y), tint);
+            }
+        }
         let bottom = top + tall;
         let mut top = top;
         if *line {
@@ -138,7 +178,67 @@ pub fn paint_list<S: DrawSurface>(
             .iter()
             .map(|&(i, top, tall)| (i, top, top + tall))
             .collect(),
+        selection,
     }
+}
+
+/// The end of a selection under `(x, y)`: the byte of the body the layout
+/// puts there. A point above every row falls on the first one. A point below
+/// them falls on the last, so a drag past an edge reaches it.
+fn spot_at(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    rows: &[(usize, f32, f32)],
+    words: &HashMap<usize, (RowWords, bool)>,
+    keys: &[RowKey],
+    (x, y): (f32, f32),
+    width: f32,
+) -> Option<Spot> {
+    let &(i, top, _) = rows
+        .iter()
+        .find(|&&(_, top, tall)| y < top + tall)
+        .or_else(|| rows.last())?;
+    let (row, line) = words.get(&i)?;
+    let body_y = body_top(font_cx, cache, row, *line, top, width);
+    let layout = shape(font_cx, cache, &row.body, FONT_BODY, width, false);
+    let cursor = Cursor::from_point(layout, x - SPACE_8, y - body_y);
+    Some(Spot {
+        row: *keys.get(i)?,
+        byte: cursor.index(),
+    })
+}
+
+/// Where the body of a row whose top is at `top` starts: below the unread
+/// line and the header, as [`draw_row`] paints them.
+fn body_top(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    row: &RowWords,
+    line: bool,
+    top: f32,
+    width: f32,
+) -> f32 {
+    let mut y = top + SPACE_2;
+    if line {
+        y += line_height(font_cx, cache, width);
+    }
+    y + header_height(font_cx, cache, row, width)
+}
+
+/// The height of a row's header and the space above it, nothing when the
+/// row opens no group.
+fn header_height(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    row: &RowWords,
+    width: f32,
+) -> f32 {
+    let Some((author, time)) = &row.header else {
+        return 0.0;
+    };
+    let author = shape(font_cx, cache, author, FONT_UI, width, true).height();
+    let time = shape(font_cx, cache, time, FONT_UI, width, false).height();
+    SPACE_4 + author.max(time)
 }
 
 /// Paint the control that brings the list back to its latest message, at
@@ -219,12 +319,7 @@ fn shape<'c>(
 
 /// The height of a row, from the same layouts [`draw_row`] paints.
 fn measure(font_cx: &mut FontContext, cache: &mut TextCache, row: &RowWords, width: f32) -> f32 {
-    let mut tall = 2.0 * SPACE_2;
-    if let Some((author, time)) = &row.header {
-        let author = shape(font_cx, cache, author, FONT_UI, width, true).height();
-        let time = shape(font_cx, cache, time, FONT_UI, width, false).height();
-        tall += SPACE_4 + author.max(time);
-    }
+    let mut tall = 2.0 * SPACE_2 + header_height(font_cx, cache, row, width);
     tall += shape(font_cx, cache, &row.body, FONT_BODY, width, false).height();
     if let Some(replies) = &row.replies {
         tall += shape(font_cx, cache, replies, FONT_UI, width, false).height();
@@ -290,7 +385,7 @@ fn draw<S: DrawSurface>(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use ambre_bus::{DocumentId, SegmentId, ThreadHead};
     use ambre_canvas::fonts::font_context_from_bytes;
     use ambre_canvas::theme::LIGHT;
@@ -300,7 +395,7 @@ mod tests {
     use crate::list::tests::message;
 
     /// The faces the page ships, read from the application's font folder.
-    fn fonts() -> FontContext {
+    pub(crate) fn fonts() -> FontContext {
         const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
         let faces = ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"]
             .iter()
@@ -323,6 +418,7 @@ mod tests {
                 unread,
                 anchor: None,
                 focus: None,
+                selecting: Selecting::default(),
             },
             height,
         )
@@ -402,6 +498,7 @@ mod tests {
             unread: None,
             anchor: None,
             focus: Some(focus),
+            selecting: Selecting::default(),
         };
         let (surface, painted) = paint_from(focused(98), 300.0);
         let rings: Vec<Rect> = surface
@@ -457,6 +554,7 @@ mod tests {
             unread: None,
             anchor: Some(anchor),
             focus: None,
+            selecting: Selecting::default(),
         };
         let (_, painted) = paint_from(at((10, 0.0)), 200.0);
         assert_eq!(painted.rest, Some((10, 0.0)));
@@ -568,6 +666,71 @@ mod tests {
         assert!(band_y < author_y && author_y <= time_y && time_y < body_y);
     }
 
+    /// `MURMURE-425`: a press and a drag resolve into a selection. It runs
+    /// from the first byte of one row to the end of the next, tinted behind
+    /// both bodies. A drag below every row ends on the last one.
+    #[test]
+    fn a_drag_selects_text_across_rows_behind_their_words() {
+        let ada = UserId::new();
+        let mut list = MessageList::default();
+        let bodies = ["hello", "brave", "world"];
+        let messages = bodies.iter().map(|b| message(ada, 0, b)).collect();
+        list.absorb(SegmentId::new(), messages);
+        let keys = list.keys();
+        let (_, plain) = paint(&list, 600.0);
+        let [(_, _, first), (_, top, second), ..] = plain.rows.as_slice() else {
+            panic!("three rows: {plain:?}");
+        };
+        let drag = |press, drag| Shown {
+            list: &list,
+            unread: None,
+            anchor: None,
+            focus: None,
+            selecting: Selecting {
+                selection: None,
+                press: Some(press),
+                drag: Some(drag),
+            },
+        };
+        let press = (SPACE_8, first - SPACE_2 - 2.0);
+        let (surface, painted) = paint_from(drag(press, (399.0, (top + second) / 2.0)), 600.0);
+        let selection = painted.selection.expect("a selection");
+        assert_eq!(
+            selection.anchor,
+            Spot {
+                row: keys[0],
+                byte: 0
+            }
+        );
+        assert_eq!(
+            selection.focus,
+            Spot {
+                row: keys[1],
+                byte: 5
+            }
+        );
+        let tint = LIGHT.selection.with_alpha(SELECTION_ALPHA);
+        let tints = surface
+            .ops()
+            .iter()
+            .filter(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == tint))
+            .count();
+        assert_eq!(tints, 2, "one band behind each body");
+
+        let (_, below) = paint_from(drag(press, (399.0, 599.0)), 600.0);
+        let focus = below.selection.expect("a selection").focus;
+        assert_eq!(
+            focus,
+            Spot {
+                row: keys[2],
+                byte: 5
+            }
+        );
+        let (_, none) = paint_from(drag(press, press), 600.0);
+        let collapsed = none.selection.expect("a collapsed selection");
+        assert_eq!(collapsed.anchor, collapsed.focus);
+    }
+
     /// An empty list paints its backdrop and shows no latest message.
     #[test]
     fn an_empty_list_paints_only_its_backdrop() {
@@ -584,6 +747,7 @@ mod tests {
                 bottom: None,
                 focus: None,
                 rows: Vec::new(),
+                selection: None,
             }
         );
         assert!(

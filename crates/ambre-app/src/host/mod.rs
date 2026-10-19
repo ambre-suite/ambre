@@ -328,7 +328,11 @@ impl AppView {
             AppView::Trame(v) => v.clipboard_write(cut),
             AppView::Toile(v) => v.clipboard_write(cut),
             AppView::Prose(v) => v.clipboard_write(cut),
-            AppView::Murmure(_) => ambre_bus::CopyOutcome::Nothing,
+            // Read-only text: a cut leaves it where it is, and copies nothing.
+            AppView::Murmure(v) => match v.copy() {
+                Some(text) if !cut => ambre_bus::CopyOutcome::Text(text),
+                _ => ambre_bus::CopyOutcome::Nothing,
+            },
         }
     }
 
@@ -409,6 +413,16 @@ impl AppView {
     /// rather than selects. Every application does.
     fn captures_pointer(&self) -> bool {
         true
+    }
+
+    /// Whether a press began a drag across read-only text. The view leaves
+    /// the press to the browser, yet the host captures the pointer, so the
+    /// drag keeps its moves past the canvas edge.
+    fn drags_text(&self) -> bool {
+        match self {
+            AppView::Murmure(v) => v.drags_text(),
+            AppView::Trame(_) | AppView::Toile(_) | AppView::Prose(_) => false,
+        }
     }
 
     /// Swap the active document in place, keeping the GPU surface.

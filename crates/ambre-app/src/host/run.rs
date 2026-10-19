@@ -266,10 +266,14 @@ where
                 let consumed = host_c.borrow_mut().handle_input(&ev);
                 if consumed {
                     event.prevent_default();
-                    // A drag keeps its moves past the canvas edge, so the
-                    // page can scroll under it (`PROSE-UI-038`).
-                    if is_down
-                        && host_c.borrow().captures_pointer()
+                }
+                // A drag keeps its moves past the canvas edge, so the page can
+                // scroll under it (`PROSE-UI-038`). A drag across read-only
+                // text leaves its press to the browser, and is captured too.
+                if is_down {
+                    let host = host_c.borrow();
+                    if (consumed || host.drags_text())
+                        && host.captures_pointer()
                         && let Some(target) = event
                             .current_target()
                             .and_then(|t| t.dyn_into::<web_sys::Element>().ok())

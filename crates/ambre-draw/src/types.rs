@@ -12,8 +12,8 @@ pub use peniko::{Brush, BrushRef, Color, Fill};
 pub use parley::layout::GlyphRun;
 pub use parley::style::{FontFamily, FontStack, FontStyle, FontWeight, StyleProperty};
 pub use parley::{
-    Alignment, AlignmentOptions, BoundingBox, FontContext, Layout, LayoutContext, PlainEditor,
-    PlainEditorDriver, PositionedLayoutItem,
+    Affinity, Alignment, AlignmentOptions, BoundingBox, Cursor, FontContext, Layout, LayoutContext,
+    PlainEditor, PlainEditorDriver, PositionedLayoutItem, Selection,
 };
 
 /// Brush type used inside Parley layouts across Ambre.

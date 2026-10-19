@@ -29,10 +29,13 @@ pub mod paint;
 mod reaction;
 pub mod schema;
 mod search;
+pub mod select;
 mod sequence;
 mod session;
 mod sidebar;
 mod space;
+#[cfg(feature = "testing")]
+pub mod testing;
 pub mod view;
 mod watchers;
 

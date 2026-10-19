@@ -29,6 +29,7 @@ use crate::MurmurePane;
 use crate::commands::MessageTarget;
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, RowKey, UnreadLine};
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
+use crate::select::Selecting;
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the
 /// host binds a cell to it while it is in the page.
@@ -60,6 +61,9 @@ pub const CHANNEL_CANVAS: &str = "ambre-canvas";
 
 /// The button of a pointer event that opens a menu: the right one.
 const SECONDARY_BUTTON: i16 = 2;
+
+/// The button of a pointer event that selects text: the main one.
+const PRIMARY_BUTTON: i16 = 0;
 
 /// The height of one line of a wheel that steps by lines.
 const WHEEL_LINE_PX: f32 = 40.0;
@@ -152,6 +156,11 @@ pub struct MurmureView {
     /// The list and the latest message this region last heard, so a new one
     /// is announced once (`MURMURE-208`).
     heard: (Option<ListOf>, Option<(MessageId, Timestamp)>),
+    /// The text selected, and the points of a drag the next paint resolves
+    /// (`MURMURE-425`).
+    selecting: Selecting,
+    /// A mouse button holds a drag: `true` once it moved.
+    drag: Option<bool>,
     dirty: bool,
 }
 
@@ -188,6 +197,8 @@ impl MurmureView {
             focus: None,
             reveal: false,
             heard: (None, None),
+            selecting: Selecting::default(),
+            drag: None,
             dirty: true,
         }
     }
@@ -447,6 +458,37 @@ impl MurmureView {
         self.kinetic.pressed()
     }
 
+    /// Whether a mouse button holds a drag across the text. The page keeps
+    /// its moves past the canvas edge, where the list scrolls under it.
+    pub fn drags_text(&self) -> bool {
+        self.drag.is_some()
+    }
+
+    /// The text a copy puts on the clipboard: each selected message under
+    /// its author and its time, `None` with nothing selected
+    /// (`MURMURE-426`).
+    pub fn copy(&self) -> Option<String> {
+        let selection = self.selecting.selection?;
+        let lists = self.lists.borrow();
+        let list = self.shown(&lists.conversations, (self.reads.pane)())?;
+        selection.copied(list, &*self.reads.name_of, &*self.reads.time_of)
+    }
+
+    /// A drag past the top or the bottom edge scrolls the list by how far
+    /// it passed.
+    fn drag_past_edge(&mut self, y: f32) {
+        let over = if y < 0.0 {
+            y
+        } else {
+            (y - self.size.1).max(0.0)
+        };
+        if over != 0.0 {
+            let now_ms = (self.reads.now_ms)();
+            let step = self.kinetic.wheel(0.0, over, true, now_ms);
+            self.scroll_by(step);
+        }
+    }
+
     pub fn plan_repaint(&mut self, now_ms: f64, _hud_tick: bool) -> RepaintPlan {
         let theme = self.theme_ctl.get();
         if theme != self.theme {
@@ -527,6 +569,7 @@ impl MurmureView {
                 unread,
                 anchor,
                 focus,
+                selecting: self.selecting,
             },
             self.size,
             self.theme.palette(),
@@ -534,6 +577,12 @@ impl MurmureView {
             &*self.reads.time_of,
         );
         self.last = Some(painted.clone());
+        // A selection moves no read cursor: only what the paint shows does
+        // (`MURMURE-427`).
+        self.selecting = Selecting {
+            selection: painted.selection,
+            ..Selecting::default()
+        };
         self.settle(&painted, &keys);
         if self.reveal {
             self.reveal_focus(&painted, focus, &keys);
@@ -622,6 +671,8 @@ impl MurmureView {
         self.asked_older = None;
         self.focus = None;
         self.reveal = false;
+        self.selecting = Selecting::default();
+        self.drag = None;
         self.kinetic.stop();
     }
 
@@ -693,22 +744,44 @@ impl MurmureView {
     /// key with a modifier is the browser's (`MURMURE-504`, `MURMURE-505`,
     /// `MURMURE-205`). The ContextMenu key and Shift+F10 open the actions of
     /// the focused message (`MURMURE-511`).
+    ///
+    /// A drag of the main button selects text, and leaves the press to the
+    /// page, so the canvas takes the focus (`MURMURE-425`).
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
         match *ev {
             InputEvent::PointerDown { x, y, button, .. } => {
-                self.hover = Some(Point::new(x, y));
+                let at = Point::new(x, y);
+                self.hover = Some(at);
                 if button == SECONDARY_BUTTON {
                     // The page's menu event follows, and opens the actions of
                     // the message found here (`MURMURE-422`).
                     (self.reads.act_on)(self.target_at(x as f32, y as f32, false));
+                } else if button == PRIMARY_BUTTON && !self.on_jump(at) {
+                    self.selecting = Selecting {
+                        press: Some((x as f32, y as f32)),
+                        ..Selecting::default()
+                    };
+                    self.drag = Some(false);
+                    self.dirty = true;
                 }
             }
             InputEvent::PointerMove { x, y } => {
                 self.hover = Some(Point::new(x, y));
+                if let Some(moved) = self.drag.as_mut() {
+                    *moved = true;
+                    self.selecting.drag = Some((x as f32, y as f32));
+                    self.dirty = true;
+                    self.drag_past_edge(y as f32);
+                }
             }
             InputEvent::PointerUp { x, y, .. } => {
                 let at = Point::new(x, y);
                 self.hover = Some(at);
+                if self.drag.take() == Some(true) {
+                    self.selecting.drag = Some((x as f32, y as f32));
+                    self.dirty = true;
+                    return false;
+                }
                 if self.on_jump(at) {
                     self.rest_at_latest();
                     return true;
@@ -766,6 +839,7 @@ mod tests {
 
     use ambre_bus::conduit::local;
     use ambre_bus::{ChannelId, MessageView, MurmureEvent};
+    use ambre_canvas::theme::{SPACE_2, SPACE_8};
     use ambre_draw::kinetic::LONG_PRESS_MS;
     use ambre_draw::testing::RecordingSurface;
 
@@ -988,6 +1062,91 @@ mod tests {
         page.pane.set(MurmurePane::Channel { channel, at: None });
         assert!(frame(&mut page.view));
         assert_eq!(line(&page.view), Some(false), "back, all is read");
+    }
+
+    /// Plan a frame and paint it with the faces the page ships, so a point
+    /// falls on the bytes a reader sees there.
+    fn frame_with_fonts(view: &mut MurmureView) {
+        view.update();
+        view.plan_repaint(0.0, false);
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let mut surface = RecordingSurface::new();
+        view.paint_content(&mut surface, &mut font_cx, &mut cache, None);
+    }
+
+    fn mouse(view: &mut MurmureView, down: (f64, f64), up: (f64, f64)) {
+        let (x, y) = down;
+        let press = InputEvent::PointerDown {
+            x,
+            y,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        };
+        assert!(!view.handle_input(&press), "the press is the page's");
+        assert!(view.drags_text());
+        let (x, y) = up;
+        if up != down {
+            view.handle_input(&InputEvent::PointerMove { x, y });
+        }
+        let release = InputEvent::PointerUp {
+            x,
+            y,
+            button: 0,
+            ctrl: false,
+        };
+        view.handle_input(&release);
+        assert!(!view.drags_text());
+    }
+
+    /// `MURMURE-425` to `MURMURE-427`: a mouse drag across two messages
+    /// selects their text, and a copy reads each under its author and its
+    /// time. Neither the drag, its paints nor the copy send a command, and
+    /// a click clears the selection.
+    #[test]
+    fn a_drag_selects_text_that_a_copy_reads_and_sends_nothing() {
+        let mut page = page();
+        let channel = ChannelId::new();
+        list(&page, channel, &["hello", "world"]);
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        frame_with_fonts(&mut page.view);
+        assert_eq!(reads(&page).0, 1);
+        let rows = page.view.last_painted().expect("painted").rows;
+        let [(_, _, first), (_, top, second)] = rows.as_slice() else {
+            panic!("two rows: {rows:?}");
+        };
+        let press = (f64::from(SPACE_8), f64::from(first - SPACE_2 - 2.0));
+        let release = (290.0, f64::from((top + second) / 2.0));
+        mouse(&mut page.view, press, release);
+        frame_with_fonts(&mut page.view);
+        let copied = page.view.copy();
+        assert_eq!(copied.as_deref(), Some("Ada, t\nhello\n\nAda, t\nworld"));
+        assert!(
+            page.commands.try_recv().is_err(),
+            "the selection sent nothing"
+        );
+
+        mouse(&mut page.view, press, press);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.copy(), None, "a click clears it");
+        assert!(page.commands.try_recv().is_err());
+    }
+
+    /// A drag past the top of the list scrolls it under the pointer, and a
+    /// drag inside it does not.
+    #[test]
+    fn a_drag_past_the_top_scrolls_the_list_under_it() {
+        let mut page = page();
+        let channel = ChannelId::new();
+        list(&page, channel, &["hello"; 100]);
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        frame(&mut page.view);
+        mouse(&mut page.view, (10.0, 200.0), (10.0, 300.0));
+        frame(&mut page.view);
+        assert_eq!(page.view.resting_on(), None, "still on the latest row");
+        mouse(&mut page.view, (10.0, 200.0), (10.0, -50.0));
+        frame(&mut page.view);
+        assert!(page.view.resting_on().is_some(), "the list moved up");
     }
 
     /// A wheel event at `now_ms`, `delta_mode` as the browser names it.

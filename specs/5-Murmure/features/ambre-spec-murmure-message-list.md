@@ -81,9 +81,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-425` | `POST` | A mouse drag across the messages MUST select their text, from one character to several messages. | this spec section 3; `CANVAS-037` | not built | unbuilt -- lands with the `Selecting text in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-426` | `POST` | Copying a selection MUST put its text on the clipboard, each message under its author and its time. | this spec section 3; `UI-THREAD-006` | not built | unbuilt -- lands with the `Selecting text in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-427` | `FRAME` | Selecting text MUST NOT move a read cursor. | this spec section 3; `MURMURE-206` | not built | unbuilt -- lands with the `Selecting text in the list` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-425` | `POST` | A mouse drag across the messages MUST select their text, from one character to several messages. | this spec section 3; `CANVAS-036` | `ambre_murmure::paint::tests::a_drag_selects_text_across_rows_behind_their_words` -- a press and a drag resolve into the ends of a selection, from one byte to several rows, each tinted behind its words; `ambre_murmure::view::tests::a_drag_selects_text_that_a_copy_reads_and_sends_nothing` -- a drag across two messages selects both, and a click clears it; `ambre_murmure::view::tests::a_drag_past_the_top_scrolls_the_list_under_it` -- a drag past the edge scrolls the list; `ambre_app::host::cell::tests::a_copy_on_a_cell_writes_the_text_it_selects` -- a press on a canvas starts a drag the canvas keeps, in the browser tier | none | verified |
+| `MURMURE-426` | `POST` | Copying a selection MUST put its text on the clipboard, each message under its author and its time. | this spec section 3; `UI-THREAD-006` | `ambre_murmure::select::tests::a_copy_puts_each_message_under_its_author_and_time` -- one character or three messages, each under its author and its time; `ambre_murmure::select::tests::a_copy_holds_only_text_a_member_wrote` -- a deleted message, a notice and the edited mark add nothing; `ambre_murmure::view::tests::a_drag_selects_text_that_a_copy_reads_and_sends_nothing` -- the view copies what the drag selected; `ambre_app::host::cell::tests::a_copy_on_a_cell_writes_the_text_it_selects` -- a copy event writes the text, a cut writes nothing, and with nothing selected the copy is the browser's, in the browser tier | none | verified |
+| `MURMURE-427` | `FRAME` | Selecting text MUST NOT move a read cursor. | this spec section 3; `MURMURE-206` | `ambre_murmure::view::tests::a_drag_selects_text_that_a_copy_reads_and_sends_nothing` -- the drag, its paints, the copy and the click that clears it send the engine no command | none | verified |
 
 **Frame:** `UI-THREAD-044`
 
@@ -99,10 +99,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
   only what `meta` already tells every member: the span of a segment.
-* **Verification.** 34 `verified`, 4 `unimplemented`. The host tier holds the order, the groups,
+* **Verification.** 37 `verified`, 1 `unimplemented`. The host tier holds the order, the groups,
   the words and the paint of the rows and the bands. It holds the scroll, the jumps, the focus and
-  the thread's list too, and the actions of a message. The browser tier holds each canvas, the
-  finger, the local time, the live region, the menu's listener and the dialog of a delete.
+  the thread's list too, the actions of a message and the selection. The browser tier holds each
+  canvas, the finger, the local time and the live region. It holds the menu's listener, the dialog
+  of a delete and the copy event too.
 
 ---
 
@@ -179,11 +180,17 @@ deletion, since the Logic thread reads no clock.
 | remove | a message of another member, for a moderator |
 | copy text | a message with text |
 
-**Selection.** A mouse drag across the list selects text through the selection model of
-`ambre-spec-text-editor.md` (`MURMURE-425`). On a touch screen a drag scrolls, so the copy text
-action takes the whole message. The text is read-only, so the model runs with no caret.
-A copy writes the `text/plain` mirror and the private type of `ambre-spec-clipboard.md`
-(`MURMURE-426`). The mirror puts each message under its author and its time.
+**Selection.** A mouse drag across the list selects text (`MURMURE-425`). The text is read-only,
+so a selection has two ends and no caret, and the editor core of `ambre-spec-text-editor.md` is
+not driven. Each end is a row and a byte of the body it paints. Input records the press and the
+drag point; the paint resolves them on the shaped body, as an editing action is resolved
+(`CANVAS-036`). The layout's own cursor and selection geometry give the byte and the tint.
+
+A drag past an edge scrolls the list by how far it passed. On a touch screen a drag scrolls, so
+the copy text action takes the whole message.
+
+A copy writes the `text/plain` mirror (`MURMURE-426`). The mirror puts each message under its
+author and its time. A band, a notice, a deleted message and the edited mark add nothing.
 
 **A screen reader** reaches the list through the mirror of `ambre-spec-accessibility.md section 2`:
 the live region carries the focused message, with its author and its time (`MURMURE-207`). Up and
@@ -263,6 +270,9 @@ both to each region, and `ambre_app::host::murmure` hands it the pane, the names
   Edit lands with the `The composer` Story (`ambre-roadmap.md` E5).
   Pin and bookmark wait for the `Pin, bookmark and copy link` Story (`ambre-roadmap.md` E5).
   Remove waits for the `Moderation` Story (`ambre-roadmap.md` E5).
+* **A copy carries no private type.** The mirror alone reaches the clipboard, so a paste drops the
+  mentions. The type waits for the
+  `A copied quote that pastes back with its mentions` Story (`ambre-roadmap.md` E5).
 * **No hover bar.** A pointer over a message shows no actions; the right-click opens them. The bar
   waits for the `The hover bar of a message` Story (`ambre-roadmap.md` E5).
 * **A message command in the palette does nothing.** The palette lists it with no message to act

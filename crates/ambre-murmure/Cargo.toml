@@ -5,6 +5,11 @@ edition = "2024"
 license.workspace = true
 description = "Secure messaging application for Ambre — E2EE channels, segments"
 
+[features]
+# A conversation fed to a view, for the browser tests of the host. Non-default:
+# only ambre-app's wasm dev-dependency turns it on.
+testing = []
+
 [dependencies]
 ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }

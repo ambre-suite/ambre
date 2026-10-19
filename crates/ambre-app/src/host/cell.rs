@@ -141,7 +141,7 @@ impl Bound {
         let observer = web_sys::ResizeObserver::new(observe.as_ref().unchecked_ref()).ok()?;
         observer.observe(&canvas);
 
-        let mut listeners = Vec::with_capacity(INPUTS.len() + 2);
+        let mut listeners = Vec::with_capacity(INPUTS.len() + 3);
         for kind in INPUTS {
             let view = Rc::downgrade(&view);
             let on_input =
@@ -154,16 +154,47 @@ impl Bound {
                         }
                         return;
                     }
-                    if let Some(input) = input_of(&event)
-                        && view.borrow_mut().handle_input(&input)
-                    {
+                    let Some(input) = input_of(&event) else {
+                        return;
+                    };
+                    if view.borrow_mut().handle_input(&input) {
                         event.prevent_default();
                         // A key the cell took is not the page's: the document
                         // listener would hand it to the content view as well.
                         event.stop_propagation();
                     }
+                    // A drag across the text keeps its moves past the edge.
+                    if matches!(input, InputEvent::PointerDown { .. })
+                        && view.borrow().drags_text()
+                        && let Some(pointer) = event.dyn_ref::<web_sys::PointerEvent>()
+                        && let Some(target) = event
+                            .current_target()
+                            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                    {
+                        let _ = target.set_pointer_capture(pointer.pointer_id());
+                    }
                 });
             listeners.push((kind, on_input));
+        }
+        // The canvas holds the focus, so a copy fires on it, not on the pipe.
+        {
+            let view = Rc::downgrade(&view);
+            listeners.push((
+                "copy",
+                Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
+                    let Some(view) = view.upgrade() else { return };
+                    let outcome = view.borrow_mut().clipboard_write(false);
+                    if let ambre_bus::CopyOutcome::Text(text) = outcome
+                        && let Some(data) = event
+                            .dyn_ref::<web_sys::ClipboardEvent>()
+                            .and_then(|e| e.clipboard_data())
+                    {
+                        let _ = data.set_data("text/plain", &text);
+                        event.prevent_default();
+                        event.stop_propagation();
+                    }
+                }),
+            ));
         }
         // `preventDefault` on a lost context is what lets the browser restore it.
         listeners.push((
@@ -600,6 +631,90 @@ mod tests {
         );
         body.remove_event_listener_with_callback("keydown", callback)
             .unwrap();
+    }
+
+    /// One frame of `view` on a recording surface. No face is shipped to the
+    /// test, so the text shapes with no width: the host tier holds the bytes.
+    fn paint(view: &mut MurmureView) {
+        let mut font_cx = ambre_canvas::fonts::font_context_from_bytes([]);
+        let mut cache = ambre_canvas::TextCache::new(1.0);
+        let mut surface = ambre_draw::testing::RecordingSurface::new();
+        view.update();
+        view.plan_repaint(0.0, false);
+        view.paint_content(&mut surface, &mut font_cx, &mut cache, None);
+    }
+
+    /// A press on a cell's text starts a drag the cell keeps, and a copy on
+    /// its canvas writes the selected text. With nothing selected, the copy
+    /// is the browser's (the Murmure message list spec).
+    #[wasm_bindgen_test]
+    fn a_copy_on_a_cell_writes_the_text_it_selects() {
+        let (_cell, canvas) = thread_cell(300, 200);
+        let (mut view, _events) =
+            ambre_murmure::testing::channel_of(&["hello", "world"], (300.0, 200.0));
+        paint(&mut view);
+        let size = size_backing_store(&canvas).unwrap();
+        let bound = Bound::bind(canvas.clone(), size, AppView::Murmure(view)).unwrap();
+        let copy = || {
+            let init = web_sys::ClipboardEventInit::new();
+            init.set_cancelable(true);
+            init.set_clipboard_data(Some(&web_sys::DataTransfer::new().unwrap()));
+            let event = web_sys::ClipboardEvent::new_with_event_init_dict("copy", &init).unwrap();
+            canvas.dispatch_event(&event).unwrap();
+            let text = event.clipboard_data().unwrap().get_data("text/plain");
+            (event.default_prevented(), text.unwrap_or_default())
+        };
+        assert_eq!(copy(), (false, String::new()), "nothing selected");
+
+        let down = web_sys::PointerEvent::new("pointerdown").unwrap();
+        canvas.dispatch_event(&down).unwrap();
+        assert!(murmure(&bound.view.borrow()).drags_text(), "a drag begins");
+        let up = web_sys::PointerEvent::new("pointerup").unwrap();
+        canvas.dispatch_event(&up).unwrap();
+
+        let rows = {
+            let mut view = bound.view.borrow_mut();
+            let AppView::Murmure(v) = &mut *view else {
+                unreachable!()
+            };
+            paint(v);
+            v.last_painted().unwrap().rows
+        };
+        let [(_, top, _), .., (_, _, bottom)] = rows.as_slice() else {
+            panic!("two rows: {rows:?}");
+        };
+        let mut view = bound.view.borrow_mut();
+        for input in [
+            InputEvent::PointerDown {
+                x: 0.0,
+                y: f64::from(*top),
+                button: 0,
+                shift: false,
+                ctrl: false,
+            },
+            InputEvent::PointerMove {
+                x: 299.0,
+                y: f64::from(*bottom - 1.0),
+            },
+        ] {
+            view.handle_input(&input);
+        }
+        let AppView::Murmure(v) = &mut *view else {
+            unreachable!()
+        };
+        paint(v);
+        drop(view);
+        let (prevented, text) = copy();
+        assert!(prevented, "the cell wrote the clipboard");
+        assert!(
+            text.starts_with("Ada, t\n") && text.ends_with("world"),
+            "{text}"
+        );
+        let cut = bound.view.borrow_mut().clipboard_write(true);
+        assert!(
+            matches!(cut, ambre_bus::CopyOutcome::Nothing),
+            "a cut leaves read-only text"
+        );
     }
 
     /// `CANVAS-070`: a cell plans its frame apart from the page. A frame

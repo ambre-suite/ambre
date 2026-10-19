@@ -390,6 +390,12 @@ impl FrameHost {
         self.view.captures_pointer()
     }
 
+    /// Whether a press began a drag across read-only text, which the host
+    /// captures although the view did not consume the press.
+    pub fn drags_text(&self) -> bool {
+        self.view.drags_text()
+    }
+
     /// Switch the active document on the live view, keeping the GPU surface.
     pub fn set_document(&mut self, document_id: DocumentId) {
         self.view.set_document(document_id);
