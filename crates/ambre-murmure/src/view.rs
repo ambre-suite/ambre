@@ -59,6 +59,9 @@ pub struct PageReads {
     /// which the channel's composer loads (`MURMURE-203`). Given `true`, it
     /// takes a reply alone, for the thread's composer (`MURMURE-526`).
     pub take_edit: Rc<dyn Fn(bool) -> Option<PendingEdit>>,
+    /// Go to the pane before this one, as the back control of the header
+    /// does: Escape in a thread's list closes it (`MURMURE-528`).
+    pub back: Rc<dyn Fn()>,
     /// The signed-in member, whose last message the up arrow edits
     /// (`MURMURE-178`).
     pub me: Rc<dyn Fn() -> Option<UserId>>,
@@ -176,9 +179,24 @@ pub struct MurmureView {
     /// The composer at the foot of the region, `MURMURE-199`. The thread's
     /// region holds one of its own (`MURMURE-523`).
     composer: Composer,
+    /// The thread's composer while no thread shows. The channel's region
+    /// holds it, so a draft outlives the thread's region (`MURMURE-530`).
+    parked: Rc<RefCell<Option<Composer>>>,
     /// The channel on screen this region last ticked, and when.
     ticked: Option<(ChannelId, f64)>,
     dirty: bool,
+}
+
+impl Drop for MurmureView {
+    /// The thread's region hands its composer back to the channel's, which
+    /// gives it to the next thread's region (`MURMURE-530`).
+    fn drop(&mut self) {
+        if self.region == Region::Thread {
+            let mut composer = std::mem::take(&mut self.composer);
+            composer.blur();
+            *self.parked.borrow_mut() = Some(composer);
+        }
+    }
 }
 
 impl MurmureView {
@@ -217,6 +235,7 @@ impl MurmureView {
             selecting: Selecting::default(),
             drag: None,
             composer: Composer::default(),
+            parked: Rc::default(),
             ticked: None,
             dirty: true,
         }
@@ -230,6 +249,10 @@ impl MurmureView {
         let mut view = Self::new(None, to_logic, reads, (width, height), theme_ctl);
         view.lists = Rc::clone(&self.lists);
         view.region = Region::Thread;
+        view.parked = Rc::clone(&self.parked);
+        if let Some(composer) = view.parked.borrow_mut().take() {
+            view.composer = composer;
+        }
         view
     }
 
@@ -434,6 +457,18 @@ impl MurmureView {
             channel_id,
             command: MurmureCommand::MarkRead,
         });
+        true
+    }
+
+    /// Close the thread the thread's region shows, back to its channel at
+    /// the root, and mark nothing read (`MURMURE-528`, `MURMURE-529`).
+    /// Answers whether a thread closed.
+    fn close_thread(&self) -> bool {
+        let shown = matches!((self.reads.pane)(), MurmurePane::Thread { .. });
+        if self.region != Region::Thread || !shown {
+            return false;
+        }
+        (self.reads.back)();
         true
     }
 
@@ -1110,7 +1145,7 @@ impl MurmureView {
                     "ArrowDown" => self.move_focus(1),
                     "ArrowUp" => self.move_focus(-1),
                     "Enter" if self.retry_focus() => {}
-                    "Escape" if self.mark_shown_read() => {}
+                    "Escape" if self.mark_shown_read() || self.close_thread() => {}
                     _ => return false,
                 }
                 return true;
@@ -1265,6 +1300,7 @@ mod tests {
         let (to_logic, commands) = local(64);
         let pane = Rc::new(Cell::new(MurmurePane::default()));
         let shown = Rc::clone(&pane);
+        let back = Rc::clone(&pane);
         let clock = Rc::new(Cell::new(0.0));
         let now = Rc::clone(&clock);
         let said_log = Rc::new(RefCell::new(Vec::new()));
@@ -1291,6 +1327,7 @@ mod tests {
                     None
                 }
             }),
+            back: Rc::new(move || back.set(back.get().back())),
             me: Rc::new(move || signed_in.get()),
             pipe: TextInput::detached(),
         };
@@ -3289,5 +3326,60 @@ mod tests {
         assert_eq!(painted(&mut page, of).as_deref(), Some("mine"));
         assert!(page.view.composer().editing(of));
         assert!(!channel_view.composer().editing(channel));
+    }
+
+    /// Escape in the thread's list shows its channel at the root, as the
+    /// back control does. In the composer it gives the keys back first
+    /// (`MURMURE-528`).
+    #[test]
+    fn escape_in_a_threads_list_closes_the_thread() {
+        let channel = ChannelId::new();
+        let (mut page, _channel_view, root, _) = threaded(channel);
+        press_composer(&mut page);
+        assert!(key(&mut page, "Escape", false, 0.0));
+        assert!(!page.view.composer().focused());
+        assert!(matches!(page.pane.get(), MurmurePane::Thread { .. }));
+        assert!(key(&mut page, "Escape", false, 0.0));
+        let MurmurePane::Channel { channel: shown, at } = page.pane.get() else {
+            panic!("the channel shows, got {:?}", page.pane.get());
+        };
+        assert_eq!(shown, channel);
+        assert_eq!(at.map(|at| at.message), Some(root), "at the root");
+        frame_with_fonts(&mut page.view);
+        assert!(
+            !key(&mut page, "Escape", false, 0.0),
+            "no thread left to close"
+        );
+    }
+
+    /// Closing a thread with Escape marks neither the channel nor the
+    /// thread read (`MURMURE-529`).
+    #[test]
+    fn closing_a_thread_with_escape_marks_nothing_read() {
+        let channel = ChannelId::new();
+        let (mut page, _channel_view, _, _) = threaded(channel);
+        reads(&page);
+        assert!(key(&mut page, "Escape", false, 0.0));
+        frame_with_fonts(&mut page.view);
+        assert_eq!(reads(&page), (0, 0), "the Escape reads nothing");
+    }
+
+    /// A thread's draft outlives its region: the panel closed and opened
+    /// again shows it, unfocused (`MURMURE-530`).
+    #[test]
+    fn a_threads_draft_survives_the_thread_closing() {
+        let channel = ChannelId::new();
+        let (mut page, channel_view, root, _) = threaded(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "later");
+        let pane = page.pane.get();
+        key(&mut page, "Escape", false, 0.0);
+        key(&mut page, "Escape", false, 0.0);
+        drop(std::mem::replace(&mut page.view, channel_view));
+        page.view = page.view.region(300.0, 400.0);
+        page.pane.set(pane);
+        let of = DraftOf::Thread(channel, root);
+        assert_eq!(painted(&mut page, of).as_deref(), Some("later"));
+        assert!(!page.view.composer().focused(), "the keys stay put");
     }
 }

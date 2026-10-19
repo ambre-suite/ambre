@@ -53,10 +53,12 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-180` | `POST` | The chord MUST run the mark-all-read command of the unread feature. | this spec section 3; `MURMURE-118` | `ambre_murmure::tests::chrome_relay::the_mark_all_read_chord_runs_the_command_of_the_unread_feature` -- the chord sends that one command, and a text field keeps it | none | verified |
 | `MURMURE-181` | `FRAME` | Marking everything read from the keyboard MUST NOT clear the draft of the composer. | this spec section 3 | `ambre_murmure::view::tests::marking_everything_read_keeps_the_draft` -- the answers of a mark-all-read leave the draft, its focus and the send untouched; `ambre_murmure::tests::chrome_relay::the_mark_all_read_chord_runs_the_command_of_the_unread_feature` -- the chord sends that one command, which names no draft | none | verified |
 | `MURMURE-522` | `POST` | Escape in the message list of a channel MUST mark that channel read. | this spec section 3; `MURMURE-115` | `ambre_murmure::view::tests::escape_in_the_list_marks_the_channel_read` -- high up in the list too, while the composer's Escape and the thread's mark nothing | none | verified |
+| `MURMURE-528` | `POST` | Escape in the message list of a thread MUST close the thread and show its channel at the root. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::view::tests::escape_in_a_threads_list_closes_the_thread` -- the channel shows at the root, while the composer's Escape first gives the keys back | none | verified |
+| `MURMURE-529` | `FRAME` | Closing a thread with Escape MUST NOT mark its channel or the thread read. | this spec section 3; `MURMURE-115` | `ambre_murmure::view::tests::closing_a_thread_with_escape_marks_nothing_read` -- no read command for the channel or the thread | none | verified |
 
 * **Budget.** none of its own: each shortcut runs a command another feature budgets.
 * **Boundary.** none: the palette filters names the client holds, and nothing it types leaves.
-* **Verification.** 15 `verified`. The table, the palette, the jumps, the find chord and the keys
+* **Verification.** 17 `verified`. The table, the palette, the jumps, the find chord and the keys
   inside a conversation hold.
 
 ---
@@ -90,6 +92,7 @@ Page Up. It acts on the list or the composer that holds the focus, which the she
 | open the previous channel with activity | Alt+Shift+Up | anywhere in Murmure |
 | edit the last own message | Up, in an empty composer | the composer |
 | mark the channel read | Escape, in the message list | the message list |
+| close the thread | Escape, in the message list of a thread | the thread's list |
 | mark everything read | Alt+Shift+A | anywhere in Murmure |
 
 ```rust
@@ -107,6 +110,10 @@ opens the search from any field, or the find of the browser would take it.
 (`MURMURE-175`). Up in an empty composer loads the member's latest message the edit action takes
 (`MURMURE-178`, `MURMURE-179`). In the composer of a thread it loads the member's latest reply
 there (`MURMURE-527`). Escape in the list marks the channel read (`MURMURE-522`).
+
+**The keys of a thread.** Escape in a thread's list closes the thread, as the back control does,
+and marks nothing (`MURMURE-528`, `MURMURE-529`). Shift+Page Up does nothing there, since a
+thread's list draws no unread line.
 
 **One palette, two lists.** The channels and the direct messages are entries Murmure supplies to
 the palette of the suite, so they come before the commands (`CHROME-093`). A query that starts with
@@ -145,8 +152,7 @@ chord opens.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Escape and Shift+Page Up do nothing in a thread.** A thread holds no read cursor of its own,
-  and Escape does not close it.
-  That waits for the `The keys of a thread` Story (`ambre-roadmap.md` E5).
+* **Shift+Page Up does nothing in a thread.** A thread's list draws no unread line, since drawing
+  its last reply marks it read. A long thread opened mid-way would want one. No story holds it.
 * **Nothing checks the shared meanings across tables.** `UI-THREAD-037` reads one application's
   table at a time.

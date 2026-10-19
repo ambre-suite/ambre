@@ -21,6 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-194` | `INV` | The Murmure mark set MUST be bold, italic, inline code, code block, link, list, quote, mention and custom emoji. | this spec section 3; `MURMURE-008` | not built | unbuilt -- lands with the `Marks in a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-195` | `INV` | A draft MUST be kept per channel while the user moves between channels. | this spec section 3 | `ambre_murmure::view::tests::each_channel_keeps_its_own_draft` -- a draft typed in one channel is there when the user comes back from another | none | verified |
 | `MURMURE-525` | `INV` | A draft MUST be kept per thread, apart from the draft of its channel. | this spec section 3; `MURMURE-195` | `ambre_murmure::view::tests::a_thread_keeps_its_own_draft_apart_from_the_channels` -- the thread's draft is not the channel's, and another thread opens on an empty one | none | verified |
+| `MURMURE-530` | `INV` | A thread's draft MUST survive the thread closing and opening again. | this spec section 3; `MURMURE-525` | `ambre_murmure::view::tests::a_threads_draft_survives_the_thread_closing` -- the region dropped and built again shows the draft, and the field does not take the keys | none | verified |
 | `MURMURE-196` | `OBS` | The composer MUST show no permanent formatting toolbar. | this spec section 3 | `ambre_murmure::view::tests::the_band_holds_a_field_and_no_toolbar` -- the band paints its fill, the field and its outline, and no other shape, under a list cut to the band's top | none | verified |
 | `MURMURE-210` | `INV` | A draft MUST survive a reload of the page. | this spec section 3; `ambre-spec-launcher.md` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-211` | `INV` | A draft MUST NOT leave the device before it is sent. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -75,7 +76,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 16 `verified`, 13 `unimplemented`. The host tier drives the view with the
+* **Verification.** 17 `verified`, 13 `unimplemented`. The host tier drives the view with the
   events the page sends: a press, a tap, text, keys, a paste. The marks and the stored draft are
   not built.
 
@@ -137,7 +138,8 @@ Enter only asks for the send.
 **A reply in the slice.** The thread's region has a composer of its own, and each thread holds a
 draft apart from its channel's (`MURMURE-525`). Enter there sends a reply to the root
 (`MURMURE-523`). The page has one pipe, and it writes into the region whose composer last took
-the keys (`CANVAS-076`).
+the keys (`CANVAS-076`). The channel's region keeps the thread's composer while the panel is shut,
+so a draft outlives it (`MURMURE-530`).
 
 **The history of the slice.** The composer keeps one history per draft. A caret move, a space or a
 line break closes a step, and a paste or a cut is a step of its own.

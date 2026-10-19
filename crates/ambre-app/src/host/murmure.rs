@@ -9,7 +9,7 @@ use ambre_bus::Timestamp;
 use ambre_canvas::TextInput;
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::view::PageReads;
-use leptos::prelude::{GetUntracked, Set};
+use leptos::prelude::{GetUntracked, Set, Update};
 use wasm_bindgen::JsValue;
 
 /// What the page tells a Murmure region, read from the shell's relay.
@@ -26,6 +26,7 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput) -> PageReads {
         }),
         act_on: Rc::new(move |target| relay.target.set(target)),
         take_edit: Rc::new(move |in_thread| relay.take_edit(in_thread)),
+        back: Rc::new(move || relay.pane.update(|pane| *pane = pane.back())),
         me: Rc::new(move || relay.me()),
         pipe,
     }
