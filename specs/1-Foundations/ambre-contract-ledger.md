@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3664 rows: 3090 shipped, of which 2 loose. 574 unbuilt.**
+**3665 rows: 3092 shipped, of which 2 loose. 573 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 864 | 418 | 816 | 609 | 381 | 3088 |
+| `verified` | 865 | 418 | 816 | 609 | 382 | 3090 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 192 | 55 | 29 | 109 | 189 | 574 |
+| `unimplemented` | 192 | 55 | 29 | 109 | 188 | 573 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -42,7 +42,7 @@
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 7 |  | 1 |
 | `ambre-spec-architecture.md` | 32 | 32 | 32 |  |  |
 | `ambre-spec-broadcast.md` | 27 | 26 | 26 |  | 1 |
-| `ambre-spec-chrome.md` | 23 | 22 | 22 |  | 1 |
+| `ambre-spec-chrome.md` | 24 | 23 | 23 |  | 1 |
 | `ambre-spec-clipboard.md` | 19 | 18 | 18 |  | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-delta-order.md` | 22 | 22 | 22 |  |  |
@@ -162,7 +162,7 @@
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 23 | 22 | 22 |  | 1 |
 | `ambre-spec-murmure-channels.md` | 53 | 39 | 39 |  | 14 |
-| `ambre-spec-murmure-composer.md` | 39 | 30 | 30 |  | 9 |
+| `ambre-spec-murmure-composer.md` | 39 | 31 | 31 |  | 8 |
 | `ambre-spec-murmure-engine.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-keyboard.md` | 21 | 21 | 21 |  |  |
 | `ambre-spec-murmure-layout.md` | 26 | 21 | 21 |  | 5 |
@@ -191,7 +191,7 @@
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
 | `ambre-spec-architecture.md` | ARCH-001..032 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186 |
-| `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094 |
+| `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..057 |
 | `ambre-spec-commands.md` | UI-THREAD-011,019,026..028,035..042 |
 | `ambre-spec-delta-order.md` | SYNC-006..007,024..033,082..087,101,131,147..148 |

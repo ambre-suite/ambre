@@ -46,6 +46,8 @@ pub fn channel_of(texts: &[&str], size: (f64, f64)) -> (MurmureView, Sender<UiEv
         members_of: Rc::new(|_| Vec::new()),
         show_mentions: Rc::new(|_, _| {}),
         take_pick: Rc::new(|_| None),
+        show_bar: Rc::new(|_, _| {}),
+        take_press: Rc::new(|_| None),
         take_returned: Rc::new(|_| None),
         open_link: Rc::new(|_| {}),
     };

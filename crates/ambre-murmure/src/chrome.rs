@@ -16,6 +16,7 @@ use crate::commands::{
     PALETTE, PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, SEARCH, asked_all_title, key_list,
     message_action, message_actions,
 };
+use crate::markers::{Cover, MarkBar};
 use crate::mention_list::MentionList;
 use crate::{
     Activity, MessageRef, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
@@ -24,10 +25,11 @@ use ambre_bus::AppCommand;
 use ambre_bus::{
     ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MessageAt,
     MurmureCommand, MurmureEvent, Presence, RequestId, RestCommand, RestEvent, SpaceCommand,
-    SpaceEvent, Timestamp, UiEvent,
+    SpaceEvent, TextStyle, Timestamp, UiEvent,
 };
 use ambre_chrome::{
-    CommandHandler, KeyRoute, MenuEntry, PaletteEntry, ShellAction, ShellRegion, Toasts,
+    CommandHandler, FormatBar, FormatControl, KeyRoute, MenuEntry, PaletteEntry, Pressed,
+    ShellAction, ShellRegion, Toasts,
 };
 use ambre_commands::{CommandId, Locale};
 use ambre_core::{ChannelId, SpaceId, UserId};
@@ -349,6 +351,12 @@ pub struct MurmureRelay {
     /// The entry a click picked in the `@` list, until its region takes it.
     /// The flag names the thread's region.
     picked: RwSignal<Option<(bool, usize)>>,
+    /// The format bar a region of the page shows, `None` while nothing is
+    /// selected (`MURMURE-432`).
+    pub mark_bar: RwSignal<Option<MarkBar>>,
+    /// The style a press on the format bar asked for, until its region takes
+    /// it. The flag names the thread's region.
+    pressed_mark: RwSignal<Option<(bool, TextStyle)>>,
     /// The other members who watch each open channel, as the Logic thread
     /// last heard them (`MURMURE-126`). A channel nobody watches has no entry.
     watching: RwSignal<HashMap<ChannelId, HashSet<UserId>>>,
@@ -451,6 +459,8 @@ impl MurmureRelay {
             channel_members: RwSignal::new(HashMap::new()),
             mentions: RwSignal::new(None),
             picked: RwSignal::new(None),
+            mark_bar: RwSignal::new(None),
+            pressed_mark: RwSignal::new(None),
             watching: RwSignal::new(HashMap::new()),
             target: RwSignal::new(None),
             deleting: RwSignal::new(None),
@@ -1127,6 +1137,38 @@ impl MurmureRelay {
         Some(index)
     }
 
+    /// Show the format bar a region handed over, or close it. A region
+    /// closes only its own bar (`MURMURE-432`).
+    pub fn show_bar(&self, in_thread: bool, bar: Option<MarkBar>) {
+        let theirs = self
+            .mark_bar
+            .with_untracked(|shown| shown.as_ref().is_some_and(|s| s.in_thread != in_thread));
+        if bar.is_some() || !theirs {
+            self.mark_bar.set(bar);
+        }
+    }
+
+    /// A press on the control of `style` in the format bar shown: its region
+    /// takes it at its next frame (`MURMURE-432`).
+    pub fn press_mark(&self, style: TextStyle) {
+        if let Some(in_thread) = self
+            .mark_bar
+            .with_untracked(|bar| bar.as_ref().map(|bar| bar.in_thread))
+        {
+            self.pressed_mark.set(Some((in_thread, style)));
+        }
+    }
+
+    /// The press on the bar of the region `in_thread`, taken once.
+    pub fn take_press(&self, in_thread: bool) -> Option<TextStyle> {
+        let (region, style) = self.pressed_mark.get_untracked()?;
+        if region != in_thread {
+            return None;
+        }
+        self.pressed_mark.set(None);
+        Some(style)
+    }
+
     /// Invite `user` into the shown channel. Their key is fetched first, for
     /// the check of the pin, and the invite leaves only once it passes. A
     /// member of the channel is fetched nothing (`MURMURE-501`).
@@ -1482,6 +1524,41 @@ pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
                     {entries}
                 </ul>
             }
+        })
+    }
+}
+
+/// The format bar of a composer, over its selection: the shared bar Prose
+/// shows, with the Murmure marks alone (`MURMURE-432`, `CHROME-105`). A
+/// press toggles its style and leaves the focus where it was.
+#[component]
+pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
+    move || {
+        relay.mark_bar.get().map(|bar| {
+            let (left, top) = canvas_origin(bar.in_thread);
+            let anchor = (left + f64::from(bar.at.0), top + f64::from(bar.at.1));
+            let controls = bar
+                .controls
+                .into_iter()
+                .map(|(style, cover)| {
+                    let label = crate::markers::MARK_BAR
+                        .iter()
+                        .find(|(shown, _)| *shown == style)
+                        .map(|(_, label)| (*label).to_owned())
+                        .unwrap_or_default();
+                    let pressed = match cover {
+                        Cover::Whole => Pressed::On,
+                        Cover::Part => Pressed::Mixed,
+                        Cover::None => Pressed::Off,
+                    };
+                    FormatControl {
+                        label,
+                        pressed,
+                        on_press: Callback::new(move |()| relay.press_mark(style.clone())),
+                    }
+                })
+                .collect();
+            view! { <FormatBar anchor=anchor controls=controls /> }
         })
     }
 }

@@ -14,6 +14,10 @@
 //                     what a toggle means to its model (a `CommandId`, a style
 //                     patch, ...): the control never reaches past the DOM.
 //
+//   FormatBar      -- the bar of format controls over a selection. Prose and
+//                     Murmure hand it the anchor and the controls; it holds
+//                     no state of its own.
+//
 // `FormatToggle` does `on:mousedown prevent_default` so a click never steals focus
 // from the host's text pipe (the palette / grid-focus hazard both apps guard
 // against). `FontSizeSelect` must NOT: on a native <select>, preventing the mousedown
@@ -89,5 +93,67 @@ pub fn FormatToggle(
         >
             {icon.map(|ic| view! { <Icon icon=ic /> })}
         </button>
+    }
+}
+
+/// How far above its anchor the format bar sits, in CSS pixels.
+pub const FORMAT_BAR_LIFT_PX: f64 = 40.0;
+
+/// Whether a control's mark covers the selection, as `aria-pressed` reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pressed {
+    On,
+    Mixed,
+    Off,
+}
+
+impl Pressed {
+    /// The `aria-pressed` value.
+    pub fn aria(self) -> &'static str {
+        match self {
+            Self::On => "true",
+            Self::Mixed => "mixed",
+            Self::Off => "false",
+        }
+    }
+}
+
+/// One control of the format bar: what it announces, whether its mark covers
+/// the selection, and what a press reports.
+#[derive(Clone)]
+pub struct FormatControl {
+    pub label: String,
+    pub pressed: Pressed,
+    pub on_press: Callback<()>,
+}
+
+/// The format bar over a selection, centred on `anchor` in the viewport
+/// (`CHROME-105`). A press keeps the selection: the bar never takes the focus.
+#[component]
+pub fn FormatBar(anchor: (f64, f64), controls: Vec<FormatControl>) -> impl IntoView {
+    let (x, y) = anchor;
+    let style = format!(
+        "position: fixed; left: {x}px; top: {}px; transform: translateX(-50%); z-index: 62;",
+        (y - FORMAT_BAR_LIFT_PX).max(0.0)
+    );
+    let controls = controls.into_iter().map(|control| {
+        let on_press = control.on_press;
+        let text = control.label.clone();
+        view! {
+            <button
+                class="ambre-format-control"
+                aria-pressed=control.pressed.aria()
+                aria-label=control.label
+                on:mousedown=|ev: web_sys::MouseEvent| ev.prevent_default()
+                on:click=move |_| on_press.run(())
+            >
+                {text}
+            </button>
+        }
+    });
+    view! {
+        <div class="ambre-format-bar" style=style role="toolbar" aria-label="Format">
+            {controls.collect_view()}
+        </div>
     }
 }

@@ -24,9 +24,9 @@
 )]
 
 use ambre_chrome::{
-    AppShell, CommandStates, ContextMenu, FONT_SIZES, FontSizeSelect, FormatToggle, Header,
-    MenuEntry, PerfChip, PerfDetail, StatusBar, ToastHost, ToastKind, Toasts, Toolbar, ZoomChip,
-    ZoomFactor,
+    AppShell, CommandStates, ContextMenu, FONT_SIZES, FontSizeSelect, FormatBar, FormatControl,
+    FormatToggle, Header, MenuEntry, PerfChip, PerfDetail, Pressed, StatusBar, ToastHost,
+    ToastKind, Toasts, Toolbar, ZoomChip, ZoomFactor,
 };
 use ambre_commands::CommandId;
 use leptos::mount::mount_to;
@@ -365,6 +365,58 @@ async fn format_toggle_reflects_pressed_and_reports_clicks() {
     pressed.set(false);
     leptos::task::tick().await;
     assert_eq!(btn.get_attribute("aria-pressed").as_deref(), Some("false"));
+    root.remove();
+}
+
+/// `CHROME-105`: the format bar hangs above its anchor, shows each control
+/// with its pressed state, and a press reports that control alone.
+#[wasm_bindgen_test]
+async fn the_format_bar_hangs_its_controls_and_reports_a_press() {
+    let owner = Owner::new();
+    owner.set();
+    let pressed = RwSignal::new(Vec::<&'static str>::new());
+    let control = |label: &'static str, state: Pressed| FormatControl {
+        label: label.to_owned(),
+        pressed: state,
+        on_press: Callback::new(move |()| pressed.update(|p| p.push(label))),
+    };
+    let controls = vec![
+        control("Bold", Pressed::On),
+        control("Italic", Pressed::Mixed),
+        control("Code", Pressed::Off),
+    ];
+    let root =
+        mount_in_container(move || view! { <FormatBar anchor=(200.0, 100.0) controls=controls /> });
+
+    let bar = root.query_selector("[role=\"toolbar\"]").unwrap().unwrap();
+    let style = bar.get_attribute("style").unwrap_or_default();
+    assert!(
+        style.contains("left: 200px") && style.contains("top: 60px"),
+        "{style}"
+    );
+    let buttons = bar.query_selector_all("button").unwrap();
+    let states: Vec<(String, String)> = (0..buttons.length())
+        .filter_map(|i| buttons.item(i))
+        .filter_map(|b| b.dyn_into::<web_sys::Element>().ok())
+        .map(|b| {
+            (
+                b.get_attribute("aria-label").unwrap_or_default(),
+                b.get_attribute("aria-pressed").unwrap_or_default(),
+            )
+        })
+        .collect();
+    let want = [("Bold", "true"), ("Italic", "mixed"), ("Code", "false")]
+        .map(|(l, p)| (l.to_owned(), p.to_owned()));
+    assert_eq!(states, want.to_vec());
+
+    let italic = root
+        .query_selector("[aria-label=\"Italic\"]")
+        .unwrap()
+        .unwrap();
+    italic
+        .dispatch_event(&web_sys::MouseEvent::new("click").unwrap())
+        .unwrap();
+    assert_eq!(pressed.get_untracked(), vec!["Italic"]);
     root.remove();
 }
 

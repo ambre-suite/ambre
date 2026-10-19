@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-214` | `INV` | Eviction from the local store MUST NOT drop a draft. | this spec section 3; `RESID-009` | not built | unbuilt -- lands with the `Drafts` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-430` | `INV` | The composer MUST be canvas content, fed by the shared input pipe. | this spec section 3; `UI-THREAD-014`; `ambre-spec-text-input.md` | `ambre_murmure::view::tests::the_composer_takes_the_pipe_until_escape` -- a press in the band focuses the pipe, and its text and keys reach the draft, never the list, until Escape; `ambre_murmure::view::tests::paste_copy_and_cut_go_through_the_draft` -- a paste lands in the draft, and a copy or a cut reads its selection; `ambre_murmure::view::tests::a_tap_in_the_band_focuses_the_composer` -- a tap focuses the pipe, and a press in the list takes the focus back | none | verified |
 | `MURMURE-431` | `INV` | A formatting chord of the composer MUST take the chord Prose binds to the same mark, and put the mark on the selection or take it off. | this spec section 3; `UI-THREAD-019` | `ambre_murmure::markers::tests::a_chord_names_its_style` -- `b`, `i` and `e` name bold, italic and code; `::a_chord_puts_a_style_on_or_takes_it_off` -- a chord takes off a mark covering the whole selection; `ambre_murmure::view::tests::a_chord_puts_its_style_on_the_selection` -- the chord reaches the draft, and none changes an empty selection; `ambre_app::shell::murmure_regions::a_style_takes_the_chord_prose_binds_to_its_mark` -- each chord is the one Prose binds | none | verified |
-| `MURMURE-432` | `OBS` | A selection in the composer MUST show the Prose format bar, with the Murmure marks alone. | this spec section 3; `MURMURE-194` | not built | unbuilt -- lands with the `The format bar of the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-432` | `OBS` | A selection in the composer MUST show the Prose format bar, with the Murmure marks alone. | this spec section 3; `MURMURE-194`; `CHROME-105` | `ambre_murmure::view::tests::a_selection_shows_the_format_bar_and_a_press_toggles_its_style` -- a selection hands the bar over, a press on its own region's bar toggles the style, and the bar leaves with the selection; `ambre_murmure::markers::tests::a_control_shows_how_much_of_the_selection_its_style_covers` -- the pressed state of each control; `ambre_murmure::tests::chrome_relay::the_format_bar_shows_the_murmure_marks_and_a_press_toggles_one` -- the DOM belt, one region's press and close; `ambre_app::shell::murmure_regions::the_format_bar_shows_the_prose_controls_of_the_murmure_marks` -- each control is Prose's, in Prose's order | none | verified |
 | `MURMURE-544` | `OBS` | The box under a thread's composer MUST name Alt+Enter at the desktop width, and only there. | this spec section 3; `MURMURE-534`; `CHROME-057` | `ambre_murmure::view::tests::the_box_names_its_chord_at_the_desktop_width_only` -- the desktop width adds one run of the chord's glyphs, and a narrow window drops it; `ambre_app::shell::murmure_regions::the_canvas_reads_the_desktop_width_as_the_stylesheet_does` -- the host reads a desktop at 1025 pixels and not at 1024, where the stylesheet shows and hides a chord | none | verified |
 
 ### 1.2 Type Markdown
@@ -85,7 +85,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 30 `verified`, 9 `unimplemented`. The host tier drives the view with the events
+* **Verification.** 31 `verified`, 8 `unimplemented`. The host tier drives the view with the events
   the page sends: a press, a tap, text, keys, a paste. The inline marks are built, drawn in the
   field and sent. The block marks, the format bar and the stored draft are not built.
 
@@ -126,9 +126,9 @@ content. It takes its keys, its input method and its clipboard events from the p
 
 **The chords of Prose, for the marks they share.** A mark Prose declares keeps the Prose chord:
 `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` inline code (`MURMURE-431`). A chord puts the mark on the
-selection, or takes it off a selection it covers whole. A selection will show the format bar of
-Prose, with the controls of the set alone (`MURMURE-432`). The bar leaves with the selection, so
-nothing stays on screen (`MURMURE-196`).
+selection, or takes it off a selection it covers whole. A selection shows the format bar Prose
+shows, with the controls of the set alone (`MURMURE-432`). A press toggles its mark as the chord
+does. The bar leaves with the selection, so nothing stays on screen (`MURMURE-196`).
 
 **A style on the body.** A sent style is a mark on the `content` text, beside the mentions
 (`MURMURE-562`). An edit, an amendment, a fold and a relocation carry it. A link holds an `http`
@@ -214,10 +214,6 @@ changed text.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No block mark.** A code block, a list and a quote wait for the `Block marks in a message`
-  Story (`ambre-roadmap.md` E5).
-* **No format bar.** A selection shows nothing. That waits for the
-  `The format bar of the composer` Story (`ambre-roadmap.md` E5).
 * **An undo puts the caret at the end.** The history keeps the text of each step, not its caret.
   That waits for the `The caret after an undo` Story (`ambre-roadmap.md` E5).
 * **A draft lives in memory.** A reload loses it, until the `Drafts` Story (`ambre-roadmap.md` E5).

@@ -1374,3 +1374,29 @@ fn a_style_takes_the_chord_prose_binds_to_its_mark() {
         );
     }
 }
+
+/// The format bar of the composer shows the Prose controls of the Murmure
+/// marks alone, in Prose's order. Each takes the title Prose gives it
+/// (`MURMURE-432`).
+#[wasm_bindgen_test]
+fn the_format_bar_shows_the_prose_controls_of_the_murmure_marks() {
+    use ambre_bus::TextStyle;
+    use ambre_prose::commands::{BOLD, CODE, COMMANDS, FORMAT_BAR, ITALIC};
+
+    let prose: Vec<_> = FORMAT_BAR.iter().map(|(id, _)| *id).collect();
+    let mut at = Vec::new();
+    for (style, label) in ambre_murmure::markers::MARK_BAR {
+        let id = match style {
+            TextStyle::Bold => BOLD,
+            TextStyle::Italic => ITALIC,
+            TextStyle::Code => CODE,
+            TextStyle::Link(_) | TextStyle::CodeBlock | TextStyle::Quote | TextStyle::List => {
+                panic!("{style:?} has no control")
+            }
+        };
+        let command = COMMANDS.iter().find(|c| c.id == id).unwrap();
+        assert_eq!((command.title)(&ambre_chrome::commands::Locale::En), label);
+        at.push(prose.iter().position(|shown| *shown == id).unwrap());
+    }
+    assert!(at.is_sorted(), "the controls keep Prose's order: {at:?}");
+}

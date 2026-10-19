@@ -52,6 +52,7 @@ the DOM side produces.
 |---|---|---|---|---|---|---|
 | `CHROME-010` | `POST` | A control MUST show the state the Logic thread reported. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::command_states_defaults`; `::command_states_single_writer_propagates`; `::command_states_unknown_id_is_noop` -- one writer reaches the right signal and leaves its neighbours alone | none | verified |
 | `CHROME-013` | `POST` | A shared formatting control MUST report a change. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks` -- a real click is dispatched and the callback fires once; `::font_size_select_lists_presets_plus_auto_entry` -- the same shape for a select | none | verified |
+| `CHROME-105` | `POST` | The format bar MUST hang above the anchor it is handed, show each control with its pressed state, and report a press of that control alone. | this spec section 2; `CHROME-013` | `ambre_chrome::chrome_ui::the_format_bar_hangs_its_controls_and_reports_a_press` -- the placement, the three pressed states, and one press reported | none | verified |
 | `CHROME-014` | `POST` | A status-bar chip MUST start collapsed. | this spec section 2 | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed`; `::perf_chip_renders_fps_from_signal_and_starts_collapsed` -- the menu element is absent on mount | none | verified |
 | `CHROME-086` | `POST` | A control MUST follow its signal when the value changes, not only when it mounts. | this spec section 2 | `ambre_chrome::chrome_ui::the_zoom_readout_follows_its_signal`; `::the_fps_readout_follows_its_signal` -- each changes the signal after the mount and reads the DOM after a reactive tick | none | verified |
 | `CHROME-087` | `FRAME` | A control MUST NOT change the state it displays: the click leaves as a report and the value comes back from the Logic thread. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::a_toggle_reports_its_click_and_waits_for_the_value` -- the click is reported and the pressed state stays put until the test writes the answer | none | verified |
@@ -79,7 +80,7 @@ the DOM side produces.
 * **Boundary.** none: `UI-THREAD-004` and `UI-THREAD-049` ban a network, crypto and persistence
   path on this thread, and the toolkit adds no exception. Its manifest names no transport and no
   crypto crate, which is the crate-graph fact `CHROME-001` and `CHROME-002` are read off.
-* **Verification.** 22 `verified`, 1 `unimplemented`. What holds is a crate-graph fact, placement
+* **Verification.** 23 `verified`, 1 `unimplemented`. What holds is a crate-graph fact, placement
   arithmetic, or a component mounted in a headless document and driven past its mount. The modal
   rows rest on one shared element, which a gate keeps the only one, and on a hold the loop counts.
   The drag rows rest on one debouncer, which a gate keeps every drag control behind.
@@ -117,6 +118,7 @@ optional row collapses and costs no height.
 | the toasts | four severities, a dwell per severity, dismiss on click, one live region | built |
 | the status chips | the caption, the zoom read-out with its preset menu, the frame read-out with a panel the application supplies | built |
 | the formatting controls | a toggle, a size select, a family picker, a colour popover, and a debouncer for a drag | built |
+| the format bar | the bar over a selection, which Prose and Murmure hand their controls | built |
 | the keybinding half | a key event to a modelled chord, for a keymap to resolve | built |
 | the shortcut chip | one chord, rendered the same way in a menu, a tooltip and a palette | built |
 | the command palette | one overlay listing every command the application declares, filtered by a substring of the label | built; the entries of an application and the `>` prefix are design |

@@ -11,7 +11,7 @@ use ambre_bus::DocType;
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
     ChannelHeader, ChannelList, ChannelMentionConfirm, DeleteConfirm, InviteControl, KeyList,
-    MemberList, MentionPanel, MessageSearch, MurmureRelay,
+    MarkBarPanel, MemberList, MentionPanel, MessageSearch, MurmureRelay,
 };
 
 /// The table the command palette searches: the booted application's whole
@@ -78,6 +78,7 @@ pub(crate) fn MurmureShell(
         />
         <KeyList relay=relay />
         <MentionPanel relay=relay />
+        <MarkBarPanel relay=relay />
     }
 }
 

@@ -20,6 +20,49 @@ pub const MARK_CHORDS: [(char, TextStyle); 3] = [
     ('e', TextStyle::Code),
 ];
 
+/// The controls of the format bar, in the order Prose shows the same marks,
+/// each with the title Prose gives its mark (`MURMURE-432`).
+pub const MARK_BAR: [(TextStyle, &str); 3] = [
+    (TextStyle::Bold, "Bold"),
+    (TextStyle::Italic, "Italic"),
+    (TextStyle::Code, "Inline code"),
+];
+
+/// How much of a selection a style covers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cover {
+    Whole,
+    Part,
+    None,
+}
+
+/// What the page draws of the format bar: each control's style and cover
+/// of the selection, hung over the caret (`MURMURE-432`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct MarkBar {
+    pub controls: Vec<(TextStyle, Cover)>,
+    /// The top-left of the caret, in pixels of the region.
+    pub at: (f32, f32),
+    /// The bar hangs over the thread's region, not the channel's.
+    pub in_thread: bool,
+}
+
+/// How much of the chars `range` the runs of `style` in `styles` cover.
+pub fn cover(styles: &[StyleMark], style: &TextStyle, range: &Range<usize>) -> Cover {
+    let runs = crate::style::normalized(styles);
+    let mut runs = runs.iter().filter(|run| run.style == *style);
+    if runs
+        .clone()
+        .any(|run| run.range.start <= range.start && range.end <= run.range.end)
+    {
+        Cover::Whole
+    } else if runs.any(|run| run.range.start < range.end && range.start < run.range.end) {
+        Cover::Part
+    } else {
+        Cover::None
+    }
+}
+
 /// The style of a chord's key, `None` for a key no style takes.
 pub fn chord_style(key: &str) -> Option<TextStyle> {
     let mut chars = key.chars();
@@ -299,10 +342,7 @@ pub fn toggled(styles: &[StyleMark], style: &TextStyle, range: Range<usize>) -> 
         return styles.to_vec();
     }
     let runs = crate::style::normalized(styles);
-    let covered = runs.iter().any(|run| {
-        run.style == *style && run.range.start <= range.start && range.end <= run.range.end
-    });
-    if !covered {
+    if cover(&runs, style, &range) != Cover::Whole {
         let mut added = runs;
         added.push(StyleMark {
             style: style.clone(),
@@ -583,5 +623,29 @@ mod tests {
             "another style stays"
         );
         assert_eq!(toggled(from_ref(&italic), &bold, 2..2), [italic]);
+    }
+
+    /// The bar presses a control whose style covers the selection whole,
+    /// half-presses one covering part of it, and leaves the rest
+    /// (`MURMURE-432`). Another style counts for nothing.
+    #[test]
+    fn a_control_shows_how_much_of_the_selection_its_style_covers() {
+        let bold = TextStyle::Bold;
+        let styles = [mark(bold.clone(), 0..2), mark(bold.clone(), 2..4)];
+        assert_eq!(
+            cover(&styles, &bold, &(1..4)),
+            Cover::Whole,
+            "two runs, one cover"
+        );
+        assert_eq!(cover(&styles, &bold, &(3..6)), Cover::Part);
+        assert_eq!(
+            cover(&styles, &bold, &(4..6)),
+            Cover::None,
+            "a run ending at it"
+        );
+        assert_eq!(cover(&styles, &TextStyle::Italic, &(0..2)), Cover::None);
+        let shown: Vec<TextStyle> = MARK_BAR.iter().map(|(s, _)| s.clone()).collect();
+        let chords: Vec<TextStyle> = MARK_CHORDS.iter().map(|(_, s)| s.clone()).collect();
+        assert_eq!(shown, chords, "the bar shows the marks a chord takes");
     }
 }

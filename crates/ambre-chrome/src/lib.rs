@@ -61,7 +61,9 @@ pub use context_menu::{ContextMenu, MenuEntry, MenuItem};
 pub use debounce::{DRAG_DEBOUNCE, Debouncer};
 pub use dialog::{Dialog, ModalHold};
 pub use font::{FONT_FAMILIES, FontPicker};
-pub use format::{FONT_SIZES, FontSizeSelect, FormatToggle};
+pub use format::{
+    FONT_SIZES, FORMAT_BAR_LIFT_PX, FontSizeSelect, FormatBar, FormatControl, FormatToggle, Pressed,
+};
 pub use handler::{CommandHandler, FilePick, KeyRoute, ShellAction};
 pub use menu::{MenuKey, aria_bool, focus_first_item, initial, menu_key, on_menu_keydown};
 pub use palette::{

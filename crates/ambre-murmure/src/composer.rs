@@ -37,7 +37,7 @@ use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::PendingEdit;
 use crate::look;
-use crate::markers;
+use crate::markers::{self, MarkBar};
 use crate::mention_list::{MentionList, Offer, offers, query_at};
 use crate::paint::{draw, shape};
 
@@ -676,9 +676,7 @@ impl Composer {
             && !(shift || alt)
             && let Some(style) = markers::chord_style(key)
         {
-            self.typed = true;
-            self.editor(of);
-            self.toggles.push((of, style));
+            self.toggle(of, style);
             return true;
         }
         let word = ctrl || alt;
@@ -810,6 +808,40 @@ impl Composer {
         Some(MentionList {
             entries: asking.offers.iter().map(Offer::written).collect(),
             chosen: asking.chosen,
+            at,
+            in_thread,
+        })
+    }
+
+    /// Put `style` on the selection of the draft `of` at the next paint, or
+    /// take it off. A chord asks for it, or a press on the format bar
+    /// (`MURMURE-431`, `MURMURE-432`).
+    pub fn toggle(&mut self, of: DraftOf, style: TextStyle) {
+        self.typed = true;
+        self.editor(of);
+        self.toggles.push((of, style));
+    }
+
+    /// What the page draws of the format bar of the draft `of`, from the
+    /// caret `at` of the last paint. `None` while nothing is selected
+    /// (`MURMURE-432`).
+    pub fn mark_bar(&self, of: DraftOf, at: (f32, f32), in_thread: bool) -> Option<MarkBar> {
+        let editor = self.drafts.get(&of)?;
+        let bytes = editor.selection()?;
+        let text = editor.text();
+        let range =
+            text.get(..bytes.start)?.chars().count()..text.get(..bytes.end)?.chars().count();
+        let styles = self
+            .marks
+            .get(&of)
+            .map(|m| m.styles.as_slice())
+            .unwrap_or_default();
+        let controls = markers::MARK_BAR
+            .iter()
+            .map(|(style, _)| (style.clone(), markers::cover(styles, style, &range)))
+            .collect();
+        Some(MarkBar {
+            controls,
             at,
             in_thread,
         })

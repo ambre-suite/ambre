@@ -23,8 +23,8 @@ use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteRow, ShellAction}
 use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId};
 use ambre_murmure::chrome::{
-    ChannelMentionConfirm, DeleteConfirm, KeyList, MentionPanel, MurmureHandler, MurmureRelay,
-    SearchBox, coverage,
+    ChannelMentionConfirm, DeleteConfirm, KeyList, MarkBarPanel, MentionPanel, MurmureHandler,
+    MurmureRelay, SearchBox, coverage,
 };
 use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
@@ -1281,6 +1281,66 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
     relay.show_mentions(false, None);
     leptos::task::tick().await;
     assert!(root.query_selector("[role=listbox]").unwrap().is_none());
+    root.remove();
+}
+
+/// The format bar shows the Murmure marks alone, each pressed as its style
+/// covers the selection. A press goes to its own region alone, and only
+/// that region closes the bar (`MURMURE-432`).
+#[wasm_bindgen_test]
+async fn the_format_bar_shows_the_murmure_marks_and_a_press_toggles_one() {
+    use ambre_bus::TextStyle;
+    use ambre_murmure::markers::{Cover, MarkBar};
+    use wasm_bindgen::JsCast;
+
+    let (_owner, relay, _) = shown_direct();
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let _handle = leptos::mount::mount_to(mount, move || view! { <MarkBarPanel relay=relay /> });
+    assert!(root.query_selector("[role=toolbar]").unwrap().is_none());
+
+    let bar = MarkBar {
+        controls: vec![
+            (TextStyle::Bold, Cover::Whole),
+            (TextStyle::Italic, Cover::Part),
+            (TextStyle::Code, Cover::None),
+        ],
+        at: (10.0, 20.0),
+        in_thread: false,
+    };
+    relay.show_bar(false, Some(bar));
+    leptos::task::tick().await;
+    let buttons = root.query_selector_all("[role=toolbar] button").unwrap();
+    let shown: Vec<(String, String)> = (0..buttons.length())
+        .map(|i| {
+            let button: web_sys::Element = buttons.item(i).unwrap().dyn_into().unwrap();
+            let read = |name: &str| button.get_attribute(name).unwrap_or_default();
+            (read("aria-label"), read("aria-pressed"))
+        })
+        .collect();
+    let expected = [
+        ("Bold", "true"),
+        ("Italic", "mixed"),
+        ("Inline code", "false"),
+    ]
+    .map(|(label, pressed)| (label.to_owned(), pressed.to_owned()));
+    assert_eq!(shown, expected.to_vec());
+
+    let italic = buttons.item(1).unwrap();
+    italic
+        .dispatch_event(&web_sys::MouseEvent::new("click").unwrap())
+        .unwrap();
+    assert_eq!(relay.take_press(true), None, "the thread pressed nothing");
+    assert_eq!(relay.take_press(false), Some(TextStyle::Italic));
+    assert_eq!(relay.take_press(false), None, "a press is taken once");
+
+    relay.show_bar(true, None);
+    leptos::task::tick().await;
+    assert!(root.query_selector("[role=toolbar]").unwrap().is_some());
+    relay.show_bar(false, None);
+    leptos::task::tick().await;
+    assert!(root.query_selector("[role=toolbar]").unwrap().is_none());
     root.remove();
 }
 

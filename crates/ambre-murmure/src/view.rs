@@ -16,7 +16,7 @@ use std::rc::Rc;
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
     ChannelId, DocumentId, LogicCommand, MessageAt, MessageId, MessageView, MurmureCommand,
-    SegmentId, Timestamp, UiEvent, UserId,
+    SegmentId, TextStyle, Timestamp, UiEvent, UserId,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, TextInput,
@@ -30,6 +30,7 @@ use crate::commands::{
 };
 use crate::composer::{Composer, DraftOf, EDITING_LINE, also_said, typing_line};
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
+use crate::markers::MarkBar;
 use crate::mention_list::MentionList;
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 use crate::select::Selecting;
@@ -80,6 +81,12 @@ pub struct PageReads {
     /// Take the entry a click picked in the `@` list. Given `true`, it takes
     /// a pick in the thread's list alone (`MURMURE-555`).
     pub take_pick: Rc<dyn Fn(bool) -> Option<usize>>,
+    /// Hand the page the format bar to draw over a selection, or `None` to
+    /// close it. The flag names the thread's region (`MURMURE-432`).
+    pub show_bar: Rc<dyn Fn(bool, Option<MarkBar>)>,
+    /// Take the style a press on the format bar asked for. Given `true`, it
+    /// takes a press on the thread's bar alone (`MURMURE-432`).
+    pub take_press: Rc<dyn Fn(bool) -> Option<TextStyle>>,
     /// Take the send its author cancelled at the `@channel` question, which
     /// the composer gets back. Given `true`, it takes a reply alone
     /// (`MURMURE-558`).
@@ -205,6 +212,8 @@ pub struct MurmureView {
     ticked: Option<(ChannelId, f64)>,
     /// The `@` list this region last handed the page.
     listed: Option<MentionList>,
+    /// The format bar this region last handed the page.
+    barred: Option<MarkBar>,
     dirty: bool,
 }
 
@@ -214,6 +223,9 @@ impl Drop for MurmureView {
     fn drop(&mut self) {
         if self.listed.is_some() {
             (self.reads.show_mentions)(self.region == Region::Thread, None);
+        }
+        if self.barred.is_some() {
+            (self.reads.show_bar)(self.region == Region::Thread, None);
         }
         if self.region == Region::Thread {
             let mut composer = std::mem::take(&mut self.composer);
@@ -262,6 +274,7 @@ impl MurmureView {
             parked: Rc::default(),
             ticked: None,
             listed: None,
+            barred: None,
             dirty: true,
         }
     }
@@ -821,6 +834,15 @@ impl MurmureView {
             self.typed();
             self.dirty = true;
         }
+        // A press on the format bar toggles its style as its chord does, and
+        // the keys stay in the composer (`MURMURE-432`).
+        if let Some(style) = (self.reads.take_press)(self.region == Region::Thread)
+            && let Some(of) = self.writes_in()
+        {
+            self.composer.toggle(of, style);
+            self.typed();
+            self.dirty = true;
+        }
         // A cancelled `@channel` gives its draft back, mentions and all
         // (`MURMURE-558`).
         if let Some(asked) = (self.reads.take_returned)(self.region == Region::Thread) {
@@ -955,6 +977,15 @@ impl MurmureView {
                 .set_caret(f64::from(x), f64::from(y), f64::from(tall.max(1.0)));
         }
         self.list_mentions(caret.map(|(x, y, _)| (x, y)));
+        // The format bar hangs over a selection, and leaves with it.
+        let bar = caret.zip(writes_in).and_then(|((x, y, _), of)| {
+            self.composer
+                .mark_bar(of, (x, y), self.region == Region::Thread)
+        });
+        if bar != self.barred {
+            self.barred.clone_from(&bar);
+            (self.reads.show_bar)(self.region == Region::Thread, bar);
+        }
         if higher_up && !shown_before {
             // The control shows: End reaches it from the keyboard
             // (`MURMURE-509`).
@@ -1457,7 +1488,15 @@ mod tests {
         returned: Rc<RefCell<Option<AskedAll>>>,
         /// Each address the view opened, oldest first.
         opened: Rc<RefCell<Vec<String>>>,
+        /// Each format bar the view handed the page, oldest first.
+        bars: Rc<RefCell<Vec<Barred>>>,
+        /// The style a press on the bar asked for, for the region it names.
+        press: Rc<RefCell<Option<(bool, TextStyle)>>>,
     }
+
+    /// A format bar the view handed the page, and whether the thread's
+    /// region shows it.
+    type Barred = (bool, Option<MarkBar>);
 
     /// An `@` list the view handed the page, and whether the thread's region
     /// shows it.
@@ -1489,6 +1528,10 @@ mod tests {
         let given = Rc::clone(&returned);
         let opened = Rc::new(RefCell::new(Vec::new()));
         let opens = Rc::clone(&opened);
+        let bars = Rc::new(RefCell::new(Vec::new()));
+        let shown_bars = Rc::clone(&bars);
+        let press = Rc::new(RefCell::new(None::<(bool, TextStyle)>));
+        let pressed = Rc::clone(&press);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| Some("Ada".to_owned())),
@@ -1518,6 +1561,15 @@ mod tests {
                     Some(index)
                 }
                 _ => None,
+            }),
+            show_bar: Rc::new(move |in_thread, bar| shown_bars.borrow_mut().push((in_thread, bar))),
+            take_press: Rc::new(move |in_thread| {
+                let mut pressed = pressed.borrow_mut();
+                if pressed.as_ref()?.0 == in_thread {
+                    pressed.take().map(|(_, style)| style)
+                } else {
+                    None
+                }
             }),
             take_returned: Rc::new(move |in_thread| {
                 let mut given = given.borrow_mut();
@@ -1552,6 +1604,8 @@ mod tests {
             picked,
             returned,
             opened,
+            bars,
+            press,
         }
     }
 
@@ -4292,6 +4346,66 @@ mod tests {
         let sent = drafts_sent(&page);
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].styles, [styled(Italic, 4..7)]);
+    }
+
+    /// A selection in the composer shows the format bar, with the Murmure
+    /// marks alone, and the bar leaves with the selection. A press toggles
+    /// its style as the chord does (`MURMURE-432`).
+    #[test]
+    fn a_selection_shows_the_format_bar_and_a_press_toggles_its_style() {
+        use crate::markers::Cover;
+        use ambre_bus::TextStyle::{Bold, Code, Italic};
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "one two");
+        let last = |page: &Page| page.bars.borrow().last().cloned();
+        assert_eq!(last(&page), None, "no selection, no bar");
+        for _ in 0..3 {
+            shift_key(&mut page, "ArrowLeft");
+        }
+        frame_with_fonts(&mut page.view);
+        let (in_thread, bar) = last(&page).expect("a bar was handed over");
+        let bar = bar.expect("the selection shows it");
+        assert!(!in_thread);
+        let none = [
+            (Bold, Cover::None),
+            (Italic, Cover::None),
+            (Code, Cover::None),
+        ];
+        assert_eq!(bar.controls, none);
+        *page.press.borrow_mut() = Some((true, Bold));
+        frame_with_fonts(&mut page.view);
+        assert_eq!(
+            page.view.composer().styles(channel),
+            [],
+            "the thread's press stays"
+        );
+        *page.press.borrow_mut() = Some((false, Bold));
+        frame_with_fonts(&mut page.view);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().styles(channel), [styled(Bold, 4..7)]);
+        let (_, bar) = last(&page).expect("the bar follows the press");
+        let whole = [
+            (Bold, Cover::Whole),
+            (Italic, Cover::None),
+            (Code, Cover::None),
+        ];
+        assert_eq!(bar.map(|b| b.controls), Some(whole.to_vec()));
+        key(&mut page, "ArrowRight", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(
+            last(&page),
+            Some((false, None)),
+            "the bar leaves with the selection"
+        );
+        let shown = page.bars.borrow().len();
+        frame_with_fonts(&mut page.view);
+        assert_eq!(
+            page.bars.borrow().len(),
+            shown,
+            "a bar unchanged is not handed again"
+        );
     }
 
     /// An edit loads the styles of its message. One that changes the styles
