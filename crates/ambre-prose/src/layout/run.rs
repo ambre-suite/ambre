@@ -518,7 +518,7 @@ impl ParleyRunData {
         let cursor = Cursor::from_point(
             &segment.layout,
             x,
-            (metrics.min_coord + metrics.max_coord) / 2.0,
+            (metrics.block_min_coord + metrics.block_max_coord) / 2.0,
         );
         (
             self.offset_of_byte(segment.to_run(cursor.index())),
@@ -660,7 +660,7 @@ impl ParleyRunData {
                 segment
                     .layout
                     .get(local)
-                    .is_some_and(|line| middle < line.metrics().max_coord)
+                    .is_some_and(|line| middle < line.metrics().block_max_coord)
             })
             .unwrap_or(segment.skip + kept - 1);
         self.lines
@@ -677,8 +677,8 @@ impl ParleyRunData {
         let segment = self.segments.get(at.segment)?;
         let metrics = *segment.layout.get(at.local)?.metrics();
         let local = y - at.shift;
-        let low = metrics.min_coord;
-        let high = (metrics.max_coord - 0.01).max(low);
+        let low = metrics.block_min_coord;
+        let high = (metrics.block_max_coord - 0.01).max(low);
         Some((segment, local.clamp(low, high)))
     }
 

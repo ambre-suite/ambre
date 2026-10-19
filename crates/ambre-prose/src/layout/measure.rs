@@ -6,7 +6,7 @@
 //! document it read (`PROSE-079`).
 
 use parley::{
-    Alignment, AlignmentOptions, FontContext, FontStack, FontStyle, FontWeight, Layout,
+    Alignment, AlignmentOptions, FontContext, FontFamily, FontStyle, FontWeight, Layout,
     LayoutContext, LineHeight, StyleProperty,
 };
 
@@ -674,7 +674,7 @@ fn build(
     width_px: Option<f32>,
 ) -> Layout<ParleyBrush> {
     let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
-    builder.push_default(StyleProperty::FontStack(FontStack::Source(
+    builder.push_default(StyleProperty::FontFamily(FontFamily::Source(
         family.to_string().into(),
     )));
     builder.push_default(StyleProperty::FontSize(style.font_size_px));
@@ -707,18 +707,17 @@ fn build(
     if width_px.is_some() && style.indent_first_px > 0.0 {
         builder.push_inline_box(parley::InlineBox {
             id: 0,
+            kind: parley::InlineBoxKind::InFlow,
             index: 0,
             width: style.indent_first_px,
             height: 0.0,
+            baseline: None,
+            vertical_align: parley::VerticalAlign::BASELINE,
         });
     }
     let mut layout: Layout<ParleyBrush> = builder.build(text);
     layout.break_all_lines(width_px);
-    layout.align(
-        width_px,
-        alignment_of(style.align),
-        AlignmentOptions::default(),
-    );
+    layout.align(alignment_of(style.align), AlignmentOptions::default());
     layout
 }
 

@@ -293,7 +293,7 @@ fn draw_lines<S: DrawSurface>(
     color: Color,
 ) {
     let style = glyphs.style();
-    let metrics = glyphs.run().metrics();
+    let metrics = glyphs.run().font_metrics();
     let lines = [
         (
             style.underline.as_ref(),

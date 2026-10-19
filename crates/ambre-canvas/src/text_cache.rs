@@ -14,7 +14,9 @@
 use std::ops::Range;
 
 use ambre_draw::{Brush, Color};
-use parley::style::{FontFamily, FontStack, FontStyle, FontWeight, OverflowWrap, StyleProperty};
+use parley::style::{
+    FontFamily, FontFamilyName, FontStyle, FontWeight, OverflowWrap, StyleProperty,
+};
 use parley::{Alignment, AlignmentOptions, FontContext, Layout, LayoutContext, RangedBuilder};
 use rustc_hash::FxHashMap;
 
@@ -87,8 +89,8 @@ pub(crate) fn push_shape(
     }
     if let Some(family) = &shape.family {
         let face = registered_family_name(Some(family.as_str()));
-        let stack = FontStack::Single(FontFamily::Named(face.into()));
-        builder.push(StyleProperty::FontStack(stack), range.clone());
+        let stack = FontFamily::Single(FontFamilyName::Named(face.into()));
+        builder.push(StyleProperty::FontFamily(stack), range.clone());
     }
     if shape.underline {
         builder.push(StyleProperty::Underline(true), range.clone());
@@ -388,8 +390,8 @@ impl TextCache {
         // (the old behaviour) matched no loaded face and shaped zero glyphs. A
         // sticky whose family was the generic default then rendered invisible text.
         // Edit mode -- which already routed through here -- showed it fine.
-        let font_family = FontFamily::Named(registered_family_name(family).into());
-        builder.push_default(StyleProperty::FontStack(FontStack::Single(font_family)));
+        let font_family = FontFamilyName::Named(registered_family_name(family).into());
+        builder.push_default(StyleProperty::FontFamily(FontFamily::Single(font_family)));
         builder.push_default(StyleProperty::FontSize(font_size));
         if bold {
             builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
@@ -408,7 +410,7 @@ impl TextCache {
         }
         let mut layout = builder.build(text);
         layout.break_all_lines(Some(max_width));
-        layout.align(Some(max_width), align, AlignmentOptions::default());
+        layout.align(align, AlignmentOptions::default());
         layout
     }
 }

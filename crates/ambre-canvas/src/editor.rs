@@ -29,7 +29,7 @@ use std::ops::Range;
 
 use ambre_draw::{
     Affine, Alignment, BezPath, BoundingBox, Brush, Color, DrawSurface, FontContext, FontFamily,
-    FontStack, FontStyle, FontWeight, LayoutContext, PlainEditor, Point, PositionedLayoutItem,
+    FontFamilyName, FontStyle, FontWeight, LayoutContext, PlainEditor, Point, PositionedLayoutItem,
     Rect, StyleProperty,
 };
 use parley::{Affinity, AlignmentOptions, Cursor, Layout, Selection};
@@ -554,7 +554,7 @@ impl TextEditor {
             } else {
                 FontStyle::Normal
             }),
-            StyleProperty::FontStack(FontStack::Single(FontFamily::Named(face.into()))),
+            StyleProperty::FontFamily(FontFamily::Single(FontFamilyName::Named(face.into()))),
             StyleProperty::Brush(Brush::Solid(self.style.color)),
         ]
     }
@@ -591,7 +591,7 @@ impl TextEditor {
         }
         let mut layout = builder.build(&text);
         layout.break_all_lines(Some(self.wrap_w));
-        layout.align(Some(self.wrap_w), self.align, AlignmentOptions::default());
+        layout.align(self.align, AlignmentOptions::default());
         self.styled = Some(Styled { text, layout });
     }
 
@@ -670,7 +670,7 @@ impl TextEditor {
         let layout = self.layout()?;
         let line = layout
             .lines()
-            .find(|line| mid < line.metrics().max_coord)
+            .find(|line| mid < line.metrics().block_max_coord)
             .or_else(|| layout.lines().last())?;
         Some(line.text_range())
     }

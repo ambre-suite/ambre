@@ -196,6 +196,9 @@
   wgpu, no loro and no leptos. Only crypto, protocol and serde are duplicated across the two; the heavy
   dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable. **Total Main
   budget < 2 MB gzip**, and Prose interop stays **lazy-loaded**.
+* **The Main instance breaks it today.** A release build weighs 6.9 MB gzip as Trunk ships it,
+  and 5.9 MB without its name section. Parley 0.12 added 30 KB of it. The roadmap story `The Main
+  instance within its download budget` closes the gap.
 
 | Contribution | Estimated raw | Notes |
 |---|---|---|

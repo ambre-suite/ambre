@@ -95,7 +95,7 @@ leptos_router = { version = "0.8", default-features = false }
 leptos_icons = { version = "0.7" }
 icondata     = { version = "0.7" }
 wgpu    = { version = "28.0", features = ["webgl"] }
-parley  = "0.7"
+parley  = "0.12"
 kurbo   = { version = "0.13", features = ["serde"] }
 peniko  = "0.6"
 bytemuck = { version = "1", features = ["derive"] }

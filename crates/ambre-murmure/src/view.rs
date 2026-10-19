@@ -3999,7 +3999,8 @@ mod tests {
         assert!(key(&mut page, "ArrowUp", false, 0.0));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("x"));
         assert!(!page.view.composer().editing(channel), "a draft keeps Up");
-        key(&mut page, "Backspace", false, 0.0);
+        // Up on the only line puts the caret at its start, as a textarea does.
+        key(&mut page, "Delete", false, 0.0);
         frame_with_fonts(&mut page.view);
 
         assert!(key(&mut page, "ArrowUp", false, 0.0));

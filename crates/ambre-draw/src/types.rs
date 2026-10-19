@@ -10,7 +10,7 @@ pub use peniko::{Brush, BrushRef, Color, Fill};
 // Parley types re-exported so that crates implementing or consuming DrawSurface
 // do not need a direct parley dependency for the types shared via DrawSurface.
 pub use parley::layout::GlyphRun;
-pub use parley::style::{FontFamily, FontStack, FontStyle, FontWeight, StyleProperty};
+pub use parley::style::{FontFamily, FontFamilyName, FontStyle, FontWeight, StyleProperty};
 pub use parley::{
     Affinity, Alignment, AlignmentOptions, BoundingBox, Cursor, FontContext, Layout, LayoutContext,
     PlainEditor, PlainEditorDriver, PositionedLayoutItem, Selection,

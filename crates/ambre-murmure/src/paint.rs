@@ -867,7 +867,7 @@ fn draw_body<S: DrawSurface>(
             let at = (f64::from(left), f64::from(baseline));
             surface.draw_glyphs(&run, &Brush::Solid(color), Affine::translate(at));
             if linked {
-                let metrics = run.run().metrics();
+                let metrics = run.run().font_metrics();
                 let top = baseline - metrics.underline_offset;
                 let size = metrics.underline_size.max(1.0);
                 let rule = Rect::new(
