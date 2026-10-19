@@ -336,6 +336,9 @@ fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
         TextStyle::Italic,
         TextStyle::Code,
         TextStyle::Link("https://ambre.dev".to_owned()),
+        TextStyle::CodeBlock,
+        TextStyle::Quote,
+        TextStyle::List,
     ];
     let amended = MessageDraft {
         text: "hi @channel".to_owned(),

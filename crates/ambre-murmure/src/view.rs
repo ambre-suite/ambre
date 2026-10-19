@@ -4179,6 +4179,83 @@ mod tests {
         );
     }
 
+    /// The marks the field draws in its margin, in the muted ink: a quote's
+    /// rule and a list's dots.
+    fn margin_marks(page: &mut Page) -> usize {
+        page.view.update();
+        page.view.plan_repaint(0.0, false);
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let mut surface = RecordingSurface::new();
+        page.view
+            .paint_content(&mut surface, &mut font_cx, &mut cache, None);
+        let ink = crate::look::margin_ink(page.view.theme.palette());
+        let top = f64::from(400.0 - page.view.composer().band());
+        surface.count(|op| {
+            matches!(op, ambre_draw::testing::DrawOp::FillRect { rect, color }
+                if *color == ink && rect.y0 >= top
+                    && rect.x0 >= f64::from(SPACE_4) && rect.x1 <= f64::from(SPACE_8))
+        })
+    }
+
+    /// A block marker at the start of a line becomes its mark as it closes
+    /// (`MURMURE-563`). A quote and a list item close on their line break or
+    /// on the send, a code block on its closing fence. A marker under an
+    /// open fence stays text. The field draws a rule and a dot in its margin, and
+    /// code on its tint (`MURMURE-564`).
+    #[test]
+    fn a_block_marker_becomes_its_mark_and_the_field_draws_it() {
+        use ambre_bus::TextStyle::{CodeBlock, List, Quote};
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "> said");
+        shift_key(&mut page, "Enter");
+        type_slowly(&mut page, "- one");
+        shift_key(&mut page, "Enter");
+        type_slowly(&mut page, "- two");
+        assert_eq!(
+            painted(&mut page, channel).as_deref(),
+            Some("said\none\n- two")
+        );
+        assert_eq!(
+            page.view.composer().styles(channel),
+            [styled(Quote, 0..5), styled(List, 5..9)]
+        );
+        assert_eq!(margin_marks(&mut page), 2, "a rule and one dot");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        let sent = drafts_sent(&page);
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].text, "said\none\ntwo");
+        assert_eq!(
+            sent[0].styles,
+            [styled(Quote, 0..5), styled(List, 5..12)],
+            "the send closes the last item, and the items read as one list"
+        );
+
+        type_slowly(&mut page, "```");
+        shift_key(&mut page, "Enter");
+        type_slowly(&mut page, "> x");
+        shift_key(&mut page, "Enter");
+        assert_eq!(
+            page.view.composer().styles(channel),
+            [],
+            "under an open fence"
+        );
+        type_slowly(&mut page, "```");
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("> x"));
+        assert_eq!(
+            page.view.composer().styles(channel),
+            [styled(CodeBlock, 0..3)]
+        );
+        let palette = page.view.theme.palette();
+        let spans = page.view.composer().spans(channel);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].family.as_deref(), Some("Monospace"));
+        assert_eq!(spans[0].background, Some(palette.header_hover));
+        assert_eq!(margin_marks(&mut page), 0, "code draws no margin mark");
+    }
+
     /// `Ctrl+B` puts bold on the selection and takes it off again. With no
     /// selection the chord changes nothing (`MURMURE-431`). The style is a
     /// mark over the draft of the inline editor, sent with it (`MURMURE-193`).

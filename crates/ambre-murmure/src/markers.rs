@@ -85,6 +85,9 @@ fn holds(inner: &str) -> bool {
 /// `[text](address)` a link to an `http` or `https` address.
 pub fn closed(text: &str, caret: usize, code: &[Range<usize>]) -> Option<Closed> {
     let before = text.get(..caret)?;
+    if let Some(block) = code_block(before) {
+        return outside(text, block, code);
+    }
     let line_start = before.rfind('\n').map_or(0, |at| at + 1);
     let line = &before[line_start..];
     let found = bold(line)
@@ -96,12 +99,90 @@ pub fn closed(text: &str, caret: usize, code: &[Range<usize>]) -> Option<Closed>
         inner: found.inner.start + line_start..found.inner.end + line_start,
         style: found.style,
     };
+    outside(text, closed, code)
+}
+
+/// The block marker of the line a line break just ended, the last break
+/// before the byte `caret`, or `None` (`MURMURE-563`). Text typed after the
+/// break in the same frame leaves it found. `code` is as for [`closed`].
+pub fn closed_by_break(text: &str, caret: usize, code: &[Range<usize>]) -> Option<Closed> {
+    let end = text.get(..caret)?.rfind('\n')? + 1;
+    let line_start = text[..end - 1].rfind('\n').map_or(0, |at| at + 1);
+    outside(text, line_marker(text, line_start, end)?, code)
+}
+
+/// The block marker of the last line of `text`, closed by the send of the
+/// draft, or `None` (`MURMURE-563`). `code` is as for [`closed`].
+pub fn closed_at_send(text: &str, code: &[Range<usize>]) -> Option<Closed> {
+    let line_start = text.rfind('\n').map_or(0, |at| at + 1);
+    outside(text, line_marker(text, line_start, text.len())?, code)
+}
+
+/// `closed`, unless a marker of it touches code (`MURMURE-198`).
+fn outside(text: &str, closed: Closed, code: &[Range<usize>]) -> Option<Closed> {
     let chars = |byte: usize| text[..byte].chars().count();
     let (first, last) = (chars(closed.span.start), chars(closed.span.end) - 1);
     let in_code = code.iter().any(|run| {
         run.contains(&first) || run.contains(&last) || (first < run.start && run.end <= last)
     });
     (!in_code).then_some(closed)
+}
+
+/// The marker of a quote, `> `, or of a list item, `- `, that opens a line
+/// of `text`. The line runs from `start` to `end`, its line break included.
+/// The mark takes the line, and the line must hold some text.
+fn line_marker(text: &str, start: usize, end: usize) -> Option<Closed> {
+    let line = text.get(start..end)?;
+    // A fence a line above still opens a code block, since a closed one
+    // took its fences out: the line is code.
+    if text[..start].lines().any(|above| above.starts_with(FENCE)) {
+        return None;
+    }
+    let style = if line.starts_with(QUOTE_MARKER) {
+        TextStyle::Quote
+    } else if line.starts_with(LIST_MARKER) {
+        TextStyle::List
+    } else {
+        return None;
+    };
+    let inner = start + QUOTE_MARKER.len()..end;
+    (!text[inner.clone()].trim().is_empty()).then_some(Closed {
+        span: start..end,
+        inner,
+        style,
+    })
+}
+
+/// The marker of a quote at the start of a line.
+const QUOTE_MARKER: &str = "> ";
+/// The marker of a list item at the start of a line, as long as a quote's.
+const LIST_MARKER: &str = "- ";
+/// The fence of a code block.
+const FENCE: &str = "```";
+
+/// A code block closing `before`: a fence at the start of a line, the code,
+/// then the fence typed last. A line break just inside a fence leaves with
+/// it, and the code must hold some text.
+fn code_block(before: &str) -> Option<Closed> {
+    let open_end = before.strip_suffix(FENCE)?;
+    if open_end.ends_with('`') {
+        return None;
+    }
+    let open = open_end.rfind(FENCE)?;
+    let at_line_start = open == 0 || open_end[..open].ends_with('\n');
+    let mut inner = open + FENCE.len()..open_end.len();
+    if open_end[inner.clone()].starts_with('\n') {
+        inner.start += 1;
+    }
+    if inner.start < inner.end && open_end[inner.clone()].ends_with('\n') {
+        inner.end -= 1;
+    }
+    let code = &open_end[inner.clone()];
+    (at_line_start && !code.trim().is_empty() && !code.starts_with('`')).then_some(Closed {
+        span: open..before.len(),
+        inner,
+        style: TextStyle::CodeBlock,
+    })
 }
 
 /// `**text**` closing `line`.
@@ -265,6 +346,14 @@ mod tests {
         Some((after, closed.range(text), closed.style))
     }
 
+    /// The draft once the break that ends `text` closes the marker of its
+    /// line, and the chars of the text that took the style.
+    fn broken(text: &str) -> Option<(String, Range<usize>, TextStyle)> {
+        let closed = closed_by_break(text, text.len(), &[])?;
+        let (_, after) = closed.apply(text);
+        Some((after, closed.range(text), closed.style))
+    }
+
     /// Each marker becomes its mark as it closes, and its chars leave the
     /// draft (`MURMURE-197`).
     #[test]
@@ -321,6 +410,88 @@ mod tests {
         assert!(
             converted("call _now_").is_some(),
             "an italic opens at a word's start"
+        );
+    }
+
+    /// A block marker at the start of a line becomes its mark as it closes
+    /// (`MURMURE-563`). A quote or a list item closes on its line break or on
+    /// the send, and a code block on its closing fence.
+    #[test]
+    fn each_block_marker_becomes_its_mark_as_it_closes() {
+        let lines = [
+            ("> said\n", "said\n", 0..5, TextStyle::Quote),
+            ("a\n- item\n", "a\nitem\n", 2..7, TextStyle::List),
+            ("> é ü\n", "é ü\n", 0..4, TextStyle::Quote),
+        ];
+        for (typed, after, range, style) in lines {
+            assert_eq!(
+                broken(typed),
+                Some((after.to_owned(), range, style)),
+                "{typed}"
+            );
+        }
+        let blocks = [
+            ("```let x```", "let x", 0..5),
+            ("hi\n```\nfn a\nfn b\n```", "hi\nfn a\nfn b", 3..12),
+        ];
+        for (typed, after, range) in blocks {
+            assert_eq!(
+                converted(typed),
+                Some((after.to_owned(), range, TextStyle::CodeBlock)),
+                "{typed}"
+            );
+        }
+
+        // Text typed after the break in the same frame leaves the line found.
+        let text = "> one\n two";
+        let closed = closed_by_break(text, text.len(), &[]).expect("closed at the break");
+        assert_eq!(closed.apply(text).1, "one\n two");
+        assert_eq!(closed.range(text), 0..4);
+        assert_eq!(closed_by_break("no break", 8, &[]), None);
+        assert_eq!(closed_by_break("é\n", 1, &[]), None, "not a char boundary");
+
+        // The send closes the marker of the last line, and only of it.
+        let sent = |text: &str| {
+            let closed = closed_at_send(text, &[])?;
+            Some((closed.apply(text).1, closed.range(text), closed.style))
+        };
+        let quote = Some(("a\nlast".to_owned(), 2..6, TextStyle::Quote));
+        assert_eq!(sent("a\n> last"), quote);
+        assert_eq!(
+            sent("- one"),
+            Some(("one".to_owned(), 0..3, TextStyle::List))
+        );
+        assert_eq!(sent("> a\nplain"), None, "the last line holds no marker");
+    }
+
+    /// A block marker that holds no text, or sits past a line's start,
+    /// stays text.
+    #[test]
+    fn a_block_marker_that_holds_no_text_stays_text() {
+        for typed in ["> \n", "-  \n", "a > b\n", ">no space\n", "plain\n"] {
+            assert_eq!(broken(typed), None, "{typed:?}");
+        }
+        for typed in ["``````", "```\n```", "a ```b```", "````b```"] {
+            assert_eq!(converted(typed), None, "{typed:?}");
+        }
+        assert_eq!(closed_at_send("> ", &[]), None);
+    }
+
+    /// A block marker typed in a code block stays text (`MURMURE-198`).
+    #[test]
+    fn a_block_marker_typed_in_a_code_block_stays_text() {
+        let text = "fn a\n> b\n";
+        assert_eq!(closed_by_break(text, text.len(), from_ref(&(0..9))), None);
+        assert_eq!(closed_at_send("fn a\n- b", from_ref(&(0..8))), None);
+        assert!(
+            closed_by_break(text, text.len(), &[]).is_some(),
+            "the same line outside code"
+        );
+        let text = "```\n> b\n";
+        assert_eq!(
+            closed_by_break(text, text.len(), &[]),
+            None,
+            "under a fence still open"
         );
     }
 

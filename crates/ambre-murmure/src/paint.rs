@@ -148,12 +148,23 @@ pub fn paint_list<S: DrawSurface>(
             .iter()
             .filter_map(|mark| look::tint(&mark.style, palette).map(|c| (mark.bytes.clone(), c)))
             .collect();
-        if band.is_some() || !tints.is_empty() {
+        let blocks = row
+            .marks
+            .iter()
+            .any(|mark| matches!(mark.style, TextStyle::Quote | TextStyle::List));
+        if band.is_some() || !tints.is_empty() || blocks {
             let body_y = body_top(font_cx, cache, row, *line, top, text_width);
             let layout = body(font_cx, cache, row, text_width);
             // The tints go first, so a selection band stays visible over code.
             for (bytes, color) in tints {
                 fill_bytes(surface, layout, bytes, body_y, color);
+            }
+            let (x, y) = (f64::from(SPACE_8), f64::from(body_y));
+            for mark in &row.marks {
+                for at in look::margin(layout, &row.body, &mark.style, mark.bytes.clone()) {
+                    let at = Rect::new(at.x0 + x, at.y0 + y, at.x1 + x, at.y1 + y);
+                    surface.fill_rect(at, look::margin_ink(palette));
+                }
             }
             if let Some((start, end)) = band {
                 let tint = palette.selection.with_alpha(SELECTION_ALPHA);
@@ -513,9 +524,14 @@ pub(crate) mod tests {
     /// The faces the page ships, read from the application's font folder.
     pub(crate) fn fonts() -> FontContext {
         const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
-        let faces = ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"]
-            .iter()
-            .map(|file| std::fs::read(format!("{DIR}{file}")).expect("a shipped face"));
+        // The code face too, as the app ships it, so code shapes in it.
+        let faces = [
+            "NotoSans-Regular.ttf",
+            "NotoSans-Bold.ttf",
+            "DejaVuSansMono.ttf",
+        ]
+        .iter()
+        .map(|file| std::fs::read(format!("{DIR}{file}")).expect("a shipped face"));
         font_context_from_bytes(faces)
     }
 
@@ -777,6 +793,33 @@ pub(crate) mod tests {
         let link: usize = runs(&surface, LIGHT.selection).iter().map(|r| r.1).sum();
         assert_eq!(link, 1, "only the link takes the accent");
         assert!(fill(LIGHT.selection).is_some(), "the link has its rule");
+    }
+
+    /// A sent quote draws one rule in the margin, and a list one dot per
+    /// item, in the muted ink (`MURMURE-565`). A code block draws its tint
+    /// and no margin mark.
+    #[test]
+    fn a_sent_block_draws_its_margin_marks() {
+        let margin = |body: &str, styles: Vec<StyleMark>| {
+            let mut sent = message(UserId::new(), 0, body);
+            sent.styles = styles;
+            let mut list = MessageList::default();
+            list.absorb(SegmentId::new(), vec![sent]);
+            let (surface, _) = paint(&list, 600.0);
+            let marks = surface.count(|op| {
+                matches!(op, DrawOp::FillRect { color, rect }
+                    if *color == LIGHT.header_text && rect.x1 <= f64::from(SPACE_8))
+            });
+            let tints = surface.count(
+                |op| matches!(op, DrawOp::FillRect { color, .. } if *color == LIGHT.header_hover),
+            );
+            (marks, tints)
+        };
+        let mark = |style, range| StyleMark { style, range };
+        let blocks = vec![mark(TextStyle::Quote, 0..5), mark(TextStyle::List, 5..12)];
+        assert_eq!(margin("said\none\ntwo", blocks), (3, 0), "a rule, two dots");
+        let code = vec![mark(TextStyle::CodeBlock, 0..4)];
+        assert_eq!(margin("fn a", code), (0, 1), "a tint, no margin mark");
     }
 
     /// The unread line paints in the accent between the read message and

@@ -107,9 +107,12 @@ amendments:amendments/{id}/by = "author" => message 3 deleted by its author
 amendments:amendments/{id}/content = "hi @channel" => message 1 amended to read "hi @channel"
 amendments:amendments/{id}/content#bold = true => message 1 amended to mark chars 0..2 bold
 amendments:amendments/{id}/content#code = true => message 1 amended to mark chars 0..2 code
+amendments:amendments/{id}/content#code_block = true => message 1 amended to mark chars 0..2 code_block
 amendments:amendments/{id}/content#italic = true => message 1 amended to mark chars 0..2 italic
 amendments:amendments/{id}/content#link = "https://ambre.dev" => message 1 amended to mark chars 0..2 a link to "https://ambre.dev"
+amendments:amendments/{id}/content#list = true => message 1 amended to mark chars 0..2 list
 amendments:amendments/{id}/content#mention = {uuid} => message 1 amended to mention the channel
+amendments:amendments/{id}/content#quote = true => message 1 amended to mark chars 0..2 quote
 amendments:amendments/{id}/deleted = true => message 3 deleted by amendment
 amendments:header/channel_id = {uuid} => the channel it opens as
 amendments:header/created_at = 1700000000007 => read by no reader of this build
@@ -151,9 +154,12 @@ segment:messages/*/content = "a reply" => message 5 reads "a reply"
 segment:messages/*/content = "hi @channel" => message 1 reads "hi @channel"
 segment:messages/*/content#bold = true => message 1 marks chars 0..2 bold
 segment:messages/*/content#code = true => message 1 marks chars 0..2 code
+segment:messages/*/content#code_block = true => message 1 marks chars 0..2 code_block
 segment:messages/*/content#italic = true => message 1 marks chars 0..2 italic
 segment:messages/*/content#link = "https://ambre.dev" => message 1 marks chars 0..2 a link to "https://ambre.dev"
+segment:messages/*/content#list = true => message 1 marks chars 0..2 list
 segment:messages/*/content#mention = {uuid} => message 1 mentions the channel
+segment:messages/*/content#quote = true => message 1 marks chars 0..2 quote
 segment:messages/*/deleted = true => message 3 is deleted
 segment:messages/*/deleted = true => message 4 is deleted
 segment:messages/*/edited = true => message 1 is edited

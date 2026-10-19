@@ -668,6 +668,16 @@ impl TextEditor {
         }
     }
 
+    /// The layout the editor draws: the spans' own while it holds spans, the
+    /// plain one otherwise (`CANVAS-082`). A host draws beside the text from
+    /// it. `None` before the first layout. Call after [`flush`](Self::flush).
+    pub fn layout(&self) -> Option<&Layout<Brush>> {
+        match &self.styled {
+            Some(styled) => Some(&styled.layout),
+            None => self.editor.try_layout(),
+        }
+    }
+
     /// Draw the selection band, glyphs and caret at `origin` (screen space). The
     /// editor's local coordinates are offset by `origin`. `selection` is the base
     /// selection tint, drawn at 30% alpha behind the text. `show_caret` gates the
@@ -1128,6 +1138,27 @@ mod tests {
             (caret_x(&mut ed) - sixteenth.x0 * plain / wide).abs() < 1.0,
             "with no span, the plain layout serves again"
         );
+    }
+
+    /// The layout handed out is the one the editor draws: the spans' own
+    /// while it holds spans, the plain one otherwise (`CANVAS-082`).
+    #[test]
+    fn the_layout_handed_out_is_the_one_drawn() {
+        let mut fcx = shipped();
+        let mut ed = TextEditor::new(&"w".repeat(20), style());
+        assert!(ed.layout().is_none(), "no layout before the first flush");
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        let plain = ed.layout().expect("a layout").full_width();
+        let bold = TextSpan {
+            weight: Some(700),
+            ..span(0..20)
+        };
+        ed.set_spans(&mut fcx, vec![bold]);
+        let wide = ed.layout().expect("a layout").full_width();
+        assert!(wide > plain * 1.05, "the plain layout over spans");
+        ed.set_spans(&mut fcx, Vec::new());
+        let back = ed.layout().expect("a layout").full_width();
+        assert!((back - plain).abs() < 0.5, "the spans' layout with no span");
     }
 
     /// Over the spans, a run of line moves keeps its column through a short

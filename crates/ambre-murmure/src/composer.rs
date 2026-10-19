@@ -99,15 +99,20 @@ fn body_style(color: Color) -> TextEditorStyle {
     }
 }
 
-/// The span the style `mark` draws over `text`, its chars turned to bytes,
-/// in the look the list draws it in too (`MURMURE-564`).
-fn span_of(text: &str, mark: &StyleMark, palette: &Palette) -> TextSpan {
+/// The bytes of `text` the chars `range` cover.
+fn bytes_of(text: &str, range: &std::ops::Range<usize>) -> std::ops::Range<usize> {
     let byte = |chars: usize| {
         text.char_indices()
             .nth(chars)
             .map_or(text.len(), |(at, _)| at)
     };
-    let shape = look::shape(&mark.style, byte(mark.range.start)..byte(mark.range.end));
+    byte(range.start)..byte(range.end)
+}
+
+/// The span the style `mark` draws over `text`, its chars turned to bytes,
+/// in the look the list draws it in too (`MURMURE-564`).
+fn span_of(text: &str, mark: &StyleMark, palette: &Palette) -> TextSpan {
+    let shape = look::shape(&mark.style, bytes_of(text, &mark.range));
     TextSpan {
         range: shape.range,
         weight: shape.weight,
@@ -426,6 +431,9 @@ pub struct Composer {
     /// A key that can close a marker was typed in this draft: the next paint
     /// looks before the caret (`MURMURE-197`).
     closing: Option<DraftOf>,
+    /// A line break was typed in this draft: the next paint closes the block
+    /// marker of the line it ended (`MURMURE-563`).
+    breaking: Option<DraftOf>,
     /// The styles chords asked for, which the next paint puts on the
     /// selection or takes off it (`MURMURE-431`).
     toggles: Vec<(DraftOf, TextStyle)>,
@@ -675,7 +683,11 @@ impl Composer {
         }
         let word = ctrl || alt;
         let intent = match key {
-            "Enter" if shift => EditIntent::Newline,
+            "Enter" if shift => {
+                // A line break closes the block marker of its line.
+                self.breaking = Some(of);
+                EditIntent::Newline
+            }
             "Enter" if alt && matches!(of, DraftOf::Thread(..)) => {
                 self.toggle_also(of);
                 return true;
@@ -857,8 +869,9 @@ impl Composer {
 
     /// Turn the marker the caret of the draft `of` just closed into its
     /// mark, and take its chars out (`MURMURE-197`). A marker typed in code
-    /// stays text (`MURMURE-198`). The change is a step of its own, so an
-    /// undo gives the markers back.
+    /// stays text (`MURMURE-198`). A line break closes the block marker of
+    /// the line it ended (`MURMURE-563`). The change is a step of its own,
+    /// so an undo gives the markers back.
     fn close_marker(
         &mut self,
         of: DraftOf,
@@ -866,13 +879,37 @@ impl Composer {
         font_cx: &mut FontContext,
         wrap: f32,
     ) {
-        if self.closing.take() != Some(of) {
+        let closing = self.closing.take() == Some(of);
+        let breaking = self.breaking.take() == Some(of);
+        if !closing && !breaking {
             return;
         }
-        let text = editor.text();
         let Some(caret) = editor.caret() else {
             return;
         };
+        self.close_with(of, editor, font_cx, wrap, |text, code| {
+            let by_break = breaking
+                .then(|| markers::closed_by_break(text, caret, code))
+                .flatten();
+            by_break.or_else(|| {
+                closing
+                    .then(|| markers::closed(text, caret, code))
+                    .flatten()
+            })
+        });
+    }
+
+    /// Turn the marker `found` reads in the draft `of` into its mark, given
+    /// the text and the chars code covers, and take its chars out.
+    fn close_with(
+        &mut self,
+        of: DraftOf,
+        editor: &mut TextEditor,
+        font_cx: &mut FontContext,
+        wrap: f32,
+        found: impl FnOnce(&str, &[std::ops::Range<usize>]) -> Option<markers::Closed>,
+    ) {
+        let text = editor.text();
         let marks = self.marks.entry(of).or_insert_with(|| Marks {
             text: text.clone(),
             ..Marks::default()
@@ -881,18 +918,29 @@ impl Composer {
         let code: Vec<_> = marks
             .styles
             .iter()
-            .filter(|mark| mark.style == TextStyle::Code)
+            .filter(|mark| matches!(mark.style, TextStyle::Code | TextStyle::CodeBlock))
             .map(|mark| mark.range.clone())
             .collect();
-        let Some(closed) = markers::closed(&text, caret, &code) else {
+        let Some(closed) = found(&text, &code) else {
             return;
         };
         let (between, after) = closed.apply(&text);
+        let caret = editor.caret();
         editor.push(EditIntent::Replace {
             start: closed.span.start,
             end: closed.span.end,
             text: text[closed.inner.clone()].to_owned(),
         });
+        // Text typed past the marker in the same frame keeps the caret after
+        // it: an empty replace puts the caret back.
+        if let Some(caret) = caret.filter(|caret| *caret > closed.span.end) {
+            let at = caret - (closed.span.len() - closed.inner.len());
+            editor.push(EditIntent::Replace {
+                start: at,
+                end: at,
+                text: String::new(),
+            });
+        }
         editor.flush(font_cx, wrap, 1.0);
         if editor.text() != after {
             return;
@@ -1044,6 +1092,8 @@ impl Composer {
             // A marker or a chord typed before Enter lands before the draft
             // leaves, never on the draft that comes back.
             self.close_marker(asked, &mut editor, font_cx, wrap);
+            // The send ends the last line, so it closes its block marker.
+            self.close_with(asked, &mut editor, font_cx, wrap, markers::closed_at_send);
             self.toggle_styles(asked, &editor);
             let text = editor.text();
             self.drafts.insert(asked, editor);
@@ -1107,6 +1157,7 @@ impl Composer {
                 }
                 if walked {
                     self.closing = None;
+                    self.breaking = None;
                 }
                 self.close_marker(shown, &mut editor, font_cx, wrap);
                 self.toggle_styles(shown, &editor);
@@ -1226,6 +1277,22 @@ impl Composer {
         let origin = Point::new(SPACE_8.into(), (inner.0 + shift).into());
         surface.push_clip(rect(SPACE_4, inner.0, width - SPACE_4, inner.1));
         editor.render(surface, origin, palette.selection, self.focused);
+        // A quote's rule and a list's dots, in the margin of the field.
+        if let (Some(layout), Some(marks)) = (editor.layout(), self.marks.get(&shown)) {
+            let text = editor.text();
+            for mark in crate::style::normalized(&marks.styles) {
+                let bytes = bytes_of(&text, &mark.range);
+                for at in look::margin(layout, &text, &mark.style, bytes) {
+                    let at = Rect::new(
+                        at.x0 + origin.x,
+                        at.y0 + origin.y,
+                        at.x1 + origin.x,
+                        at.y1 + origin.y,
+                    );
+                    surface.fill_rect(at, look::margin_ink(palette));
+                }
+            }
+        }
         surface.pop_clip();
         let caret = editor.caret_local().filter(|_| self.focused)?;
         Some((

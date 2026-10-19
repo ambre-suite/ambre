@@ -1362,7 +1362,9 @@ fn a_style_takes_the_chord_prose_binds_to_its_mark() {
             TextStyle::Bold => BOLD,
             TextStyle::Italic => ITALIC,
             TextStyle::Code => CODE,
-            TextStyle::Link(_) => panic!("a link takes no chord"),
+            TextStyle::Link(_) | TextStyle::CodeBlock | TextStyle::Quote | TextStyle::List => {
+                panic!("{style:?} takes no chord")
+            }
         };
         let command = COMMANDS.iter().find(|c| c.id == id).unwrap();
         assert_eq!(

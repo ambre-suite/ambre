@@ -5,7 +5,7 @@ use ambre_bus::{MessageDraft, MessageView, StyleMark, TextStyle, Timestamp};
 use ambre_core::{ChannelId, Seq, UserId};
 use loro::{Container, LoroText, LoroValue, TextDelta, ValueOrContainer};
 
-use crate::schema::{BOLD, LINK, MESSAGE_CONTENT, MESSAGES};
+use crate::schema::{BOLD, BULLETS, CODE_BLOCK, LINK, MESSAGE_CONTENT, MESSAGES, QUOTE};
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Sent, Signer};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
@@ -128,6 +128,42 @@ fn a_style_is_a_mark_on_the_body_that_travels_with_it() {
     };
     assert_eq!(marked(BOLD, LoroValue::Bool(true)), "very");
     assert_eq!(marked(LINK, LoroValue::from("https://ambre.dev")), "site");
+}
+
+// --- MURMURE-194 ---
+
+/// A code block, a quote and a list are marks on the body like the inline
+/// styles. A member reads them from the delta alone. Text put at the edge
+/// of a block stays out of it.
+#[test]
+fn a_block_mark_travels_with_the_body() {
+    let (mut alice, author) = alice();
+    let styles = vec![
+        mark(TextStyle::Quote, 0..5),
+        mark(TextStyle::CodeBlock, 5..10),
+        mark(TextStyle::List, 10..14),
+    ];
+    let text = "said\nfn a\none\ntwo";
+    let mut bob = open_from(&alice);
+    let sent = alice
+        .send(&draft(text, styles.clone()), author, NOW)
+        .expect("send");
+    deliver(&mut bob, &alice, author, &sent, 1);
+    assert_eq!(messages(&bob)[0].styles, styles, "the delta carries them");
+
+    let marked = |state: &ChannelState, key: &str| -> String {
+        stored(state, 0, key)
+            .into_iter()
+            .filter(|(_, held)| held == &Some(LoroValue::Bool(true)))
+            .map(|(text, _)| text)
+            .collect()
+    };
+    assert_eq!(marked(&alice, QUOTE), "said\n");
+    assert_eq!(marked(&alice, CODE_BLOCK), "fn a\n");
+    assert_eq!(marked(&alice, BULLETS), "one\n");
+    body(&alice, 0).insert(5, "x").expect("an insert");
+    assert_eq!(marked(&alice, QUOTE), "said\n", "a block does not grow");
+    assert_eq!(marked(&alice, CODE_BLOCK), "fn a\n");
 }
 
 /// The runs a draft gives that touch or overlap read as one, in text order.

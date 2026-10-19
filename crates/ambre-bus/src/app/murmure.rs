@@ -199,6 +199,13 @@ pub enum TextStyle {
     Code,
     /// A link to an `http` or `https` address (`MURMURE-561`).
     Link(String),
+    /// A block of code: its lines, the fences gone. A marker typed in it
+    /// stays text (`MURMURE-198`).
+    CodeBlock,
+    /// A quote: its lines, each with its line break.
+    Quote,
+    /// A list: one item per line, each with its line break.
+    List,
 }
 
 /// One style over the body of a message, and the run of text it covers.

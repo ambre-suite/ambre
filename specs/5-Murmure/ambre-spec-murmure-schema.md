@@ -157,7 +157,7 @@ or `moderator`. **The `mention` mark** carries a user id, or the channel for an 
 to nothing: text typed beside it is not part of the mention. **The `emoji` mark** carries a
 `CustomEmojiId` and draws its image.
 
-**The style marks** `bold`, `italic` and `code` hold `true`,
+**The style marks** `bold`, `italic`, `code`, `code_block`, `quote` and `list` hold `true`,
 and `link` holds an `http` or `https` address (`MURMURE-561`, `MURMURE-562`). Each expands to
 nothing, like a mention.
 

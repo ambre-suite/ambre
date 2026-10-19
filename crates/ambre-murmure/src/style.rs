@@ -1,7 +1,8 @@
 //! The style marks of a message body (the Murmure composer spec).
 //!
-//! Bold, italic and inline code are marks that hold `true`. A link is a mark
-//! that holds its address, `http` or `https` only (`MURMURE-561`). Each mark
+//! Bold, italic and inline code are marks that hold `true`, and so are a code
+//! block, a quote and a list, over whole lines (`MURMURE-194`). A link is a
+//! mark that holds its address, `http` or `https` only (`MURMURE-561`). Each mark
 //! sits on the body beside the `mention` marks (`MURMURE-562`). The marks are
 //! the truth: nothing here parses the text.
 
@@ -9,19 +10,19 @@ use ambre_bus::{StyleMark, TextStyle};
 use loro::{ExpandType, LoroDoc, LoroText, LoroValue, StyleConfig, StyleConfigMap, TextDelta};
 
 use crate::error::MurmureError;
-use crate::schema::{BOLD, CODE, ITALIC, LINK, MENTION};
+use crate::schema::{BOLD, BULLETS, CODE, CODE_BLOCK, ITALIC, LINK, MENTION, QUOTE};
 
 /// Every key a style mark takes, in the order a read lists them.
-const KEYS: [&str; 4] = [BOLD, ITALIC, CODE, LINK];
+const KEYS: [&str; 7] = [BOLD, ITALIC, CODE, LINK, CODE_BLOCK, QUOTE, BULLETS];
 
 /// Set the expansion of every mark a body takes. The config is local to the
 /// document and read at the mark: a receiver takes it from the op itself.
 ///
-/// A mention and inline code expand to nothing, so text typed beside them
-/// stays out. Bold and italic grow with text typed at their end.
+/// A mention, inline code and a block expand to nothing, so text typed beside
+/// them stays out. Bold and italic grow with text typed at their end.
 pub(crate) fn configure(doc: &LoroDoc) {
     let mut styles = StyleConfigMap::default_rich_text_config();
-    for key in [MENTION, CODE] {
+    for key in [MENTION, CODE, CODE_BLOCK, QUOTE, BULLETS] {
         styles.insert(
             key.into(),
             StyleConfig {
@@ -102,7 +103,12 @@ pub(crate) fn write(
     for mark in styles {
         let value = match &mark.style {
             TextStyle::Link(address) => LoroValue::from(address.as_str()),
-            TextStyle::Bold | TextStyle::Italic | TextStyle::Code => LoroValue::Bool(true),
+            TextStyle::Bold
+            | TextStyle::Italic
+            | TextStyle::Code
+            | TextStyle::CodeBlock
+            | TextStyle::Quote
+            | TextStyle::List => LoroValue::Bool(true),
         };
         content.mark(mark.range.clone(), key(&mark.style), value)?;
     }
@@ -116,6 +122,9 @@ pub(crate) fn key(style: &TextStyle) -> &'static str {
         TextStyle::Italic => ITALIC,
         TextStyle::Code => CODE,
         TextStyle::Link(_) => LINK,
+        TextStyle::CodeBlock => CODE_BLOCK,
+        TextStyle::Quote => QUOTE,
+        TextStyle::List => BULLETS,
     }
 }
 
@@ -141,6 +150,9 @@ fn style_of(key: &str, value: &LoroValue) -> Option<TextStyle> {
         (BOLD, LoroValue::Bool(true)) => Some(TextStyle::Bold),
         (ITALIC, LoroValue::Bool(true)) => Some(TextStyle::Italic),
         (CODE, LoroValue::Bool(true)) => Some(TextStyle::Code),
+        (CODE_BLOCK, LoroValue::Bool(true)) => Some(TextStyle::CodeBlock),
+        (QUOTE, LoroValue::Bool(true)) => Some(TextStyle::Quote),
+        (BULLETS, LoroValue::Bool(true)) => Some(TextStyle::List),
         (LINK, LoroValue::String(address)) if linkable(address) => {
             Some(TextStyle::Link(address.to_string()))
         }

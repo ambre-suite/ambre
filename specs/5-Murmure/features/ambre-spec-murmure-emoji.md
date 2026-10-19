@@ -21,6 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-138` | `INV` | The colour emoji font MUST load on first use, never at start. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `Emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-374` | `INV` | A custom emoji MUST belong to one space, listed in its space document. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Custom emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-375` | `INV` | The image of a custom emoji MUST be sealed under the key of its space. | this spec section 3; `ambre-spec-media.md` | not built | unbuilt -- lands with the `Custom emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-569` | `INV` | A custom emoji in a body MUST be an `emoji` mark beside the style marks, carrying its `CustomEmojiId`. | this spec section 3; `MURMURE-194`; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Custom emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Pick an emoji
 
@@ -49,7 +50,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** the colour emoji font row of `ambre-spec-budgets.md section 6`.
 * **Boundary.** none: an emoji is text inside a sealed message, and the font ships with the
   client.
-* **Verification.** 13 `unimplemented`: no emoji is drawn in colour today.
+* **Verification.** 14 `unimplemented`: no emoji is drawn in colour today.
 
 ---
 

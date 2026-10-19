@@ -115,9 +115,12 @@ thread:peers: map
 amendments:amendments/{id}/by: string
 amendments:amendments/{id}/content#bold: bool
 amendments:amendments/{id}/content#code: bool
+amendments:amendments/{id}/content#code_block: bool
 amendments:amendments/{id}/content#italic: bool
 amendments:amendments/{id}/content#link: string
+amendments:amendments/{id}/content#list: bool
 amendments:amendments/{id}/content#mention: string
+amendments:amendments/{id}/content#quote: bool
 amendments:amendments/{id}/content: text
 amendments:amendments/{id}/deleted: bool
 amendments:amendments/{id}: map
@@ -161,9 +164,12 @@ segment:messages/*/also_in_thread: string
 segment:messages/*/author: string
 segment:messages/*/content#bold: bool
 segment:messages/*/content#code: bool
+segment:messages/*/content#code_block: bool
 segment:messages/*/content#italic: bool
 segment:messages/*/content#link: string
+segment:messages/*/content#list: bool
 segment:messages/*/content#mention: string
+segment:messages/*/content#quote: bool
 segment:messages/*/content: text
 segment:messages/*/deleted: bool
 segment:messages/*/edited: bool

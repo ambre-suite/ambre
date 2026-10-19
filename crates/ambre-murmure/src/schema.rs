@@ -25,7 +25,8 @@ use crate::error::MurmureError;
 /// Raise it in the commit that changes a key or a value type, and append the
 /// new section to `schema/shapes.txt`.
 ///
-/// Version 2 adds the style marks over a body (`MURMURE-562`).
+/// Version 2 adds the style marks over a body (`MURMURE-562`), the block
+/// marks among them (`MURMURE-194`).
 pub const SCHEMA_VERSION: u32 = 2;
 
 /// The root map every Murmure document carries (`MURMURE-001`).
@@ -122,11 +123,16 @@ pub(crate) const MESSAGE_ALSO_IN_THREAD: &str = "also_in_thread";
 /// channel identifier for an `@channel` (`MURMURE-008`).
 pub(crate) const MENTION: &str = "mention";
 /// The style marks over a body (`MURMURE-562`). Bold, italic and code hold
-/// `true`, a link its address.
+/// `true`, a link its address. A block mark holds `true` over whole lines
+/// (`MURMURE-194`).
 pub(crate) const BOLD: &str = "bold";
 pub(crate) const ITALIC: &str = "italic";
 pub(crate) const CODE: &str = "code";
 pub(crate) const LINK: &str = "link";
+pub(crate) const CODE_BLOCK: &str = "code_block";
+pub(crate) const QUOTE: &str = "quote";
+/// The `list` mark. Named apart, since a `LIST` constant names a container.
+pub(crate) const BULLETS: &str = "list";
 
 /// Murmure's migration registry: one row per version bump, appended never
 /// rewritten.
