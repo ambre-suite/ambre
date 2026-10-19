@@ -285,6 +285,9 @@ pub struct MurmureRelay {
     /// The member whose key was fetched for an invite, and the channel it
     /// goes into. The answer becomes that invite, not a direct message.
     inviting: RwSignal<Option<(UserId, ChannelId)>>,
+    /// The members of each open channel, as the Logic thread last listed
+    /// them. The invite control offers none of them.
+    channel_members: RwSignal<HashMap<ChannelId, HashSet<UserId>>>,
 }
 
 /// The search box: whether it is open, the query typed, and the last answer
@@ -360,6 +363,7 @@ impl MurmureRelay {
             me: RwSignal::new(None),
             search: RwSignal::new(SearchBox::default()),
             inviting: RwSignal::new(None),
+            channel_members: RwSignal::new(HashMap::new()),
         }
     }
 
@@ -564,6 +568,16 @@ impl MurmureRelay {
                     .update(|s| s.set_name(*channel_id, name.clone()));
                 Vec::new()
             }
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::Members { members },
+            } => {
+                let listed = members.iter().map(|member| member.user_id).collect();
+                self.channel_members.update(|m| {
+                    m.insert(*channel_id, listed);
+                });
+                Vec::new()
+            }
             // A channel the user lost while it was open (`MURMURE-489`).
             UiEvent::Channel {
                 channel_id,
@@ -638,6 +652,8 @@ impl MurmureRelay {
     /// pane that shows one of them.
     fn drop_channels(&self, channels: &[ChannelId]) {
         self.opened.update(|o| o.retain(|c| !channels.contains(c)));
+        self.channel_members
+            .update(|m| m.retain(|c, _| !channels.contains(c)));
         let shown = self.pane.get_untracked().shown_channel();
         if shown.is_some_and(|c| channels.contains(&c)) {
             self.pane.set(MurmurePane::ChannelList);
@@ -739,9 +755,11 @@ impl MurmureRelay {
 
     /// Who the invite control offers: the members of the space of a private
     /// channel, or of every open space for a direct message. Each comes
-    /// once, and this user never does.
+    /// once, and neither this user nor a member of the channel does
+    /// (`MURMURE-501`).
     pub fn invitees(&self) -> Signal<Vec<MemberView>> {
         let (sidebar, members, me) = (self.sidebar, self.members, self.me);
+        let in_channel = self.channel_members;
         let target = self.invite_target();
         Signal::derive(move || {
             let Some(channel) = target.get() else {
@@ -752,24 +770,35 @@ impl MurmureRelay {
                 _ => s.spaces().to_vec(),
             });
             let me = me.get();
-            let mut seen = HashSet::new();
+            let mut seen = in_channel.with(|m| m.get(&channel).cloned().unwrap_or_default());
+            seen.extend(me);
             members.with(|m| {
                 spaces
                     .iter()
                     .filter_map(|space| m.get(space))
                     .flatten()
-                    .filter(|v| Some(v.user_id) != me && seen.insert(v.user_id))
+                    .filter(|v| seen.insert(v.user_id))
                     .cloned()
                     .collect()
             })
         })
     }
 
+    /// Whether the Logic thread lists `user` among the members of `channel`.
+    fn in_channel(&self, channel: ChannelId, user: UserId) -> bool {
+        self.channel_members
+            .with_untracked(|m| m.get(&channel).is_some_and(|listed| listed.contains(&user)))
+    }
+
     /// Invite `user` into the shown channel. Their key is fetched first, for
-    /// the check of the pin, and the invite leaves only once it passes.
+    /// the check of the pin, and the invite leaves only once it passes. A
+    /// member of the channel is fetched nothing (`MURMURE-501`).
     pub fn invite(&self, user: UserId) -> Option<LogicCommand> {
         let channel = self.invite_target().get_untracked()?;
-        if self.me.get_untracked() == Some(user) || self.member_name(user).is_none() {
+        if self.me.get_untracked() == Some(user)
+            || self.member_name(user).is_none()
+            || self.in_channel(channel, user)
+        {
             return None;
         }
         self.inviting.set(Some((user, channel)));

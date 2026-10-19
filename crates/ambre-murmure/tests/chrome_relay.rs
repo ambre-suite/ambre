@@ -15,8 +15,8 @@
 
 use ambre_bus::{
     CatalogueEntry, ChannelActivity, ChannelMatches, ChannelName, ChannelPlace, DirectMessageEvent,
-    LogicCommand, MemberChannel, MemberView, MessageView, MurmureEvent, Presence, RequestId,
-    RestCommand, RestEvent, SearchMatch, SpaceEvent, Timestamp, UiEvent,
+    LogicCommand, MemberChannel, MemberInfo, MemberStanding, MemberView, MessageView, MurmureEvent,
+    Presence, RequestId, RestCommand, RestEvent, Role, SearchMatch, SpaceEvent, Timestamp, UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, Locale};
@@ -368,6 +368,70 @@ fn an_invite_fetches_the_key_for_the_shown_channel_and_is_taken_once() {
     assert!(relay.invite(bob).is_some());
     assert!(relay.choose(*bob.as_bytes()).is_some());
     assert_eq!(relay.take_invite(bob), None, "a direct message cancels it");
+}
+
+/// The invite control offers no member the open channel lists, and fetches
+/// no key for one (`MURMURE-501`). A channel left forgets its list.
+#[wasm_bindgen_test]
+fn the_invite_control_offers_no_member_of_the_channel() {
+    let (_owner, relay, general, [_alice, bob, carol]) = a_space_with_members();
+    let space = relay
+        .sidebar
+        .with_untracked(|s| s.public_space_of(general))
+        .unwrap();
+    let board = ChannelId::new();
+    relay.absorb(&UiEvent::MemberChannels {
+        channels: vec![MemberChannel {
+            channel_id: board,
+            place: ChannelPlace::Private(space),
+        }],
+        spaces: vec![space],
+        names: Vec::new(),
+        peers: Vec::new(),
+    });
+    relay.select(board);
+    let offered = || -> Vec<UserId> {
+        relay
+            .invitees()
+            .get_untracked()
+            .iter()
+            .map(|m| m.user_id)
+            .collect()
+    };
+    assert_eq!(offered(), [bob, carol], "no list yet: every member");
+
+    let info = |user_id| MemberInfo {
+        user_id,
+        display_name: String::new(),
+        email: String::new(),
+        role: Role::Editor,
+        standing: MemberStanding::Verified,
+    };
+    relay.absorb(&UiEvent::Channel {
+        channel_id: board,
+        event: MurmureEvent::Members {
+            members: vec![info(bob)],
+        },
+    });
+    assert_eq!(offered(), [carol], "bob holds the channel");
+    assert!(relay.invite(bob).is_none(), "no key for a member");
+    assert!(relay.invite(carol).is_some());
+
+    relay.absorb(&UiEvent::Channel {
+        channel_id: board,
+        event: MurmureEvent::Left,
+    });
+    relay.absorb(&UiEvent::MemberChannels {
+        channels: vec![MemberChannel {
+            channel_id: board,
+            place: ChannelPlace::Private(space),
+        }],
+        spaces: vec![space],
+        names: Vec::new(),
+        peers: Vec::new(),
+    });
+    relay.select(board);
+    assert_eq!(offered(), [bob, carol], "the list left with the channel");
 }
 
 /// The commands a handler sent through its sink.
