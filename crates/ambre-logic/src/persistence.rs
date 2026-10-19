@@ -83,7 +83,7 @@ const STORE_META: &str = "meta";
 /// The drafts the user has not sent, one text row per channel or thread. The
 /// composer builds the key from the user (the Murmure composer spec, section
 /// 3). No document row names them, so no eviction reaches them
-/// (`MURMURE-214`).
+/// (`ambre-spec-murmure-composer.md`).
 const STORE_DRAFTS: &str = "drafts";
 
 /// How one write ended.
@@ -1142,7 +1142,7 @@ mod wasm_tests {
         assert_eq!(store.load_snapshot(doc).await.unwrap(), None);
     }
 
-    /// `MURMURE-214`: the eviction of a document leaves every draft, even one
+    /// The eviction of a document leaves every draft, even one
     /// whose key starts with the document's. A range takes its own rows
     /// alone, and a clear takes them all.
     #[wasm_bindgen_test]

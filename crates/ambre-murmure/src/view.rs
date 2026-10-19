@@ -2252,8 +2252,7 @@ mod tests {
     }
 
     /// A click on a reaction chip adds the member's reaction when theirs is
-    /// not in it, and takes it away when it is (`MURMURE-092`,
-    /// `MURMURE-096`).
+    /// not in it, and takes it away when it is (`MURMURE-140`).
     #[test]
     fn a_click_on_a_chip_adds_or_takes_away_the_members_reaction() {
         let mut page = page();

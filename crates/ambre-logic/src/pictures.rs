@@ -3,7 +3,7 @@
 //!
 //! The view asks for an image it paints. This thread fetches it under the
 //! channel's meta and decodes it here, off the render thread
-//! (`MURMURE-135`). The view gets frames at the size of the preview, never
+//! (`ambre-spec-murmure-attachments.md`). The view gets frames at the size of the preview, never
 //! the file, so a frame costs it a texture and no decode.
 
 use std::io::Cursor;
@@ -200,7 +200,7 @@ mod tests {
         bytes
     }
 
-    /// `MURMURE-135`: an animated GIF decodes here into its frames, each
+    /// An animated GIF decodes here into its frames, each
     /// with its delay, scaled into the preview. A delay of none plays slow.
     #[test]
     fn an_animated_gif_decodes_into_its_frames_at_the_preview_size() {

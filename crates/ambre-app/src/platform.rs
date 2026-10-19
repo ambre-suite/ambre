@@ -484,7 +484,8 @@ pub(crate) fn install_board_file_drop(
 }
 
 /// Attach the file drop to a channel's canvas: each file dropped on it is
-/// read, and its region uploads it for the draft (`MURMURE-132`). A thread
+/// read, and its region uploads it for the draft
+/// (`ambre-spec-murmure-attachments.md`). A thread
 /// takes no file, so its canvas takes no drop.
 pub(crate) fn install_murmure_file_drop(relay: ambre_murmure::chrome::MurmureRelay) {
     Effect::new(move |_| {

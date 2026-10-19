@@ -445,7 +445,7 @@ mod tests {
     }
 
     /// A lost channel takes its draft and its threads' with it, and its
-    /// range covers no other channel's row (`MURMURE-215`, `MURMURE-217`).
+    /// range covers no other channel's row (`MURMURE-217`).
     #[test]
     fn a_lost_channel_takes_its_drafts_and_no_other() {
         let me = UserId::new();

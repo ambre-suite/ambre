@@ -1013,7 +1013,8 @@ pub fn main() {
     // Set once a session holds the key: the page's document comes back from
     // its copy only then.
     let session_seen = Rc::new(std::cell::Cell::new(false));
-    // The drafts the composer keeps go to the same store (`MURMURE-210`).
+    // The drafts the composer keeps go to the same store
+    // (`ambre-spec-murmure-composer.md`).
     let draft_keeper = host::DraftKeeper::new(murmure_relay.drafts(), vault.clone());
     {
         let store_slot = Rc::clone(&persist_store);
@@ -1386,7 +1387,7 @@ pub fn main() {
                 }
                 // The worker ended the session and asked the relay to revoke
                 // it (`CHROME-107`). The relays above deleted the drafts
-                // (`MURMURE-216`); once that write has landed, the page boots
+                // (`ambre-spec-murmure-composer.md`). Once that write has landed, the page boots
                 // home afresh and holds nothing of the session (`CHROME-108`).
                 UiEvent::Rest {
                     evt: ambre_bus::RestEvent::LoggedOut,

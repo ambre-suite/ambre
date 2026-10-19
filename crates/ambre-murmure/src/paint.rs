@@ -1236,10 +1236,11 @@ pub(crate) mod tests {
         assert!(!runs(&surface, LIGHT.selection).is_empty(), "link ink");
     }
 
-    /// `MURMURE-136`, `MURMURE-131`: an image previews in a box of its own
-    /// above its chip. Before it lands the box is empty, and the row keeps
-    /// its height when it does. A paint draws the frame its clock reaches
-    /// and names the next. Under reduced motion none is due (`MURMURE-130`).
+    /// An image previews in a box of its own above its chip. Before it lands
+    /// the box is empty, and the row keeps its height when it does. A paint
+    /// draws the frame its clock reaches and names the next, so only a
+    /// preview painted plays (`MURMURE-131`). Under reduced motion none is
+    /// due.
     #[test]
     fn an_image_previews_in_a_box_that_keeps_its_height_and_plays() {
         use ambre_bus::{Attachment, ByteSize, MediaType, Picture, PictureFrame};

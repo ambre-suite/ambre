@@ -90,7 +90,7 @@ fn a_channel_lost_while_open_leaves_the_sidebar_and_the_pane() {
 
 /// The drafts of a channel lost go with it. Those of a channel that only
 /// failed to open stay, and a sign-out takes every one (`MURMURE-215`,
-/// `MURMURE-216`, `MURMURE-217`).
+/// `MURMURE-216`).
 #[wasm_bindgen_test]
 fn a_lost_channel_and_a_sign_out_take_their_drafts() {
     use ambre_murmure::composer::DraftOf;

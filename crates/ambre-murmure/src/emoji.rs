@@ -178,7 +178,8 @@ mod tests {
     use super::*;
 
     /// Every emoji of the table is one a reaction takes, and no two entries
-    /// repeat one (`MURMURE-092`).
+    /// repeat one. The table is compiled in, so the picker asks nothing of the
+    /// network (`MURMURE-141`).
     #[test]
     fn every_emoji_of_the_table_is_one_reaction_key() {
         let mut seen = std::collections::HashSet::new();

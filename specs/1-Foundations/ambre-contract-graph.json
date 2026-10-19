@@ -8404,6 +8404,7 @@
   {"edge": "verified-by", "from": "MURMURE-132", "to": "ambre_murmure::view::tests::a_dropped_file_uploads_and_its_message_carries_it"},
   {"edge": "verified-by", "from": "MURMURE-132", "to": "ambre_murmure::uploads::tests::a_file_joins_its_draft_once_its_upload_is_answered"},
   {"edge": "verified-by", "from": "MURMURE-132", "to": "ambre_logic::channels::tests::a_file_uploads_and_downloads_under_the_channels_meta"},
+  {"edge": "verified-by", "from": "MURMURE-132", "to": "ambre_murmure::tests::chrome_relay::dropped_files_wait_for_the_region_and_are_taken_once"},
   {"edge": "cites-section", "from": "MURMURE-133", "section": "3", "to": "5-Murmure/features/ambre-spec-murmure-attachments.md"},
   {"edge": "verified-by", "from": "MURMURE-133", "to": "ambre_murmure::view::tests::a_failed_upload_adds_nothing_to_the_message"},
   {"edge": "verified-by", "from": "MURMURE-133", "to": "ambre_murmure::uploads::tests::a_failed_upload_adds_nothing_and_names_its_file"},

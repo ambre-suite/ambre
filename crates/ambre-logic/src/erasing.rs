@@ -2,10 +2,11 @@
 //! (`specs/5-Murmure/features/ambre-spec-murmure-attachments.md`).
 //!
 //! A delete of a message of this user's asks for each file it alone carried
-//! (`MURMURE-240`). The relay drops this user's claim, and the blob goes with
-//! the last one, so a file another member uploaded stays (`MURMURE-242`). An
+//! (`ambre-spec-murmure-attachments.md`). The relay drops this user's claim,
+//! and the blob goes with the last one, so a file another member uploaded
+//! stays. An
 //! erase that does not reach the relay waits, and the next connection or
-//! session asks again (`MURMURE-241`). The queue lives in memory: a reload
+//! session asks again. The queue lives in memory: a reload
 //! before the retry leaves the blob to the channel's deletion.
 
 use super::*;
@@ -44,7 +45,8 @@ impl LogicState {
     }
 
     /// An erase that did not reach the relay waits for the next connection
-    /// (`MURMURE-241`). Returns `false` for any other request.
+    /// (`ambre-spec-murmure-attachments.md`). Returns `false` for any other
+    /// request.
     pub(crate) fn erase_failed(&mut self, id: RequestId) -> bool {
         let Some(erase) = self.erasing.remove(&id) else {
             return false;

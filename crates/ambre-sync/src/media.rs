@@ -594,7 +594,7 @@ mod tests {
     /// Holds `SYNC-174`: an erase the relay answered, yes or refusal, reaches
     /// the caller as erased, since nothing of this user's is left either way.
     /// One that failed to reach an answer, or met a server error, is reported
-    /// for a retry (`SYNC-176`, `MURMURE-241`).
+    /// for a retry (`SYNC-176`).
     #[tokio::test]
     async fn an_erase_answers_erased_unless_it_must_be_retried() {
         let (logic, logic_rx) = LogicSink::channel();

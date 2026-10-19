@@ -768,10 +768,10 @@ struct LogicState {
     /// each with the document its file is stored under and its address.
     erasing: HashMap<ambre_bus::RequestId, (DocumentId, String)>,
     /// The erases that did not reach the relay, asked again on the next
-    /// connection (`MURMURE-241`).
+    /// connection (`ambre-spec-murmure-attachments.md`).
     erase_owed: Vec<(DocumentId, String)>,
     /// The images fetched for a preview the relay has not answered, each
-    /// with the channel whose view asked (`MURMURE-135`).
+    /// with the channel whose view asked.
     picturing: HashMap<ambre_bus::RequestId, (ambre_bus::ChannelId, ambre_bus::MediaRef)>,
     /// Direct message requests the relay has not answered yet, keyed by the
     /// channel id each minted, with the channel it would create.

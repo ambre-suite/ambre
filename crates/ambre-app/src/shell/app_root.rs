@@ -404,7 +404,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
     if boot_is_toile {
         install_board_file_drop(toile_dropped_file, toasts);
     }
-    // A file dropped on a channel uploads for its draft (`MURMURE-132`).
+    // A file dropped on a channel uploads for its draft
+    // (`ambre-spec-murmure-attachments.md`).
     if boot_is_murmure {
         crate::platform::install_murmure_file_drop(murmure_relay);
     }

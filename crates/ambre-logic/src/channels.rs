@@ -1332,7 +1332,7 @@ impl LogicState {
                 });
             }
             // The image of a preview decodes here, off the render thread
-            // (`MURMURE-135`).
+            // (`ambre-spec-murmure-attachments.md`).
             MurmureCommand::ShowPicture { media_ref } => {
                 let document_id = channel.meta_id().document_id();
                 self.show_picture(channel_id, document_id, media_ref);
@@ -1505,7 +1505,7 @@ impl LogicState {
                     return;
                 };
                 // The files the message alone carried, read before the
-                // delete takes them off it (`MURMURE-240`).
+                // delete takes them off it (`ambre-spec-murmure-attachments.md`).
                 let files = match at {
                     MessageAt::Segment(segment) => channel.erasable(segment, message, user),
                     MessageAt::Thread(_) => Vec::new(),
@@ -3711,8 +3711,8 @@ mod tests {
             .collect()
     }
 
-    /// `MURMURE-132`: a file the view uploads or fetches goes through the
-    /// shared media flow, under the channel's meta and the view's request.
+    /// A file the view uploads or fetches goes through the shared media
+    /// flow, under the channel's meta and the view's request.
     #[test]
     fn a_file_uploads_and_downloads_under_the_channels_meta() {
         let (mut state, _ui, sync) = harness();
@@ -3755,8 +3755,7 @@ mod tests {
         );
     }
 
-    /// `MURMURE-240`, `MURMURE-241`: a delete erases the file its message
-    /// carried, under the channel's meta document. A failed erase waits for
+    /// A delete erases the file its message carried, under the channel's meta document. A failed erase waits for
     /// the next connection, and no view sees either answer.
     #[test]
     fn a_delete_erases_its_file_and_retries_on_the_next_connection() {
@@ -3868,8 +3867,7 @@ mod tests {
             .collect()
     }
 
-    /// `MURMURE-135`: an image a view paints is fetched once under the
-    /// channel's meta, and reaches the view decoded, never as its file. One
+    /// An image a view paints is fetched once under the channel's meta, and reaches the view decoded, never as its file. One
     /// the relay refuses reaches it as nothing.
     #[test]
     fn a_preview_is_fetched_once_and_reaches_the_view_decoded() {
