@@ -28,13 +28,15 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    ChannelId, LogicCommand, Mention, MessageAt, MessageDraft, MessageId, MurmureCommand, Timestamp,
+    ChannelId, LogicCommand, Mention, MessageAt, MessageDraft, MessageId, MurmureCommand,
+    Timestamp, UserId,
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle};
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::PendingEdit;
+use crate::mention_list::{MentionList, Offer, offers, query_at};
 use crate::paint::{draw, shape};
 
 /// The strip above the field while the composer holds an edit.
@@ -219,10 +221,40 @@ struct Editing {
     message: MessageId,
     /// The text the message read when the edit began.
     original: String,
-    /// Who that text names.
+    /// The draft, its history and its mentions the edit put aside, `None`
+    /// with no draft.
+    kept: Option<(TextEditor, History, Option<Marks>)>,
+}
+
+/// The mentions of a draft, and the text whose chars their ranges count.
+#[derive(Debug, Clone, Default)]
+struct Marks {
+    text: String,
     mentions: Vec<Mention>,
-    /// The draft and its history the edit put aside, `None` with no draft.
-    kept: Option<(TextEditor, History)>,
+}
+
+impl Marks {
+    /// The mentions `text` leaves whole, once the ranges follow it
+    /// (`MURMURE-553`).
+    fn follow(&mut self, text: &str) -> &[Mention] {
+        if self.text != text {
+            self.mentions = kept_mentions(&self.text, text, &self.mentions);
+            text.clone_into(&mut self.text);
+        }
+        &self.mentions
+    }
+}
+
+/// The `@` list open in a draft (`MURMURE-551`).
+#[derive(Debug, Clone)]
+struct Asking {
+    of: DraftOf,
+    /// The byte of its `@`, and what follows it up to the caret.
+    at: usize,
+    query: String,
+    /// The entries of the members the view last offered.
+    offers: Vec<Offer>,
+    chosen: usize,
 }
 
 /// What the composer hands the view to send, once a paint read it.
@@ -355,6 +387,15 @@ pub struct Composer {
     /// The window is as wide as a desktop, so the box names its chord
     /// (`MURMURE-544`).
     chords: bool,
+    /// The mentions each draft carries (`MURMURE-552`).
+    marks: HashMap<DraftOf, Marks>,
+    /// The `@` list, while a query is open.
+    asking: Option<Asking>,
+    /// The `@` Escape closed the list of: it stays closed while its query
+    /// lasts (`MURMURE-554`).
+    dismissed: Option<(DraftOf, usize)>,
+    /// The entry picked, which the next paint writes into the draft.
+    picked: Option<(DraftOf, usize)>,
 }
 
 impl Composer {
@@ -452,10 +493,10 @@ impl Composer {
         let of = DraftOf::of_edit(&edit);
         let kept = match self.editing.remove(&of) {
             Some(open) => open.kept,
-            None => self
-                .drafts
-                .remove(&of)
-                .map(|editor| (editor, self.histories.remove(&of).unwrap_or_default())),
+            None => self.drafts.remove(&of).map(|editor| {
+                let history = self.histories.remove(&of).unwrap_or_default();
+                (editor, history, self.marks.remove(&of))
+            }),
         };
         let editor = TextEditor::new(&edit.text, body_style(Color::BLACK));
         self.drafts.insert(of, editor);
@@ -464,13 +505,17 @@ impl Composer {
             ..History::default()
         };
         self.histories.insert(of, history);
+        let marks = Marks {
+            text: edit.text.clone(),
+            mentions: edit.mentions,
+        };
+        self.marks.insert(of, marks);
         self.editing.insert(
             of,
             Editing {
                 at: edit.at,
                 message: edit.message,
                 original: edit.text,
-                mentions: edit.mentions,
                 kept,
             },
         );
@@ -490,9 +535,13 @@ impl Composer {
         };
         self.drafts.remove(&of);
         self.histories.remove(&of);
-        if let Some((editor, history)) = open.kept {
+        self.marks.remove(&of);
+        if let Some((editor, history, marks)) = open.kept {
             self.drafts.insert(of, editor);
             self.histories.insert(of, history);
+            if let Some(marks) = marks {
+                self.marks.insert(of, marks);
+            }
         }
     }
 
@@ -537,10 +586,15 @@ impl Composer {
     /// checks the box or unchecks it (`MURMURE-534`). `Ctrl+Z` undoes, and
     /// `Ctrl+Shift+Z` or `Ctrl+Y` redoes (`MURMURE-433`). Escape cancels an
     /// edit (`MURMURE-204`), and otherwise gives the keys back to the list.
-    /// Answers whether the composer took the key.
+    ///
+    /// An open `@` list takes its own keys first (`MURMURE-554`). Answers
+    /// whether the composer took the key.
     pub fn key(&mut self, of: DraftOf, key: &str, shift: bool, ctrl: bool, alt: bool) -> bool {
         if self.composing {
             return false;
+        }
+        if !(shift || ctrl || alt) && self.list_key(of, key) {
+            return true;
         }
         let word = ctrl || alt;
         let intent = match key {
@@ -601,6 +655,162 @@ impl Composer {
         true
     }
 
+    /// A key while the `@` list of the draft `of` shows an entry. Up and Down
+    /// move the choice round the list, Enter and Tab pick it, and Escape
+    /// closes the list until its query ends (`MURMURE-554`).
+    fn list_key(&mut self, of: DraftOf, key: &str) -> bool {
+        let Some(asking) = self
+            .asking
+            .as_mut()
+            .filter(|asking| asking.of == of && !asking.offers.is_empty())
+        else {
+            return false;
+        };
+        let len = asking.offers.len();
+        match key {
+            "ArrowDown" => asking.chosen = (asking.chosen + 1) % len,
+            "ArrowUp" => asking.chosen = (asking.chosen + len - 1) % len,
+            "Enter" | "Tab" => {
+                let chosen = asking.chosen;
+                self.pick(of, chosen);
+            }
+            "Escape" => {
+                self.dismissed = Some((of, asking.at));
+                self.asking = None;
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    /// Pick the entry `index` of the `@` list of the draft `of`: the next
+    /// paint writes it over the query (`MURMURE-552`). A pick is a step of
+    /// its own in the history.
+    pub fn pick(&mut self, of: DraftOf, index: usize) {
+        let shows = self
+            .asking
+            .as_ref()
+            .is_some_and(|asking| asking.of == of && index < asking.offers.len());
+        if shows {
+            self.picked = Some((of, index));
+            self.typed = true;
+            self.history(of).apart();
+        }
+    }
+
+    /// Hand the `@` list the members of its channel, and keep the choice on
+    /// the list. `me` is never offered (`MURMURE-551`).
+    pub fn offer(&mut self, members: &[(UserId, String)], me: Option<UserId>) {
+        if let Some(asking) = &mut self.asking {
+            asking.offers = offers(&asking.query, members, me);
+            asking.chosen = asking.chosen.min(asking.offers.len().saturating_sub(1));
+        }
+    }
+
+    /// The channel whose members the open `@` list wants, `None` while no
+    /// list is open.
+    pub fn asks_members_of(&self) -> Option<ChannelId> {
+        self.asking.as_ref().map(|asking| asking.of.channel())
+    }
+
+    /// What the page draws of the `@` list, from the caret `at` of the last
+    /// paint. `None` while no list is open or no entry matches
+    /// (`MURMURE-555`).
+    pub fn mention_list(&self, at: (f32, f32), in_thread: bool) -> Option<MentionList> {
+        let asking = self.asking.as_ref().filter(|a| !a.offers.is_empty())?;
+        Some(MentionList {
+            entries: asking.offers.iter().map(Offer::written).collect(),
+            chosen: asking.chosen,
+            at,
+            in_thread,
+        })
+    }
+
+    /// The mentions the draft `of` carries now, for a test.
+    #[cfg(test)]
+    pub fn mentions(&mut self, of: DraftOf) -> Vec<Mention> {
+        let text = self
+            .drafts
+            .get(&of)
+            .map(TextEditor::text)
+            .unwrap_or_default();
+        self.marks
+            .get_mut(&of)
+            .map(|marks| marks.follow(&text).to_vec())
+            .unwrap_or_default()
+    }
+
+    /// Write the entry picked over its query, with a space after it, and
+    /// mark the name (`MURMURE-552`). Runs once the edits before it landed,
+    /// so the query is read where it now stands.
+    fn write_pick(&mut self, editor: &mut TextEditor, font_cx: &mut FontContext, wrap: f32) {
+        let Some((of, index)) = self.picked.take() else {
+            return;
+        };
+        let text = editor.text();
+        let Some(asking) = self.asking.take().filter(|asking| asking.of == of) else {
+            return;
+        };
+        let Some(offer) = asking.offers.get(index) else {
+            return;
+        };
+        let Some((at, query)) = editor.caret().and_then(|caret| query_at(&text, caret)) else {
+            return;
+        };
+        let written = offer.written();
+        editor.push(EditIntent::Replace {
+            start: at,
+            end: at + 1 + query.len(),
+            text: format!("{written} "),
+        });
+        editor.flush(font_cx, wrap, 1.0);
+        let start = text[..at].chars().count();
+        let marks = self.marks.entry(of).or_insert_with(|| Marks {
+            text: text.clone(),
+            mentions: Vec::new(),
+        });
+        marks.follow(&text);
+        marks.follow(&editor.text());
+        marks.mentions.push(Mention {
+            target: offer.target,
+            range: start..start + written.chars().count(),
+        });
+        marks.mentions.sort_by_key(|mention| mention.range.start);
+    }
+
+    /// Open the `@` list where the caret of the draft `of` ends a query, or
+    /// close it. A query Escape closed stays closed until it ends.
+    fn ask(&mut self, of: DraftOf, editor: &TextEditor) {
+        let text = editor.text();
+        let query = editor.caret().and_then(|caret| query_at(&text, caret));
+        let Some((at, query)) = query.filter(|_| self.focused) else {
+            self.asking = None;
+            self.dismissed = None;
+            return;
+        };
+        if self.dismissed != Some((of, at)) {
+            self.dismissed = None;
+        }
+        if self.dismissed.is_some() {
+            self.asking = None;
+            return;
+        }
+        match &mut self.asking {
+            Some(asking) if asking.of == of && asking.at == at => {
+                query.clone_into(&mut asking.query)
+            }
+            _ => {
+                self.asking = Some(Asking {
+                    of,
+                    at,
+                    query: query.to_owned(),
+                    offers: Vec::new(),
+                    chosen: 0,
+                });
+            }
+        }
+    }
+
     /// A press at `(x, y)` in the band: the caret goes there, and a drag
     /// from it selects.
     pub fn press(&mut self, of: DraftOf, x: f32, y: f32) {
@@ -655,6 +865,12 @@ impl Composer {
             editor.set_style(style.clone());
             editor.flush(font_cx, wrap, 1.0);
             let text = editor.text();
+            // The mentions the text left whole leave with it (`MURMURE-552`).
+            let mentions = self
+                .marks
+                .get_mut(&asked)
+                .map(|marks| marks.follow(&text).to_vec())
+                .unwrap_or_default();
             if let Some(open) = self.editing.get(&asked) {
                 if !text.trim().is_empty() {
                     if text != open.original {
@@ -662,10 +878,7 @@ impl Composer {
                             channel: asked.channel(),
                             at: open.at,
                             message: open.message,
-                            draft: MessageDraft {
-                                mentions: kept_mentions(&open.original, &text, &open.mentions),
-                                text,
-                            },
+                            draft: MessageDraft { mentions, text },
                         });
                     }
                     self.end_edit(asked);
@@ -675,25 +888,26 @@ impl Composer {
                 // The history leaves with the draft: no undo reaches a
                 // message sent (`MURMURE-434`).
                 self.histories.remove(&asked);
+                self.marks.remove(&asked);
                 // The box unchecks once the reply leaves (`MURMURE-531`).
                 sent = Some(Sent::Message {
                     to: asked,
-                    draft: MessageDraft {
-                        text,
-                        mentions: Vec::new(),
-                    },
+                    draft: MessageDraft { text, mentions },
                     also_in_channel: self.also.remove(&asked),
                 });
             }
         }
         let Some(shown) = shown else {
             self.band = 0.0;
+            self.asking = None;
             return sent;
         };
-        let tall = match self.drafts.get_mut(&shown) {
-            Some(editor) => {
+        let tall = match self.drafts.remove(&shown) {
+            Some(mut editor) => {
                 editor.set_style(style);
                 editor.flush(font_cx, wrap, 1.0);
+                // A pick lands once the keys before it did.
+                self.write_pick(&mut editor, font_cx, wrap);
                 // Record the edits that landed, then walk the steps asked
                 // after them. A step puts the caret at the end of the draft.
                 let history = self.histories.entry(shown).or_default();
@@ -708,9 +922,18 @@ impl Composer {
                 if walked {
                     editor.flush(font_cx, wrap, 1.0);
                 }
-                editor.layout_height().unwrap_or(0.0)
+                if let Some(marks) = self.marks.get_mut(&shown) {
+                    marks.follow(&editor.text());
+                }
+                self.ask(shown, &editor);
+                let tall = editor.layout_height().unwrap_or(0.0);
+                self.drafts.insert(shown, editor);
+                tall
             }
-            None => 0.0,
+            None => {
+                self.asking = None;
+                0.0
+            }
         };
         let most = (size.1 / 2.0 - 2.0 * SPACE_4).max(MIN_LINE_PX);
         self.band = TYPING_PX + tall.clamp(MIN_LINE_PX, most) + 2.0 * SPACE_4;

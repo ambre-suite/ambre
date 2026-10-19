@@ -16,6 +16,7 @@ use crate::commands::{
     PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, SEARCH, key_list, message_action,
     message_actions,
 };
+use crate::mention_list::MentionList;
 use crate::{
     Activity, MessageRef, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
 };
@@ -338,9 +339,16 @@ pub struct MurmureRelay {
     /// The member whose key was fetched for an invite, and the channel it
     /// goes into. The answer becomes that invite, not a direct message.
     inviting: RwSignal<Option<(UserId, ChannelId)>>,
-    /// The members of each open channel, as the Logic thread last listed
-    /// them. The invite control offers none of them.
-    channel_members: RwSignal<HashMap<ChannelId, HashSet<UserId>>>,
+    /// The members of each open channel by name, as the Logic thread last
+    /// listed them. The invite control offers none of them, and the `@`
+    /// list offers them all (`MURMURE-551`).
+    channel_members: RwSignal<HashMap<ChannelId, HashMap<UserId, String>>>,
+    /// The `@` list a region of the page shows, `None` while none is open
+    /// (`MURMURE-555`).
+    pub mentions: RwSignal<Option<MentionList>>,
+    /// The entry a click picked in the `@` list, until its region takes it.
+    /// The flag names the thread's region.
+    picked: RwSignal<Option<(bool, usize)>>,
     /// The other members who watch each open channel, as the Logic thread
     /// last heard them (`MURMURE-126`). A channel nobody watches has no entry.
     watching: RwSignal<HashMap<ChannelId, HashSet<UserId>>>,
@@ -435,6 +443,8 @@ impl MurmureRelay {
             search: RwSignal::new(SearchBox::default()),
             inviting: RwSignal::new(None),
             channel_members: RwSignal::new(HashMap::new()),
+            mentions: RwSignal::new(None),
+            picked: RwSignal::new(None),
             watching: RwSignal::new(HashMap::new()),
             target: RwSignal::new(None),
             deleting: RwSignal::new(None),
@@ -754,7 +764,10 @@ impl MurmureRelay {
                 channel_id,
                 event: MurmureEvent::Members { members },
             } => {
-                let listed = members.iter().map(|member| member.user_id).collect();
+                let listed = members
+                    .iter()
+                    .map(|member| (member.user_id, member.display_name.clone()))
+                    .collect();
                 self.channel_members.update(|m| {
                     m.insert(*channel_id, listed);
                 });
@@ -999,7 +1012,11 @@ impl MurmureRelay {
                 _ => s.spaces().to_vec(),
             });
             let me = me.get();
-            let mut seen = in_channel.with(|m| m.get(&channel).cloned().unwrap_or_default());
+            let mut seen: HashSet<UserId> = in_channel.with(|m| {
+                m.get(&channel)
+                    .map(|listed| listed.keys().copied().collect())
+                    .unwrap_or_default()
+            });
             seen.extend(me);
             members.with(|m| {
                 spaces
@@ -1015,8 +1032,52 @@ impl MurmureRelay {
 
     /// Whether the Logic thread lists `user` among the members of `channel`.
     fn in_channel(&self, channel: ChannelId, user: UserId) -> bool {
-        self.channel_members
-            .with_untracked(|m| m.get(&channel).is_some_and(|listed| listed.contains(&user)))
+        self.channel_members.with_untracked(|m| {
+            m.get(&channel)
+                .is_some_and(|listed| listed.contains_key(&user))
+        })
+    }
+
+    /// The members of `channel` by name, as the Logic thread last listed
+    /// them. The `@` list offers them (`MURMURE-551`).
+    pub fn members_of(&self, channel: ChannelId) -> Vec<(UserId, String)> {
+        self.channel_members.with_untracked(|m| {
+            m.get(&channel)
+                .map(|listed| listed.iter().map(|(u, n)| (*u, n.clone())).collect())
+                .unwrap_or_default()
+        })
+    }
+
+    /// Show the `@` list a region handed over, or close it. A region closes
+    /// only its own list, so the other region's stays (`MURMURE-555`).
+    pub fn show_mentions(&self, in_thread: bool, list: Option<MentionList>) {
+        let theirs = self
+            .mentions
+            .with_untracked(|shown| shown.as_ref().is_some_and(|s| s.in_thread != in_thread));
+        if list.is_some() || !theirs {
+            self.mentions.set(list);
+        }
+    }
+
+    /// A click on the entry `index` of the `@` list shown: its region takes
+    /// the pick at its next frame (`MURMURE-555`).
+    pub fn pick_mention(&self, index: usize) {
+        if let Some(in_thread) = self
+            .mentions
+            .with_untracked(|m| m.as_ref().map(|m| m.in_thread))
+        {
+            self.picked.set(Some((in_thread, index)));
+        }
+    }
+
+    /// The pick of the region `in_thread`, taken once.
+    pub fn take_pick(&self, in_thread: bool) -> Option<usize> {
+        let (region, index) = self.picked.get_untracked()?;
+        if region != in_thread {
+            return None;
+        }
+        self.picked.set(None);
+        Some(index)
     }
 
     /// Invite `user` into the shown channel. Their key is fetched first, for
@@ -1273,6 +1334,64 @@ pub fn DeleteConfirm(
                 </button>
             </div>
         </ambre_chrome::Dialog>
+    }
+}
+
+/// The top-left of the canvas a region paints, in the viewport, `(0, 0)`
+/// with no such canvas in the page.
+fn canvas_origin(in_thread: bool) -> (f64, f64) {
+    let id = if in_thread {
+        crate::view::THREAD_CANVAS
+    } else {
+        crate::view::CHANNEL_CANVAS
+    };
+    leptos::web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.get_element_by_id(id))
+        .map(|canvas| {
+            let rect = canvas.get_bounding_client_rect();
+            (rect.left(), rect.top())
+        })
+        .unwrap_or_default()
+}
+
+/// The `@` list of a composer, hung above its caret (`MURMURE-555`). The
+/// pipe keeps the focus, so the composer takes its keys. A press on an
+/// entry picks it and leaves the focus where it was.
+#[component]
+pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
+    move || {
+        relay.mentions.get().map(|list| {
+            let (left, top) = canvas_origin(list.in_thread);
+            let (x, y) = (left + f64::from(list.at.0), top + f64::from(list.at.1));
+            let entries = list
+                .entries
+                .into_iter()
+                .enumerate()
+                .map(|(index, name)| {
+                    let chosen = (index == list.chosen).to_string();
+                    let pick = move |ev: leptos::ev::MouseEvent| {
+                        ev.prevent_default();
+                        relay.pick_mention(index);
+                    };
+                    view! {
+                        <li role="option" class="murmure-mention" aria-selected=chosen on:mousedown=pick>
+                            {name}
+                        </li>
+                    }
+                })
+                .collect_view();
+            view! {
+                <ul
+                    class="murmure-mentions"
+                    role="listbox"
+                    aria-label="Mention a member"
+                    style=format!("left: {x}px; top: {y}px;")
+                >
+                    {entries}
+                </ul>
+            }
+        })
     }
 }
 

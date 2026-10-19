@@ -10,8 +10,8 @@ use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
-    ChannelHeader, ChannelList, DeleteConfirm, InviteControl, KeyList, MemberList, MessageSearch,
-    MurmureRelay,
+    ChannelHeader, ChannelList, DeleteConfirm, InviteControl, KeyList, MemberList, MentionPanel,
+    MessageSearch, MurmureRelay,
 };
 
 /// The table the command palette searches: the booted application's whole
@@ -72,6 +72,7 @@ pub(crate) fn MurmureShell(
             now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))
         />
         <KeyList relay=relay />
+        <MentionPanel relay=relay />
     }
 }
 

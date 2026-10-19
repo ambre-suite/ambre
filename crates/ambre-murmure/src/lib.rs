@@ -25,6 +25,7 @@ mod layout;
 pub mod list;
 mod members;
 mod mention;
+pub mod mention_list;
 mod opening;
 pub mod paint;
 mod reaction;

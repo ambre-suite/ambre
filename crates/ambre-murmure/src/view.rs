@@ -30,6 +30,7 @@ use crate::commands::{
 };
 use crate::composer::{Composer, DraftOf, EDITING_LINE, also_said, typing_line};
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
+use crate::mention_list::MentionList;
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 use crate::select::Selecting;
 use crate::watchers::TICK_MS;
@@ -70,6 +71,15 @@ pub struct PageReads {
     /// The page's input pipe. A press in the composer gives it the keyboard
     /// focus, and its caret follows the composer's (`MURMURE-430`).
     pub pipe: TextInput,
+    /// The members of a channel by name, as the Logic thread last listed
+    /// them. The `@` list offers them (`MURMURE-551`).
+    pub members_of: Rc<dyn Fn(ChannelId) -> Vec<(UserId, String)>>,
+    /// Hand the page the `@` list to draw, or `None` to close it. The flag
+    /// names the thread's region (`MURMURE-555`).
+    pub show_mentions: Rc<dyn Fn(bool, Option<MentionList>)>,
+    /// Take the entry a click picked in the `@` list. Given `true`, it takes
+    /// a pick in the thread's list alone (`MURMURE-555`).
+    pub take_pick: Rc<dyn Fn(bool) -> Option<usize>>,
 }
 
 /// The id of the content canvas, which the channel's region paints. The
@@ -186,6 +196,8 @@ pub struct MurmureView {
     parked: Rc<RefCell<Option<Composer>>>,
     /// The channel on screen this region last ticked, and when.
     ticked: Option<(ChannelId, f64)>,
+    /// The `@` list this region last handed the page.
+    listed: Option<MentionList>,
     dirty: bool,
 }
 
@@ -193,6 +205,9 @@ impl Drop for MurmureView {
     /// The thread's region hands its composer back to the channel's, which
     /// gives it to the next thread's region (`MURMURE-530`).
     fn drop(&mut self) {
+        if self.listed.is_some() {
+            (self.reads.show_mentions)(self.region == Region::Thread, None);
+        }
         if self.region == Region::Thread {
             let mut composer = std::mem::take(&mut self.composer);
             composer.blur();
@@ -239,6 +254,7 @@ impl MurmureView {
             composer: Composer::default(),
             parked: Rc::default(),
             ticked: None,
+            listed: None,
             dirty: true,
         }
     }
@@ -783,6 +799,15 @@ impl MurmureView {
             self.reads.pipe.focus();
             self.dirty = true;
         }
+        // A click in the `@` list picks its entry, and the keys stay in the
+        // composer (`MURMURE-555`).
+        if let Some(index) = (self.reads.take_pick)(self.region == Region::Thread)
+            && let Some(of) = self.writes_in()
+        {
+            self.composer.pick(of, index);
+            self.typed();
+            self.dirty = true;
+        }
         let dirty = std::mem::take(&mut self.dirty);
         RepaintPlan {
             content: if dirty {
@@ -900,6 +925,7 @@ impl MurmureView {
                 .pipe
                 .set_caret(f64::from(x), f64::from(y), f64::from(tall.max(1.0)));
         }
+        self.list_mentions(caret.map(|(x, y, _)| (x, y)));
         if higher_up && !shown_before {
             // The control shows: End reaches it from the keyboard
             // (`MURMURE-509`).
@@ -954,6 +980,32 @@ impl MurmureView {
             return;
         };
         (self.reads.announce)(&row.announcement(&*self.reads.name_of, &*self.reads.time_of));
+    }
+
+    /// Offer the open `@` list the members of its channel, and hand the page
+    /// what changed of it, hung from the `caret` (`MURMURE-551`,
+    /// `MURMURE-555`). The entry chosen is said to a screen reader.
+    fn list_mentions(&mut self, caret: Option<(f32, f32)>) {
+        if let Some(channel) = self.composer.asks_members_of() {
+            let members = (self.reads.members_of)(channel);
+            self.composer.offer(&members, (self.reads.me)());
+        }
+        let in_thread = self.region == Region::Thread;
+        let list = caret.and_then(|at| self.composer.mention_list(at, in_thread));
+        if list == self.listed {
+            return;
+        }
+        let chosen = |list: &Option<MentionList>| {
+            list.as_ref().and_then(|l| l.entries.get(l.chosen).cloned())
+        };
+        let said = chosen(&list);
+        if let Some(text) = &said
+            && said != chosen(&self.listed)
+        {
+            (self.reads.announce)(text);
+        }
+        self.listed.clone_from(&list);
+        (self.reads.show_mentions)(in_thread, list);
     }
 
     /// Hand `command` to the Logic thread. A full channel drops it, and the
@@ -1332,7 +1384,7 @@ mod tests {
     use std::cell::Cell;
 
     use ambre_bus::conduit::local;
-    use ambre_bus::{ChannelId, MessageView, MurmureEvent, Unreadable};
+    use ambre_bus::{ChannelId, MentionTarget, MessageView, MurmureEvent, Unreadable};
     use ambre_canvas::theme::{FONT_UI, SPACE_2, SPACE_4, SPACE_8};
     use ambre_draw::kinetic::LONG_PRESS_MS;
     use ambre_draw::testing::RecordingSurface;
@@ -1357,7 +1409,17 @@ mod tests {
         editing: Rc<RefCell<Option<PendingEdit>>>,
         /// The signed-in member, `None` until a test names one.
         me: Rc<Cell<Option<UserId>>>,
+        /// The members of every channel, as the page lists them.
+        members: Rc<RefCell<Vec<(UserId, String)>>>,
+        /// Each `@` list the view handed the page, oldest first.
+        lists: Rc<RefCell<Vec<Listed>>>,
+        /// The entry a click picked, for the region it names.
+        picked: Rc<Cell<Option<(bool, usize)>>>,
     }
+
+    /// An `@` list the view handed the page, and whether the thread's region
+    /// shows it.
+    type Listed = (bool, Option<MentionList>);
 
     fn page() -> Page {
         let (events, from_logic) = local(64);
@@ -1375,6 +1437,12 @@ mod tests {
         let asked = Rc::clone(&editing);
         let me = Rc::new(Cell::new(None));
         let signed_in = Rc::clone(&me);
+        let members = Rc::new(RefCell::new(Vec::new()));
+        let listed = Rc::clone(&members);
+        let lists = Rc::new(RefCell::new(Vec::new()));
+        let shown_lists = Rc::clone(&lists);
+        let picked = Rc::new(Cell::new(None::<(bool, usize)>));
+        let pick = Rc::clone(&picked);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| Some("Ada".to_owned())),
@@ -1394,6 +1462,17 @@ mod tests {
             back: Rc::new(move || back.set(back.get().back())),
             me: Rc::new(move || signed_in.get()),
             pipe: TextInput::detached(),
+            members_of: Rc::new(move |_| listed.borrow().clone()),
+            show_mentions: Rc::new(move |in_thread, list| {
+                shown_lists.borrow_mut().push((in_thread, list));
+            }),
+            take_pick: Rc::new(move |in_thread| match pick.get() {
+                Some((region, index)) if region == in_thread => {
+                    pick.set(None);
+                    Some(index)
+                }
+                _ => None,
+            }),
         };
         let size = (300.0, 400.0);
         let view = MurmureView::new(
@@ -1413,6 +1492,9 @@ mod tests {
             acted: acted_log,
             editing,
             me,
+            members,
+            lists,
+            picked,
         }
     }
 
@@ -3706,5 +3788,207 @@ mod tests {
             panic!("the reply opens a thread");
         };
         assert_eq!(pane, MurmurePane::Thread { channel, root: at });
+    }
+
+    /// A composer on `channel`, whose members are Ada (the writer), Bob and
+    /// Carol, with the keys in its field.
+    fn mentioning(channel: ChannelId) -> (Page, UserId, UserId) {
+        let mut page = composing(channel);
+        let (ada, bob, carol) = (UserId::new(), UserId::new(), UserId::new());
+        page.me.set(Some(ada));
+        *page.members.borrow_mut() = vec![
+            (carol, "Carol".to_owned()),
+            (ada, "Ada".to_owned()),
+            (bob, "Bob".to_owned()),
+        ];
+        assert!(press_composer(&mut page));
+        (page, bob, carol)
+    }
+
+    /// The entries of the `@` list the page holds now, `None` when closed.
+    fn listed(page: &Page) -> Option<Vec<String>> {
+        let lists = page.lists.borrow();
+        lists
+            .last()
+            .and_then(|(_, list)| list.as_ref().map(|l| l.entries.clone()))
+    }
+
+    /// The entry the `@` list chose, as the page holds it.
+    fn chosen(page: &Page) -> Option<usize> {
+        let lists = page.lists.borrow();
+        lists
+            .last()
+            .and_then(|(_, list)| list.as_ref().map(|l| l.chosen))
+    }
+
+    /// The drafts sent since the last call.
+    fn drafts_sent(page: &Page) -> Vec<ambre_bus::MessageDraft> {
+        let mut drafts = Vec::new();
+        while let Ok(command) = page.commands.try_recv() {
+            if let LogicCommand::Channel {
+                command: MurmureCommand::SendMessage { draft, .. },
+                ..
+            } = command
+            {
+                drafts.push(draft);
+            }
+        }
+        drafts
+    }
+
+    /// An `@` that starts a word opens the members of the channel, with
+    /// `@channel` first and never the writer. What follows filters them, and
+    /// a space closes the list (`MURMURE-551`).
+    #[test]
+    fn an_at_opens_the_members_with_the_channel_first() {
+        let channel = ChannelId::new();
+        let (mut page, ..) = mentioning(channel);
+        type_text(&mut page, "hi @");
+        frame_with_fonts(&mut page.view);
+        let all = ["@channel", "@Bob", "@Carol"].map(str::to_owned);
+        assert_eq!(listed(&page), Some(all.to_vec()));
+        let (in_thread, list) = page.lists.borrow().last().cloned().expect("a list");
+        assert!(!in_thread, "the channel's region hangs it");
+        assert!(list.expect("open").at.0 > 0.0, "it hangs from the caret");
+        type_text(&mut page, "c");
+        frame_with_fonts(&mut page.view);
+        let kept = ["@channel", "@Carol"].map(str::to_owned);
+        assert_eq!(listed(&page), Some(kept.to_vec()));
+        type_text(&mut page, " ");
+        frame_with_fonts(&mut page.view);
+        assert_eq!(listed(&page), None, "a space ends the query");
+        type_text(&mut page, "mail@x");
+        frame_with_fonts(&mut page.view);
+        assert_eq!(listed(&page), None, "an @ inside a word opens nothing");
+    }
+
+    /// A pick writes the name over the query, then a space, and the message
+    /// carries a mention over the name. Tab picks as Enter does, and sends
+    /// nothing (`MURMURE-552`).
+    #[test]
+    fn a_pick_writes_the_name_and_sends_its_mention() {
+        let channel = ChannelId::new();
+        let (mut page, bob, carol) = mentioning(channel);
+        type_text(&mut page, "@b");
+        frame_with_fonts(&mut page.view);
+        assert!(key(&mut page, "Enter", false, 0.0));
+        frame_with_fonts(&mut page.view);
+        assert!(drafts_sent(&page).is_empty(), "the pick sent nothing");
+        assert_eq!(
+            page.view.composer().draft(channel).as_deref(),
+            Some("@Bob ")
+        );
+        type_text(&mut page, "and @car");
+        frame_with_fonts(&mut page.view);
+        assert!(key(&mut page, "Tab", false, 0.0));
+        frame_with_fonts(&mut page.view);
+        type_text(&mut page, "hi");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        let sent = drafts_sent(&page);
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].text, "@Bob and @Carol hi");
+        let mentions: Vec<_> = sent[0]
+            .mentions
+            .iter()
+            .map(|m| (m.target, m.range.clone()))
+            .collect();
+        let (bob, carol) = (MentionTarget::User(bob), MentionTarget::User(carol));
+        assert_eq!(mentions, vec![(bob, 0..4), (carol, 9..15)]);
+    }
+
+    /// Text typed before a mention moves it, and a key that cuts into the
+    /// name drops it. The message never names a member over other text
+    /// (`MURMURE-553`).
+    #[test]
+    fn an_edit_of_the_draft_keeps_the_mentions_it_leaves_whole() {
+        let channel = ChannelId::new();
+        let (mut page, bob, _) = mentioning(channel);
+        type_text(&mut page, "@bo");
+        frame_with_fonts(&mut page.view);
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        key(&mut page, "Home", false, 0.0);
+        type_text(&mut page, "é ");
+        frame_with_fonts(&mut page.view);
+        key(&mut page, "End", false, 0.0);
+        type_text(&mut page, "@channel");
+        frame_with_fonts(&mut page.view);
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(
+            page.view.composer().draft(channel).as_deref(),
+            Some("é @Bob @channel ")
+        );
+        // Two keys back cut the space and a char of `@channel`.
+        key(&mut page, "Backspace", false, 0.0);
+        key(&mut page, "Backspace", false, 0.0);
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        let sent = drafts_sent(&page);
+        assert_eq!(sent.len(), 1, "a broken query opened no list");
+        assert_eq!(sent[0].text, "é @Bob @channe");
+        let mentions: Vec<_> = sent[0]
+            .mentions
+            .iter()
+            .map(|m| (m.target, m.range.clone()))
+            .collect();
+        assert_eq!(mentions, vec![(MentionTarget::User(bob), 2..6)]);
+    }
+
+    /// While the list shows, Up and Down move its choice round it and say
+    /// the entry. Escape closes it and keeps the draft and the focus, and the
+    /// list stays closed until its query ends (`MURMURE-554`). None of it
+    /// changes the draft or sends it (`MURMURE-556`).
+    #[test]
+    fn the_list_takes_its_keys_and_escape_closes_it_until_the_query_ends() {
+        let channel = ChannelId::new();
+        let (mut page, ..) = mentioning(channel);
+        type_text(&mut page, "@");
+        frame_with_fonts(&mut page.view);
+        assert_eq!(chosen(&page), Some(0));
+        assert!(key(&mut page, "ArrowDown", false, 0.0));
+        frame_with_fonts(&mut page.view);
+        assert_eq!(chosen(&page), Some(1));
+        assert_eq!(page.said.borrow().last().map(String::as_str), Some("@Bob"));
+        key(&mut page, "ArrowUp", false, 0.0);
+        key(&mut page, "ArrowUp", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(chosen(&page), Some(2), "Up from the first wraps");
+        assert!(key(&mut page, "Escape", false, 0.0));
+        frame_with_fonts(&mut page.view);
+        assert_eq!(listed(&page), None);
+        assert!(page.view.composer().focused(), "Escape kept the keys");
+        assert_eq!(page.view.composer().draft(channel).as_deref(), Some("@"));
+        type_text(&mut page, "b");
+        frame_with_fonts(&mut page.view);
+        assert_eq!(listed(&page), None, "the query Escape closed stays closed");
+        type_text(&mut page, " @");
+        frame_with_fonts(&mut page.view);
+        assert!(listed(&page).is_some(), "a new query opens it again");
+        assert!(drafts_sent(&page).is_empty());
+    }
+
+    /// A click the page took on an entry picks it at the next frame, in the
+    /// region it names alone (`MURMURE-555`).
+    #[test]
+    fn a_click_on_an_entry_picks_it_in_its_region() {
+        let channel = ChannelId::new();
+        let (mut page, ..) = mentioning(channel);
+        type_text(&mut page, "@");
+        frame_with_fonts(&mut page.view);
+        page.picked.set(Some((true, 1)));
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().draft(channel).as_deref(), Some("@"));
+        assert!(page.picked.get().is_some(), "the thread's pick waits");
+        page.picked.set(Some((false, 1)));
+        frame_with_fonts(&mut page.view);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(
+            page.view.composer().draft(channel).as_deref(),
+            Some("@Bob ")
+        );
+        assert_eq!(listed(&page), None, "the pick closed the list");
+        assert!(page.view.composer().focused());
     }
 }

@@ -23,7 +23,7 @@ use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteRow, ShellAction}
 use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId};
 use ambre_murmure::chrome::{
-    DeleteConfirm, KeyList, MurmureHandler, MurmureRelay, SearchBox, coverage,
+    DeleteConfirm, KeyList, MentionPanel, MurmureHandler, MurmureRelay, SearchBox, coverage,
 };
 use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
@@ -1224,4 +1224,56 @@ fn the_channel_being_read_notifies_nothing_until_the_page_is_hidden() {
     assert!(relay.notice(&news(direct, true), false).is_some());
     relay.pane.set(MurmurePane::ChannelList);
     assert!(relay.notice(&news(direct, false), true).is_some());
+}
+
+/// The `@` list shows its entries as options, the chosen one selected. A
+/// press on an entry picks it for its own region alone, and only that
+/// region closes the list (`MURMURE-555`).
+#[wasm_bindgen_test]
+async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
+    use ambre_murmure::mention_list::MentionList;
+    use wasm_bindgen::JsCast;
+
+    let (_owner, relay, _) = shown_direct();
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let _handle = leptos::mount::mount_to(mount, move || view! { <MentionPanel relay=relay /> });
+    assert!(root.query_selector("[role=listbox]").unwrap().is_none());
+
+    let entries = ["@channel", "@Bob", "@Carol"].map(str::to_owned).to_vec();
+    let list = MentionList {
+        entries,
+        chosen: 0,
+        at: (10.0, 20.0),
+        in_thread: false,
+    };
+    relay.show_mentions(false, Some(list));
+    leptos::task::tick().await;
+    let options = root.query_selector_all("[role=option]").unwrap();
+    assert_eq!(options.length(), 3);
+    let selected: Vec<Option<String>> = (0..3)
+        .map(|i| {
+            let option: web_sys::Element = options.item(i).unwrap().dyn_into().unwrap();
+            option.get_attribute("aria-selected")
+        })
+        .collect();
+    let expected = ["true", "false", "false"].map(|s| Some(s.to_owned()));
+    assert_eq!(selected, expected.to_vec());
+    let bob = options.item(1).unwrap();
+    assert_eq!(bob.text_content().as_deref(), Some("@Bob"));
+
+    let press = web_sys::MouseEvent::new("mousedown").unwrap();
+    bob.dispatch_event(&press).unwrap();
+    assert_eq!(relay.take_pick(true), None, "the thread picked nothing");
+    assert_eq!(relay.take_pick(false), Some(1));
+    assert_eq!(relay.take_pick(false), None, "a pick is taken once");
+
+    relay.show_mentions(true, None);
+    leptos::task::tick().await;
+    assert!(root.query_selector("[role=listbox]").unwrap().is_some());
+    relay.show_mentions(false, None);
+    leptos::task::tick().await;
+    assert!(root.query_selector("[role=listbox]").unwrap().is_none());
+    root.remove();
 }

@@ -199,6 +199,5 @@ changed text.
 * **An undo puts the caret at the end.** The history keeps the text of each step, not its caret.
   That waits for the `The caret after an undo` Story (`ambre-roadmap.md` E5).
 * **A draft lives in memory.** A reload loses it, until the `Drafts` Story (`ambre-roadmap.md` E5).
-* **`@` opens no panel.** The panel waits for the `The mention panel` Story (`ambre-roadmap.md` E5).
 * **A screen reader does not hear the draft.** The pipe takes the text, and nothing reads the draft
   back. That waits for the `The composer read aloud` Story (`ambre-roadmap.md` E5).

@@ -89,6 +89,13 @@ pub enum EditIntent {
     Compose(String),
     /// IME composition committed: finalize the preedit as real text.
     ComposeEnd(String),
+    /// Replace the bytes `start..end` of the buffer with `text`, the caret
+    /// after it. A range off a char boundary changes nothing.
+    Replace {
+        start: usize,
+        end: usize,
+        text: String,
+    },
 }
 
 /// The pinned visual style of an edit, captured by the host at open and re-applied
@@ -326,6 +333,14 @@ impl TextEditor {
         self.editor.selected_text().map(str::to_owned)
     }
 
+    /// The byte offset of the caret, or `None` while a selection or a
+    /// composition holds. Font-free, and as of the last flush.
+    pub fn caret(&self) -> Option<usize> {
+        let selection = self.editor.raw_selection();
+        let collapsed = selection.is_collapsed() && self.editor.raw_compose().is_none();
+        collapsed.then(|| selection.focus().index())
+    }
+
     /// Push the pinned style + geometry onto the editor for this paint, then apply
     /// every queued intent through the driver. Must run before rendering so the
     /// layout reflects the latest edits. `wrap_w` is the wrap width in screen
@@ -425,6 +440,14 @@ impl TextEditor {
                         drv.clear_compose();
                         if !s.is_empty() {
                             drv.insert_or_replace_selection(&s);
+                        }
+                    }
+                    EditIntent::Replace { start, end, text } => {
+                        // The driver selects nothing off a char boundary, so
+                        // only a selection of the exact range is replaced.
+                        drv.select_byte_range(start, end);
+                        if drv.editor.raw_selection().text_range() == (start..end) {
+                            drv.insert_or_replace_selection(&text);
                         }
                     }
                 }
@@ -715,6 +738,33 @@ mod tests {
         ed.push(EditIntent::Insert("2".to_owned()));
         ed.flush(&mut fcx, 1000.0, 1.0);
         assert_eq!(ed.text(), "a2b1");
+    }
+
+    /// A replace swaps the exact bytes it names and leaves the caret after
+    /// its text. A range off a char boundary or past the end changes nothing,
+    /// and a selection reads no caret (`CANVAS-077`).
+    #[test]
+    fn a_replace_swaps_its_range_and_puts_the_caret_after_it() {
+        let mut fcx = FontContext::default();
+        let mut ed = TextEditor::new("hé @bo x", style());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.caret(), Some("hé @bo x".len()));
+        let replace = |start, end, text: &str| EditIntent::Replace {
+            start,
+            end,
+            text: text.to_owned(),
+        };
+        ed.push(replace(4, 7, "@Bob"));
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.text(), "hé @Bob x");
+        assert_eq!(ed.caret(), Some(8), "the caret follows the new text");
+        ed.push(replace(2, 3, "!"));
+        ed.push(replace(0, 99, "!"));
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.text(), "hé @Bob x", "a broken range replaced text");
+        ed.push(EditIntent::SelectAll);
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.caret(), None, "a selection is no caret");
     }
 
     /// The flush drains the queue: nothing is left behind, and a second flush

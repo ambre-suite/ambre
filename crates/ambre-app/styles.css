@@ -607,6 +607,35 @@ input[type="radio"] {
     list-style: none;
 }
 
+/* The `@` list of the composer, hung above its caret. The pipe keeps the
+   focus, so the list takes no pointer focus of its own. */
+.murmure-mentions {
+    position: fixed;
+    z-index: 20;
+    transform: translateY(-100%);
+    min-width: 12rem;
+    max-width: min(20rem, 90vw);
+    max-height: 40vh;
+    overflow-y: auto;
+    margin: 0;
+    padding: var(--space-2) 0;
+    list-style: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+}
+
+.murmure-mention {
+    padding: var(--space-1) var(--space-4);
+    cursor: pointer;
+}
+
+.murmure-mention[aria-selected="true"] {
+    box-shadow: inset 2px 0 0 var(--accent);
+    background: var(--bg);
+}
+
 /* The search box of the command bar, its results under it. */
 .murmure-search {
     position: relative;

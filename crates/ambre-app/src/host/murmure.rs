@@ -29,6 +29,9 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput) -> PageReads {
         back: Rc::new(move || relay.pane.update(|pane| *pane = pane.back())),
         me: Rc::new(move || relay.me()),
         pipe,
+        members_of: Rc::new(move |channel| relay.members_of(channel)),
+        show_mentions: Rc::new(move |in_thread, list| relay.show_mentions(in_thread, list)),
+        take_pick: Rc::new(move |in_thread| relay.take_pick(in_thread)),
     }
 }
 

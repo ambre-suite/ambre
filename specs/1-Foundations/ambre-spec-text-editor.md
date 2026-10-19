@@ -53,6 +53,7 @@ everything recorded since the last frame.
 |---|---|---|---|---|---|---|
 | `CANVAS-047` | `POST` | Every recorded action MUST be applied at paint time. | this spec section 2 | `ambre_canvas::editor::tests::every_recorded_action_applies_at_the_flush` -- two inserts with motion between them, and one flush shows each one at its place | none | verified |
 | `CANVAS-050` | `FRAME` | A flush MUST NOT leave a recorded action in the queue. | this spec section 2, the seam; derived | `ambre_canvas::editor::tests::a_flush_leaves_the_queue_empty` -- it reads the queue empty after a flush, and a second flush with nothing recorded leaves the buffer as it was | none | verified |
+| `CANVAS-077` | `POST` | A recorded replace MUST swap the exact byte range it names, leave the caret after its text, and change nothing when the range is off a char boundary. | this spec section 2 | `ambre_canvas::editor::tests::a_replace_swaps_its_range_and_puts_the_caret_after_it` -- a query becomes a name with the caret after it, and a range inside a char or past the end leaves the buffer | none | verified |
 
 ### 1.4 Close an edit
 
@@ -68,7 +69,7 @@ The host compares the body it captured when the edit opened against the one the 
 * **Boundary.** none: the core holds a string in memory, reaches no relay and opens no socket. What
   the user types leaves it as a commit the application turns into a document operation, and the
   keyboard path that feeds it is `ambre-spec-text-input.md`.
-* **Verification.** 11 `verified`, 2 `unimplemented`. Host-tier tests hold the queue, the drain at
+* **Verification.** 12 `verified`, 2 `unimplemented`. Host-tier tests hold the queue, the drain at
   paint time, the drawn paths and the no-op close. A parity belt per wrapper proves each one
   delegates to the core. What is loose is the two rules nothing has built yet.
 

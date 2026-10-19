@@ -1,6 +1,6 @@
 # AMBRE -- FEATURE: MURMURE MENTIONS
 **Type:** Vertical (feature)
-**Implementation:** partial -- every rule is built; the composer draws the `@` list later
+**Implementation:** partial -- every rule is built; the `@channel` question is not drawn yet
 
 > A member names another in a message with `@`. The one named is told, even when the channel is
 > not loaded, and the name follows a later rename.
@@ -46,11 +46,23 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-231` | `POST` | In a channel past the member threshold of the budget register, the composer MUST ask for confirmation before it sends an `@channel`. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_murmure::mention_tests::an_at_channel_past_the_threshold_waits_for_confirmation`; `ambre_logic::channels::tests::an_at_channel_past_the_threshold_asks_before_it_sends` -- eleven members ask first and nothing leaves before the confirmed resend | none | verified |
 | `MURMURE-232` | `FRAME` | Mentioning the channel MUST NOT write the list of its members into the message. | this spec section 3 | `ambre_murmure::mention_tests::an_at_channel_names_the_channel_and_no_member` -- the message holds no field beyond its five keys | none | verified |
 
+### 1.5 Pick a member from the `@` list
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-551` | `POST` | An `@` that starts a word in the composer MUST list `@channel` first, then the members of the channel whose name has a word that starts with the query, never the writer, until a space ends the query. | this spec section 3 | `ambre_murmure::mention_list::tests::an_at_that_starts_a_word_opens_a_query_up_to_the_caret` -- an `@` inside a word opens nothing; `ambre_murmure::view::tests::an_at_opens_the_members_with_the_channel_first` -- the list filters as the user types and a space closes it | none | verified |
+| `MURMURE-552` | `POST` | A pick MUST write the name over the query, then a space, and the message sent MUST carry a `mention` mark over that name. | this spec section 3; `MURMURE-100` | `ambre_murmure::view::tests::a_pick_writes_the_name_and_sends_its_mention` -- two picks send two marks over their names, and Tab picks without sending | none | verified |
+| `MURMURE-553` | `POST` | An edit of the draft MUST move each mention it leaves whole, and drop each mention whose name it cuts. | this spec section 3 | `ambre_murmure::view::tests::an_edit_of_the_draft_keeps_the_mentions_it_leaves_whole` -- text typed before a name moves its mark, and a key inside a name drops it | none | verified |
+| `MURMURE-554` | `POST` | While the list shows, Up and Down MUST move its choice, Enter and Tab MUST pick it, and Escape MUST close it until its query ends. | this spec section 4 | `ambre_murmure::view::tests::the_list_takes_its_keys_and_escape_closes_it_until_the_query_ends` -- the choice wraps round, Escape keeps the draft, and a new `@` opens it again | none | verified |
+| `MURMURE-555` | `POST` | A press on an entry MUST pick it in the region whose list shows it, and leave the focus in the composer. | this spec section 4 | `ambre_murmure::view::tests::a_click_on_an_entry_picks_it_in_its_region` -- a pick for the thread leaves the channel's draft; `ambre_murmure::tests::chrome_relay::the_mention_list_shows_its_entries_and_a_press_picks_one` -- the options show the choice, and a press is taken once by its region | none | verified |
+| `MURMURE-556` | `FRAME` | Moving through the `@` list or closing it MUST NOT change the draft, and MUST NOT send it. | this spec section 4 | `ambre_murmure::view::tests::the_list_takes_its_keys_and_escape_closes_it_until_the_query_ends` -- the draft reads `@` after Down, Up and Escape, and nothing left | none | verified |
+
 * **Budget.** none of its own: a mention is a mark inside a message.
 * **Boundary.** the mentioned users ride in the sealed summary (`SYNC-113`), never in a field the
   relay reads. Push notifications, later, put that list in front of the relay, which they rule.
-* **Verification.** 13 `verified`. The mention tests of `crates/ambre-murmure` hold the mark, the
-  count, the summary and the screen. The Logic tests hold the members that feed it.
+* **Verification.** 19 `verified`. The mention tests of `crates/ambre-murmure` hold the mark, the
+  count, the summary and the screen. The Logic tests hold the members that feed it. The view tests
+  hold the `@` list, and a browser test holds its panel.
 
 ---
 
@@ -76,8 +88,13 @@ not a list of members (`MURMURE-230`), and each client counts it as its own ment
 it anyway. Past a member threshold, the composer asks first (`MURMURE-231`). Only moderation, a
 later Story, can restrict it by role.
 
-**The mention list** is a floating panel of the shared shell, placed at the caret. It takes its
-placement, its flip and its keyboard model from `ambre-spec-chrome.md` (`CHROME-004`).
+**The mention list** is a floating panel hung above the caret. An `@` that starts a word opens a
+query (`MURMURE-551`), and a pick writes the name with its mark (`MURMURE-552`). The pipe keeps the
+focus, so the composer takes the list's keys (`MURMURE-554`). A press on an entry picks it and
+moves no focus (`MURMURE-555`). The panel is a listbox in the page, so a screen reader reads it.
+
+**The marks of a draft** count chars of the text they were laid on. Each edit maps them onto the
+new text, and drops each one whose name it cut (`MURMURE-553`).
 
 **The screen.** The Logic thread drops each mark of a non-member before a draft leaves
 (`MURMURE-099`). Members unlisted yet, every mark stays.
@@ -86,6 +103,7 @@ placement, its flip and its keyboard model from `ambre-spec-chrome.md` (`CHROME-
 with no document loaded. The loaded message always wins (`MURMURE-104`).
 
 **Code.** `crates/ambre-murmure/src/mention.rs`, `ChannelState::send` and `ChannelState::mentions`.
+The list is `crates/ambre-murmure/src/mention_list.rs`, the composer and `MentionPanel`.
 The Logic thread folds the counts into the channel mark.
 
 ---
@@ -95,6 +113,10 @@ The Logic thread folds the counts into the channel mark.
 | Trigger | Behaviour |
 |---|---|
 | `@` in the composer | a list of the members of the channel, filtered as the user types, with `@channel` first |
+| Up, Down in the list | the choice moves round the list, and a screen reader says it |
+| Enter, Tab in the list | the choice is written into the draft |
+| Escape in the list | the list closes until its query ends |
+| a press on an entry | that entry is written into the draft |
 | a click on a mention | the profile of the member named |
 
 ---
@@ -112,6 +134,8 @@ The Logic thread folds the counts into the channel mark.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The `@` panel is not drawn.** The members reach the view, and the composer sends plain text.
-  The panel, the mark and the question before an `@channel` wait for the
-  `The mention panel` Story (`ambre-roadmap.md` E5).
+* **The question before an `@channel` is not drawn.** The Logic thread asks it, but the draft has
+  left the composer by then. Keeping it, asking and sending it again wait for the
+  `The @channel question` Story (`ambre-roadmap.md` E5).
+* **The panel has a shell of its own.** It takes no placement nor flip from the shared one
+  (`CHROME-004`), which waits for the `One floating-menu shell` Story (`ambre-roadmap.md` E8).
