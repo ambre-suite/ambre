@@ -264,6 +264,14 @@ impl Sidebar {
         }
     }
 
+    /// Where a channel of the user lies, as the listing gave it.
+    pub fn place_of(&self, channel: ChannelId) -> Option<ChannelPlace> {
+        self.members
+            .iter()
+            .find(|m| m.channel_id == channel)
+            .map(|m| m.place)
+    }
+
     /// The spaces of the user, in the order the sidebar draws them.
     pub fn spaces(&self) -> &[SpaceId] {
         &self.spaces

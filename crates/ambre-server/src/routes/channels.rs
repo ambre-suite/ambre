@@ -1839,7 +1839,8 @@ mod tests {
                 session(who),
                 Path(document.to_string()),
                 Json(crate::routes::share::InviteRequest {
-                    invitee_email: invitee.into(),
+                    invitee_email: Some(invitee.into()),
+                    invitee_id: None,
                     role: Role::Editor,
                     doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([9u8; 48]),
                     key_id: ambre_core::KeyId::from_array(key),

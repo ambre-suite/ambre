@@ -15,8 +15,8 @@ use crate::commands::{MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, 
 use crate::{Activity, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection};
 use ambre_bus::AppCommand;
 use ambre_bus::{
-    ChannelMatches, DirectMessageEvent, LogicCommand, MemberView, MurmureEvent, Presence,
-    RequestId, RestCommand, RestEvent, SpaceCommand, SpaceEvent, Timestamp, UiEvent,
+    ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MurmureEvent,
+    Presence, RequestId, RestCommand, RestEvent, SpaceCommand, SpaceEvent, Timestamp, UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, PaletteEntry, ShellAction, ShellRegion};
 use ambre_commands::CommandId;
@@ -147,7 +147,7 @@ pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl Int
                                         }
                                     })
                                 });
-                            member_view(member, choose)
+                            member_view(member, choose.map(|choose| (choose, "Message")))
                         })
                         .collect_view()
                 }}
@@ -156,11 +156,81 @@ pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl Int
     }
 }
 
+/// The invite control of a private channel or a direct message (the Murmure
+/// channels spec). It opens a list of the members the relay offers, behind
+/// a filter that sends nothing. Choosing one fetches their key for the check
+/// of the pin, and closes the list.
+#[component]
+pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl IntoView {
+    let open = RwSignal::new(false);
+    let query = RwSignal::new(String::new());
+    let target = relay.invite_target();
+    // Another channel closes the list.
+    Effect::new(move |_| {
+        target.track();
+        open.set(false);
+    });
+    let rows = relay.invitees();
+    let found = move || {
+        rows.with(|members| {
+            query.with(|q| {
+                crate::find_members(members, q)
+                    .into_iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+        })
+    };
+    view! {
+        <Show when=move || target.get().is_some()>
+            <div class="murmure-invite">
+                <button
+                    class="murmure-invite-toggle"
+                    aria-expanded=move || ambre_chrome::aria_bool(open.get())
+                    on:click=move |_| open.update(|o| *o = !*o)
+                >
+                    "Invite"
+                </button>
+                <Show when=move || open.get()>
+                    <div class="murmure-invite-picker">
+                        <input
+                            class="murmure-invite-filter"
+                            type="search"
+                            aria-label="Find a member to invite"
+                            placeholder="Find a member"
+                            prop:value=move || query.get()
+                            on:input=move |ev| query.set(event_target_value(&ev))
+                        />
+                        <ul aria-label="Invite a member">
+                            {move || {
+                                found()
+                                    .into_iter()
+                                    .map(|member| {
+                                        let user = member.user_id;
+                                        let choose = Callback::new(move |()| {
+                                            if let Some(command) = relay.invite(user) {
+                                                send.run(command);
+                                            }
+                                            open.set(false);
+                                            query.set(String::new());
+                                        });
+                                        member_view(member, Some((choose, "Invite")))
+                                    })
+                                    .collect_view()
+                            }}
+                        </ul>
+                    </div>
+                </Show>
+            </div>
+        </Show>
+    }
+}
+
 /// One member: the avatar, the name, then the presence mark. The two marks
 /// differ in shape as well as in colour, and each carries its word for a
-/// screen reader (`MURMURE-443`). Another member's row is a button that
-/// writes to them; the user's own row is not.
-fn member_view(member: MemberView, choose: Option<Callback<()>>) -> impl IntoView {
+/// screen reader (`MURMURE-443`). A row the user may act on is a button,
+/// titled by the verb of what it does; the user's own row is not.
+fn member_view(member: MemberView, choose: Option<(Callback<()>, &'static str)>) -> impl IntoView {
     let (state, word) = match member.presence {
         Presence::Online => ("online", "Online"),
         Presence::Offline => ("offline", "Offline"),
@@ -175,12 +245,12 @@ fn member_view(member: MemberView, choose: Option<Callback<()>>) -> impl IntoVie
     view! {
         <li class="murmure-member">
             {match choose {
-                Some(choose) => {
+                Some((choose, verb)) => {
                     view! {
                         <button
                             r#type="button"
                             class="murmure-member-open"
-                            title=format!("Message {name}")
+                            title=format!("{verb} {name}")
                             on:click=move |_| choose.run(())
                         >
                             {who}
@@ -212,6 +282,9 @@ pub struct MurmureRelay {
     me: RwSignal<Option<UserId>>,
     /// The search box of the command bar, closed until the find chord.
     pub search: RwSignal<SearchBox>,
+    /// The member whose key was fetched for an invite, and the channel it
+    /// goes into. The answer becomes that invite, not a direct message.
+    inviting: RwSignal<Option<(UserId, ChannelId)>>,
 }
 
 /// The search box: whether it is open, the query typed, and the last answer
@@ -286,6 +359,7 @@ impl MurmureRelay {
             members: RwSignal::new(HashMap::new()),
             me: RwSignal::new(None),
             search: RwSignal::new(SearchBox::default()),
+            inviting: RwSignal::new(None),
         }
     }
 
@@ -631,6 +705,7 @@ impl MurmureRelay {
     pub fn choose(&self, key: [u8; 16]) -> Option<LogicCommand> {
         let user_id = UserId::from_bytes(key);
         if self.member_name(user_id).is_some() && self.me.get_untracked() != Some(user_id) {
+            self.inviting.set(None);
             return Some(LogicCommand::Rest {
                 id: RequestId::next(),
                 cmd: RestCommand::FetchMemberKey { user_id },
@@ -648,6 +723,74 @@ impl MurmureRelay {
                 .find(|member| member.user_id == user)
                 .map(|member| member.display_name.clone())
         })
+    }
+
+    /// The shown channel, when the user may invite into it: a private
+    /// channel or a direct message of theirs. A space member joins a public
+    /// channel by themselves.
+    pub fn invite_target(&self) -> Signal<Option<ChannelId>> {
+        let (sidebar, pane) = (self.sidebar, self.pane);
+        Signal::derive(move || {
+            let channel = pane.get().shown_channel()?;
+            let place = sidebar.with(|s| s.place_of(channel))?;
+            (!matches!(place, ChannelPlace::Public(_))).then_some(channel)
+        })
+    }
+
+    /// Who the invite control offers: the members of the space of a private
+    /// channel, or of every open space for a direct message. Each comes
+    /// once, and this user never does.
+    pub fn invitees(&self) -> Signal<Vec<MemberView>> {
+        let (sidebar, members, me) = (self.sidebar, self.members, self.me);
+        let target = self.invite_target();
+        Signal::derive(move || {
+            let Some(channel) = target.get() else {
+                return Vec::new();
+            };
+            let spaces = sidebar.with(|s| match s.place_of(channel) {
+                Some(ChannelPlace::Private(space)) => vec![space],
+                _ => s.spaces().to_vec(),
+            });
+            let me = me.get();
+            let mut seen = HashSet::new();
+            members.with(|m| {
+                spaces
+                    .iter()
+                    .filter_map(|space| m.get(space))
+                    .flatten()
+                    .filter(|v| Some(v.user_id) != me && seen.insert(v.user_id))
+                    .cloned()
+                    .collect()
+            })
+        })
+    }
+
+    /// Invite `user` into the shown channel. Their key is fetched first, for
+    /// the check of the pin, and the invite leaves only once it passes.
+    pub fn invite(&self, user: UserId) -> Option<LogicCommand> {
+        let channel = self.invite_target().get_untracked()?;
+        if self.me.get_untracked() == Some(user) || self.member_name(user).is_none() {
+            return None;
+        }
+        self.inviting.set(Some((user, channel)));
+        Some(LogicCommand::Rest {
+            id: RequestId::next(),
+            cmd: RestCommand::FetchMemberKey { user_id: user },
+        })
+    }
+
+    /// The channel a key fetched for `user` invites them into, taken once.
+    /// `None` means the key was fetched for a direct message.
+    pub fn take_invite(&self, user: UserId) -> Option<ChannelId> {
+        self.inviting
+            .try_update(|pending| match *pending {
+                Some((invitee, channel)) if invitee == user => {
+                    *pending = None;
+                    Some(channel)
+                }
+                _ => None,
+            })
+            .flatten()
     }
 
     /// Open the next channel with activity after the shown one, or the

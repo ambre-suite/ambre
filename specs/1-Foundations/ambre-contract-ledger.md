@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3581 rows: 2965 shipped, of which 2 loose. 616 unbuilt.**
+**3584 rows: 2969 shipped, of which 2 loose. 615 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 851 | 418 | 816 | 609 | 269 | 2963 |
+| `verified` | 853 | 418 | 816 | 609 | 271 | 2967 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 193 | 55 | 29 | 109 | 230 | 616 |
+| `unimplemented` | 193 | 55 | 29 | 109 | 229 | 615 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -58,7 +58,7 @@
 | `ambre-spec-kinetic-scroll.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-launcher.md` | 25 | 21 | 21 |  | 4 |
 | `ambre-spec-media.md` | 15 | 15 | 15 |  |  |
-| `ambre-spec-membership.md` | 33 | 33 | 33 |  |  |
+| `ambre-spec-membership.md` | 34 | 34 | 34 |  |  |
 | `ambre-spec-message-bus.md` | 30 | 30 | 30 |  |  |
 | `ambre-spec-object-store.md` | 18 | 13 | 13 |  | 5 |
 | `ambre-spec-op-authorship.md` | 29 | 29 | 29 |  |  |
@@ -71,7 +71,7 @@
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 23 | 23 |  | 1 |
 | `ambre-spec-sequencer.md` | 70 | 70 | 70 |  |  |
-| `ambre-spec-server.md` | 79 | 73 | 72 | 1 | 6 |
+| `ambre-spec-server.md` | 80 | 74 | 73 | 1 | 6 |
 | `ambre-spec-session.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-sync.md` | 48 | 47 | 47 |  | 1 |
 | `ambre-spec-text-editor.md` | 13 | 11 | 11 |  | 2 |
@@ -161,7 +161,7 @@
 | `ambre-spec-prose-viewport.md` | 21 | 14 | 14 |  | 7 |
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 22 | 21 | 21 |  | 1 |
-| `ambre-spec-murmure-channels.md` | 51 | 36 | 36 |  | 15 |
+| `ambre-spec-murmure-channels.md` | 52 | 38 | 38 |  | 14 |
 | `ambre-spec-murmure-engine.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-murmure-keyboard.md` | 13 | 9 | 9 |  | 4 |
 | `ambre-spec-murmure-layout.md` | 24 | 19 | 19 |  | 5 |
@@ -209,12 +209,12 @@
 | `ambre-spec-machine-access.md` | MACH-001..034 |
 | `ambre-spec-macros.md` | MACRO-001..054 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146 |
-| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161 |
+| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172 |
 | `ambre-spec-message-bus.md` | BUS-001..030 |
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |
 | `ambre-spec-murmure-calls.md` | MURMURE-407..413 |
-| `ambre-spec-murmure-channels.md` | MURMURE-046..061,243..246,251..252,257,262,264,323..335,461..465,467..469,473..475,491,498 |
+| `ambre-spec-murmure-channels.md` | MURMURE-046..061,243..246,251..252,257,262,264,323..335,461..465,467..469,473..475,491,498,500 |
 | `ambre-spec-murmure-composer.md` | MURMURE-193..204,210..212,214..217,259,430..434 |
 | `ambre-spec-murmure-emoji.md` | MURMURE-137..141,374..381 |
 | `ambre-spec-murmure-engine.md` | MURMURE-021..030,476 |
@@ -280,7 +280,7 @@
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215 |
-| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..223 |
+| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..224 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050; UI-THREAD-014,018 |

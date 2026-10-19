@@ -876,7 +876,7 @@ fn request_id_echo_is_preserved_across_the_hop() {
         id,
         cmd: RestCommand::InviteToDocument {
             document_id: DocumentId::new(),
-            invitee_email: "x@y.z".to_string(),
+            invitee_email: Some("x@y.z".to_string()),
             invitee: UserId::new(),
             role: Role::Editor,
             expect_exchange_pub_key: [0u8; 32],

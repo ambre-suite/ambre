@@ -105,7 +105,13 @@ pub(crate) async fn checked_entry(
 /// encrypted with the invitee's X25519 exchange key.
 #[derive(serde::Deserialize)]
 pub struct InviteRequest {
-    pub invitee_email: String,
+    /// The invitee by email, as a document's share dialog names them.
+    #[serde(default)]
+    pub invitee_email: Option<String>,
+    /// The invitee by identity, as a member of a space is known to the
+    /// others. A request names one of the two (`SRV-224`).
+    #[serde(default, with = "ambre_core::serde_id::user_id::option")]
+    pub invitee_id: Option<ambre_core::UserId>,
     /// A role word, parsed by the handler: an unknown word answers 409, as it
     /// always has, rather than the extractor's 422.
     #[serde(with = "ambre_core::serde_enums::role")]
@@ -175,8 +181,16 @@ pub async fn invite_to_document(
 
     // An account without keys cannot hold a wrap. The key lookup and the search
     // never offer it, and the invite refuses it the same way (`SRV-163`).
-    let invitee = db::get_user_by_email(&state.db, &req.invitee_email)
-        .await?
+    let found = match (&req.invitee_email, req.invitee_id) {
+        (Some(email), None) => db::get_user_by_email(&state.db, email).await?,
+        (None, Some(user_id)) => db::get_user(&state.db, &user_id).await?,
+        _ => {
+            return Err(AppError::Conflict {
+                detail: "an invite names its invitee by email or by id, once".into(),
+            });
+        }
+    };
+    let invitee = found
         .filter(|u| u.exchange_pubkey.is_some())
         .ok_or(AppError::NotFound { resource: "user" })?;
     let invitee_id = invitee.id;

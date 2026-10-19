@@ -755,6 +755,66 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    // `SRV-224`: an invite names its invitee by id as it does by email. One
+    // naming both, or neither, is refused and adds no row.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_invite_names_its_invitee_by_id_or_by_email_once(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
+        let share = format!("/api/documents/{doc_id}/share");
+        let email = "by-id@test.com";
+        let invitee = crate::test_helpers::create_test_user(&state.db, email).await;
+        let body = |email: Option<&str>, id: Option<String>| {
+            let mut body = serde_json::json!({
+                "role": "editor",
+                "doc_key_enc": base64_encode(&[9u8; 32]),
+                "key_id": key_id_hex(1),
+            });
+            if let Some(email) = email {
+                body["invitee_email"] = email.into();
+            }
+            if let Some(id) = id {
+                body["invitee_id"] = id.into();
+            }
+            body
+        };
+        let member = || async {
+            let document = ambre_core::DocumentId::from_bytes(
+                *uuid::Uuid::parse_str(&doc_id).unwrap().as_bytes(),
+            );
+            crate::db::get_document_member(&state.db, &document, &invitee)
+                .await
+                .unwrap()
+        };
+
+        let both = body(Some(email), Some(invitee.to_string()));
+        assert_eq!(
+            post_json(&app, &auth, share.clone(), both).await,
+            StatusCode::CONFLICT
+        );
+        let neither = body(None, None);
+        assert_eq!(
+            post_json(&app, &auth, share.clone(), neither).await,
+            StatusCode::CONFLICT
+        );
+        assert!(member().await.is_none(), "a refused invite adds no row");
+
+        let unknown = body(None, Some(ambre_core::UserId::new().to_string()));
+        assert_eq!(
+            post_json(&app, &auth, share.clone(), unknown).await,
+            StatusCode::NOT_FOUND
+        );
+        let by_id = body(None, Some(invitee.to_string()));
+        assert_eq!(post_json(&app, &auth, share, by_id).await, StatusCode::OK);
+        assert!(
+            member().await.is_some(),
+            "the invite by id adds the invitee"
+        );
+    }
+
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn list_members_includes_owner(pool: sqlx::PgPool) {

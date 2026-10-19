@@ -312,9 +312,12 @@ pub enum RestCommand {
     /// refuses the invite. `now` is the instant the user confirmed, since
     /// Logic has no clock. A direct message of two stamps its notice of
     /// the third member with it (the Murmure channels spec).
+    ///
+    /// `invitee_email` is `None` for a member known by id alone, such as a
+    /// member of a space: Sync then fetches the keys of `invitee` itself.
     InviteToDocument {
         document_id: DocumentId,
-        invitee_email: String,
+        invitee_email: Option<String>,
         invitee: UserId,
         role: Role,
         expect_exchange_pub_key: [u8; 32],

@@ -803,9 +803,14 @@ impl Frame {
     }
 
     async fn filter(&self, text: &str) {
+        self.type_into(".murmure-members-filter", text).await;
+    }
+
+    /// Type `text` into the field `selector` names, as one input event.
+    async fn type_into(&self, selector: &str, text: &str) {
         let input: web_sys::HtmlInputElement = self
-            .query(".murmure-members-filter")
-            .expect("the member list has a filter")
+            .query(selector)
+            .unwrap_or_else(|| panic!("{selector} is on screen"))
             .dyn_into()
             .unwrap();
         input.set_value(text);
@@ -920,6 +925,58 @@ async fn a_click_on_another_member_fetches_their_key() {
         ),
         "{sent:?}"
     );
+}
+
+/// A private channel shows an invite control, and a public one none. Its
+/// list offers the other members of the space, and its filter sends nothing.
+/// A choice fetches the key for the check of the pin, then closes the list.
+#[wasm_bindgen_test]
+async fn the_invite_control_offers_the_other_members_and_fetches_a_key() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let (alice, members) = alice_and_bob(&acme);
+    let session = UiEvent::Rest {
+        id: ambre_bus::RequestId::next(),
+        evt: ambre_bus::RestEvent::SessionReady {
+            user_id: alice,
+            display_name: "Alice Martin".to_owned(),
+            email: "alice@test.local".to_owned(),
+        },
+    };
+    assert!(frame.absorb(session).await.is_empty());
+    assert!(frame.absorb(members).await.is_empty());
+    frame.select("general").await;
+    assert!(frame.query(".murmure-invite-toggle").is_none());
+
+    frame.select("Private channel").await;
+    assert!(frame.query(".murmure-invite-picker").is_none(), "closed");
+    frame.click(".murmure-invite-toggle").await;
+    let names = ".murmure-invite-picker .murmure-member-name";
+    assert_eq!(frame.texts(names), ["Bob"]);
+    let sent = frame.sent.get_untracked().len();
+    frame.type_into(".murmure-invite-filter", "zz").await;
+    assert!(frame.texts(names).is_empty());
+    frame.type_into(".murmure-invite-filter", "").await;
+    assert_eq!(
+        frame.sent.get_untracked().len(),
+        sent,
+        "the filter sends nothing"
+    );
+
+    frame
+        .click(".murmure-invite-picker .murmure-member-open")
+        .await;
+    let sent = frame.sent.get_untracked();
+    let Some(LogicCommand::Rest {
+        cmd: ambre_bus::RestCommand::FetchMemberKey { user_id: bob },
+        ..
+    }) = sent.last().cloned()
+    else {
+        panic!("no key fetched: {sent:?}");
+    };
+    assert_ne!(bob, alice);
+    assert!(frame.query(".murmure-invite-picker").is_none(), "it closes");
+    assert_eq!(frame.relay.take_invite(bob), Some(acme.board));
 }
 
 /// Online is a filled dot and offline a hollow ring: the two marks differ

@@ -9,7 +9,9 @@ use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
 use ambre_murmure::MurmurePane;
-use ambre_murmure::chrome::{ChannelHeader, ChannelList, MemberList, MessageSearch, MurmureRelay};
+use ambre_murmure::chrome::{
+    ChannelHeader, ChannelList, InviteControl, MemberList, MessageSearch, MurmureRelay,
+};
 
 /// The table the command palette searches: the booted application's whole
 /// declaration, never a menu's subset (`CHROME-008`). No application
@@ -45,6 +47,7 @@ pub(crate) fn MurmureShell(
             <Header slot>{children()}</Header>
             <Toolbar slot>
                 <ChannelHeader pane=pane name=relay.channel_name() has_members=relay.has_members() />
+                <InviteControl relay=relay send=send />
                 <MessageSearch relay=relay send=send />
             </Toolbar>
             <Sidebar slot label="Channels">

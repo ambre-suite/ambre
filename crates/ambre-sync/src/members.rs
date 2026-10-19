@@ -81,7 +81,7 @@ impl SyncState {
         &self,
         id: RequestId,
         document_id: DocumentId,
-        invitee_email: String,
+        invitee_email: Option<String>,
         invitee: UserId,
         role: Role,
         expect_exchange_pub_key: [u8; 32],
@@ -103,7 +103,7 @@ impl SyncState {
                 RestEvent::InviteSent {
                     document_id,
                     user_id: UserId::new(),
-                    display_name: invitee_email.clone(),
+                    display_name: invitee_email.unwrap_or_default(),
                 },
             );
             return;

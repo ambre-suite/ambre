@@ -190,6 +190,12 @@ impl LogicState {
             LogicCommand::OpenChannel { channel_id } => self.open_channel(channel_id),
             LogicCommand::CloseChannel { channel_id } => self.close_channel(channel_id),
             LogicCommand::OpenDirectMessage { draft, now } => self.open_direct_message(draft, now),
+            LogicCommand::InviteToChannel {
+                id,
+                channel_id,
+                invitee,
+                now,
+            } => self.invite_to_channel(id, channel_id, invitee, now),
             LogicCommand::FetchActivity => self.send_to_sync(SyncCommand::FetchActivity),
             LogicCommand::ListMemberChannels => {
                 self.send_to_sync(SyncCommand::ListMemberChannels);
@@ -1959,7 +1965,7 @@ mod tests {
             RestCommand::FetchMemberKey { user_id: user },
             RestCommand::InviteToDocument {
                 document_id: doc,
-                invitee_email: "a@b.c".to_owned(),
+                invitee_email: Some("a@b.c".to_owned()),
                 invitee: user,
                 role: Role::Editor,
                 expect_exchange_pub_key: [0; 32],

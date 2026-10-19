@@ -295,6 +295,81 @@ fn choosing_a_member_fetches_their_key_then_shows_the_direct_message() {
     assert!(relay.select(direct).is_none(), "it is open already");
 }
 
+/// A private channel and a direct message offer to invite the other members:
+/// those of the channel's space, or of every open space, each once. A public
+/// channel offers none. The key fetched for an invite is taken once, for the
+/// channel shown when it was asked (the Murmure channels spec).
+#[wasm_bindgen_test]
+fn an_invite_fetches_the_key_for_the_shown_channel_and_is_taken_once() {
+    let (_owner, relay, general, [alice, bob, carol]) = a_space_with_members();
+    assert_eq!(relay.invite_target().get_untracked(), None, "a public one");
+    assert!(relay.invite(bob).is_none());
+
+    let space = relay
+        .sidebar
+        .with_untracked(|s| s.public_space_of(general))
+        .unwrap();
+    let other = SpaceId::new();
+    let (board, direct, dave) = (ChannelId::new(), ChannelId::new(), UserId::new());
+    let member = |channel_id, place| MemberChannel { channel_id, place };
+    relay.absorb(&UiEvent::MemberChannels {
+        channels: vec![
+            member(general, ChannelPlace::Public(space)),
+            member(board, ChannelPlace::Private(space)),
+            member(direct, ChannelPlace::Direct),
+        ],
+        spaces: vec![space, other],
+        names: Vec::new(),
+        peers: Vec::new(),
+    });
+    let view = |user_id, name: &str| MemberView {
+        user_id,
+        display_name: name.to_owned(),
+        presence: Presence::Offline,
+    };
+    relay.absorb(&UiEvent::Space {
+        space_id: other,
+        event: SpaceEvent::Members {
+            members: vec![view(bob, "Bob"), view(dave, "Dave")],
+        },
+    });
+    let offered = |channel| -> Vec<UserId> {
+        relay.select(channel);
+        assert_eq!(relay.invite_target().get_untracked(), Some(channel));
+        relay
+            .invitees()
+            .get_untracked()
+            .iter()
+            .map(|m| m.user_id)
+            .collect()
+    };
+    assert_eq!(offered(board), [bob, carol], "the space of the channel");
+    assert_eq!(
+        offered(direct),
+        [bob, carol, dave],
+        "every space, each once"
+    );
+
+    assert!(relay.invite(alice).is_none(), "never oneself");
+    let fetched = relay.invite(carol);
+    assert!(
+        matches!(
+            fetched,
+            Some(LogicCommand::Rest { cmd: RestCommand::FetchMemberKey { user_id }, .. })
+                if user_id == carol
+        ),
+        "{fetched:?}"
+    );
+    relay.select(board);
+    assert_eq!(relay.take_invite(bob), None, "another member's key");
+    assert_eq!(relay.take_invite(carol), Some(direct), "the channel asked");
+    assert_eq!(relay.take_invite(carol), None, "taken once");
+
+    assert!(relay.invite(bob).is_some());
+    assert!(relay.choose(*bob.as_bytes()).is_some());
+    assert_eq!(relay.take_invite(bob), None, "a direct message cancels it");
+}
+
 /// The commands a handler sent through its sink.
 fn handler(relay: MurmureRelay) -> (MurmureHandler, RwSignal<Vec<LogicCommand>>) {
     let sent = RwSignal::new(Vec::new());

@@ -1258,7 +1258,14 @@ pub(crate) struct PubkeysResponse {
 
 #[derive(Serialize)]
 pub(crate) struct InviteRequest {
-    pub invitee_email: String,
+    /// One of the two names the invitee (`SRV-224`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invitee_email: Option<String>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "ambre_core::serde_id::user_id::option"
+    )]
+    pub invitee_id: Option<ambre_core::UserId>,
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
     pub doc_key_enc: String,

@@ -23,6 +23,9 @@ pub(crate) enum Purpose {
     /// The direct message of this user and the recipient alone (the Murmure
     /// members spec). `channel_id` names the request.
     Direct { channel_id: ChannelId },
+    /// An invitation of a space member into an open channel, by id (the
+    /// Murmure channels spec). The invitee joins as an editor.
+    Channel { channel_id: ChannelId },
 }
 
 /// A pending trust decision. Built by the per-frame relay from a fetched
@@ -54,7 +57,7 @@ impl TofuPrompt {
     fn email(&self) -> Option<&str> {
         match &self.purpose {
             Purpose::Invite { email, .. } => Some(email),
-            Purpose::Direct { .. } => None,
+            Purpose::Direct { .. } | Purpose::Channel { .. } => None,
         }
     }
 }
@@ -109,7 +112,7 @@ fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
             id: RequestId::next(),
             cmd: RestCommand::InviteToDocument {
                 document_id: *document_id,
-                invitee_email: email.clone(),
+                invitee_email: Some(email.clone()),
                 invitee: prompt.user_id,
                 role,
                 expect_exchange_pub_key: prompt.exchange_pub_key,
@@ -123,6 +126,15 @@ fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
                     user_id: prompt.user_id,
                     exchange_pub_key: prompt.exchange_pub_key,
                 }],
+            },
+            now,
+        },
+        Purpose::Channel { channel_id } => LogicCommand::InviteToChannel {
+            id: RequestId::next(),
+            channel_id: *channel_id,
+            invitee: DirectMember {
+                user_id: prompt.user_id,
+                exchange_pub_key: prompt.exchange_pub_key,
             },
             now,
         },
@@ -335,6 +347,38 @@ mod tests {
             },
         );
         assert_eq!(log.into_inner(), ["pin 6", "dispatch"]);
+    }
+
+    /// An invitation into a channel names the channel and the member, with the
+    /// key the user saw. It asks first, as every share does.
+    #[wasm_bindgen_test]
+    fn a_trusted_key_invites_the_member_into_the_channel() {
+        let channel_id = ChannelId::new();
+        let prompt = TofuPrompt {
+            purpose: Purpose::Channel { channel_id },
+            ..fetched(7)
+        };
+        assert!(prompt.email().is_none(), "an invite by id shows no email");
+        assert!(matches!(
+            classify(prompt.clone(), None, Role::Editor),
+            Next::Ask(_)
+        ));
+        let Next::Proceed(LogicCommand::InviteToChannel {
+            channel_id: sent,
+            invitee,
+            ..
+        }) = classify(prompt.clone(), Some([7; 32]), Role::Editor)
+        else {
+            panic!("a pinned key did not invite into the channel");
+        };
+        assert_eq!(sent, channel_id);
+        assert_eq!(
+            invitee,
+            DirectMember {
+                user_id: prompt.user_id,
+                exchange_pub_key: [7; 32],
+            }
+        );
     }
 
     /// The pin lands before the invitation leaves, under the recipient's

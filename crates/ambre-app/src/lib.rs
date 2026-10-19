@@ -1521,8 +1521,9 @@ pub fn main() {
                     };
                     classify_against_pin(prompt);
                 }
-                // A member chosen in the Murmure palette: their key passes the
-                // same check before a direct message wraps a key for them.
+                // A member chosen in the Murmure palette, or for an invite into
+                // the shown channel. Their key passes the same check before a
+                // direct message or the invite wraps a key for them.
                 UiEvent::Rest {
                     evt:
                         ambre_bus::RestEvent::MemberKey {
@@ -1535,10 +1536,14 @@ pub fn main() {
                     let display_name = murmure_relay
                         .member_name(*user_id)
                         .unwrap_or_else(|| "This member".to_owned());
-                    classify_against_pin(TofuPrompt {
-                        purpose: tofu::Purpose::Direct {
+                    let purpose = match murmure_relay.take_invite(*user_id) {
+                        Some(channel_id) => tofu::Purpose::Channel { channel_id },
+                        None => tofu::Purpose::Direct {
                             channel_id: ambre_bus::ChannelId::new(),
                         },
+                    };
+                    classify_against_pin(TofuPrompt {
+                        purpose,
                         user_id: *user_id,
                         display_name,
                         exchange_pub_key: *exchange_pub_key,
