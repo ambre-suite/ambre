@@ -887,6 +887,11 @@ impl MurmureView {
             let now = self.now();
             self.send(sent.command(now));
         }
+        // The draft is drawn, so what the last key did is said
+        // (`MURMURE-571` to `MURMURE-574`).
+        if let Some(text) = self.composer.take_said() {
+            (self.reads.announce)(&text);
+        }
         let list_size = (self.size.0, self.list_height());
         let lists = Rc::clone(&self.lists);
         let lists = lists.borrow();
@@ -2923,7 +2928,11 @@ mod tests {
         assert!(shift_key(&mut page, "ArrowLeft"));
         assert!(key(&mut page, "ArrowUp", false, 0.0), "the caret takes it");
         frame_with_fonts(&mut page.view);
-        assert!(page.said.borrow().is_empty(), "the list announced nothing");
+        assert_eq!(
+            *page.said.borrow(),
+            ["ab"],
+            "the composer said its line, and the list announced nothing"
+        );
         assert!(
             !key(&mut page, "F5", false, 0.0),
             "a key it does not use stays the page's"
@@ -4406,6 +4415,38 @@ mod tests {
             shown,
             "a bar unchanged is not handed again"
         );
+    }
+
+    /// The draft is said to a screen reader as the keys land on it. The
+    /// focus, a move, a delete, a selection and an undo say it, and a typed
+    /// key does not (`MURMURE-571` to `MURMURE-575`).
+    #[test]
+    fn the_keys_on_the_draft_are_said_once_they_land() {
+        let mut page = composing(ChannelId::new());
+        let last = |page: &Page| page.said.borrow().last().cloned();
+        press_composer(&mut page);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(last(&page).as_deref(), Some("blank"), "the focus says it");
+        type_slowly(&mut page, "one two");
+        assert_eq!(last(&page).as_deref(), Some("blank"), "a typed key is not");
+        key(&mut page, "ArrowLeft", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(last(&page).as_deref(), Some("o"));
+        chord(&mut page, "ArrowLeft", false);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(last(&page).as_deref(), Some("two"));
+        key(&mut page, "Backspace", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(last(&page).as_deref(), Some("space"));
+        shift_key(&mut page, "ArrowLeft");
+        frame_with_fonts(&mut page.view);
+        assert_eq!(last(&page).as_deref(), Some("e, selected"));
+        chord(&mut page, "z", false);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(last(&page).as_deref(), Some("one two"));
+        let count = page.said.borrow().len();
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.said.borrow().len(), count, "a key is said once");
     }
 
     /// An edit loads the styles of its message. One that changes the styles

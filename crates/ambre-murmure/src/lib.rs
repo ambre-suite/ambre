@@ -31,6 +31,7 @@ pub mod mention_list;
 mod opening;
 pub mod paint;
 mod reaction;
+mod read_aloud;
 pub mod schema;
 mod search;
 pub mod select;

@@ -82,12 +82,22 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-433` | `POST` | An undo in the composer MUST revert the last edit of the draft. | this spec section 3; `UNDO-010` | `ambre_murmure::view::tests::undo_and_redo_walk_the_draft_a_word_at_a_time` -- a word, a run of deletions and a paste are each one step, a redo brings them back, and an edit drops the redo; `ambre_murmure::composer::tests::a_seal_closes_the_waiting_edit_and_never_the_next_one` -- a caret move closes the step and never the next | none | verified |
 | `MURMURE-434` | `FRAME` | An undo in the composer MUST NOT reach a message already sent. | this spec section 3; `UNDO-001` | `ambre_murmure::view::tests::an_undo_after_a_send_reaches_no_message` -- after a send, an undo and a redo leave the draft empty and send nothing | none | verified |
 
+### 1.7 Hear the draft
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-571` | `POST` | A caret move in the composer MUST say the char, the word or the line it reaches. | this spec section 3 | `ambre_murmure::read_aloud::tests::a_move_says_the_char_or_the_word_after_the_caret` -- a char by its name, a word, no caret; `ambre_murmure::read_aloud::tests::a_line_move_says_the_line_of_the_caret` -- the logical line, an empty one; `ambre_murmure::view::tests::the_keys_on_the_draft_are_said_once_they_land` -- a key on the view, said once | none | verified |
+| `MURMURE-572` | `POST` | A delete in the composer MUST say the text it took. | this spec section 3 | `ambre_murmure::read_aloud::tests::a_delete_says_what_it_took` -- a char, a word, a key that typed; `ambre_murmure::view::tests::the_keys_on_the_draft_are_said_once_they_land` -- a Backspace on the view | none | verified |
+| `MURMURE-573` | `POST` | A selection in the composer MUST say the text selected. | this spec section 3 | `ambre_murmure::read_aloud::tests::a_selection_says_its_text` -- the text, then `selected`; `ambre_murmure::view::tests::the_keys_on_the_draft_are_said_once_they_land` -- a Shift move on the view | none | verified |
+| `MURMURE-574` | `POST` | The composer MUST say its draft as it takes the focus or an undo lands. | this spec section 3 | `ambre_murmure::read_aloud::tests::the_draft_is_said_by_its_start` -- trimmed, clipped, `blank`; `ambre_murmure::view::tests::the_keys_on_the_draft_are_said_once_they_land` -- a press and an undo on the view | none | verified |
+| `MURMURE-575` | `FRAME` | A key that types text MUST NOT be said by the composer. | this spec section 3 | `ambre_murmure::view::tests::the_keys_on_the_draft_are_said_once_they_land` -- a typed draft adds nothing to what was said | none | verified |
+
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 31 `verified`, 8 `unimplemented`. The host tier drives the view with the events
-  the page sends: a press, a tap, text, keys, a paste. The inline marks are built, drawn in the
-  field and sent. The block marks, the format bar and the stored draft are not built.
+* **Verification.** 36 `verified`, 8 `unimplemented`. The host tier drives the view with the events
+  the page sends: a press, a tap, text, keys, a paste. The marks are built, drawn in the field and
+  sent, and the format bar shows. The stored draft is not built.
 
 ---
 
@@ -129,6 +139,9 @@ content. It takes its keys, its input method and its clipboard events from the p
 selection, or takes it off a selection it covers whole. A selection shows the format bar Prose
 shows, with the controls of the set alone (`MURMURE-432`). A press toggles its mark as the chord
 does. The bar leaves with the selection, so nothing stays on screen (`MURMURE-196`).
+
+**A draft read aloud.** The pipe holds no text, so the composer says what a key did in the polite
+live region (`MURMURE-571` to `MURMURE-574`). The screen reader echoes a typed key itself (`MURMURE-575`).
 
 **A style on the body.** A sent style is a mark on the `content` text, beside the mentions
 (`MURMURE-562`). An edit, an amendment, a fold and a relocation carry it. A link holds an `http`
@@ -217,5 +230,5 @@ changed text.
 * **An undo puts the caret at the end.** The history keeps the text of each step, not its caret.
   That waits for the `The caret after an undo` Story (`ambre-roadmap.md` E5).
 * **A draft lives in memory.** A reload loses it, until the `Drafts` Story (`ambre-roadmap.md` E5).
-* **A screen reader does not hear the draft.** The pipe takes the text, and nothing reads the draft
-  back. That waits for the `The composer read aloud` Story (`ambre-roadmap.md` E5).
+* **A line move says the logical line.** A wrapped draft is said from break to break. That waits
+  for the `The wrapped line read aloud` Story (`ambre-roadmap.md` E5).

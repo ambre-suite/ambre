@@ -40,6 +40,7 @@ use crate::look;
 use crate::markers::{self, MarkBar};
 use crate::mention_list::{MentionList, Offer, offers, query_at};
 use crate::paint::{draw, shape};
+use crate::read_aloud::{self, Say};
 
 /// The strip above the field while the composer holds an edit.
 pub const EDITING_LINE: &str = "Editing a message. Escape cancels.";
@@ -437,6 +438,11 @@ pub struct Composer {
     /// The styles chords asked for, which the next paint puts on the
     /// selection or takes off it (`MURMURE-431`).
     toggles: Vec<(DraftOf, TextStyle)>,
+    /// What the last key of the frame asks the next paint to say
+    /// (`MURMURE-571` to `MURMURE-574`).
+    saying: Option<(DraftOf, Say)>,
+    /// What the last paint said, until the view takes it.
+    said: Option<String>,
 }
 
 impl Composer {
@@ -511,6 +517,12 @@ impl Composer {
     /// caret or a selection changes none.
     pub fn take_typed(&mut self) -> bool {
         std::mem::take(&mut self.typed)
+    }
+
+    /// What a screen reader hears of the last paint, once
+    /// (`MURMURE-571` to `MURMURE-574`).
+    pub fn take_said(&mut self) -> Option<String> {
+        self.said.take()
     }
 
     /// The editor of the draft `of`, opened empty on first use.
@@ -619,6 +631,8 @@ impl Composer {
     /// method chose. A paste is a step of its own, and a space ends a word's.
     pub fn text(&mut self, of: DraftOf, text: &str) {
         self.typed |= !text.is_empty();
+        // The screen reader echoes a typed key itself.
+        self.saying = None;
         let history = self.history(of);
         if text.chars().count() > 1 {
             history.apart();
@@ -651,6 +665,7 @@ impl Composer {
         let text = editor.selected_text()?;
         editor.delete_selection();
         self.typed = true;
+        self.saying = Some((of, Say::Removed));
         self.history(of).apart();
         Some(text)
     }
@@ -707,6 +722,7 @@ impl Composer {
                 self.typed = true;
                 self.editor(of);
                 self.history(of).asked.push(redo);
+                self.saying = Some((of, Say::Draft));
                 return true;
             }
             "a" | "A" if ctrl => EditIntent::SelectAll,
@@ -731,6 +747,17 @@ impl Composer {
             EditIntent::Newline | EditIntent::Backspace | EditIntent::Delete
         );
         self.typed |= edits;
+        self.saying = match intent {
+            EditIntent::Newline => None,
+            EditIntent::Backspace | EditIntent::Delete => Some((of, Say::Removed)),
+            EditIntent::Left { word: true, .. } | EditIntent::Right { word: true, .. } => {
+                Some((of, Say::Word))
+            }
+            EditIntent::Left { .. } | EditIntent::Right { .. } | EditIntent::SelectAll => {
+                Some((of, Say::Char))
+            }
+            _ => Some((of, Say::Line)),
+        };
         // A caret move ends the step, and a line break is one of its own.
         let history = self.history(of);
         match intent {
@@ -1072,6 +1099,10 @@ impl Composer {
     /// from it selects.
     pub fn press(&mut self, of: DraftOf, x: f32, y: f32) {
         let (dx, dy) = self.origin;
+        // The field that takes the focus says its draft (`MURMURE-574`).
+        if !self.focused {
+            self.saying = Some((of, Say::Draft));
+        }
         self.history(of).seal();
         self.editor(of).point_down(x - dx, y - dy);
         self.dragging = true;
@@ -1166,6 +1197,7 @@ impl Composer {
         };
         let tall = match self.drafts.remove(&shown) {
             Some(mut editor) => {
+                let before = editor.text();
                 editor.set_style(style);
                 editor.flush(font_cx, wrap, 1.0);
                 // A pick lands once the keys before it did.
@@ -1205,6 +1237,10 @@ impl Composer {
                         .collect()
                 });
                 editor.set_spans(font_cx, spans);
+                if let Some((_, say)) = self.saying.take().filter(|(of, _)| *of == shown) {
+                    let (caret, selection) = (editor.caret(), editor.selection());
+                    self.said = read_aloud::said(say, &before, &text, caret, selection);
+                }
                 let tall = editor.layout_height().unwrap_or(0.0);
                 self.drafts.insert(shown, editor);
                 tall
