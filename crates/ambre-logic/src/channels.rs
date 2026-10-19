@@ -1046,12 +1046,13 @@ impl LogicState {
     /// The question an unconfirmed `@channel` past the threshold asks, with
     /// the send it holds. `None` lets the command run.
     fn held_send(&self, channel_id: ChannelId, command: &MurmureCommand) -> Option<MurmureEvent> {
-        let (draft, reply) = match command {
+        let (draft, attachments, reply) = match command {
             MurmureCommand::SendMessage {
                 draft,
+                attachments,
                 confirmed: false,
                 ..
-            } => (draft, None),
+            } => (draft, attachments.clone(), None),
             MurmureCommand::Reply {
                 root,
                 draft,
@@ -1063,7 +1064,7 @@ impl LogicState {
                     root: *root,
                     also_in_channel: *also_in_channel,
                 };
-                (draft, Some(reply))
+                (draft, Vec::new(), Some(reply))
             }
             _ => return None,
         };
@@ -1081,7 +1082,11 @@ impl LogicState {
             Screened::Send(_) => None,
             Screened::Confirm { members, draft } => Some(MurmureEvent::ConfirmChannelMention {
                 members,
-                held: HeldSend { draft, reply },
+                held: HeldSend {
+                    draft,
+                    attachments,
+                    reply,
+                },
             }),
         }
     }
@@ -1224,7 +1229,10 @@ impl LogicState {
             | MurmureCommand::MarkThreadRead { .. }
             | MurmureCommand::Tick { .. }
             | MurmureCommand::Typing { .. }
-            | MurmureCommand::Retry { .. } => None,
+            | MurmureCommand::Retry { .. }
+            | MurmureCommand::FetchFile { .. }
+            // A file writes no document: its message does, once it sends.
+            | MurmureCommand::UploadFile { .. } => None,
         };
         if let Some(document_id) = target {
             let identified = self
@@ -1240,7 +1248,12 @@ impl LogicState {
             return;
         };
         match command {
-            MurmureCommand::SendMessage { draft, now, .. } => {
+            MurmureCommand::SendMessage {
+                draft,
+                attachments,
+                now,
+                ..
+            } => {
                 // A mention of anyone outside the channel is no mark (the
                 // Murmure mentions spec). The `@channel` question was asked
                 // on the way in.
@@ -1258,7 +1271,7 @@ impl LogicState {
                     );
                     return;
                 };
-                match channel.send(&draft, author, now) {
+                match channel.send_attached(&draft, &attachments, author, now) {
                     Ok(sent) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
                             document_id: sent.segment.document_id(),
@@ -1296,6 +1309,26 @@ impl LogicState {
                     });
                 }
                 self.advance_seek(channel_id);
+            }
+            // A channel's files live under its meta, which outlives every
+            // segment (the Murmure attachments spec). The answer reaches the
+            // view under the request it named.
+            MurmureCommand::UploadFile { id, data } => {
+                let document_id = channel.meta_id().document_id();
+                self.send_to_sync(SyncCommand::Rest {
+                    id,
+                    cmd: RestCommand::UploadMedia { document_id, data },
+                });
+            }
+            MurmureCommand::FetchFile { id, media_ref } => {
+                let document_id = channel.meta_id().document_id();
+                self.send_to_sync(SyncCommand::Rest {
+                    id,
+                    cmd: RestCommand::DownloadMedia {
+                        document_id,
+                        content_hash: media_ref.as_str().to_owned(),
+                    },
+                });
             }
             MurmureCommand::Retry { segment } => {
                 // Sync walks the key chain again at each open, so a new open
@@ -1464,7 +1497,20 @@ impl LogicState {
                     tracing::warn!("Logic: delete on {channel_id} before the session; dropped");
                     return;
                 };
+                // The files the message alone carried, read before the
+                // delete takes them off it (`MURMURE-240`).
+                let files = match at {
+                    MessageAt::Segment(segment) => channel.erasable(segment, message, user),
+                    MessageAt::Thread(_) => Vec::new(),
+                };
+                let meta = channel.meta_id().document_id();
                 let deleted = channel.delete(at, message, user);
+                if deleted.is_ok() {
+                    self.erase_files(meta, files);
+                }
+                let Some(channel) = self.channels.get_mut(&channel_id) else {
+                    return;
+                };
                 // A deleted reply leaves the count of its root (the Murmure
                 // threads spec), and its copy goes with it.
                 let (head, copy) = match (&deleted, at) {
@@ -2003,8 +2049,9 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::{
-        ActivityKind, FoldAnswer, LeaseAnswer, LeaseId, Mention, MentionTarget, MessageDraft,
-        MurmureEvent, RestEvent, SegmentId, Timestamp,
+        ActivityKind, Attachment, ByteSize, FoldAnswer, LeaseAnswer, LeaseId, MediaRef, MediaType,
+        Mention, MentionTarget, MessageDraft, MurmureEvent, RestCommand, RestEvent, SegmentId,
+        Timestamp,
     };
     use ambre_murmure::ChannelType;
 
@@ -2064,6 +2111,7 @@ mod tests {
                 mentions,
                 styles: Vec::new(),
             },
+            attachments: Vec::new(),
             now: NOW,
             confirmed: false,
         }
@@ -3639,6 +3687,163 @@ mod tests {
         assert!(drain(&ui).is_empty());
     }
 
+    /// The erase a delete asks for, as `(request, document, file)`.
+    fn erases(sent: &[SyncCommand]) -> Vec<(RequestId, DocumentId, String)> {
+        sent.iter()
+            .filter_map(|command| match command {
+                SyncCommand::Rest {
+                    id,
+                    cmd:
+                        RestCommand::EraseMedia {
+                            document_id,
+                            content_hash,
+                        },
+                } => Some((*id, *document_id, content_hash.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `MURMURE-132`: a file the view uploads or fetches goes through the
+    /// shared media flow, under the channel's meta and the view's request.
+    #[test]
+    fn a_file_uploads_and_downloads_under_the_channels_meta() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, _) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let file = MediaRef::parse(&"cd".repeat(32)).expect("a content hash");
+        let (up, down) = (RequestId(41), RequestId(42));
+        drain(&sync);
+
+        for asked in [
+            MurmureCommand::UploadFile {
+                id: up,
+                data: vec![1, 2, 3],
+            },
+            MurmureCommand::FetchFile {
+                id: down,
+                media_ref: file.clone(),
+            },
+        ] {
+            command(&mut state, channel_id, asked);
+        }
+        let sent = drain(&sync);
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [
+                    SyncCommand::Rest {
+                        id: a,
+                        cmd: RestCommand::UploadMedia { document_id: d1, data },
+                    },
+                    SyncCommand::Rest {
+                        id: b,
+                        cmd: RestCommand::DownloadMedia { document_id: d2, content_hash },
+                    },
+                ] if *a == up && *b == down && *d1 == meta && *d2 == meta
+                    && data == &[1, 2, 3] && content_hash == file.as_str()
+            ),
+            "got {sent:?}"
+        );
+    }
+
+    /// `MURMURE-240`, `MURMURE-241`: a delete erases the file its message
+    /// carried, under the channel's meta document. A failed erase waits for
+    /// the next connection, and no view sees either answer.
+    #[test]
+    fn a_delete_erases_its_file_and_retries_on_the_next_connection() {
+        let (mut state, ui, sync) = harness();
+        let me = UserId::new();
+        signed_in(&mut state, me);
+        let (channel_id, segment) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let file = "ab".repeat(32);
+        let MurmureCommand::SendMessage {
+            draft,
+            now,
+            confirmed,
+            ..
+        } = send("", Vec::new())
+        else {
+            panic!("a send is a SendMessage");
+        };
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::SendMessage {
+                draft,
+                attachments: vec![Attachment {
+                    media_ref: MediaRef::parse(&file).expect("a content hash"),
+                    name: "plan.pdf".to_owned(),
+                    media_type: MediaType("application/pdf".to_owned()),
+                    size: ByteSize(2048),
+                }],
+                now,
+                confirmed,
+            },
+        );
+        assert!(erases(&drain(&sync)).is_empty(), "a send erases nothing");
+        let message = state.channels[&channel_id].messages(segment).expect("held")[0].id;
+        drain(&ui);
+
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::DeleteMessage {
+                at: segment.into(),
+                message,
+                now: Timestamp(2),
+            },
+        );
+        let asked = erases(&drain(&sync));
+        let [(first, document_id, hash)] = asked.as_slice() else {
+            panic!("one erase, got {asked:?}");
+        };
+        assert_eq!((*document_id, hash.as_str()), (meta, file.as_str()));
+        let first = *first;
+
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::ApiError {
+            id: Some(first),
+            request: "EraseMedia".into(),
+            code: 0,
+            message: "offline".into(),
+        });
+        assert!(drain(&ui).is_empty(), "a failed erase reaches no view");
+        assert!(drain(&sync).is_empty(), "the erase waits");
+
+        state.handle_logic_event(LogicEvent::ConnectionStatus {
+            document_id: meta,
+            connected: true,
+        });
+        let asked = erases(&drain(&sync));
+        let [(again, document_id, hash)] = asked.as_slice() else {
+            panic!("the erase asked again, got {asked:?}");
+        };
+        assert_eq!((*document_id, hash.as_str()), (meta, file.as_str()));
+        assert_ne!(*again, first);
+        let again = *again;
+
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::Rest {
+            id: again,
+            evt: RestEvent::MediaErased {
+                document_id: meta,
+                content_hash: file.clone(),
+            },
+        });
+        assert!(drain(&ui).is_empty(), "no view awaits the erase");
+        state.handle_logic_event(LogicEvent::ConnectionStatus {
+            document_id: meta,
+            connected: true,
+        });
+        assert!(
+            erases(&drain(&sync)).is_empty(),
+            "an answered erase is done"
+        );
+    }
+
     // --- Who watches a channel, and who types in it ---
 
     fn at(offset: u64) -> Timestamp {
@@ -3967,6 +4172,7 @@ mod tests {
             members: ambre_murmure::CONFIRM_CHANNEL_PAST + 1,
             held: HeldSend {
                 draft: draft.clone(),
+                attachments: Vec::new(),
                 reply: None,
             },
         };
@@ -3975,6 +4181,7 @@ mod tests {
 
         let confirmed = MurmureCommand::SendMessage {
             draft: draft.clone(),
+            attachments: Vec::new(),
             now: NOW,
             confirmed: true,
         };
@@ -3995,6 +4202,7 @@ mod tests {
         command(&mut state, channel_id, reply);
         let held = HeldSend {
             draft,
+            attachments: Vec::new(),
             reply: Some(HeldReply {
                 root,
                 also_in_channel: true,

@@ -253,6 +253,25 @@ fn a_channel_that_cannot_open_is_told_and_opens_anew() {
     assert!(!texts[0].contains("refused"), "the cause stays out of it");
 }
 
+/// The files dropped on the channel's canvas wait in the relay, in the order
+/// they landed, until the channel's region takes them once (`MURMURE-132`).
+#[wasm_bindgen_test]
+fn dropped_files_wait_for_the_region_and_are_taken_once() {
+    let owner = Owner::new();
+    owner.set();
+    let relay = MurmureRelay::new();
+    let file = |name: &str| ambre_murmure::uploads::PickedFile {
+        name: name.to_owned(),
+        media_type: "image/png".to_owned(),
+        data: vec![1],
+    };
+    relay.drop_file(file("a.png"));
+    relay.drop_file(file("b.png"));
+    let names: Vec<String> = relay.take_files().into_iter().map(|f| f.name).collect();
+    assert_eq!(names, ["a.png", "b.png"]);
+    assert!(relay.take_files().is_empty(), "taken once");
+}
+
 /// A space that could not open is told, and the next listing naming it
 /// opens it anew, once (`MURMURE-550`).
 #[wasm_bindgen_test]
@@ -1186,6 +1205,7 @@ fn found(query: &str, budget: ChannelId, zeta: ChannelId) -> UiEvent {
         text: "the budget for May".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
+        attachments: Vec::new(),
         reactions: Vec::new(),
         notice: None,
         edited: false,
@@ -1573,6 +1593,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
             members: 12,
             held: HeldSend {
                 draft: draft.clone(),
+                attachments: Vec::new(),
                 reply,
             },
         },
@@ -1618,7 +1639,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
         &sent.get_untracked()[..],
         [LogicCommand::Channel {
             channel_id,
-            command: MurmureCommand::SendMessage { draft: d, now: t, confirmed: true },
+            command: MurmureCommand::SendMessage { draft: d, now: t, confirmed: true, .. },
         }] if *channel_id == direct && *d == draft && *t == now
     ));
     assert_eq!(

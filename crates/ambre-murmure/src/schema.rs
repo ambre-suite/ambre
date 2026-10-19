@@ -26,8 +26,9 @@ use crate::error::MurmureError;
 /// new section to `schema/shapes.txt`.
 ///
 /// Version 2 adds the style marks over a body (`MURMURE-562`), the block
-/// marks among them (`MURMURE-194`).
-pub const SCHEMA_VERSION: u32 = 2;
+/// marks among them (`MURMURE-194`). Version 3 adds the attachments of a
+/// message (`MURMURE-017`).
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// The root map every Murmure document carries (`MURMURE-001`).
 pub(crate) const HEADER: &str = "header";
@@ -113,6 +114,13 @@ pub(crate) const MESSAGE_DELETED: &str = "deleted";
 pub(crate) const MESSAGE_NOTICE: &str = "notice";
 /// The member a `member_added` notice names.
 pub(crate) const MESSAGE_MEMBER: &str = "member";
+/// The files a message carries, absent from a message that carries none
+/// (`MURMURE-017`). One map per file, in the order its author attached them.
+pub(crate) const MESSAGE_ATTACHMENTS: &str = "attachments";
+pub(crate) const ATTACHMENT_MEDIA: &str = "media_ref";
+pub(crate) const ATTACHMENT_NAME: &str = "name";
+pub(crate) const ATTACHMENT_TYPE: &str = "media_type";
+pub(crate) const ATTACHMENT_SIZE: &str = "size";
 /// The thread document of a root message, absent while it has no reply
 /// (`MURMURE-107`).
 pub(crate) const MESSAGE_THREAD: &str = "thread";
@@ -145,11 +153,20 @@ pub(crate) const BULLETS: &str = "list";
 /// writes, and the check refuses a change under any other identity, so a
 /// migration's writes would never travel. `1 -> 2` adds marks a version 1
 /// body holds none of, so the document reads as it is and keeps its stamp.
-pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
-    from: 1,
-    to: 2,
-    apply: read_as_it_is,
-}];
+/// `2 -> 3` adds attachments, whose absence reads as none, so it reads as it
+/// is too.
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
+    SchemaMigration {
+        from: 1,
+        to: 2,
+        apply: read_as_it_is,
+    },
+    SchemaMigration {
+        from: 2,
+        to: 3,
+        apply: read_as_it_is,
+    },
+];
 
 /// A step that leaves the document as it is (`MURMURE-566`).
 #[allow(clippy::unnecessary_wraps)]

@@ -593,6 +593,7 @@ mod tests {
             crate::host::page_reads(
                 ambre_murmure::chrome::MurmureRelay::new(),
                 TextInput::detached(),
+                std::rc::Rc::new(|_| {}),
             ),
             (300.0, 200.0),
             ThemeControl::default(),

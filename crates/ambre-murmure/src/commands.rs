@@ -366,10 +366,15 @@ impl AskedAll {
     /// The send again, confirmed and stamped `now` by the view
     /// (`MURMURE-557`).
     pub fn command(self, now: Timestamp) -> LogicCommand {
-        let HeldSend { draft, reply } = self.held;
+        let HeldSend {
+            draft,
+            attachments,
+            reply,
+        } = self.held;
         let command = match reply {
             None => MurmureCommand::SendMessage {
                 draft,
+                attachments,
                 now,
                 confirmed: true,
             },
@@ -673,6 +678,7 @@ mod tests {
             members: 12,
             held: HeldSend {
                 draft: draft.clone(),
+                attachments: Vec::new(),
                 reply: None,
             },
         };
@@ -681,13 +687,14 @@ mod tests {
             asked.clone().command(Timestamp(7)),
             LogicCommand::Channel {
                 channel_id,
-                command: MurmureCommand::SendMessage { draft: d, now: Timestamp(7), confirmed: true },
+                command: MurmureCommand::SendMessage { draft: d, now: Timestamp(7), confirmed: true, .. },
             } if channel_id == channel && d == draft
         ));
         let root = MessageId::new();
         let reply = AskedAll {
             held: HeldSend {
                 draft: draft.clone(),
+                attachments: Vec::new(),
                 reply: Some(HeldReply {
                     root,
                     also_in_channel: true,

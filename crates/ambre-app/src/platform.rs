@@ -476,6 +476,47 @@ pub(crate) fn install_board_file_drop(
     });
 }
 
+/// Attach the file drop to a channel's canvas: each file dropped on it is
+/// read, and its region uploads it for the draft (`MURMURE-132`). A thread
+/// takes no file, so its canvas takes no drop.
+pub(crate) fn install_murmure_file_drop(relay: ambre_murmure::chrome::MurmureRelay) {
+    Effect::new(move |_| {
+        let Some(canvas) = leptos::prelude::document().get_element_by_id("ambre-canvas") else {
+            return;
+        };
+        // Without a `dragover` that prevents the default, the browser navigates
+        // away to the dropped file and the drop never fires.
+        let over = Closure::<dyn FnMut(web_sys::DragEvent)>::new(|e: web_sys::DragEvent| {
+            e.prevent_default();
+        });
+        let _ = canvas.add_event_listener_with_callback("dragover", over.as_ref().unchecked_ref());
+        over.forget();
+
+        let cb = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |e: web_sys::DragEvent| {
+            e.prevent_default();
+            let Some(files) = e.data_transfer().and_then(|dt| dt.files()) else {
+                return;
+            };
+            for file in (0..files.length()).filter_map(|i| files.get(i)) {
+                wasm_bindgen_futures::spawn_local(async move {
+                    let Ok(buf) = wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await
+                    else {
+                        tracing::warn!("Murmure: a dropped file could not be read");
+                        return;
+                    };
+                    relay.drop_file(ambre_murmure::uploads::PickedFile {
+                        name: file.name(),
+                        media_type: file.type_(),
+                        data: js_sys::Uint8Array::new(&buf).to_vec(),
+                    });
+                });
+            }
+        });
+        let _ = canvas.add_event_listener_with_callback("drop", cb.as_ref().unchecked_ref());
+        cb.forget();
+    });
+}
+
 /// Whether a keyboard event targets an editable element: a text `<input>`, a
 /// `<textarea>`, or a contenteditable host. A bare tool chord must not steal
 /// such an event (`toile-tools`). The pure decision lives in

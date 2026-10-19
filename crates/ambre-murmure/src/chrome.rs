@@ -20,6 +20,7 @@ use crate::drafts::DraftShelf;
 use crate::emoji;
 use crate::markers::{Cover, MarkBar};
 use crate::mention_list::MentionList;
+use crate::uploads::PickedFile;
 use crate::{
     Activity, MessageRef, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
 };
@@ -387,6 +388,9 @@ pub struct MurmureRelay {
     /// The emoji the picker picked for a composer, until its region takes
     /// it (`MURMURE-139`). The flag names the thread's region.
     picked_emoji: RwSignal<Option<(bool, String)>>,
+    /// The files dropped on the channel's canvas, until its region takes
+    /// them to upload (`MURMURE-132`).
+    dropped_files: RwSignal<Vec<PickedFile>>,
 }
 
 /// The search box: whether it is open, the query typed, and the last answer
@@ -481,7 +485,20 @@ impl MurmureRelay {
             drafts: StoredValue::new_local(DraftShelf::default()),
             picking: RwSignal::new(None),
             picked_emoji: RwSignal::new(None),
+            dropped_files: RwSignal::new(Vec::new()),
         }
+    }
+
+    /// The page read `file`, dropped on the channel's canvas.
+    pub fn drop_file(&self, file: PickedFile) {
+        self.dropped_files.update(|files| files.push(file));
+    }
+
+    /// The files dropped since the last call, taken once.
+    pub fn take_files(&self) -> Vec<PickedFile> {
+        self.dropped_files
+            .try_update_untracked(std::mem::take)
+            .unwrap_or_default()
     }
 
     /// Open the emoji picker on the composer of the region `in_thread`

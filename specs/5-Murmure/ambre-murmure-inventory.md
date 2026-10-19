@@ -22,6 +22,7 @@
 | `murmure-reactions` | A member answers a message with an emoji. | implemented | 7 |  |
 | `murmure-segments` | A channel grows for years and still opens fast. | implemented | 26 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | implemented | 17 |  |
+| `murmure-attachments` | A member drops a file or an image into a message. | partial | 14 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 53 |  |
 | `murmure-composer` | The field where a member writes. | partial | 45 |  |
 | `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | partial | 14 |  |
@@ -33,7 +34,6 @@
 | `murmure-spaces` | A team gathers in a space. | partial | 34 |  |
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | partial | 28 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | partial | 16 |  |
-| `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
 | `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
 | `murmure-calls` | A member starts a video call from a channel in one click. | design-only | 7 |  |
 | `murmure-forums` | A forum is a channel of posts. | design-only | 11 |  |
@@ -44,4 +44,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 7 implemented, 11 partial, 10 design-only. 553 contract rows, 0 loose.**
+**28 features: 7 implemented, 12 partial, 9 design-only. 555 contract rows, 0 loose.**

@@ -1825,7 +1825,11 @@ pub fn main() {
                 AppView::Murmure(host::MurmureView::new(
                     Some(view_rx),
                     Some(view_tx_logic),
-                    host::page_reads(murmure_relay, text_input),
+                    host::page_reads(
+                        murmure_relay,
+                        text_input,
+                        Rc::new(move |text: &str| toasts.warning(text.to_owned())),
+                    ),
                     (w, h),
                     theme_ctl,
                 ))

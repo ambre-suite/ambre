@@ -133,6 +133,10 @@ pub enum MurmureError {
     #[error("a style outside the body of its message, or a link refused")]
     BadStyle,
 
+    /// A send named an attachment with a blank name. Nothing is written.
+    #[error("an attachment with no name")]
+    BadAttachment,
+
     /// The authorship check refused a delta, which changed nothing
     /// (`MURMURE-030`).
     #[error("the authorship check refused a delta: {0}")]

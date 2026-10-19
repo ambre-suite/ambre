@@ -403,6 +403,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
     if boot_is_toile {
         install_board_file_drop(toile_dropped_file, toasts);
     }
+    // A file dropped on a channel uploads for its draft (`MURMURE-132`).
+    if boot_is_murmure {
+        crate::platform::install_murmure_file_drop(murmure_relay);
+    }
 
     // Toile cursor feedback (toile-tools): reflect the active tool on the
     // canvas element as a CSS cursor. That is crosshair while a creation

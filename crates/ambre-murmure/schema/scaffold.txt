@@ -24,3 +24,10 @@ segment: its session alone
 amendments: its session alone
 thread: its session alone
 space: its session alone
+
+== v3
+meta: its session alone
+segment: its session alone
+amendments: its session alone
+thread: its session alone
+space: its session alone

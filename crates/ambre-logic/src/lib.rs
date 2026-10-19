@@ -38,6 +38,7 @@ mod channels;
 mod data;
 mod direct;
 mod dispatch;
+mod erasing;
 /// A history replay imported in slices (`SYNC-131`).
 mod replay;
 /// Which documents this thread holds, and the reopen of one that left
@@ -759,6 +760,12 @@ struct LogicState {
     /// spaces spec). Each is keyed by the role change this thread asked for,
     /// and holds the leave the view asked for.
     handing_off: HashMap<ambre_bus::RequestId, (ambre_bus::RequestId, DocumentId)>,
+    /// The erases of a deleted message's files the relay has not answered,
+    /// each with the document its file is stored under and its address.
+    erasing: HashMap<ambre_bus::RequestId, (DocumentId, String)>,
+    /// The erases that did not reach the relay, asked again on the next
+    /// connection (`MURMURE-241`).
+    erase_owed: Vec<(DocumentId, String)>,
     /// Direct message requests the relay has not answered yet, keyed by the
     /// channel id each minted, with the channel it would create.
     direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
@@ -871,6 +878,8 @@ impl LogicState {
             deleting: HashMap::new(),
             leaving: HashMap::new(),
             handing_off: HashMap::new(),
+            erasing: HashMap::new(),
+            erase_owed: Vec::new(),
             direct: HashMap::new(),
             unsent: HashMap::new(),
             murmure_identities: HashMap::new(),

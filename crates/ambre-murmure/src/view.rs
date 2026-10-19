@@ -11,12 +11,13 @@
 //! So the view holds no signal, and a host test drives it with plain values.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
-    ChannelId, DocumentId, LogicCommand, MessageAt, MessageId, MessageView, MurmureCommand,
-    SegmentId, TextStyle, Timestamp, UiEvent, UserId,
+    Attachment, ByteSize, ChannelId, DocumentId, LogicCommand, MessageAt, MessageId, MessageView,
+    MurmureCommand, RequestId, RestEvent, SegmentId, TextStyle, Timestamp, UiEvent, UserId,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, TextInput,
@@ -36,6 +37,7 @@ use crate::markers::MarkBar;
 use crate::mention_list::MentionList;
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
 use crate::select::Selecting;
+use crate::uploads::{PickedFile, Uploaded};
 use crate::watchers::TICK_MS;
 use crate::{MessageRef, MurmurePane};
 
@@ -105,7 +107,18 @@ pub struct PageReads {
     /// Take the emoji the picker picked for the composer. Given `true`, it
     /// takes a pick for the thread's composer alone (`MURMURE-139`).
     pub take_emoji: Rc<dyn Fn(bool) -> Option<String>>,
+    /// Take the files the member dropped on the channel's canvas since the
+    /// last frame. The channel's composer uploads them (`MURMURE-132`).
+    pub take_files: Rc<dyn Fn() -> Vec<PickedFile>>,
+    /// Hand the page a file a click on its chip fetched: an image opens at
+    /// full size, any other file is saved.
+    pub save_file: SaveFile,
+    /// Warn the user, in a toast: an upload failed (`MURMURE-133`).
+    pub warn: Rc<dyn Fn(&str)>,
 }
+
+/// What the page does with a file fetched, and its bytes.
+pub type SaveFile = Rc<dyn Fn(&Attachment, Vec<u8>)>;
 
 /// The id of the content canvas, which the channel's region paints. The
 /// shell names it.
@@ -219,6 +232,9 @@ pub struct MurmureView {
     /// The thread's composer while no thread shows. The channel's region
     /// holds it, so a draft outlives the thread's region (`MURMURE-530`).
     parked: Rc<RefCell<Option<Composer>>>,
+    /// The files a click asked for, by the request that fetches each. Both
+    /// regions share it, and the content canvas reads the answers.
+    fetching: Rc<RefCell<HashMap<RequestId, Attachment>>>,
     /// The channel on screen this region last ticked, and when.
     ticked: Option<(ChannelId, f64)>,
     /// The `@` list this region last handed the page.
@@ -285,6 +301,7 @@ impl MurmureView {
             drag: None,
             composer: Composer::default(),
             parked: Rc::default(),
+            fetching: Rc::default(),
             ticked: None,
             listed: None,
             barred: None,
@@ -302,6 +319,7 @@ impl MurmureView {
         view.lists = Rc::clone(&self.lists);
         view.region = Region::Thread;
         view.parked = Rc::clone(&self.parked);
+        view.fetching = Rc::clone(&self.fetching);
         if let Some(composer) = view.parked.borrow_mut().take() {
             view.composer = composer;
         }
@@ -361,12 +379,62 @@ impl MurmureView {
         let Some(from_logic) = &self.from_logic else {
             return;
         };
-        let mut lists = self.lists.borrow_mut();
+        let mut events = Vec::new();
         while let Ok(ev) = from_logic.try_recv() {
+            events.push(ev);
+        }
+        for ev in events {
+            let Some(ev) = self.answer_file(ev) else {
+                continue;
+            };
+            let mut lists = self.lists.borrow_mut();
             if lists.conversations.absorb(ev) {
                 lists.revision += 1;
             }
         }
+    }
+
+    /// Take the answer to an upload or a fetch of a file, and give back any
+    /// other event. An upload answered joins its draft (`MURMURE-132`). A
+    /// failed one adds nothing, and the page told the user of the error
+    /// (`MURMURE-133`).
+    fn answer_file(&mut self, ev: UiEvent) -> Option<UiEvent> {
+        match ev {
+            UiEvent::Rest {
+                id,
+                evt:
+                    RestEvent::MediaUploaded {
+                        ref content_hash, ..
+                    },
+            } => match self.composer.uploads_mut().uploaded(id, content_hash) {
+                None => return Some(ev),
+                Some(Uploaded::Failed { name, .. }) => {
+                    (self.reads.warn)(&format!("{name} could not be attached"));
+                }
+                Some(Uploaded::Ready(_)) => {}
+            },
+            UiEvent::Rest {
+                id,
+                evt: RestEvent::MediaDownloaded { data, .. },
+            } if self.fetching.borrow().contains_key(&id) => {
+                if let Some(file) = self.fetching.borrow_mut().remove(&id) {
+                    (self.reads.save_file)(&file, data);
+                }
+            }
+            UiEvent::ApiError { id: Some(id), .. } => {
+                let upload = self.composer.uploads_mut().failed(id);
+                let fetch = self.fetching.borrow_mut().remove(&id).is_some();
+                if let Some(Uploaded::Failed { name, .. }) = &upload {
+                    (self.reads.warn)(&format!("{name} could not be attached"));
+                }
+                if upload.is_none() && !fetch {
+                    return Some(ev);
+                }
+            }
+            ev => return Some(ev),
+        }
+        self.dirty = true;
+        None
     }
 
     /// Where the list rests: the row at the top and its top, `None` on the
@@ -458,6 +526,54 @@ impl MurmureView {
 
     /// A click on the chip `emoji` of the row `i`: the member's own reaction
     /// leaves (`MURMURE-096`), or theirs joins the others (`MURMURE-092`).
+    /// Ask the relay for a file a click fell on. Its answer opens or saves
+    /// it (`MURMURE-134`).
+    fn fetch_file(&self, pane: MurmurePane, file: Attachment) {
+        let channel_id = match self.list_of(pane) {
+            Some(ListOf::Channel(channel) | ListOf::Thread(channel, _)) => channel,
+            None => return,
+        };
+        let id = RequestId::next();
+        let media_ref = file.media_ref.clone();
+        self.fetching.borrow_mut().insert(id, file);
+        self.send(LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::FetchFile { id, media_ref },
+        });
+    }
+
+    /// Ask the Logic thread to upload each file the page took for this
+    /// region's draft. A thread's draft takes none (`MURMURE-128`).
+    fn upload_files(&mut self) {
+        if self.region != Region::Channel {
+            return;
+        }
+        let files = (self.reads.take_files)();
+        let Some(DraftOf::Channel(channel_id)) = self.writes_in() else {
+            return;
+        };
+        for file in files {
+            let id = RequestId::next();
+            let (media_type, size) = (file.media_type(), ByteSize(file.data.len() as u64));
+            let of = DraftOf::Channel(channel_id);
+            if !self
+                .composer
+                .uploads_mut()
+                .begin(id, of, file.name, media_type, size)
+            {
+                continue;
+            }
+            self.send(LogicCommand::Channel {
+                channel_id,
+                command: MurmureCommand::UploadFile {
+                    id,
+                    data: file.data,
+                },
+            });
+            self.dirty = true;
+        }
+    }
+
     fn press_chip(&self, i: usize, emoji: String) {
         let (Some(me), Some(target)) = ((self.reads.me)(), self.target_of_row(i)) else {
             return;
@@ -773,6 +889,13 @@ impl MurmureView {
                 }
                 None
             }
+            Release::Tap { x, y } if self.composer.file_at(x, y).is_some() => {
+                if let (Some(of), Some(index)) = (self.writes_in(), self.composer.file_at(x, y)) {
+                    self.composer.uploads_mut().remove(of, index);
+                    self.dirty = true;
+                }
+                None
+            }
             Release::Tap { x, y } if self.in_composer(y.into()) => {
                 if let Some(of) = self.writes_in() {
                     self.composer.press(of, x, y);
@@ -915,6 +1038,9 @@ impl MurmureView {
             self.typed();
             self.dirty = true;
         }
+        // A file dropped on the canvas uploads, and joins the draft once
+        // the relay answers (`MURMURE-132`).
+        self.upload_files();
         // A cancelled `@channel` gives its draft back, mentions and all
         // (`MURMURE-558`).
         if let Some(asked) = (self.reads.take_returned)(self.region == Region::Thread) {
@@ -923,7 +1049,11 @@ impl MurmureView {
                 None => DraftOf::Channel(asked.channel),
             };
             let also = asked.held.reply.as_ref().is_some_and(|r| r.also_in_channel);
-            if self.composer.restore(of, asked.held.draft, also) {
+            let mut held = asked.held;
+            self.composer
+                .uploads_mut()
+                .restore(of, std::mem::take(&mut held.attachments));
+            if self.composer.restore(of, held.draft, also) {
                 self.reads.pipe.focus();
                 self.dirty = true;
             }
@@ -1017,6 +1147,9 @@ impl MurmureView {
         }
         if let Some((i, emoji)) = painted.chip.clone() {
             self.press_chip(i, emoji);
+        }
+        if let Some(file) = painted.file.clone() {
+            self.fetch_file(pane, file);
         }
         // A selection moves no read cursor: only what the paint shows does
         // (`MURMURE-427`).
@@ -1443,6 +1576,15 @@ impl MurmureView {
                 self.composer.toggle_also(channel);
             }
             InputEvent::DoubleClick { y, .. } if self.composer.on_also(y as f32) => {}
+            // A press on a file of the draft takes it off (`MURMURE-132`).
+            InputEvent::PointerDown { x, y, button, .. }
+                if button == PRIMARY_BUTTON
+                    && self.composer.file_at(x as f32, y as f32).is_some() =>
+            {
+                if let Some(index) = self.composer.file_at(x as f32, y as f32) {
+                    self.composer.uploads_mut().remove(channel, index);
+                }
+            }
             InputEvent::PointerDown { x, y, button, .. } if self.in_composer(y) => {
                 self.hover = Some(Point::new(x, y));
                 if button != PRIMARY_BUTTON {
@@ -1541,8 +1683,8 @@ mod tests {
 
     use ambre_bus::conduit::local;
     use ambre_bus::{
-        ChannelId, HeldReply, HeldSend, Mention, MentionTarget, MessageView, MurmureEvent,
-        StyleMark, TextStyle, Unreadable,
+        ChannelId, HeldReply, HeldSend, MediaRef, MediaType, Mention, MentionTarget, MessageView,
+        MurmureEvent, StyleMark, TextStyle, Unreadable,
     };
     use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
     use ambre_draw::kinetic::LONG_PRESS_MS;
@@ -1586,7 +1728,16 @@ mod tests {
         asked_emoji: Rc<RefCell<Vec<bool>>>,
         /// The emoji the picker picked, for the region it names.
         emoji: Rc<RefCell<Option<(bool, String)>>>,
+        /// The files dropped on the canvas, for the view to take.
+        dropped: Rc<RefCell<Vec<PickedFile>>>,
+        /// Each file the view opened or saved, and its bytes, oldest first.
+        saved: Rc<RefCell<Vec<Saved>>>,
+        /// Each warning the view gave the user, oldest first.
+        warned: Rc<RefCell<Vec<String>>>,
     }
+
+    /// A file the view handed the page, and its bytes.
+    type Saved = (Attachment, Vec<u8>);
 
     /// A format bar the view handed the page, and whether the thread's
     /// region shows it.
@@ -1630,6 +1781,12 @@ mod tests {
         let asks = Rc::clone(&asked_emoji);
         let emoji = Rc::new(RefCell::new(None::<(bool, String)>));
         let picked_emoji = Rc::clone(&emoji);
+        let dropped = Rc::new(RefCell::new(Vec::new()));
+        let taken = Rc::clone(&dropped);
+        let saved = Rc::new(RefCell::new(Vec::new()));
+        let saves = Rc::clone(&saved);
+        let warned = Rc::new(RefCell::new(Vec::new()));
+        let warns = Rc::clone(&warned);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| Some("Ada".to_owned())),
@@ -1688,6 +1845,11 @@ mod tests {
                     None
                 }
             }),
+            take_files: Rc::new(move || std::mem::take(&mut *taken.borrow_mut())),
+            save_file: Rc::new(move |file: &Attachment, data| {
+                saves.borrow_mut().push((file.clone(), data));
+            }),
+            warn: Rc::new(move |text: &str| warns.borrow_mut().push(text.to_owned())),
         };
         let size = (300.0, 400.0);
         let view = MurmureView::new(
@@ -1716,6 +1878,9 @@ mod tests {
             press,
             asked_emoji,
             emoji,
+            dropped,
+            saved,
+            warned,
         }
     }
 
@@ -3003,6 +3168,7 @@ mod tests {
                         draft,
                         now,
                         confirmed,
+                        ..
                     },
                 ..
             } = command
@@ -3038,6 +3204,173 @@ mod tests {
             None,
             "the draft is gone"
         );
+    }
+
+    const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    /// Drop `name` on the canvas, paint, and return the upload it asked.
+    fn drop_file(page: &mut Page, channel: ChannelId, name: &str) -> RequestId {
+        page.dropped.borrow_mut().push(PickedFile {
+            name: name.to_owned(),
+            media_type: String::new(),
+            data: vec![7; 3],
+        });
+        frame_with_fonts(&mut page.view);
+        let mut uploads = Vec::new();
+        while let Ok(command) = page.commands.try_recv() {
+            if let LogicCommand::Channel {
+                channel_id,
+                command: MurmureCommand::UploadFile { id, data },
+            } = command
+            {
+                assert_eq!((channel_id, data), (channel, vec![7; 3]));
+                uploads.push(id);
+            }
+        }
+        let [id] = uploads.as_slice() else {
+            panic!("one upload per file, got {uploads:?}");
+        };
+        *id
+    }
+
+    /// The files of each message sent since the last call.
+    fn sent_files(page: &Page) -> Vec<Vec<Attachment>> {
+        std::iter::from_fn(|| page.commands.try_recv().ok())
+            .filter_map(|command| match command {
+                LogicCommand::Channel {
+                    command: MurmureCommand::SendMessage { attachments, .. },
+                    ..
+                } => Some(attachments),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `MURMURE-132`: a dropped file uploads before its message leaves. The
+    /// draft holds while it uploads, and carries it once the relay answered.
+    #[test]
+    fn a_dropped_file_uploads_and_its_message_carries_it() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        let id = drop_file(&mut page, channel, "a.png");
+        assert!(press_composer(&mut page));
+        assert!(type_text(&mut page, "see"));
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert!(sent_files(&page).is_empty(), "the upload holds the send");
+
+        let evt = RestEvent::MediaUploaded {
+            document_id: DocumentId::new(),
+            content_hash: HASH.to_owned(),
+        };
+        page.events
+            .try_send(UiEvent::Rest { id, evt })
+            .expect("room");
+        frame_with_fonts(&mut page.view);
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        let sent = sent_files(&page);
+        assert_eq!(sent.len(), 1);
+        let [file] = sent[0].as_slice() else {
+            panic!("one file, got {:?}", sent[0]);
+        };
+        assert_eq!((file.name.as_str(), file.size), ("a.png", ByteSize(3)));
+        assert_eq!(file.media_type.0, "application/octet-stream");
+        assert_eq!(file.media_ref.as_str(), HASH);
+    }
+
+    /// `MURMURE-133`: a failed upload adds nothing to the message, which
+    /// then leaves on its text alone, and the user is warned by the file's
+    /// name.
+    #[test]
+    fn a_failed_upload_adds_nothing_to_the_message() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        let id = drop_file(&mut page, channel, "a.png");
+        let failed = UiEvent::ApiError {
+            id: Some(id),
+            request: "upload".to_owned(),
+            code: 500,
+            message: "down".to_owned(),
+        };
+        page.events.try_send(failed).expect("room");
+        assert!(press_composer(&mut page));
+        assert!(type_text(&mut page, "see"));
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(sent_files(&page), vec![Vec::new()]);
+        assert_eq!(*page.warned.borrow(), ["a.png could not be attached"]);
+    }
+
+    /// A press on a file of the draft takes it off, so the draft sends
+    /// nothing of it.
+    #[test]
+    fn a_press_on_a_file_of_the_draft_takes_it_off() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        let id = drop_file(&mut page, channel, "a.png");
+        let evt = RestEvent::MediaUploaded {
+            document_id: DocumentId::new(),
+            content_hash: HASH.to_owned(),
+        };
+        page.events
+            .try_send(UiEvent::Rest { id, evt })
+            .expect("room");
+        frame_with_fonts(&mut page.view);
+        let hit = (0..300)
+            .flat_map(|x| (0..400).map(move |y| (x as f32, y as f32)))
+            .find(|&(x, y)| page.view.composer().file_at(x, y).is_some())
+            .expect("the file shows in the composer");
+        let press = InputEvent::PointerDown {
+            x: hit.0.into(),
+            y: hit.1.into(),
+            button: 0,
+            shift: false,
+            ctrl: false,
+        };
+        page.view.handle_input(&press);
+        frame_with_fonts(&mut page.view);
+        assert!(page.view.composer().file_at(hit.0, hit.1).is_none());
+        assert!(press_composer(&mut page));
+        assert!(type_text(&mut page, "see"));
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        assert_eq!(sent_files(&page), vec![Vec::new()]);
+    }
+
+    /// A clicked file is asked of the relay under its channel. Its answer
+    /// goes to the page, which opens or saves it.
+    #[test]
+    fn a_file_clicked_is_fetched_and_handed_to_the_page() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        let file = Attachment {
+            media_ref: MediaRef::parse(HASH).expect("an address"),
+            name: "a.png".to_owned(),
+            media_type: MediaType("image/png".to_owned()),
+            size: ByteSize(3),
+        };
+        let pane = MurmurePane::Channel { channel, at: None };
+        while page.commands.try_recv().is_ok() {}
+        page.view.fetch_file(pane, file.clone());
+        let Ok(LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::FetchFile { id, media_ref },
+        }) = page.commands.try_recv()
+        else {
+            panic!("a fetch of the file");
+        };
+        assert_eq!((channel_id, media_ref.as_str()), (channel, HASH));
+        let evt = RestEvent::MediaDownloaded {
+            document_id: DocumentId::new(),
+            content_hash: HASH.to_owned(),
+            data: vec![1, 2, 3],
+        };
+        page.events
+            .try_send(UiEvent::Rest { id, evt })
+            .expect("room");
+        frame_with_fonts(&mut page.view);
+        assert_eq!(*page.saved.borrow(), vec![(file, vec![1, 2, 3])]);
     }
 
     /// An empty draft, or one of white space alone, sends nothing and
@@ -4912,6 +5245,7 @@ mod tests {
             members: 12,
             held: HeldSend {
                 draft: draft.clone(),
+                attachments: Vec::new(),
                 reply: None,
             },
         };

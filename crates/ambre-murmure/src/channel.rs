@@ -9,9 +9,9 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    ActivityKind, ActivitySummary, ChannelMatches, Mention, MentionCount, MentionTarget, MessageAt,
-    MessageDraft, MessageView, MurmureEvent, Notice, SearchMatch, StyleMark, ThreadHead, Timestamp,
-    UnreadCount, Unreadable,
+    ActivityKind, ActivitySummary, Attachment, ChannelMatches, MediaRef, Mention, MentionCount,
+    MentionTarget, MessageAt, MessageDraft, MessageView, MurmureEvent, Notice, SearchMatch,
+    StyleMark, ThreadHead, Timestamp, UnreadCount, Unreadable,
 };
 use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
 use loro::{
@@ -22,14 +22,15 @@ use crate::delta::{self, Arrival, Refusal, Rules, Signer};
 use crate::error::MurmureError;
 use crate::schema::{
     self, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, ChannelType, DocumentKind, MENTION,
-    MESSAGE_ALSO_IN_THREAD, MESSAGE_AUTHOR, MESSAGE_CONTENT, MESSAGE_DELETED, MESSAGE_EDITED,
-    MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS, MESSAGE_THREAD, MESSAGE_TS,
-    MESSAGES, NoticeKind, SEGMENT_DOCUMENT, SEGMENT_FROM, SEGMENT_STATE, SEGMENTS, SegmentState,
+    MESSAGE_ALSO_IN_THREAD, MESSAGE_ATTACHMENTS, MESSAGE_AUTHOR, MESSAGE_CONTENT, MESSAGE_DELETED,
+    MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS, MESSAGE_THREAD,
+    MESSAGE_TS, MESSAGES, NoticeKind, SEGMENT_DOCUMENT, SEGMENT_FROM, SEGMENT_STATE, SEGMENTS,
+    SegmentState,
 };
 use crate::search::Query;
 use crate::sequence::{self, Order, Position, Sequence};
 use crate::session::Session;
-use crate::{mention, reaction, style};
+use crate::{attachment, mention, reaction, style};
 
 mod amending;
 mod closing;
@@ -900,6 +901,24 @@ impl ChannelState {
         author: UserId,
         now: Timestamp,
     ) -> Result<Sent, MurmureError> {
+        self.send_attached(draft, &[], author, now)
+    }
+
+    /// [`ChannelState::send`], the message carrying `attachments` by their
+    /// addresses alone (`MURMURE-017`). Each was uploaded before
+    /// (`MURMURE-132`), so no byte of a file enters the segment
+    /// (`MURMURE-134`).
+    ///
+    /// # Errors
+    /// Every refusal of [`ChannelState::send`], and
+    /// [`MurmureError::BadAttachment`] for an attachment with a blank name.
+    pub fn send_attached(
+        &mut self,
+        draft: &MessageDraft,
+        attachments: &[Attachment],
+        author: UserId,
+        now: Timestamp,
+    ) -> Result<Sent, MurmureError> {
         // Checked before the first write, so a refused draft leaves no
         // message half written in the segment.
         if !mention::fits(&draft.mentions, &draft.text) {
@@ -908,15 +927,19 @@ impl ChannelState {
         if !style::fits(&draft.styles, &draft.text) {
             return Err(MurmureError::BadStyle);
         }
-        self.send_from(draft, author, now, None)
+        if !attachment::fits(attachments) {
+            return Err(MurmureError::BadAttachment);
+        }
+        self.send_from(draft, attachments, author, now, None)
     }
 
-    /// [`ChannelState::send`] with the draft checked. A copy of a reply
-    /// names the thread it came from (`MURMURE-109`), and takes the
+    /// [`ChannelState::send_attached`] with the draft checked. A copy of a
+    /// reply names the thread it came from (`MURMURE-109`), and takes the
     /// identifier its reply derives (`MURMURE-538`).
     fn send_from(
         &mut self,
         draft: &MessageDraft,
+        attachments: &[Attachment],
         author: UserId,
         now: Timestamp,
         copy: Option<(DocumentId, MessageId)>,
@@ -924,7 +947,8 @@ impl ChannelState {
         let channel = self.channel_id;
         let segment = self.active_id();
         let (doc, session) = self.active.session()?;
-        let (id, mentions, styles) = write_message(doc, draft, author, now, channel, copy)?;
+        let (id, mentions, styles) =
+            write_message(doc, draft, attachments, author, now, channel, copy)?;
         let delta = session.export_json(doc)?;
         Ok(Sent {
             segment,
@@ -940,6 +964,7 @@ impl ChannelState {
                     text: draft.text.clone(),
                     mentions,
                     styles,
+                    attachments: attachments.to_vec(),
                     reactions: Vec::new(),
                     notice: None,
                     edited: false,
@@ -993,6 +1018,7 @@ impl ChannelState {
                     text: String::new(),
                     mentions: Vec::new(),
                     styles: Vec::new(),
+                    attachments: Vec::new(),
                     reactions: Vec::new(),
                     notice: Some(Notice::MemberAdded { member }),
                     edited: false,
@@ -1230,9 +1256,55 @@ impl ChannelState {
         if len > 0 {
             content.delete(0, len)?;
         }
+        // The files go with the text: the caller erases them from storage
+        // (`MURMURE-240`), and no reference outlives them.
+        if map.get(MESSAGE_ATTACHMENTS).is_some() {
+            map.delete(MESSAGE_ATTACHMENTS)?;
+        }
         map.insert(MESSAGE_DELETED, true)?;
         let delta = session.export_json(doc)?;
         self.changed_at(at, delta)
+    }
+
+    /// The files a delete of `message` should erase (`MURMURE-240`). Each it
+    /// carries is named once, less any another live message of `author` in a
+    /// held segment still carries. One file attached twice then stays
+    /// until its last message goes.
+    ///
+    /// Read before the delete, which empties the list. A file another member
+    /// uploaded too keeps their claim on the relay (`MURMURE-242`).
+    pub fn erasable(
+        &self,
+        segment: SegmentId,
+        message: MessageId,
+        author: UserId,
+    ) -> Vec<MediaRef> {
+        let Some(target) = self.messages(segment).ok().and_then(|messages| {
+            messages
+                .into_iter()
+                .find(|view| view.id == message && view.author == author && !view.deleted)
+        }) else {
+            return Vec::new();
+        };
+        let others: Vec<MessageView> = self
+            .held_segments()
+            .into_iter()
+            .filter_map(|id| self.messages(id).ok())
+            .flatten()
+            .filter(|view| view.author == author && !view.deleted && view.id != message)
+            .collect();
+        let mut erasable: Vec<MediaRef> = Vec::new();
+        for attachment in target.attachments {
+            let elsewhere = others.iter().any(|view| {
+                view.attachments
+                    .iter()
+                    .any(|other| other.media_ref == attachment.media_ref)
+            });
+            if !elsewhere && !erasable.contains(&attachment.media_ref) {
+                erasable.push(attachment.media_ref);
+            }
+        }
+        erasable
     }
 
     /// What an edit or a delete at `at` produced, as
@@ -1860,6 +1932,7 @@ fn read_message(item: ValueOrContainer, channel: ChannelId) -> Option<MessageVie
     let (id, author) = identity_of(&map)?;
     let ts = Timestamp(schema::unsigned(&map, MESSAGE_TS)?);
     let content = content_of(&map)?;
+    let deleted = schema::flag(&map, MESSAGE_DELETED);
     Some(MessageView {
         id,
         author,
@@ -1867,10 +1940,16 @@ fn read_message(item: ValueOrContainer, channel: ChannelId) -> Option<MessageVie
         text: content.to_string(),
         mentions: mention::read(&content, channel),
         styles: style::read(&content),
+        // A deleted message's files are erased with it (`MURMURE-240`).
+        attachments: if deleted {
+            Vec::new()
+        } else {
+            attachment::read(&map)
+        },
         reactions: reaction::read(&map),
         notice: notice_of(&map)?,
         edited: schema::flag(&map, MESSAGE_EDITED),
-        deleted: schema::flag(&map, MESSAGE_DELETED),
+        deleted,
         // The count is read from the thread document, once it is held
         // (`MURMURE-106`).
         thread: document_of(&map, MESSAGE_THREAD).map(|document| ThreadHead {
@@ -1901,6 +1980,7 @@ fn document_of(map: &LoroMap, key: &str) -> Option<DocumentId> {
 fn write_message(
     doc: &LoroDoc,
     draft: &MessageDraft,
+    attachments: &[Attachment],
     author: UserId,
     now: Timestamp,
     channel: ChannelId,
@@ -1920,6 +2000,7 @@ fn write_message(
     content.insert(0, &draft.text)?;
     mention::write(doc, &content, &draft.mentions, channel)?;
     style::write(doc, &content, &draft.styles)?;
+    attachment::write(&message, attachments)?;
     // Created empty here, so no reaction ever creates a container, and
     // two first reactors never race for one (`MURMURE-256`).
     message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;

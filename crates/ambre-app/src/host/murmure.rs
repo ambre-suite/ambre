@@ -6,17 +6,19 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ambre_bus::{Timestamp, UserId};
+use ambre_bus::{Attachment, Timestamp, UserId};
 use ambre_canvas::TextInput;
 use ambre_logic::persistence::PersistenceStore;
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::drafts::{DraftShelf, DraftWrite, user_range};
+use ambre_murmure::uploads::opens_as;
 use ambre_murmure::view::PageReads;
 use leptos::prelude::{GetUntracked, Set, Update};
 use wasm_bindgen::JsValue;
 
-/// What the page tells a Murmure region, read from the shell's relay.
-pub fn page_reads(relay: MurmureRelay, pipe: TextInput) -> PageReads {
+/// What the page tells a Murmure region, read from the shell's relay. `warn`
+/// puts a warning in front of the user.
+pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) -> PageReads {
     let clock = LocalTime::new();
     PageReads {
         pane: Rc::new(move || relay.pane.get_untracked()),
@@ -42,7 +44,59 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput) -> PageReads {
         drafts: relay.drafts(),
         ask_emoji: Rc::new(move |in_thread| relay.ask_emoji(in_thread)),
         take_emoji: Rc::new(move |in_thread| relay.take_emoji(in_thread)),
+        take_files: Rc::new(move || relay.take_files()),
+        save_file: Rc::new(save_file),
+        warn,
     }
+}
+
+/// How long a tab has to read the address of an image it opened, in
+/// milliseconds, before the page lets the bytes go.
+const OPENED_FOR_MS: i32 = 60_000;
+
+/// Hand the browser a file a member fetched. A raster image opens in a tab of
+/// its own. Any other file saves, typed as a plain stream of bytes. So no
+/// file a member sent runs in this page's origin.
+fn save_file(file: &Attachment, data: Vec<u8>) {
+    use wasm_bindgen::JsCast;
+    let opens = opens_as(&file.media_type);
+    let parts = js_sys::Array::new();
+    parts.push(&js_sys::Uint8Array::from(data.as_slice()).buffer());
+    let options = web_sys::BlobPropertyBag::new();
+    options.set_type(opens.unwrap_or("application/octet-stream"));
+    let url = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options)
+        .and_then(|blob| web_sys::Url::create_object_url_with_blob(&blob));
+    let url = match url {
+        Ok(url) => url,
+        Err(e) => {
+            tracing::warn!("Murmure: the file could not open: {e:?}");
+            return;
+        }
+    };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    if opens.is_some() {
+        let _ = window.open_with_url_and_target_and_features(&url, "_blank", "noopener,noreferrer");
+        let revoke = wasm_bindgen::closure::Closure::once_into_js(move || {
+            let _ = web_sys::Url::revoke_object_url(&url);
+        });
+        let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+            revoke.unchecked_ref(),
+            OPENED_FOR_MS,
+        );
+        return;
+    }
+    let anchor = window
+        .document()
+        .and_then(|d| d.create_element("a").ok())
+        .and_then(|e| e.dyn_into::<web_sys::HtmlAnchorElement>().ok());
+    if let Some(anchor) = anchor {
+        anchor.set_href(&url);
+        anchor.set_download(&file.name);
+        anchor.click();
+    }
+    let _ = web_sys::Url::revoke_object_url(&url);
 }
 
 /// The page's drafts in the local store (`MURMURE-210`). The store opens and
@@ -175,7 +229,11 @@ mod tests {
             document.create_element("button").unwrap().unchecked_into();
         body.append_child(&button).unwrap();
         button.focus().unwrap();
-        let reads = page_reads(MurmureRelay::new(), TextInput::create(&document, &cell));
+        let reads = page_reads(
+            MurmureRelay::new(),
+            TextInput::create(&document, &cell),
+            Rc::new(|_| {}),
+        );
         (reads.announce)("Ada, 10:42: hello");
         let live = cell.query_selector(".ambre-a11y-live").unwrap().unwrap();
         assert_eq!(live.text_content().as_deref(), Some("Ada, 10:42: hello"));
@@ -193,7 +251,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn the_page_reads_follow_the_relay() {
         let relay = MurmureRelay::new();
-        let reads = page_reads(relay, TextInput::detached());
+        let reads = page_reads(relay, TextInput::detached(), Rc::new(|_| {}));
         assert_eq!((reads.pane)(), MurmurePane::ChannelList);
         relay.pane.set(MurmurePane::Members {
             channel: ambre_bus::ChannelId::new(),
@@ -216,7 +274,7 @@ mod tests {
             "globalThis.__murmureOpened = [url, target, features]; return null;",
         );
         js_sys::Reflect::set(&window, &key, &recorder).expect("a writable open");
-        let reads = page_reads(MurmureRelay::new(), TextInput::detached());
+        let reads = page_reads(MurmureRelay::new(), TextInput::detached(), Rc::new(|_| {}));
         (reads.open_link)("https://ambre.dev/a");
         js_sys::Reflect::set(&window, &key, &original).expect("open restored");
         let opened = js_sys::Reflect::get(&window, &"__murmureOpened".into()).expect("a record");
@@ -228,5 +286,44 @@ mod tests {
             opened,
             ["https://ambre.dev/a", "_blank", "noopener,noreferrer"]
         );
+    }
+
+    /// A fetched raster image opens in a fresh tab from a blob address, with
+    /// no opener. An SVG never opens, since its script would run in this
+    /// page's origin.
+    #[wasm_bindgen_test]
+    fn a_fetched_image_opens_in_a_tab_and_an_svg_never_does() {
+        let window = web_sys::window().expect("a window");
+        let key = JsValue::from_str("open");
+        let original = js_sys::Reflect::get(&window, &key).expect("window.open");
+        let recorder = js_sys::Function::new_with_args(
+            "url, target, features",
+            "(globalThis.__murmureFiles ||= []).push([url, target, features]); return null;",
+        );
+        js_sys::Reflect::set(&window, &key, &recorder).expect("a writable open");
+        let file = |media_type: &str| Attachment {
+            media_ref: ambre_bus::MediaRef::parse(&"0".repeat(64)).expect("an address"),
+            name: "a".to_owned(),
+            media_type: ambre_bus::MediaType(media_type.to_owned()),
+            size: ambre_bus::ByteSize(1),
+        };
+        save_file(&file("image/png"), vec![1]);
+        js_sys::Reflect::set(&window, &key, &original).expect("open restored");
+        let opened = js_sys::Reflect::get(&window, &"__murmureFiles".into()).expect("a record");
+        let opened: Vec<Vec<String>> = js_sys::Array::from(&opened)
+            .iter()
+            .map(|call| {
+                js_sys::Array::from(&call)
+                    .iter()
+                    .filter_map(|v| v.as_string())
+                    .collect()
+            })
+            .collect();
+        let [call] = opened.as_slice() else {
+            panic!("one tab, got {opened:?}");
+        };
+        assert!(call[0].starts_with("blob:"), "a blob address: {}", call[0]);
+        assert_eq!(call[1..], ["_blank", "noopener,noreferrer"]);
+        assert_eq!(opens_as(&file("image/svg+xml").media_type), None);
     }
 }

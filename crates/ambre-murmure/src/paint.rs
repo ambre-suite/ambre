@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
-use ambre_bus::{MessageId, TextStyle, Timestamp, UserId};
+use ambre_bus::{Attachment, MessageId, TextStyle, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
 use ambre_draw::{
@@ -16,7 +16,9 @@ use ambre_draw::{
     ParleyBrush, PositionedLayoutItem, Rect, Selection,
 };
 
-use crate::list::{JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, chip_label, window};
+use crate::list::{
+    JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, chip_label, file_label, window,
+};
 use crate::look;
 use crate::select::{Selecting, Spot, TextSelection};
 
@@ -55,6 +57,8 @@ pub struct Painted {
     /// The reaction chip a click landed on: the index of its row, and its
     /// emoji.
     pub chip: Option<(usize, String)>,
+    /// The file chip a click landed on: the file it fetches.
+    pub file: Option<Attachment>,
 }
 
 impl Painted {
@@ -144,6 +148,9 @@ pub fn paint_list<S: DrawSurface>(
     let chip = selecting
         .click
         .and_then(|at| chip_at(font_cx, cache, &reached.rows, &words, at, text_width));
+    let file = selecting
+        .click
+        .and_then(|at| file_at(font_cx, cache, &reached.rows, &words, at, text_width));
     let mut line_shown = false;
     let mut focus = None;
     for &(i, top, tall) in &reached.rows {
@@ -216,6 +223,7 @@ pub fn paint_list<S: DrawSurface>(
         selection,
         link,
         chip,
+        file,
     }
 }
 
@@ -236,8 +244,10 @@ fn chip_at(
     if row.reactions.is_empty() {
         return None;
     }
+    // The reactions sit under the files.
     let chips_y = body_top(font_cx, cache, row, *line, top, width)
-        + body(font_cx, cache, row, width).height();
+        + body(font_cx, cache, row, width).height()
+        + file_chips(font_cx, cache, row, width).1;
     let (boxes, _) = chips(font_cx, cache, row, width);
     let (x, y) = (f64::from(x - SPACE_8), f64::from(y - chips_y));
     boxes
@@ -256,13 +266,36 @@ fn chips(
     row: &RowWords,
     width: f32,
 ) -> (Vec<Rect>, f32) {
-    if row.reactions.is_empty() {
+    let labels: Vec<String> = row.reactions.iter().map(chip_label).collect();
+    chip_boxes(font_cx, cache, &labels, width)
+}
+
+/// The box of each file chip of a row, as [`chips`] gives the reactions.
+fn file_chips(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    row: &RowWords,
+    width: f32,
+) -> (Vec<Rect>, f32) {
+    let labels: Vec<String> = row.files.iter().map(file_label).collect();
+    chip_boxes(font_cx, cache, &labels, width)
+}
+
+/// The box of a chip for each of `labels`, from the top-left of the first,
+/// and the height they take with the space above them.
+fn chip_boxes(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    labels: &[String],
+    width: f32,
+) -> (Vec<Rect>, f32) {
+    if labels.is_empty() {
         return (Vec::new(), 0.0);
     }
-    let mut boxes = Vec::with_capacity(row.reactions.len());
+    let mut boxes = Vec::with_capacity(labels.len());
     let (mut x, mut y, mut line) = (0.0_f32, SPACE_2, 0.0_f32);
-    for reaction in &row.reactions {
-        let layout = shape(font_cx, cache, &chip_label(reaction), FONT_UI, width, false);
+    for label in labels {
+        let layout = shape(font_cx, cache, label, FONT_UI, width, false);
         let (wide, tall) = (
             layout.width() + 2.0 * SPACE_4,
             layout.height() + 2.0 * SPACE_2,
@@ -313,6 +346,58 @@ fn draw_chips<S: DrawSurface>(
         let (left, top) = (at.x0 as f32 + SPACE_4, at.y0 as f32 + SPACE_2);
         draw(surface, layout, left, top, palette.cell_text);
     }
+}
+
+/// Paint the file chips of a row, their top-left at `(x, y)`, in the ink of
+/// a link: a click fetches the file.
+fn draw_files<S: DrawSurface>(
+    surface: &mut S,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    row: &RowWords,
+    (x, y): (f32, f32),
+    width: f32,
+    palette: &Palette,
+) {
+    let (boxes, _) = file_chips(font_cx, cache, row, width);
+    let (dx, dy) = (f64::from(x), f64::from(y));
+    for (file, b) in row.files.iter().zip(boxes) {
+        let at = Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
+        surface.fill_rect(at, palette.header_bg);
+        surface.stroke_rect(at, palette.header_border, 1.0);
+        let layout = shape(font_cx, cache, &file_label(file), FONT_UI, width, false);
+        #[allow(clippy::cast_possible_truncation)]
+        let (left, top) = (at.x0 as f32 + SPACE_4, at.y0 as f32 + SPACE_2);
+        draw(surface, layout, left, top, palette.selection);
+    }
+}
+
+/// The file chip drawn under `(x, y)`: the file a click fetches. `None` off
+/// every file chip.
+fn file_at(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    rows: &[(usize, f32, f32)],
+    words: &HashMap<usize, (RowWords, bool)>,
+    (x, y): (f32, f32),
+    width: f32,
+) -> Option<Attachment> {
+    let &(i, top, _) = rows
+        .iter()
+        .find(|&&(_, top, tall)| top <= y && y < top + tall)?;
+    let (row, line) = words.get(&i)?;
+    if row.files.is_empty() {
+        return None;
+    }
+    let files_y = body_top(font_cx, cache, row, *line, top, width)
+        + body(font_cx, cache, row, width).height();
+    let (boxes, _) = file_chips(font_cx, cache, row, width);
+    let (x, y) = (f64::from(x - SPACE_8), f64::from(y - files_y));
+    boxes
+        .iter()
+        .zip(&row.files)
+        .find(|(b, _)| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1)
+        .map(|(_, file)| file.clone())
 }
 
 /// The address of the link drawn under `(x, y)`, `None` off any link. An
@@ -517,6 +602,7 @@ fn fill_bytes<S: DrawSurface>(
 fn measure(font_cx: &mut FontContext, cache: &mut TextCache, row: &RowWords, width: f32) -> f32 {
     let mut tall = 2.0 * SPACE_2 + header_height(font_cx, cache, row, width);
     tall += body(font_cx, cache, row, width).height();
+    tall += file_chips(font_cx, cache, row, width).1;
     tall += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
         tall += shape(font_cx, cache, replies, FONT_UI, width, false).height();
@@ -557,6 +643,8 @@ fn draw_row<S: DrawSurface>(
     let body_tall = layout.height();
     draw_body(surface, layout, x, y, ink, palette);
     y += body_tall;
+    draw_files(surface, font_cx, cache, row, (x, y), width, palette);
+    y += file_chips(font_cx, cache, row, width).1;
     draw_chips(surface, font_cx, cache, row, (x, y), width, palette, me);
     y += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
@@ -928,6 +1016,48 @@ pub(crate) mod tests {
         assert_eq!(chips, 0, "a deleted message shows no chip");
     }
 
+    /// The files of a message paint as one chip each under its body, in the
+    /// ink of a link. A click on one names its file.
+    #[test]
+    fn the_files_paint_as_chips_a_click_names() {
+        use ambre_bus::{Attachment, ByteSize, MediaRef, MediaType};
+        let ada = UserId::new();
+        let file = Attachment {
+            media_ref: MediaRef::parse(&"0".repeat(64)).expect("an address"),
+            name: "a.png".to_owned(),
+            media_type: MediaType("image/png".to_owned()),
+            size: ByteSize(2048),
+        };
+        let mut carrying = message(ada, 0, "hello");
+        carrying.attachments = vec![file.clone()];
+        let mut list = MessageList::default();
+        list.absorb(SegmentId::new(), vec![carrying]);
+        let mut bare = MessageList::default();
+        bare.absorb(SegmentId::new(), vec![message(ada, 0, "hello")]);
+        let tall = |painted: &Painted| painted.rows[0].2 - painted.rows[0].1;
+        let (_, plain) = paint(&bare, 600.0);
+        let (_, at) = paint(&list, 600.0);
+        assert!(tall(&at) > tall(&plain), "the chip takes room");
+
+        let bottom = at.rows[0].2;
+        let selecting = Selecting {
+            click: Some((SPACE_8 + 2.0, bottom - 2.0 * SPACE_2 - 2.0)),
+            ..Selecting::default()
+        };
+        let shown = Shown {
+            list: &list,
+            unread: None,
+            anchor: None,
+            focus: None,
+            selecting,
+            me: None,
+        };
+        let (surface, painted) = paint_from(shown, 600.0);
+        assert_eq!(painted.file, Some(file));
+        assert_eq!(painted.chip, None);
+        assert!(!runs(&surface, LIGHT.selection).is_empty(), "link ink");
+    }
+
     /// The colour emoji face is fetched the first time a painted row holds
     /// an emoji, in its body or on a chip. A list with none fetches nothing
     /// (`MURMURE-138`). The count is a host hook of the cache.
@@ -1203,6 +1333,7 @@ pub(crate) mod tests {
                 selection: None,
                 link: None,
                 chip: None,
+                file: None,
             }
         );
         assert!(

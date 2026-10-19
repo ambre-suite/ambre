@@ -493,6 +493,7 @@ pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channe
             view.text.clear();
             view.mentions.clear();
             view.styles.clear();
+            view.attachments.clear();
             view.deleted = true;
         } else if let Some(content) = entry_content(&entry) {
             view.text = content.to_string();

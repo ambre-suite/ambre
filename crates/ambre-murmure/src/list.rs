@@ -9,8 +9,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::ops::Range;
 
 use ambre_bus::{
-    ChannelId, DocumentId, LogicCommand, MessageId, MessageView, MurmureCommand, MurmureEvent,
-    Notice, Reaction, SegmentId, TextStyle, Timestamp, UiEvent, Unreadable, UserId,
+    Attachment, ChannelId, DocumentId, LogicCommand, MessageId, MessageView, MurmureCommand,
+    MurmureEvent, Notice, Reaction, SegmentId, TextStyle, Timestamp, UiEvent, Unreadable, UserId,
 };
 
 /// Consecutive messages of one author inside this span share one header:
@@ -283,6 +283,9 @@ pub struct RowWords {
     /// The reactions under the body, one chip per emoji in emoji order
     /// (`MURMURE-137`). A notice and a band take none.
     pub reactions: Vec<Reaction>,
+    /// The files under the body, one chip each, which a click fetches. A
+    /// deleted message carries none.
+    pub files: Vec<Attachment>,
 }
 
 impl<'a> Row<'a> {
@@ -335,6 +338,11 @@ impl<'a> Row<'a> {
         } else {
             message.reactions.clone()
         };
+        let files = if message.deleted {
+            Vec::new()
+        } else {
+            message.attachments.clone()
+        };
         RowWords {
             header,
             body,
@@ -342,6 +350,7 @@ impl<'a> Row<'a> {
             marks,
             replies,
             reactions,
+            files,
         }
     }
 
@@ -367,6 +376,10 @@ impl<'a> Row<'a> {
             let chips: Vec<String> = words.reactions.iter().map(chip_label).collect();
             heard = format!("{heard}. Reactions: {}", chips.join(", "));
         }
+        if !words.files.is_empty() {
+            let files: Vec<String> = words.files.iter().map(file_label).collect();
+            heard = format!("{heard}. Files: {}", files.join(", "));
+        }
         heard
     }
 }
@@ -375,6 +388,11 @@ impl<'a> Row<'a> {
 /// it.
 pub fn chip_label(reaction: &Reaction) -> String {
     format!("{} {}", reaction.emoji, reaction.users.len())
+}
+
+/// What the chip of a file reads: its name and its size.
+pub fn file_label(file: &Attachment) -> String {
+    format!("{} ({})", file.name, crate::uploads::size_label(file.size))
 }
 
 /// The words of a band: its span, its cause and its remedy, muted
@@ -400,6 +418,7 @@ fn band_words(band: &Band, time_of: impl Fn(Timestamp) -> String) -> RowWords {
         marks: Vec::new(),
         replies: None,
         reactions: Vec::new(),
+        files: Vec::new(),
     }
 }
 
@@ -751,6 +770,7 @@ pub(crate) mod tests {
             text: text.to_owned(),
             mentions: Vec::new(),
             styles: Vec::new(),
+            attachments: Vec::new(),
             reactions: Vec::new(),
             notice: None,
             edited: false,

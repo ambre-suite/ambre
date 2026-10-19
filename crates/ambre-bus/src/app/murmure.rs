@@ -231,11 +231,53 @@ pub struct MessageDraft {
     pub styles: Vec<StyleMark>,
 }
 
+/// The address of a blob, as the Sync worker named it: sixty-four lowercase
+/// hexadecimal characters, keyed by the document key (`ambre-spec-media.md`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MediaRef(String);
+
+impl MediaRef {
+    /// The address `word` spells, or `None` for anything else.
+    pub fn parse(word: &str) -> Option<Self> {
+        (word.len() == 64
+            && word
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+        .then(|| Self(word.to_owned()))
+    }
+
+    /// The address, as the relay names it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// The media type of a file, as the browser named it, such as `image/png`.
+/// Shown and used to open the file; never sent to the relay (`SYNC-053`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MediaType(pub String);
+
+/// A size in bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ByteSize(pub u64);
+
+/// A file a message carries: its address, never its bytes (`MURMURE-017`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Attachment {
+    pub media_ref: MediaRef,
+    /// The file's name, as its author's file system gave it.
+    pub name: String,
+    pub media_type: MediaType,
+    pub size: ByteSize,
+}
+
 /// A send the Logic thread holds until its author confirms the `@channel`
 /// in it (`MURMURE-231`). The view sends it again, or gives the draft back.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeldSend {
     pub draft: MessageDraft,
+    /// The files the message carries, each already uploaded (`MURMURE-132`).
+    pub attachments: Vec<Attachment>,
     /// The thread a reply goes to, `None` for a message of the channel.
     pub reply: Option<HeldReply>,
 }
@@ -259,6 +301,9 @@ pub enum MurmureCommand {
     /// (`MURMURE-080`).
     SendMessage {
         draft: MessageDraft,
+        /// The files it carries. The view names only files the Sync worker
+        /// answered uploaded, under the channel's `meta` (`MURMURE-132`).
+        attachments: Vec<Attachment>,
         /// The instant the author sent it, stamped by the view.
         now: Timestamp,
         /// The author confirmed the `@channel` the Logic thread asked about
@@ -354,6 +399,17 @@ pub enum MurmureCommand {
     /// Find the root of `thread`, which a copy names, down the older
     /// segments, and answer [`MurmureEvent::RootFound`] once it is loaded.
     SeekRoot { thread: DocumentId },
+    /// Upload a file for the composer, under the channel's `meta`, through
+    /// the shared media flow (`MURMURE-132`). The answer is the
+    /// `MediaUploaded` of request `id`, or an `ApiError` naming it. The view
+    /// holds no document of the channel, so the Logic thread names it.
+    UploadFile { id: crate::RequestId, data: Vec<u8> },
+    /// Fetch the file `media_ref` of a message, stored under the channel's
+    /// `meta`. The answer is the `MediaDownloaded` of request `id`.
+    FetchFile {
+        id: crate::RequestId,
+        media_ref: MediaRef,
+    },
 }
 
 impl MurmureCommand {
@@ -369,8 +425,11 @@ impl MurmureCommand {
             | Self::Unreact { .. }
             | Self::EditMessage { .. }
             | Self::DeleteMessage { .. }
-            | Self::Reply { .. } => true,
+            | Self::Reply { .. }
+            // A file uploads only for a message to carry it.
+            | Self::UploadFile { .. } => true,
             Self::LoadOlder { .. }
+            | Self::FetchFile { .. }
             | Self::MarkRead
             | Self::MarkUnread { .. }
             | Self::MarkThreadRead { .. }
@@ -397,6 +456,9 @@ pub struct MessageView {
     pub mentions: Vec<Mention>,
     /// The style marks of the body, in text order (`MURMURE-562`).
     pub styles: Vec<StyleMark>,
+    /// The files it carries, in the order its author attached them. A
+    /// deleted message carries none (`MURMURE-240`).
+    pub attachments: Vec<Attachment>,
     /// One per emoji, in emoji order (`MURMURE-006`).
     pub reactions: Vec<Reaction>,
     /// What the channel announces, `None` for a message a member wrote. A

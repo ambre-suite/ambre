@@ -27,7 +27,8 @@
 use std::collections::BTreeSet;
 
 use ambre_bus::{
-    Mention, MentionTarget, MessageDraft, SealedChannelKey, StyleMark, TextStyle, Timestamp, Topic,
+    Attachment, ByteSize, MediaRef, MediaType, Mention, MentionTarget, MessageDraft,
+    SealedChannelKey, StyleMark, TextStyle, Timestamp, Topic,
 };
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN, SessionNonce};
 use ambre_core::schema::{migration_peer, step_fingerprint};
@@ -209,8 +210,15 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
     ] {
         state.adopt_session(id, peer, entry()).expect("adopt");
     }
+    // The first message carries a file, by its address alone.
+    let file = Attachment {
+        media_ref: MediaRef::parse(&"ab".repeat(32)).expect("an address"),
+        name: "plan.pdf".to_owned(),
+        media_type: MediaType("application/pdf".to_owned()),
+        size: ByteSize(2_048),
+    };
     state
-        .send(
+        .send_attached(
             &MessageDraft {
                 text: "hello @channel".to_owned(),
                 styles: Vec::new(),
@@ -219,6 +227,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
                     range: 6..14,
                 }],
             },
+            &[file],
             AUTHOR,
             Timestamp(1_700_000_000_001),
         )
@@ -559,12 +568,13 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 /// added later never moves what an earlier one writes.
 fn canonical(from: u32) -> LoroDoc {
     match from {
-        // A version 1 segment holds one message, its body with no style.
-        1 => {
+        // A version 1 segment holds one message, its body with no style. A
+        // version 2 one holds the same message, which carries no file.
+        1 | 2 => {
             let doc = LoroDoc::new();
             doc.set_peer_id(1).expect("a peer");
             doc.get_map(ambre_core::schema::SCHEMA_META_MAP)
-                .insert(ambre_core::schema::SCHEMA_VERSION_KEY, 1)
+                .insert(ambre_core::schema::SCHEMA_VERSION_KEY, from)
                 .expect("the stamp");
             doc.get_map(crate::schema::HEADER)
                 .insert(crate::schema::HEADER_KIND, DocumentKind::Segment.as_str())

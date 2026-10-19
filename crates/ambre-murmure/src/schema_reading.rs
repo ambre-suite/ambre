@@ -40,11 +40,12 @@ use loro::{Container, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::channel::{folded_amendments, header_fold, read_messages};
 use crate::schema::{
-    AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS, CATALOGUE,
-    CATEGORIES, CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE,
-    DocumentKind, ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER,
-    HEADER_CHANNEL, HEADER_FOLDED, HEADER_FOLDED_SEQ, HEADER_KIND, HEADER_ROOT, HEADER_SEGMENT,
-    HEADER_SPACE, MENTION, MESSAGE_ALSO_IN_THREAD, MESSAGE_AUTHOR, MESSAGE_CONTENT,
+    AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS,
+    ATTACHMENT_MEDIA, ATTACHMENT_NAME, ATTACHMENT_SIZE, ATTACHMENT_TYPE, CATALOGUE, CATEGORIES,
+    CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, DocumentKind,
+    ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER, HEADER_CHANNEL,
+    HEADER_FOLDED, HEADER_FOLDED_SEQ, HEADER_KIND, HEADER_ROOT, HEADER_SEGMENT, HEADER_SPACE,
+    MENTION, MESSAGE_ALSO_IN_THREAD, MESSAGE_ATTACHMENTS, MESSAGE_AUTHOR, MESSAGE_CONTENT,
     MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS,
     MESSAGE_THREAD, MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT,
     SEGMENT_FOLDED, SEGMENT_STATE, SEGMENTS, SPACE, SPACE_NAME, SegmentState,
@@ -465,6 +466,30 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         },
         MESSAGE_EDITED if message.edited => Some(format!("message {n} is edited")),
         MESSAGE_DELETED if message.deleted => Some(format!("message {n} is deleted")),
+        // A file is read through the attachments the view is given.
+        MESSAGE_ATTACHMENTS => {
+            let at = stored.at(2)?;
+            let file = message.attachments.get(at)?;
+            let f = at + 1;
+            match stored.key(3)? {
+                ATTACHMENT_MEDIA if stored.string()? == file.media_ref.as_str() => {
+                    Some(format!("message {n} carries file {f} by its address"))
+                }
+                ATTACHMENT_NAME => Some(format!(
+                    "message {n} carries file {f} named {:?}",
+                    file.name
+                )),
+                ATTACHMENT_TYPE => Some(format!(
+                    "message {n} carries file {f} of type {:?}",
+                    file.media_type.0
+                )),
+                ATTACHMENT_SIZE => Some(format!(
+                    "message {n} carries file {f} of {} bytes",
+                    file.size.0
+                )),
+                _ => None,
+            }
+        }
         _ => None,
     }
 }

@@ -28,8 +28,8 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    ChannelId, LogicCommand, Mention, MessageAt, MessageDraft, MessageId, MurmureCommand,
-    StyleMark, TextStyle, Timestamp, UserId,
+    Attachment, ChannelId, LogicCommand, Mention, MessageAt, MessageDraft, MessageId,
+    MurmureCommand, StyleMark, TextStyle, Timestamp, UserId,
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
@@ -42,6 +42,7 @@ use crate::markers::{self, MarkBar};
 use crate::mention_list::{MentionList, Offer, offers, query_at};
 use crate::paint::{draw, shape};
 use crate::read_aloud::{self, Say};
+use crate::uploads::Uploads;
 
 /// The strip above the field while the composer holds an edit.
 pub const EDITING_LINE: &str = "Editing a message. Escape cancels.";
@@ -67,6 +68,15 @@ pub const ALSO_CHORD: &str = "Alt+Enter";
 
 /// The height of the row of that box, under the field.
 pub(crate) const ALSO_PX: f32 = FONT_UI + SPACE_8;
+
+/// The height of the row of files over the field, while the draft has one.
+pub(crate) const FILES_PX: f32 = FONT_UI + SPACE_8;
+
+/// What ends the chip of a file a press takes off the draft.
+const REMOVE_MARK: &str = "\u{d7}";
+
+/// What a file still uploading says after its name.
+pub const UPLOADING: &str = "uploading";
 
 /// The side of the box.
 const BOX_PX: f32 = FONT_UI;
@@ -309,6 +319,8 @@ pub enum Sent {
     Message {
         to: DraftOf,
         draft: MessageDraft,
+        /// The files the draft carries, every one uploaded (`MURMURE-132`).
+        attachments: Vec<Attachment>,
         also_in_channel: bool,
     },
     /// An edit of a message of the member (`MURMURE-203`).
@@ -327,12 +339,14 @@ impl Sent {
             Self::Message {
                 to,
                 draft,
+                attachments,
                 also_in_channel,
             } => LogicCommand::Channel {
                 channel_id: to.channel(),
                 command: match to {
                     DraftOf::Channel(_) => MurmureCommand::SendMessage {
                         draft,
+                        attachments,
                         now,
                         confirmed: false,
                     },
@@ -449,12 +463,42 @@ pub struct Composer {
     sent: Vec<DraftOf>,
     /// How many losses of the shelf the composer applied.
     losses_seen: usize,
+    /// The files each draft carries, and those still uploading.
+    uploads: Uploads,
+    /// Each file chip of the last paint that a press takes off the draft, as
+    /// its rectangle and its place in the draft's files.
+    file_chips: Vec<(Rect, usize)>,
 }
 
 impl Composer {
+    /// The files each draft carries, and those still uploading.
+    pub fn uploads(&self) -> &Uploads {
+        &self.uploads
+    }
+
+    /// The same, for the view to hand it an upload or its answer.
+    pub fn uploads_mut(&mut self) -> &mut Uploads {
+        &mut self.uploads
+    }
+
     /// The height of the band at the last paint, `0` when no channel showed.
     pub fn band(&self) -> f32 {
         self.band
+    }
+
+    /// The file whose chip the last paint drew under `(x, y)`, by its place
+    /// in the files of the draft shown.
+    pub fn file_at(&self, x: f32, y: f32) -> Option<usize> {
+        let at = Point::new(x.into(), y.into());
+        self.file_chips
+            .iter()
+            .find(|(chip, _)| chip.contains(at))
+            .map(|&(_, index)| index)
+    }
+
+    /// Whether the draft `of` shows a row of files.
+    fn has_files(&self, of: DraftOf) -> bool {
+        !self.uploads.ready(of).is_empty() || !self.uploads.uploading(of).is_empty()
     }
 
     /// Whether the keys reach the composer.
@@ -1242,7 +1286,11 @@ impl Composer {
                     }
                     self.end_edit(asked);
                 }
-            } else if !text.trim().is_empty() {
+            } else if self.uploads.busy(asked) {
+                // A file still uploads: the draft holds until it lands or
+                // fails, so no message names a file the relay lacks
+                // (`MURMURE-132`).
+            } else if !text.trim().is_empty() || !self.uploads.ready(asked).is_empty() {
                 self.drafts.remove(&asked);
                 // The history leaves with the draft: no undo reaches a
                 // message sent (`MURMURE-434`).
@@ -1253,6 +1301,7 @@ impl Composer {
                 sent = Some(Sent::Message {
                     to: asked,
                     draft,
+                    attachments: self.uploads.take(asked),
                     also_in_channel: self.also.remove(&asked),
                 });
             }
@@ -1323,6 +1372,9 @@ impl Composer {
         if matches!(shown, DraftOf::Thread(..)) {
             self.band += ALSO_PX;
         }
+        if self.has_files(shown) {
+            self.band += FILES_PX;
+        }
         sent
     }
 
@@ -1358,7 +1410,13 @@ impl Composer {
                 palette.header_text,
             );
         }
-        let top = strip + TYPING_PX;
+        let mut top = strip + TYPING_PX;
+        // The files of the draft sit in a row over the field.
+        self.file_chips.clear();
+        if self.has_files(shown) {
+            self.paint_files(surface, font_cx, cache, shown, top, width, palette);
+            top += FILES_PX;
+        }
         // A thread's field leaves the row of its box under it.
         self.also_row = None;
         let height = match shown {
@@ -1436,6 +1494,55 @@ impl Composer {
             (origin.y + caret.y0) as f32,
             caret.height() as f32,
         ))
+    }
+
+    /// Paint the files of the draft `shown` as a row of chips from `top`.
+    /// The uploaded files come first, a press takes one off, and those that
+    /// still upload follow (`MURMURE-132`). A chip past the width is left out.
+    #[allow(clippy::too_many_arguments)]
+    fn paint_files<S: DrawSurface>(
+        &mut self,
+        surface: &mut S,
+        font_cx: &mut FontContext,
+        cache: &mut TextCache,
+        shown: DraftOf,
+        top: f32,
+        width: f32,
+        palette: &Palette,
+    ) {
+        let ready = self.uploads.ready(shown).iter().map(|file| {
+            let size = crate::uploads::size_label(file.size);
+            (format!("{} ({size}) {REMOVE_MARK}", file.name), true)
+        });
+        let uploading = self
+            .uploads
+            .uploading(shown)
+            .into_iter()
+            .map(|name| (format!("{name}, {UPLOADING}"), false));
+        let chips: Vec<(String, bool)> = ready.chain(uploading).collect();
+        let mut x = SPACE_8;
+        for (index, (label, removable)) in chips.into_iter().enumerate() {
+            let words = shape(font_cx, cache, &label, FONT_UI, width, false);
+            let chip_w = words.width() + 2.0 * SPACE_4;
+            if x + chip_w > width - SPACE_4 {
+                break;
+            }
+            let (y0, y1) = (top + SPACE_2, top + FILES_PX - SPACE_2);
+            let chip = Rect::new(x.into(), y0.into(), (x + chip_w).into(), y1.into());
+            surface.fill_rect(chip, palette.header_bg);
+            surface.stroke_rect(chip, palette.cell_border, 1.0);
+            let ink = if removable {
+                palette.cell_text
+            } else {
+                palette.header_text
+            };
+            let label_y = y0 + (y1 - y0 - words.height()) / 2.0;
+            draw(surface, words, x + SPACE_4, label_y, ink);
+            if removable {
+                self.file_chips.push((chip, index));
+            }
+            x += chip_w + SPACE_4;
+        }
     }
 }
 

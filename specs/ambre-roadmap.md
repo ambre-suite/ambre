@@ -267,7 +267,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` A ceiling on the channels watched unopened | V1 | every channel never opened costs one subscription per live segment, with no bound. A member of many channels pays a socket subscription each. A budget row and an order that keeps the most recent channels would bound it |
 | `[x]` Search in loaded segments | MVP | local search over the active segment and the final segments already fetched. The jump to a result lands with the message list. Done when `MURMURE-147`, `MURMURE-148`, `MURMURE-149` and `MURMURE-151` read `verified` |
 | `[x]` A search fold for every script | MVP | the search folds the diacritics of Greek, Vietnamese and every script the client draws, past the Latin table, within the Main instance budget. Done when `MURMURE-478` reads `verified` |
-| `[ ]` Attachments | MVP | files and images attached to a message through the shared media flow |
+| `[x]` Attachments | MVP | files and images attached to a message through the shared media flow |
 | `[x]` Emoji | MVP | Unicode emoji drawn in messages and reactions, with a picker |
 | `[ ]` Animated images | MVP | an animated GIF plays in the message list, and stays still under reduced motion |
 | `[ ]` Murmure measured on a phone | MVP | the Murmure budgets measured in WASM on a mid-range phone, in place of the desktop figures and the ratio they assume: segment replay and snapshot import, the JSON authorship check, the envelope open, the rotation of a space leave, the color emoji font size, and the two residency memory budgets. The `segment` bench of `ambre-murmure` is the starting point. It also measures a cold open end to end, relay read included, against the cold start row |

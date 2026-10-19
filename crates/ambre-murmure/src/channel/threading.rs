@@ -656,7 +656,7 @@ impl ChannelState {
         let segment = thread.segment;
         let document = thread.held.id;
         let (doc, session) = thread.held.session()?;
-        let (id, mentions, _) = super::write_message(doc, draft, author, now, channel, None)?;
+        let (id, mentions, _) = super::write_message(doc, draft, &[], author, now, channel, None)?;
         let delta = session.export_json(doc)?;
         let event = self
             .thread_view(document)
@@ -669,7 +669,7 @@ impl ChannelState {
             event,
         };
         let copy = if also_in_channel {
-            Some(self.send_from(draft, author, now, Some((document, id)))?)
+            Some(self.send_from(draft, &[], author, now, Some((document, id)))?)
         } else {
             None
         };

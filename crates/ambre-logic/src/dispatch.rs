@@ -273,6 +273,10 @@ impl LogicState {
                 if self.handed_off(id, &evt) {
                     return;
                 }
+                // The erase of a deleted message's file, which no view awaits.
+                if self.erased(id, &evt) {
+                    return;
+                }
                 // A response to a request this Logic thread issued on behalf of a
                 // document (`toile-media`) is fed back into the owning engine. It
                 // is not forwarded to the UI. UI-issued requests are absent from
@@ -297,6 +301,7 @@ impl LogicState {
                         doc.state.set_display_name(display_name);
                     }
                     self.spaces_know_me(*user_id);
+                    self.retry_erases();
                 }
                 self.send_to_ui(UiEvent::Rest { id, evt });
             }
@@ -420,6 +425,9 @@ impl LogicState {
                 document_id,
                 connected,
             } => {
+                if connected {
+                    self.retry_erases();
+                }
                 self.send_to_ui(UiEvent::ConnectionStatus {
                     document_id,
                     connected,
@@ -707,6 +715,9 @@ impl LogicState {
                     && let Some(document_id) = self.rest_routes.remove(&id)
                 {
                     self.route_service_error(document_id, id, message);
+                    return;
+                }
+                if id.is_some_and(|id| self.erase_failed(id)) {
                     return;
                 }
                 // A hand-off the relay refused fails the leave it held, which

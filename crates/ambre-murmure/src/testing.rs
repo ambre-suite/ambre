@@ -54,6 +54,9 @@ pub fn channel_of(texts: &[&str], size: (f64, f64)) -> (MurmureView, Sender<UiEv
         drafts: DraftShelf::default(),
         ask_emoji: Rc::new(|_| {}),
         take_emoji: Rc::new(|_| None),
+        take_files: Rc::new(Vec::new),
+        save_file: Rc::new(|_, _| {}),
+        warn: Rc::new(|_| {}),
     };
     let (events, from_logic) = local(8);
     let view = MurmureView::new(Some(from_logic), None, reads, size, ThemeControl::default());
@@ -68,6 +71,7 @@ pub fn channel_of(texts: &[&str], size: (f64, f64)) -> (MurmureView, Sender<UiEv
             text: (*text).to_owned(),
             mentions: Vec::new(),
             styles: Vec::new(),
+            attachments: Vec::new(),
             reactions: Vec::new(),
             notice: None,
             edited: false,

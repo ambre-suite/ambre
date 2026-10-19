@@ -1260,6 +1260,7 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
         text: "the budget for May".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
+        attachments: Vec::new(),
         reactions: Vec::new(),
         notice: None,
         edited: false,
