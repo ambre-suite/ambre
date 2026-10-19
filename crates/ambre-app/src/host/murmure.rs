@@ -33,6 +33,7 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput) -> PageReads {
         show_mentions: Rc::new(move |in_thread, list| relay.show_mentions(in_thread, list)),
         take_pick: Rc::new(move |in_thread| relay.take_pick(in_thread)),
         take_returned: Rc::new(move |in_thread| relay.take_returned(in_thread)),
+        open_link: Rc::new(super::open_address),
     }
 }
 
@@ -126,5 +127,32 @@ mod tests {
         assert!(matches!((reads.pane)(), MurmurePane::Members { .. }));
         let ts = Timestamp(1_700_000_000_000);
         assert_eq!((reads.time_of)(ts), LocalTime::new().format(ts));
+    }
+
+    /// `MURMURE-567`: a clicked link opens in a fresh tab with no opener and
+    /// no referrer. The page's own `open` is swapped for a recorder, so the
+    /// test opens no tab.
+    #[wasm_bindgen_test]
+    fn a_clicked_link_opens_in_a_fresh_tab_with_no_opener() {
+        let window = web_sys::window().expect("a window");
+        let key = JsValue::from_str("open");
+        let original = js_sys::Reflect::get(&window, &key).expect("window.open");
+        let recorder = js_sys::Function::new_with_args(
+            "url, target, features",
+            "globalThis.__murmureOpened = [url, target, features]; return null;",
+        );
+        js_sys::Reflect::set(&window, &key, &recorder).expect("a writable open");
+        let reads = page_reads(MurmureRelay::new(), TextInput::detached());
+        (reads.open_link)("https://ambre.dev/a");
+        js_sys::Reflect::set(&window, &key, &original).expect("open restored");
+        let opened = js_sys::Reflect::get(&window, &"__murmureOpened".into()).expect("a record");
+        let opened: Vec<String> = js_sys::Array::from(&opened)
+            .iter()
+            .filter_map(|v| v.as_string())
+            .collect();
+        assert_eq!(
+            opened,
+            ["https://ambre.dev/a", "_blank", "noopener,noreferrer"]
+        );
     }
 }

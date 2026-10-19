@@ -64,16 +64,16 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-567` | `POST` | A click on a link in a message MUST open its address in a fresh tab, with no opener. | this spec section 3; `MURMURE-561` | not built | unbuilt -- lands with the `A link in a message opens on a click` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-568` | `FRAME` | Opening a link MUST NOT move the selection or a read cursor. | this spec section 3; `MURMURE-425` | not built | unbuilt -- lands with the `A link in a message opens on a click` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-567` | `POST` | A click on a link in a message MUST open its address in a fresh tab, with no opener. | this spec section 3; `MURMURE-561` | `ambre_murmure::view::tests::a_click_on_a_link_opens_its_address_and_sends_nothing` -- a click and a tap on it, after a click beside it, a drag over it and a click on a refused address; `ambre_app::host::murmure::tests::a_clicked_link_opens_in_a_fresh_tab_with_no_opener` -- the page's `open` reads `noopener,noreferrer` | none | verified |
+| `MURMURE-568` | `FRAME` | Opening a link MUST NOT send the Logic thread anything. | this spec section 3; `MURMURE-427` | `ambre_murmure::view::tests::a_click_on_a_link_opens_its_address_and_sends_nothing` -- no command follows the opens | none | verified |
 
 * **Budget.** the authorship check reads each received delta with no document, a row of
   `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
   summary (`SYNC-113`). The relay never learns whether a delta is a message, an edit or a delete.
-* **Verification.** 23 `verified`, 2 `unimplemented`. The send, the authorship check, the edit
-  and the delete are built, live and as amendments. So is the `thread` field another member sets
-  once. The list draws the styles of a body, and a click on a link does nothing yet.
+* **Verification.** 25 `verified`. The send, the authorship check, the edit and the delete are
+  built, live and as amendments. So is the `thread` field another member sets once. The list
+  draws the styles of a body, and a click on a link opens it.
 
 ---
 
@@ -134,6 +134,10 @@ leaves `thread` and `reactions` as they were. Both take a summary of kind edit, 
 **The list draws the marks** (`MURMURE-565`). The shape of each mark is part of the layout's cache
 key, and its ink and tint are painted on top. A renamed mention shifts the bytes, so each char
 range is mapped onto the body as shown.
+
+**A click opens a link** (`MURMURE-567`). The next paint looks for a link under a click or a tap
+that moved nothing. It checks the address again, and the page opens it as a Toile link opens. The
+open runs one frame after the gesture, inside the browser's window for a popup.
 
 **Code.** the send is `ChannelState::send`, in `crates/ambre-murmure/src/channel.rs`, beside
 `ChannelState::edit` and `ChannelState::delete`. The check is

@@ -34,6 +34,9 @@ pub struct Selecting {
     pub press: Option<(f32, f32)>,
     /// Where the drag is now: the focus to come.
     pub drag: Option<(f32, f32)>,
+    /// Where a click or a tap that moved nothing landed: the paint looks for
+    /// a link under it (`MURMURE-567`).
+    pub click: Option<(f32, f32)>,
 }
 
 impl TextSelection {

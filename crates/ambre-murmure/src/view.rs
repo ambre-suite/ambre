@@ -84,6 +84,9 @@ pub struct PageReads {
     /// the composer gets back. Given `true`, it takes a reply alone
     /// (`MURMURE-558`).
     pub take_returned: Rc<dyn Fn(bool) -> Option<AskedAll>>,
+    /// Open the address of a link a click landed on, in a fresh tab with no
+    /// opener (`MURMURE-567`).
+    pub open_link: Rc<dyn Fn(&str)>,
 }
 
 /// The id of the content canvas, which the channel's region paints. The
@@ -711,7 +714,12 @@ impl MurmureView {
                 }
                 None
             }
-            Release::Tap { x, y } => (!self.retry_at(y)).then_some((x, y)),
+            Release::Tap { y, .. } if self.retry_at(y) => None,
+            Release::Tap { x, y } => {
+                self.selecting.click = Some((x, y));
+                self.dirty = true;
+                Some((x, y))
+            }
             Release::Fling | Release::Rest => None,
         }
     }
@@ -899,6 +907,9 @@ impl MurmureView {
             &*self.reads.time_of,
         );
         self.last = Some(painted.clone());
+        if let Some(address) = &painted.link {
+            (self.reads.open_link)(address);
+        }
         // A selection moves no read cursor: only what the paint shows does
         // (`MURMURE-427`).
         self.selecting = Selecting {
@@ -1245,6 +1256,12 @@ impl MurmureView {
                 if drag == Some(false) && self.retry_at(y as f32) {
                     return true;
                 }
+                // A click that moved nothing may land on a link, which the
+                // next paint finds under it (`MURMURE-567`).
+                if drag == Some(false) {
+                    self.selecting.click = Some((x as f32, y as f32));
+                    self.dirty = true;
+                }
             }
             InputEvent::Key {
                 ref key,
@@ -1404,9 +1421,9 @@ mod tests {
     use ambre_bus::conduit::local;
     use ambre_bus::{
         ChannelId, HeldReply, HeldSend, Mention, MentionTarget, MessageView, MurmureEvent,
-        Unreadable,
+        StyleMark, TextStyle, Unreadable,
     };
-    use ambre_canvas::theme::{FONT_UI, SPACE_2, SPACE_4, SPACE_8};
+    use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
     use ambre_draw::kinetic::LONG_PRESS_MS;
     use ambre_draw::testing::RecordingSurface;
 
@@ -1438,6 +1455,8 @@ mod tests {
         picked: Rc<Cell<Option<(bool, usize)>>>,
         /// The send a cancelled `@channel` question gives back.
         returned: Rc<RefCell<Option<AskedAll>>>,
+        /// Each address the view opened, oldest first.
+        opened: Rc<RefCell<Vec<String>>>,
     }
 
     /// An `@` list the view handed the page, and whether the thread's region
@@ -1468,6 +1487,8 @@ mod tests {
         let pick = Rc::clone(&picked);
         let returned = Rc::new(RefCell::new(None::<AskedAll>));
         let given = Rc::clone(&returned);
+        let opened = Rc::new(RefCell::new(Vec::new()));
+        let opens = Rc::clone(&opened);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| Some("Ada".to_owned())),
@@ -1506,6 +1527,7 @@ mod tests {
                     None
                 }
             }),
+            open_link: Rc::new(move |address: &str| opens.borrow_mut().push(address.to_owned())),
         };
         let size = (300.0, 400.0);
         let view = MurmureView::new(
@@ -1529,6 +1551,7 @@ mod tests {
             lists,
             picked,
             returned,
+            opened,
         }
     }
 
@@ -1765,6 +1788,64 @@ mod tests {
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.copy(), None, "a click clears it");
         assert!(page.commands.try_recv().is_err());
+    }
+
+    /// A click or a tap on a link opens its address, and sends nothing
+    /// (`MURMURE-567`, `MURMURE-568`). A click beside it, a drag over it and
+    /// an address the write rule refuses open nothing.
+    #[test]
+    fn a_click_on_a_link_opens_its_address_and_sends_nothing() {
+        let mut page = page();
+        let channel = ChannelId::new();
+        let link = |text: &str, address: &str, range| {
+            let mut sent = message(UserId::new(), 0, text);
+            sent.styles = vec![StyleMark {
+                style: TextStyle::Link(address.to_owned()),
+                range,
+            }];
+            sent
+        };
+        let messages = vec![
+            link("bad x", "javascript:alert(1)", 0..3),
+            link("see site now", "https://ambre.dev", 4..8),
+        ];
+        let segment = SegmentId::new();
+        send(&page, channel, MurmureEvent::Messages { segment, messages });
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        frame_with_fonts(&mut page.view);
+        assert_eq!(reads(&page).0, 1);
+        let rows = page.view.last_painted().expect("painted").rows;
+        let [(_, _, first), (_, _, second)] = rows.as_slice() else {
+            panic!("two rows: {rows:?}");
+        };
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let mut x_after = |text| {
+            let width =
+                crate::paint::shape(&mut font_cx, &mut cache, text, FONT_BODY, 284.0, false);
+            f64::from(SPACE_8 + width.width())
+        };
+        let on_link = (x_after("see si"), f64::from(second - SPACE_2 - 6.0));
+        let beside = (x_after("s"), on_link.1);
+        let on_bad = (x_after("b"), f64::from(first - SPACE_2 - 6.0));
+
+        for at in [beside, on_bad] {
+            mouse(&mut page.view, at, at);
+            frame_with_fonts(&mut page.view);
+        }
+        mouse(&mut page.view, beside, on_link);
+        frame_with_fonts(&mut page.view);
+        assert!(page.view.copy().is_some(), "the drag selects");
+        assert!(page.opened.borrow().is_empty(), "nothing opened");
+
+        mouse(&mut page.view, on_link, on_link);
+        frame_with_fonts(&mut page.view);
+        page.view
+            .touch_down(on_link.0 as f32, on_link.1 as f32, 0.0);
+        assert!(page.view.touch_up(50.0).is_some());
+        frame_with_fonts(&mut page.view);
+        let opened = page.opened.borrow().clone();
+        assert_eq!(opened, ["https://ambre.dev", "https://ambre.dev"]);
+        assert!(page.commands.try_recv().is_err(), "the opens sent nothing");
     }
 
     /// A drag past the top of the list scrolls it under the pointer, and a

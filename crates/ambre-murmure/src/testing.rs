@@ -47,6 +47,7 @@ pub fn channel_of(texts: &[&str], size: (f64, f64)) -> (MurmureView, Sender<UiEv
         show_mentions: Rc::new(|_, _| {}),
         take_pick: Rc::new(|_| None),
         take_returned: Rc::new(|_| None),
+        open_link: Rc::new(|_| {}),
     };
     let (events, from_logic) = local(8);
     let view = MurmureView::new(Some(from_logic), None, reads, size, ThemeControl::default());

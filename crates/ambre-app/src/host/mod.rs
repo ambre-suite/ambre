@@ -81,6 +81,15 @@ pub enum TouchPhase {
 }
 pub use run::run_with;
 
+/// Open a web address in a fresh tab with `noopener,noreferrer`. The page can
+/// neither reach back into this window nor learn where it came from. A
+/// followed Toile link and a clicked Murmure link both open through it.
+pub(crate) fn open_address(url: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.open_with_url_and_target_and_features(url, "_blank", "noopener,noreferrer");
+    }
+}
+
 /// Private clipboard MIME type carrying the base64 postcard
 /// [`ClipboardPayload`](ambre_bus::ClipboardPayload) for an internal round-trip
 /// on the *synchronous* `copy`/`paste` events (Ctrl+C/Ctrl+V). Browsers that

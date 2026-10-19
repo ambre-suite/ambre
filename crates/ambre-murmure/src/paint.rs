@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
-use ambre_bus::{MessageId, Timestamp, UserId};
+use ambre_bus::{MessageId, TextStyle, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
 use ambre_draw::{
@@ -50,6 +50,8 @@ pub struct Painted {
     /// The selection, with the points the paint resolved into it
     /// (`MURMURE-425`).
     pub selection: Option<TextSelection>,
+    /// The address of the link a click landed on (`MURMURE-567`).
+    pub link: Option<String>,
 }
 
 impl Painted {
@@ -131,6 +133,9 @@ pub fn paint_list<S: DrawSurface>(
     {
         selection.focus = spot;
     }
+    let link = selecting
+        .click
+        .and_then(|at| link_at(font_cx, cache, &reached.rows, &words, at, text_width));
     let mut line_shown = false;
     let mut focus = None;
     for &(i, top, tall) in &reached.rows {
@@ -188,7 +193,39 @@ pub fn paint_list<S: DrawSurface>(
             .map(|&(i, top, tall)| (i, top, top + tall))
             .collect(),
         selection,
+        link,
     }
+}
+
+/// The address of the link drawn under `(x, y)`, `None` off any link. An
+/// address the write rule would refuse opens nothing (`MURMURE-561`).
+fn link_at(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    rows: &[(usize, f32, f32)],
+    words: &HashMap<usize, (RowWords, bool)>,
+    (x, y): (f32, f32),
+    width: f32,
+) -> Option<String> {
+    let &(i, top, _) = rows
+        .iter()
+        .find(|&&(_, top, tall)| top <= y && y < top + tall)?;
+    let (row, line) = words.get(&i)?;
+    let body_y = body_top(font_cx, cache, row, *line, top, width);
+    let layout = body(font_cx, cache, row, width);
+    let (x, y) = (f64::from(x - SPACE_8), f64::from(y - body_y));
+    row.marks.iter().find_map(|mark| {
+        let TextStyle::Link(address) = &mark.style else {
+            return None;
+        };
+        let from = Cursor::from_byte_index(layout, mark.bytes.start, Affinity::Downstream);
+        let to = Cursor::from_byte_index(layout, mark.bytes.end, Affinity::Upstream);
+        let hit = Selection::new(from, to)
+            .geometry(layout)
+            .iter()
+            .any(|(bb, _)| bb.x0 <= x && x < bb.x1 && bb.y0 <= y && y < bb.y1);
+        (hit && crate::style::linkable(address)).then(|| address.clone())
+    })
 }
 
 /// The end of a selection under `(x, y)`: the byte of the body the layout
@@ -825,6 +862,7 @@ pub(crate) mod tests {
                 selection: None,
                 press: Some(press),
                 drag: Some(drag),
+                click: None,
             },
         };
         let press = (SPACE_8, first - SPACE_2 - 2.0);
@@ -883,6 +921,7 @@ pub(crate) mod tests {
                 focus: None,
                 rows: Vec::new(),
                 selection: None,
+                link: None,
             }
         );
         assert!(

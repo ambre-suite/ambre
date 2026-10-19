@@ -169,15 +169,7 @@ fn follow_shell_nav(
     booted: ambre_bus::DocType,
 ) {
     match nav {
-        toile_chrome::ShellNav::Url(url) => {
-            if let Some(window) = web_sys::window() {
-                let _ = window.open_with_url_and_target_and_features(
-                    &url,
-                    "_blank",
-                    "noopener,noreferrer",
-                );
-            }
-        }
+        toile_chrome::ShellNav::Url(url) => crate::host::open_address(&url),
         toile_chrome::ShellNav::Document {
             document_id,
             doc_type,
