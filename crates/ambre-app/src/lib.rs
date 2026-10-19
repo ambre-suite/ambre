@@ -1396,6 +1396,24 @@ pub fn main() {
                         }
                     }
                 }
+                // The worker ended the session and asked the relay to revoke
+                // it (`CHROME-107`). The relays above deleted the drafts
+                // (`MURMURE-216`); once that write has landed, the page boots
+                // home afresh and holds nothing of the session (`CHROME-108`).
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::LoggedOut,
+                    ..
+                } => {
+                    let keeper = draft_keeper.clone();
+                    wasm_bindgen_futures::spawn_local(async move {
+                        keeper.written().await;
+                        signin::leave_session(|url| {
+                            if let Some(window) = web_sys::window() {
+                                let _ = window.location().replace(url);
+                            }
+                        });
+                    });
+                }
                 // The provider's address: send the browser there (`CHROME-095`).
                 UiEvent::Rest {
                     evt: ambre_bus::RestEvent::ProviderAddress { url, state },

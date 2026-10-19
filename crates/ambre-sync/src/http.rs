@@ -89,6 +89,37 @@ impl AuthContext {
         *self.tokens.borrow_mut() = Some(next);
         Ok(())
     }
+
+    /// Revokes the session's refresh token at the relay over the browser's
+    /// `fetch` (`SRV-026`).
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) async fn revoke(&self) -> Result<(), String> {
+        self.revoke_via(&Fetch).await
+    }
+
+    /// Revokes the session's refresh token through `transport`. The route
+    /// takes the access token, so a refused one is renewed first. The body
+    /// is built again after that renewal: the renewal replaced the refresh
+    /// token, and revoking the old one would leave the new one alive.
+    async fn revoke_via(&self, transport: &impl Transport) -> Result<(), String> {
+        let url = format!("{}://{}/api/auth/logout", self.url_scheme, self.api_base);
+        let send = || async {
+            // The same body as a renewal's: the refresh token alone.
+            let body = RefreshRequest {
+                refresh_token: self.refresh_token()?,
+            };
+            let mut request = Outgoing::json(Method::Post, &url, &body)?;
+            request.bearer = Some(bearer(&self.access_token()?));
+            let resp = exchange(transport, &request).await?;
+            Ok::<_, String>((request, resp))
+        };
+        let (mut request, mut resp) = send().await?;
+        if resp.status == 401 {
+            self.refresh_via(transport).await?;
+            (request, resp) = send().await?;
+        }
+        expect_ok(&request, &resp)
+    }
 }
 
 /// The `Authorization` header value, wiped once the request holds its copy.
@@ -1624,6 +1655,59 @@ mod tests {
             (first.method, &first.url, &first.body)
         );
         assert!(sent.iter().all(|r| r.timeout_ms == REQUEST_TIMEOUT_MS));
+    }
+
+    /// `SYNC-177`: a sign-out revokes the refresh token at the relay, under
+    /// the access token. After a renewal it revokes the token the renewal
+    /// handed out, not the one it replaced.
+    #[tokio::test]
+    async fn a_sign_out_revokes_the_refresh_token_it_holds() {
+        let body_of = |request: &Outgoing| -> serde_json::Value {
+            serde_json::from_slice(&request.body.as_ref().unwrap().1).unwrap()
+        };
+        let logout = "https://relay.test/api/auth/logout";
+
+        let transport = Scripted::new([Ok((200, serde_json::json!({})))]);
+        session("access-1", "refresh-1")
+            .revoke_via(&transport)
+            .await
+            .unwrap();
+        let sent = transport.sent.take();
+        let [only] = sent.as_slice() else {
+            panic!("expected one request, got {}", sent.len());
+        };
+        assert_eq!((only.method, only.url.as_str()), (Method::Post, logout));
+        assert_eq!(bearer_of(only).as_deref(), Some("Bearer access-1"));
+        assert_eq!(
+            body_of(only),
+            serde_json::json!({ "refresh_token": "refresh-1" })
+        );
+
+        let transport = Scripted::new([
+            Ok((401, serde_json::json!({}))),
+            Ok((200, renewed("access-2"))),
+            Ok((200, serde_json::json!({}))),
+        ]);
+        session("access-1", "refresh-1")
+            .revoke_via(&transport)
+            .await
+            .unwrap();
+        let sent = transport.sent.take();
+        let [_, _, replay] = sent.as_slice() else {
+            panic!("expected three requests, got {}", sent.len());
+        };
+        assert_eq!(replay.url, logout);
+        assert_eq!(bearer_of(replay).as_deref(), Some("Bearer access-2"));
+        assert_eq!(
+            body_of(replay),
+            serde_json::json!({ "refresh_token": "refresh-2" })
+        );
+
+        let refused = Scripted::new([Ok((500, serde_json::json!({})))]);
+        assert!(
+            session("a", "r").revoke_via(&refused).await.is_err(),
+            "a refusal is reported"
+        );
     }
 
     /// `SYNC-062`: the replay is the only one. A second refusal, or a renewal

@@ -1546,10 +1546,7 @@ impl SyncState {
             } => {
                 self.handle_recover_account(recovery_words, new_passphrase);
             }
-            RestCommand::Logout => {
-                self.handle_logout();
-                self.reply(id, RestEvent::LoggedOut);
-            }
+            RestCommand::Logout => self.handle_sign_out(id),
 
             // -- Document CRUD -------------------------------------------------
             RestCommand::ListDocuments => self.handle_list_documents(id),

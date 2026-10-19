@@ -227,6 +227,13 @@ pub(crate) fn remember_dev_user(username: &str) {
     }
 }
 
+/// Forget the remembered dev identity, so the next boot signs no one in.
+pub(crate) fn forget_dev_user() {
+    if let Some(Ok(Some(storage))) = web_sys::window().map(|w| w.local_storage()) {
+        let _ = storage.remove_item(DEV_USER_KEY);
+    }
+}
+
 /// Map a `SyncWarningCode` (the closed `ambre-bus` contract) to a user-facing
 /// notice. All are non-fatal, and all but an unreadable document correct
 /// themselves, so the wording reassures rather than alarms. Exhaustive by

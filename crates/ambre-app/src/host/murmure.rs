@@ -152,6 +152,16 @@ impl DraftKeeper {
         self.load();
     }
 
+    /// Resolves once every write handed to the store so far has landed. A
+    /// read starts only after each read-write transaction opened before it
+    /// on the same store has ended, so a read is the barrier.
+    pub async fn written(&self) {
+        let store = self.0.borrow().store.clone();
+        if let Some(store) = store {
+            let _ = store.load_drafts("", "\u{10FFFF}").await;
+        }
+    }
+
     /// Read the user's rows into the shelf, once the store and the user are
     /// both known.
     fn load(&self) {

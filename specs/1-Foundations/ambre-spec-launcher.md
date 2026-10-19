@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE LAUNCHER
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the development sign-in, listing, creating, renaming and deleting
-ship, and so does the provider sign-in up to its tokens. An account has no face to unlock or set up
+**Implementation:** partial -- the development sign-in, the list and the sign-out ship, and so
+does the provider sign-in up to its tokens. An account has no face to unlock or set up
 its keys. The list has no order, no grouping and no search.
 
 > The home screen at the root of the site: sign in, then every document you can open, whatever kind
@@ -90,8 +90,8 @@ The session ends where it was opened: on this screen.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-107` | `POST` | A sign-out control MUST end the session on the live threads and show the sign-in panel. | this spec section 3; `ambre-spec-session.md`, `SRV-026`; `ambre-spec-sync.md`, `SYNC-066` | not built | unbuilt -- lands with the `Signing out from the screen` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CHROME-108` | `FRAME` | A sign-out MUST leave nothing of the session it ended on screen: no list, no open document, no draft. | this spec section 3; `MURMURE-216` | not built | unbuilt -- lands with the `Signing out from the screen` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CHROME-107` | `POST` | A sign-out control MUST end the session on the live threads and show the sign-in panel. | this spec section 3; `ambre-spec-session.md`, `SRV-026`; `ambre-spec-sync.md`, `SYNC-066`, `SYNC-177` | `ambre_app::landing::tests::the_sign_out_control_ends_the_session_once` -- the control sends one sign-out however often it is clicked, and the page stays put until the worker confirms; `ambre_app::signin::tests::a_sign_out_forgets_the_user_and_boots_home_afresh` -- the confirmation boots `/`, where no user is left to sign in | none | verified |
+| `CHROME-108` | `FRAME` | A sign-out MUST leave nothing of the session it ended on screen: no list, no open document, no draft. | this spec section 3; `MURMURE-216` | `ambre_app::signin::tests::a_sign_out_forgets_the_user_and_boots_home_afresh` -- the page is replaced by a fresh boot, which holds no state of the one it replaced, and that boot signs no one in; `ambre_murmure::drafts::tests::a_sign_out_deletes_every_draft` | none | verified |
 
 * **Budget.** none of its own: the list is a handful of rows of DOM and `ambre-spec-budgets.md`
   budgets no chrome operation. The frame the home screen does not draw is a saving, charged to
@@ -100,7 +100,7 @@ The session ends where it was opened: on this screen.
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
   unauthenticated same-origin read of the sign-in configuration, keeps the sign-in's own state and
   owns the local store. Each is an exception `UI-THREAD-004` names.
-* **Verification.** 21 `verified`, 6 `unimplemented`. What holds is what a pure function or one
+* **Verification.** 23 `verified`, 4 `unimplemented`. What holds is what a pure function or one
   mounted control carries, and what a scan of the source refuses. Creation is held by the gate that
   keeps the named command off the page. A composed name is held by its type, which converts to no
   `String` (`CHROME-080`).
@@ -141,6 +141,17 @@ person into the third party's account. The address the relay answers is followed
 The development route matters for a reason that is not convenience. It signs in on the live
 threads, so the Sync worker keeps the keys it already holds instead of losing them to a page
 reload.
+
+**Signing out.** The control sits beside the user's name in the header, and sends one sign-out to
+the live threads. The Logic thread drops every document. The Sync worker clears its keys, then asks
+the relay to revoke the refresh token (`SYNC-177`). Its confirmation deletes the drafts
+(`MURMURE-216`). Once that write has landed, the page forgets who it signed in and boots `/` afresh
+(`CHROME-108`).
+
+**Why it reloads.** A sign-out in place would have to empty each list, panel and sidebar an
+application fills, and the next application would forget one. The fresh boot empties all of them,
+at the cost of one boot per sign-out. It also ends the Sync worker, so no byte of a key outlives
+the session in that worker's memory.
 
 **A card.** One row per document, and four things on it.
 

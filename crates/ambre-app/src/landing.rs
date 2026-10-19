@@ -150,6 +150,7 @@ pub fn landing_view(
     // analysis cannot share one binding across both closures).
     let to_logic_cards = to_logic.clone();
     let to_logic_signin = to_logic.clone();
+    let to_logic_signout = to_logic.clone();
 
     let confirm_delete = {
         let to_logic = to_logic.clone();
@@ -172,6 +173,7 @@ pub fn landing_view(
                         <span class="ambre-landing-user">
                             {move || username.get().unwrap_or_default()}
                         </span>
+                        {sign_out_control(to_logic_signout.clone())}
                         <NewDocPicker on_pick=on_pick />
                         <button
                             class="ambre-open-file"
@@ -536,6 +538,31 @@ fn rel_time(updated_at_ms: u64) -> String {
 /// The signed-out sign-in panel. Renders a dev-login field when the server
 /// reports `dev_mode`, an OIDC button otherwise, and a neutral placeholder
 /// until `/api/auth/config` has answered.
+/// The sign-out control (`CHROME-107`). It asks the live threads to end the
+/// session, once: the page boots home afresh when the Sync worker confirms,
+/// so nothing here clears anything.
+fn sign_out_control(to_logic: ambre_bus::conduit::Sender<LogicCommand>) -> impl IntoView {
+    let leaving = RwSignal::new(false);
+    view! {
+        <button
+            class="ambre-sign-out"
+            disabled=move || leaving.get()
+            on:click=move |_| {
+                if leaving.get_untracked() {
+                    return;
+                }
+                leaving.set(true);
+                let _ = to_logic.try_send(LogicCommand::Rest {
+                    id: RequestId::next(),
+                    cmd: RestCommand::Logout,
+                });
+            }
+        >
+            {move || if leaving.get() { "Signing out..." } else { "Sign out" }}
+        </button>
+    }
+}
+
 fn sign_in_panel(
     dev_mode: RwSignal<Option<SignInMode>>,
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
@@ -824,6 +851,43 @@ mod tests {
             LogicCommand::Rest { cmd: RestCommand::ProviderSignIn { provider }, .. }
                 if provider == "google"
         ));
+        assert_eq!(
+            web_sys::window().unwrap().location().href().unwrap(),
+            before
+        );
+        container.remove();
+    }
+
+    /// The sign-out control asks the live threads to end the session, once,
+    /// and leaves the page where it is until the worker confirms
+    /// (`CHROME-107`).
+    #[wasm_bindgen_test]
+    async fn the_sign_out_control_ends_the_session_once() {
+        let owner = Owner::new();
+        owner.set();
+        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(8);
+        let before = web_sys::window().unwrap().location().href().unwrap();
+
+        let container = mount_in_container(move || sign_out_control(tx));
+        let button = container
+            .query_selector(".ambre-sign-out")
+            .unwrap()
+            .unwrap();
+        click(&button);
+        tick().await;
+        click(&button);
+        tick().await;
+
+        let sent: Vec<LogicCommand> = rx.try_iter().collect();
+        assert_eq!(sent.len(), 1, "one sign-out, however many clicks");
+        assert!(matches!(
+            &sent[0],
+            LogicCommand::Rest {
+                cmd: RestCommand::Logout,
+                ..
+            }
+        ));
+        assert!(button.has_attribute("disabled"));
         assert_eq!(
             web_sys::window().unwrap().location().href().unwrap(),
             before

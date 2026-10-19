@@ -2013,6 +2013,26 @@ input[type="radio"] {
     color: var(--text-dim);
 }
 
+/* A quiet action beside the identity it ends. */
+.ambre-sign-out {
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: var(--font-body);
+    cursor: pointer;
+}
+
+.ambre-sign-out:hover:not(:disabled) {
+    color: var(--text);
+}
+
+.ambre-sign-out:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
 /* -- Delete confirmation dialog ------------------------------------------- */
 /* A `Dialog`: the padding sits on the body, so a hit on the element itself is
    a backdrop click. */
