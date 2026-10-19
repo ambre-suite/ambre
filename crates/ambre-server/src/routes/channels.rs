@@ -1860,7 +1860,7 @@ mod tests {
         let state = crate::test_helpers::test_app_state(pool).await;
         let alice = user(&state, "alice@test.dev").await;
         let carol = user(&state, "carol@test.dev").await;
-        let space = space(&state, alice, &[]).await;
+        let space = space(&state, alice, &[(carol, Role::Editor)]).await;
         let channel = private_channel(&state, alice, space).await;
         let meta = channel.meta.document_id();
         let segment = channel.segment.document_id();
@@ -1880,13 +1880,15 @@ mod tests {
             invite(&state, alice, segment, "carol@test.dev", [2; 16]).await,
             StatusCode::CONFLICT
         );
-        let rows: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM document_members WHERE user_id = $1")
-                .bind(uuid::Uuid::from_bytes(*carol.as_bytes()))
-                .fetch_one(&state.db)
-                .await
-                .expect("count");
-        assert_eq!(rows, 0, "the refused invite adds no row");
+        let rows: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM document_members WHERE user_id = $1 AND document_id <> $2",
+        )
+        .bind(uuid::Uuid::from_bytes(*carol.as_bytes()))
+        .bind(uuid_of_doc(space.document_id()))
+        .fetch_one(&state.db)
+        .await
+        .expect("count");
+        assert_eq!(rows, 0, "the refused invite adds no row past the space");
 
         assert_eq!(
             invite(&state, alice, meta, "carol@test.dev", [2; 16]).await,
@@ -1903,6 +1905,54 @@ mod tests {
                 .expect("links"),
             vec![b"link".to_vec()],
             "the chain under meta serves the segment"
+        );
+    }
+
+    /// `SRV-225`: a channel of a space, private or public, admits the members
+    /// of that space alone. An invite of an account outside it is refused and
+    /// adds no row; once the account joins the space, the same invite lands.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_invite_into_a_channel_of_a_space_needs_a_member_of_it(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let private = private_channel(&state, alice, space).await;
+        let public = public_channel(&state, alice, space).await;
+        let rows = || async {
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM document_members WHERE user_id = $1")
+                .bind(uuid::Uuid::from_bytes(*carol.as_bytes()))
+                .fetch_one(&state.db)
+                .await
+                .expect("count")
+        };
+        for channel in [&private, &public] {
+            assert_eq!(
+                invite(
+                    &state,
+                    alice,
+                    channel.meta.document_id(),
+                    "carol@test.dev",
+                    [2; 16]
+                )
+                .await,
+                StatusCode::CONFLICT
+            );
+        }
+        assert_eq!(rows().await, 0, "a refused invite adds no row");
+
+        grant(&state, space.document_id(), carol, Role::Viewer).await;
+        assert_eq!(
+            invite(
+                &state,
+                alice,
+                private.meta.document_id(),
+                "carol@test.dev",
+                [2; 16]
+            )
+            .await,
+            StatusCode::OK
         );
     }
 
@@ -2801,7 +2851,7 @@ mod tests {
             assert!(next_notice(stream, 300).await.is_none(), "a reuse spoke");
         }
 
-        let space = space(&state, alice, &[]).await;
+        let space = space(&state, alice, &[(carol, Role::Editor)]).await;
         let channel = private_channel(&state, alice, space).await;
         let meta = channel.meta.document_id();
         assert_eq!(

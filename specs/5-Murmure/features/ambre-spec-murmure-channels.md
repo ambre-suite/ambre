@@ -198,10 +198,9 @@ leaves on the same queue. An invite waits while the segment cannot be written. U
 are announced too: a notice too many is harmless. An invite is asked from the open channel, whose
 active segment takes the notice (`MURMURE-498`).
 
-**The invite control.** A private channel or a direct message shows it; a member of the space joins
-a public channel alone. It lists the members of the channel's space, or of every open space for a
-direct message. A choice fetches the key by member id, so no email reaches the view. The key passes
-the check of the pin before the invite leaves.
+**The invite control.** A private channel or a direct message shows it. It lists the members of the
+channel's space, or of every open space for a direct message. A choice fetches the key by member id,
+so no email reaches the view. The key passes the pin check, and the relay admits space members alone.
 
 **A member learns of a channel from the relay.** The membership is the channel list, so the relay
 lists each channel of a user when the client asks (`MURMURE-473`). An invite or a new direct message
@@ -321,6 +320,3 @@ who writes its key into the catalogue.
   channel or a direct message. The Logic thread refuses an invite of a listed member
   (`MURMURE-500`). They leave the list with this Story:
   the `The invite list without the channel's members` Story (`ambre-roadmap.md` E5).
-* **No rule holds a private channel to its space.** The relay takes an invitee by id from any
-  account with keys. One outside the space is refused with this Story:
-  the `A private channel admits the members of its space` Story (`ambre-roadmap.md` E5).

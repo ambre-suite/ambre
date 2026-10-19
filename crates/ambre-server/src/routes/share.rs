@@ -160,15 +160,16 @@ pub async fn invite_to_document(
     }
     // The rows of a channel's `meta` grant every document of it, so an
     // invite into a channel goes there and nowhere else (`SRV-190`).
+    let mut channel_space = None;
     if let Some(channel_id) = db::channel_of_document(&state.db, &doc_id).await? {
-        let meta = db::get_channel(&state.db, &channel_id)
-            .await?
-            .and_then(|channel| channel.meta_id);
+        let channel = db::get_channel(&state.db, &channel_id).await?;
+        let meta = channel.as_ref().and_then(|channel| channel.meta_id);
         if meta.map(|meta| meta.document_id()) != Some(doc_id) {
             return Err(AppError::Conflict {
                 detail: "a channel takes its invites on its meta document".into(),
             });
         }
+        channel_space = channel.and_then(|channel| channel.space_id);
     }
     let invalid_role = || AppError::Conflict {
         detail: "invalid role".into(),
@@ -194,6 +195,17 @@ pub async fn invite_to_document(
         .filter(|u| u.exchange_pubkey.is_some())
         .ok_or(AppError::NotFound { resource: "user" })?;
     let invitee_id = invitee.id;
+    // A channel of a space admits the members of that space alone; a direct
+    // message lies in no space (`SRV-225`).
+    if let Some(space) = channel_space
+        && db::member_role(&state.db, &space.document_id(), &invitee_id)
+            .await?
+            .is_none()
+    {
+        return Err(AppError::Conflict {
+            detail: "the invitee is not a member of the space of the channel".into(),
+        });
+    }
     // `add_document_member` upserts (ON CONFLICT DO UPDATE), so invite is also
     // the role-change path for an EXISTING member. Clamp the target too: a caller
     // may only touch a member currently at or below their own rank. Without this
