@@ -4026,6 +4026,58 @@ mod tests {
         );
     }
 
+    /// The field draws each mark as it is typed. Bold is heavier, code is
+    /// mono on a tint, and a link is underlined in the link ink. A range
+    /// counts bytes, past a wide char (`MURMURE-564`).
+    #[test]
+    fn the_field_draws_each_mark_as_it_is_typed() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "é **b** `c` [d](https://ambre.dev)");
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("é b c d"));
+        let palette = page.view.theme.palette();
+        let spans: Vec<_> = page
+            .view
+            .composer()
+            .spans(channel)
+            .into_iter()
+            .map(|span| {
+                let look = (span.weight, span.italic, span.family, span.color);
+                (span.range, look, span.underline, span.background)
+            })
+            .collect();
+        let code = Some("Monospace".to_owned());
+        assert_eq!(
+            spans,
+            [
+                (3..4, (Some(700), false, None, None), false, None),
+                (
+                    5..6,
+                    (None, false, code, None),
+                    false,
+                    Some(palette.header_hover)
+                ),
+                (
+                    7..8,
+                    (None, false, None, Some(palette.selection)),
+                    true,
+                    None
+                ),
+            ]
+        );
+        type_slowly(&mut page, " _e_");
+        let spans = page.view.composer().spans(channel);
+        assert_eq!(spans.len(), 4);
+        assert!(spans[3].italic && spans[3].range == (9..10));
+        // A draft with no mark draws none.
+        for _ in 0.."é b c d e".chars().count() {
+            key(&mut page, "Backspace", false, 0.0);
+        }
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().spans(channel), []);
+    }
+
     /// A marker typed inside inline code stays text (`MURMURE-198`).
     #[test]
     fn a_marker_typed_in_code_stays_text() {

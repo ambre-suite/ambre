@@ -32,7 +32,7 @@ use ambre_bus::{
     StyleMark, TextStyle, Timestamp, UserId,
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
-use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle};
+use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::PendingEdit;
@@ -51,6 +51,9 @@ const MIN_LINE_PX: f32 = FONT_BODY + SPACE_4;
 
 /// The family label of the composer's text, the one of the message bodies.
 const FAMILY: &str = "Sans";
+
+/// The family label an inline code span draws in (`MURMURE-564`).
+const CODE_FAMILY: &str = "Monospace";
 
 /// The height of the strip that names who types, above the field.
 const TYPING_PX: f32 = FONT_UI + SPACE_4;
@@ -96,6 +99,34 @@ fn body_style(color: Color) -> TextEditorStyle {
         underline: false,
         strikethrough: false,
     }
+}
+
+/// The span the style `mark` draws over `text`, its chars turned to bytes
+/// (`MURMURE-564`). Code takes the mono face on a tint, and a link the accent
+/// ink, underlined.
+fn span_of(text: &str, mark: &StyleMark, palette: &Palette) -> TextSpan {
+    let byte = |chars: usize| {
+        text.char_indices()
+            .nth(chars)
+            .map_or(text.len(), |(at, _)| at)
+    };
+    let mut span = TextSpan {
+        range: byte(mark.range.start)..byte(mark.range.end),
+        ..TextSpan::default()
+    };
+    match &mark.style {
+        TextStyle::Bold => span.weight = Some(700),
+        TextStyle::Italic => span.italic = true,
+        TextStyle::Code => {
+            span.family = Some(CODE_FAMILY.to_owned());
+            span.background = Some(palette.header_hover);
+        }
+        TextStyle::Link(_) => {
+            span.color = Some(palette.selection);
+            span.underline = true;
+        }
+    }
+    span
 }
 
 /// Which way a step of the history moved the draft.
@@ -925,6 +956,15 @@ impl Composer {
             .unwrap_or_default()
     }
 
+    /// The spans the field of the draft `of` draws now, for a test.
+    #[cfg(test)]
+    pub fn spans(&self, of: impl Into<DraftOf>) -> Vec<TextSpan> {
+        self.drafts
+            .get(&of.into())
+            .map(|editor| editor.spans().to_vec())
+            .unwrap_or_default()
+    }
+
     /// Open the `@` list where the caret of the draft `of` ends a query, or
     /// close it. A query Escape closed stays closed until it ends.
     fn ask(&mut self, of: DraftOf, editor: &TextEditor) {
@@ -1081,6 +1121,17 @@ impl Composer {
                 self.close_marker(shown, &mut editor, font_cx, wrap);
                 self.toggle_styles(shown, &editor);
                 self.ask(shown, &editor);
+                // The field draws each style as it is typed (`MURMURE-564`).
+                let text = editor.text();
+                let spans = self.marks.get_mut(&shown).map_or_else(Vec::new, |marks| {
+                    marks.follow(&text);
+                    let styles = crate::style::normalized(&marks.styles);
+                    styles
+                        .iter()
+                        .map(|mark| span_of(&text, mark, palette))
+                        .collect()
+                });
+                editor.set_spans(font_cx, spans);
                 let tall = editor.layout_height().unwrap_or(0.0);
                 self.drafts.insert(shown, editor);
                 tall

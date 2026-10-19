@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-194` | `INV` | The Murmure mark set MUST be bold, italic, inline code, code block, link, list, quote, mention and custom emoji. | this spec section 3; `MURMURE-008` | not built | unbuilt -- lands with the `Block marks in a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-561` | `INV` | A link MUST hold an `http` or `https` address: the engine refuses another one, and reads one stored as text. | this spec section 3; `MURMURE-562` | `ambre_murmure::style_tests::a_style_outside_the_body_or_a_bad_link_is_refused` -- a send, an edit and a reply with another scheme are refused; `::a_link_to_another_scheme_reads_as_text` -- a stored `javascript:` link reads as text | none | verified |
 | `MURMURE-562` | `INV` | Each style MUST be a mark on the body beside the mentions, carried through an edit, an amendment, a fold and a relocation. | this spec section 3; `ambre-spec-murmure-schema.md` | `ambre_murmure::style_tests::a_style_is_a_mark_on_the_body_that_travels_with_it` -- each style is a mark a second peer reads; `::runs_of_one_style_read_as_one` -- touching runs read as one; `::an_edit_rewrites_the_styles_of_the_body` -- an edit replaces them; `ambre_murmure::amending_tests::a_member_reads_the_amendments_over_the_segment` -- an amendment carries them; `ambre_murmure::amending_tests::a_change_refused_by_the_lock_is_replayed` -- and its replay; `ambre_murmure::folding_tests::the_lease_holder_folds_the_amendments_into_the_segment` -- a fold keeps them; `ambre_murmure::closing_tests::a_message_refused_by_the_lock_moves_to_the_active_segment` -- a relocated message keeps them; `ambre_murmure::view::tests::an_edit_of_the_styles_alone_is_sent` -- an edit of the styles alone is sent | none | verified |
-| `MURMURE-564` | `OBS` | The composer MUST draw each style of its draft as it is typed. | this spec section 3; `MURMURE-193` | not built | unbuilt -- lands with the `Marks drawn in the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-564` | `OBS` | The composer MUST draw each style of its draft as it is typed. | this spec section 3; `MURMURE-193` | `ambre_murmure::view::tests::the_field_draws_each_mark_as_it_is_typed` -- markers typed past a wide char give a bold span, a code span on its tint and an underlined link, each at its byte range, and a draft with no mark draws none | none | verified |
 | `MURMURE-195` | `INV` | A draft MUST be kept per channel while the user moves between channels. | this spec section 3 | `ambre_murmure::view::tests::each_channel_keeps_its_own_draft` -- a draft typed in one channel is there when the user comes back from another | none | verified |
 | `MURMURE-525` | `INV` | A draft MUST be kept per thread, apart from the draft of its channel. | this spec section 3; `MURMURE-195` | `ambre_murmure::view::tests::a_thread_keeps_its_own_draft_apart_from_the_channels` -- the thread's draft is not the channel's, and another thread opens on an empty one | none | verified |
 | `MURMURE-530` | `INV` | A thread's draft MUST survive the thread closing and opening again. | this spec section 3; `MURMURE-525` | `ambre_murmure::view::tests::a_threads_draft_survives_the_thread_closing` -- the region dropped and built again shows the draft, and the field does not take the keys | none | verified |
@@ -84,9 +84,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 27 `verified`, 11 `unimplemented`. The host tier drives the view with the
-  events the page sends: a press, a tap, text, keys, a paste. The inline marks are built and sent,
-  but not drawn. The block marks, the format bar and the stored draft are not built.
+* **Verification.** 28 `verified`, 10 `unimplemented`. The host tier drives the view with the
+  events the page sends: a press, a tap, text, keys, a paste. The inline marks are built, drawn in
+  the field and sent. The block marks, the format bar and the stored draft are not built.
 
 ---
 
@@ -153,8 +153,8 @@ end of a mark stays out of it, as in most chat editors. A chord or a marker type
 Enter lands before the draft leaves.
 
 **The slice.** Each channel holds one draft, in memory. The next paint applies the keys, so Enter
-only asks for the send. The marks are sent, but the field draws the draft as plain text
-(`MURMURE-564`).
+only asks for the send. Each flush pins the marks on the field as spans, so each mark is drawn
+as it is typed (`MURMURE-564`).
 
 **A reply in the slice.** The thread's region has a composer of its own, and each thread holds a
 draft apart from its channel's (`MURMURE-525`). Enter there sends a reply to the root
@@ -211,8 +211,7 @@ changed text.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A mark is not drawn.** The field draws plain text, until the
-  `Marks drawn in the composer` Story (`ambre-roadmap.md` E5). So does the list, until the
+* **A sent mark is not drawn.** The list draws a body as plain text, until the
   `Marks drawn in a message` Story (`ambre-roadmap.md` E5).
 * **No block mark.** A code block, a list and a quote wait for the `Block marks in a message`
   Story (`ambre-roadmap.md` E5).

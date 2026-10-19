@@ -53,7 +53,7 @@
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 |  |
 | `server` | The one process every client talks to. | partial | 81 | 1 |
 | `sync` | The one part of the client that talks to the network. | partial | 48 |  |
-| `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 14 |  |
+| `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 16 |  |
 | `ui` | The page's own thread. | partial | 20 |  |
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 18 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
@@ -62,4 +62,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**46 features: 20 implemented, 21 partial, 5 design-only. 1053 contract rows, 2 loose.**
+**46 features: 20 implemented, 21 partial, 5 design-only. 1055 contract rows, 2 loose.**
