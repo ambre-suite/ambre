@@ -15,8 +15,8 @@ use std::rc::Rc;
 
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
-    ChannelId, DocumentId, LogicCommand, MessageAt, MessageId, MurmureCommand, SegmentId,
-    Timestamp, UiEvent, UserId,
+    ChannelId, DocumentId, LogicCommand, MessageAt, MessageId, MessageView, MurmureCommand,
+    SegmentId, Timestamp, UiEvent, UserId,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, TextInput,
@@ -26,7 +26,7 @@ use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::MurmurePane;
-use crate::commands::{MessageTarget, PendingEdit};
+use crate::commands::{EDIT, MessageAction, MessageTarget, PendingEdit, message_action};
 use crate::composer::{Composer, EDITING_LINE, typing_line};
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::paint::{Painted, Shown, paint_jump, paint_list};
@@ -58,6 +58,9 @@ pub struct PageReads {
     /// Take the edit the member asked for from the actions of a message,
     /// which the channel's composer loads (`MURMURE-203`).
     pub take_edit: Rc<dyn Fn() -> Option<PendingEdit>>,
+    /// The signed-in member, whose last message the up arrow edits
+    /// (`MURMURE-178`).
+    pub me: Rc<dyn Fn() -> Option<UserId>>,
     /// The page's input pipe. A press in the composer gives it the keyboard
     /// focus, and its caret follows the composer's (`MURMURE-430`).
     pub pipe: TextInput,
@@ -356,7 +359,14 @@ impl MurmureView {
             ),
             (Region::Thread, _) => return None,
         };
-        Some(MessageTarget {
+        let mut target = self.target_of(channel, at, message);
+        target.pressed = pressed.then_some((x, y));
+        Some(target)
+    }
+
+    /// `message`, lying at `at` in `channel`, as the target of its actions.
+    fn target_of(&self, channel: ChannelId, at: MessageAt, message: &MessageView) -> MessageTarget {
+        MessageTarget {
             channel,
             at,
             message: message.id,
@@ -365,12 +375,65 @@ impl MurmureView {
             mentions: message.mentions.clone(),
             notice: message.notice.is_some(),
             deleted: message.deleted,
-            pressed: pressed.then_some((x, y)),
+            pressed: None,
             canvas: match self.region {
                 Region::Channel => CHANNEL_CANVAS,
                 Region::Thread => THREAD_CANVAS,
             },
-        })
+        }
+    }
+
+    /// The edit of the latest message of the member in `channel` that the
+    /// edit action takes, `None` with none. Another member's message, a
+    /// notice and a deleted message are passed over (`MURMURE-179`).
+    fn last_own_edit(&self, channel: ChannelId) -> Option<PendingEdit> {
+        let me = (self.reads.me)()?;
+        let lists = self.lists.borrow();
+        let list = lists.conversations.channel(channel)?;
+        let rows = list.rows();
+        rows.iter()
+            .rev()
+            .filter_map(|row| row.message())
+            .filter(|message| message.author == me)
+            .find_map(|message| {
+                let at = MessageAt::Segment(list.segment_of(message.id)?);
+                let target = self.target_of(channel, at, message);
+                match message_action(EDIT, &target, Some(me)) {
+                    Some(MessageAction::Edit(edit)) => Some(edit),
+                    _ => None,
+                }
+            })
+    }
+
+    /// Mark the channel on screen read, as Escape in its list asks
+    /// (`MURMURE-522`). `false` in the thread's region, which leaves the key.
+    fn mark_shown_read(&self) -> bool {
+        let Some(channel_id) = self.composer_channel() else {
+            return false;
+        };
+        self.send(LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::MarkRead,
+        });
+        true
+    }
+
+    /// Bring the list to the message the unread line sits above, a quarter
+    /// down (`MURMURE-175`). With no line, the list stays.
+    fn rest_at_first_unread(&mut self) {
+        let Some(message) = self
+            .composer_channel()
+            .and_then(|channel| self.unread_line.held(channel))
+        else {
+            return;
+        };
+        self.rest = Rest::Row {
+            key: RowKey::Message(message),
+            anchor_y: self.list_height() * AT_FRACTION,
+        };
+        self.pending = false;
+        self.kinetic.stop();
+        self.dirty = true;
     }
 
     /// Ask again for the segment of the band under `y` at the last paint, if
@@ -934,6 +997,9 @@ impl MurmureView {
     /// `MURMURE-205`). The ContextMenu key and Shift+F10 open the actions of
     /// the focused message (`MURMURE-511`).
     ///
+    /// Shift+Page Up goes to the unread line (`MURMURE-175`), and Escape
+    /// marks the channel read (`MURMURE-522`).
+    ///
     /// A click on a band, or Enter on a focused one, asks for its segment
     /// again (`MURMURE-513`).
     ///
@@ -1009,12 +1075,14 @@ impl MurmureView {
                 match key.as_str() {
                     "ContextMenu" => (self.reads.act_on)(self.target_of_focus()),
                     "F10" if shift => (self.reads.act_on)(self.target_of_focus()),
+                    "PageUp" if shift => self.rest_at_first_unread(),
                     "PageDown" => self.page(1.0),
                     "PageUp" => self.page(-1.0),
                     "End" => self.rest_at_latest(),
                     "ArrowDown" => self.move_focus(1),
                     "ArrowUp" => self.move_focus(-1),
                     "Enter" if self.retry_focus() => {}
+                    "Escape" if self.mark_shown_read() => {}
                     _ => return false,
                 }
                 return true;
@@ -1080,6 +1148,17 @@ impl MurmureView {
                 alt,
                 meta: false,
             } if self.composer.focused() => {
+                // Up in an empty composer edits the member's latest message
+                // (`MURMURE-178`). With none, it moves the caret as ever.
+                let bare = !(shift || ctrl || alt);
+                if key == "ArrowUp"
+                    && bare
+                    && self.composer.blank(channel)
+                    && let Some(edit) = self.last_own_edit(channel)
+                {
+                    self.composer.start_edit(edit);
+                    return Some(true);
+                }
                 if !self.composer.key(channel, key, shift, ctrl, alt) {
                     return None;
                 }
@@ -1148,6 +1227,8 @@ mod tests {
         acted: Rc<RefCell<Vec<Option<MessageTarget>>>>,
         /// The edit the page holds for the view to take.
         editing: Rc<RefCell<Option<PendingEdit>>>,
+        /// The signed-in member, `None` until a test names one.
+        me: Rc<Cell<Option<UserId>>>,
     }
 
     fn page() -> Page {
@@ -1163,6 +1244,8 @@ mod tests {
         let acted = Rc::clone(&acted_log);
         let editing = Rc::new(RefCell::new(None));
         let asked = Rc::clone(&editing);
+        let me = Rc::new(Cell::new(None));
+        let signed_in = Rc::clone(&me);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| Some("Ada".to_owned())),
@@ -1171,6 +1254,7 @@ mod tests {
             announce: Rc::new(move |text: &str| said.borrow_mut().push(text.to_owned())),
             act_on: Rc::new(move |target| acted.borrow_mut().push(target)),
             take_edit: Rc::new(move || asked.borrow_mut().take()),
+            me: Rc::new(move || signed_in.get()),
             pipe: TextInput::detached(),
         };
         let size = (300.0, 400.0);
@@ -1190,6 +1274,7 @@ mod tests {
             said: said_log,
             acted: acted_log,
             editing,
+            me,
         }
     }
 
@@ -2674,6 +2759,164 @@ mod tests {
         assert_eq!(edits(&page), (Vec::new(), 0), "nothing sent");
         key(&mut page, "Escape", false, 0.0);
         assert!(!page.view.composer().focused());
+    }
+
+    /// Shift+Page Up brings the unread line into view, and moves no read
+    /// cursor. With no line, the list stays (`MURMURE-175`).
+    #[test]
+    fn shift_page_up_brings_the_list_to_the_unread_line() {
+        let (mut page, channel, rows) = long_channel(400);
+        let first = rows[100].id;
+        send(
+            &page,
+            channel,
+            MurmureEvent::FirstUnread {
+                message: Some(first),
+            },
+        );
+        frame(&mut page.view);
+        assert!(!shown(&page.view).line_shown, "the line is far up");
+        assert_eq!(reads(&page).0, 1);
+        assert!(shift_key(&mut page, "PageUp"), "the list takes the key");
+        frame(&mut page.view);
+        let painted = shown(&page.view);
+        assert!(painted.line_shown && !painted.latest_shown);
+        assert_eq!(reads(&page), (0, 0), "a jump reads nothing");
+
+        let (mut quiet, _, _) = long_channel(400);
+        frame(&mut quiet.view);
+        assert!(shift_key(&mut quiet, "PageUp"));
+        frame(&mut quiet.view);
+        assert_eq!(quiet.view.resting_on(), None, "no line, no jump");
+    }
+
+    /// Escape in the list marks the channel read, high up as well. In the
+    /// composer it gives the keys back, and marks nothing (`MURMURE-522`).
+    #[test]
+    fn escape_in_the_list_marks_the_channel_read() {
+        let (mut page, _, _) = long_channel(400);
+        frame(&mut page.view);
+        assert!(key(&mut page, "PageUp", false, 10.0));
+        frame_at(&mut page.view, 10.0);
+        assert_eq!(reads(&page).0, 1, "the first paint read the latest");
+        assert!(key(&mut page, "Escape", false, 20.0));
+        assert_eq!(reads(&page).0, 1, "Escape marks the channel read");
+
+        let channel = ChannelId::new();
+        let mut composing = composing(channel);
+        reads(&composing);
+        press_composer(&mut composing);
+        assert!(key(&mut composing, "Escape", false, 0.0));
+        assert!(!composing.view.composer().focused());
+        assert_eq!(
+            reads(&composing),
+            (0, 0),
+            "the composer's Escape reads nothing"
+        );
+
+        let thread_view = composing.view.region(300.0, 400.0);
+        let mut thread = Page {
+            view: thread_view,
+            ..composing
+        };
+        assert!(
+            !key(&mut thread, "Escape", false, 0.0),
+            "the thread leaves it"
+        );
+    }
+
+    /// Messages of `me` and of another member, in one segment of `channel`
+    /// on screen: the member's own, one of theirs deleted, then another's.
+    fn mixed_channel(channel: ChannelId) -> (Page, SegmentId, MessageId) {
+        let mut page = page();
+        let (me, bob) = (UserId::new(), UserId::new());
+        page.me.set(Some(me));
+        let own = message(me, 0, "mine");
+        let deleted = MessageView {
+            deleted: true,
+            text: String::new(),
+            ..message(me, 1, "gone")
+        };
+        let messages = vec![own.clone(), deleted, message(bob, 2, "theirs")];
+        let segment = SegmentId::new();
+        send(&page, channel, MurmureEvent::Messages { segment, messages });
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        frame_with_fonts(&mut page.view);
+        (page, segment, own.id)
+    }
+
+    /// Up in an empty composer opens the latest message of the member for
+    /// edit, past a deleted one and another's. Up in a draft moves its
+    /// caret (`MURMURE-178`).
+    #[test]
+    fn up_in_an_empty_composer_edits_the_last_own_message() {
+        let channel = ChannelId::new();
+        let (mut page, segment, own) = mixed_channel(channel);
+        press_composer(&mut page);
+        type_text(&mut page, "x");
+        assert!(key(&mut page, "ArrowUp", false, 0.0));
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("x"));
+        assert!(!page.view.composer().editing(channel), "a draft keeps Up");
+        key(&mut page, "Backspace", false, 0.0);
+        frame_with_fonts(&mut page.view);
+
+        assert!(key(&mut page, "ArrowUp", false, 0.0));
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("mine"));
+        assert!(page.view.composer().editing(channel));
+        type_text(&mut page, " too");
+        key(&mut page, "Enter", false, 0.0);
+        frame_with_fonts(&mut page.view);
+        let (sent_edits, messages) = edits(&page);
+        let [(at, message, draft)] = &sent_edits[..] else {
+            panic!("one edit, got {sent_edits:?}");
+        };
+        assert_eq!((*at, *message), (MessageAt::Segment(segment), own));
+        assert_eq!((draft.text.as_str(), messages), ("mine too", 0));
+    }
+
+    /// Up never opens a message of another member: with none of the
+    /// member's own, or no member signed in, it opens nothing
+    /// (`MURMURE-179`).
+    #[test]
+    fn up_never_opens_another_members_message() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        page.me.set(Some(UserId::new()));
+        press_composer(&mut page);
+        assert!(key(&mut page, "ArrowUp", false, 0.0), "the caret takes it");
+        assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
+        assert!(!page.view.composer().editing(channel));
+
+        let (mut signed_out, _, _) = mixed_channel(channel);
+        signed_out.me.set(None);
+        press_composer(&mut signed_out);
+        key(&mut signed_out, "ArrowUp", false, 0.0);
+        frame_with_fonts(&mut signed_out.view);
+        assert!(!signed_out.view.composer().editing(channel));
+        assert_eq!(edits(&signed_out), (Vec::new(), 0));
+    }
+
+    /// The answer of a mark-all-read clears the unread line's source and
+    /// leaves the draft as it was, unsent (`MURMURE-181`).
+    #[test]
+    fn marking_everything_read_keeps_the_draft() {
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "draft");
+        sent(&page);
+        send(&page, channel, MurmureEvent::FirstUnread { message: None });
+        send(
+            &page,
+            ChannelId::new(),
+            MurmureEvent::FirstUnread { message: None },
+        );
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
+        assert!(
+            page.view.composer().focused(),
+            "the composer keeps the keys"
+        );
+        assert!(sent(&page).is_empty(), "nothing was sent");
     }
 
     /// A tap in the band puts the caret there and gives the pipe the

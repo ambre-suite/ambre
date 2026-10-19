@@ -26,6 +26,7 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput) -> PageReads {
         }),
         act_on: Rc::new(move |target| relay.target.set(target)),
         take_edit: Rc::new(move || relay.take_edit()),
+        me: Rc::new(move || relay.me()),
         pipe,
     }
 }

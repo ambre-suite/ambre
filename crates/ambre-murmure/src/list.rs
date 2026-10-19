@@ -612,6 +612,15 @@ impl UnreadLine {
         self.held = Some((channel, known));
         known.flatten()
     }
+
+    /// The message the line sits above in `channel` at the last paint, with
+    /// no lookup. `None` off that channel, or with no line.
+    pub fn held(&self, channel: ChannelId) -> Option<MessageId> {
+        match self.held {
+            Some((held, Some(known))) if held == channel => known,
+            _ => None,
+        }
+    }
 }
 
 /// The latest message the list drew of each channel and each thread, so a

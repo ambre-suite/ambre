@@ -294,6 +294,12 @@ impl TextEditor {
         }
     }
 
+    /// Whether an intent waits for the next flush, so [`Self::text`] may not
+    /// hold it yet.
+    pub fn queued(&self) -> bool {
+        !self.intents.is_empty()
+    }
+
     /// The current buffer text (IME preedit excluded). Font-free.
     pub fn text(&self) -> String {
         self.editor.text().chars().collect()

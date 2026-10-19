@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE MURMURE KEYBOARD
 **Type:** Vertical (feature)
-**Implementation:** partial -- the command table, the channels in the palette, the jumps, the
-mark-all-read chord and the find chord ship. The chords inside a conversation do not.
+**Implementation:** implemented -- the command table, the palette, the jumps and the find chord.
+The chords of the unread feature and the keys inside a conversation ship too.
 
 > No frequent action in Murmure needs the mouse. From the keyboard, a member jumps to a channel by
 > its name, to the first unread message and to their last message. They mark everything read.
@@ -34,7 +34,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-175` | `POST` | The command MUST scroll the message list to the first message after the read cursor. | this spec section 3 | not built | unbuilt -- lands with the `The keyboard in a conversation` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-175` | `POST` | The command MUST scroll the message list to the first message after the read cursor. | this spec section 3 | `ambre_murmure::view::tests::shift_page_up_brings_the_list_to_the_unread_line` -- Shift+Page Up brings the unread line into view and reads nothing, and a list with no line stays | none | verified |
 | `MURMURE-176` | `POST` | The next-unread command MUST open the next channel with activity, in sidebar order. | this spec section 3 | `ambre_murmure::sidebar::tests::a_jump_opens_the_next_channel_with_activity_in_sidebar_order` -- both ways, wrapping, past the quiet channels and the ones to join; `ambre_murmure::tests::chrome_relay::a_jump_opens_the_next_active_channel_and_moves_no_read_cursor` -- through the chords | none | verified |
 | `MURMURE-177` | `FRAME` | Jumping MUST NOT move a read cursor. | this spec section 3 | `ambre_murmure::tests::chrome_relay::a_jump_opens_the_next_active_channel_and_moves_no_read_cursor` -- three jumps send two channel openings and nothing else | none | verified |
 
@@ -42,20 +42,21 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-178` | `POST` | The up arrow in an empty composer MUST open the last message of the user in this channel for edit. | this spec section 3; `features/ambre-spec-murmure-composer.md` | not built | unbuilt -- lands with the `The keyboard in a conversation` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-179` | `FRAME` | The up arrow MUST NOT open a message of another member. | this spec section 3; `MURMURE-085` | not built | unbuilt -- lands with the `The keyboard in a conversation` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-178` | `POST` | The up arrow in an empty composer MUST open the last message of the user in this channel for edit. | this spec section 3; `features/ambre-spec-murmure-composer.md` | `ambre_murmure::view::tests::up_in_an_empty_composer_edits_the_last_own_message` -- the latest own message opens past a deleted one and an other's, Enter sends its edit, and a draft keeps Up | none | verified |
+| `MURMURE-179` | `FRAME` | The up arrow MUST NOT open a message of another member. | this spec section 3; `MURMURE-085` | `ambre_murmure::view::tests::up_never_opens_another_members_message` -- with no own message, or no member signed in, Up opens nothing and sends nothing | none | verified |
 
 ### 1.5 Mark everything read
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-180` | `POST` | The chord MUST run the mark-all-read command of the unread feature. | this spec section 3; `MURMURE-118` | `ambre_murmure::tests::chrome_relay::the_mark_all_read_chord_runs_the_command_of_the_unread_feature` -- the chord sends that one command, and a text field keeps it | none | verified |
-| `MURMURE-181` | `FRAME` | Marking everything read from the keyboard MUST NOT clear the draft of the composer. | this spec section 3 | not built | unbuilt -- lands with the `The keyboard in a conversation` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-181` | `FRAME` | Marking everything read from the keyboard MUST NOT clear the draft of the composer. | this spec section 3 | `ambre_murmure::view::tests::marking_everything_read_keeps_the_draft` -- the answers of a mark-all-read leave the draft, its focus and the send untouched; `ambre_murmure::tests::chrome_relay::the_mark_all_read_chord_runs_the_command_of_the_unread_feature` -- the chord sends that one command, which names no draft | none | verified |
+| `MURMURE-522` | `POST` | Escape in the message list of a channel MUST mark that channel read. | this spec section 3; `MURMURE-115` | `ambre_murmure::view::tests::escape_in_the_list_marks_the_channel_read` -- high up in the list too, while the composer's Escape and the thread's mark nothing | none | verified |
 
 * **Budget.** none of its own: each shortcut runs a command another feature budgets.
 * **Boundary.** none: the palette filters names the client holds, and nothing it types leaves.
-* **Verification.** 9 `verified`, 4 `unimplemented`. The table, the palette, the jumps and the find
-  chord hold. The chords inside a conversation wait for the message list.
+* **Verification.** 14 `verified`. The table, the palette, the jumps, the find chord and the keys
+  inside a conversation hold.
 
 ---
 
@@ -66,8 +67,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | presses the palette chord and types "bud" | the "budget" channel and a direct message named "Budget" | none |
 | presses the find chord and types "budget" | the matches by channel, under what the search read (`MURMURE-213`) | `ambre_app::shell::murmure_regions::the_search_box_asks_lists_and_opens_a_match` |
 | presses the next-unread chord | the next channel with activity, in sidebar order (`MURMURE-176`) | none |
-| presses up in an empty composer | her last message, open for edit (`MURMURE-178`) | none |
-| presses the mark-all-read chord while drafting | every badge cleared, and her draft kept (`MURMURE-181`) | none |
+| presses up in an empty composer | her last message, open for edit (`MURMURE-178`) | `ambre_murmure::view::tests::up_in_an_empty_composer_edits_the_last_own_message` |
+| presses the mark-all-read chord while drafting | every badge cleared, and her draft kept (`MURMURE-181`) | `ambre_murmure::view::tests::marking_everything_read_keeps_the_draft` |
 
 ---
 
@@ -75,8 +76,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 **CRDT containers.** none.
 
-**The commands.** Each is a row of the command table, with a label, an icon, a chord and a group
-(`ambre-spec-commands.md`).
+**The commands.** A chord the shell routes is a row of the command table, with a label, an icon, a
+chord and a group (`ambre-spec-commands.md`). A key inside a conversation is the region's, like
+Page Up. It acts on the list or the composer that holds the focus, which the shell does not see.
 
 | Command | Chord | Where it acts |
 |---|---|---|
@@ -99,6 +101,10 @@ quiet channels and the channels to join, so it never joins one (`MURMURE-176`). 
 opening of the channel and nothing else (`MURMURE-177`). A text field keeps the jump chords and
 the mark-all-read chord, since Alt+Shift with an arrow extends a selection on a Mac. The find chord
 opens the search from any field, or the find of the browser would take it.
+
+**The keys of a conversation.** Shift+Page Up rests the list on the unread line, a quarter down
+(`MURMURE-175`). Up in an empty composer loads the member's latest message the edit action takes
+(`MURMURE-178`, `MURMURE-179`). Escape in the list marks the channel read (`MURMURE-522`).
 
 **One palette, two lists.** The channels and the direct messages are entries Murmure supplies to
 the palette of the suite, so they come before the commands (`CHROME-093`). A query that starts with
@@ -137,8 +143,7 @@ chord opens.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The chords inside a conversation.** The first unread, the edit of the last message and the
-  draft kept by mark-all-read wait on the message list. They land with the
-  `The keyboard in a conversation` Story (`ambre-roadmap.md` E5).
+* **The thread's region takes none of these keys.** Its composer waits for the
+  `Replying in a thread` Story (`ambre-roadmap.md` E5).
 * **Nothing checks the shared meanings across tables.** `UI-THREAD-037` reads one application's
   table at a time.

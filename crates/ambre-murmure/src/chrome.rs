@@ -447,6 +447,11 @@ impl MurmureRelay {
         Some(pending)
     }
 
+    /// The signed-in member, `None` before the session names them.
+    pub fn me(&self) -> Option<UserId> {
+        self.me.get_untracked()
+    }
+
     /// Open the search box, on the find chord (`MURMURE-213`). An open box
     /// keeps its query.
     pub fn open_search(&self) {

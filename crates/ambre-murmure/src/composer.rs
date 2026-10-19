@@ -300,6 +300,20 @@ impl Composer {
         self.drafts.get(&channel).map(TextEditor::text)
     }
 
+    /// Whether the composer of `channel` holds nothing: no edit, no text, and
+    /// no key or undo waiting for the next paint.
+    pub fn blank(&self, channel: ChannelId) -> bool {
+        let idle = self
+            .drafts
+            .get(&channel)
+            .is_none_or(|editor| editor.text().is_empty() && !editor.queued());
+        let asked = self
+            .histories
+            .get(&channel)
+            .is_some_and(|history| !history.asked.is_empty());
+        idle && !asked && !self.composing && !self.editing(channel)
+    }
+
     /// The text selected in the draft of `channel`.
     pub fn selected(&self, channel: ChannelId) -> Option<String> {
         self.drafts.get(&channel)?.selected_text()

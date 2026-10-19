@@ -1,9 +1,9 @@
 //! Murmure's command registry: one `Command` per shortcut the shell routes
 //! (the Murmure keyboard spec, `UI-THREAD-019`).
 //!
-//! The chords that act inside a conversation, such as the up arrow of an empty
-//! composer, land with the message list. The find chord opens the search of
-//! Murmure, as it opens the find of the other applications.
+//! A key inside a conversation, such as the up arrow of an empty composer, is
+//! the message region's. The region holds the focus it needs. The find chord opens the search of Murmure, as it opens the find of the
+//! other applications.
 //!
 //! The actions of a message are commands of the same table, with no chord
 //! (`MURMURE-419`). The menu of a message offers the ones its target allows.
