@@ -117,6 +117,17 @@ pub(crate) fn take_boot_return() -> Option<ProviderReturn> {
     accepted
 }
 
+/// The page's part of a sign-out the Sync worker confirmed (`CHROME-107`,
+/// `CHROME-108`). What would sign someone in at the next boot is forgotten,
+/// then `reload` replaces the page with a fresh boot of `/`. A new page holds
+/// nothing of the session the old one showed, which no list of signals to
+/// reset could promise.
+pub(crate) fn leave_session(reload: impl FnOnce(&str)) {
+    crate::platform::forget_dev_user();
+    let _ = take_pending_state();
+    reload("/");
+}
+
 fn session_storage() -> Option<web_sys::Storage> {
     web_sys::window()?.session_storage().ok().flatten()
 }
@@ -208,5 +219,22 @@ mod tests {
             assert!(!went);
             assert_eq!(take_pending_state(), None);
         }
+    }
+
+    /// A confirmed sign-out forgets the user the next boot would sign in,
+    /// and replaces the page with a fresh boot of home (`CHROME-107`,
+    /// `CHROME-108`).
+    #[wasm_bindgen_test]
+    fn a_sign_out_forgets_the_user_and_boots_home_afresh() {
+        crate::platform::remember_dev_user("ada");
+        session_storage()
+            .unwrap()
+            .set_item(PENDING_STATE_KEY, "st1")
+            .unwrap();
+        let mut went = None;
+        leave_session(|u| went = Some(u.to_owned()));
+        assert_eq!(went.as_deref(), Some("/"));
+        assert_eq!(crate::platform::stored_dev_user(), None);
+        assert_eq!(take_pending_state(), None);
     }
 }

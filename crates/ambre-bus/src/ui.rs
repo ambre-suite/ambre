@@ -110,9 +110,28 @@ pub enum UiEvent {
     /// mark the view last drew for it.
     ChannelActivity { channels: Vec<ChannelActivity> },
 
-    /// Every channel this user is a member of, whole. It comes at start, and
-    /// again each time the relay adds the user to one. None of them is open.
-    MemberChannels { channels: Vec<MemberChannel> },
+    /// Another member wrote a message in a channel, as its sealed summary
+    /// says (the Murmure notifications spec). `mention` holds when the
+    /// summary names this user or the channel. The view decides whether it
+    /// notifies: it alone knows the direct messages and what is on screen.
+    /// `message` names the message and its segment when the channel is open.
+    /// A closed channel is counted by the relay alone, so it names none.
+    NewMessage {
+        channel_id: ChannelId,
+        mention: bool,
+        message: Option<(crate::SegmentId, crate::MessageId)>,
+    },
+
+    /// Every channel and every space this user is a member of, whole. It
+    /// comes at start, and again each time the relay adds the user to one.
+    /// None of them is open. `names` holds the name each named channel shows
+    /// before it opens, and `peers` the other members of each direct message.
+    MemberChannels {
+        channels: Vec<MemberChannel>,
+        spaces: Vec<SpaceId>,
+        names: Vec<crate::ChannelName>,
+        peers: Vec<crate::DirectPeers>,
+    },
 
     /// The answer to [`crate::LogicCommand::SearchMessages`]: one entry per
     /// open channel, each stating the segments it covered. A query with no

@@ -136,6 +136,10 @@ impl SyncState {
                 after_seq: seen,
             });
         }
+        // A channel watched from the head has no cursor to replay from yet.
+        for document_id in self.light_heads() {
+            self.ws_send(&WsClientMsg::Subscribe { document_id });
+        }
     }
 
     /// Attaches onmessage / onclose / onerror closures to `ws`. Each closure
@@ -341,6 +345,7 @@ impl SyncState {
                 self.replay_stops.remove(&document_id);
                 self.send_to_logic(LogicEvent::DocumentOpenFailed {
                     document_id,
+                    cause: OpenFailure::Transient,
                     message,
                 });
             } else {
@@ -760,11 +765,13 @@ impl SyncState {
             }
             SyncEvent::OpenDocumentFailed {
                 document_id,
+                cause,
                 message,
             } => {
                 tracing::error!("Sync: open document {document_id:?} failed: {message}");
                 self.send_to_logic(LogicEvent::DocumentOpenFailed {
                     document_id,
+                    cause,
                     message,
                 });
             }
@@ -946,6 +953,7 @@ impl SyncState {
                 );
             }
             SyncEvent::DocumentMaterialized { document_id } => {
+                self.new_spaces.remove(&document_id);
                 let pending = match self.documents.get_mut(&document_id) {
                     Some(doc_state) => {
                         doc_state.server_created = true;
@@ -1000,6 +1008,21 @@ impl SyncState {
                         user_id,
                         display_name,
                         email,
+                        exchange_pub_key,
+                        fingerprint,
+                    },
+                );
+            }
+            SyncEvent::MemberKeyReady {
+                id,
+                user_id,
+                exchange_pub_key,
+                fingerprint,
+            } => {
+                self.reply(
+                    id,
+                    RestEvent::MemberKey {
+                        user_id,
                         exchange_pub_key,
                         fingerprint,
                     },
@@ -1149,6 +1172,19 @@ impl SyncState {
                     },
                 );
             }
+            SyncEvent::MediaErased {
+                id,
+                document_id,
+                content_hash,
+            } => {
+                self.reply(
+                    id,
+                    RestEvent::MediaErased {
+                        document_id,
+                        content_hash,
+                    },
+                );
+            }
             SyncEvent::MediaDownloaded {
                 id,
                 document_id,
@@ -1185,15 +1221,23 @@ impl SyncState {
     // -- Inbound: Server -> Sync (WebSocket demux) -----------------------------
 
     /// This user no longer reaches `document_id`. Close it here, and tell the
-    /// Logic thread they were removed from it, so the view reacts.
+    /// Logic thread they were removed from it, so the view reacts. It can be
+    /// the `meta` of a channel never opened. Unless it is held as another
+    /// kind, the user's channels are listed again (the Murmure layout spec).
     fn document_removed(&mut self, document_id: DocumentId) {
-        self.documents.remove(&document_id);
+        let other_kind = self
+            .documents
+            .remove(&document_id)
+            .is_some_and(|d| d.doc_type != DocType::Murmure);
         self.light.remove(&document_id);
         if let Some(uid) = self.user_id {
             self.send_to_logic(LogicEvent::MemberRevoked {
                 document_id,
                 revoked_user_id: uid,
             });
+        }
+        if !other_kind {
+            self.handle_list_member_channels();
         }
     }
 
@@ -2079,8 +2123,12 @@ mod tests {
         }
         let told: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(
-            matches!(told[..], [LogicEvent::DocumentOpenFailed { document_id, .. }] if document_id == id),
-            "{told:?}"
+            matches!(
+                told[..],
+                [LogicEvent::DocumentOpenFailed { document_id, cause: ambre_bus::OpenFailure::Transient, .. }]
+                    if document_id == id
+            ),
+            "a stopped replay is no missing key (`SYNC-173`): {told:?}"
         );
         assert!(!state.documents.contains_key(&id), "nothing of it is kept");
         assert!(matches!(

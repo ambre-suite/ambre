@@ -109,7 +109,7 @@ travels towards the downstream worker and an `Event` always flows back.
 | Logic to UI | `UiEvent` | `ui.rs` | 16 |
 | Logic to Sync | `SyncCommand` | `command.rs` | 11 |
 | Sync to Logic | `LogicEvent` | `event.rs` | 18 |
-| shared service plane | `RestCommand` / `RestEvent` / `RequestId` | `rest.rs` | 33 / 34 |
+| shared service plane | `RestCommand` / `RestEvent` / `RequestId` | `rest.rs` | 35 / 37 |
 
 ```rust
 pub enum LogicCommand {

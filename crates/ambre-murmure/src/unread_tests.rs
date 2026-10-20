@@ -24,6 +24,7 @@ fn draft(text: &str) -> MessageDraft {
     MessageDraft {
         text: text.to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     }
 }
 
@@ -228,4 +229,34 @@ fn a_truncated_table_is_refused_before_any_import() {
         Err(MurmureError::Crdt(_))
     ));
     assert_eq!(bob.delivered(segment), Seq::ZERO);
+}
+
+// --- MURMURE-499 ---
+
+#[test]
+fn the_first_unread_message_is_the_first_past_the_cursor_by_another() {
+    let (mut alice, mut bob) = pair();
+    let (author, me) = (UserId::new(), UserId::new());
+    let segment = alice.active_id();
+    let sent = [("one", author), ("mine", me), ("two", author)];
+    for (seq, (text, from)) in (5..).zip(sent) {
+        let sent = alice.send(&draft(text), from, NOW).expect("send");
+        let by = signer(&alice, segment, from);
+        bob.apply_signed(segment.document_id(), Seq(seq), &sent.delta, by)
+            .expect("apply");
+    }
+    let ids: Vec<_> = bob
+        .messages(segment)
+        .expect("messages")
+        .iter()
+        .map(|m| m.id)
+        .collect();
+    let first = |read: Seq| bob.first_unread(|_| read, me);
+    assert_eq!(first(Seq(4)), ids.first().copied());
+    assert_eq!(
+        first(Seq(5)),
+        ids.get(2).copied(),
+        "the reader's own message is never the first unread"
+    );
+    assert_eq!(first(Seq(7)), None);
 }

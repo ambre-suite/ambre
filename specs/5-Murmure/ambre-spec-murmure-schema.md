@@ -51,19 +51,20 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 | `MURMURE-014` | `INV` | The catalogue MUST list public channels only. | this spec section 3 | `ambre_murmure::space_tests::the_catalogue_refuses_a_private_channel_and_a_direct_message` -- the refusal writes nothing; `ambre_server::routes::channels::tests::an_editor_of_the_space_registers_a_public_channel` -- database tier, the relay holds the channel public in its space | none | verified |
 | `MURMURE-015` | `INV` | The `meta` document MUST NOT hold a member list. | this spec section 5; `ambre-spec-membership.md` | `ambre_murmure::channel_tests::meta_holds_no_member_list`; `ambre_murmure::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- a member list is a root the frozen shape does not carry | none | verified |
 | `MURMURE-016` | `INV` | An unnamed direct message MUST hold no `name` key: a name composed from its members MUST NOT be stored. | this spec section 3; `CHROME-080` | `ambre_logic::direct::tests::a_created_direct_message_is_held_and_sent_whole` -- a new direct message holds no `name` key; `ambre_murmure::channel_tests::clearing_a_name_removes_its_key` -- nor does a cleared name | none | verified |
-| `MURMURE-017` | `INV` | A message MUST hold an attachment by its media reference; no attachment byte MUST enter a document. | this spec section 3; `ambre-spec-media.md` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-017` | `INV` | A message MUST hold an attachment by its media reference; no attachment byte MUST enter a document. | this spec section 3; `ambre-spec-media.md` | `ambre_murmure::attachment_tests::a_file_travels_by_its_address_and_reads_back_whole` -- the list holds the reference, the name, the type and the size; `ambre_murmure::attachment_tests::a_file_with_no_name_writes_nothing` -- a malformed entry is refused before the write | none | verified |
 | `MURMURE-018` | `INV` | An unset property of a Murmure document MUST be the absence of its key, never a "cleared" marker. | this spec section 3 | `ambre_murmure::channel_tests::an_unset_property_is_an_absent_key` -- an unnamed channel writes no `name` key | none | verified |
 | `MURMURE-019` | `INV` | A Murmure document whose `schema_version` exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | this spec section 7; `ambre-spec-schema-version.md` | `ambre_murmure::channel_tests::a_document_a_newer_client_wrote_is_refused_whole`; `ambre_murmure::channel_tests::a_document_with_no_version_finds_no_migration_and_is_refused` -- the refusal comes from `ambre_core::schema::verdict`, called first at every open | none | verified |
 | `MURMURE-157` | `INV` | The catalogue MUST hold each channel key sealed under the key of the space, so that no key material reaches the Logic thread. | this spec section 5; `SYNC-039`; `ambre-spec-zero-knowledge.md section 2` | `ambre_murmure::space_tests::a_listed_channel_carries_its_name_topic_category_position_and_key` -- stored and answered unopened; `ambre_logic::spaces::tests::a_self_join_hands_the_sealed_key_to_sync_and_writes_no_catalogue`; type-level -- `SealedChannelKey` exposes its bytes and no opening | none | verified |
 | `MURMURE-020` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit. | this spec section 7; `ambre-spec-fixtures.md section 2` | `ambre_murmure::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- the build's shape is compared against the section frozen for the compiled `SCHEMA_VERSION`, so a moved key or value type is red until the number rises; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds a published section append-only | none | verified |
 | `MURMURE-437` | `INV` | The shape each Murmure `SCHEMA_VERSION` writes MUST be frozen in the shapes file of `ambre-murmure`, under the freeze gate. | this spec section 7; `SCHEMA-015`; `SCHEMA-018` | `ambre_murmure::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_murmure::schema_shape::every_declared_key_appears_in_the_shape`; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which refuses a crate stamping a `SCHEMA_VERSION` with no frozen shape | none | verified |
+| `MURMURE-566` | `INV` | A Murmure migration step MUST write no operation: no member signs it, so the check of every other peer would refuse it. | this spec section 7; `SCHEMA-007`; `MURMURE-029` | `ambre_murmure::channel_tests::an_older_document_opens_and_the_walk_writes_nothing` -- a version 1 segment opens, its history and its stamp unchanged; `ambre_murmure::schema_shape::each_migration_step_writes_what_its_version_froze` -- each step's line holds the fingerprint of no operation, frozen | none | verified |
 
 * **Budget.** none: a format has no operation to budget. What a segment weighs, and what memory the
   documents take, are rows of `ambre-spec-budgets.md`, cited by the features that own them.
 * **Boundary.** none: every document here reaches the relay as ciphertext alone (`ZK-001`). What
   the relay learns of the grouping of these documents is `ZK-015`.
-* **Verification.** 21 `verified`, 1 `unimplemented`. The engine tests and the shape belt of
-  `crates/ambre-murmure` hold every built container and the version gate.
+* **Verification.** 23 `verified`. The engine tests and the shape belt of `crates/ambre-murmure`
+  hold every built container and the version gate.
 
 ---
 
@@ -74,7 +75,8 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 * Every **document** of a channel or a space has its own `document_id`, a UUID v7 minted by the
   client. Its `header` names its kind and the channel or the space it belongs to (`MURMURE-001`).
 * A **message** is identified by a `MessageId` minted by the peer that creates it (`MURMURE-002`). Its
-  position in a list moves with every concurrent append.
+  position in a list moves with every concurrent append. The copy of a reply also sent to the
+  channel takes its reply's identifier, the last bit turned (`MURMURE-538`).
 * A **segment** is identified by its `document_id`. A thread reply, a pin and an amendment reach a
   message through the pair of its segment and its `MessageId`.
 * A **thread** document names its channel, its root message and the segment of that root
@@ -133,7 +135,7 @@ names the unit two concurrent writers race for. Every document also carries the 
 | thread | `header` | Map | `root_id`, `segment_id` | `MessageId`, `SegmentId` | the key | threads | built |
 | segment, thread | `messages` | List | position | one message map | list order, no LWW | messages | built |
 | segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `DocumentId`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `MeetingId`, `NoticeKind`, `UserId` | the key | messages | built |
-| segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark | none: char-CRDT | messages, mentions | built |
+| segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark and the style marks | none: char-CRDT | messages, mentions | built |
 | segment, thread | `messages/{n}/attachments` | List | position | `{media_ref, name: String, media_type: MediaType, size: ByteSize}`, the reference typed by `ambre-spec-media.md` | list order, no LWW | attachments | design |
 | segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and a `UserId` | a `Timestamp` | the entry | reactions | built |
 | segment, thread | `messages/{n}/tags` | Map | a `TagId` | `true` | the entry | forums | design |
@@ -141,7 +143,7 @@ names the unit two concurrent writers race for. Every document also carries the 
 | segment, thread | `messages/{n}/preview` | Map | `title`, `description`, `image` | String, String, a media reference | the key | link-previews | design |
 | amendments | `header` | Map | `segment_id` | `SegmentId` | the key | messages | built |
 | amendments | `amendments` | Map | a `MessageId` | `{content}` or `{deleted: bool, by: DeletedBy}` | the entry | messages | built |
-| amendments | `amendments/{id}/content` | Text | -- | the edited body, with the `mention` mark | none: char-CRDT | messages | built |
+| amendments | `amendments/{id}/content` | Text | -- | the edited body, with the `mention` mark and the style marks | none: char-CRDT | messages | built |
 | amendments | `threads` | Map | a `MessageId` | `DocumentId`, the thread of a locked root | the entry | threads | built |
 | settings | `murmure/layout` | Map | a `ChannelId` | `{group: SidebarGroup, position: u32, hidden: bool, collapsed: bool}` | the entry | sidebar | design |
 | settings | `murmure/groups` | Map | a `PersonalGroupId` | `{name: String, position: u32}` | the entry | sidebar | design |
@@ -154,6 +156,10 @@ names the unit two concurrent writers race for. Every document also carries the 
 or `moderator`. **The `mention` mark** carries a user id, or the channel for an `@channel`. It expands
 to nothing: text typed beside it is not part of the mention. **The `emoji` mark** carries a
 `CustomEmojiId` and draws its image.
+
+**The style marks** `bold`, `italic`, `code`, `code_block`, `quote` and `list` hold `true`,
+and `link` holds an `http` or `https` address (`MURMURE-561`, `MURMURE-562`). Each expands to
+nothing, like a mention.
 
 **Absence is a value** (`MURMURE-018`). No `name` on a direct message means the client composes one
 at display (`MURMURE-016`). No `thread` means the message has no reply. A segment entry with no
@@ -226,7 +232,7 @@ nothing in.
 |---|---|
 | Version | `meta.schema_version` on every document, the foundation's register (`SCHEMA-004`) |
 | Read | a version past the compiled one is refused whole (`MURMURE-019`) |
-| Migration | the walk of `ambre-spec-schema-version.md`, per document kind |
+| Migration | the walk of `ambre-spec-schema-version.md`, per document kind. A step writes nothing (`MURMURE-566`): version 2 adds the style marks, which a version 1 body holds none of, so the document reads as it is and keeps its stamp |
 | Bump | `MURMURE-020` |
 | Freeze | the key set and the value types of each version, frozen as in the other applications and read by `scripts/schema_freeze.py` (`MURMURE-437`) |
 | Unknown field | a map key no build knows is ignored on read, so a key a newer client wrote is dropped rather than refused |

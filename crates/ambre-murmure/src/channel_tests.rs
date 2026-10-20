@@ -3,7 +3,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_bus::{Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Timestamp};
+use ambre_bus::{
+    Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Timestamp, Unreadable,
+};
 use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, SchemaError};
 use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
@@ -23,6 +25,7 @@ fn draft(text: &str) -> MessageDraft {
     MessageDraft {
         text: text.to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     }
 }
 
@@ -416,6 +419,34 @@ fn a_document_a_newer_client_wrote_is_refused_whole() {
     );
 }
 
+/// A segment stamped at version 1 opens, and the walk writes nothing in it:
+/// no member would sign that write (`MURMURE-566`).
+#[test]
+fn an_older_document_opens_and_the_walk_writes_nothing() {
+    let mut stored = stored_channel();
+    let older = segment_doc(stored.channel);
+    older
+        .get_map(SCHEMA_META_MAP)
+        .insert(SCHEMA_VERSION_KEY, 1)
+        .expect("stamp");
+    older.commit();
+    let before = older.oplog_vv();
+    stored.segments.insert(stored.active_id, snapshot(&older));
+    let state = ChannelState::open(
+        stored.channel,
+        stored.meta_id,
+        &stored.meta,
+        &stored.segments,
+    )
+    .expect("a version 1 segment opens");
+    let opened = state.doc(stored.active_id.document_id()).expect("held");
+    assert_eq!(opened.oplog_vv(), before, "the walk wrote an operation");
+    assert_eq!(
+        schema::unsigned(&opened.get_map(SCHEMA_META_MAP), SCHEMA_VERSION_KEY),
+        Some(1)
+    );
+}
+
 #[test]
 fn a_document_with_no_version_finds_no_migration_and_is_refused() {
     let stored = stored_channel();
@@ -484,6 +515,7 @@ fn a_sent_message_carries_a_content_summary_with_its_mentions() {
     let (bob, carol) = (UserId::new(), UserId::new());
     let with_mentions = MessageDraft {
         text: "@bob @carol @bob @channel".to_owned(),
+        styles: Vec::new(),
         mentions: vec![
             Mention {
                 target: MentionTarget::User(bob),
@@ -563,6 +595,29 @@ fn a_sent_delta_brings_a_peer_to_the_same_messages() {
             messages: alice.messages(alice.active_id()).expect("messages"),
         }]
     );
+}
+
+/// A remote delta names the message it brought, once, and an own send
+/// names none (`MURMURE-507`).
+#[test]
+fn a_remote_delta_names_the_message_it_brought_once() {
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
+    let mut bob = peer_of(&alice);
+    let author = UserId::new();
+    let sent = alice.send(&draft("hi bob"), author, NOW).expect("send");
+    assert_eq!(alice.take_arrived(), None, "an own send");
+    bob.apply_signed(
+        sent.segment.document_id(),
+        Seq(1),
+        &sent.delta,
+        signer(&alice, sent.segment, author),
+    )
+    .expect("apply");
+    let id = alice.messages(alice.active_id()).expect("messages")[0].id;
+    assert_eq!(bob.take_arrived(), Some((sent.segment, id)));
+    assert_eq!(bob.take_arrived(), None, "taken");
 }
 
 // --- MURMURE-004, MURMURE-005 ---
@@ -995,6 +1050,107 @@ fn an_opening_refuses_a_document_it_did_not_ask_for() {
     );
 }
 
+// --- MURMURE-502, MURMURE-503: a closing segment that cannot open ---
+
+/// An opening past `meta`, with the active segment in and ready.
+fn opening_with_active(stored: &Stored) -> OpeningChannel {
+    let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
+    opening.receive(stored.meta_id.document_id(), &stored.meta);
+    let _ = opening.ready(stored.meta_id.document_id()).expect("meta");
+    opening.receive(
+        stored.active_id.document_id(),
+        &stored.segments[&stored.active_id],
+    );
+    opening
+}
+
+/// A closing segment whose key never came is given up: the channel opens
+/// without it, and its band is handed once.
+#[test]
+fn a_closing_segment_with_no_key_opens_the_channel_without_it() {
+    let stored = stored_channel();
+    let mut opening = opening_with_active(&stored);
+    assert!(
+        opening.give_up(stored.active_id.document_id()).is_none(),
+        "the active segment is never given up"
+    );
+    assert!(matches!(
+        opening.give_up(stored.closing_id.document_id()),
+        Some(Ok(Opening::Waiting))
+    ));
+    assert!(!opening.expects(stored.closing_id.document_id()));
+    let Ok(Opening::Open(mut state)) = opening.ready(stored.active_id.document_id()) else {
+        panic!("the active segment opens the channel");
+    };
+    assert_eq!(state.closing_id(), None);
+    assert_eq!(
+        state.take_closing_band(),
+        Some(MurmureEvent::Unreadable {
+            segment: stored.closing_id,
+            cause: Unreadable::KeyNotReceived,
+            from: NOW,
+            to: Some(NOW),
+        })
+    );
+    assert_eq!(state.take_closing_band(), None, "handed once");
+}
+
+/// A closing segment whose bytes fail the check opens as a damaged band.
+#[test]
+fn a_damaged_closing_segment_opens_the_channel_without_it() {
+    let stored = stored_channel();
+    let mut opening = opening_with_active(&stored);
+    opening.receive(stored.closing_id.document_id(), &[0xff; 8]);
+    let _ = opening
+        .ready(stored.closing_id.document_id())
+        .expect("closing");
+    let Ok(Opening::Open(mut state)) = opening.ready(stored.active_id.document_id()) else {
+        panic!("the active segment opens the channel");
+    };
+    assert_eq!(state.closing_id(), None);
+    assert!(matches!(
+        state.take_closing_band(),
+        Some(MurmureEvent::Unreadable {
+            cause: Unreadable::Damaged,
+            ..
+        })
+    ));
+}
+
+/// The active segment has no such leniency: its failure ends the opening.
+#[test]
+fn a_damaged_active_segment_still_ends_the_opening() {
+    let stored = stored_channel();
+    let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
+    opening.receive(stored.meta_id.document_id(), &stored.meta);
+    let _ = opening.ready(stored.meta_id.document_id()).expect("meta");
+    opening.receive(stored.active_id.document_id(), &[0xff; 8]);
+    let _ = opening.give_up(stored.closing_id.document_id());
+    assert!(opening.ready(stored.active_id.document_id()).is_err());
+}
+
+/// A closing segment the channel does not hold still occupies the slot: the
+/// active segment never asks to close past it.
+#[test]
+fn a_closing_segment_not_held_blocks_the_next_close() {
+    let stored = stored_channel();
+    let mut opening = opening_with_active(&stored);
+    let _ = opening.give_up(stored.closing_id.document_id());
+    let Ok(Opening::Open(state)) = opening.ready(stored.active_id.document_id()) else {
+        panic!("the active segment opens the channel");
+    };
+    let mut state = (*state).with_segment_size(0);
+    assert_eq!(state.wants_close(), None);
+}
+
+/// The same channel holding no closing segment asks at once.
+#[test]
+fn a_channel_with_no_closing_segment_asks_to_close_at_the_size() {
+    let (stored, _, _) = two_finals();
+    let mut state = open(&stored).with_segment_size(0);
+    assert_eq!(state.wants_close(), Some(stored.active_id));
+}
+
 // --- MURMURE-023: an older segment over the relay ---
 
 #[test]
@@ -1038,6 +1194,137 @@ fn an_older_segment_asked_for_arrives_then_loads() {
         None,
         "already loaded"
     );
+}
+
+// --- MURMURE-218 and MURMURE-221: a segment that cannot open ---
+
+/// A stored channel with two final segments, spanning `from` to the next
+/// one, then an active one. Returns it with the two finals, oldest first.
+fn two_finals() -> (Stored, SegmentId, SegmentId) {
+    let mut stored = stored_channel();
+    let (older, newer) = (SegmentId::new(), SegmentId::new());
+    let meta = LoroDoc::new();
+    schema::write_header(&meta, DocumentKind::Meta, stored.channel, NOW.0).expect("header");
+    for (id, from, state) in [
+        (older, 10, SegmentState::Final),
+        (newer, 20, SegmentState::Final),
+        (stored.active_id, 30, SegmentState::Active),
+    ] {
+        push_segment_entry(&meta, id, Timestamp(from), state).expect("entry");
+    }
+    meta.commit();
+    stored.meta = snapshot(&meta);
+    stored.segments.retain(|id, _| *id == stored.active_id);
+    (stored, older, newer)
+}
+
+/// The band of a final segment spans its own start to the start of the
+/// next one. It names the cause it is handed.
+#[test]
+fn a_band_spans_its_segment_up_to_the_next_one() {
+    let (stored, older, newer) = two_finals();
+    let state = open(&stored);
+    assert_eq!(
+        state.band(newer.document_id(), Unreadable::KeyNotReceived),
+        Some(MurmureEvent::Unreadable {
+            segment: newer,
+            cause: Unreadable::KeyNotReceived,
+            from: Timestamp(20),
+            to: Some(Timestamp(30)),
+        })
+    );
+    assert!(matches!(
+        state.band(older.document_id(), Unreadable::Damaged),
+        Some(MurmureEvent::Unreadable {
+            cause: Unreadable::Damaged,
+            from: Timestamp(10),
+            to: Some(Timestamp(20)),
+            ..
+        })
+    ));
+    assert_eq!(
+        state.band(stored.active_id.document_id(), Unreadable::Damaged),
+        None,
+        "a live segment is no band"
+    );
+    assert_eq!(
+        state.band(DocumentId::new(), Unreadable::Damaged),
+        None,
+        "nor is a document meta does not list"
+    );
+}
+
+/// A loaded segment shows its messages, never a band.
+#[test]
+fn a_loaded_segment_is_no_band() {
+    let stored = stored_channel();
+    let mut state = open(&stored);
+    let bytes = stored.segments.get(&stored.final_id).expect("bytes");
+    state.load_older(stored.final_id, bytes).expect("load");
+    assert_eq!(
+        state.band(stored.final_id.document_id(), Unreadable::Damaged),
+        None
+    );
+}
+
+// --- MURMURE-514: a band asked for again ---
+
+/// A final segment shown as a band is asked for once more, then loads in
+/// place: its messages take the place of the band.
+#[test]
+fn a_final_band_asked_again_loads_in_place() {
+    let stored = stored_channel();
+    let mut state = open(&stored);
+    assert_eq!(state.retry(stored.final_id), Some(stored.final_id));
+    assert_eq!(state.retry(stored.final_id), None, "asked for once");
+    let bytes = &stored.segments[&stored.final_id];
+    let _ = state
+        .apply_remote(stored.final_id.document_id(), bytes)
+        .expect("kept");
+    assert_eq!(
+        state.older_ready(stored.final_id.document_id()),
+        Ok(MurmureEvent::Messages {
+            segment: stored.final_id,
+            messages: Vec::new()
+        })
+    );
+    assert_eq!(state.retry(stored.final_id), None, "already loaded");
+}
+
+/// Only a final segment `meta` lists is asked for again this way.
+#[test]
+fn only_a_listed_final_segment_is_asked_again() {
+    let stored = stored_channel();
+    let mut state = open(&stored);
+    assert_eq!(state.retry(stored.active_id), None);
+    assert_eq!(state.retry(stored.closing_id), None);
+    assert_eq!(state.retry(SegmentId::new()), None);
+    assert!(!state.lacks_closing(stored.closing_id), "held");
+    assert!(!state.lacks_closing(stored.final_id), "no closing segment");
+}
+
+/// A closing segment the channel opened without is no final segment: only
+/// a new opening fetches it again.
+#[test]
+fn a_closing_segment_opened_without_is_lacking() {
+    let stored = stored_channel();
+    let mut opening = opening_with_active(&stored);
+    let _ = opening.give_up(stored.closing_id.document_id());
+    let Ok(Opening::Open(mut state)) = opening.ready(stored.active_id.document_id()) else {
+        panic!("the active segment opens the channel");
+    };
+    assert!(state.lacks_closing(stored.closing_id));
+    assert_eq!(state.retry(stored.closing_id), None);
+}
+
+/// A segment given up still leads to the one before it (`MURMURE-221`).
+#[test]
+fn a_segment_given_up_still_leads_to_the_one_before() {
+    let (stored, older, newer) = two_finals();
+    let mut state = open(&stored);
+    assert_eq!(state.request_older(stored.active_id), Some(newer));
+    assert!(state.cancel_older(newer.document_id()));
+    assert_eq!(state.request_older(newer), Some(older));
 }
 
 #[test]

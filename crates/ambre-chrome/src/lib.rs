@@ -16,6 +16,7 @@
 // schedule for it is ambre-roadmap.md; neither belongs here.
 //   - shortcut     -- keybinding presentation (the <Kbd> component)
 //   - app_shell    -- CSS-grid shell: header, command bar, status bar, canvas
+//   - avatar       -- a user's initials on their identity colour
 //   - command      -- command-state store + keybinding manager
 //   - composed     -- a name composed for display, which converts to no `String`
 //   - dialog       -- native <dialog> modal (rAF-suspending)
@@ -32,6 +33,7 @@
 pub use ambre_commands as commands;
 
 mod app_shell;
+mod avatar;
 mod color;
 mod command;
 mod composed;
@@ -48,7 +50,10 @@ mod shortcut;
 mod status;
 mod toast;
 
-pub use app_shell::{AppShell, FormulaBar, Header, StatusBar, Tabs, Toolbar};
+pub use app_shell::{
+    AppShell, CanvasCell, FormulaBar, Header, Panel, ShellRegion, Sidebar, StatusBar, Tabs, Toolbar,
+};
+pub use avatar::{Avatar, avatar_initials};
 pub use color::{ColorPopover, color_hex, parse_hex_color};
 pub use command::{CommandStates, keybinding_from_event};
 pub use composed::ComposedName;
@@ -56,10 +61,15 @@ pub use context_menu::{ContextMenu, MenuEntry, MenuItem};
 pub use debounce::{DRAG_DEBOUNCE, Debouncer};
 pub use dialog::{Dialog, ModalHold};
 pub use font::{FONT_FAMILIES, FontPicker};
-pub use format::{FONT_SIZES, FontSizeSelect, FormatToggle};
+pub use format::{
+    FONT_SIZES, FORMAT_BAR_LIFT_PX, FontSizeSelect, FormatBar, FormatControl, FormatToggle, Pressed,
+};
 pub use handler::{CommandHandler, FilePick, KeyRoute, ShellAction};
 pub use menu::{MenuKey, aria_bool, focus_first_item, initial, menu_key, on_menu_keydown};
-pub use palette::{CommandPalette, filter as filter_commands, matches as command_matches};
+pub use palette::{
+    CommandPalette, PaletteEntry, PaletteRow, filter as filter_commands,
+    matches as command_matches, rows as palette_rows,
+};
 pub use passphrase::{PassphraseDialog, PassphraseIntent};
 pub use shortcut::Kbd;
 pub use status::{PerfChip, PerfDetail, StatusLabel, ZOOM_PRESETS, ZoomChip, ZoomFactor};

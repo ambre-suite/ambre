@@ -29,6 +29,8 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-004` | `INV` | A document not held in memory MUST cost only a light subscription: its key, its counters and its cursor. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_sync::light::tests::an_evicted_document_costs_only_a_light_subscription` -- it releases a document, finds its full session gone, and bounds the entry left by the budget row | none | verified |
 | `RESID-005` | `INV` | The activity counters of a document not held in memory MUST come from the activity summaries alone. | this spec section 3; `SYNC-113` | `ambre_sync::light::tests::a_light_update_moves_its_counters_from_the_summary` -- the counters it reads back are the ones the sealed summaries name | none | verified |
 | `RESID-020` | `INV` | The local store MUST be requested from the browser as persistent storage. | this spec section 3; `ambre-spec-launcher.md` | `ambre_belt::store::tests::the_local_store_is_asked_to_persist` -- browser tier: the store reads best-effort before the permission, and persistent once a document opens after it | none | verified |
+| `RESID-025` | `INV` | Every row of the local store, a document copy and a draft alike, MUST be sealed under a key the device never stores. | this spec section 3; `ambre-spec-zero-knowledge.md`, `ZK-002`; `MURMURE-211` | `ambre_sync::local_store::tests::a_row_is_sealed_under_the_seed_and_opens_on_a_later_session` -- the stored bytes carry no plaintext and the same seed opens them on a later session, `ambre_sync::local_store::tests::without_a_session_the_store_is_locked` -- without a seed nothing is sealed or opened, `ambre_app::local_store::tests::a_copy_lands_sealed_and_one_that_does_not_open_leaves` -- a copy reaches the store only as the worker's sealed bytes | none | verified |
+| `RESID-026` | `INV` | The key that seals the local store MUST NOT reach the UI thread. | this spec section 3; `ambre-spec-launcher.md`, `CHROME-044` | cargo-deny -- `deny.toml` lets only `ambre-sync` and `ambre-logic` declare `ambre-crypto`, so the page's crate cannot derive the key, and `ambre_app::vault::tests::a_seal_asks_the_worker_and_takes_its_answer` -- the page asks the worker for each seal and receives only sealed bytes | none | verified |
 
 ### 1.2 Evict a document
 
@@ -56,6 +58,9 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-015` | `FAIL` | Given an update with no summary, the client MUST mark its document as active, with no count. | this spec section 3 | `ambre_sync::light::tests::a_light_update_with_no_summary_marks_activity_alone` -- an update with no summary, and one that does not open, each mark activity and count nothing | none | verified |
 | `RESID-016` | `FRAME` | Counting activity MUST NOT load the document. | this spec section 3 | `ambre_sync::light::tests::a_light_update_moves_its_counters_from_the_summary` -- nothing but the counters reaches the Logic thread, and no full session appears | none | verified |
 | `RESID-021` | `FRAME` | An update this user signed MUST NOT advance the counters of its document. | this spec section 3; `RESID-014` | `ambre_sync::light::tests::an_update_this_user_signed_counts_nothing` -- an update under the user's own key counts nothing, and another member's counts | none | verified |
+| `RESID-022` | `POST` | A document the client never held MUST be counted after the last number the relay gave for it, with no replay of the deltas up to it. | this spec section 3; `RESID-014`; `SRV-222`; `SRV-223` | `ambre_sync::light::tests::a_channel_never_opened_is_watched_after_its_last_number` -- a segment asks for what follows its last number and a reconnection resumes there, a delta at it counts nothing and the next counts; `ambre_sync::light::tests::the_meta_of_a_channel_never_opened_is_watched_after_its_last_number` -- a `meta` with a listed last number asks for what follows it and resumes there; `ambre_logic::unopened::tests::a_channel_never_opened_is_watched_once_listed_and_answered` -- each segment reaches the watch with the last number the answer gave, its `meta` with the listing's | none | verified |
+| `RESID-023` | `POST` | A rotation of a document held as a light subscription MUST give it the new key, and a document watched after under its key the same. | this spec section 3; `RESID-014`; `ambre-spec-key-rotation.md`, `SYNC-080` | `ambre_sync::light::tests::a_rotation_rekeys_a_channel_watched_unopened` -- a mention under the new key counts nothing before the rotation and one after it, the listed key follows, and a segment watched after counts under it | none | verified |
+| `RESID-024` | `POST` | A frame sealed under a key a light subscription lacks MUST ask for the document's current key once per key, and the key taken MUST replay from that frame. | this spec section 3; `RESID-023`; `ambre-spec-key-rotation.md`, `SYNC-080` | `ambre_sync::light::tests::a_frame_under_a_missing_key_fetches_it_and_replays` -- two frames under a missing key mark activity and ask once, the key taken asks from the first again and both mentions count, a key already held replays nothing | none | verified |
 
 ### 1.5 Meet the browser quota
 
@@ -67,11 +72,19 @@ The browser can refuse a write before the local store reaches its own budget.
 | `RESID-018` | `FAIL` | Given a change the relay has not acknowledged that the browser still refuses to store, the client MUST stop taking local edits and warn the user until the change is sent or space frees. | this spec section 3 | `ambre_logic::residency::tests::a_full_store_pauses_editing_until_the_change_is_safe` -- one warning, an edit refused, then taken again once space frees or the relay acknowledges | none | verified |
 | `RESID-019` | `FRAME` | Meeting the quota MUST NOT evict a change the relay has not acknowledged. | this spec section 3; `RESID-009` | `ambre_core::residency::tests::an_unsent_change_keeps_its_document`; `ambre_logic::store_ledger::tests::a_shown_or_unsent_copy_never_leaves` -- past the budget and under the quota alike; `ambre_sync::light::tests::a_release_waits_for_the_echo_of_every_frame_sent` -- the acknowledgement reaches the Logic thread only after the echo | none | verified |
 
+### 1.6 Read back a sealed row
+
+A row sealed under one session may meet another.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `RESID-027` | `FAIL` | Given a row that fails to open under the session's key, the client MUST drop it and treat its document as having no local copy. | this spec section 3; `RESID-012` | `ambre_sync::local_store::tests::a_row_that_does_not_open_answers_none_in_its_slot` -- a foreign, a moved and a clear row each answer `None` beside a row that opens, `ambre_app::local_store::tests::a_copy_lands_sealed_and_one_that_does_not_open_leaves` -- a copy with a row that fails is deleted and restores as empty | none | verified |
+
 * **Budget.** three rows of `ambre-spec-budgets.md section 6`: the documents in memory, the local
   store, and one light subscription. All three wait on a measure.
 * **Boundary.** the summary rides inside the ciphertext (`SYNC-113`), so the relay learns nothing
   of it. The local store stays on the device, owned by the launcher (`ambre-spec-launcher.md`).
-* **Verification.** 21 `verified`, by host tests on the Logic, Sync and ledger states. The browser
+* **Verification.** 27 `verified`, by host tests on the Logic, Sync and ledger states. The browser
   tier holds the quota refusal and the persistent storage request.
 
 ---
@@ -153,6 +166,17 @@ subscription, and the open fetches the whole document (`RESID-012`).
 tells it which document a view shows and when the relay holds every change. Any write marks its
 document unsent, and only that acknowledgement clears it. One row per document keeps its bytes,
 its last view and its flags, so a reload restores the order (`RESID-008`).
+
+**At rest.** Every content row is sealed: snapshots, deltas and drafts. The key derives from the
+session's master seed and is never written down (`RESID-025`). The Sync worker seals and opens on
+request over the service plane, so the Main thread moves sealed bytes it cannot read
+(`RESID-026`). A row that fails to open deletes its copy, which then counts as missing
+(`RESID-027`).
+
+The bookkeeping rows stay in the clear: sessions, ledger entries and trust pins. They carry no
+content, and their keys are document and user ids the relay already sees. Before sign-in no key
+exists, so a cold boot offline opens no local copy. That is the accepted cost of a key never
+stored.
 
 **Code.** `ambre_core::activity` holds the summary and the counters. `ambre_sync::light` holds the
 light subscription, and `ambre_logic::residency` the close and the reopen. `ambre_core::residency`

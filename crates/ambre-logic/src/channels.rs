@@ -8,12 +8,15 @@
 use super::*;
 use ambre_bus::{
     ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, ChannelMatches,
-    DocumentActivity, MessageAt, MetaId, MurmureCommand, MurmureEvent,
+    DocumentActivity, HeldReply, HeldSend, MessageAt, MetaId, MurmureCommand, MurmureEvent,
 };
-use ambre_bus::{MemberInfo, MentionCount, MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
+use ambre_bus::{
+    MemberInfo, Mention, MentionCount, MentionTarget, MessageId, OpenFailure, SegmentId, Seq,
+    SignedDelta, UnreadCount, Unreadable,
+};
 use ambre_murmure::{
     ChangeTarget, ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample,
-    Screened, Sent, Signer, ThreadTarget, members_only, screen,
+    Screened, SeekStep, Sent, Signer, ThreadTarget, members_only, screen,
 };
 
 /// This user's read cursor on one channel document (the Murmure unread spec).
@@ -92,6 +95,21 @@ fn change_ask(
 }
 
 impl ClosedChannel {
+    /// A channel this session never opened, counted from its light
+    /// subscriptions (the Murmure notifications spec). Nothing is known of
+    /// its count, and no copy of it is in the local store.
+    pub(crate) fn watched(meta: MetaId, documents: Vec<DocumentId>) -> Self {
+        Self {
+            meta,
+            documents,
+            finals: Vec::new(),
+            base: None,
+            counted: HashMap::new(),
+            copies: HashMap::new(),
+            reading: HashMap::new(),
+        }
+    }
+
     /// Whether the channel held `document_id` at close.
     pub(crate) fn holds(&self, document_id: DocumentId) -> bool {
         self.documents.contains(&document_id)
@@ -245,7 +263,27 @@ impl LogicState {
             self.send_to_ui(UiEvent::ChannelActivity {
                 channels: vec![mark],
             });
+            self.emit_first_unread(channel_id);
         }
+    }
+
+    /// Hand the view the first unread message of an open channel, once its
+    /// count is known. The line of the message list sits above it.
+    fn emit_first_unread(&self, channel_id: ChannelId) {
+        let (Some(channel), Some(me)) = (self.channels.get(&channel_id), self.my_user_id) else {
+            return;
+        };
+        if counts_of(channel, &self.read_cursors, me).is_none() {
+            return;
+        }
+        let read_of = |segment: SegmentId| {
+            self.read_cursors
+                .get(&segment.document_id())
+                .map_or(Seq::ZERO, |cursor| cursor.read)
+        };
+        let message = channel.first_unread(read_of, me);
+        let event = MurmureEvent::FirstUnread { message };
+        self.send_to_ui(UiEvent::Channel { channel_id, event });
     }
 
     /// Ask the relay for the documents of a channel (the Murmure engine spec).
@@ -603,19 +641,27 @@ impl LogicState {
         else {
             return false;
         };
-        closed.counted.insert(
-            document_id,
-            Counts {
-                unread: UnreadCount(counters.content),
-                mentions: MentionCount(counters.mentions),
-            },
-        );
+        let now = Counts {
+            unread: UnreadCount(counters.content),
+            mentions: MentionCount(counters.mentions),
+        };
+        let before = closed.counted.insert(document_id, now).unwrap_or_default();
+        // The summaries counted a message since the last count: that is
+        // news (the Murmure notifications spec).
+        let news = (now.unread > before.unread).then_some(now.mentions > before.mentions);
         if let Some(mark) = closed.mark(
             channel_id,
             threads::mentions_of(&self.watched_threads, channel_id),
         ) {
             self.send_to_ui(UiEvent::ChannelActivity {
                 channels: vec![mark],
+            });
+        }
+        if let Some(mention) = news {
+            self.send_to_ui(UiEvent::NewMessage {
+                channel_id,
+                mention,
+                message: None,
             });
         }
         true
@@ -677,6 +723,17 @@ impl LogicState {
         if let Some((&channel_id, channel)) =
             self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
         {
+            // A probe is read for the segment its header names, then
+            // closed: nothing holds it.
+            if channel.is_probe(document_id) {
+                if let Err(error) = channel.probe_ready(document_id) {
+                    tracing::warn!("Logic: thread {document_id} names no root: {error}");
+                }
+                self.forget_murmure_session(document_id);
+                self.send_to_sync(SyncCommand::CloseDocument { document_id });
+                self.advance_seek(channel_id);
+                return true;
+            }
             // An older segment the view asked for. A second
             // ready for a live document, after a reconnect, changes nothing.
             if channel.is_pending(document_id) {
@@ -693,10 +750,17 @@ impl LogicState {
                         self.open_threads(channel_id);
                     }
                     Err(error) => {
+                        // Its key opened it, so the segment itself is
+                        // damaged, never a missing key.
+                        let band = channel.band(document_id, Unreadable::Damaged);
                         tracing::warn!("Logic: older segment {document_id} refused: {error}");
                         self.send_to_sync(SyncCommand::CloseDocument { document_id });
+                        if let Some(event) = band {
+                            self.send_to_ui(UiEvent::Channel { channel_id, event });
+                        }
                     }
                 }
+                self.advance_seek(channel_id);
             }
             return true;
         }
@@ -707,19 +771,43 @@ impl LogicState {
         }) else {
             return false;
         };
-        match opening.ready(document_id) {
+        let asked = opening.document_ids();
+        let result = opening.ready(document_id);
+        self.advance_opening(channel_id, asked, result);
+        true
+    }
+
+    /// Act on where an opening stands. `asked` lists every document it asked
+    /// for: those the open channel does not hold are closed.
+    fn advance_opening(
+        &mut self,
+        channel_id: ChannelId,
+        asked: Vec<DocumentId>,
+        result: Result<Opening, MurmureError>,
+    ) {
+        match result {
             Ok(Opening::Waiting) => {}
             Ok(Opening::OpenSegments(segments)) => {
                 for segment in segments {
                     self.open_channel_document(channel_id, segment.document_id());
                 }
             }
-            Ok(Opening::Open(state)) => {
+            Ok(Opening::Open(mut state)) => {
                 self.opening.remove(&channel_id);
                 self.send_to_ui(UiEvent::Channel {
                     channel_id,
                     event: MurmureEvent::Named { name: state.name() },
                 });
+                // A closing segment the channel opened without shows as a
+                // band, and its session ends.
+                if let Some(event) = state.take_closing_band() {
+                    self.send_to_ui(UiEvent::Channel { channel_id, event });
+                }
+                let held = state.document_ids();
+                for document_id in asked.into_iter().filter(|id| !held.contains(id)) {
+                    self.forget_murmure_session(document_id);
+                    self.send_to_sync(SyncCommand::CloseDocument { document_id });
+                }
                 // The closing segment first, so the view draws the history in
                 // order.
                 for segment in [state.closing_id(), Some(state.active_id())]
@@ -748,7 +836,44 @@ impl LogicState {
             }
             Err(error) => self.end_opening(channel_id, error.to_string()),
         }
-        true
+    }
+
+    /// Move the seek for the root of a copy one step (the Murmure threads
+    /// spec). It opens the next older segment, or tells the view the root.
+    fn advance_seek(&mut self, channel_id: ChannelId) {
+        let Some(step) = self
+            .channels
+            .get_mut(&channel_id)
+            .and_then(ChannelState::seek_step)
+        else {
+            return;
+        };
+        match step {
+            SeekStep::Found {
+                thread,
+                segment,
+                root,
+            } => self.send_to_ui(UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::RootFound {
+                    thread,
+                    segment,
+                    root,
+                },
+            }),
+            SeekStep::Load(segment) => self.send_to_sync(SyncCommand::OpenDocument {
+                document_id: segment.document_id(),
+                doc_type: DocType::Murmure,
+            }),
+            SeekStep::Wait => {}
+            SeekStep::Lost { thread } => {
+                tracing::warn!("Logic: channel {channel_id} holds no root for the copy");
+                self.send_to_ui(UiEvent::Channel {
+                    channel_id,
+                    event: MurmureEvent::RootLost { thread },
+                });
+            }
+        }
     }
 
     /// A document of a channel could not open. Returns `false` when no
@@ -756,13 +881,28 @@ impl LogicState {
     pub(crate) fn channel_document_failed(
         &mut self,
         document_id: DocumentId,
+        cause: OpenFailure,
         message: &str,
     ) -> bool {
-        if let Some(channel) = self.channels.values_mut().find(|c| c.holds(document_id)) {
+        if let Some((&channel_id, channel)) =
+            self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
+        {
+            // A missing key earns a band in the list. A transient failure
+            // earns none: asking again may open it.
+            let band = match cause {
+                OpenFailure::KeyNotReceived => {
+                    channel.band(document_id, Unreadable::KeyNotReceived)
+                }
+                OpenFailure::Transient => None,
+            };
             // An older segment is given up, so the view can ask again. A live
             // document of an open channel keeps what it holds.
             channel.cancel_older(document_id);
             tracing::warn!("Logic: channel document {document_id} failed to open: {message}");
+            if let Some(event) = band {
+                self.send_to_ui(UiEvent::Channel { channel_id, event });
+            }
+            self.advance_seek(channel_id);
             return true;
         }
         let Some(channel_id) = self.opening.iter().find_map(|(id, o)| {
@@ -772,7 +912,24 @@ impl LogicState {
         }) else {
             return false;
         };
-        self.end_opening(channel_id, message.to_owned());
+        // A closing segment whose key never came is given up, and the channel
+        // opens without it. Any other failure ends the opening.
+        let given_up = match (cause, self.opening.get_mut(&channel_id)) {
+            (OpenFailure::KeyNotReceived, Some(Some(opening))) => {
+                let asked = opening.document_ids();
+                opening.give_up(document_id).map(|result| (asked, result))
+            }
+            _ => None,
+        };
+        let Some((asked, result)) = given_up else {
+            self.end_opening(channel_id, message.to_owned());
+            return true;
+        };
+        tracing::warn!("Logic: closing segment {document_id} given up: {message}");
+        self.forget_murmure_session(document_id);
+        self.send_to_sync(SyncCommand::CloseDocument { document_id });
+        let asked = asked.into_iter().filter(|id| *id != document_id).collect();
+        self.advance_opening(channel_id, asked, result);
         true
     }
 
@@ -886,6 +1043,54 @@ impl LogicState {
             || self.space_opening.contains_key(&space)
     }
 
+    /// The question an unconfirmed `@channel` past the threshold asks, with
+    /// the send it holds. `None` lets the command run.
+    fn held_send(&self, channel_id: ChannelId, command: &MurmureCommand) -> Option<MurmureEvent> {
+        let (draft, attachments, reply) = match command {
+            MurmureCommand::SendMessage {
+                draft,
+                attachments,
+                confirmed: false,
+                ..
+            } => (draft, attachments.clone(), None),
+            MurmureCommand::Reply {
+                root,
+                draft,
+                also_in_channel,
+                confirmed: false,
+                ..
+            } => {
+                let reply = HeldReply {
+                    root: *root,
+                    also_in_channel: *also_in_channel,
+                };
+                (draft, Vec::new(), Some(reply))
+            }
+            _ => return None,
+        };
+        let all = |mention: &Mention| mention.target == MentionTarget::Channel;
+        if !draft.mentions.iter().any(all) {
+            return None;
+        }
+        let members: Vec<UserId> = self
+            .channel_members
+            .get(&channel_id)?
+            .iter()
+            .map(|row| row.user_id)
+            .collect();
+        match screen(draft.clone(), Some(&members), false) {
+            Screened::Send(_) => None,
+            Screened::Confirm { members, draft } => Some(MurmureEvent::ConfirmChannelMention {
+                members,
+                held: HeldSend {
+                    draft,
+                    attachments,
+                    reply,
+                },
+            }),
+        }
+    }
+
     /// Run one command on an open channel, and emit what it produced
     /// (`BUS-027`).
     ///
@@ -896,6 +1101,11 @@ impl LogicState {
         channel_id: ChannelId,
         command: MurmureCommand,
     ) {
+        // An `@channel` past the threshold is asked about before anything
+        // moves, so a cancel leaves no thread created for it.
+        if let Some(event) = self.held_send(channel_id, &command) {
+            return self.send_to_ui(UiEvent::Channel { channel_id, event });
+        }
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             tracing::warn!("Logic: command for channel {channel_id}, which is not open; dropped");
             return;
@@ -1013,11 +1223,17 @@ impl LogicState {
                 Some(id)
             }
             MurmureCommand::LoadOlder { .. }
+            | MurmureCommand::SeekRoot { .. }
             | MurmureCommand::MarkRead
             | MurmureCommand::MarkUnread { .. }
             | MurmureCommand::MarkThreadRead { .. }
             | MurmureCommand::Tick { .. }
-            | MurmureCommand::Typing { .. } => None,
+            | MurmureCommand::Typing { .. }
+            | MurmureCommand::Retry { .. }
+            | MurmureCommand::FetchFile { .. }
+            | MurmureCommand::ShowPicture { .. }
+            // A file writes no document: its message does, once it sends.
+            | MurmureCommand::UploadFile { .. } => None,
         };
         if let Some(document_id) = target {
             let identified = self
@@ -1035,25 +1251,18 @@ impl LogicState {
         match command {
             MurmureCommand::SendMessage {
                 draft,
+                attachments,
                 now,
-                confirmed,
+                ..
             } => {
-                // A mention of anyone outside the channel is no mark, and an
-                // `@channel` past the threshold waits for the author (the
-                // Murmure mentions spec).
+                // A mention of anyone outside the channel is no mark (the
+                // Murmure mentions spec). The `@channel` question was asked
+                // on the way in.
                 let members: Option<Vec<UserId>> = self
                     .channel_members
                     .get(&channel_id)
                     .map(|rows| rows.iter().map(|row| row.user_id).collect());
-                let draft = match screen(draft, members.as_deref(), confirmed) {
-                    Screened::Send(draft) => draft,
-                    Screened::Confirm { members } => {
-                        return self.send_to_ui(UiEvent::Channel {
-                            channel_id,
-                            event: MurmureEvent::ConfirmChannelMention { members },
-                        });
-                    }
-                };
+                let draft = members_only(draft, members.as_deref());
                 // The author is this session's user. Before `SessionReady`
                 // there is none, and a message with no author is refused
                 // rather than written under a placeholder (the Murmure schema).
@@ -1063,7 +1272,7 @@ impl LogicState {
                     );
                     return;
                 };
-                match channel.send(&draft, author, now) {
+                match channel.send_attached(&draft, &attachments, author, now) {
                     Ok(sent) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
                             document_id: sent.segment.document_id(),
@@ -1089,6 +1298,59 @@ impl LogicState {
                         document_id: older.document_id(),
                         doc_type: DocType::Murmure,
                     });
+                }
+            }
+            MurmureCommand::SeekRoot { thread } => {
+                // The thread's header names the segment of its root. A
+                // probe reads it, then the older segments load down to it.
+                if let Some(probe) = channel.seek_root(thread) {
+                    self.send_to_sync(SyncCommand::OpenDocument {
+                        document_id: probe,
+                        doc_type: DocType::Murmure,
+                    });
+                }
+                self.advance_seek(channel_id);
+            }
+            // A channel's files live under its meta, which outlives every
+            // segment (the Murmure attachments spec). The answer reaches the
+            // view under the request it named.
+            MurmureCommand::UploadFile { id, data } => {
+                let document_id = channel.meta_id().document_id();
+                self.send_to_sync(SyncCommand::Rest {
+                    id,
+                    cmd: RestCommand::UploadMedia { document_id, data },
+                });
+            }
+            MurmureCommand::FetchFile { id, media_ref } => {
+                let document_id = channel.meta_id().document_id();
+                self.send_to_sync(SyncCommand::Rest {
+                    id,
+                    cmd: RestCommand::DownloadMedia {
+                        document_id,
+                        content_hash: media_ref.as_str().to_owned(),
+                    },
+                });
+            }
+            // The image of a preview decodes here, off the render thread
+            // (`ambre-spec-murmure-attachments.md`).
+            MurmureCommand::ShowPicture { media_ref } => {
+                let document_id = channel.meta_id().document_id();
+                self.show_picture(channel_id, document_id, media_ref);
+            }
+            MurmureCommand::Retry { segment } => {
+                // Sync walks the key chain again at each open, so a new open
+                // serves a missing key and damaged bytes alike (the Murmure
+                // engine spec).
+                if let Some(segment) = channel.retry(segment) {
+                    self.send_to_sync(SyncCommand::OpenDocument {
+                        document_id: segment.document_id(),
+                        doc_type: DocType::Murmure,
+                    });
+                } else if channel.lacks_closing(segment) {
+                    // The closing segment has no place to load into: the
+                    // channel opens anew, from its local copies.
+                    self.close_channel(channel_id);
+                    self.open_channel(channel_id);
                 }
             }
             MurmureCommand::MarkRead => {
@@ -1133,6 +1395,7 @@ impl LogicState {
                 self.send_to_ui(UiEvent::ChannelActivity {
                     channels: vec![mark],
                 });
+                self.emit_first_unread(channel_id);
             }
             MurmureCommand::Name { name } => match channel.name_direct(name.as_deref()) {
                 Ok(named) => {
@@ -1140,6 +1403,12 @@ impl LogicState {
                         document_id: named.meta.document_id(),
                         payload: named.delta,
                         summary: None,
+                    });
+                    // Sealed beside meta too, so the name shows before the
+                    // channel opens (the Murmure layout spec).
+                    self.send_to_sync(SyncCommand::NameChannel {
+                        meta: named.meta,
+                        name,
                     });
                     self.send_to_ui(UiEvent::Channel {
                         channel_id,
@@ -1197,7 +1466,7 @@ impl LogicState {
                 at,
                 message,
                 draft,
-                now: _,
+                now,
             } => {
                 let Some(user) = self.my_user_id else {
                     tracing::warn!("Logic: edit on {channel_id} before the session; dropped");
@@ -1211,27 +1480,65 @@ impl LogicState {
                     .map(|rows| rows.iter().map(|row| row.user_id).collect());
                 let draft = members_only(draft, members.as_deref());
                 let edited = channel.edit(at, message, &draft, user);
+                let copy = match (&edited, at) {
+                    (Ok(Some(_)), MessageAt::Thread(root)) => channel.copy_of(root, message),
+                    _ => None,
+                };
                 self.send_change(channel_id, edited);
+                // The copy of a reply takes its edit, through the path of a
+                // message of its segment (the Murmure threads spec).
+                if let Some((segment, copy)) = copy {
+                    self.handle_channel_command(
+                        channel_id,
+                        MurmureCommand::EditMessage {
+                            at: segment.into(),
+                            message: copy,
+                            draft,
+                            now,
+                        },
+                    );
+                }
             }
-            MurmureCommand::DeleteMessage {
-                at,
-                message,
-                now: _,
-            } => {
+            MurmureCommand::DeleteMessage { at, message, now } => {
                 let Some(user) = self.my_user_id else {
                     tracing::warn!("Logic: delete on {channel_id} before the session; dropped");
                     return;
                 };
+                // The files the message alone carried, read before the
+                // delete takes them off it (`ambre-spec-murmure-attachments.md`).
+                let files = match at {
+                    MessageAt::Segment(segment) => channel.erasable(segment, message, user),
+                    MessageAt::Thread(_) => Vec::new(),
+                };
+                let meta = channel.meta_id().document_id();
                 let deleted = channel.delete(at, message, user);
+                if deleted.is_ok() {
+                    self.erase_files(meta, files);
+                }
+                let Some(channel) = self.channels.get_mut(&channel_id) else {
+                    return;
+                };
                 // A deleted reply leaves the count of its root (the Murmure
-                // threads spec).
-                let head = match (&deleted, at) {
-                    (Ok(_), MessageAt::Thread(root)) => channel.root_view(root),
-                    _ => None,
+                // threads spec), and its copy goes with it.
+                let (head, copy) = match (&deleted, at) {
+                    (Ok(_), MessageAt::Thread(root)) => {
+                        (channel.root_view(root), channel.copy_of(root, message))
+                    }
+                    _ => (None, None),
                 };
                 self.send_change(channel_id, deleted.map(Some));
                 if let Some(event) = head {
                     self.send_to_ui(UiEvent::Channel { channel_id, event });
+                }
+                if let Some((segment, copy)) = copy {
+                    self.handle_channel_command(
+                        channel_id,
+                        MurmureCommand::DeleteMessage {
+                            at: segment.into(),
+                            message: copy,
+                            now,
+                        },
+                    );
                 }
             }
             MurmureCommand::Reply {
@@ -1239,7 +1546,7 @@ impl LogicState {
                 draft,
                 also_in_channel,
                 now,
-                confirmed,
+                ..
             } => {
                 // A reply is screened as a message is: a copy to the channel
                 // notifies it as one (the Murmure threads spec).
@@ -1247,15 +1554,7 @@ impl LogicState {
                     .channel_members
                     .get(&channel_id)
                     .map(|rows| rows.iter().map(|row| row.user_id).collect());
-                let draft = match screen(draft, members.as_deref(), confirmed) {
-                    Screened::Send(draft) => draft,
-                    Screened::Confirm { members } => {
-                        return self.send_to_ui(UiEvent::Channel {
-                            channel_id,
-                            event: MurmureEvent::ConfirmChannelMention { members },
-                        });
-                    }
-                };
+                let draft = members_only(draft, members.as_deref());
                 let Some(author) = self.my_user_id else {
                     tracing::warn!("Logic: reply on {channel_id} before the session; dropped");
                     return;
@@ -1298,15 +1597,15 @@ impl LogicState {
                 }
                 self.replay_owed(channel_id, now);
             }
-            MurmureCommand::Typing { now } => {
+            MurmureCommand::Typing { now, thread } => {
                 let meta = channel.meta_id().document_id();
                 if self
                     .channel_watchers
                     .entry(channel_id)
                     .or_default()
-                    .owes_typing(now)
+                    .owes_typing(now, thread)
                 {
-                    self.send_sample(meta, Sample::Typing);
+                    self.send_sample(meta, Sample::typing(thread));
                 }
             }
         }
@@ -1330,9 +1629,14 @@ impl LogicState {
             return;
         };
         let (watching, typing) = watchers.view();
+        let in_threads = watchers.in_threads();
         self.send_to_ui(UiEvent::Channel {
             channel_id,
-            event: MurmureEvent::Watchers { watching, typing },
+            event: MurmureEvent::Watchers {
+                watching,
+                typing,
+                in_threads,
+            },
         });
     }
 
@@ -1529,12 +1833,18 @@ impl LogicState {
                 }
             }
         }
+        let mut counted_now = Vec::new();
         for mark in &mut channels {
             if let Some(counted) = self.counted(mark.channel_id) {
                 *mark = counted;
+                counted_now.push(mark.channel_id);
             }
         }
         self.send_to_ui(UiEvent::ChannelActivity { channels });
+        for channel_id in counted_now {
+            self.emit_first_unread(channel_id);
+        }
+        self.segments_listed(documents);
         self.place_threads();
     }
 
@@ -1639,8 +1949,14 @@ impl LogicState {
         }
         let mut events = Vec::new();
         let mut outdated = false;
+        let mut fresh = None;
         for (delta, verdict) in deltas.iter().zip(verdicts) {
             let accepted = verdict.is_ok();
+            if accepted && open.is_some() {
+                fresh = self
+                    .news_of(delta)
+                    .map_or(fresh, |mention| Some(mention || fresh.unwrap_or(false)));
+            }
             self.record_channel_seq(
                 document_id,
                 delta.seq,
@@ -1671,9 +1987,39 @@ impl LogicState {
             self.emit_count(channel_id);
         }
         if let Some(channel_id) = open {
+            // Taken on every batch, so a message never outlives its own.
+            let message = self
+                .channels
+                .get_mut(&channel_id)
+                .and_then(ChannelState::take_arrived);
+            if let Some(mention) = fresh {
+                self.send_to_ui(UiEvent::NewMessage {
+                    channel_id,
+                    mention,
+                    message,
+                });
+            }
             self.follow_close(channel_id);
         }
         true
+    }
+
+    /// Whether a delta is a message another member wrote, from its sealed
+    /// summary alone (the Murmure notifications spec). `Some(true)` when it
+    /// names this user or the channel. A delta with no summary is none.
+    fn news_of(&self, delta: &SignedDelta) -> Option<bool> {
+        let summary = delta.summary.as_ref()?;
+        if summary.kind != ambre_bus::ActivityKind::Content
+            || (delta.user.is_some() && delta.user == self.my_user_id)
+        {
+            return None;
+        }
+        Some(
+            summary.mentions_all
+                || self
+                    .my_user_id
+                    .is_some_and(|me| summary.mentions.contains(&me)),
+        )
     }
 
     /// Search every open channel for `query` (the Murmure search spec). Each
@@ -1710,8 +2056,9 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::{
-        ActivityKind, FoldAnswer, LeaseAnswer, LeaseId, Mention, MentionTarget, MessageDraft,
-        MurmureEvent, RestEvent, SegmentId, Timestamp,
+        ActivityKind, Attachment, ByteSize, FoldAnswer, LeaseAnswer, LeaseId, MediaRef, MediaType,
+        Mention, MentionTarget, MessageDraft, MurmureEvent, RestCommand, RestEvent, SegmentId,
+        Timestamp,
     };
     use ambre_murmure::ChannelType;
 
@@ -1769,7 +2116,9 @@ mod tests {
             draft: MessageDraft {
                 text: text.to_owned(),
                 mentions,
+                styles: Vec::new(),
             },
+            attachments: Vec::new(),
             now: NOW,
             confirmed: false,
         }
@@ -1963,6 +2312,105 @@ mod tests {
         assert_eq!(messages[0].text, "over the wire");
     }
 
+    /// An open channel reads the news from the summary of each accepted
+    /// delta (the Murmure notifications spec). A message of another member
+    /// that names the user is a mention. The user's own message, from another device, is
+    /// none, and neither is a delta with no summary. The news names the
+    /// segment of its message, so a click opens it there.
+    #[test]
+    fn a_message_of_another_member_is_news_and_names_a_mention() {
+        let (mut alice, _, alice_sync) = harness();
+        let author = UserId::new();
+        signed_in(&mut alice, author);
+        let channel_id = ChannelId::new();
+        alice.hold_channel(
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
+        );
+        let original = &alice.channels[&channel_id];
+        let active = original.active_id();
+        let segments = std::collections::HashMap::from([(
+            active,
+            original.snapshot(active.document_id()).expect("active"),
+        )]);
+        let meta = original
+            .snapshot(original.meta_id().document_id())
+            .expect("meta");
+        let copy =
+            ChannelState::open(channel_id, original.meta_id(), &meta, &segments).expect("open");
+        let (mut bob, bob_ui, _) = harness();
+        let bob_id = UserId::new();
+        signed_in(&mut bob, bob_id);
+        bob.hold_channel(copy);
+        drain(&bob_ui);
+
+        let mut deltas = Vec::new();
+        for (seq, text, mention) in [(1, "plain", false), (2, "hi @bob", true)] {
+            let mentions = if mention {
+                vec![Mention {
+                    target: MentionTarget::User(bob_id),
+                    range: 3..7,
+                }]
+            } else {
+                Vec::new()
+            };
+            alice.handle_logic_command(LogicCommand::Channel {
+                channel_id,
+                command: send(text, mentions),
+            });
+            let Ok(SyncCommand::SendUpdate {
+                document_id,
+                payload,
+                summary,
+            }) = alice_sync.try_recv()
+            else {
+                panic!("alice sends one update");
+            };
+            let peer = alice.channels[&channel_id]
+                .peer(document_id)
+                .expect("a session");
+            deltas.push((
+                document_id,
+                ambre_bus::SignedDelta {
+                    seq,
+                    payload,
+                    nonce: ambre_core::SessionNonce([0; 16]),
+                    peer,
+                    user: Some(author),
+                    summary,
+                },
+            ));
+        }
+        let news = |bob: &mut LogicState, (document_id, delta): (DocumentId, SignedDelta)| {
+            bob.handle_logic_event(LogicEvent::RemoteUpdate { document_id, delta });
+            drain(&bob_ui)
+                .into_iter()
+                .filter_map(|event| match event {
+                    UiEvent::NewMessage {
+                        channel_id: c,
+                        mention,
+                        message,
+                    } if c == channel_id => {
+                        let segment = message.map(|(segment, _)| segment.document_id());
+                        Some((mention, segment == Some(document_id)))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let [plain, named] = <[_; 2]>::try_from(deltas).expect("two deltas");
+        // The same message as bob's own, which the engine would refuse
+        // under alice's peer: the filter is read on its own.
+        let (doc, mut own) = plain.clone();
+        own.user = Some(bob_id);
+        assert_eq!(bob.news_of(&own), None);
+        assert_eq!(bob.news_of(&plain.1), Some(false));
+        let (_, mut bare) = plain.clone();
+        bare.summary = None;
+        assert_eq!(news(&mut bob, (doc, bare)), Vec::<(bool, bool)>::new());
+        assert_eq!(news(&mut bob, plain), [(false, true)]);
+        assert_eq!(news(&mut bob, named), [(true, true)]);
+    }
+
     /// An open channel keeps its documents while its view shows it (the
     /// Murmure engine spec). Closing one channel releases its documents alone, as
     /// light subscriptions, and the other stays whole.
@@ -2031,10 +2479,19 @@ mod tests {
                 counters: activity(content),
             });
         }
+        let mut news = 0;
         let marks: Vec<_> = drain(&ui)
             .into_iter()
-            .map(|event| match event {
-                UiEvent::ChannelActivity { channels } => channels,
+            .filter_map(|event| match event {
+                UiEvent::ChannelActivity { channels } => Some(channels),
+                UiEvent::NewMessage {
+                    channel_id: c,
+                    mention: false,
+                    message: None,
+                } if c == channel_id => {
+                    news += 1;
+                    None
+                }
                 other => panic!("a document badge leaked: {other:?}"),
             })
             .collect();
@@ -2047,6 +2504,8 @@ mod tests {
             }]
         };
         assert_eq!(marks, vec![mark(2), mark(3), mark(3)]);
+        // A count that rose is news; the update with no message is not.
+        assert_eq!(news, 2);
     }
 
     /// A closed channel counts its mentions from the summaries beside its
@@ -2064,9 +2523,18 @@ mod tests {
             },
         });
         let shown = drain(&ui);
-        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-            panic!("expected the channel's mark, got {shown:?}");
+        let [
+            UiEvent::ChannelActivity { channels },
+            UiEvent::NewMessage {
+                channel_id: news,
+                mention: true,
+                message: None,
+            },
+        ] = shown.as_slice()
+        else {
+            panic!("expected the channel's mark, then a mention, got {shown:?}");
         };
+        assert_eq!(*news, channel_id);
         assert_eq!(
             channels,
             &[ChannelActivity {
@@ -2100,8 +2568,12 @@ mod tests {
             counters: activity(1),
         });
         let shown = drain(&ui);
-        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-            panic!("expected the channel's mark, got {shown:?}");
+        let [
+            UiEvent::ChannelActivity { channels },
+            UiEvent::NewMessage { mention: false, .. },
+        ] = shown.as_slice()
+        else {
+            panic!("expected the channel's mark, then the news, got {shown:?}");
         };
         assert_eq!(
             channels,
@@ -2131,7 +2603,10 @@ mod tests {
             counters: activity(1),
         });
         assert!(
-            matches!(drain(&ui).as_slice(), [UiEvent::ChannelActivity { .. }]),
+            matches!(
+                drain(&ui).as_slice(),
+                [UiEvent::ChannelActivity { .. }, UiEvent::NewMessage { .. }]
+            ),
             "a reopening channel stopped counting from its summaries"
         );
     }
@@ -2265,6 +2740,7 @@ mod tests {
                 &MessageDraft {
                     text: "stored".to_owned(),
                     mentions: Vec::new(),
+                    styles: Vec::new(),
                 },
                 UserId::new(),
                 NOW,
@@ -2446,6 +2922,7 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: stored.meta_id().document_id(),
+            cause: OpenFailure::KeyNotReceived,
             message: "cannot unwrap document key".to_owned(),
         });
         assert_eq!(sent(&sync), [Sent::Close(stored.meta_id().document_id())]);
@@ -2535,8 +3012,15 @@ mod tests {
         assert_eq!(*live, [active]);
         assert!(finals.is_empty());
         let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
-        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-            panic!("one activity event, got {shown:?}");
+        let [
+            UiEvent::ChannelActivity { channels },
+            UiEvent::Channel {
+                event: MurmureEvent::FirstUnread { message: None },
+                ..
+            },
+        ] = shown.as_slice()
+        else {
+            panic!("one activity event, then no first unread, got {shown:?}");
         };
         assert_eq!(
             *channels,
@@ -2556,8 +3040,10 @@ mod tests {
         let entry = |channel_id, active| DocumentActivity {
             channel_id,
             document_id: DocumentId::new(),
+            kind: ChannelDocumentKind::Segment,
             active,
             read: Seq::ZERO,
+            last: None,
         };
 
         state.handle_logic_event(LogicEvent::ChannelActivity {
@@ -2618,19 +3104,41 @@ mod tests {
                 place: ambre_bus::ChannelPlace::Direct,
             },
         ];
+        let spaces = vec![ambre_bus::SpaceId::new()];
+        let names = vec![ambre_bus::ChannelName {
+            channel_id: channels[0].channel_id,
+            name: "board".into(),
+        }];
+        let peers = vec![ambre_bus::DirectPeers {
+            channel_id: channels[1].channel_id,
+            names: vec!["Bob".into()],
+        }];
         state.handle_logic_event(LogicEvent::MemberChannels {
             channels: channels.clone(),
+            spaces: spaces.clone(),
+            names: names.clone(),
+            peers: peers.clone(),
+            metas: vec![ambre_bus::ChannelMeta {
+                channel_id: channels[0].channel_id,
+                meta: MetaId::new(),
+                last: None,
+            }],
         });
         let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
         assert!(
-            matches!(shown.as_slice(), [UiEvent::MemberChannels { channels: c }] if *c == channels),
+            matches!(
+                shown.as_slice(),
+                [UiEvent::MemberChannels { channels: c, spaces: s, names: n, peers: p }]
+                    if *c == channels && *s == spaces && *n == names && *p == peers
+            ),
             "got {shown:?}"
         );
         assert!(
             drain(&sync).is_empty(),
-            "learning of a channel opens nothing"
+            "learning of a channel or a space opens nothing"
         );
         assert!(state.channels.is_empty(), "no channel state is held");
+        assert!(state.spaces.is_empty(), "no space state is held");
     }
 
     #[test]
@@ -2699,6 +3207,7 @@ mod tests {
                     &MessageDraft {
                         text: text.to_owned(),
                         mentions: Vec::new(),
+                        styles: Vec::new(),
                     },
                     self.author,
                     NOW,
@@ -2721,8 +3230,10 @@ mod tests {
                 documents: vec![DocumentActivity {
                     channel_id: self.channel_id,
                     document_id: self.active.document_id(),
+                    kind: ChannelDocumentKind::Segment,
                     active: true,
                     read: Seq(read),
+                    last: None,
                 }],
             });
         }
@@ -2739,6 +3250,21 @@ mod tests {
                 .flatten()
                 .filter(|c| c.channel_id == self.channel_id)
                 .map(|c| c.unread.map(|count| count.0))
+                .collect()
+        }
+
+        /// Every first unread message the view was handed for the channel
+        /// since the last call.
+        fn firsts(&self) -> Vec<Option<MessageId>> {
+            drain(&self.bob_ui)
+                .into_iter()
+                .filter_map(|e| match e {
+                    UiEvent::Channel {
+                        channel_id,
+                        event: MurmureEvent::FirstUnread { message },
+                    } if channel_id == self.channel_id => Some(message),
+                    _ => None,
+                })
                 .collect()
         }
 
@@ -2807,6 +3333,26 @@ mod tests {
         assert_eq!(m.counts(), [Some(1)]);
     }
 
+    /// The view is handed the first unread message each time the count is
+    /// known anew, and none once the channel is read.
+    #[test]
+    fn the_view_is_handed_the_first_unread_message_with_each_count() {
+        let mut m = members();
+        m.deliver("before any answer", 1);
+        assert_eq!(m.firsts(), [], "no cursor yet, so no first unread");
+
+        m.answer(0);
+        let ids = m.message_ids();
+        assert_eq!(m.firsts(), [ids.first().copied()]);
+        m.deliver("two", 2);
+        assert_eq!(m.firsts(), [ids.first().copied()], "the first one stays");
+        m.bob.handle_logic_command(LogicCommand::Channel {
+            channel_id: m.channel_id,
+            command: MurmureCommand::MarkRead,
+        });
+        assert_eq!(m.firsts(), [None]);
+    }
+
     /// Marking a message unread moves the cursor to just before it, so it
     /// and every later message count again.
     #[test]
@@ -2839,6 +3385,7 @@ mod tests {
                 &MessageDraft {
                     text: "as somebody else".to_owned(),
                     mentions: Vec::new(),
+                    styles: Vec::new(),
                 },
                 UserId::new(),
                 NOW,
@@ -2875,6 +3422,7 @@ mod tests {
                 &MessageDraft {
                     text: "from the future".to_owned(),
                     mentions: Vec::new(),
+                    styles: Vec::new(),
                 },
                 m.author,
                 NOW,
@@ -3077,6 +3625,7 @@ mod tests {
             message,
             draft: MessageDraft {
                 text: "lunch @bob @eve?".to_owned(),
+                styles: Vec::new(),
                 mentions: vec![
                     mention(MentionTarget::User(bob), 6..10),
                     mention(MentionTarget::User(UserId::new()), 11..15),
@@ -3145,6 +3694,262 @@ mod tests {
         assert!(drain(&ui).is_empty());
     }
 
+    /// The erase a delete asks for, as `(request, document, file)`.
+    fn erases(sent: &[SyncCommand]) -> Vec<(RequestId, DocumentId, String)> {
+        sent.iter()
+            .filter_map(|command| match command {
+                SyncCommand::Rest {
+                    id,
+                    cmd:
+                        RestCommand::EraseMedia {
+                            document_id,
+                            content_hash,
+                        },
+                } => Some((*id, *document_id, content_hash.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A file the view uploads or fetches goes through the shared media
+    /// flow, under the channel's meta and the view's request.
+    #[test]
+    fn a_file_uploads_and_downloads_under_the_channels_meta() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, _) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let file = MediaRef::parse(&"cd".repeat(32)).expect("a content hash");
+        let (up, down) = (RequestId(41), RequestId(42));
+        drain(&sync);
+
+        for asked in [
+            MurmureCommand::UploadFile {
+                id: up,
+                data: vec![1, 2, 3],
+            },
+            MurmureCommand::FetchFile {
+                id: down,
+                media_ref: file.clone(),
+            },
+        ] {
+            command(&mut state, channel_id, asked);
+        }
+        let sent = drain(&sync);
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [
+                    SyncCommand::Rest {
+                        id: a,
+                        cmd: RestCommand::UploadMedia { document_id: d1, data },
+                    },
+                    SyncCommand::Rest {
+                        id: b,
+                        cmd: RestCommand::DownloadMedia { document_id: d2, content_hash },
+                    },
+                ] if *a == up && *b == down && *d1 == meta && *d2 == meta
+                    && data == &[1, 2, 3] && content_hash == file.as_str()
+            ),
+            "got {sent:?}"
+        );
+    }
+
+    /// A delete erases the file its message carried, under the channel's meta document. A failed erase waits for
+    /// the next connection, and no view sees either answer.
+    #[test]
+    fn a_delete_erases_its_file_and_retries_on_the_next_connection() {
+        let (mut state, ui, sync) = harness();
+        let me = UserId::new();
+        signed_in(&mut state, me);
+        let (channel_id, segment) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let file = "ab".repeat(32);
+        let MurmureCommand::SendMessage {
+            draft,
+            now,
+            confirmed,
+            ..
+        } = send("", Vec::new())
+        else {
+            panic!("a send is a SendMessage");
+        };
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::SendMessage {
+                draft,
+                attachments: vec![Attachment {
+                    media_ref: MediaRef::parse(&file).expect("a content hash"),
+                    name: "plan.pdf".to_owned(),
+                    media_type: MediaType("application/pdf".to_owned()),
+                    size: ByteSize(2048),
+                }],
+                now,
+                confirmed,
+            },
+        );
+        assert!(erases(&drain(&sync)).is_empty(), "a send erases nothing");
+        let message = state.channels[&channel_id].messages(segment).expect("held")[0].id;
+        drain(&ui);
+
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::DeleteMessage {
+                at: segment.into(),
+                message,
+                now: Timestamp(2),
+            },
+        );
+        let asked = erases(&drain(&sync));
+        let [(first, document_id, hash)] = asked.as_slice() else {
+            panic!("one erase, got {asked:?}");
+        };
+        assert_eq!((*document_id, hash.as_str()), (meta, file.as_str()));
+        let first = *first;
+
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::ApiError {
+            id: Some(first),
+            request: "EraseMedia".into(),
+            code: 0,
+            message: "offline".into(),
+        });
+        assert!(drain(&ui).is_empty(), "a failed erase reaches no view");
+        assert!(drain(&sync).is_empty(), "the erase waits");
+
+        state.handle_logic_event(LogicEvent::ConnectionStatus {
+            document_id: meta,
+            connected: true,
+        });
+        let asked = erases(&drain(&sync));
+        let [(again, document_id, hash)] = asked.as_slice() else {
+            panic!("the erase asked again, got {asked:?}");
+        };
+        assert_eq!((*document_id, hash.as_str()), (meta, file.as_str()));
+        assert_ne!(*again, first);
+        let again = *again;
+
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::Rest {
+            id: again,
+            evt: RestEvent::MediaErased {
+                document_id: meta,
+                content_hash: file.clone(),
+            },
+        });
+        assert!(drain(&ui).is_empty(), "no view awaits the erase");
+        state.handle_logic_event(LogicEvent::ConnectionStatus {
+            document_id: meta,
+            connected: true,
+        });
+        assert!(
+            erases(&drain(&sync)).is_empty(),
+            "an answered erase is done"
+        );
+    }
+
+    /// The image of a preview, as `(request, document, file)`.
+    fn downloads(sent: &[SyncCommand]) -> Vec<(RequestId, DocumentId, String)> {
+        sent.iter()
+            .filter_map(|command| match command {
+                SyncCommand::Rest {
+                    id,
+                    cmd:
+                        RestCommand::DownloadMedia {
+                            document_id,
+                            content_hash,
+                        },
+                } => Some((*id, *document_id, content_hash.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// An image a view paints is fetched once under the channel's meta, and reaches the view decoded, never as its file. One
+    /// the relay refuses reaches it as nothing.
+    #[test]
+    fn a_preview_is_fetched_once_and_reaches_the_view_decoded() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, _) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let file = MediaRef::parse(&"cd".repeat(32)).expect("a content hash");
+        drain(&sync);
+        for _ in 0..2 {
+            let media_ref = file.clone();
+            command(
+                &mut state,
+                channel_id,
+                MurmureCommand::ShowPicture { media_ref },
+            );
+        }
+        let asked = downloads(&drain(&sync));
+        let [(id, document_id, hash)] = asked.as_slice() else {
+            panic!("one fetch, got {asked:?}");
+        };
+        assert_eq!((*document_id, hash.as_str()), (meta, file.as_str()));
+        let mut png = Vec::new();
+        image::RgbaImage::from_pixel(4, 2, image::Rgba([9, 8, 7, 255]))
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .expect("png");
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::Rest {
+            id: *id,
+            evt: RestEvent::MediaDownloaded {
+                document_id: meta,
+                content_hash: file.as_str().to_owned(),
+                data: png,
+            },
+        });
+        let got = drain(&ui);
+        let [
+            UiEvent::Channel {
+                channel_id: to,
+                event:
+                    MurmureEvent::Picture {
+                        media_ref,
+                        picture: Some(picture),
+                    },
+            },
+        ] = got.as_slice()
+        else {
+            panic!("one decoded picture, got {} events", got.len());
+        };
+        assert_eq!((*to, media_ref), (channel_id, &file));
+        assert_eq!((picture.width, picture.height), (4, 2));
+        assert_eq!(picture.frames[0].pixels[..4], [9, 8, 7, 255]);
+
+        let media_ref = file.clone();
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::ShowPicture { media_ref },
+        );
+        let [(again, _, _)] = downloads(&drain(&sync))[..] else {
+            panic!("a fetch once the first was answered");
+        };
+        state.handle_logic_event(LogicEvent::ApiError {
+            id: Some(again),
+            request: "DownloadMedia".into(),
+            code: 404,
+            message: "gone".into(),
+        });
+        let got = drain(&ui);
+        assert!(
+            matches!(
+                got.as_slice(),
+                [UiEvent::Channel {
+                    event: MurmureEvent::Picture { picture: None, .. },
+                    ..
+                }]
+            ),
+            "a refused fetch reaches the view as nothing, got {} events",
+            got.len()
+        );
+    }
+
     // --- Who watches a channel, and who types in it ---
 
     fn at(offset: u64) -> Timestamp {
@@ -3179,7 +3984,10 @@ mod tests {
             .filter_map(|event| match event {
                 UiEvent::Channel {
                     channel_id,
-                    event: MurmureEvent::Watchers { watching, typing },
+                    event:
+                        MurmureEvent::Watchers {
+                            watching, typing, ..
+                        },
                 } => Some((channel_id, watching, typing)),
                 _ => None,
             })
@@ -3245,7 +4053,10 @@ mod tests {
             command(
                 &mut state,
                 channel_id,
-                MurmureCommand::Typing { now: at(offset) },
+                MurmureCommand::Typing {
+                    now: at(offset),
+                    thread: None,
+                },
             );
         }
         assert_eq!(
@@ -3256,6 +4067,44 @@ mod tests {
             ]
         );
         assert_eq!(versions(&state), before);
+    }
+
+    /// A key in a thread's composer sends a sample naming its root, at once
+    /// after one in the channel. A member heard there shows under that root,
+    /// and out of the channel's list.
+    #[test]
+    fn typing_in_a_thread_names_its_root() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, _active) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
+        drain(&sync);
+        drain(&ui);
+        let root = MessageId::new();
+        for thread in [None, Some(root)] {
+            let typing = MurmureCommand::Typing { now: NOW, thread };
+            command(&mut state, channel_id, typing);
+        }
+        let sent = [Sample::Typing, Sample::TypingIn(root)].map(|s| (meta, s.bytes()));
+        assert_eq!(ephemerals(&sync), sent);
+
+        let bob = UserId::new();
+        hear(&mut state, meta, bob, Sample::TypingIn(root));
+        let shown: Vec<_> = drain(&ui)
+            .into_iter()
+            .filter_map(|event| match event {
+                UiEvent::Channel {
+                    event:
+                        MurmureEvent::Watchers {
+                            typing, in_threads, ..
+                        },
+                    ..
+                } => Some((typing, in_threads)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(shown, [(Vec::new(), vec![(root, vec![bob])])]);
     }
 
     /// A sample heard shows its member, and a newcomer gets this user's own
@@ -3403,7 +4252,7 @@ mod tests {
         let (mut state, ui, sync) = harness();
         let alice = UserId::new();
         signed_in(&mut state, alice);
-        let (channel_id, _active) = open_channel(&mut state);
+        let (channel_id, active) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         let members: Vec<MemberInfo> = (0..=ambre_murmure::CONFIRM_CHANNEL_PAST)
             .map(|_| member(UserId::new()))
@@ -3420,23 +4269,57 @@ mod tests {
         }];
 
         command(&mut state, channel_id, send("@channel", all.clone()));
+        let draft = MessageDraft {
+            text: "@channel".to_owned(),
+            mentions: all.clone(),
+            styles: Vec::new(),
+        };
         let asked = MurmureEvent::ConfirmChannelMention {
             members: ambre_murmure::CONFIRM_CHANNEL_PAST + 1,
+            held: HeldSend {
+                draft: draft.clone(),
+                attachments: Vec::new(),
+                reply: None,
+            },
         };
         assert_eq!(channel_events(&ui), [(channel_id, asked)]);
         assert!(drain(&sync).is_empty(), "nothing leaves unconfirmed");
 
         let confirmed = MurmureCommand::SendMessage {
-            draft: MessageDraft {
-                text: "@channel".to_owned(),
-                mentions: all,
-            },
+            draft: draft.clone(),
+            attachments: Vec::new(),
             now: NOW,
             confirmed: true,
         };
         command(&mut state, channel_id, confirmed);
         let [summary] = summaries(&sync).try_into().expect("one update");
         assert!(summary.mentions_all);
+        drain(&ui);
+
+        // A reply is held with its thread, so the view sends it back there.
+        let root = state.channels[&channel_id].messages(active).expect("held")[0].id;
+        let reply = MurmureCommand::Reply {
+            root,
+            draft: draft.clone(),
+            also_in_channel: true,
+            now: NOW,
+            confirmed: false,
+        };
+        command(&mut state, channel_id, reply);
+        let held = HeldSend {
+            draft,
+            attachments: Vec::new(),
+            reply: Some(HeldReply {
+                root,
+                also_in_channel: true,
+            }),
+        };
+        let asked = MurmureEvent::ConfirmChannelMention {
+            members: ambre_murmure::CONFIRM_CHANNEL_PAST + 1,
+            held,
+        };
+        assert_eq!(channel_events(&ui), [(channel_id, asked)]);
+        assert!(drain(&sync).is_empty(), "no reply leaves unconfirmed");
     }
 
     // --- The close of a full segment ---
@@ -3691,6 +4574,221 @@ mod tests {
         });
     }
 
+    // --- A segment that cannot open: a band in the list ---
+
+    /// A channel whose one final segment this client has not loaded, with
+    /// the view's ask for it already sent. Returns the final segment.
+    fn unloaded_final(
+        state: &mut LogicState,
+        sync: &Receiver<SyncCommand>,
+    ) -> (ChannelId, SegmentId, SegmentId) {
+        let (channel_id, closed) = closed_channel(state, sync);
+        state.record_channel_seq(closed.document_id(), 1, None);
+        finalize_at_one(state, sync, channel_id, closed, NOW);
+        let channel = &state.channels[&channel_id];
+        let (meta, active) = (channel.meta_id(), channel.active_id());
+        let meta_bytes = channel.snapshot(meta.document_id()).expect("meta");
+        let segments = HashMap::from([(
+            active,
+            channel.snapshot(active.document_id()).expect("active"),
+        )]);
+        let reopened = ChannelState::open(channel_id, meta, &meta_bytes, &segments).expect("open");
+        state.hold_channel(crate::identified(reopened));
+        drain(sync);
+        command(
+            state,
+            channel_id,
+            MurmureCommand::LoadOlder { segment: active },
+        );
+        assert_eq!(sent(sync), [Sent::Open(closed.document_id())]);
+        (channel_id, closed, active)
+    }
+
+    /// A channel whose closing segment is listed, opening in a second
+    /// client: `meta` and the active segment are in, the closing one not.
+    fn opening_past_closing() -> (
+        LogicState,
+        Receiver<UiEvent>,
+        Receiver<SyncCommand>,
+        ChannelId,
+        SegmentId,
+    ) {
+        let (mut first, _first_ui, first_sync) = harness();
+        let (channel_id, closing) = closed_channel(&mut first, &first_sync);
+        let stored = first.channels.remove(&channel_id).expect("channel");
+        let (mut state, ui, sync) = harness();
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        serve(&mut state, &stored, stored.meta_id().document_id());
+        serve(&mut state, &stored, stored.active_id().document_id());
+        drain(&sync);
+        drain(&ui);
+        (state, ui, sync, channel_id, closing)
+    }
+
+    /// A closing segment whose key never came is given up: the channel opens
+    /// without it, shows it as a band, and ends its session.
+    #[test]
+    fn a_closing_segment_with_no_key_still_opens_the_channel() {
+        let (mut state, ui, sync, channel_id, closing) = opening_past_closing();
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: closing.document_id(),
+            cause: OpenFailure::KeyNotReceived,
+            message: "cannot unwrap document key".to_owned(),
+        });
+        assert_eq!(sent(&sync), [Sent::Close(closing.document_id())]);
+        assert!(state.opening.is_empty());
+        assert_eq!(state.channels[&channel_id].closing_id(), None);
+        assert_eq!(bands(&ui), [(closing, Unreadable::KeyNotReceived)]);
+    }
+
+    /// A transient failure of the closing segment still ends the opening: a
+    /// later open can clear it.
+    #[test]
+    fn a_transient_failure_of_the_closing_segment_ends_the_opening() {
+        let (mut state, ui, _sync, channel_id, closing) = opening_past_closing();
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: closing.document_id(),
+            cause: OpenFailure::Transient,
+            message: "server unreachable".to_owned(),
+        });
+        assert!(state.opening.is_empty());
+        assert!(!state.channels.contains_key(&channel_id));
+        assert!(drain(&ui).iter().any(|e| matches!(
+            e,
+            UiEvent::Channel {
+                event: MurmureEvent::OpenFailed { .. },
+                ..
+            }
+        )));
+    }
+
+    fn bands(ui: &Receiver<UiEvent>) -> Vec<(SegmentId, Unreadable)> {
+        drain(ui)
+            .into_iter()
+            .filter_map(|e| match e {
+                UiEvent::Channel {
+                    event: MurmureEvent::Unreadable { segment, cause, .. },
+                    ..
+                } => Some((segment, cause)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A key that never reached this device shows the segment as one band,
+    /// and the segment can be asked for again.
+    #[test]
+    fn a_key_not_received_shows_one_band_for_the_segment() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, segment, active) = unloaded_final(&mut state, &sync);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: segment.document_id(),
+            cause: OpenFailure::KeyNotReceived,
+            message: "cannot unwrap document key".to_owned(),
+        });
+        assert_eq!(bands(&ui), [(segment, Unreadable::KeyNotReceived)]);
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::LoadOlder { segment: active },
+        );
+        assert_eq!(sent(&sync), [Sent::Open(segment.document_id())]);
+    }
+
+    /// A relay out of reach is no missing key: no band, and the segment can
+    /// be asked for again.
+    #[test]
+    fn a_transient_failure_shows_no_band() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, segment, active) = unloaded_final(&mut state, &sync);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: segment.document_id(),
+            cause: OpenFailure::Transient,
+            message: "the server could not be reached".to_owned(),
+        });
+        assert!(bands(&ui).is_empty());
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::LoadOlder { segment: active },
+        );
+        assert_eq!(sent(&sync), [Sent::Open(segment.document_id())]);
+    }
+
+    /// A band asked for again opens its segment once more, and only once
+    /// while it is on its way (the Murmure engine spec).
+    #[test]
+    fn a_final_band_asked_again_opens_its_segment() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, segment, active) = unloaded_final(&mut state, &sync);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: segment.document_id(),
+            cause: OpenFailure::KeyNotReceived,
+            message: "cannot unwrap document key".to_owned(),
+        });
+        drain(&ui);
+        drain(&sync);
+        for _ in 0..2 {
+            command(&mut state, channel_id, MurmureCommand::Retry { segment });
+        }
+        assert_eq!(sent(&sync), [Sent::Open(segment.document_id())]);
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Retry { segment: active },
+        );
+        assert!(sent(&sync).is_empty(), "a live segment is no band");
+    }
+
+    /// The closing segment the channel opened without is fetched again by a
+    /// new opening of the channel (the Murmure engine spec).
+    #[test]
+    fn a_closing_band_asked_again_opens_the_channel_anew() {
+        let (mut state, ui, sync, channel_id, closing) = opening_past_closing();
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: closing.document_id(),
+            cause: OpenFailure::KeyNotReceived,
+            message: "cannot unwrap document key".to_owned(),
+        });
+        drain(&ui);
+        drain(&sync);
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Retry { segment: closing },
+        );
+        assert!(!state.channels.contains_key(&channel_id));
+        assert!(state.opening.contains_key(&channel_id));
+        let asked = sent(&sync);
+        assert!(asked.contains(&Sent::List(channel_id)), "{asked:?}");
+    }
+
+    /// Bytes that opened under their key and then fail the check show the
+    /// segment as damaged, never as a missing key.
+    #[test]
+    fn a_segment_that_fails_its_check_shows_as_damaged() {
+        let (mut state, ui, sync) = harness();
+        let (_, segment, _) = unloaded_final(&mut state, &sync);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: segment.document_id(),
+            covered_seq: 1,
+            payload: vec![0xff; 8],
+        });
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: segment.document_id(),
+            role: ambre_bus::Role::Editor,
+        });
+        assert_eq!(bands(&ui), [(segment, Unreadable::Damaged)]);
+        assert!(sent(&sync).contains(&Sent::Close(segment.document_id())));
+    }
+
     /// A report dropped the final snapshot of a segment. The view names who
     /// sealed it and who reported it, and this client seals the segment
     /// again with no `meta` delta (the Murmure segments spec).
@@ -3825,6 +4923,7 @@ mod tests {
             draft: MessageDraft {
                 text: text.to_owned(),
                 mentions: Vec::new(),
+                styles: Vec::new(),
             },
             now,
         }
@@ -4378,6 +5477,7 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: successor.document_id(),
+            cause: OpenFailure::KeyNotReceived,
             message: "no update yet".to_owned(),
         });
         let tick = |ms: u64| MurmureCommand::Tick {
@@ -4463,6 +5563,7 @@ mod tests {
             draft: MessageDraft {
                 text: text.to_owned(),
                 mentions: Vec::new(),
+                styles: Vec::new(),
             },
             also_in_channel,
             now: at(1),
@@ -4594,6 +5695,7 @@ mod tests {
                 draft: MessageDraft {
                     text: "edited".to_owned(),
                     mentions: Vec::new(),
+                    styles: Vec::new(),
                 },
                 now: NOW,
             },
@@ -4673,6 +5775,64 @@ mod tests {
         assert!(state.murmure_waiting.is_empty());
     }
 
+    /// An edit and a delete of a reply also sent to the channel reach its
+    /// copy in the active segment as well. A reaction stays on the reply.
+    #[test]
+    fn a_copy_follows_the_edit_and_the_delete_of_its_reply() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, active, root) = rooted_channel(&mut state, &sync);
+        command(&mut state, channel_id, reply_to(root, "a reply", true));
+        let [(segment, _, thread)] = created_threads(&sync).try_into().expect("one create");
+        state.handle_logic_event(LogicEvent::ThreadLinked {
+            channel_id,
+            segment,
+            root,
+            thread,
+        });
+        state.grant_identity(thread);
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: thread,
+            role: ambre_bus::Role::Owner,
+        });
+        drain(&sync);
+        drain(&ui);
+        let Some(MurmureEvent::ThreadMessages { messages, .. }) =
+            state.channels[&channel_id].thread_view(thread)
+        else {
+            panic!("the thread is held");
+        };
+        let reply = messages[0].id;
+        let copy = |state: &LogicState| {
+            state.channels[&channel_id].messages(active).expect("held")[1].clone()
+        };
+        for (kind, written) in [
+            ("react", vec![thread]),
+            ("edit", vec![thread, active.document_id()]),
+            ("delete", vec![thread, active.document_id()]),
+        ] {
+            command(&mut state, channel_id, thread_change(root, reply, kind));
+            let sent: Vec<DocumentId> = drain(&sync)
+                .into_iter()
+                .filter_map(|c| match c {
+                    SyncCommand::SendUpdate { document_id, .. } => Some(document_id),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(sent, written, "{kind}");
+            if kind == "edit" {
+                assert_eq!(copy(&state).text, "edited", "the copy reads the edit");
+                assert!(copy(&state).edited);
+            }
+        }
+        assert!(copy(&state).deleted, "the copy is deleted with its reply");
+        assert!(copy(&state).text.is_empty());
+        assert!(
+            copy(&state).reactions.is_empty(),
+            "the reaction stayed on the reply"
+        );
+    }
+
     /// A link that lost its race names another member's thread. What waited
     /// on this client's own waits on the winner, which opens. A failed link
     /// drops this client's own, so the next reply creates again.
@@ -4738,6 +5898,7 @@ mod tests {
         let draft = MessageDraft {
             text: "a reply".to_owned(),
             mentions: Vec::new(),
+            styles: Vec::new(),
         };
         m.alice
             .reply(root, &draft, m.author, NOW, false)
@@ -4763,6 +5924,92 @@ mod tests {
                     if *t == thread && messages[0].text == "a reply")),
             "bob's view was told {shown:?}"
         );
+    }
+
+    /// The reply on a copy whose root lies in a final segment not loaded.
+    /// The probe is read and closed, the segment loads, and the view is told
+    /// the root. A thread the client never reached ends the seek.
+    #[test]
+    fn the_reply_on_a_far_copy_loads_its_root_then_names_it() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, closed) = closed_channel(&mut state, &sync);
+        let channel = state.channels.get_mut(&channel_id).expect("open");
+        let root = channel.messages(closed).expect("held")[0].id;
+        let ThreadTarget::Create(thread) = channel.reply_target(root, NOW).expect("target") else {
+            panic!("a root with no thread creates one");
+        };
+        let peer = crate::test_peer();
+        channel
+            .adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+            .expect("adopt");
+        channel.thread_linked(closed, root, thread).expect("link");
+        let probe = channel.snapshot(thread).expect("thread");
+        state.record_channel_seq(closed.document_id(), 1, None);
+        finalize_at_one(&mut state, &sync, channel_id, closed, NOW);
+        let channel = &state.channels[&channel_id];
+        let (meta, active) = (channel.meta_id(), channel.active_id());
+        let meta_bytes = channel.snapshot(meta.document_id()).expect("meta");
+        let closed_bytes = channel.snapshot(closed.document_id()).expect("closed");
+        let segments = HashMap::from([(
+            active,
+            channel.snapshot(active.document_id()).expect("active"),
+        )]);
+        let reopened = ChannelState::open(channel_id, meta, &meta_bytes, &segments).expect("open");
+        state.hold_channel(crate::identified(reopened));
+        drain(&sync);
+        drain(&ui);
+        let deliver = |state: &mut LogicState, document_id, payload: &[u8]| {
+            state.handle_logic_event(LogicEvent::RemoteSnapshot {
+                document_id,
+                covered_seq: 1,
+                payload: payload.to_vec(),
+            });
+            state.handle_logic_event(LogicEvent::DocumentReady {
+                document_id,
+                role: ambre_bus::Role::Editor,
+            });
+        };
+
+        command(&mut state, channel_id, MurmureCommand::SeekRoot { thread });
+        assert_eq!(sent(&sync), [Sent::Open(thread)], "the probe");
+        deliver(&mut state, thread, &probe);
+        assert_eq!(
+            sent(&sync),
+            [Sent::Close(thread), Sent::Open(closed.document_id())]
+        );
+        deliver(&mut state, closed.document_id(), &closed_bytes);
+        assert!(
+            sent(&sync).contains(&Sent::Open(thread)),
+            "the thread opens"
+        );
+        let found = channel_events(&ui).into_iter().any(|(_, event)| {
+            event
+                == MurmureEvent::RootFound {
+                    thread,
+                    segment: closed,
+                    root,
+                }
+        });
+        assert!(found, "the view is told the root");
+
+        let unknown = DocumentId::new();
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::SeekRoot { thread: unknown },
+        );
+        assert_eq!(sent(&sync), [Sent::Open(unknown)]);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: unknown,
+            cause: OpenFailure::Transient,
+            message: "gone".to_owned(),
+        });
+        assert!(sent(&sync).is_empty(), "the seek ends");
+        let lost = channel_events(&ui)
+            .into_iter()
+            .filter(|(_, event)| *event == MurmureEvent::RootLost { thread: unknown })
+            .count();
+        assert_eq!(lost, 1, "the view is told once");
     }
 
     /// A reply that mentions me in a thread the open channel holds counts
@@ -4813,8 +6060,12 @@ mod tests {
             })
         );
         let shown = drain(&m.bob_ui);
-        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-            panic!("expected the channel's mark, got {shown:?}");
+        let [
+            UiEvent::ChannelActivity { channels },
+            UiEvent::Channel { .. },
+        ] = shown.as_slice()
+        else {
+            panic!("expected the channel's mark and its first unread, got {shown:?}");
         };
         assert_eq!(channels[0].mentions, Some(MentionCount(0)));
         assert!(!channels[0].active);
@@ -4841,6 +6092,7 @@ mod tests {
         let bob = m.bob.my_user_id.expect("signed in");
         let draft = MessageDraft {
             text: "@bob".to_owned(),
+            styles: Vec::new(),
             mentions: vec![ambre_bus::Mention {
                 target: ambre_bus::MentionTarget::User(bob),
                 range: 0..4,
@@ -4912,8 +6164,10 @@ mod tests {
                 .map(|&(document_id, read)| DocumentActivity {
                     channel_id,
                     document_id,
+                    kind: ChannelDocumentKind::Thread,
                     active: true,
                     read,
+                    last: None,
                 })
                 .collect(),
         });
@@ -5026,9 +6280,18 @@ mod tests {
                 },
             });
             let shown = drain(&ui);
-            let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-                panic!("expected the mark of {channel_id}, got {shown:?}");
+            let [
+                UiEvent::ChannelActivity { channels },
+                UiEvent::NewMessage {
+                    channel_id: news,
+                    mention: true,
+                    ..
+                },
+            ] = shown.as_slice()
+            else {
+                panic!("expected the mark of {channel_id}, then a mention, got {shown:?}");
             };
+            assert_eq!(*news, channel_id);
             assert_eq!(
                 channels,
                 &[ChannelActivity {
@@ -5065,8 +6328,12 @@ mod tests {
             },
         });
         let shown = drain(&ui);
-        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
-            panic!("expected the channel's mark, got {shown:?}");
+        let [
+            UiEvent::ChannelActivity { channels },
+            UiEvent::NewMessage { mention: true, .. },
+        ] = shown.as_slice()
+        else {
+            panic!("expected the channel's mark, then a mention, got {shown:?}");
         };
         assert_eq!(
             channels,

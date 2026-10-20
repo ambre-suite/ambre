@@ -150,12 +150,24 @@ pub enum SyncCommand {
     /// carries the key sealed under the key of the space, for the catalogue.
     /// Its space document must then have an open session, which holds the
     /// space key. A private channel is listed nowhere, and gets no sealed key.
+    ///
+    /// A private channel's `name` is sealed beside `meta`, so it shows before
+    /// the channel opens. A public channel's name is in the catalogue, so it
+    /// has none.
     CreateChannel {
         channel_id: ChannelId,
         space_id: SpaceId,
         meta: MetaId,
         segment: SegmentId,
         public: bool,
+        name: Option<String>,
+    },
+    /// Seal the name just written into the `meta` of an open channel beside
+    /// it on the relay, under the channel key. `None` seals an empty name: the
+    /// channel is unnamed. A failure is logged, and the next name replaces it.
+    NameChannel {
+        meta: MetaId,
+        name: Option<String>,
     },
     /// Close the active segment `closing` of an open channel into
     /// `successor` (the Murmure segments spec). The Sync worker creates the
@@ -244,6 +256,18 @@ pub enum SyncCommand {
         meta: MetaId,
         after: Seq,
     },
+    /// Count a channel this session never opened, as light subscriptions
+    /// (the Murmure notifications spec). Each of `documents` counts after
+    /// the last number beside it, the activity answer's, and from the next
+    /// delta without one. Its `meta` counts after `meta_last`, the listing's,
+    /// the same way. They open under the key of `meta` the listing wrapped,
+    /// and an open fetches them whole.
+    WatchChannel {
+        channel_id: ChannelId,
+        meta: MetaId,
+        meta_last: Option<Seq>,
+        documents: Vec<(DocumentId, Option<Seq>)>,
+    },
     /// Join a public channel alone. The Sync worker unseals `key` with the
     /// space key, wraps it for this user alone, and asks for the member row.
     /// Answered by [`crate::LogicEvent::ChannelJoined`] or
@@ -288,6 +312,12 @@ pub enum SyncCommand {
     /// [`crate::LogicEvent::MemberChannels`]; a failure is logged and answers
     /// nothing, since the next share of a Murmure document asks again.
     ListMemberChannels,
+    /// Open a new space, as [`SyncCommand::OpenDocument`] does for its
+    /// document. Its lazy creation marks it a space, so each member lists it
+    /// (`SYNC-170`).
+    CreateSpace {
+        space_id: SpaceId,
+    },
 
     // -- Flow control (posted by the Main relay, never by Logic) ---------------
     /// The path back to the Logic thread is full: stop reading the socket

@@ -634,7 +634,9 @@ pub async fn insert_media(
     // hash together. A retried `confirm` would otherwise raise a unique
     // violation and surface as a 500. So would two clients confirming the same
     // blob. The row is content-addressed, so a re-insert is a no-op, and the
-    // same file in another document gets a row of its own (`SRV-058`).
+    // same file in another document gets a row of its own (`SRV-058`). Each
+    // uploader adds a claim of its own beside the row (`SRV-138`).
+    let mut tx = pool.begin().await?;
     sqlx::query(
         "INSERT INTO media (id, document_id, uploaded_by, size_bytes, s3_key) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (document_id, id) DO NOTHING"
     )
@@ -643,9 +645,82 @@ pub async fn insert_media(
     .bind(uid)
     .bind(size_bytes)
     .bind(s3_key)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+    sqlx::query(
+        "INSERT INTO media_uploaders (document_id, id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+    )
+    .bind(did)
+    .bind(content_hash)
+    .bind(uid)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
     Ok(())
+}
+
+/// What an erase found, once the caller's claim is gone.
+#[derive(Debug, PartialEq, Eq)]
+pub enum MediaErase {
+    /// The caller never uploaded this blob to this document (`SRV-140`).
+    NotUploader,
+    /// Another uploader still holds the blob, so the object stays.
+    Kept,
+    /// The last claim went: the object under this key must go with the row.
+    Last { s3_key: String },
+}
+
+/// Erases `user`'s claim on a blob of `document_id`, inside `tx`.
+///
+/// The media row is locked first, so a confirmation racing the erase waits
+/// for it. The caller commits once the object is gone, so a failed object
+/// delete leaves the row and the claim for a retry (`SRV-139`).
+pub async fn erase_media_claim(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: &ambre_core::DocumentId,
+    user: &ambre_core::UserId,
+    content_hash: &str,
+) -> Result<MediaErase, AppError> {
+    let did = id_to_uuid(*document_id);
+    let uid = id_to_uuid(*user);
+    let s3_key: Option<String> = sqlx::query_scalar(
+        "SELECT s3_key FROM media WHERE document_id = $1 AND id = $2 FOR UPDATE",
+    )
+    .bind(did)
+    .bind(content_hash)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(s3_key) = s3_key else {
+        return Ok(MediaErase::NotUploader);
+    };
+    let claimed = sqlx::query(
+        "DELETE FROM media_uploaders WHERE document_id = $1 AND id = $2 AND user_id = $3",
+    )
+    .bind(did)
+    .bind(content_hash)
+    .bind(uid)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+    if claimed == 0 {
+        return Ok(MediaErase::NotUploader);
+    }
+    let others: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM media_uploaders WHERE document_id = $1 AND id = $2)",
+    )
+    .bind(did)
+    .bind(content_hash)
+    .fetch_one(&mut **tx)
+    .await?;
+    if others {
+        return Ok(MediaErase::Kept);
+    }
+    sqlx::query("DELETE FROM media WHERE document_id = $1 AND id = $2")
+        .bind(did)
+        .bind(content_hash)
+        .execute(&mut **tx)
+        .await?;
+    Ok(MediaErase::Last { s3_key })
 }
 
 /// Whether the media index records `content_hash` in `document_id`.

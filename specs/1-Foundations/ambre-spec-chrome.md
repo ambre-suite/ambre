@@ -30,8 +30,8 @@ the DOM side produces.
 | `CHROME-009` | `INV` | The content surface MUST be a cell of the chrome layout, so it is sized by the layout and never by the viewport. | this spec section 2 | `ambre_chrome::chrome_ui::app_shell_owns_the_named_canvas_cell` -- wasm tier, real `document` | none | verified |
 | `CHROME-004` | `INV` | Every popover and floating bar MUST take its placement, flip and keyboard model from one shell. | this spec section 2 | not built | unbuilt -- lands with the `One floating-menu shell` Story (`ambre-roadmap.md` E8). Four shells exist: the shared menu, Trame's filter popover, Trame's find panel and Toile's selection toolbar | unimplemented |
 | `CHROME-008` | `INV` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::palette::tests::an_empty_query_lists_every_declared_command`; `::a_query_matches_any_case_and_any_position`; `::a_query_that_answers_nothing_lists_nothing`; `::rows_keep_the_declaration_order`; `ambre_chrome::chrome_ui::palette_lists_every_declared_command` -- the DOM belt, all five over a table the test declares; `ambre_app::shell::app_root::tests::the_palette_is_fed_the_whole_declared_table` -- the feed, per kind | none | verified |
-| `CHROME-093` | `INV` | The palette MUST list the entries an application supplies before the commands it declares. | this spec section 2 | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CHROME-094` | `INV` | A palette query that starts with `>` MUST list the commands alone. | this spec section 2; `CHROME-008` | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CHROME-093` | `INV` | The palette MUST list the entries an application supplies before the commands it declares. | this spec section 2 | `ambre_chrome::palette::tests::the_entries_of_the_application_come_before_the_commands` -- the pure rows, one query over both sides; `ambre_chrome::chrome_ui::palette_entry_comes_first_and_hands_back_its_key` -- the DOM belt: the entry is the first row, and choosing it hands its key back | none | verified |
+| `CHROME-094` | `INV` | A palette query that starts with `>` MUST list the commands alone. | this spec section 2; `CHROME-008` | `ambre_chrome::palette::tests::a_query_that_starts_with_a_chevron_lists_the_commands_alone` -- the bare chevron and one followed by a query, over entries that would match it | none | verified |
 
 ### 1.2 A floating menu is placed
 
@@ -52,6 +52,7 @@ the DOM side produces.
 |---|---|---|---|---|---|---|
 | `CHROME-010` | `POST` | A control MUST show the state the Logic thread reported. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::command_states_defaults`; `::command_states_single_writer_propagates`; `::command_states_unknown_id_is_noop` -- one writer reaches the right signal and leaves its neighbours alone | none | verified |
 | `CHROME-013` | `POST` | A shared formatting control MUST report a change. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks` -- a real click is dispatched and the callback fires once; `::font_size_select_lists_presets_plus_auto_entry` -- the same shape for a select | none | verified |
+| `CHROME-105` | `POST` | The format bar MUST hang above the anchor it is handed, show each control with its pressed state, and report a press of that control alone. | this spec section 2; `CHROME-013` | `ambre_chrome::chrome_ui::the_format_bar_hangs_its_controls_and_reports_a_press` -- the placement, the three pressed states, and one press reported | none | verified |
 | `CHROME-014` | `POST` | A status-bar chip MUST start collapsed. | this spec section 2 | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed`; `::perf_chip_renders_fps_from_signal_and_starts_collapsed` -- the menu element is absent on mount | none | verified |
 | `CHROME-086` | `POST` | A control MUST follow its signal when the value changes, not only when it mounts. | this spec section 2 | `ambre_chrome::chrome_ui::the_zoom_readout_follows_its_signal`; `::the_fps_readout_follows_its_signal` -- each changes the signal after the mount and reads the DOM after a reactive tick | none | verified |
 | `CHROME-087` | `FRAME` | A control MUST NOT change the state it displays: the click leaves as a report and the value comes back from the Logic thread. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::a_toggle_reports_its_click_and_waits_for_the_value` -- the click is reported and the pressed state stays put until the test writes the answer | none | verified |
@@ -65,6 +66,7 @@ the DOM side produces.
 | `CHROME-091` | `POST` | Clearing a modal's open signal MUST hide the element. | this spec section 2 | `ambre_chrome::chrome_ui::a_modal_follows_its_signal_and_holds_the_loop_while_open` | none | verified |
 | `CHROME-088` | `POST` | Escape and a click on the backdrop MUST close a modal. | this spec section 2 | `ambre_chrome::chrome_ui::a_backdrop_click_dismisses_the_modal_and_clears_its_signal`; `::a_native_close_clears_the_signal_and_the_modal_reopens` -- Escape is the browser's own close, which the second test drives | none | verified |
 | `CHROME-092` | `POST` | A dismissed modal MUST clear its signal. | this spec section 2 | `ambre_chrome::chrome_ui::a_backdrop_click_dismisses_the_modal_and_clears_its_signal`; `::a_native_close_clears_the_signal_and_the_modal_reopens` -- the second opens the modal again after the dismissal | none | verified |
+| `CHROME-106` | `FRAME` | A close that lands after its modal opened again MUST NOT close it, clear its signal, give the frame loop back or notify its caller. | this spec section 2; `CHROME-092` | `ambre_chrome::chrome_ui::a_close_landing_after_a_reopen_leaves_the_modal_open` -- the signal is cleared and set again before the queued event lands | none | verified |
 | `CHROME-089` | `FRAME` | Closing a modal MUST NOT leave the frame loop suspended. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | `ambre_chrome::chrome_ui::a_modal_follows_its_signal_and_holds_the_loop_while_open`; `::a_backdrop_click_dismisses_the_modal_and_clears_its_signal`; `::an_open_modal_unmounted_releases_the_loop` -- each close path returns the hold; `ambre_canvas::frame::tests::a_closed_modal_resumes_only_what_it_suspended` -- a release keeps the loop paused while the route is away | none | verified |
 
 ### 1.6 A drag drives a control
@@ -79,7 +81,7 @@ the DOM side produces.
 * **Boundary.** none: `UI-THREAD-004` and `UI-THREAD-049` ban a network, crypto and persistence
   path on this thread, and the toolkit adds no exception. Its manifest names no transport and no
   crypto crate, which is the crate-graph fact `CHROME-001` and `CHROME-002` are read off.
-* **Verification.** 20 `verified`, 3 `unimplemented`. What holds is a crate-graph fact, placement
+* **Verification.** 24 `verified`, 1 `unimplemented`. What holds is a crate-graph fact, placement
   arithmetic, or a component mounted in a headless document and driven past its mount. The modal
   rows rest on one shared element, which a gate keeps the only one, and on a hold the loop counts.
   The drag rows rest on one debouncer, which a gate keeps every drag control behind.
@@ -117,6 +119,7 @@ optional row collapses and costs no height.
 | the toasts | four severities, a dwell per severity, dismiss on click, one live region | built |
 | the status chips | the caption, the zoom read-out with its preset menu, the frame read-out with a panel the application supplies | built |
 | the formatting controls | a toggle, a size select, a family picker, a colour popover, and a debouncer for a drag | built |
+| the format bar | the bar over a selection, which Prose and Murmure hand their controls | built |
 | the keybinding half | a key event to a modelled chord, for a keymap to resolve | built |
 | the shortcut chip | one chord, rendered the same way in a menu, a tooltip and a palette | built |
 | the command palette | one overlay listing every command the application declares, filtered by a substring of the label | built; the entries of an application and the `>` prefix are design |
@@ -144,7 +147,12 @@ why `CHROME-003` has five tests and no browser.
 **The modal.** The native dialog element supplies the focus trap and the inertness of the page
 behind it, along with Escape and the backdrop. The component adds two things and no more. It keeps
 the open signal and the element agreeing in both directions (`CHROME-012`). It also fires the
-callbacks that pause and resume the frame loop (`CHROME-011`). A blur over a frozen canvas then costs nothing.
+callbacks that pause and resume the frame loop (`CHROME-011`). A blur over a frozen canvas then
+costs nothing.
+
+**A late close.** The element's close event is queued, so a modal can open again before the event of
+its last close lands. That event then describes a state already gone, and the component ignores it
+(`CHROME-106`).
 
 **The application's own chrome.** An application builds its specific components on this toolkit, in
 its own crate. Those are a formula bar, a filter popover, a find panel, a selection toolbar and a

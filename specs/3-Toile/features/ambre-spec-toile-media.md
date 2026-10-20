@@ -232,7 +232,8 @@ picture the document cannot resolve would be re-requested on every frame that fa
   one fetch, and the cache would have to leave the engine to do it.
 * **The thumbnail persists in plaintext on the device** (`TOILE-IO-037`). It rides in the document,
   and local storage keeps the document unencrypted at rest, like its text. The rule bans only the
-  decoded pixels, which the cache holds in memory. Encrypting the local store is not ruled.
+  decoded pixels, which the cache holds in memory. Sealing the local store is ruled, not built
+  (`RESID-025`).
 
 * **The plaintext is held whole beside the decoded form.** The blob carries the file's own bytes
   while the decode holds the expanded picture, so a picture at the bound costs both. No rule caps

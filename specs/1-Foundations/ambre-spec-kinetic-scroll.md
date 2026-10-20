@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `KINETIC`
 |---|---|---|---|---|---|---|
 | `KINETIC-012` | `INV` | Code outside the shared model MUST NOT name a decay, a friction, a damping, an inertia, a half-life or a velocity. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses each of those names outside `crates/ambre-draw/src/kinetic.rs`, above its tests | none | verified |
 | `KINETIC-013` | `INV` | A pan, flick, glide or edge step an application takes MUST be built by the shared model alone. | this spec section 2 | type-level -- the model hands each step back as a `ScrollStep`, whose fields and zero are private, and keeps the edge clock in `EdgeScroll` and the step clamp private. Its three `compile_fail` doctests show a step and the clamp refused outside the model; `ambre_toile::ui::kinetic::tests::a_step_moves_the_same_screen_distance_at_any_zoom` | none | verified |
-| `KINETIC-001` | `INV` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | this spec section 2 | type-level -- each view's scroll setter (Prose `scroll_by`, the Trame `accumulate`, the Toile `pan_by_screen`) takes a `ScrollStep`, which only the model builds (`KINETIC-013`); `ambre_draw::kinetic::tests::a_drag_moves_the_view_as_a_pan_past_the_slop_does`; ci-gate -- `scripts/crate_boundaries.py` refuses a setter that drops its step, an offset moved by a distance outside its setter, the Trame grid panned outside its accumulator, and a drag step built away from the board's pointer, each above its tests | none | verified |
+| `KINETIC-001` | `INV` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | this spec section 2 | type-level -- each view's scroll setter (Prose `scroll_by`, the Trame `accumulate`, the Toile `pan_by_screen`, the Murmure list `scroll_by`) takes a `ScrollStep`, which only the model builds (`KINETIC-013`); `ambre_draw::kinetic::tests::a_drag_moves_the_view_as_a_pan_past_the_slop_does`; ci-gate -- `scripts/crate_boundaries.py` refuses a setter that drops its step, an offset moved by a distance outside its setter, the Trame grid panned outside its accumulator, and a drag step built away from the board's pointer, each above its tests | none | verified |
 
 ### 1.2 Pan and flick
 
@@ -40,6 +40,7 @@ The user puts a finger down, moves it or not, and lifts it.
 | `KINETIC-006` | `FRAME` | A press, or an edge the application meets, MUST stop the motion, and no tick MUST move the view after. | this spec section 2 | `ambre_draw::kinetic::tests::a_press_or_an_edge_stops_the_motion` | none | verified |
 | `KINETIC-010` | `FRAME` | A pointer the browser cancels MUST NOT leave a tap or a motion. | this spec section 2 | `ambre_draw::kinetic::tests::a_cancelled_pan_leaves_no_tap_and_no_motion` | none | verified |
 | `KINETIC-011` | `POST` | A cancelled pointer that acted as the mouse MUST end its gesture as a release at its last position. | this spec section 3 | `ambre_belt::toile::tests::a_cancelled_mouse_drag_ends_where_the_pointer_was` -- browser tier: a marquee cancelled mid-drag selects the two shapes it covered | none | verified |
+| `KINETIC-014` | `POST` | A press held inside the tap slop past the long-press delay MUST be a long press at its press point, and its release MUST NOT be a tap. | this spec section 2 | `ambre_draw::kinetic::tests::a_press_held_inside_the_slop_is_a_long_press_and_no_tap` -- said once at the delay, then no pan and no tap, and a pan past the slop is never one | none | verified |
 
 ### 1.3 Scroll at an edge
 
@@ -63,7 +64,7 @@ The user glides two fingers on a trackpad and lifts them, or turns a notched whe
   scroll the application's viewport already carries in `ambre-spec-budgets.md`.
 * **Boundary.** none: the model is view state on the UI thread. It writes no document and sends no
   command, so nothing here reaches the relay.
-* **Verification.** 13 `verified`. The browser tier holds the cancelled pointer (`KINETIC-011`). A
+* **Verification.** 14 `verified`. The browser tier holds the cancelled pointer (`KINETIC-011`). A
   gate refuses a speed name outside the model, and a step only the model builds holds each step it
   hands back (`KINETIC-013`). Each view's setter takes that step, and a gate refuses an offset moved
   by a distance anywhere else (`KINETIC-001`).
@@ -107,6 +108,7 @@ pub struct EdgeScroll { /* the last frame, private */ }
 | Constant | Value | What it sets |
 | :--- | :--- | :--- |
 | tap slop | 8 px | how far a pointer moves and stays a tap |
+| long press | 500 ms | how long a press held inside the slop waits before it is a long press |
 | sample window | 100 ms | how much of the pan the release speed reads |
 | slowdown | a time constant of 325 ms | how fast a motion dies |
 | stop speed | 0.02 px/ms | below it a release leaves nothing and a motion stops |
@@ -136,6 +138,7 @@ depends on, and it depends on nothing.
 |---|---|
 | a finger down, lifted without moving | a tap where it went down (`KINETIC-003`) |
 | a finger dragged | the view follows it (`KINETIC-003`) |
+| a finger held still past the long-press delay | a long press where it went down, and no tap on the lift (`KINETIC-014`) |
 | a finger lifted while moving | the view coasts and slows to a stop (`KINETIC-004`, `KINETIC-005`) |
 | a press during a coast | the coast stops (`KINETIC-006`) |
 | the browser cancels a finger that pans | the pan ends, with no tap and no coast (`KINETIC-010`) |

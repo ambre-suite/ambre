@@ -24,8 +24,9 @@
 )]
 
 use ambre_chrome::{
-    AppShell, CommandStates, FONT_SIZES, FontSizeSelect, FormatToggle, Header, PerfChip,
-    PerfDetail, StatusBar, ToastHost, ToastKind, Toasts, Toolbar, ZoomChip, ZoomFactor,
+    AppShell, CommandStates, ContextMenu, FONT_SIZES, FontSizeSelect, FormatBar, FormatControl,
+    FormatToggle, Header, MenuEntry, PerfChip, PerfDetail, Pressed, StatusBar, ToastHost,
+    ToastKind, Toasts, Toolbar, ZoomChip, ZoomFactor,
 };
 use ambre_commands::CommandId;
 use leptos::mount::mount_to;
@@ -367,6 +368,58 @@ async fn format_toggle_reflects_pressed_and_reports_clicks() {
     root.remove();
 }
 
+/// `CHROME-105`: the format bar hangs above its anchor, shows each control
+/// with its pressed state, and a press reports that control alone.
+#[wasm_bindgen_test]
+async fn the_format_bar_hangs_its_controls_and_reports_a_press() {
+    let owner = Owner::new();
+    owner.set();
+    let pressed = RwSignal::new(Vec::<&'static str>::new());
+    let control = |label: &'static str, state: Pressed| FormatControl {
+        label: label.to_owned(),
+        pressed: state,
+        on_press: Callback::new(move |()| pressed.update(|p| p.push(label))),
+    };
+    let controls = vec![
+        control("Bold", Pressed::On),
+        control("Italic", Pressed::Mixed),
+        control("Code", Pressed::Off),
+    ];
+    let root =
+        mount_in_container(move || view! { <FormatBar anchor=(200.0, 100.0) controls=controls /> });
+
+    let bar = root.query_selector("[role=\"toolbar\"]").unwrap().unwrap();
+    let style = bar.get_attribute("style").unwrap_or_default();
+    assert!(
+        style.contains("left: 200px") && style.contains("top: 60px"),
+        "{style}"
+    );
+    let buttons = bar.query_selector_all("button").unwrap();
+    let states: Vec<(String, String)> = (0..buttons.length())
+        .filter_map(|i| buttons.item(i))
+        .filter_map(|b| b.dyn_into::<web_sys::Element>().ok())
+        .map(|b| {
+            (
+                b.get_attribute("aria-label").unwrap_or_default(),
+                b.get_attribute("aria-pressed").unwrap_or_default(),
+            )
+        })
+        .collect();
+    let want = [("Bold", "true"), ("Italic", "mixed"), ("Code", "false")]
+        .map(|(l, p)| (l.to_owned(), p.to_owned()));
+    assert_eq!(states, want.to_vec());
+
+    let italic = root
+        .query_selector("[aria-label=\"Italic\"]")
+        .unwrap()
+        .unwrap();
+    italic
+        .dispatch_event(&web_sys::MouseEvent::new("click").unwrap())
+        .unwrap();
+    assert_eq!(pressed.get_untracked(), vec!["Italic"]);
+    root.remove();
+}
+
 // -- Accessibility (menu.rs, ambre-spec-accessibility.md) --------------------
 
 /// The element that holds the focus now.
@@ -482,6 +535,101 @@ async fn a_menu_is_operable_by_keyboard_alone() {
             .is_none()
     );
     assert_eq!(zoom.get_untracked().get(), 0.5, "Escape chose nothing");
+    root.remove();
+}
+
+/// A key that closes a menu opened from a trigger, Escape or Enter, gives
+/// the focus back to the trigger (`CHROME-027`).
+#[wasm_bindgen_test]
+async fn a_key_that_closes_a_trigger_menu_returns_the_focus_to_its_trigger() {
+    let owner = Owner::new();
+    owner.set();
+    let zoom = RwSignal::new(ZoomFactor::ONE);
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let btn: web_sys::HtmlElement = root
+        .query_selector(".statusbar-zoom-btn")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    for key in ["Escape", "Enter"] {
+        btn.focus().unwrap();
+        btn.click();
+        leptos::task::tick().await;
+        let menu = root
+            .query_selector(".statusbar-zoom-menu")
+            .unwrap()
+            .unwrap();
+        // A menu opened again takes the focus a task later than the first
+        // time. Its list is built, then its node lands, then the effect runs.
+        leptos::task::tick().await;
+        assert_ne!(active().as_ref(), btn.dyn_ref(), "{key}: the menu took it");
+        press(&menu, key);
+        leptos::task::tick().await;
+        assert_eq!(
+            active().as_ref(),
+            btn.dyn_ref(),
+            "{key}: the trigger has it"
+        );
+    }
+    root.remove();
+}
+
+/// The floating menu gives the focus back to what held it when it opened,
+/// unless the user moved it elsewhere meanwhile (`CHROME-027`).
+#[wasm_bindgen_test]
+async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
+    let owner = Owner::new();
+    owner.set();
+    let pos = RwSignal::new(None::<(f64, f64)>);
+    let item = ambre_commands::Command {
+        id: CommandId("test.item"),
+        title: |_| "Item".to_owned(),
+        icon: None,
+        keybindings: &[],
+        category: ambre_commands::CommandCategory(""),
+    };
+    let entries = vec![MenuEntry::command(&item, &ambre_commands::Locale::En)];
+    let root = mount_in_container(move || {
+        view! {
+            <button class="test-opener">"Opener"</button>
+            <input class="test-elsewhere"/>
+            <ContextMenu pos=pos entries=entries on_command=Callback::new(|_| {})/>
+        }
+    });
+    let opener: web_sys::HtmlElement = root
+        .query_selector(".test-opener")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    opener.focus().unwrap();
+    pos.set(Some((10.0, 10.0)));
+    leptos::task::tick().await;
+    let menu = root.query_selector(".ambre-ctx-menu").unwrap().unwrap();
+    let inside = active().is_some_and(|el| menu.contains(Some(&el)));
+    assert!(inside, "the menu took the focus");
+    press(&menu, "Escape");
+    leptos::task::tick().await;
+    assert!(root.query_selector(".ambre-ctx-menu").unwrap().is_none());
+    assert_eq!(active().as_ref(), opener.dyn_ref(), "the focus came back");
+
+    pos.set(Some((10.0, 10.0)));
+    leptos::task::tick().await;
+    let elsewhere: web_sys::HtmlElement = root
+        .query_selector(".test-elsewhere")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    elsewhere.focus().unwrap();
+    pos.set(None);
+    leptos::task::tick().await;
+    assert_eq!(
+        active().as_ref(),
+        elsewhere.dyn_ref(),
+        "a focus moved by the user stays"
+    );
     root.remove();
 }
 
@@ -655,6 +803,55 @@ async fn palette_row_invokes_its_command_and_closes() {
     root.remove();
 }
 
+/// DOM test: the entries an application supplies are drawn before the
+/// commands. Choosing one hands its key back and closes the overlay, and runs
+/// no command.
+#[wasm_bindgen_test]
+async fn palette_entry_comes_first_and_hands_back_its_key() {
+    let owner = Owner::new();
+    owner.set();
+    let open = RwSignal::new(true);
+    let chosen: RwSignal<Option<[u8; 16]>> = RwSignal::new(None);
+    let invoked: RwSignal<Option<CommandId>> = RwSignal::new(None);
+    let entries = Signal::stored(vec![ambre_chrome::PaletteEntry {
+        key: [7; 16],
+        label: "budget".to_owned(),
+        hint: Some("Channel"),
+    }]);
+    let root = mount_in_container(move || {
+        view! {
+            <ambre_chrome::CommandPalette
+                open=open
+                table=PALETTE_TABLE
+                on_command=Callback::new(move |id| invoked.set(Some(id)))
+                entries=entries
+                on_entry=Callback::new(move |key| chosen.set(Some(key)))
+            />
+        }
+    });
+
+    let labels = palette_labels(&root);
+    assert_eq!(labels.len(), PALETTE_TABLE.len() + 1, "labels: {labels:?}");
+    assert_eq!(labels[0], "budget");
+    let first: web_sys::HtmlElement = root
+        .query_selector(".ambre-palette-row")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    first.click();
+
+    assert_eq!(chosen.get_untracked(), Some([7; 16]));
+    assert_eq!(invoked.get_untracked(), None);
+    assert!(
+        !open.get_untracked(),
+        "choosing an entry closes the palette"
+    );
+
+    leptos::task::tick().await;
+    root.remove();
+}
+
 // -- The modal (dialog.rs) ---------------------------------------------------
 
 /// A mounted modal, the hold count its `ModalHold` reached, and its element.
@@ -662,6 +859,8 @@ struct Modal {
     root: web_sys::Element,
     dialog: web_sys::HtmlDialogElement,
     holds: std::sync::Arc<std::sync::atomic::AtomicI32>,
+    /// How many times `on_close` ran.
+    heard: RwSignal<u32>,
     /// The mount's handle: dropping it unmounts the modal.
     handle: Option<Box<dyn std::any::Any>>,
 }
@@ -696,13 +895,15 @@ fn mount_modal(open: RwSignal<bool>) -> Modal {
             holds.fetch_add(if held { 1 } else { -1 }, Ordering::Relaxed);
         })
     };
+    let heard = RwSignal::new(0);
+    let on_close = Callback::new(move |()| heard.update(|n| *n += 1));
     let root = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&root).unwrap();
     let target: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
     let handle = mount_to(target, move || {
         provide_context(hold);
         view! {
-            <ambre_chrome::Dialog open=open>
+            <ambre_chrome::Dialog open=open on_close=on_close>
                 <button class="inside">"Inside"</button>
             </ambre_chrome::Dialog>
         }
@@ -718,8 +919,89 @@ fn mount_modal(open: RwSignal<bool>) -> Modal {
         root,
         dialog,
         holds,
+        heard,
         handle: Some(Box::new(handle)),
     }
+}
+
+/// A modal opened again before the `close` event of its last close lands
+/// stays open (`CHROME-106`). The stale event clears no signal, releases no
+/// hold and notifies no one.
+#[wasm_bindgen_test]
+async fn a_close_landing_after_a_reopen_leaves_the_modal_open() {
+    let open = RwSignal::new(true);
+    let modal = mount_modal(open);
+    leptos::task::tick().await;
+    assert_eq!(modal.holds(), 1);
+
+    let closed = modal.closed();
+    open.set(false);
+    leptos::task::tick().await;
+    assert!(!modal.dialog.open(), "closed, its event queued");
+    open.set(true);
+    leptos::task::tick().await;
+    assert!(modal.dialog.open(), "open again before the event");
+    closed.await.unwrap();
+    assert!(modal.dialog.open(), "the stale close closed nothing");
+    assert!(open.get_untracked(), "nor cleared the signal");
+    assert_eq!(modal.holds(), 1, "nor released the loop");
+    assert_eq!(modal.heard.get_untracked(), 0, "nor notified");
+    modal.root.remove();
+}
+
+/// The native `close` event is queued. One that lands after the owner of
+/// `on_close` is gone notifies no one, and panics nothing.
+#[wasm_bindgen_test]
+async fn a_close_after_its_callback_is_gone_notifies_no_one() {
+    let open = RwSignal::new(true);
+    let heard = RwSignal::new(0);
+    let owner = Owner::new();
+    let on_close = owner.with(|| Callback::new(move |()| heard.update(|n| *n += 1)));
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let target: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let handle = mount_to(target, move || {
+        view! { <ambre_chrome::Dialog open=open on_close=on_close>"Body"</ambre_chrome::Dialog> }
+            .into_any()
+    });
+    leptos::task::tick().await;
+    let dialog: web_sys::HtmlDialogElement = root
+        .query_selector("dialog")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    assert!(dialog.open());
+
+    let modal = Modal {
+        root,
+        dialog,
+        holds: std::sync::Arc::default(),
+        heard,
+        handle: Some(Box::new(handle)),
+    };
+    // A panic in the handler throws out of the event, to the window.
+    let thrown = std::rc::Rc::new(std::cell::Cell::new(0));
+    let count = std::rc::Rc::clone(&thrown);
+    let on_error = wasm_bindgen::closure::Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
+        count.set(count.get() + 1);
+    });
+    let window = web_sys::window().unwrap();
+    let listener = on_error.as_ref().unchecked_ref();
+    window
+        .add_event_listener_with_callback("error", listener)
+        .unwrap();
+    let closed = modal.closed();
+    modal.dialog.close();
+    owner.cleanup();
+    closed.await.unwrap();
+    window
+        .remove_event_listener_with_callback("error", listener)
+        .unwrap();
+    assert_eq!(thrown.get(), 0, "the handler threw");
+    assert_eq!(heard.get_untracked(), 0, "the callback was gone");
+    assert!(!open.get_untracked(), "the signal still follows");
+    modal.root.remove();
 }
 
 /// Setting the signal shows the modal (`CHROME-012`) and suspends the loop

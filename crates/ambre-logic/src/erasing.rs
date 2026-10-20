@@ -1,0 +1,64 @@
+//! The files a delete asks the relay to erase, until it has
+//! (`specs/5-Murmure/features/ambre-spec-murmure-attachments.md`).
+//!
+//! A delete of a message of this user's asks for each file it alone carried
+//! (`ambre-spec-murmure-attachments.md`). The relay drops this user's claim,
+//! and the blob goes with the last one, so a file another member uploaded
+//! stays. An
+//! erase that does not reach the relay waits, and the next connection or
+//! session asks again. The queue lives in memory: a reload
+//! before the retry leaves the blob to the channel's deletion.
+
+use super::*;
+use ambre_bus::{MediaRef, RestCommand, RestEvent};
+
+impl LogicState {
+    /// Ask the relay to erase each of `files`, stored under `document_id`.
+    pub(crate) fn erase_files(&mut self, document_id: DocumentId, files: Vec<MediaRef>) {
+        for file in files {
+            self.erase(document_id, file.as_str().to_owned());
+        }
+    }
+
+    fn erase(&mut self, document_id: DocumentId, content_hash: String) {
+        let id = RequestId::next();
+        self.erasing.insert(id, (document_id, content_hash.clone()));
+        self.send_to_sync(SyncCommand::Rest {
+            id,
+            cmd: RestCommand::EraseMedia {
+                document_id,
+                content_hash,
+            },
+        });
+    }
+
+    /// The answer to an erase this thread asked for, which no view awaits.
+    /// Returns `false` for any other answer.
+    pub(crate) fn erased(&mut self, id: RequestId, evt: &RestEvent) -> bool {
+        if self.erasing.remove(&id).is_none() {
+            return false;
+        }
+        if !matches!(evt, RestEvent::MediaErased { .. }) {
+            tracing::warn!("Logic: an erase answered {evt:?}");
+        }
+        true
+    }
+
+    /// An erase that did not reach the relay waits for the next connection
+    /// (`ambre-spec-murmure-attachments.md`). Returns `false` for any other
+    /// request.
+    pub(crate) fn erase_failed(&mut self, id: RequestId) -> bool {
+        let Some(erase) = self.erasing.remove(&id) else {
+            return false;
+        };
+        self.erase_owed.push(erase);
+        true
+    }
+
+    /// Ask again for every erase that waits.
+    pub(crate) fn retry_erases(&mut self) {
+        for (document_id, content_hash) in std::mem::take(&mut self.erase_owed) {
+            self.erase(document_id, content_hash);
+        }
+    }
+}

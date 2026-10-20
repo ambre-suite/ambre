@@ -8,8 +8,8 @@ a belt proving it drives it rather than reimplementing it.
 > a shape. The caret, the selection, the word jumps and the composition are one implementation. The
 > application supplies only the box and what to do with the result.
 
-The unit is formattable, not rich: one weight, one slant, one family, one size and one colour for
-the whole of it (`CANVAS-042`).
+The unit is formattable, not rich: one pinned style for the whole of it. A host may pin spans over
+it, each a range in a look of its own. The core keeps none of its own (`CANVAS-042`).
 
 ---
 
@@ -25,7 +25,13 @@ rules live beside the design they constrain, rather than in the thread's own doc
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CANVAS-042` | `INV` | The core MUST hold one style for the whole unit: it MUST NOT carry a per-range style. | this spec section 2 | type-level -- the pinned style is one value with five fields, so a range-addressed style has nowhere to be stored | none | verified |
+| `CANVAS-042` | `INV` | The core MUST hold one style for the whole unit, and only the spans its host pinned: an edit MUST NOT move, add or drop a span. | this spec section 2 | `ambre_canvas::editor::tests::an_edit_moves_no_span` -- two backspaces leave the pinned spans as they were, and a range the edit left past the buffer renders with no panic | none | verified |
+| `CANVAS-078` | `INV` | With spans pinned, the caret, the selection, a click and a line move MUST read where the spans draw the text. | this spec section 2 | `ambre_canvas::editor::tests::a_click_lands_on_the_char_a_span_draws_under_it` -- a bold span widens twenty chars: the caret, End and a click land at the wide x, and with no span the plain layout serves again | none | verified |
+| `CANVAS-079` | `OBS` | A span MUST draw its range in its own weight, slant, family, ink, underline and tint. | this spec section 2 | `ambre_canvas::editor::tests::a_span_draws_its_range_in_its_own_look` -- each of weight, slant and family shapes a second face, and a recorded render finds the span ink, the underline and the tint | none | verified |
+| `CANVAS-080` | `INV` | With spans pinned, a run of line moves MUST keep its column through a shorter line. | this spec section 2 | `ambre_canvas::editor::tests::a_line_move_over_spans_keeps_its_column` -- two moves up through a one-char line land at the column they left, in one flush or across two, and a move left first aims at a new column | none | verified |
+| `CANVAS-082` | `INV` | The layout the core hands out MUST be the one it draws: the spans' own while it holds spans, the plain one otherwise. | this spec section 2 | `ambre_canvas::editor::tests::the_layout_handed_out_is_the_one_drawn` -- none before the first flush, wider under a bold span, and plain again with no span | none | verified |
+| `CANVAS-083` | `INV` | The line the core names around the caret MUST be the line it draws, a wrapped line rather than the text between two breaks. | this spec section 2 | `ambre_canvas::editor::tests::the_caret_line_is_the_line_drawn` -- three words wrapped one a line: the last line, a move up, End at the wrap, and no line before a flush or under a selection | none | verified |
+| `CANVAS-085` | `INV` | Under a span's indent, the glyphs, a click and the caret MUST all start past the indent, scaled by the zoom. | this spec section 2; `CANVAS-084` | `ambre_canvas::editor::tests::an_indented_paragraph_draws_and_puts_its_caret_past_the_indent` -- at zoom 2 the held line's glyphs and caret move right by twice the indent, and a click just past it lands at the paragraph's start | none | verified |
 | `CANVAS-048` | `INV` | A composition preview MUST be replaceable in place. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- after the composition ends, its second assertion reads the buffer back as the composed run alone, so a preview appended beside its own commit fails | none | verified |
 | `CANVAS-040` | `OBS` | A composition preview MUST read as unconfirmed text. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- its first assertion finds the underline on the composing run, and its last asserts the committed run has lost it | none | verified |
 | `CANVAS-041` | `INV` | The caret and the selection MUST be drawn as paths, so a caller's transform carries them. | this spec section 2; `ambre-spec-drawing-surface.md` | `ambre_canvas::editor::tests::the_caret_and_selection_are_drawn_as_paths` -- it renders a selection and a caret under a pushed rotation and finds both as path fills and no rect fill, which a rotation maps by its bounding box alone | none | verified |
@@ -53,6 +59,7 @@ everything recorded since the last frame.
 |---|---|---|---|---|---|---|
 | `CANVAS-047` | `POST` | Every recorded action MUST be applied at paint time. | this spec section 2 | `ambre_canvas::editor::tests::every_recorded_action_applies_at_the_flush` -- two inserts with motion between them, and one flush shows each one at its place | none | verified |
 | `CANVAS-050` | `FRAME` | A flush MUST NOT leave a recorded action in the queue. | this spec section 2, the seam; derived | `ambre_canvas::editor::tests::a_flush_leaves_the_queue_empty` -- it reads the queue empty after a flush, and a second flush with nothing recorded leaves the buffer as it was | none | verified |
+| `CANVAS-077` | `POST` | A recorded replace MUST swap the exact byte range it names, leave the caret after its text, and change nothing when the range is off a char boundary. | this spec section 2 | `ambre_canvas::editor::tests::a_replace_swaps_its_range_and_puts_the_caret_after_it` -- a query becomes a name with the caret after it, and a range inside a char or past the end leaves the buffer | none | verified |
 
 ### 1.4 Close an edit
 
@@ -68,7 +75,7 @@ The host compares the body it captured when the edit opened against the one the 
 * **Boundary.** none: the core holds a string in memory, reaches no relay and opens no socket. What
   the user types leaves it as a commit the application turns into a document operation, and the
   keyboard path that feeds it is `ambre-spec-text-input.md`.
-* **Verification.** 11 `verified`, 2 `unimplemented`. Host-tier tests hold the queue, the drain at
+* **Verification.** 18 `verified`, 2 `unimplemented`. Host-tier tests hold the queue, the drain at
   paint time, the drawn paths and the no-op close. A parity belt per wrapper proves each one
   delegates to the core. What is loose is the two rules nothing has built yet.
 
@@ -122,6 +129,20 @@ pub struct TextEditorStyle {
 The family is resolved through the shared font resolver (`CANVAS-017`), so the in-edit body takes
 the face the committed one has. `base_size` is in world units and the zoom multiplies it at each
 flush, because the editor holds no camera.
+
+**The spans.** A host may pin spans over the pinned style, each a byte range with its own weight,
+slant, family, ink, underline and tint. The host pins them again after each flush that changed the
+text, so the core neither moves nor keeps one (`CANVAS-042`). A range off a char boundary draws
+nothing.
+
+Parley's `PlainEditor` lays its text out with one style. So the spans get a second layout, built
+from the same text at the same wrap width (`CANVAS-079`). Every geometry is read from that layout:
+the caret, the band, the height, and the outcome of a click or a line move (`CANVAS-078`). With no
+span, the core takes the one-layout path it had before. A line move keeps its column (`CANVAS-080`).
+An indent moves the glyphs, the caret and a click alike (`CANVAS-085`).
+
+**What a host reads.** The core hands out its layout, so a host can draw beside the text
+(`CANVAS-082`). It names the caret's line from the caret's own box (`CANVAS-083`).
 
 **The coordinate frame.** The core lays out in a local frame whose origin is the text's top-left
 corner. The zoom is baked into the font size and the wrap width. The host translates by that
@@ -182,7 +203,8 @@ reports, so an input method opens its window in the right place.
 | The intent queue, rather than editing at input time | driving the editor from the input handler | it needs a second font context on the UI thread: `PlainEditor` re-shapes on every operation, and the font context exists during the paint pass alone. The queue is what lets input handling stay pure and testable on the host tier, with no GPU and no browser |
 | The intent queue, rather than editing at input time | holding a live layout across frames | it is the same memory twice, and it keeps a shaped layout alive outside the pass that can shape it |
 | The style is pinned, not read live | the core reading a theme, a zoom and a toolbar state | it is three dependencies for a struct that holds a string. The host recomputes the style each frame anyway -- the zoom, the theme and the toolbar all move it -- so pinning at open and re-applying at flush costs one assignment |
-| One style for the whole unit | a per-range style model | it makes the core a rich-text editor for two callers that have no rich text: a cell and a sticky note carry one look. The document that does have it is a different design entirely (`CANVAS-042`), and it is `4-Prose/` |
+| The host pins the spans | a per-range style model the core keeps up to date | it makes the core a rich-text editor. A cell and a sticky note carry one look, and the composer already keeps its marks beside the draft, so a second copy in the core would drift from it. The document that does have rich text is a different design entirely (`CANVAS-042`), and it is `4-Prose/` |
+| A second layout for the spans | patching `PlainEditor`'s own layout | parley 0.12 pushes only its default styles when it re-shapes, and offers no hook for ranged ones. The second layout costs one more shape per flush with spans, and none without (`CANVAS-078`) |
 | The caret and the band are filled paths | `fill_rect` | it is cheaper and wrong on a rotated element: Toile rotates, and a rotation applied to an axis-aligned fill maps its bounding box rather than the shape. A path is mapped whole, so one code path serves the rotated and the unrotated case |
 | The wrapper is proven by replay, not by reading | a review of the wrapper | it is what let the mapping be wrong in the first place. A shim wired to the wrong intent compiles, runs, and is wrong in one key out of twelve; replaying an operation corpus through both editors and comparing after each step is the only mechanism that catches it |
 

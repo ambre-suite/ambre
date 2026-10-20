@@ -201,6 +201,7 @@ impl LogicState {
         let Some(watched) = self.watched_threads.get_mut(&thread) else {
             return false;
         };
+        let named = MentionCount(counters.mentions) > watched.mentions;
         watched.mentions = MentionCount(counters.mentions);
         let channel_id = watched.channel_id;
         let mark = match self.closed_channels.get(&channel_id) {
@@ -210,6 +211,14 @@ impl LogicState {
         if let Some(mark) = mark {
             self.send_to_ui(UiEvent::ChannelActivity {
                 channels: vec![mark],
+            });
+        }
+        // A reply that names the user is a mention on its channel.
+        if named {
+            self.send_to_ui(UiEvent::NewMessage {
+                channel_id,
+                mention: true,
+                message: None,
             });
         }
         true

@@ -21,10 +21,11 @@
 
 use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
-    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelPlace,
-    ClipboardCell, ClipboardPayload, DocType, DocumentId, FoldAnswer, LeaseAnswer, LeaseId,
-    LogicEvent, MemberChannel, MemberInfo, MemberStanding, MessageId, RequestId, RestCommand,
-    RestEvent, Role, SelectionKind, SyncCommand, Timestamp, TrameCommand, UserId,
+    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelMeta,
+    ChannelName, ChannelPlace, ClipboardCell, ClipboardPayload, DirectPeers, DocType, DocumentId,
+    FoldAnswer, LeaseAnswer, LeaseId, LogicEvent, MemberChannel, MemberInfo, MemberStanding,
+    MessageId, OpenFailure, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand,
+    Timestamp, TrameCommand, UserId,
 };
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -278,12 +279,15 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::FoldSegment { .. } => "FoldSegment",
         SyncCommand::WatchSegment { .. } => "WatchSegment",
         SyncCommand::WatchThread { .. } => "WatchThread",
+        SyncCommand::WatchChannel { .. } => "WatchChannel",
+        SyncCommand::NameChannel { .. } => "NameChannel",
         SyncCommand::JoinChannel { .. } => "JoinChannel",
         SyncCommand::DeleteChannel { .. } => "DeleteChannel",
         SyncCommand::LeaveChannel { .. } => "LeaveChannel",
         SyncCommand::CreateDirectMessage { .. } => "CreateDirectMessage",
         SyncCommand::ListSpaceChannels { .. } => "ListSpaceChannels",
         SyncCommand::ListMemberChannels => "ListMemberChannels",
+        SyncCommand::CreateSpace { .. } => "CreateSpace",
         SyncCommand::HoldInbound => "HoldInbound",
         SyncCommand::ReleaseInbound => "ReleaseInbound",
         SyncCommand::MarkRead { .. } => "MarkRead",
@@ -357,7 +361,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 36;
+const SYNC_VARIANTS: usize = 39;
 const EVENT_VARIANTS: usize = 55;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
@@ -375,6 +379,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
 
     let doc = DocumentId::new();
     let chan = ChannelId::new();
+    let direct = ChannelId::new();
     let space = SpaceId::new();
     let meta = MetaId::from_document(DocumentId::new());
     let segment = SegmentId::from_document(DocumentId::new());
@@ -451,8 +456,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             space_id: space,
             meta,
             segment,
-            public: true,
+            public: false,
+            name: Some("board".into()),
         },
+        SyncCommand::NameChannel { meta, name: None },
         SyncCommand::JoinChannel {
             channel_id: chan,
             space_id: space,
@@ -506,10 +513,17 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             meta,
             after: Seq(3),
         },
+        SyncCommand::WatchChannel {
+            channel_id: chan,
+            meta,
+            meta_last: Some(Seq(2)),
+            documents: vec![(doc, Some(Seq(3))), (doc, None)],
+        },
         SyncCommand::DeleteChannel { channel_id: chan },
         SyncCommand::LeaveChannel { channel_id: chan },
         SyncCommand::ListSpaceChannels { space_id: space },
         SyncCommand::ListMemberChannels,
+        SyncCommand::CreateSpace { space_id: space },
         SyncCommand::CreateDirectMessage {
             channel_id: chan,
             meta,
@@ -642,8 +656,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             documents: vec![DocumentActivity {
                 channel_id: chan,
                 document_id: segment.document_id(),
+                kind: ChannelDocumentKind::Segment,
                 active: true,
                 read: Seq(2),
+                last: Some(Seq(5)),
             }],
         },
         LogicEvent::ChannelCreated {
@@ -759,10 +775,24 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                     place: ChannelPlace::Private(space),
                 },
                 MemberChannel {
-                    channel_id: ChannelId::new(),
+                    channel_id: direct,
                     place: ChannelPlace::Direct,
                 },
             ],
+            spaces: vec![space],
+            names: vec![ChannelName {
+                channel_id: chan,
+                name: "board".into(),
+            }],
+            peers: vec![DirectPeers {
+                channel_id: direct,
+                names: vec!["Bob".into()],
+            }],
+            metas: vec![ChannelMeta {
+                channel_id: chan,
+                meta: MetaId::from_document(doc),
+                last: Some(Seq(5)),
+            }],
         },
         LogicEvent::MeetingParticipantJoined {
             meeting_id: MeetingId::new(),
@@ -774,6 +804,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::DocumentOpenFailed {
             document_id: doc,
+            cause: OpenFailure::KeyNotReceived,
             message: "unwrap".to_owned(),
         },
         LogicEvent::AuthError {
@@ -846,7 +877,7 @@ fn request_id_echo_is_preserved_across_the_hop() {
         id,
         cmd: RestCommand::InviteToDocument {
             document_id: DocumentId::new(),
-            invitee_email: "x@y.z".to_string(),
+            invitee_email: Some("x@y.z".to_string()),
             invitee: UserId::new(),
             role: Role::Editor,
             expect_exchange_pub_key: [0u8; 32],

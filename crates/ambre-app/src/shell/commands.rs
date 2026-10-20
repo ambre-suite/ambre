@@ -10,6 +10,7 @@
 // ============================================================================
 
 use ambre_chrome::{CommandHandler, KeyRoute, ShellAction};
+use ambre_murmure::chrome::MurmureHandler;
 use ambre_prose::chrome::ProseHandler;
 use ambre_toile::chrome::ToileHandler;
 use ambre_trame::chrome::TrameHandler;
@@ -24,6 +25,19 @@ pub(crate) enum AppHandler {
     Trame(TrameHandler),
     Toile(ToileHandler),
     Prose(ProseHandler),
+    Murmure(MurmureHandler),
+}
+
+/// The sink of a Murmure page. Its commands address the user's channels,
+/// not the routed document, so they go to the Logic thread unchanged.
+pub(crate) fn murmure_send(
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+) -> Callback<LogicCommand> {
+    Callback::new(move |command: LogicCommand| {
+        if let Err(e) = to_logic.try_send(command) {
+            tracing::warn!("Murmure command dropped, Logic channel full ({e:?})");
+        }
+    })
 }
 
 impl AppHandler {
@@ -32,6 +46,15 @@ impl AppHandler {
             Self::Trame(h) => h,
             Self::Toile(h) => h,
             Self::Prose(h) => h,
+            Self::Murmure(h) => h,
+        }
+    }
+
+    /// Murmure's handler, when a Murmure page is booted.
+    pub(crate) fn murmure(&self) -> Option<MurmureHandler> {
+        match self {
+            Self::Murmure(h) => Some(*h),
+            _ => None,
         }
     }
 
@@ -108,6 +131,11 @@ impl CommandPath {
             ShellAction::OpenPalette => self.palette_open.set(true),
             ShellAction::OpenSealedSave => self.seal_open.set(true),
             ShellAction::Copy { cut } => exec_clipboard(!cut),
+            ShellAction::CopyText(text) => {
+                if let Some(win) = web_sys::window() {
+                    let _ = win.navigator().clipboard().write_text(&text);
+                }
+            }
             ShellAction::Paste { plain } => {
                 read_clipboard(self.clipboard_paste.clone(), self.toasts, plain);
             }

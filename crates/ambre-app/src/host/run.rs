@@ -36,7 +36,7 @@ pub fn run_with<F, C, P>(
     canvas_id: &str,
     make_view: F,
     make_child_fn: C,
-    mut pre_frame: P,
+    pre_frame: P,
     raf: RafControl,
     paste_rx: ambre_bus::conduit::Receiver<ClipboardPaste>,
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
@@ -123,8 +123,23 @@ where
             // dispatcher, the SPA route poll. It must run EVERY frame, even when
             // the canvas is frozen behind a modal or the landing overlay. So
             // `drive_frame` gates only the render on `raf_c`.
+            // A hidden page gets no frame, so a timer relays for it: the
+            // threads keep hearing the relay, and a notification can rise
+            // (`CANVAS-075`). One relay serves both, never at once.
+            let pre_frame = Rc::new(RefCell::new(pre_frame));
+            let hidden_relay = Rc::clone(&pre_frame);
+            ambre_canvas::host::start_hidden_relay(
+                move || (hidden_relay.borrow_mut())(),
+                HIDDEN_RELAY_PERIOD_MS,
+            );
             start_raf_loop(
-                move |ts| drive_frame(&raf_c, &mut pre_frame, || host_c.borrow_mut().render(ts)),
+                move |ts| {
+                    drive_frame(
+                        &raf_c,
+                        || (pre_frame.borrow_mut())(),
+                        || host_c.borrow_mut().render(ts),
+                    )
+                },
                 settled,
             );
         });
@@ -251,10 +266,14 @@ where
                 let consumed = host_c.borrow_mut().handle_input(&ev);
                 if consumed {
                     event.prevent_default();
-                    // A drag keeps its moves past the canvas edge, so the
-                    // page can scroll under it (`PROSE-UI-038`).
-                    if is_down
-                        && host_c.borrow().captures_pointer()
+                }
+                // A drag keeps its moves past the canvas edge, so the page can
+                // scroll under it (`PROSE-UI-038`). A drag across read-only
+                // text leaves its press to the browser, and is captured too.
+                if is_down {
+                    let host = host_c.borrow();
+                    if (consumed || host.drags_text())
+                        && host.captures_pointer()
                         && let Some(target) = event
                             .current_target()
                             .and_then(|t| t.dyn_into::<web_sys::Element>().ok())

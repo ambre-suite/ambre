@@ -8,15 +8,159 @@ use super::prose_status::ProseFigures;
 use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
+use ambre_murmure::MurmurePane;
+use ambre_murmure::chrome::{
+    ChannelHeader, ChannelList, ChannelMentionConfirm, DeleteConfirm, EmojiPicker, InviteControl,
+    KeyList, MarkBarPanel, MemberList, MentionPanel, MessageSearch, MurmureRelay,
+};
 
 /// The table the command palette searches: the booted application's whole
-/// declaration, never a menu's subset (`CHROME-008`). Murmure has no view yet
-/// and falls on the Trame side, like every non-Toile, non-Prose kind.
+/// declaration, never a menu's subset (`CHROME-008`). No application
+/// borrows another's table.
 pub(crate) fn palette_table(kind: DocType) -> &'static [ambre_chrome::commands::Command] {
     match kind {
         DocType::Toile => ambre_toile::ui::commands::COMMANDS,
         DocType::Prose => ambre_prose::commands::COMMANDS,
-        DocType::Trame | DocType::Murmure => trame_chrome::COMMANDS,
+        DocType::Trame => trame_chrome::COMMANDS,
+        DocType::Murmure => ambre_murmure::commands::COMMANDS,
+    }
+}
+
+/// The shell of a Murmure page: its channel list, its channel and its thread
+/// (the Murmure layout spec). The pane names the region in focus, and the
+/// command bar holds the channel header. No formula bar, tabs or status bar:
+/// each row is absent.
+#[component]
+pub(crate) fn MurmureShell(
+    /// The pane, the sidebar, and the channels this page opened.
+    relay: MurmureRelay,
+    /// Carries what the channel list asks of the Logic thread.
+    send: Callback<LogicCommand>,
+    /// The shared header.
+    children: ChildrenFn,
+) -> impl IntoView {
+    let pane = relay.pane;
+    view! {
+        <AppShell
+            focus=Signal::derive(move || ambre_murmure::chrome::focus_of(pane.get()))
+            panel_open=Signal::derive(move || ambre_murmure::chrome::panel_open(pane.get()))
+        >
+            <Header slot>{children()}</Header>
+            <Toolbar slot>
+                <ChannelHeader pane=pane name=relay.channel_name() has_members=relay.has_members() />
+                <InviteControl relay=relay send=send />
+                <MessageSearch relay=relay send=send />
+            </Toolbar>
+            <Sidebar slot label="Channels">
+                <ChannelList relay=relay send=send />
+            </Sidebar>
+            <Panel slot label=Signal::derive(move || ambre_murmure::chrome::panel_label(pane.get()).to_owned())>
+                <Show
+                    when=move || matches!(pane.get(), MurmurePane::Members { .. })
+                    // The thread is a canvas of its own, in the panel's cell
+                    // (the Murmure message list spec). The host binds it by id.
+                    fallback=|| view! { <CanvasCell id=crate::host::THREAD_CANVAS label="Thread" /> }
+                >
+                    <MemberList relay=relay send=send />
+                </Show>
+            </Panel>
+        </AppShell>
+        // The view stamps the deletion: the Logic thread reads no clock.
+        <DeleteConfirm
+            relay=relay
+            send=send
+            now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))
+        />
+        <ChannelMentionConfirm
+            relay=relay
+            send=send
+            now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))
+        />
+        // The view stamps a reaction, as it stamps a deletion.
+        <EmojiPicker
+            relay=relay
+            send=send
+            now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))
+        />
+        <KeyList relay=relay />
+        <MentionPanel relay=relay />
+        <MarkBarPanel relay=relay />
+    }
+}
+
+/// The header every application shares: the title, the sync badge, the theme
+/// switch, the share and about buttons and the avatar.
+#[component]
+fn ShellHeader(
+    theme_ctl: ambre_canvas::ThemeControl,
+    theme_sig: RwSignal<ambre_canvas::Theme>,
+    toasts: Toasts,
+    chrome_status: RwSignal<ChromeStatus>,
+    current_doc: RwSignal<Option<DocumentId>>,
+    share_open: RwSignal<bool>,
+    about_open: RwSignal<bool>,
+    username: RwSignal<Option<String>>,
+    me: RwSignal<Option<UserId>>,
+) -> impl IntoView {
+    view! {
+        <span class="title">"Ambre"</span>
+        <span class="spacer"></span>
+        <SyncBadge status=chrome_status.into() />
+        <button
+            class="icon"
+            title="Toggle theme"
+            aria-label="Toggle colour theme"
+            on:click=move |_| {
+                let next = switch_theme(&theme_ctl);
+                theme_sig.set(next);
+                let label = if next == ambre_canvas::Theme::Dark {
+                    "Dark theme"
+                } else {
+                    "Light theme"
+                };
+                toasts.info(label);
+            }
+        >
+            {move || {
+                let icon = if theme_sig.get() == ambre_canvas::Theme::Dark {
+                    icondata::AiMoonFilled
+                } else {
+                    icondata::AiSunFilled
+                };
+                view! { <Icon icon=icon /> }
+            }}
+        </button>
+        <Show when=move || current_doc.get().is_some()>
+            <button
+                class="icon"
+                title="Share"
+                aria-label="Share document"
+                aria-haspopup="dialog"
+                aria-expanded=move || ambre_chrome::aria_bool(share_open.get())
+                on:click=move |_| share_open.set(true)
+            >
+                <Icon icon=icondata::AiShareAltOutlined />
+            </button>
+        </Show>
+        <button
+            class="icon"
+            title="About"
+            aria-label="About Ambre"
+            aria-haspopup="dialog"
+            aria-expanded=move || ambre_chrome::aria_bool(about_open.get())
+            on:click=move |_| about_open.set(true)
+        >
+            "?"
+        </button>
+        // The user's initials on their identity colour, the accent until the
+        // session names them (`PROFILE-002`).
+        <span
+            class="ambre-avatar"
+            title=move || username.get().unwrap_or_else(|| "Signed out".to_owned())
+            style:background=move || me.get().map(|user| ambre_draw::peer_css(&user))
+        >
+            {move || ambre_chrome::avatar_initials(username.get().as_deref().unwrap_or_default())}
+        </span>
     }
 }
 
@@ -32,15 +176,7 @@ fn follow_shell_nav(
     booted: ambre_bus::DocType,
 ) {
     match nav {
-        toile_chrome::ShellNav::Url(url) => {
-            if let Some(window) = web_sys::window() {
-                let _ = window.open_with_url_and_target_and_features(
-                    &url,
-                    "_blank",
-                    "noopener,noreferrer",
-                );
-            }
-        }
+        toile_chrome::ShellNav::Url(url) => crate::host::open_address(&url),
         toile_chrome::ShellNav::Document {
             document_id,
             doc_type,
@@ -88,6 +224,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         find_result_toile,
         boot_is_toile,
         boot_is_prose,
+        boot_is_murmure,
         prose_figures,
         prose_signals,
         formula_ref,
@@ -95,6 +232,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         formula_action,
         tofu_prompt,
         tofu_confirm,
+        opened_file,
         invite_role,
         me,
         sel_stats,
@@ -130,6 +268,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_dialogs,
         trame_relay,
         toile_relay,
+        murmure_relay,
     } = use_context::<Wiring>().expect("Wiring provided by mount_shell");
 
     // The reactive client route, used only to show/hide the landing overlay.
@@ -144,6 +283,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // Theme toggle drives only the button glyph; `theme_ctl` (canvas) and the
     // document `data-theme` (CSS custom properties) are the real switches.
     let theme_sig = RwSignal::new(theme_ctl.get());
+    // The kind of the view this page booted, fixed per page load.
+    let booted = crate::route::booted_kind(boot_is_toile, boot_is_prose, boot_is_murmure);
 
     // About modal. Every `Dialog` suspends the canvas rAF through the
     // `ModalHold` the shell provides, so no modal here wires the loop.
@@ -174,11 +315,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 return;
             };
             toile_followed_link.set(None);
-            follow_shell_nav(
-                nav,
-                &navigate,
-                crate::route::booted_kind(boot_is_toile, boot_is_prose),
-            );
+            follow_shell_nav(nav, &navigate, booted);
         });
     }
     // A Prose link followed with the modifier leaves through the same shell
@@ -190,11 +327,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 return;
             };
             prose_signals.followed.set(None);
-            follow_shell_nav(
-                toile_chrome::ShellNav::Url(url),
-                &navigate,
-                crate::route::booted_kind(boot_is_toile, boot_is_prose),
-            );
+            follow_shell_nav(toile_chrome::ShellNav::Url(url), &navigate, booted);
         });
         // The link cursor over a link's text, the text cursor elsewhere
         // (`PROSE-UI-153`).
@@ -221,15 +354,60 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // Canvas right-click -> context menu (the launcher owns the listener since
     // the canvas is created by the AppShell).
     let ctx_menu = RwSignal::new(None::<(f64, f64)>);
+    // A Murmure right-click off any message opens nothing. Its menu holds
+    // the actions of the message under the pointer (the Murmure message list
+    // spec). The view names it before the browser's menu event.
     install_canvas_context_menu(
         ctx_menu,
-        Signal::derive(move || boot_is_toile && present_toile.get().is_presenting()),
+        Signal::derive(move || {
+            (boot_is_toile && present_toile.get().is_presenting())
+                || (boot_is_murmure && murmure_relay.target.with(Option::is_none))
+        }),
+        // A long press or a key names the point of the menu itself.
+        Signal::derive(move || {
+            boot_is_murmure
+                && murmure_relay
+                    .target
+                    .with(|t| t.as_ref().is_some_and(|t| t.pressed.is_some()))
+        }),
     );
+    if boot_is_murmure {
+        // A long press opens the same menu where the finger held, and a key
+        // below the focused row. The view names that point in its canvas, and
+        // the menu needs the client's.
+        Effect::new(move |_| {
+            let Some((target, (x, y))) = murmure_relay
+                .target
+                .with(|t| t.as_ref().and_then(|t| Some((t.canvas, t.pressed?))))
+            else {
+                return;
+            };
+            if let Some(canvas) = leptos::prelude::document().get_element_by_id(target) {
+                let rect = canvas.get_bounding_client_rect();
+                ctx_menu.set(Some((
+                    rect.left() + f64::from(x),
+                    rect.top() + f64::from(y),
+                )));
+            }
+        });
+        // The target lives as long as its menu: once it closes, a palette
+        // run of an action finds no message to act on.
+        Effect::new(move |_| {
+            if ctx_menu.with(Option::is_none) {
+                murmure_relay.target.set(None);
+            }
+        });
+    }
     // A file dropped on a board reaches the importer at the point it landed on
     // (`toile-import-export`). Same reason the listener lives here: the canvas
     // belongs to the AppShell, not to the view that paints into it.
     if boot_is_toile {
         install_board_file_drop(toile_dropped_file, toasts);
+    }
+    // A file dropped on a channel uploads for its draft
+    // (`ambre-spec-murmure-attachments.md`).
+    if boot_is_murmure {
+        crate::platform::install_murmure_file_drop(murmure_relay);
     }
 
     // Toile cursor feedback (toile-tools): reflect the active tool on the
@@ -265,6 +443,19 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let on_command = Callback::new({
         let commands = commands.clone();
         move |id: CommandId| commands.run(id)
+    });
+    // The entries the booted application adds to the palette: the channels
+    // of a Murmure page, none for the others.
+    let murmure = commands.handler.murmure();
+    let palette_entries = Signal::derive(move || {
+        murmure
+            .map(|h| h.relay.palette_entries().get())
+            .unwrap_or_default()
+    });
+    let on_palette_entry = Callback::new(move |key: [u8; 16]| {
+        if let Some(h) = murmure {
+            h.choose(key);
+        }
     });
 
     // A panel's intent becomes its application's command in that application's
@@ -344,6 +535,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
             toile_chrome::context_entries_for(&toile_ctx_scope.get())
         } else if boot_is_prose {
             ambre_prose::chrome::context_entries(prose_signals.history.get())
+        } else if boot_is_murmure {
+            murmure_relay.menu_entries().get()
         } else {
             trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get().is_filtered())
         }
@@ -368,73 +561,42 @@ pub(crate) fn AppRoot() -> impl IntoView {
         docs,
         username,
         dev_mode,
-        booted: crate::route::booted_kind(boot_is_toile, boot_is_prose),
+        booted,
         toasts,
+        opened_file,
     };
     let landing_tx = to_logic.clone();
 
-    view! {
+    let header = {
+        let theme_ctl = theme_ctl.clone();
+        move || {
+            view! {
+                <ShellHeader
+                    theme_ctl=theme_ctl.clone()
+                    theme_sig=theme_sig
+                    toasts=toasts
+                    chrome_status=chrome_status
+                    current_doc=current_doc
+                    share_open=share_open
+                    about_open=about_open
+                    username=username
+                    me=me
+                />
+            }
+        }
+    };
+    // A Murmure page lays out its channel list, its channel and its thread
+    // (the Murmure layout spec). It has no formula bar, tabs or status bar.
+    let shell = if boot_is_murmure {
+        let send = super::commands::murmure_send(to_logic.clone());
+        view! {
+            <MurmureShell relay=murmure_relay send=send>{header.clone()}</MurmureShell>
+        }
+        .into_any()
+    } else {
+        view! {
         <AppShell>
-            <Header slot>
-                <span class="title">"Ambre"</span>
-                <span class="spacer"></span>
-                <SyncBadge status=chrome_status.into() />
-                <button
-                    class="icon"
-                    title="Toggle theme"
-                    aria-label="Toggle colour theme"
-                    on:click={
-                        let theme_ctl = theme_ctl.clone();
-                        move |_| {
-                            let next = switch_theme(&theme_ctl);
-                            theme_sig.set(next);
-                            let label = if next == ambre_canvas::Theme::Dark {
-                                "Dark theme"
-                            } else {
-                                "Light theme"
-                            };
-                            toasts.info(label);
-                        }
-                    }
-                >
-                    {move || {
-                        let icon = if theme_sig.get() == ambre_canvas::Theme::Dark {
-                            icondata::AiMoonFilled
-                        } else {
-                            icondata::AiSunFilled
-                        };
-                        view! { <Icon icon=icon /> }
-                    }}
-                </button>
-                <Show when=move || current_doc.get().is_some()>
-                    <button
-                        class="icon"
-                        title="Share"
-                        aria-label="Share document"
-                        aria-haspopup="dialog"
-                        aria-expanded=move || ambre_chrome::aria_bool(share_open.get())
-                        on:click=move |_| share_open.set(true)
-                    >
-                        <Icon icon=icondata::AiShareAltOutlined />
-                    </button>
-                </Show>
-                <button
-                    class="icon"
-                    title="About"
-                    aria-label="About Ambre"
-                    aria-haspopup="dialog"
-                    aria-expanded=move || ambre_chrome::aria_bool(about_open.get())
-                    on:click=move |_| about_open.set(true)
-                >
-                    "?"
-                </button>
-                <span
-                    class="ambre-avatar"
-                    title=move || username.get().unwrap_or_else(|| "Signed out".to_owned())
-                >
-                    {move || initials(username.get().as_deref())}
-                </span>
-            </Header>
+            <Header slot>{header.clone()}</Header>
             // The toolbar / formula bar / sheet tabs / status bar are Trame chrome
             // (`trame-cell-styles`, `trame-cell-editing`, `trame-sheets`,
             // `trame-status-bar`). A Toile board renders none of them. Its tool palette,
@@ -497,6 +659,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 }}
             </StatusBar>
         </AppShell>
+        }
+        .into_any()
+    };
+
+    view! {
+        {shell}
 
         <ambre_chrome::PassphraseDialog
             open=seal_open
@@ -648,11 +816,14 @@ pub(crate) fn AppRoot() -> impl IntoView {
 
         // The command palette (`CHROME-008`): every command the booted
         // application declares, searchable, whether or not a menu shows it. One
-        // overlay for both, fed by the app's own table.
+        // overlay for both, fed by the app's own table. Murmure lists its
+        // channels before its commands (the Murmure keyboard spec).
         <ambre_chrome::CommandPalette
             open=palette_open
-            table=palette_table(crate::route::booted_kind(boot_is_toile, boot_is_prose))
+            table=palette_table(booted)
             on_command=on_command
+            entries=palette_entries
+            on_entry=on_palette_entry
         />
         // Find panel, pinned top-right. Trame ships `trame-find-replace`;
         // Toile ships a find-only panel (`toile-find`). The booted app kind
@@ -894,6 +1065,10 @@ mod tests {
         );
         assert_eq!(fed(DocType::Prose), ids(ambre_prose::commands::COMMANDS));
         assert_eq!(fed(DocType::Trame), ids(trame_chrome::COMMANDS));
+        assert_eq!(
+            fed(DocType::Murmure),
+            ids(ambre_murmure::commands::COMMANDS)
+        );
         assert!(fed(DocType::Toile).len() > ambre_toile::ui::menu::COMMANDS.len());
     }
 

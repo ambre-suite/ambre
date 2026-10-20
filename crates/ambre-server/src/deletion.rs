@@ -12,7 +12,8 @@ const PASS_LIMIT: i64 = 100;
 /// (`SRV-165`). It also schedules the second sweep of the objects (`SRV-057`).
 ///
 /// A space goes with every channel of it, the channels first (`SRV-143`).
-/// Each member of each channel drops it (`SRV-188`).
+/// Each member of each channel drops it (`SRV-188`), and each member of the
+/// space drops the space (`SRV-218`).
 ///
 /// # Errors
 ///
@@ -22,7 +23,11 @@ pub async fn delete_document(
     document_id: &ambre_core::DocumentId,
 ) -> Result<(), AppError> {
     let sweep_due = sweep_due(state);
+    let space_members = crate::db::space_members(&state.db, document_id).await?;
     let channels = crate::db::begin_deletion(&state.db, document_id, unix_i64(sweep_due)).await?;
+    for member in &space_members {
+        crate::routes::notify_removed(state, document_id, member).await;
+    }
     for channel in &channels {
         empty_marked(state, &channel.documents, unix_i64(sweep_due)).await;
         let Some(meta) = channel.meta else { continue };

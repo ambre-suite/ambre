@@ -14,6 +14,12 @@
 :root {
     --header-h: 44px;
     --status-h: 26px;
+    --sidebar-w: 260px;
+    --sidebar-strip: 44px;
+    --panel-w: 380px;
+    /* 1 at the desktop width, where a chord shows. The host reads it for the
+       canvas, so no width lives outside this sheet. */
+    --desktop: 0;
 }
 
 /* Native form controls: tint the checked fill with the accent, and render the
@@ -29,11 +35,11 @@ input[type="radio"] {
 }
 
 /* The shell fills the viewport; rows = header, command bar, formula bar,
-   content, tab strip, status. The tab-strip row is `auto`: it collapses to 0
-   when the app provides no <Tabs> slot. */
+   body, tab strip, status. Each row is placed by name, so an absent one leaves
+   its track empty: an `auto` track then collapses to 0. */
 .ambre-shell {
     display: grid;
-    grid-template-rows: var(--header-h) auto auto 1fr auto var(--status-h);
+    grid-template-rows: var(--header-h) auto auto 1fr auto auto;
     grid-template-columns: 100%;
     width: 100%;
     height: 100%;
@@ -441,9 +447,392 @@ input[type="radio"] {
     box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+.ambre-shell > .ambre-header { grid-row: 1; }
+.ambre-shell > .ambre-commandbar { grid-row: 2; }
+.ambre-shell > .ambre-formulabar { grid-row: 3; }
+.ambre-shell > .ambre-body { grid-row: 4; }
+.ambre-shell > .ambre-tabstrip { grid-row: 5; }
+.ambre-shell > .ambre-statusbar { grid-row: 6; }
+
+/* The body: an optional sidebar, the content, an optional panel. The narrowest
+   window shows the region in focus alone (`data-focus`), and each wider one
+   only adds a region beside it (`CHROME-031`). */
+.ambre-body {
+    display: flex;
+    min-height: 0;
+    min-width: 0;
+}
+
+.ambre-body > .ambre-sidebar,
+.ambre-body > .ambre-content,
+.ambre-body > .ambre-panel {
+    display: none;
+    min-width: 0;
+    min-height: 0;
+}
+
+.ambre-body[data-focus="sidebar"] > .ambre-sidebar,
+.ambre-body[data-focus="content"] > .ambre-content,
+.ambre-body[data-focus="panel"] > .ambre-panel {
+    display: flex;
+    flex: 1 1 0;
+}
+
+.ambre-sidebar {
+    flex-direction: column;
+    overflow: auto;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+}
+
+.ambre-sidebar-fold {
+    align-self: flex-end;
+}
+
+.ambre-sidebar-body {
+    flex: 1 1 auto;
+    overflow: auto;
+}
+
+/* The Murmure channel list (the Murmure layout spec): one section per group,
+   one button per channel, its mark or its counts at the end. */
+.murmure-channel-list {
+    padding: var(--space-2) 0;
+}
+
+.murmure-section-title {
+    margin: var(--space-3) var(--space-4) var(--space-1);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+.murmure-section ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.murmure-entry {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-1) var(--space-4);
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-body);
+    text-align: left;
+    cursor: pointer;
+}
+
+.murmure-entry:hover {
+    background: var(--surface-hover);
+}
+
+.murmure-entry[aria-current="page"] {
+    background: var(--surface-2);
+    box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.murmure-entry-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.murmure-mark {
+    width: var(--space-2);
+    height: var(--space-2);
+    border-radius: 50%;
+    background: var(--text);
+}
+
+.murmure-count,
+.murmure-mentions {
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-xs);
+}
+
+.murmure-count {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.murmure-mentions {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.murmure-members-toggle {
+    margin-left: auto;
+}
+
+/* The invite control of a private channel or a direct message, its member
+   list under it. */
+.murmure-invite {
+    position: relative;
+    margin-left: var(--space-2);
+}
+
+.murmure-invite-picker {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    width: min(20rem, 90vw);
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: var(--space-2) 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+}
+
+.murmure-invite-filter {
+    margin: 0 var(--space-4);
+}
+
+.murmure-invite-picker ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* The `@` list of the composer, hung above its caret. The pipe keeps the
+   focus, so the list takes no pointer focus of its own. */
+.murmure-mentions {
+    position: fixed;
+    z-index: 20;
+    transform: translateY(-100%);
+    min-width: 12rem;
+    max-width: min(20rem, 90vw);
+    max-height: 40vh;
+    overflow-y: auto;
+    margin: 0;
+    padding: var(--space-2) 0;
+    list-style: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+}
+
+.murmure-mention {
+    padding: var(--space-1) var(--space-4);
+    cursor: pointer;
+}
+
+.murmure-mention[aria-selected="true"] {
+    box-shadow: inset 2px 0 0 var(--accent);
+    background: var(--bg);
+}
+
+/* The search box of the command bar, its results under it. */
+.murmure-search {
+    position: relative;
+    margin-left: var(--space-2);
+}
+
+.murmure-search-results {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 10;
+    width: min(28rem, 90vw);
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: var(--space-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+}
+
+.murmure-search-coverage,
+.murmure-search-segments {
+    color: var(--text-dim);
+    font-size: var(--font-small);
+}
+
+.murmure-search-coverage {
+    margin: 0 0 var(--space-2);
+}
+
+.murmure-search-channel {
+    display: flex;
+    gap: var(--space-2);
+    margin: var(--space-2) 0 var(--space-1);
+    font-size: var(--font-small);
+}
+
+.murmure-search-group ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.murmure-search-match {
+    width: 100%;
+    padding: var(--space-1) var(--space-2);
+    text-align: left;
+    border-radius: var(--radius);
+}
+
+.murmure-search-match:hover {
+    background: var(--surface-hover);
+}
+
+/* The list of keys (MURMURE-540). Its keys show at every width, unlike the
+   chip of a menu (MURMURE-542). */
+.murmure-keys-table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.murmure-keys-table th,
+.murmure-keys-table td {
+    padding: var(--space-1) var(--space-2);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+.murmure-keys-key {
+    display: inline-block;
+    font: var(--font-xs) ui-monospace, monospace;
+    white-space: nowrap;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1px var(--space-3);
+}
+
+/* The emoji picker (MURMURE-139, MURMURE-140). The buttons draw with the
+   system's emoji face: the DOM fetches no font for them. */
+.murmure-emoji-search {
+    width: 100%;
+    margin-bottom: var(--space-2);
+}
+
+.murmure-emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr));
+    gap: var(--space-1);
+    max-height: 16rem;
+    overflow-y: auto;
+}
+
+.murmure-emoji-pick {
+    font-size: var(--font-display);
+    line-height: 1;
+    padding: var(--space-1);
+    border-radius: var(--radius);
+}
+
+.murmure-emoji-pick:hover,
+.murmure-emoji-pick:focus-visible {
+    background: var(--surface-hover);
+}
+
+.murmure-members {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+}
+
+.murmure-members-filter {
+    margin: 0 var(--space-4);
+}
+
+.murmure-members ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.murmure-member {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-4);
+}
+
+/* Another member's row writes to them; it reads as the row it fills. */
+.murmure-member-open {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
+.murmure-member-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Online is a filled dot, offline a hollow ring, and a member in the channel
+   a dot inside a ring: each differs in shape as well as in colour
+   (`MURMURE-443`, `MURMURE-520`). */
+.murmure-presence {
+    box-sizing: border-box;
+    width: var(--space-2);
+    height: var(--space-2);
+    border-radius: 50%;
+}
+
+.murmure-presence[data-presence="online"] {
+    background: var(--success);
+}
+
+.murmure-presence[data-presence="here"] {
+    border: 2px solid var(--accent);
+    background: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--surface);
+}
+
+.murmure-presence[data-presence="offline"] {
+    border: 2px solid var(--text-dim);
+    background: transparent;
+}
+
+.ambre-panel {
+    flex-direction: column;
+    overflow: auto;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+}
+
 /* Content: the wgpu canvas cell. */
 .ambre-content {
     position: relative;
+    overflow: hidden;
+}
+
+/* A canvas cell beside the content, such as a Murmure thread: the rest of
+   the region that holds it, sized by it alone. */
+.ambre-canvas-cell {
+    position: relative;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -557,6 +946,7 @@ input[type="radio"] {
 /* Status bar. */
 .ambre-statusbar {
     display: flex;
+    height: var(--status-h);
     align-items: center;
     gap: var(--space-7);
     padding: 0 var(--space-6);
@@ -1339,12 +1729,44 @@ input[type="radio"] {
     .ambre-sync .label {
         display: inline;
     }
+
+    /* The sidebar joins the region in focus, and folds to a strip. A panel in
+       focus still takes the place of the content. */
+    .ambre-body[data-focus] > .ambre-sidebar {
+        display: flex;
+        flex: 0 0 var(--sidebar-w);
+    }
+
+    .ambre-body[data-focus] > .ambre-sidebar[data-folded="true"] {
+        flex-basis: var(--sidebar-strip);
+        overflow: hidden;
+    }
+
+    .ambre-body[data-focus="sidebar"] > .ambre-content {
+        display: flex;
+        flex: 1 1 0;
+    }
 }
 
 /* -- Desktop (> 1024 dp): icons + labels + shortcuts -- restore Kbd hints. -- */
 @media (min-width: 1025px) {
+    :root {
+        --desktop: 1;
+    }
+
     .ambre-kbd {
         display: inline-block;
+    }
+
+    /* Every region side by side: the content, and an open panel after it. */
+    .ambre-body[data-focus] > .ambre-content {
+        display: flex;
+        flex: 1 1 0;
+    }
+
+    .ambre-body[data-focus] > .ambre-panel {
+        display: flex;
+        flex: 0 0 var(--panel-w);
     }
 }
 
@@ -1591,6 +2013,26 @@ input[type="radio"] {
     color: var(--text-dim);
 }
 
+/* A quiet action beside the identity it ends. */
+.ambre-sign-out {
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: var(--font-body);
+    cursor: pointer;
+}
+
+.ambre-sign-out:hover:not(:disabled) {
+    color: var(--text);
+}
+
+.ambre-sign-out:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
 /* -- Delete confirmation dialog ------------------------------------------- */
 /* A `Dialog`: the padding sits on the body, so a hit on the element itself is
    a backdrop click. */
@@ -1649,6 +2091,20 @@ input[type="radio"] {
 }
 
 .ambre-btn-danger:hover {
+    filter: brightness(1.1);
+}
+
+.ambre-btn-primary {
+    padding: var(--space-4) var(--space-8);
+    border: 0;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: var(--font-body);
+    cursor: pointer;
+}
+
+.ambre-btn-primary:hover {
     filter: brightness(1.1);
 }
 

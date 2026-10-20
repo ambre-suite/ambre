@@ -191,15 +191,20 @@ pub(crate) fn creation(
 pub(crate) fn build_invite_request(
     my_xk: &StaticSecret,
     invitee_pub_hex: &str,
-    invitee_email: String,
+    invitee: InviteeName,
     doc_key: &DocumentKey,
     role: Role,
     anchor: Option<EntryDigest>,
     entry: Option<String>,
 ) -> Result<http::InviteRequest, String> {
     let peer = decode_exchange_pubkey(invitee_pub_hex)?;
+    let (invitee_email, invitee_id) = match invitee {
+        InviteeName::Email(email) => (Some(email), None),
+        InviteeName::Id(id) => (None, Some(id)),
+    };
     Ok(http::InviteRequest {
         invitee_email,
+        invitee_id,
         role,
         doc_key_enc: wrap_anchored_b64(my_xk, &peer, doc_key, anchor).map_err(|e| e.to_string())?,
         // The relay refuses the copy if a rotation replaced this key
@@ -378,8 +383,9 @@ pub(crate) struct InviteParams {
     pub document_id: DocumentId,
     pub url_scheme: &'static str,
     pub api_base: String,
-    pub invitee_email: String,
-    /// The user phase 1 answered for that email, whom the user confirmed.
+    /// The email phase 1 searched, or `None` for a member known by id.
+    pub invitee_email: Option<String>,
+    /// The user phase 1 answered, whom the user confirmed.
     pub invitee: UserId,
     pub role: Role,
     pub exchange_key: StaticSecret,
@@ -407,36 +413,10 @@ pub(crate) async fn invite_task<H: ShareHttp>(
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    let search_url = format!(
-        "{}://{}/api/users/search?query={}",
-        p.url_scheme,
-        p.api_base,
-        p.invitee_email.replace('@', "%40")
-    );
-    let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
-        Ok(resp) => resp.users,
-        Err(e) => {
-            return api_error(
-                logic_tx,
-                "InviteToDocument",
-                500,
-                format!("User search failed: {e}"),
-            );
-        }
+    let invitee = match invitee_keys(http, &p).await {
+        Ok(keys) => keys,
+        Err((code, message)) => return api_error(logic_tx, "InviteToDocument", code, message),
     };
-    let Some(invitee) = users.iter().find(|u| u.email == p.invitee_email) else {
-        return api_error(logic_tx, "InviteToDocument", 404, "User not found".into());
-    };
-    // The email must still name the user confirmed in phase 1, whom a
-    // notice of the channel may already name (`SYNC-161`).
-    if invitee.id != p.invitee {
-        return api_error(
-            logic_tx,
-            "InviteToDocument",
-            409,
-            "Invitee changed since confirmation; invite refused".into(),
-        );
-    }
     // TOFU pin: the re-fetched key must match the one confirmed in phase 1.
     match decode_exchange_pubkey(&invitee.exchange_pubkey) {
         Ok(fetched) if fetched == p.expect_exchange_pub_key => {}
@@ -451,7 +431,7 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         Err(e) => return api_error(logic_tx, "InviteToDocument", 500, e),
     }
     // The invitation's entry names the invitee by identity and signing key.
-    let invitee_id = invitee.id;
+    let invitee_id = p.invitee;
     let invitee_key = match decode_signing_pubkey(&invitee.signing_pubkey) {
         Ok(key) => key,
         Err(e) => return api_error(logic_tx, "InviteToDocument", 500, e),
@@ -495,7 +475,7 @@ pub(crate) async fn invite_task<H: ShareHttp>(
             build_invite_request(
                 &p.exchange_key,
                 &invitee.exchange_pubkey,
-                p.invitee_email.clone(),
+                invitee_named(&p),
                 &p.doc_key,
                 p.role,
                 anchor,
@@ -533,6 +513,74 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         ),
         Err(e) => api_error(logic_tx, "InviteToDocument", 500, e),
     }
+}
+
+/// The keys the relay serves now for the invitee of `p`.
+struct InviteeKeys {
+    exchange_pubkey: String,
+    signing_pubkey: String,
+}
+
+/// Fetch the keys of the confirmed invitee again, the way phase 1 found
+/// them. An email is searched, and must still name the confirmed user
+/// (`SYNC-161`). An id is asked for its keys alone (`SYNC-172`).
+async fn invitee_keys<H: ShareHttp>(
+    http: &H,
+    p: &InviteParams,
+) -> Result<InviteeKeys, (u16, String)> {
+    let Some(email) = &p.invitee_email else {
+        let url = format!(
+            "{}://{}/api/users/{}/pubkeys",
+            p.url_scheme, p.api_base, p.invitee
+        );
+        return match http.get_json::<http::PubkeysResponse>(&url).await {
+            Ok(served) => Ok(InviteeKeys {
+                exchange_pubkey: served.exchange_pubkey,
+                signing_pubkey: served.signing_pubkey,
+            }),
+            Err(e) => Err((500, format!("Key fetch failed: {e}"))),
+        };
+    };
+    let search_url = format!(
+        "{}://{}/api/users/search?query={}",
+        p.url_scheme,
+        p.api_base,
+        email.replace('@', "%40")
+    );
+    let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
+        Ok(resp) => resp.users,
+        Err(e) => return Err((500, format!("User search failed: {e}"))),
+    };
+    let Some(invitee) = users.into_iter().find(|u| u.email == *email) else {
+        return Err((404, "User not found".into()));
+    };
+    // The email must still name the user confirmed in phase 1, whom a
+    // notice of the channel may already name.
+    if invitee.id != p.invitee {
+        return Err((
+            409,
+            "Invitee changed since confirmation; invite refused".into(),
+        ));
+    }
+    Ok(InviteeKeys {
+        exchange_pubkey: invitee.exchange_pubkey,
+        signing_pubkey: invitee.signing_pubkey,
+    })
+}
+
+/// How the share names its invitee: by the email phase 1 searched, else by
+/// the id alone (`SRV-224`).
+fn invitee_named(p: &InviteParams) -> InviteeName {
+    match &p.invitee_email {
+        Some(email) => InviteeName::Email(email.clone()),
+        None => InviteeName::Id(p.invitee),
+    }
+}
+
+/// The one name a share carries for its invitee.
+pub(crate) enum InviteeName {
+    Email(String),
+    Id(UserId),
 }
 
 /// Inputs for [`fetch_invitee_key_task`] (TOFU phase 1).
@@ -591,6 +639,51 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
         email: invitee.email.clone(),
         exchange_pub_key,
         fingerprint,
+    });
+}
+
+/// Inputs for [`fetch_member_key_task`].
+pub(crate) struct FetchMemberKeyParams {
+    pub id: RequestId,
+    pub user_id: UserId,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+}
+
+/// Fetch the exchange key the relay serves for a user the client already
+/// names, and answer with `SyncEvent::MemberKeyReady`. Nothing is wrapped:
+/// the Main thread compares the key with the pin first. The answer carries
+/// the id the request named, never one the relay returns.
+pub(crate) async fn fetch_member_key_task<H: ShareHttp>(
+    http: &H,
+    p: FetchMemberKeyParams,
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
+    logic_tx: &LogicSink,
+) {
+    let url = format!(
+        "{}://{}/api/users/{}/pubkeys",
+        p.url_scheme, p.api_base, p.user_id
+    );
+    let served = match http.get_json::<http::PubkeysResponse>(&url).await {
+        Ok(served) => served,
+        Err(e) => {
+            return api_error(
+                logic_tx,
+                "FetchMemberKey",
+                500,
+                format!("Key fetch failed: {e}"),
+            );
+        }
+    };
+    let exchange_pub_key = match decode_exchange_pubkey(&served.exchange_pubkey) {
+        Ok(key) => key,
+        Err(e) => return api_error(logic_tx, "FetchMemberKey", 500, e),
+    };
+    let _ = event_tx.send(SyncEvent::MemberKeyReady {
+        id: p.id,
+        user_id: p.user_id,
+        exchange_pub_key,
+        fingerprint: ambre_crypto::fingerprint(&exchange_pub_key),
     });
 }
 
@@ -890,6 +983,7 @@ pub(crate) async fn close_segment_task<H: ShareHttp>(
         doc_key_enc,
         document_id: Some(successor),
         entry: Some(entry),
+        space: false,
     };
     http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
         .await?;
@@ -944,6 +1038,7 @@ pub(crate) async fn amendments_task<H: ShareHttp>(
         doc_key_enc,
         document_id: Some(p.amendments),
         entry: Some(entry),
+        space: false,
     };
     http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
         .await?;
@@ -999,6 +1094,7 @@ pub(crate) async fn thread_task<H: ShareHttp>(
         doc_key_enc,
         document_id: Some(p.thread),
         entry: Some(entry),
+        space: false,
     };
     http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
         .await?;
@@ -1428,7 +1524,7 @@ mod tests {
         let req = build_invite_request(
             &my_xk,
             &invitee_pub_hex,
-            "invitee@test.local".into(),
+            InviteeName::Email("invitee@test.local".into()),
             &doc_key,
             Role::Editor,
             None,
@@ -1436,7 +1532,8 @@ mod tests {
         )
         .expect("valid pubkey");
 
-        assert_eq!(req.invitee_email, "invitee@test.local");
+        assert_eq!(req.invitee_email.as_deref(), Some("invitee@test.local"));
+        assert_eq!(req.invitee_id, None);
         assert_eq!(req.role, Role::Editor);
         // The invitee unwraps against the inviter's public key: succeeds.
         assert!(unwrap_b64(&invitee_xk, &my_pub, &req.doc_key_enc).is_ok());
@@ -1450,7 +1547,7 @@ mod tests {
         let err = build_invite_request(
             &my_xk,
             "zz-not-hex",
-            "x@y.z".into(),
+            InviteeName::Email("x@y.z".into()),
             &DocumentKey::generate(),
             Role::Viewer,
             None,
@@ -1642,7 +1739,7 @@ mod tests {
             document_id: DocumentId::new(),
             url_scheme: "https",
             api_base: "api.test".into(),
-            invitee_email: "invitee@test.local".into(),
+            invitee_email: Some("invitee@test.local".into()),
             invitee: UserId::parse_str(INVITEE).expect("an id"),
             role: Role::Editor,
             exchange_key: my_xk.clone(),
@@ -1690,6 +1787,77 @@ mod tests {
             }
             other => panic!("expected share POST, got {other:?}"),
         }
+    }
+
+    // --- SYNC-172 ---
+
+    /// An invitee known by id alone has its keys fetched by that id, and
+    /// the share names the id, never an email.
+    #[tokio::test]
+    async fn an_invite_by_id_fetches_the_keys_of_that_id_and_shares_by_it() {
+        let (my_xk, my_pub_hex) = keypair(1);
+        let my_pub = decode_exchange_pubkey(&my_pub_hex).unwrap();
+        let (invitee_xk, invitee_pub_hex) = keypair(2);
+        let invitee_pub = decode_exchange_pubkey(&invitee_pub_hex).unwrap();
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({
+                "signing_pubkey": "00".repeat(32),
+                "exchange_pubkey": invitee_pub_hex,
+            })),
+            Ok(serde_json::json!({ "members": [] })),
+            Ok(serde_json::json!({ "user_id": INVITEE, "display_name": "Invitee" })),
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        let params = InviteParams {
+            invitee_email: None,
+            ..invite_params(&my_xk, invitee_pub)
+        };
+        invite_task(&http, params, &etx, &sink).await;
+
+        assert!(matches!(erx.try_recv(), Ok(SyncEvent::InviteSent { .. })));
+        assert!(lrx.try_recv().is_err(), "no ApiError on success");
+        let calls = http.calls();
+        assert!(
+            matches!(&calls[0], Call::Get(url) if url.ends_with(&format!("/users/{INVITEE}/pubkeys"))),
+            "the keys of the id are fetched, and no search runs: {calls:?}"
+        );
+        match &calls[2] {
+            Call::Post(url, body) => {
+                assert!(url.ends_with("/share"));
+                assert_eq!(body["invitee_id"], INVITEE);
+                assert!(body.get("invitee_email").is_none());
+                let enc = body["doc_key_enc"].as_str().unwrap();
+                assert!(unwrap_b64(&invitee_xk, &my_pub, enc).is_ok());
+            }
+            other => panic!("expected share POST, got {other:?}"),
+        }
+    }
+
+    /// A key served by id that differs from the pin refuses the invite
+    /// before any wrap, as the email path does.
+    #[tokio::test]
+    async fn an_invite_by_id_refuses_a_key_other_than_the_pin() {
+        let (my_xk, _) = keypair(1);
+        let (_, confirmed_hex) = keypair(2);
+        let confirmed = decode_exchange_pubkey(&confirmed_hex).unwrap();
+        let (_, substituted_hex) = keypair(9);
+        let http = FakeHttp::new(vec![Ok(serde_json::json!({
+            "signing_pubkey": "00".repeat(32),
+            "exchange_pubkey": substituted_hex,
+        }))]);
+        let (etx, erx, sink, lrx) = channels();
+        let params = InviteParams {
+            invitee_email: None,
+            ..invite_params(&my_xk, confirmed)
+        };
+        invite_task(&http, params, &etx, &sink).await;
+
+        assert!(matches!(
+            lrx.try_recv(),
+            Ok(LogicEvent::ApiError { code: 409, .. })
+        ));
+        assert!(erx.try_recv().is_err(), "no InviteSent on mismatch");
+        assert_eq!(http.calls().len(), 1, "only the key fetch ran");
     }
 
     #[tokio::test]
@@ -1820,6 +1988,69 @@ mod tests {
         assert!(lrx.try_recv().is_err(), "no ApiError on success");
         // Phase 1 only searches: no wrapping, no share POST.
         assert_eq!(http.calls().len(), 1);
+    }
+
+    fn member_key_params(user_id: UserId) -> FetchMemberKeyParams {
+        FetchMemberKeyParams {
+            id: RequestId::next(),
+            user_id,
+            url_scheme: "https",
+            api_base: "api.test".into(),
+        }
+    }
+
+    /// A member's key is fetched by the id the client names, and answered
+    /// under that id with its fingerprint. One GET, and nothing is wrapped.
+    #[tokio::test]
+    async fn a_member_key_is_fetched_by_user_id_and_wraps_nothing() {
+        let (_member_xk, member_pub_hex) = keypair(3);
+        let member_pub = decode_exchange_pubkey(&member_pub_hex).unwrap();
+        let user_id = UserId::new();
+        let http = FakeHttp::new(vec![Ok(serde_json::json!({
+            "signing_pubkey": "00".repeat(32),
+            "exchange_pubkey": member_pub_hex,
+        }))]);
+        let (etx, erx, sink, lrx) = channels();
+        fetch_member_key_task(&http, member_key_params(user_id), &etx, &sink).await;
+
+        match erx.try_recv().expect("MemberKeyReady emitted") {
+            SyncEvent::MemberKeyReady {
+                user_id: answered,
+                exchange_pub_key,
+                fingerprint,
+                ..
+            } => {
+                assert_eq!(answered, user_id);
+                assert_eq!(exchange_pub_key, member_pub);
+                assert_eq!(fingerprint, ambre_crypto::fingerprint(&member_pub));
+            }
+            _ => panic!("unexpected event (want MemberKeyReady)"),
+        }
+        assert!(lrx.try_recv().is_err(), "no ApiError on success");
+        let calls = http.calls();
+        assert_eq!(calls.len(), 1);
+        assert!(
+            matches!(&calls[0], Call::Get(url) if url == &format!("https://api.test/api/users/{user_id}/pubkeys"))
+        );
+    }
+
+    /// A refused fetch or a malformed key answers an error, and no key.
+    #[tokio::test]
+    async fn a_member_key_that_fails_or_is_malformed_answers_an_error() {
+        let malformed = serde_json::json!({
+            "signing_pubkey": "00".repeat(32),
+            "exchange_pubkey": "ab".repeat(31),
+        });
+        for answer in [Err("404".to_owned()), Ok(malformed)] {
+            let http = FakeHttp::new(vec![answer]);
+            let (etx, erx, sink, lrx) = channels();
+            fetch_member_key_task(&http, member_key_params(UserId::new()), &etx, &sink).await;
+            assert!(erx.try_recv().is_err(), "no key answered");
+            assert!(matches!(
+                lrx.try_recv(),
+                Ok(LogicEvent::ApiError { code: 500, .. })
+            ));
+        }
     }
 
     #[tokio::test]
@@ -2035,7 +2266,7 @@ mod tests {
         let req = build_invite_request(
             &my_xk,
             &i_pub,
-            "i@test".into(),
+            InviteeName::Email("i@test".into()),
             &doc_key,
             Role::Editor,
             None,

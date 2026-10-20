@@ -7,10 +7,11 @@
 
 use ambre_bus::{Mention, MentionTarget, MessageDraft};
 use ambre_core::{ChannelId, UserId};
-use loro::{ExpandType, LoroDoc, LoroText, LoroValue, StyleConfig, StyleConfigMap, TextDelta};
+use loro::{LoroDoc, LoroText, LoroValue, TextDelta};
 
 use crate::error::MurmureError;
 use crate::schema::MENTION;
+use crate::style;
 
 /// The value a mark stores for `target`: the user, or the channel itself.
 fn value_of(target: MentionTarget, channel: ChannelId) -> String {
@@ -54,16 +55,7 @@ pub(crate) fn write(
     if mentions.is_empty() {
         return Ok(());
     }
-    // The style config is local to this document and read at the mark: a
-    // receiver takes the expansion from the op itself.
-    let mut styles = StyleConfigMap::default_rich_text_config();
-    styles.insert(
-        MENTION.into(),
-        StyleConfig {
-            expand: ExpandType::None,
-        },
-    );
-    doc.config_text_style(styles);
+    style::configure(doc);
     for mention in mentions {
         content.mark(
             mention.range.clone(),
@@ -112,8 +104,8 @@ pub enum Screened {
     Send(MessageDraft),
     /// The draft mentions the channel, which holds this many members, past
     /// [`CONFIRM_CHANNEL_PAST`]. Nothing is sent before the author confirms
-    /// (`MURMURE-231`).
-    Confirm { members: usize },
+    /// (`MURMURE-231`). The draft comes back to be held.
+    Confirm { members: usize, draft: MessageDraft },
 }
 
 /// Screen `draft` against `members`, the users of its channel. `None` before
@@ -132,6 +124,7 @@ pub fn screen(draft: MessageDraft, members: Option<&[UserId]>, confirmed: bool) 
     if all && !confirmed && members.len() > CONFIRM_CHANNEL_PAST {
         return Screened::Confirm {
             members: members.len(),
+            draft,
         };
     }
     Screened::Send(draft)

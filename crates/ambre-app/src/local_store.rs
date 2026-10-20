@@ -6,15 +6,22 @@
 //! quota: it frees what the relay holds and retries once. A change the relay
 //! has not acknowledged that still does not fit pauses editing, and is
 //! retried until it lands or the relay acknowledges it.
+//!
+//! Each snapshot and each delta reaches the store sealed by the Sync worker,
+//! and opens through it on the way back (`RESID-025`). The writes keep the
+//! order Logic made them in while their seals are on the way.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use ambre_bus::conduit::Sender;
-use ambre_bus::{DocumentId, LogicCommand};
+use ambre_bus::{DocType, DocumentId, LogicCommand, RowPlace, SealedRow};
 use ambre_logic::PersistWrite;
 use ambre_logic::persistence::{PersistenceStore, Stored};
+use ambre_logic::seal_queue::SealQueue;
 use ambre_logic::store_ledger::{Refusal, StoreLedger};
+
+use crate::vault::Vault;
 
 /// How many frames a write held for the quota waits before it is tried
 /// again: about two seconds at 60 Hz.
@@ -47,12 +54,23 @@ struct Inner {
     /// Frames since the held writes were last tried.
     frames: Cell<u32>,
     to_logic: Sender<LogicCommand>,
+    vault: Vault,
+    /// The writes on their way to the store, behind their seals.
+    queue: RefCell<SealQueue>,
+    /// The document the page opened on, restored once a session holds the
+    /// key.
+    boot: Cell<Option<(DocType, DocumentId)>>,
 }
 
 impl LocalStore {
     /// Wrap an open store: read back what the ledger knew before the
     /// reload, and ask the browser to keep the store (`RESID-020`).
-    pub(crate) async fn open(store: PersistenceStore, to_logic: Sender<LogicCommand>) -> Self {
+    pub(crate) async fn open(
+        store: PersistenceStore,
+        to_logic: Sender<LogicCommand>,
+        vault: Vault,
+        boot: Option<(DocType, DocumentId)>,
+    ) -> Self {
         PersistenceStore::request_persistent();
         let mut ledger = StoreLedger::default();
         for (id, meta) in store.load_meta().await.unwrap_or_default() {
@@ -65,6 +83,9 @@ impl LocalStore {
                 held: RefCell::new(Vec::new()),
                 frames: Cell::new(0),
                 to_logic,
+                vault,
+                queue: RefCell::new(SealQueue::default()),
+                boot: Cell::new(boot),
             }),
         }
     }
@@ -74,8 +95,44 @@ impl LocalStore {
         &self.inner.store
     }
 
-    /// Perform one write or signal from Logic. A read back is the caller's.
+    /// A session holds the key: the page's document comes back from its
+    /// copy, if the store holds one. Before it, the copy cannot open.
+    pub(crate) fn signed_in(&self) {
+        if let Some((doc_type, document_id)) = self.inner.boot.take() {
+            self.read_back(document_id, doc_type, true);
+        }
+    }
+
+    /// Take one write or signal from Logic. A snapshot or a delta waits for
+    /// its seal, and every write behind it waits its turn.
     pub(crate) fn apply(&self, id: DocumentId, write: PersistWrite) {
+        let seal = self.inner.queue.borrow_mut().push(id, write);
+        let Some((ticket, plaintext)) = seal else {
+            self.flush();
+            return;
+        };
+        let this = self.clone();
+        self.inner
+            .vault
+            .seal(RowPlace::Document(id), plaintext, move |sealed| {
+                if sealed.is_none() {
+                    tracing::warn!("Persistence: no session seals the copy, the write is dropped");
+                }
+                this.inner.queue.borrow_mut().sealed(ticket, sealed);
+                this.flush();
+            });
+    }
+
+    /// Perform the writes whose turn came.
+    fn flush(&self) {
+        let ready = self.inner.queue.borrow_mut().ready();
+        for (id, write) in ready {
+            self.land(id, write);
+        }
+    }
+
+    /// Perform one write or signal, its row sealed.
+    fn land(&self, id: DocumentId, write: PersistWrite) {
         let observed = self.inner.ledger.borrow_mut().observe(id, &write);
         for gone in &observed.evict {
             self.inner.store.delete_snapshot(*gone.as_bytes());
@@ -97,8 +154,78 @@ impl LocalStore {
             // The relay holds every change: what the quota held back is a
             // copy it can serve again.
             PersistWrite::Sent => self.inner.held.borrow_mut().retain(|(held, _)| *held != id),
-            PersistWrite::Shown | PersistWrite::Hidden | PersistWrite::ReadBack { .. } => {}
+            // Read after every write queued before it, so the copy holds what
+            // the document had when it left (`RESID-010`).
+            PersistWrite::ReadBack { doc_type } => self.read_back(id, doc_type, false),
+            PersistWrite::Shown | PersistWrite::Hidden => {}
         }
+    }
+
+    /// Read the document's copy back, open it, and hand it to Logic. A copy
+    /// with a row that does not open leaves the store, and Logic receives
+    /// none (`RESID-027`). At `boot`, a store that holds no copy hands
+    /// nothing: the open fetches the document anyway.
+    fn read_back(&self, document_id: DocumentId, doc_type: DocType, boot: bool) {
+        let this = self.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            let store = &this.inner.store;
+            let key = *document_id.as_bytes();
+            let snapshot = store.load_snapshot(key).await.ok().flatten();
+            let deltas = store.load_deltas(key).await.unwrap_or_default();
+            let sessions = store.load_sessions(key).await.unwrap_or_default();
+            let has_snapshot = snapshot.is_some();
+            let rows: Vec<SealedRow> = snapshot
+                .into_iter()
+                .chain(deltas)
+                .map(|sealed| SealedRow {
+                    place: RowPlace::Document(document_id),
+                    sealed,
+                })
+                .collect();
+            if boot && rows.is_empty() {
+                return;
+            }
+            let opened_by = this.clone();
+            this.inner.vault.open(rows, move |opened| {
+                let copy = opened.map(|rows| {
+                    rows.into_iter()
+                        .map(|row| row.map(|bytes| bytes.to_vec()))
+                        .collect::<Option<Vec<_>>>()
+                });
+                let (snapshot, deltas, sessions) = match copy {
+                    Some(Some(mut rows)) => {
+                        let snapshot = has_snapshot.then(|| rows.remove(0));
+                        (snapshot, rows, sessions)
+                    }
+                    Some(None) => {
+                        tracing::warn!("Persistence: a copy did not open, it leaves the store");
+                        opened_by.forget(document_id);
+                        (None, Vec::new(), Vec::new())
+                    }
+                    // No session holds the key: the copy stays for the next.
+                    None => (None, Vec::new(), Vec::new()),
+                };
+                if boot && snapshot.is_none() && deltas.is_empty() {
+                    return;
+                }
+                let _ = opened_by
+                    .inner
+                    .to_logic
+                    .try_send(LogicCommand::RestoreLocalSnapshot {
+                        document_id,
+                        doc_type,
+                        snapshot,
+                        deltas,
+                        sessions,
+                    });
+            });
+        });
+    }
+
+    /// Drop the document's copy from the store and from the ledger.
+    fn forget(&self, id: DocumentId) {
+        self.inner.store.delete_snapshot(*id.as_bytes());
+        self.inner.ledger.borrow_mut().forget(id);
     }
 
     /// Try the held writes again, every [`RETRY_FRAMES`] frames.
@@ -183,5 +310,147 @@ impl LocalStore {
         {
             tracing::warn!("Persistence: Logic did not take the store state");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ambre_bus::conduit::{self, Receiver};
+    use ambre_bus::{RequestId, RestCommand, RestEvent, SecretBytes};
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    use super::*;
+
+    async fn sleep(ms: i32) {
+        let wait = js_sys::Promise::new(&mut |resolve, _| {
+            let _ = web_sys::window()
+                .unwrap()
+                .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
+        });
+        let _ = wasm_bindgen_futures::JsFuture::from(wait).await;
+    }
+
+    /// The next command on `rx`, once one comes.
+    async fn next(rx: &Receiver<LogicCommand>) -> LogicCommand {
+        for _ in 0..200 {
+            if let Ok(cmd) = rx.try_recv() {
+                return cmd;
+            }
+            sleep(10).await;
+        }
+        panic!("nothing came");
+    }
+
+    /// The next service request the vault sent.
+    async fn request(rx: &Receiver<LogicCommand>) -> (RequestId, RestCommand) {
+        match next(rx).await {
+            LogicCommand::Rest { id, cmd } => (id, cmd),
+            other => panic!("expected a service request, got {other:?}"),
+        }
+    }
+
+    /// What Logic receives for one read back.
+    async fn restored(rx: &Receiver<LogicCommand>) -> (Option<Vec<u8>>, Vec<Vec<u8>>) {
+        match next(rx).await {
+            LogicCommand::RestoreLocalSnapshot {
+                snapshot, deltas, ..
+            } => (snapshot, deltas),
+            other => panic!("expected a restore, got {other:?}"),
+        }
+    }
+
+    /// A copy reaches the store sealed: the bytes the store holds are the
+    /// worker's, and the plaintext comes back only through its open. A copy
+    /// whose row does not open leaves the store, and Logic receives none
+    /// (`RESID-025`, `RESID-027`).
+    #[wasm_bindgen_test]
+    async fn a_copy_lands_sealed_and_one_that_does_not_open_leaves() {
+        let store = PersistenceStore::open().await.unwrap().unwrap();
+        let (logic_tx, logic_rx) = conduit::local(8);
+        let (vault_tx, vault_rx) = conduit::local(8);
+        let local =
+            LocalStore::open(store.clone(), logic_tx, Vault::new(vault_tx.clone()), None).await;
+        // The answers reach the vault as the per-frame relay hands them.
+        let vault = local.inner.vault.clone();
+        let doc = DocumentId::new();
+
+        local.apply(doc, PersistWrite::Snapshot(b"the document".to_vec()));
+        local.apply(doc, PersistWrite::Delta(b"an edit".to_vec()));
+        let (first, cmd) = request(&vault_rx).await;
+        let RestCommand::SealLocalRow { place, plaintext } = cmd else {
+            panic!("expected a seal");
+        };
+        assert_eq!(place, RowPlace::Document(doc));
+        assert_eq!(&plaintext[..], b"the document");
+        let (second, _) = request(&vault_rx).await;
+        // The delta's seal answers first: the store still waits for the
+        // snapshot's, so the delta never lands under it.
+        vault.answer(
+            second,
+            &RestEvent::LocalRowSealed {
+                sealed: b"sealed edit".to_vec(),
+            },
+        );
+        vault.answer(
+            first,
+            &RestEvent::LocalRowSealed {
+                sealed: b"sealed document".to_vec(),
+            },
+        );
+        let key = *doc.as_bytes();
+        assert_eq!(
+            store.load_snapshot(key).await.unwrap().as_deref(),
+            Some(b"sealed document".as_slice())
+        );
+        assert_eq!(
+            store.load_deltas(key).await.unwrap(),
+            [b"sealed edit".to_vec()]
+        );
+
+        // A read back asks the worker to open both rows, in order.
+        local.apply(
+            doc,
+            PersistWrite::ReadBack {
+                doc_type: DocType::Prose,
+            },
+        );
+        let (id, cmd) = request(&vault_rx).await;
+        let RestCommand::OpenLocalRows { rows } = cmd else {
+            panic!("expected an open");
+        };
+        let sealed: Vec<&[u8]> = rows.iter().map(|row| row.sealed.as_slice()).collect();
+        assert_eq!(sealed, [b"sealed document".as_slice(), b"sealed edit"]);
+        vault.answer(
+            id,
+            &RestEvent::LocalRowsOpened {
+                rows: vec![
+                    Some(SecretBytes::new(b"the document".to_vec())),
+                    Some(SecretBytes::new(b"an edit".to_vec())),
+                ],
+            },
+        );
+        assert_eq!(
+            restored(&logic_rx).await,
+            (Some(b"the document".to_vec()), vec![b"an edit".to_vec()])
+        );
+
+        // One row that does not open: the copy leaves.
+        local.apply(
+            doc,
+            PersistWrite::ReadBack {
+                doc_type: DocType::Prose,
+            },
+        );
+        let (id, _) = request(&vault_rx).await;
+        vault.answer(
+            id,
+            &RestEvent::LocalRowsOpened {
+                rows: vec![Some(SecretBytes::new(b"the document".to_vec())), None],
+            },
+        );
+        assert_eq!(restored(&logic_rx).await, (None, Vec::new()));
+        assert_eq!(store.load_snapshot(key).await.unwrap(), None);
+        assert!(store.load_deltas(key).await.unwrap().is_empty());
+        drop(vault_tx);
     }
 }

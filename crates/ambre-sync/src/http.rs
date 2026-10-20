@@ -89,6 +89,37 @@ impl AuthContext {
         *self.tokens.borrow_mut() = Some(next);
         Ok(())
     }
+
+    /// Revokes the session's refresh token at the relay over the browser's
+    /// `fetch` (`SRV-026`).
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) async fn revoke(&self) -> Result<(), String> {
+        self.revoke_via(&Fetch).await
+    }
+
+    /// Revokes the session's refresh token through `transport`. The route
+    /// takes the access token, so a refused one is renewed first. The body
+    /// is built again after that renewal: the renewal replaced the refresh
+    /// token, and revoking the old one would leave the new one alive.
+    async fn revoke_via(&self, transport: &impl Transport) -> Result<(), String> {
+        let url = format!("{}://{}/api/auth/logout", self.url_scheme, self.api_base);
+        let send = || async {
+            // The same body as a renewal's: the refresh token alone.
+            let body = RefreshRequest {
+                refresh_token: self.refresh_token()?,
+            };
+            let mut request = Outgoing::json(Method::Post, &url, &body)?;
+            request.bearer = Some(bearer(&self.access_token()?));
+            let resp = exchange(transport, &request).await?;
+            Ok::<_, String>((request, resp))
+        };
+        let (mut request, mut resp) = send().await?;
+        if resp.status == 401 {
+            self.refresh_via(transport).await?;
+            (request, resp) = send().await?;
+        }
+        expect_ok(&request, &resp)
+    }
 }
 
 /// The `Authorization` header value, wiped once the request holds its copy.
@@ -528,6 +559,15 @@ pub(crate) async fn delete_auth(url: &str, auth: AuthContext) -> Result<(), Stri
     expect_ok(&request, &resp)
 }
 
+/// Sends an authenticated `DELETE` and answers the status the relay gave. Only
+/// a request that reached no answer is an error.
+pub(crate) async fn delete_status_auth(url: &str, auth: AuthContext) -> Result<u16, String> {
+    let mut request = Outgoing::new(Method::Delete, url);
+    exchange_auth(&Fetch, &auth, &mut request)
+        .await
+        .map(|resp| resp.status)
+}
+
 /// PUTs a sealed blob to a presigned object-storage URL. It takes what the seal
 /// built and nothing else, so no plaintext reaches object storage (`SYNC-049`,
 /// `ZK-001`).
@@ -727,14 +767,47 @@ pub(crate) struct SpaceChannelsResponse {
     pub channels: Vec<ambre_core::ChannelId>,
 }
 
-/// `GET /api/channels`: every channel the caller is a member of.
+/// `GET /api/channels`: every channel the caller is a member of, and every
+/// space.
 #[derive(Deserialize)]
 pub(crate) struct MemberChannelsResponse {
     pub channels: Vec<MemberChannelEntry>,
+    #[serde(with = "ambre_core::serde_id::space_id::vec")]
+    pub spaces: Vec<ambre_core::SpaceId>,
+}
+
+impl MemberChannelsResponse {
+    /// The answer as the bus carries it: the channels, the spaces, and the
+    /// other members of each direct message that lists some. The names stay
+    /// sealed; the caller opens them.
+    pub(crate) fn listing(
+        &self,
+    ) -> (
+        Vec<ambre_bus::MemberChannel>,
+        Vec<ambre_core::SpaceId>,
+        Vec<ambre_bus::DirectPeers>,
+    ) {
+        let channels = self
+            .channels
+            .iter()
+            .map(MemberChannelEntry::member_channel)
+            .collect();
+        let peers = self
+            .channels
+            .iter()
+            .filter(|entry| entry.space_id.is_none() && !entry.peers.is_empty())
+            .map(|entry| ambre_bus::DirectPeers {
+                channel_id: entry.channel_id,
+                names: entry.peers.clone(),
+            })
+            .collect();
+        (channels, self.spaces.clone(), peers)
+    }
 }
 
 /// One channel of [`MemberChannelsResponse`]: its space, none for a direct
-/// message, and whether the space lists it.
+/// message, and whether the space lists it. It also carries the name sealed
+/// beside its meta, with the caller's wrapped key of that meta (`SRV-219`).
 #[derive(Deserialize)]
 pub(crate) struct MemberChannelEntry {
     #[serde(with = "ambre_core::serde_id::channel_id")]
@@ -742,12 +815,28 @@ pub(crate) struct MemberChannelEntry {
     #[serde(with = "ambre_core::serde_id::space_id::option")]
     pub space_id: Option<ambre_core::SpaceId>,
     pub public: bool,
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
+    /// Base64 of the sealed name, none for a meta never named.
+    #[serde(default)]
+    pub name_enc: Option<String>,
+    /// Base64 of `nonce || ciphertext`.
+    pub doc_key_enc: String,
+    /// Hex, empty for a self-wrapped row.
+    pub wrapper_exchange_pub_key: String,
+    /// The display names of a direct message's other members (`SRV-220`).
+    #[serde(default)]
+    pub peers: Vec<String>,
+    /// The last number the relay gave in the meta (`SRV-223`), none from a
+    /// relay that lists none.
+    #[serde(default)]
+    pub meta_last: Option<ambre_core::Seq>,
 }
 
 impl MemberChannelEntry {
     /// The entry as the bus carries it. A channel in no space is a direct
     /// message, whatever its flag says.
-    pub(crate) fn into_member_channel(self) -> ambre_bus::MemberChannel {
+    pub(crate) fn member_channel(&self) -> ambre_bus::MemberChannel {
         let place = match (self.space_id, self.public) {
             (Some(space), true) => ambre_bus::ChannelPlace::Public(space),
             (Some(space), false) => ambre_bus::ChannelPlace::Private(space),
@@ -773,11 +862,17 @@ pub(crate) struct ActivityEntry {
     pub channel_id: ambre_core::ChannelId,
     #[serde(with = "ambre_core::serde_id::document_id")]
     pub document_id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_enums::channel_document_kind")]
+    pub kind: ambre_core::ChannelDocumentKind,
     pub active: bool,
     /// The caller's own cursor. A relay that predates it answers none, which
     /// reads as nothing read.
     #[serde(default)]
     pub read: ambre_core::Seq,
+    /// The document's last number. A relay that predates it answers none,
+    /// and a watch then starts from the head.
+    #[serde(default)]
+    pub last: Option<ambre_core::Seq>,
 }
 
 /// `PUT /api/documents/{id}/read-cursor`.
@@ -841,6 +936,9 @@ pub(crate) struct CreateDocumentRequest {
     /// writes it (`SYNC-132`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
+    /// The document is a Murmure space, which its members list.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub space: bool,
 }
 
 /// `POST /api/channels`: a channel of a space, with its first two documents.
@@ -1200,7 +1298,14 @@ pub(crate) struct PubkeysResponse {
 
 #[derive(Serialize)]
 pub(crate) struct InviteRequest {
-    pub invitee_email: String,
+    /// One of the two names the invitee (`SRV-224`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invitee_email: Option<String>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "ambre_core::serde_id::user_id::option"
+    )]
+    pub invitee_id: Option<ambre_core::UserId>,
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
     pub doc_key_enc: String,
@@ -1550,6 +1655,59 @@ mod tests {
             (first.method, &first.url, &first.body)
         );
         assert!(sent.iter().all(|r| r.timeout_ms == REQUEST_TIMEOUT_MS));
+    }
+
+    /// `SYNC-177`: a sign-out revokes the refresh token at the relay, under
+    /// the access token. After a renewal it revokes the token the renewal
+    /// handed out, not the one it replaced.
+    #[tokio::test]
+    async fn a_sign_out_revokes_the_refresh_token_it_holds() {
+        let body_of = |request: &Outgoing| -> serde_json::Value {
+            serde_json::from_slice(&request.body.as_ref().unwrap().1).unwrap()
+        };
+        let logout = "https://relay.test/api/auth/logout";
+
+        let transport = Scripted::new([Ok((200, serde_json::json!({})))]);
+        session("access-1", "refresh-1")
+            .revoke_via(&transport)
+            .await
+            .unwrap();
+        let sent = transport.sent.take();
+        let [only] = sent.as_slice() else {
+            panic!("expected one request, got {}", sent.len());
+        };
+        assert_eq!((only.method, only.url.as_str()), (Method::Post, logout));
+        assert_eq!(bearer_of(only).as_deref(), Some("Bearer access-1"));
+        assert_eq!(
+            body_of(only),
+            serde_json::json!({ "refresh_token": "refresh-1" })
+        );
+
+        let transport = Scripted::new([
+            Ok((401, serde_json::json!({}))),
+            Ok((200, renewed("access-2"))),
+            Ok((200, serde_json::json!({}))),
+        ]);
+        session("access-1", "refresh-1")
+            .revoke_via(&transport)
+            .await
+            .unwrap();
+        let sent = transport.sent.take();
+        let [_, _, replay] = sent.as_slice() else {
+            panic!("expected three requests, got {}", sent.len());
+        };
+        assert_eq!(replay.url, logout);
+        assert_eq!(bearer_of(replay).as_deref(), Some("Bearer access-2"));
+        assert_eq!(
+            body_of(replay),
+            serde_json::json!({ "refresh_token": "refresh-2" })
+        );
+
+        let refused = Scripted::new([Ok((500, serde_json::json!({})))]);
+        assert!(
+            session("a", "r").revoke_via(&refused).await.is_err(),
+            "a refusal is reported"
+        );
     }
 
     /// `SYNC-062`: the replay is the only one. A second refusal, or a renewal

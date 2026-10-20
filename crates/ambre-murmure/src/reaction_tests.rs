@@ -72,6 +72,7 @@ fn pair() -> (Member, Member, MessageId) {
     let draft = MessageDraft {
         text: "lunch?".to_owned(),
         mentions: Vec::new(),
+        styles: Vec::new(),
     };
     alice.state.send(&draft, alice.user, NOW).expect("send");
     let bob = Member {

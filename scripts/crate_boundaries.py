@@ -381,6 +381,8 @@ WIDTH_MEDIA = re.compile(r"@media[^{]*\((?:min|max)-width:[^)]*\)[^{]*\{")
 HIDING = re.compile(r"\bdisplay:\s*none\b|\bvisibility:\s*hidden\b")
 # A width threshold spelled anywhere else: a width query, or a media read.
 THRESHOLD = re.compile(r"\((?:min|max)-width:\s*\d+(?:px|em|rem)\s*\)|\bmatch_media\b|\bmatchMedia\b")
+# A media read that asks for the user's motion setting, which no width rides.
+MOTION_QUERY = re.compile(r"\(prefers-reduced-motion:\s*reduce\)")
 # The relay's log lines, and the words that name a payload in them.
 RELAY = "crates/ambre-server/src"
 LOG_MACRO = re.compile(
@@ -424,7 +426,10 @@ ENGINE_SPAWN = re.compile(r"\bambre_logic::run\(")
 APP_SRC = "crates/ambre-app/src"
 APP_LIB = "crates/ambre-app/src/lib.rs"
 FRAME_HOST = "crates/ambre-app/src/host/run.rs"
-FRAME_RELAY = re.compile(r"drive_frame\(\s*&\w+,\s*&mut pre_frame\b")
+# The relay is either borrowed whole, or shared with the hidden page's timer.
+FRAME_RELAY = re.compile(
+    r"drive_frame\(\s*&\w+,\s*(?:&mut pre_frame\b|\|\|\s*\(pre_frame\.borrow_mut\(\)\)\(\))"
+)
 SYNC_DRAIN = re.compile(r"\.drain\(&logic_to_sync_rx\b")
 APP_MESSAGE = re.compile(
     r"\bambre_bus::app\b|\b(?:Trame|Toile|Prose|Murmure|App)(?:Command|Event)\b|\bLogicCommand\b|\bUiEvent\b"
@@ -453,9 +458,10 @@ SCROLL_SETTERS = {
     "crates/ambre-prose/src/view/mod.rs": re.compile(r"^(\s*)pub fn scroll_by\(&mut self, \w+: ScrollStep\)"),
     "crates/ambre-toile/src/ui/viewport.rs": re.compile(r"^(\s*)pub fn pan_by_screen\(&mut self, \w+: ScrollStep\)"),
     "crates/ambre-trame/src/ui/view/scroll.rs": re.compile(r"^(\s*)fn accumulate\(&mut self, \w+: ScrollStep\)"),
+    "crates/ambre-murmure/src/view.rs": re.compile(r"^(\s*)pub fn scroll_by\(&mut self, \w+: ScrollStep\)"),
 }
-SCROLL_APPS = ("crates/ambre-prose/src", "crates/ambre-toile/src", "crates/ambre-trame/src")
-SCROLL_OFFSET = re.compile(r"\b(?:scroll_y|center)\s*(?:[+-]=|[+-](?!=))")
+SCROLL_APPS = ("crates/ambre-prose/src", "crates/ambre-toile/src", "crates/ambre-trame/src", "crates/ambre-murmure/src")
+SCROLL_OFFSET = re.compile(r"\b(?:scroll_y|center|anchor_y)\s*(?:[+-]=|[+-](?!=))")
 GRID_SCROLL = "crates/ambre-trame/src/ui/view/scroll.rs"
 GRID_PAN = re.compile(r"\.scroll_by\(")
 # A mouse drag is the one step built from two pointer positions, so only the
@@ -1128,7 +1134,7 @@ def check_widths(errors: list[str]) -> int:
             continue
         for number, line in enumerate(path.read_text().splitlines(), 1):
             found = THRESHOLD.search(code(line) if path.suffix == ".rs" else line)
-            if found:
+            if found and not MOTION_QUERY.search(line):
                 errors.append(f"{rel}:{number}: a width spelled outside the stylesheet: `{found.group(0)}`")
         held += 1
     for path in sources(CONTENT_VIEWS):

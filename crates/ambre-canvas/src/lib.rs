@@ -72,7 +72,7 @@ pub use busy::BusyPublisher;
 pub use density::SurfaceSize;
 #[cfg(target_arch = "wasm32")]
 pub use density::{DensityWatch, density_query, size_backing_store};
-pub use editor::{CARET_WIDTH, EditIntent, TextEditor, TextEditorStyle};
+pub use editor::{CARET_WIDTH, EditIntent, TextEditor, TextEditorStyle, TextSpan};
 pub use fatal::{fatal_message, signal_fatal};
 pub use frame::{FATAL_BACKDROP, Phases, RafControl, Tick, drive_frame, paint_fatal};
 #[cfg(target_arch = "wasm32")]
@@ -81,7 +81,7 @@ pub use intent::{FilterOpenPublisher, NoticePublisher};
 pub use perf::PerfPublisher;
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use request_registry::{RequestRegistry, RequestTag};
-pub use text_cache::{TextCache, registered_family_name};
+pub use text_cache::{SpanShape, TextCache, registered_family_name};
 pub use text_input::{ContentKind, TYPING_ATTR, TextInput};
 pub use theme::{Palette, Theme, ThemeControl};
 pub use view::{FrameStats, InputEvent, PerfSnapshot, RepaintPlan};

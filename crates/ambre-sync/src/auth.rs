@@ -504,6 +504,39 @@ impl SyncState {
         *self.tokens.borrow_mut() = None;
         tracing::info!("Sync: logged out, all keys zeroized");
     }
+
+    /// A sign-out the user asked for. The session ends on the worker at once,
+    /// then the relay revokes its refresh token (`SYNC-177`), and only then
+    /// does `LoggedOut` answer. A failed revocation still signs out: the keys
+    /// are gone already, and the token expires on its own.
+    pub(crate) fn handle_sign_out(&mut self, id: RequestId) {
+        let held = self.tokens.borrow_mut().take();
+        self.handle_logout();
+        let (Some(tokens), Some(_)) = (held, self.event_tx.as_ref()) else {
+            self.send_to_logic(LogicEvent::Rest {
+                id,
+                evt: RestEvent::LoggedOut,
+            });
+            return;
+        };
+        // A context of its own, so a sign-in that follows at once starts
+        // from an empty store.
+        let auth = http::AuthContext {
+            api_base: self.api_base.clone(),
+            url_scheme: self.url_scheme,
+            tokens: Rc::new(RefCell::new(Some(tokens))),
+        };
+        let logic_tx = self.logic_tx.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Err(e) = auth.revoke().await {
+                tracing::warn!("Sync: the refresh token was not revoked: {e}");
+            }
+            let _ = logic_tx.send(LogicEvent::Rest {
+                id,
+                evt: RestEvent::LoggedOut,
+            });
+        });
+    }
 }
 
 /// The user-facing refusal of a provider name that is not one.

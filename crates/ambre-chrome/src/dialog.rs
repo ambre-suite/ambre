@@ -116,13 +116,20 @@ pub fn Dialog(
 
     // Native close (Escape, or el.close()): sync the signal and notify. All
     // three are idempotent, so this is safe whatever initiated the close.
+    // The event is queued: a modal opened again before it lands is open now,
+    // and the stale close must clear, release and notify nothing.
     let handle_close = move |_| {
+        if dialog_ref.get_untracked().is_some_and(|el| el.open()) {
+            return;
+        }
         open.set(false);
         if let Some(hold) = &hold {
             hold.release();
         }
+        // The native event is queued: it can land after the owner of the
+        // callback is gone, and a disposed callback has no one to notify.
         if let Some(cb) = on_close {
-            cb.run(());
+            let _ = cb.try_run(());
         }
     };
 

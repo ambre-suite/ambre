@@ -38,11 +38,16 @@ mod channels;
 mod data;
 mod direct;
 mod dispatch;
+mod erasing;
+mod pictures;
 /// A history replay imported in slices (`SYNC-131`).
 mod replay;
 /// Which documents this thread holds, and the reopen of one that left
 /// (`ambre-spec-residency.md`).
 mod residency;
+/// The order of the local store's writes while their rows are sealed
+/// (`RESID-025`).
+pub mod seal_queue;
 mod segments;
 /// The snapshot check against the signed deltas (`AUTHOR-016`).
 mod snapshot_check;
@@ -51,6 +56,7 @@ mod spaces;
 pub mod store_ledger;
 /// The threads of a channel: a reply, and the link of its thread.
 mod threads;
+mod unopened;
 /// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
 mod waiting;
 
@@ -715,6 +721,9 @@ struct LogicState {
     watched_threads: HashMap<DocumentId, threads::WatchedThread>,
     /// The signalled threads whose channel the next activity answer names.
     unplaced_threads: HashSet<DocumentId>,
+    /// The channels of the user this session may watch unopened (the
+    /// Murmure notifications spec). Cleared on `Logout`.
+    listed_channels: unopened::ListedChannels,
     /// The close each open channel asked of the Sync worker, with the time
     /// of the send that filled its segment (the Murmure segments spec).
     /// Removed on the answer, and with the channel.
@@ -755,6 +764,15 @@ struct LogicState {
     /// spaces spec). Each is keyed by the role change this thread asked for,
     /// and holds the leave the view asked for.
     handing_off: HashMap<ambre_bus::RequestId, (ambre_bus::RequestId, DocumentId)>,
+    /// The erases of a deleted message's files the relay has not answered,
+    /// each with the document its file is stored under and its address.
+    erasing: HashMap<ambre_bus::RequestId, (DocumentId, String)>,
+    /// The erases that did not reach the relay, asked again on the next
+    /// connection (`ambre-spec-murmure-attachments.md`).
+    erase_owed: Vec<(DocumentId, String)>,
+    /// The images fetched for a preview the relay has not answered, each
+    /// with the channel whose view asked.
+    picturing: HashMap<ambre_bus::RequestId, (ambre_bus::ChannelId, ambre_bus::MediaRef)>,
     /// Direct message requests the relay has not answered yet, keyed by the
     /// channel id each minted, with the channel it would create.
     direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
@@ -854,6 +872,7 @@ impl LogicState {
             document_channels: HashMap::new(),
             watched_threads: HashMap::new(),
             unplaced_threads: HashSet::new(),
+            listed_channels: unopened::ListedChannels::default(),
             closing_segments: HashMap::new(),
             close_successors: HashMap::new(),
             owed_replays: HashMap::new(),
@@ -866,6 +885,9 @@ impl LogicState {
             deleting: HashMap::new(),
             leaving: HashMap::new(),
             handing_off: HashMap::new(),
+            erasing: HashMap::new(),
+            erase_owed: Vec::new(),
+            picturing: HashMap::new(),
             direct: HashMap::new(),
             unsent: HashMap::new(),
             murmure_identities: HashMap::new(),

@@ -40,6 +40,13 @@ pub(crate) struct Opening {
     members: Option<Vec<MemberInfo>>,
 }
 
+/// What a new channel comes with: a public one its catalogue entry, a
+/// private one its name.
+enum NewChannel {
+    Public(PublicChannelDraft),
+    Private(String),
+}
+
 /// A channel the relay is creating, until it answers.
 pub(crate) struct Creating {
     space_id: SpaceId,
@@ -62,7 +69,6 @@ impl LogicState {
             Ok(state) => state,
             Err(error) => return self.space_open_failed(space_id, error.to_string()),
         };
-        let document_id = state.document_id();
         self.spaces.insert(
             space_id,
             OpenSpace {
@@ -73,10 +79,8 @@ impl LogicState {
                 roles: Vec::new(),
             },
         );
-        self.send_to_sync(SyncCommand::OpenDocument {
-            document_id,
-            doc_type: DocType::Murmure,
-        });
+        // Sync tells the relay it is a space, so each member lists it.
+        self.send_to_sync(SyncCommand::CreateSpace { space_id });
         self.show_catalogue(space_id);
     }
 
@@ -383,13 +387,15 @@ impl LogicState {
                         return self.channel_failed(space_id, channel_id, error.to_string());
                     }
                 };
-                self.create_channel(space_id, channel, Some(draft));
+                self.create_channel(space_id, channel, NewChannel::Public(draft));
             }
             SpaceCommand::CreatePrivateChannel { draft, now } => {
                 // Any member of the space may: the channel is listed nowhere.
                 let PrivateChannelDraft { channel_id, name } = draft;
                 match ChannelState::create(channel_id, ChannelType::Private, Some(&name), now) {
-                    Ok(channel) => self.create_channel(space_id, channel, None),
+                    Ok(channel) => {
+                        self.create_channel(space_id, channel, NewChannel::Private(name));
+                    }
                     Err(error) => self.channel_failed(space_id, channel_id, error.to_string()),
                 }
             }
@@ -673,19 +679,21 @@ impl LogicState {
     }
 
     /// Ask the relay for a new channel, and hold it until the relay answers.
-    fn create_channel(
-        &mut self,
-        space_id: SpaceId,
-        channel: ChannelState,
-        listing: Option<PublicChannelDraft>,
-    ) {
+    /// A public channel comes with its catalogue entry. A private one comes
+    /// with its name, sealed beside meta so it shows before the channel opens.
+    fn create_channel(&mut self, space_id: SpaceId, channel: ChannelState, kind: NewChannel) {
         let channel_id = channel.channel_id();
+        let (listing, name) = match kind {
+            NewChannel::Public(draft) => (Some(draft), None),
+            NewChannel::Private(name) => (None, Some(name)),
+        };
         self.send_to_sync(SyncCommand::CreateChannel {
             channel_id,
             space_id,
             meta: channel.meta_id(),
             segment: channel.active_id(),
             public: listing.is_some(),
+            name,
         });
         self.creating.insert(
             channel_id,
@@ -800,6 +808,21 @@ impl LogicState {
         });
     }
 
+    /// The relay removed this user from `document_id`. Is it a space held
+    /// here? Then the user left it, an owner removed them, or it was deleted.
+    /// The space closes, and the view learns it (the Murmure spaces spec).
+    pub(crate) fn space_revoked(&mut self, document_id: DocumentId) {
+        let space_id = SpaceId::from_document(document_id);
+        if !self.spaces.contains_key(&space_id) && !self.space_opening.contains_key(&space_id) {
+            return;
+        }
+        self.close_space(space_id);
+        self.send_to_ui(UiEvent::Space {
+            space_id,
+            event: SpaceEvent::Left,
+        });
+    }
+
     /// The relay removed this user from `document_id` (`SRV-187`,
     /// `SRV-188`). Is it the `meta` of a channel held here? Then the user
     /// left it from another client, or its owner deleted it. A leave or a
@@ -855,6 +878,7 @@ impl LogicState {
         for document_id in cursored {
             self.read_cursors.remove(&document_id);
         }
+        self.listed_channels.forget(channel_id);
         self.end_channel(channel_id);
     }
 
@@ -991,7 +1015,7 @@ mod tests {
 
     /// A new space shows at once. Its whole document is its first update,
     /// sent once the Sync worker holds the session. That upload makes its
-    /// creator the owner on the relay.
+    /// creator the owner on the relay, and marks the document a space.
     #[test]
     fn a_new_space_shows_at_once_and_uploads_whole_once_its_session_is_ready() {
         let (mut state, ui, sync) = harness();
@@ -1004,8 +1028,7 @@ mod tests {
         let sent = drain(&sync);
         assert!(matches!(
             sent.as_slice(),
-            [SyncCommand::OpenDocument { document_id, doc_type: DocType::Murmure }]
-                if *document_id == space_id.document_id()
+            [SyncCommand::CreateSpace { space_id: s }] if *s == space_id
         ));
         assert_eq!(
             last_catalogue(&drain(&ui)),
@@ -1120,6 +1143,7 @@ mod tests {
                 meta,
                 segment,
                 public: true,
+                name: None,
             },
         ] = sent.as_slice()
         else {
@@ -1276,12 +1300,14 @@ mod tests {
                 meta,
                 segment,
                 public: false,
+                name,
             },
         ] = sent.as_slice()
         else {
             panic!("one private creation, got {sent:?}");
         };
         assert_eq!((*asked, *of), (channel_id, space_id));
+        assert_eq!(name.as_deref(), Some("board"), "sealed beside meta");
         let (meta, segment) = (meta.document_id(), segment.document_id());
 
         state.handle_logic_event(LogicEvent::ChannelCreated {
@@ -2386,5 +2412,43 @@ mod tests {
                 ));
             }
         }
+    }
+
+    /// The relay's notice that this user left a space, or lost it, closes the
+    /// space and tells the view once. Another user's removal, or a document
+    /// no space holds, changes nothing (the Murmure spaces spec).
+    #[test]
+    fn a_space_the_user_lost_closes_and_the_view_learns_it() {
+        let (mut state, ui, sync) = harness();
+        let me = UserId::new();
+        state.my_user_id = Some(me);
+        let space_id = created_space(&mut state, &ui, &sync);
+        let revoked = |document_id, revoked_user_id| LogicEvent::MemberRevoked {
+            document_id,
+            revoked_user_id,
+        };
+        state.handle_logic_event(revoked(space_id.document_id(), UserId::new()));
+        state.handle_logic_event(revoked(DocumentId::new(), me));
+        assert!(state.spaces.contains_key(&space_id), "kept");
+        assert!(drain(&sync).is_empty());
+        let _ = drain(&ui);
+
+        state.handle_logic_event(revoked(space_id.document_id(), me));
+        assert!(!state.spaces.contains_key(&space_id));
+        assert!(matches!(
+            drain(&sync).as_slice(),
+            [SyncCommand::CloseDocument { document_id }] if *document_id == space_id.document_id()
+        ));
+        let left = |shown: &[UiEvent]| {
+            shown
+                .iter()
+                .filter(|e| {
+                    matches!(e, UiEvent::Space { space_id: s, event: SpaceEvent::Left } if *s == space_id)
+                })
+                .count()
+        };
+        assert_eq!(left(&drain(&ui)), 1);
+        state.handle_logic_event(revoked(space_id.document_id(), me));
+        assert_eq!(left(&drain(&ui)), 0, "once");
     }
 }

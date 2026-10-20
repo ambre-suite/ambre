@@ -527,9 +527,10 @@ impl SyncState {
                                     word = Some(o.word);
                                     (o.doc_key, true, o.signing_keys, o.role, o.rotation_owed)
                                 }
-                                Err(_) => {
+                                Err((cause, _)) => {
                                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
                                         document_id: doc_id,
+                                        cause,
                                         message: "cannot unwrap document key".into(),
                                     });
                                     return;
@@ -539,6 +540,7 @@ impl SyncState {
                         None => {
                             let _ = tx.send(SyncEvent::OpenDocumentFailed {
                                 document_id: doc_id,
+                                cause: OpenFailure::Transient,
                                 message: "session not ready".into(),
                             });
                             return;
@@ -560,6 +562,7 @@ impl SyncState {
                     MembersAnswer::Unreachable(message) => {
                         let _ = tx.send(SyncEvent::OpenDocumentFailed {
                             document_id: doc_id,
+                            cause: OpenFailure::Transient,
                             message: format!("the server could not be reached: {message}"),
                         });
                         return;
@@ -576,9 +579,12 @@ impl SyncState {
                 } else {
                     Vec::new()
                 };
-                if let Err(message) = Self::named_key_holds(doc_id, &doc_key, named_key, &links) {
+                if let Err((cause, message)) =
+                    Self::named_key_holds(doc_id, &doc_key, named_key, &links)
+                {
                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
                         document_id: doc_id,
+                        cause,
                         message,
                     });
                     return;
@@ -754,14 +760,20 @@ impl SyncState {
     /// The log walks from the anchor sealed with our copy (`SYNC-104`). A log
     /// that does not verify leaves the open as it is (`SYNC-111`). It walks
     /// under `rule`, the rule of the document's log (`SYNC-106`).
+    ///
+    /// # Errors
+    ///
+    /// No wrap opens under `exchange_key`: the key has not reached this
+    /// device (`SYNC-173`).
     pub(crate) fn opened_from_members(
         resp: &http::MembersResponse,
         document_id: DocumentId,
         exchange_key: &x25519_dalek::StaticSecret,
         my_user_id: Option<UserId>,
         rule: &membership_log::LogRule,
-    ) -> Result<OpenedMembers, String> {
-        let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)?;
+    ) -> Result<OpenedMembers, (OpenFailure, String)> {
+        let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)
+            .map_err(|message| (OpenFailure::KeyNotReceived, message))?;
         let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, rule);
         let role =
             crate::sharing::own_role(resp.members.iter().map(|m| (m.user_id, m.role)), my_user_id);
@@ -789,20 +801,24 @@ impl SyncState {
     ///
     /// # Errors
     ///
-    /// The reason the key is refused.
+    /// The reason the key is refused: the chain does not reach the named
+    /// key, so the key has not reached this device (`SYNC-173`).
     pub(crate) fn named_key_holds(
         document_id: DocumentId,
         doc_key: &DocumentKey,
         named_key: Option<ambre_core::KeyId>,
         links: &[ambre_protocol::KeyLink],
-    ) -> Result<(), String> {
+    ) -> Result<(), (OpenFailure, String)> {
         let Some(named) = named_key else {
             return Ok(());
         };
         let chain = crate::chain::Chain::new(document_id, links.iter().cloned());
         match chain.recover(document_id, doc_key, named) {
             Some(_) => Ok(()),
-            None => Err("the document key is not the one the invitation names".into()),
+            None => Err((
+                OpenFailure::KeyNotReceived,
+                "the document key is not the one the invitation names".into(),
+            )),
         }
     }
 
@@ -832,7 +848,16 @@ impl SyncState {
         });
     }
 
+    /// Open a new space as a document, marked so its lazy creation tells
+    /// the relay it is a space (`SYNC-170`).
+    pub(crate) fn handle_create_space(&mut self, space_id: ambre_bus::SpaceId) {
+        let document_id = space_id.document_id();
+        self.new_spaces.insert(document_id);
+        self.handle_open_document(document_id, DocType::Murmure);
+    }
+
     pub(crate) fn handle_close_document(&mut self, document_id: DocumentId) {
+        self.new_spaces.remove(&document_id);
         if self.ws_connected() {
             self.ws_send(&WsClientMsg::Unsubscribe { document_id });
         }
@@ -1258,6 +1283,7 @@ impl SyncState {
         links: impl IntoIterator<Item = ambre_protocol::KeyLink>,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            self.rekey_light(document_id, new_key);
             return;
         };
         for link in links {
@@ -1331,6 +1357,9 @@ impl SyncState {
             return;
         };
         doc_state.creating = true;
+        // A space is marked so on its creation, so each member lists it
+        // (`SYNC-170`).
+        let space = self.new_spaces.contains(&document_id);
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
@@ -1356,6 +1385,7 @@ impl SyncState {
                 doc_key_enc,
                 document_id: Some(document_id),
                 entry: Some(entry),
+                space,
             };
             match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth).await {
                 Ok(_) => {
@@ -1736,16 +1766,16 @@ mod tests {
             rotation_owed: false,
             log: Vec::new(),
         };
-        assert!(
-            SyncState::opened_from_members(
-                &resp,
-                DocumentId::new(),
-                &my_xk,
-                Some(me),
-                &membership_log::LogRule::document(),
-            )
-            .is_err()
+        let refused = SyncState::opened_from_members(
+            &resp,
+            DocumentId::new(),
+            &my_xk,
+            Some(me),
+            &membership_log::LogRule::document(),
         );
+        // The open fails as a key that has not reached this device
+        // (`SYNC-173`).
+        assert!(matches!(refused, Err((OpenFailure::KeyNotReceived, _))));
     }
 
     /// Holds `SYNC-124`: a key the invitation does not name is refused, unless
@@ -1763,7 +1793,8 @@ mod tests {
         };
         assert!(held(&named, &[]).is_ok());
         assert!(held(&rotated, std::slice::from_ref(&link)).is_ok());
-        assert!(held(&DocumentKey::generate(), &[link]).is_err());
+        let swapped = held(&DocumentKey::generate(), &[link]);
+        assert!(matches!(swapped, Err((OpenFailure::KeyNotReceived, _))));
         assert!(SyncState::named_key_holds(document_id, &rotated, None, &[]).is_ok());
     }
 

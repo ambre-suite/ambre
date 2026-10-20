@@ -14,12 +14,21 @@ use super::*;
 mod app_root;
 mod commands;
 #[cfg(test)]
+mod murmure_regions;
+#[cfg(test)]
 mod narrow;
 pub(crate) mod prose_status;
 mod share;
 mod sync_badge;
 use app_root::AppRoot;
 pub(crate) use commands::{AppHandler, CommandPath};
+
+/// Each application's relay, read back by the per-frame loop (`ARCH-018`).
+pub(crate) type Relays = (
+    trame_chrome::TrameRelay,
+    toile_chrome::ToileRelay,
+    ambre_murmure::chrome::MurmureRelay,
+);
 
 /// Mount the Leptos shell onto the page body: the persistent AppShell chrome
 /// (which owns the `<canvas>`) plus the landing overlay shown on `/`. All
@@ -41,9 +50,10 @@ pub(crate) fn mount_shell(
     members_slot: Slot<RwSignal<Vec<MemberInfo>>>,
     devmode_slot: Slot<RwSignal<Option<landing::SignInMode>>>,
     current_doc_slot: Slot<RwSignal<Option<DocumentId>>>,
-    relays_slot: Slot<(trame_chrome::TrameRelay, toile_chrome::ToileRelay)>,
+    relays_slot: Slot<Relays>,
     boot_is_toile: bool,
     boot_is_prose: bool,
+    boot_is_murmure: bool,
     prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
     prose_signals: crate::host::ProseSignals,
     style_slot: Slot<trame_chrome::StyleState>,
@@ -53,6 +63,7 @@ pub(crate) fn mount_shell(
     formula_action: RwSignal<Option<FormulaAction>>,
     tofu_prompt: RwSignal<Option<TofuPrompt>>,
     tofu_confirm: RwSignal<Option<TofuPrompt>>,
+    opened_file: RwSignal<Option<platform::OpenedFile>>,
     invite_role: RwSignal<Role>,
     me: RwSignal<Option<UserId>>,
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
@@ -143,7 +154,8 @@ pub(crate) fn mount_shell(
             following: following_toile,
             presenter_peer: presenter_peer_toile,
         };
-        *relays_slot.borrow_mut() = Some((trame_relay, toile_relay));
+        let murmure_relay = ambre_murmure::chrome::MurmureRelay::new();
+        *relays_slot.borrow_mut() = Some((trame_relay, toile_relay, murmure_relay));
         let style_state = trame_chrome::StyleState::new();
         *style_slot.borrow_mut() = Some(style_state);
         // Boot directly into a document => start hydrating; the landing route
@@ -171,6 +183,11 @@ pub(crate) fn mount_shell(
         } else if boot_is_prose {
             AppHandler::Prose(ambre_prose::chrome::ProseHandler {
                 format: prose_signals.format,
+            })
+        } else if boot_is_murmure {
+            AppHandler::Murmure(ambre_murmure::chrome::MurmureHandler {
+                relay: murmure_relay,
+                send: commands::murmure_send(to_logic.clone()),
             })
         } else {
             AppHandler::Trame(trame_chrome::TrameHandler {
@@ -225,6 +242,7 @@ pub(crate) fn mount_shell(
             find_result_toile,
             boot_is_toile,
             boot_is_prose,
+            boot_is_murmure,
             prose_figures,
             prose_signals,
             formula_ref,
@@ -232,6 +250,7 @@ pub(crate) fn mount_shell(
             formula_action,
             tofu_prompt,
             tofu_confirm,
+            opened_file,
             invite_role,
             me,
             sel_stats,
@@ -267,6 +286,7 @@ pub(crate) fn mount_shell(
             toile_dialogs,
             trame_relay,
             toile_relay,
+            murmure_relay,
         });
 
         view! {

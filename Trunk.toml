@@ -1,6 +1,16 @@
 [build]
 target = "crates/ambre-app/index.html"
-filehash = false
+# Each built file is named by a hash of its content, so a deployment may cache
+# it for good and only the page is asked again. The page learns the Sync
+# worker's hashed name from the post-build hook below.
+filehash = true
+
+# Writes the Sync worker's address into the page and, in a release, a brotli
+# copy beside each compressible file (`scripts/trunk_post_build.py`).
+[[hooks]]
+stage = "post_build"
+command = "python3"
+command_arguments = ["scripts/trunk_post_build.py"]
 
 # By default Trunk only watches the parent folder of `build.target`
 # (crates/ambre-app/), so edits to any other workspace crate (ambre-trame,
@@ -49,8 +59,6 @@ backend = "http://127.0.0.1:3000/api/"
 wasm_opt = false # disable wasm optimization for faster builds during development
 
 [profile.release]
-# wasm_opt disabled — Binaryen 116 (shipped with Trunk 0.21.13) cannot parse
-# wasm modules built with `+atomics` from rustc nightly. See the rationale in
-# crates/ambre-app/index.html. Re-enable once Trunk ships Binaryen 117+ or
-# wire a manual post-step against a newer binaryen.
+# wasm_opt disabled: it makes the download larger. See the rationale in
+# crates/ambre-app/index.html.
 wasm_opt = false

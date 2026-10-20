@@ -51,7 +51,7 @@ pub async fn list_channel_documents(
 
 /// A stored kind. A word no build wrote is a decode error: the column's
 /// check constraint admits none.
-fn decode_kind(word: &str) -> Result<ambre_core::ChannelDocumentKind, AppError> {
+pub(super) fn decode_kind(word: &str) -> Result<ambre_core::ChannelDocumentKind, AppError> {
     ambre_core::ChannelDocumentKind::parse(word).ok_or_else(|| {
         AppError::Database(sqlx::Error::Decode(
             format!("unknown channel document kind {word:?}").into(),
@@ -95,6 +95,47 @@ pub async fn get_channel(
     .transpose()
 }
 
+/// Hold `space` as a space. A second registration changes nothing.
+pub async fn register_space(pool: &PgPool, space: &ambre_core::SpaceId) -> Result<(), AppError> {
+    sqlx::query("INSERT INTO spaces (id) VALUES ($1) ON CONFLICT DO NOTHING")
+        .bind(id_to_uuid(*space))
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Every space whose document holds a row of `user`, by identifier
+/// (`SRV-216`).
+pub async fn list_member_spaces(
+    pool: &PgPool,
+    user: &ambre_core::UserId,
+) -> Result<Vec<ambre_core::SpaceId>, AppError> {
+    let ids: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT s.id FROM spaces s JOIN document_members m ON m.document_id = s.id \
+         WHERE m.user_id = $1 ORDER BY s.id",
+    )
+    .bind(id_to_uuid(*user))
+    .fetch_all(pool)
+    .await?;
+    Ok(ids.into_iter().map(uuid_row_to_id).collect())
+}
+
+/// Every user holding a row of `document`, when it is a space; none for any
+/// other document (`SRV-218`).
+pub async fn space_members(
+    pool: &PgPool,
+    document: &ambre_core::DocumentId,
+) -> Result<Vec<ambre_core::UserId>, AppError> {
+    let ids: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT m.user_id FROM spaces s JOIN document_members m ON m.document_id = s.id \
+         WHERE s.id = $1 ORDER BY m.user_id",
+    )
+    .bind(id_to_uuid(*document))
+    .fetch_all(pool)
+    .await?;
+    Ok(ids.into_iter().map(uuid_row_to_id).collect())
+}
+
 /// The channels the relay holds as public in `space`, by identifier.
 pub async fn list_space_public_channels(
     pool: &PgPool,
@@ -115,18 +156,46 @@ pub struct MemberChannelRow {
     /// `None` for a direct message.
     pub space_id: Option<ambre_core::SpaceId>,
     pub is_public: bool,
+    pub meta_id: ambre_core::MetaId,
+    /// The name sealed beside `meta`, if any (`SRV-219`).
+    pub name_enc: Option<Vec<u8>>,
+    /// The caller's copy of the channel key, and the exchange key of whoever
+    /// wrapped it, `None` for a self-wrapped row.
+    pub doc_key_enc: Vec<u8>,
+    pub wrapper_exchange_pubkey: Option<Vec<u8>>,
+    /// For a direct message, the display names of its other members, by
+    /// name then id. Empty for a channel of a space (`SRV-220`).
+    pub peers: Vec<String>,
+    /// The highest sequence number the register holds for `meta`. The
+    /// ephemeral store may hold a higher one not yet flushed.
+    pub meta_durable_last: i64,
 }
 
 /// Every channel whose `meta` holds a row of `user`, by identifier
-/// (`SRV-191`).
+/// (`SRV-191`), with the name sealed beside its `meta` (`SRV-219`). A direct
+/// message also lists its other members (`SRV-220`).
 pub async fn list_member_channels(
     pool: &PgPool,
     user: &ambre_core::UserId,
 ) -> Result<Vec<MemberChannelRow>, AppError> {
     let rows = sqlx::query(
-        "SELECT c.id, c.space_id, c.is_public FROM channels c \
+        "SELECT c.id, c.space_id, c.is_public, d.document_id, doc.name_enc, m.doc_key_enc, \
+         inv.exchange_pubkey AS wrapper_exchange_pubkey, \
+         CASE WHEN c.space_id IS NULL THEN ARRAY(SELECT u.display_name \
+           FROM document_members pm JOIN users u ON u.id = pm.user_id \
+           WHERE pm.document_id = d.document_id AND pm.user_id <> $1 \
+           ORDER BY u.display_name, u.id) ELSE ARRAY[]::text[] END AS peers, \
+         GREATEST( \
+             COALESCE((SELECT MAX(u.seq) FROM updates u \
+                       WHERE u.document_id = d.document_id), 0), \
+             COALESCE((SELECT MAX(s.covered_seq) FROM snapshots s \
+                       WHERE s.document_id = d.document_id), 0) \
+         ) AS meta_durable_last \
+         FROM channels c \
          JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
+         JOIN documents doc ON doc.id = d.document_id \
          JOIN document_members m ON m.document_id = d.document_id \
+         LEFT JOIN users inv ON inv.id = m.invited_by \
          WHERE m.user_id = $1 ORDER BY c.id",
     )
     .bind(id_to_uuid(*user))
@@ -139,6 +208,14 @@ pub async fn list_member_channels(
                 id: uuid_row_to_id(r.try_get("id")?),
                 space_id: space_id.map(uuid_row_to_id),
                 is_public: r.try_get("is_public")?,
+                meta_id: ambre_core::MetaId::from_document(uuid_row_to_id(
+                    r.try_get("document_id")?,
+                )),
+                name_enc: r.try_get("name_enc")?,
+                doc_key_enc: r.try_get("doc_key_enc")?,
+                wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
+                peers: r.try_get("peers")?,
+                meta_durable_last: r.try_get("meta_durable_last")?,
             })
         })
         .collect()
@@ -1915,7 +1992,8 @@ mod tests {
     /// key. An amendments document names the
     /// segment it amends, and the snapshot, reach and time of its fold. The
     /// cursor table holds a member, a
-    /// document and a number. Nothing else: no name, no member and no key. A
+    /// document and a number, and the space table a document alone.
+    /// Nothing else: no name, no member and no key. A
     /// column added here widens what the relay learns, so it fails this test
     /// before it ships.
     #[sqlx::test]
@@ -1923,7 +2001,8 @@ mod tests {
     async fn the_channel_tables_hold_only_what_the_relay_may_learn(pool: PgPool) {
         let columns: Vec<(String, String)> = sqlx::query_as(
             "SELECT table_name::text, column_name::text FROM information_schema.columns \
-             WHERE table_schema = current_schema() AND (table_name LIKE 'channel%' OR table_name = 'read_cursors') \
+             WHERE table_schema = current_schema() \
+             AND (table_name LIKE 'channel%' OR table_name IN ('read_cursors', 'spaces')) \
              ORDER BY table_name, column_name",
         )
         .fetch_all(&pool)
@@ -1958,6 +2037,7 @@ mod tests {
                 ("read_cursors", "document_id"),
                 ("read_cursors", "seq"),
                 ("read_cursors", "user_id"),
+                ("spaces", "id"),
             ]
         );
     }

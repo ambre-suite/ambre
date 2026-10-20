@@ -227,6 +227,13 @@ pub(crate) fn remember_dev_user(username: &str) {
     }
 }
 
+/// Forget the remembered dev identity, so the next boot signs no one in.
+pub(crate) fn forget_dev_user() {
+    if let Some(Ok(Some(storage))) = web_sys::window().map(|w| w.local_storage()) {
+        let _ = storage.remove_item(DEV_USER_KEY);
+    }
+}
+
 /// Map a `SyncWarningCode` (the closed `ambre-bus` contract) to a user-facing
 /// notice. All are non-fatal, and all but an unreadable document correct
 /// themselves, so the wording reassures rather than alarms. Exhaustive by
@@ -254,9 +261,17 @@ pub(crate) fn sync_warning_message(code: SyncWarningCode) -> &'static str {
 /// `data-type="worker"` wasm artifact, and emits this `importScripts`-based
 /// loader. The loader is a CLASSIC worker: it calls `wasm_bindgen(...)`, which
 /// creates the worker's own shared `WebAssembly.Memory` and runs
-/// `#[wasm_bindgen(start)]`. `filehash` is off (Trunk.toml), so the path is
-/// stable.
-const SYNC_WORKER_URL: &str = "/ambre-sync_loader.js";
+/// `#[wasm_bindgen(start)]`. `filehash` hashes its name (Trunk.toml), so the
+/// post-build hook writes it into the page's `ambre-sync-worker` meta. `None`
+/// when the page carries no address.
+fn sync_worker_url() -> Option<String> {
+    web_sys::window()?
+        .document()?
+        .query_selector(r#"meta[name="ambre-sync-worker"]"#)
+        .ok()??
+        .get_attribute("content")
+        .filter(|url| !url.is_empty())
+}
 
 /// Fetch the server's public auth config (`GET /api/auth/config`) and return
 /// its `dev_mode` flag. Same-origin, unauthenticated; on any failure (network,
@@ -280,25 +295,6 @@ pub(crate) async fn fetch_dev_mode() -> bool {
     inner().await.unwrap_or(false)
 }
 
-/// Up to two uppercase initials from a display name, for the header avatar.
-/// Empty / missing name falls back to a neutral dash.
-pub(crate) fn initials(name: Option<&str>) -> String {
-    let Some(name) = name else {
-        return "-".to_owned();
-    };
-    let letters: String = name
-        .split_whitespace()
-        .filter_map(|w| w.chars().next())
-        .take(2)
-        .collect::<String>()
-        .to_uppercase();
-    if letters.is_empty() {
-        "-".to_owned()
-    } else {
-        letters
-    }
-}
-
 /// The main side of the Sync -> Logic channel. An event from the Sync worker
 /// is lossless (a CRDT delta, a service answer), and the main thread may not
 /// wait for room (`ARCH-021`). So what the channel cannot take waits in the
@@ -315,7 +311,8 @@ pub(crate) fn spawn_sync_worker(
     start: Rc<RefCell<ambre_bus::start::StartGate>>,
 ) -> web_sys::Worker {
     // Classic worker (the Trunk loader uses `importScripts`); not a module worker.
-    let worker = web_sys::Worker::new(SYNC_WORKER_URL).expect("failed to spawn Sync worker");
+    let url = sync_worker_url().expect("the page carries no Sync worker address");
+    let worker = web_sys::Worker::new(&url).expect("failed to spawn Sync worker");
     let to_worker = worker.clone();
 
     let onmessage =
@@ -415,29 +412,48 @@ pub(crate) fn apply_theme_attr(theme: ambre_canvas::Theme) {
     }
 }
 
-/// Attach a `contextmenu` listener to the canvas: right-click opens the DOM
-/// context menu at the click point (and suppresses the browser menu). Runs in
-/// a post-mount effect so the AppShell's `<canvas>` is already in the DOM.
-/// While `silent` holds, a right-click opens nothing: a presenting board shows
-/// no editing surface.
+/// The canvases a right-click opens the DOM menu on: the content's, and the
+/// thread's of a Murmure page.
+pub(crate) const MENU_CANVASES: [&str; 2] = ["ambre-canvas", crate::host::THREAD_CANVAS];
+
+/// Listen for `contextmenu` on the document. A right-click on one of the
+/// `MENU_CANVASES` opens the DOM context menu at the click point, and the
+/// browser menu stays shut. The document holds the listener, since a panel
+/// mounts its canvas later. While `silent` holds, a right-click opens nothing:
+/// a presenting board shows no editing surface.
+///
+/// While `placed` holds, the page already placed the menu at a point of its
+/// own, from a long press or a key. The event then only keeps the browser
+/// menu shut, since its point is not the page's. A key's event lands on
+/// whatever holds the focus, the text pipe or the body as well as a canvas.
 pub(crate) fn install_canvas_context_menu(
     ctx_menu: RwSignal<Option<(f64, f64)>>,
     silent: Signal<bool>,
+    placed: Signal<bool>,
 ) {
-    Effect::new(move |_| {
-        let Some(canvas) = leptos::prelude::document().get_element_by_id("ambre-canvas") else {
+    let cb = Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |e: web_sys::MouseEvent| {
+        // The document keeps the listener past the owner of the signals.
+        // Once they are gone, the browser keeps its menu.
+        let (Some(placed), Some(silent)) = (placed.try_get_untracked(), silent.try_get_untracked())
+        else {
             return;
         };
-        let cb = Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |e: web_sys::MouseEvent| {
-            e.prevent_default();
-            if silent.get_untracked() {
-                return;
-            }
-            ctx_menu.set(Some((e.client_x() as f64, e.client_y() as f64)));
-        });
-        let _ = canvas.add_event_listener_with_callback("contextmenu", cb.as_ref().unchecked_ref());
-        cb.forget();
+        let on_canvas = e
+            .target()
+            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+            .is_some_and(|el| MENU_CANVASES.contains(&el.id().as_str()));
+        if !on_canvas && !placed {
+            return;
+        }
+        e.prevent_default();
+        if silent || placed {
+            return;
+        }
+        ctx_menu.set(Some((e.client_x() as f64, e.client_y() as f64)));
     });
+    let _ = leptos::prelude::document()
+        .add_event_listener_with_callback("contextmenu", cb.as_ref().unchecked_ref());
+    cb.forget();
 }
 
 /// Attach the file drop to a board's canvas: a file dropped on it reaches the
@@ -470,6 +486,48 @@ pub(crate) fn install_board_file_drop(
             };
             let at = ambre_draw::Point::new(f64::from(e.offset_x()), f64::from(e.offset_y()));
             toile_chrome::import_dropped_file(file, at, dropped, toasts);
+        });
+        let _ = canvas.add_event_listener_with_callback("drop", cb.as_ref().unchecked_ref());
+        cb.forget();
+    });
+}
+
+/// Attach the file drop to a channel's canvas: each file dropped on it is
+/// read, and its region uploads it for the draft
+/// (`ambre-spec-murmure-attachments.md`). A thread
+/// takes no file, so its canvas takes no drop.
+pub(crate) fn install_murmure_file_drop(relay: ambre_murmure::chrome::MurmureRelay) {
+    Effect::new(move |_| {
+        let Some(canvas) = leptos::prelude::document().get_element_by_id("ambre-canvas") else {
+            return;
+        };
+        // Without a `dragover` that prevents the default, the browser navigates
+        // away to the dropped file and the drop never fires.
+        let over = Closure::<dyn FnMut(web_sys::DragEvent)>::new(|e: web_sys::DragEvent| {
+            e.prevent_default();
+        });
+        let _ = canvas.add_event_listener_with_callback("dragover", over.as_ref().unchecked_ref());
+        over.forget();
+
+        let cb = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |e: web_sys::DragEvent| {
+            e.prevent_default();
+            let Some(files) = e.data_transfer().and_then(|dt| dt.files()) else {
+                return;
+            };
+            for file in (0..files.length()).filter_map(|i| files.get(i)) {
+                wasm_bindgen_futures::spawn_local(async move {
+                    let Ok(buf) = wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await
+                    else {
+                        tracing::warn!("Murmure: a dropped file could not be read");
+                        return;
+                    };
+                    relay.drop_file(ambre_murmure::uploads::PickedFile {
+                        name: file.name(),
+                        media_type: file.type_(),
+                        data: js_sys::Uint8Array::new(&buf).to_vec(),
+                    });
+                });
+            }
         });
         let _ = canvas.add_event_listener_with_callback("drop", cb.as_ref().unchecked_ref());
         cb.forget();
@@ -567,7 +625,11 @@ pub(crate) fn install_command_keys(keymap: Keymap, commands: shell::CommandPath)
 ///   land on an empty document.
 ///
 /// One path, taken every time, beats two that differ by the byte at offset 5.
-pub(crate) fn open_ambre_file_picker(toasts: Toasts, on_sealed: Callback<Vec<u8>>) {
+pub(crate) fn open_ambre_file_picker(
+    toasts: Toasts,
+    on_sealed: Callback<Vec<u8>>,
+    opened: RwSignal<Option<OpenedFile>>,
+) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
         return;
     };
@@ -583,7 +645,7 @@ pub(crate) fn open_ambre_file_picker(toasts: Toasts, on_sealed: Callback<Vec<u8>
     let picker = input.clone();
     let onchange = Closure::<dyn FnMut()>::new(move || {
         if let Some(file) = picker.files().and_then(|fs| fs.get(0)) {
-            read_ambre_file(file, toasts, on_sealed);
+            read_ambre_file(file, toasts, on_sealed, opened);
         }
     });
     input.set_onchange(Some(onchange.as_ref().unchecked_ref()));
@@ -603,7 +665,12 @@ pub(crate) fn open_ambre_file_picker(toasts: Toasts, on_sealed: Callback<Vec<u8>
 ///
 /// None of them navigates anywhere, so a refused file costs the user a message
 /// and nothing else.
-fn read_ambre_file(file: web_sys::File, toasts: Toasts, on_sealed: Callback<Vec<u8>>) {
+fn read_ambre_file(
+    file: web_sys::File,
+    toasts: Toasts,
+    on_sealed: Callback<Vec<u8>>,
+    opened: RwSignal<Option<OpenedFile>>,
+) {
     wasm_bindgen_futures::spawn_local(async move {
         let Ok(buf) = wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await else {
             toasts.error("Ambre could not read that file");
@@ -623,26 +690,56 @@ fn read_ambre_file(file: web_sys::File, toasts: Toasts, on_sealed: Callback<Vec<
             on_sealed.run(bytes);
             return;
         }
-        open_container_bytes(bytes, toasts).await;
+        // The per-frame relay holds the store's seal, and resumes from here
+        // (`RESID-025`).
+        opened.set(Some(OpenedFile(bytes)));
     });
 }
 
-/// Attribute a plaintext container, persist its payload and navigate to it.
+/// A plaintext container the picker read, on its way to the store's seal.
+#[derive(Clone)]
+pub(crate) struct OpenedFile(pub(crate) Vec<u8>);
+
+/// Attribute a plaintext container, persist its payload sealed and navigate
+/// to it.
 ///
 /// Split from [`read_ambre_file`] because a sealed file reaches exactly this
 /// point too, one round trip later and by way of the Sync worker. What it holds
 /// is a whole plaintext container, so the two lineages share every step after
 /// the seal comes off (`DOCFILE-014`).
-pub(crate) fn open_plaintext_container(bytes: Vec<u8>, toasts: Toasts) {
-    wasm_bindgen_futures::spawn_local(open_container_bytes(bytes, toasts));
+pub(crate) fn open_plaintext_container(bytes: Vec<u8>, toasts: Toasts, vault: crate::vault::Vault) {
+    let Some((document_id, doc_type, payload)) = read_container(&bytes, toasts) else {
+        return;
+    };
+    // The payload lands as every copy does, sealed under the session's key.
+    vault.seal(
+        ambre_bus::RowPlace::Document(document_id),
+        payload,
+        move |sealed| match sealed {
+            Some(sealed) => {
+                wasm_bindgen_futures::spawn_local(store_container(
+                    document_id,
+                    doc_type,
+                    sealed,
+                    toasts,
+                ));
+            }
+            None => toasts.error("Sign in to open that file"),
+        },
+    );
 }
 
-async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
-    let header = match ambre_core::docfile::read_ambre_plaintext(&bytes) {
+/// The container's document, its type and its payload, once this build
+/// can render it. A refusal reaches the user by name.
+fn read_container(
+    bytes: &[u8],
+    toasts: Toasts,
+) -> Option<(DocumentId, ambre_bus::DocType, Vec<u8>)> {
+    let header = match ambre_core::docfile::read_ambre_plaintext(bytes) {
         Ok(header) => header,
         Err(e) => {
             toasts.error(format!("Ambre cannot open that file: {e}"));
-            return;
+            return None;
         }
     };
     // A type this build knows by name but cannot render draws a refusal here
@@ -653,9 +750,19 @@ async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
             "Ambre cannot open a {} yet",
             header.doc_type.generic_label()
         ));
-        return;
+        return None;
     }
+    Some((header.document_id.into(), header.doc_type, header.payload))
+}
 
+/// Store a container's sealed payload as the document's copy, and navigate
+/// to it.
+async fn store_container(
+    document_id: DocumentId,
+    doc_type: ambre_bus::DocType,
+    sealed: Vec<u8>,
+    toasts: Toasts,
+) {
     let store = match ambre_logic::persistence::PersistenceStore::open().await {
         Ok(Ok(store)) => store,
         _ => {
@@ -666,14 +773,14 @@ async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
     // Durable, not fire-and-forget: the navigation below unloads the page,
     // and an open transaction goes with it.
     let committed = store
-        .save_snapshot_committed(*header.document_id.as_bytes(), header.payload)
+        .save_snapshot_committed(*document_id.as_bytes(), sealed)
         .await;
     if committed != Ok(true) {
         toasts.error("Ambre could not store that file locally");
         return;
     }
 
-    let path = crate::route::doc_path(header.doc_type, header.document_id.into());
+    let path = crate::route::doc_path(doc_type, document_id);
     if let Some(window) = web_sys::window() {
         let _ = window.location().set_href(&path);
     }
@@ -764,6 +871,104 @@ mod tests {
         assert!(keydown_reads_editable("div", Some("true")));
         assert!(!keydown_reads_editable("div", None));
         assert!(!keydown_reads_editable("button", None));
+    }
+
+    /// A right-click on `id` at (12, 34): whether the browser menu stayed
+    /// shut. The element lives in the body for the click alone.
+    fn right_click(id: &str) -> bool {
+        let el = leptos::prelude::document()
+            .create_element("canvas")
+            .expect("a canvas");
+        el.set_id(id);
+        menu_event_on(el)
+    }
+
+    /// The menu event a key raises on the text pipe that holds the focus:
+    /// whether the browser menu stayed shut.
+    fn menu_key_on_the_pipe() -> bool {
+        let el = leptos::prelude::document()
+            .create_element("textarea")
+            .expect("a textarea");
+        el.set_class_name("ambre-input");
+        menu_event_on(el)
+    }
+
+    /// A `contextmenu` at (12, 34) on `el`, in the body for the event alone.
+    fn menu_event_on(el: web_sys::Element) -> bool {
+        let document = leptos::prelude::document();
+        document
+            .body()
+            .expect("a body")
+            .append_child(&el)
+            .expect("in the body");
+        let init = web_sys::PointerEventInit::new();
+        init.set_bubbles(true);
+        init.set_cancelable(true);
+        init.set_client_x(12);
+        init.set_client_y(34);
+        let ev = web_sys::PointerEvent::new_with_event_init_dict("contextmenu", &init)
+            .expect("an event");
+        el.dispatch_event(&ev).expect("dispatched");
+        el.remove();
+        ev.default_prevented()
+    }
+
+    /// A right-click on the content's canvas or on the thread's, mounted
+    /// after the listener, opens the menu at its point. While `silent`
+    /// holds it opens nothing, and a right-click elsewhere keeps the
+    /// browser menu (the Murmure message list spec).
+    #[wasm_bindgen_test]
+    fn a_right_click_on_either_canvas_opens_the_menu_at_its_point() {
+        // A scoped owner: one left current would dispose the signals of the
+        // tests that follow.
+        Owner::new().with(right_clicks_open_the_menu);
+    }
+
+    fn right_clicks_open_the_menu() {
+        let ctx_menu = RwSignal::new(None);
+        let silent = RwSignal::new(false);
+        install_canvas_context_menu(ctx_menu, silent.into(), Signal::stored(false));
+        for id in MENU_CANVASES {
+            ctx_menu.set(None);
+            assert!(right_click(id), "{id}: the browser menu stays shut");
+            assert_eq!(ctx_menu.get_untracked(), Some((12.0, 34.0)), "{id}");
+        }
+        ctx_menu.set(None);
+        silent.set(true);
+        assert!(right_click(crate::host::THREAD_CANVAS));
+        assert_eq!(ctx_menu.get_untracked(), None, "silent opens nothing");
+        silent.set(false);
+        assert!(!right_click("elsewhere"), "the browser menu of the page");
+        assert_eq!(ctx_menu.get_untracked(), None);
+    }
+
+    /// A menu the page placed from a key keeps its point. The event the key
+    /// raises on a canvas or on the text pipe only keeps the browser menu
+    /// shut. With nothing placed, the pipe keeps its browser menu (the
+    /// Murmure message list spec).
+    ///
+    /// The pipe stands for any element outside the canvases.
+    #[wasm_bindgen_test]
+    fn a_menu_the_page_placed_keeps_its_point_and_the_browsers_stays_shut() {
+        Owner::new().with(a_placed_menu_keeps_its_point);
+    }
+
+    fn a_placed_menu_keeps_its_point() {
+        let ctx_menu = RwSignal::new(None);
+        let placed = RwSignal::new(false);
+        install_canvas_context_menu(ctx_menu, Signal::stored(false), placed.into());
+        assert!(!menu_key_on_the_pipe(), "nothing placed: the browser's");
+        assert_eq!(ctx_menu.get_untracked(), None);
+
+        placed.set(true);
+        ctx_menu.set(Some((1.0, 2.0)));
+        assert!(menu_key_on_the_pipe(), "the pipe's browser menu stays shut");
+        assert!(right_click(crate::host::THREAD_CANVAS), "and the canvas's");
+        assert_eq!(
+            ctx_menu.get_untracked(),
+            Some((1.0, 2.0)),
+            "the point stays"
+        );
     }
 
     /// `CHROME-103`: a pipe that is not typed text gives a bare key to the

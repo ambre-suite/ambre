@@ -133,6 +133,46 @@ pub fn ContextMenu(
     let menu_x = RwSignal::new(0.0_f64);
     let menu_y = RwSignal::new(0.0_f64);
 
+    // The menu takes the focus, so it gives it back to what held it before it
+    // opened (`CHROME-027`). Created before the effect that moves the focus in,
+    // so the opener is read first. A focus moved elsewhere while the menu
+    // was open is the user's, and stays.
+    let opener = std::rc::Rc::new(std::cell::RefCell::new(None::<web_sys::HtmlElement>));
+    Effect::new(move |was_open: Option<bool>| {
+        let open = pos.with(Option::is_some);
+        let doc = web_sys::window().and_then(|w| w.document());
+        let active = doc.as_ref().and_then(web_sys::Document::active_element);
+        let in_menu = |el: &web_sys::Element| {
+            menu_ref
+                .get_untracked()
+                .is_some_and(|menu| menu.contains(Some(el)))
+        };
+        match (was_open.unwrap_or(false), open) {
+            (false, true) => {
+                *opener.borrow_mut() = active
+                    .filter(|el| !in_menu(el))
+                    .and_then(|el| el.dyn_into::<web_sys::HtmlElement>().ok());
+            }
+            (true, false) => {
+                let left_on_page = active.is_none_or(|el| {
+                    in_menu(&el)
+                        || doc
+                            .as_ref()
+                            .and_then(|d| d.body())
+                            .is_some_and(|b| *b == el)
+                });
+                if let Some(el) = opener.borrow_mut().take()
+                    && left_on_page
+                    && el.is_connected()
+                {
+                    let _ = el.focus();
+                }
+            }
+            _ => {}
+        }
+        open
+    });
+
     // On open: reset highlight, then place at the click point and flip if the
     // menu would overflow the viewport (measured after it renders).
     Effect::new(move |_| {

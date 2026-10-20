@@ -12,22 +12,48 @@
 
 #![forbid(unsafe_code)]
 
+mod attachment;
 mod channel;
+/// Murmure-specific chrome, built on the `ambre-chrome` toolkit. Wasm-only
+/// (leptos CSR + DOM).
+#[cfg(target_arch = "wasm32")]
+pub mod chrome;
+pub mod commands;
+pub mod composer;
 mod delta;
+pub mod drafts;
+pub mod emoji;
 mod error;
+mod layout;
+pub mod list;
+mod look;
+pub mod markers;
 mod members;
 mod mention;
+pub mod mention_list;
 mod opening;
+pub mod paint;
+pub mod pictures;
 mod reaction;
+mod read_aloud;
 pub mod schema;
 mod search;
+pub mod select;
 mod sequence;
 mod session;
+mod sidebar;
 mod space;
+mod style;
+#[cfg(feature = "testing")]
+pub mod testing;
+pub mod uploads;
+pub mod view;
 mod watchers;
 
 #[cfg(test)]
 mod amending_tests;
+#[cfg(test)]
+mod attachment_tests;
 #[cfg(test)]
 mod authorship_tests;
 #[cfg(test)]
@@ -51,6 +77,8 @@ mod schema_shape;
 #[cfg(test)]
 mod space_tests;
 #[cfg(test)]
+mod style_tests;
+#[cfg(test)]
 mod thread_tests;
 #[cfg(test)]
 mod unread_tests;
@@ -58,10 +86,11 @@ mod unread_tests;
 pub use channel::{
     ChangeTarget, ChannelState, Closed, FINALIZE_RETRY_MS, FOLD_DELAY_MS, FinalSnapshot,
     FoldSnapshot, Linked, Named, Relocated, Replay, Replied, SEGMENT_BYTES, SEGMENT_MESSAGES,
-    SUCCESSOR_RETRY_MS, Sent, Settled, ThreadLinked, ThreadTarget,
+    SUCCESSOR_RETRY_MS, SeekStep, Sent, Settled, ThreadLinked, ThreadTarget,
 };
 pub use delta::{JSON_SCHEMA_VERSION, Refusal, Signer};
 pub use error::MurmureError;
+pub use layout::{MessageRef, MurmurePane};
 pub use members::{
     PRESENCE_EXPIRY_MS, REFRESH_PERIOD_MS, Roster, find_members, is_presence_sample,
     presence_sample,
@@ -71,5 +100,6 @@ pub use opening::{Opening, OpeningChannel};
 pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};
 pub use search::Query;
 pub use sequence::{Order, Position};
+pub use sidebar::{Activity, Sidebar, SidebarEntry, SidebarGroup, SidebarSection};
 pub use space::{Listing, SpaceState};
 pub use watchers::{Sample, TICK_MS, TYPING_EXPIRY_MS, TYPING_REFRESH_MS, Watchers};

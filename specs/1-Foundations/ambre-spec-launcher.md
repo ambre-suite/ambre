@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE LAUNCHER
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the development sign-in, listing, creating, renaming and deleting
-ship, and so does the provider sign-in up to its tokens. An account has no face to unlock or set up
+**Implementation:** partial -- the development sign-in, the list and the sign-out ship, and so
+does the provider sign-in up to its tokens. An account has no face to unlock or set up
 its keys. The list has no order, no grouping and no search.
 
 > The home screen at the root of the site: sign in, then every document you can open, whatever kind
@@ -84,6 +84,15 @@ The provider says who the person is; a passphrase opens their keys, or a setup c
 | `CHROME-098` | `POST` | An account that owes its key setup MUST be shown the setup, never an error, whether the sign-in or a later refusal reveals it. | this spec section 2; `ambre-spec-sync.md`, `SYNC-134` | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `CHROME-100` | `FRAME` | A passphrase typed on this screen MUST NOT outlive its submission on the UI thread. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-010` | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
 
+### 1.7 Sign out
+
+The session ends where it was opened: on this screen.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-107` | `POST` | A sign-out control MUST end the session on the live threads and show the sign-in panel. | this spec section 3; `ambre-spec-session.md`, `SRV-026`; `ambre-spec-sync.md`, `SYNC-066`, `SYNC-177` | `ambre_app::landing::tests::the_sign_out_control_ends_the_session_once` -- the control sends one sign-out however often it is clicked, and the page stays put until the worker confirms; `ambre_app::signin::tests::a_sign_out_forgets_the_user_and_boots_home_afresh` -- the confirmation boots `/`, where no user is left to sign in | none | verified |
+| `CHROME-108` | `FRAME` | A sign-out MUST leave nothing of the session it ended on screen: no list, no open document, no draft. | this spec section 3; `MURMURE-216` | `ambre_app::signin::tests::a_sign_out_forgets_the_user_and_boots_home_afresh` -- the page is replaced by a fresh boot, which holds no state of the one it replaced, and that boot signs no one in; `ambre_murmure::drafts::tests::a_sign_out_deletes_every_draft` | none | verified |
+
 * **Budget.** none of its own: the list is a handful of rows of DOM and `ambre-spec-budgets.md`
   budgets no chrome operation. The frame the home screen does not draw is a saving, charged to
   `ambre-spec-frame.md`.
@@ -91,7 +100,7 @@ The provider says who the person is; a passphrase opens their keys, or a setup c
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
   unauthenticated same-origin read of the sign-in configuration, keeps the sign-in's own state and
   owns the local store. Each is an exception `UI-THREAD-004` names.
-* **Verification.** 21 `verified`, 4 `unimplemented`. What holds is what a pure function or one
+* **Verification.** 23 `verified`, 4 `unimplemented`. What holds is what a pure function or one
   mounted control carries, and what a scan of the source refuses. Creation is held by the gate that
   keeps the named command off the page. A composed name is held by its type, which converts to no
   `String` (`CHROME-080`).
@@ -132,6 +141,17 @@ person into the third party's account. The address the relay answers is followed
 The development route matters for a reason that is not convenience. It signs in on the live
 threads, so the Sync worker keeps the keys it already holds instead of losing them to a page
 reload.
+
+**Signing out.** The control sits beside the user's name in the header, and sends one sign-out to
+the live threads. The Logic thread drops every document. The Sync worker clears its keys, then asks
+the relay to revoke the refresh token (`SYNC-177`). Its confirmation deletes the drafts
+(`MURMURE-216`). Once that write has landed, the page forgets who it signed in and boots `/` afresh
+(`CHROME-108`).
+
+**Why it reloads.** A sign-out in place would have to empty each list, panel and sidebar an
+application fills, and the next application would forget one. The fresh boot empties all of them,
+at the cost of one boot per sign-out. It also ends the Sync worker, so no byte of a key outlives
+the session in that worker's memory.
 
 **A card.** One row per document, and four things on it.
 
@@ -203,6 +223,7 @@ monograms, their generic labels and the creatable list. The style is `crates/amb
 | a return this tab did not start | it is dropped, its address cleared, and the sign-in panel shows again (`CHROME-101`) |
 | a provider account holds its keys | a passphrase field opens them, then the list appears (`CHROME-097`) |
 | a provider account owes its keys, or the relay refuses it for that later | the setup: a passphrase, then the recovery words, shown once (`CHROME-098`, `CHROME-099`) |
+| the sign-out control | the session ends, and the sign-in panel shows over nothing of it (`CHROME-107`, `CHROME-108`) |
 | the list is empty | a placeholder invites creating one, rather than a bare empty list |
 | a card is clicked | the document opens, in place or after a reload depending on its kind |
 | the kind picker is opened | one entry per creatable kind, each under its generic label |

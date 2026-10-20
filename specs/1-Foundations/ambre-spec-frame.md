@@ -30,7 +30,8 @@ one numbering over the four documents the rendering layer produces.
 | `CANVAS-057` | `INV` | A crate that needs `unsafe` MUST stay encapsulated behind the rendering layer, never reached from an application. | README pillar "Security"; this spec section 2 | cargo-deny -- `deny.toml` grants `wgpu` to `ambre-canvas` and `ambre-app` and `swash` to `ambre-canvas` and `parley`, and the CI `deny` job fails an application manifest that takes either | none | verified |
 | `CANVAS-009` | `INV` | The canvas element MUST NOT be the end of the accessibility tree: what it draws MUST also have a presence in the page. | this spec section 3; `ambre-spec-accessibility.md` | `ambre_app::host::pipe::tests::the_canvas_content_has_a_presence_in_the_page` -- the pipe takes the focus and the live region carries an announcement, in the browser tier | none | verified |
 | `CANVAS-016` | `INV` | The frame read-out MUST be available in every application, not in one. | this spec section 3 | not built | unbuilt -- lands with the `One performance read-out` Story (`ambre-roadmap.md` E8). `PerfPublisher` ships and Trame is its only consumer | unimplemented |
-| `CANVAS-070` | `INV` | A frame MUST paint every canvas the active view shows, each under its own repaint plan. | this spec section 2; `ambre-spec-chrome.md section 2` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CANVAS-070` | `INV` | A frame MUST paint every canvas the active view shows, each under its own repaint plan. | this spec section 2; `ambre-spec-chrome.md section 2` | `ambre_app::host::cell::tests::a_cell_plans_its_frame_apart_from_the_page` -- a cell's plan moves apart from the page's, and a frame before its GPU spends none, in the browser tier. The paint and the present run the content canvas's own code | none | verified |
+| `CANVAS-076` | `INV` | Text typed MUST reach the one canvas whose field last took the keys, and no other canvas of the page. | this spec section 2; `ambre-spec-chrome.md section 2` | `ambre_app::host::cell::tests::the_pipe_writes_into_the_cell_whose_field_took_the_keys` -- a press in a cell's field takes text and keys and the content's field lets go, and a press on the content or its field taking the keys again takes the pipe back, in the browser tier | none | verified |
 
 ### 1.2 The loop runs a frame
 
@@ -49,6 +50,7 @@ one numbering over the four documents the rendering layer produces.
 |---|---|---|---|---|---|---|
 | `CANVAS-012` | `POST` | A paused loop MUST hold its last frame on screen. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-011` | `ambre_canvas::frame::tests::a_paused_loop_relays_and_does_no_frame_work` -- no frame work while paused, so no present replaces the last frame | none | verified |
 | `CANVAS-058` | `FRAME` | A paused loop MUST NOT dispatch and MUST NOT render. | this spec section 2 | `ambre_canvas::frame::tests::a_paused_loop_relays_and_does_no_frame_work` -- the relay alone runs, dispatch and render both skipped | none | verified |
+| `CANVAS-075` | `POST` | A hidden page MUST still run the relay on a timer, since the browser gives it no animation frame. | this spec section 2 | `ambre_canvas::frame::tests::a_hidden_page_relays_on_its_timer_and_a_shown_one_does_not` -- the timer relays while the page is hidden, and leaves a shown page to its frames | none | verified |
 
 ### 1.4 A fatal condition is signalled
 
@@ -71,8 +73,9 @@ one numbering over the four documents the rendering layer produces.
 * **Boundary.** none: this loop opens no socket, holds no key and writes nothing. The one network
   path the layer opens is the same-origin font fetch of `ambre-spec-render-assets.md`, which
   `UI-THREAD-004` names as the single exception.
-* **Verification.** 16 `verified`, 1 `qa-manual`, 2 `unimplemented`. The frame's decisions are pure
-  functions a host test drives: the phases of each plan, the pause, the fatal screen, the clear.
+* **Verification.** 19 `verified`, 1 `qa-manual`, 1 `unimplemented`. The frame's decisions are pure
+  functions a host test drives: the phases of each plan, the pause, the hidden page, the fatal
+  screen, the clear.
   The browser tier drives the loop and the page beside the canvas. A count holds the content walk
   of a busy frame; the whole frame is timed by hand on the phone.
 ---
@@ -130,10 +133,19 @@ alone. `FrameStats` -- fps, frame, drain, draw, gpu -- is measured by the host a
 `paint_overlay`.
 
 **Several canvases in one view.** A Murmure view shows a channel, a thread and a second pane, each
-in its own canvas (`ambre-spec-chrome.md section 2`). One GPU device serves them all, and each
-canvas has its own surface. The one `requestAnimationFrame` callback runs steps 3 to 6 once per
-canvas, each with its own plan (`CANVAS-070`). A canvas planned `Reuse` on both layers costs one
+in its own canvas (`ambre-spec-chrome.md section 2`). Each canvas holds a GPU state of its own:
+under WebGL2 a device presents only to the canvas whose context created it. A canvas binds its
+state once it has a box, so a hidden panel spends none, and releases its context when it leaves
+the page.
+
+The one `requestAnimationFrame` callback runs steps 3 to 6 once per canvas, each with its own plan
+(`CANVAS-070`). A canvas planned `Reuse` on both layers costs one
 present. Trame, Toile and Prose show one canvas, and the loop runs the steps once for them.
+
+The page has one text pipe, whichever canvas shows the field. A canvas whose field takes the keys
+claims the pipe, by a press, a tap or an edit loaded from a menu. The other field lets the keys go.
+Text, keys, compositions and the clipboard then reach that canvas alone (`CANVAS-076`). A press on
+the content canvas takes the pipe back.
 
 **The GPU backend, and the two browser quirks that decide it.**
 

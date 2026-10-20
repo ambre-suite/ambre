@@ -1,6 +1,7 @@
 # AMBRE -- FEATURE: THE MURMURE LAYOUT
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the regions, the back control, the rows of the shell and the
+channel list are built. The canvas paints the messages of the channel it shows.
 
 > Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of
 > them at a time on a phone. The layout follows the three widths every application shares.
@@ -17,31 +18,37 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-158` | `OBS` | Over the desktop width, the sidebar, the message list and an open thread MUST sit side by side. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-159` | `OBS` | Between the phone and the desktop widths, an open thread MUST replace the message list, with a way back to it. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-160` | `OBS` | Under the phone width, Murmure MUST show one view at a time: the channel list, a channel, or a thread. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-161` | `INV` | A region MUST collapse at a narrow width, never disappear. | this spec section 3; `CHROME-033` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-162` | `INV` | The layout MUST read the three widths of the adaptive layout, never a device class. | this spec section 3; `CHROME-034` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-163` | `OBS` | The sidebar MUST group the public channels of each space by category, then list the private channels and the direct messages. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-164` | `OBS` | A channel to join MUST be shown apart from the joined channels. | this spec section 3; `features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-165` | `OBS` | A channel with activity MUST show a mark, and its count once the count is known. | this spec section 3; `features/ambre-spec-murmure-unread.md` | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-158` | `OBS` | Over the desktop width, the sidebar, the message list and an open thread MUST sit side by side. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | `ambre_app::shell::murmure_regions::a_desktop_shows_the_sidebar_the_channel_and_the_thread_side_by_side` -- the shell mounted on a thread in a frame of 1025 and 1024 pixels, each region's width read off the layout | none | verified |
+| `MURMURE-159` | `OBS` | Between the phone and the desktop widths, an open thread MUST replace the message list, with a way back to it. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | `ambre_app::shell::murmure_regions::a_tablet_thread_replaces_the_channel_with_a_way_back` -- a thread in a frame of 600 and 1024 pixels shows the sidebar and the thread, and the back control shows the channel | none | verified |
+| `MURMURE-160` | `OBS` | Under the phone width, Murmure MUST show one view at a time: the channel list, a channel, or a thread. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | `ambre_app::shell::murmure_regions::a_phone_shows_one_view_at_a_time` -- each pane in a frame of 360 and 599 pixels shows one region, as wide as the frame | none | verified |
+| `MURMURE-161` | `INV` | A region MUST collapse at a narrow width, never disappear. | this spec section 3; `CHROME-033` | `ambre_app::shell::murmure_regions::a_region_collapses_and_never_disappears` -- the folded sidebar of a tablet is a strip that unfolds, and a phone reaches the channel list through the back control | none | verified |
+| `MURMURE-162` | `INV` | The layout MUST read the three widths of the adaptive layout, never a device class. | this spec section 3; `CHROME-034` | `ambre_app::shell::murmure_regions::the_layout_reads_the_three_widths` -- a channel and a thread in frames of 599, 600, 1024 and 1025 pixels, each region flipping at the two thresholds alone | none | verified |
+| `MURMURE-163` | `OBS` | The sidebar MUST group the public channels of each space by category, then list the private channels and the direct messages. | this spec section 3 | `ambre_murmure::sidebar::tests::the_sidebar_groups_public_channels_by_category_then_private_then_direct` -- the sections in order, each channel by catalogue rank; `ambre_app::shell::murmure_regions::the_sidebar_draws_its_sections_in_order` -- the shell draws the section titles and entries in that order | none | verified |
+| `MURMURE-164` | `OBS` | A channel to join MUST be shown apart from the joined channels. | this spec section 3; `features/ambre-spec-murmure-spaces.md` | `ambre_murmure::sidebar::tests::a_channel_to_join_sits_apart_from_the_joined_ones` -- a section of its own, left once joined; `ambre_app::shell::murmure_regions::the_sidebar_draws_its_sections_in_order` -- the last section drawn is the one to join | none | verified |
+| `MURMURE-165` | `OBS` | A channel with activity MUST show a mark, and its count once the count is known. | this spec section 3; `features/ambre-spec-murmure-unread.md` | `ambre_murmure::sidebar::tests::a_mark_shows_before_the_count_and_the_count_replaces_it` -- the mark, then the counts, kept when absent from an answer; `ambre_app::shell::murmure_regions::a_channel_shows_its_mark_then_its_counts` -- the entry draws the mark, then the message and mention counts | none | verified |
 | `MURMURE-382` | `INV` | A split view MUST exist at the desktop width alone. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-428` | `OBS` | The command bar of the shell MUST hold the header of the current channel. | this spec section 3; `ambre-spec-chrome.md section 2` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-429` | `OBS` | Murmure MUST show no status bar. | this spec section 3; `ambre-spec-chrome.md section 2` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-
+| `MURMURE-428` | `OBS` | The command bar of the shell MUST hold the header of the current channel. | this spec section 3; `ambre-spec-chrome.md section 2` | `ambre_app::shell::murmure_regions::the_command_bar_holds_the_channel_header_and_no_status_bar_shows` -- the channel name is read inside the channel header, inside the command bar; `ambre_murmure::tests::chrome_relay::a_channel_named_shows_its_name_in_the_header` -- the name an open channel learns is the one the header reads | none | verified |
+| `MURMURE-429` | `OBS` | Murmure MUST show no status bar. | this spec section 3; `ambre-spec-chrome.md section 2` | `ambre_app::shell::murmure_regions::the_command_bar_holds_the_channel_header_and_no_status_bar_shows` -- the mounted shell holds no status bar, formula bar or tab strip | none | verified |
+| `MURMURE-486` | `OBS` | A space the user joined no channel of MUST show its channels to join. | this spec section 3; `MURMURE-164`; `ambre-spec-server.md`, `SRV-216` | `ambre_murmure::sidebar::tests::a_space_with_no_channel_of_the_user_shows_its_channels_to_join` -- a listed space with no channel is opened once, and its catalogue fills the section to join; `ambre_app::shell::murmure_regions::a_space_with_no_channel_of_the_user_shows_its_channels_to_join` -- the shell opens the space once and draws its channels to join alone | none | verified |
+| `MURMURE-488` | `OBS` | A space the user lost MUST leave the sidebar with every channel of it, and a pane showing one MUST go back to the channel list. | this spec section 3; `features/ambre-spec-murmure-spaces.md`, `MURMURE-487` | `ambre_murmure::sidebar::tests::a_space_lost_leaves_the_sidebar_with_every_channel_of_it` -- its joined, private and listed channels go, where another space and the direct messages stay; `ambre_app::shell::murmure_regions::a_space_lost_leaves_the_sidebar_with_its_channels` -- the shell leaves the channel shown and draws the direct messages alone, and a later listing shows the space again | none | verified |
+| `MURMURE-489` | `OBS` | A channel the user lost, opened or not, MUST leave the sidebar of every open client, and a pane showing it MUST go back to the channel list. | this spec section 3; `features/ambre-spec-murmure-channels.md`, `MURMURE-474` | `ambre_sync::channels::tests::the_loss_of_a_document_not_held_as_another_kind_lists_the_users_channels` -- the loss of a held channel document or of one not held lists the channels again, and the loss of a held Prose document does not; `ambre_murmure::sidebar::tests::a_channel_absent_from_a_listing_leaves_the_sidebar` -- the listing replaces the channels whole; `ambre_murmure::tests::chrome_relay::a_channel_lost_while_open_leaves_the_sidebar_and_the_pane` -- the notice of an open channel resets the pane and drops the channel, and a later listing opens it again | none | verified |
+| `MURMURE-490` | `OBS` | A private channel or a named direct message MUST show its name in the sidebar before it opens. | this spec section 3; `ambre-spec-server.md`, `SRV-219`; `MURMURE-475` | `ambre_murmure::sidebar::tests::a_hint_names_a_channel_until_its_meta_reads_one` -- the listing's names show and are replaced whole, what meta reads wins, even no name, and a forgotten channel keeps none; `ambre_app::shell::murmure_regions::a_named_channel_not_open_shows_its_name` -- the shell draws the private channel and the direct message under their names | none | verified |
+| `MURMURE-492` | `OBS` | A direct message nobody named MUST show its other members' display names, open or not. | this spec section 3; `ambre-spec-server.md`, `SRV-220`; `MURMURE-055` | `ambre_murmure::sidebar::tests::an_unnamed_direct_message_shows_its_other_members` -- the members show in the relay's order, a hinted or read name wins, and meta reading none brings them back; `ambre_sync::channels::tests::a_listing_of_the_users_channels_forwards_their_places` -- the members of a direct message reach Logic, a channel of a space's none; `ambre_logic::channels::tests::the_users_channels_reach_the_view_and_open_nothing` -- they reach the view whole; `ambre_app::shell::murmure_regions::an_unnamed_direct_message_shows_its_other_members` -- the sidebar and the header draw them | none | verified |
 ### 1.2 Select a channel
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-166` | `POST` | Selecting a channel MUST show it in the message list and mark it current in the sidebar. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-167` | `FRAME` | Selecting a channel MUST NOT move the read cursor of the channel left behind. | this spec section 3; `MURMURE-116` | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-166` | `POST` | Selecting a channel MUST show it in the message list and mark it current in the sidebar. | this spec section 3 | `ambre_murmure::view::tests::the_selected_channel_shows_its_list_and_is_marked_read_once` -- the channel the pane shows paints its own list, and no other, on a recording surface | none | verified |
+| `MURMURE-167` | `FRAME` | Selecting a channel MUST NOT move the read cursor of the channel left behind. | this spec section 3; `MURMURE-116` | `ambre_app::shell::murmure_regions::selecting_a_channel_sends_nothing_for_the_one_left_behind` -- switching channels sends one open per new channel and no other command | none | verified |
+| `MURMURE-549` | `FAIL` | Given a channel that could not open, the client MUST tell the user, show the channel list, keep the channel in the sidebar, and open it anew when selected again. | this spec section 3; `MURMURE-166` | `ambre_logic::channels::tests::a_refused_listing_tells_the_view_and_holds_nothing` -- a refused listing tells the view; `::a_document_that_fails_to_open_ends_the_opening` -- so does a document that fails; `ambre_murmure::tests::chrome_relay::a_channel_that_cannot_open_is_told_and_opens_anew` -- one toast without the cause, the pane back to the list, and a new open on the next selection | none | verified |
+| `MURMURE-550` | `FAIL` | Given a space that could not open, the client MUST tell the user, keep its joined channels drawn, and open it anew on the next listing that names it. | this spec section 3; `MURMURE-486` | `ambre_logic::spaces::tests::a_space_with_nothing_readable_fails_to_open` -- the view is told; `ambre_murmure::sidebar::tests::a_space_that_failed_opens_anew_on_the_next_listing` -- its channels stay drawn, and the next listing opens it once; `ambre_murmure::tests::chrome_relay::a_space_that_cannot_open_is_told_and_opens_anew` -- one toast without the cause, then one new open | none | verified |
 
 ### 1.3 Go back on a phone
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-168` | `POST` | Back from a thread MUST show its channel at the root message; back from a channel MUST show the channel list. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-169` | `FRAME` | Going back MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-168` | `POST` | Back from a thread MUST show its channel at the root message; back from a channel MUST show the channel list. | this spec section 3 | `ambre_murmure::layout::tests::back_from_a_thread_shows_its_channel_at_the_root_then_the_list` -- the pane before a thread, a channel and the list; `ambre_app::shell::murmure_regions::back_shows_the_channel_at_the_root_then_the_list` -- the back control clicked twice on a phone | none | verified |
+| `MURMURE-169` | `FRAME` | Going back MUST NOT move a read cursor. | this spec section 3 | `ambre_app::shell::murmure_regions::back_shows_the_channel_at_the_root_then_the_list` -- the back control writes the pane alone; structural -- going back is a value of the pane, and the shell holding the control holds no command sender | none | verified |
 
 ### 1.4 Show two channels side by side
 
@@ -55,7 +62,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 19 `unimplemented`: no Murmure view exists.
+* **Verification.** 21 `verified`, 5 `unimplemented`. The regions, the back control, the rows of
+  the shell, the sidebar entries and the list of the shown channel are built. The split view is
+  not.
 
 ---
 
@@ -63,10 +72,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | Alice does | At the width | Alice sees | Test |
 |---|---|---|---|
-| opens a thread | desktop | the sidebar, the channel and the thread, side by side (`MURMURE-158`) | none |
-| opens a thread | tablet | the sidebar and the thread, with a way back to the channel (`MURMURE-159`) | none |
-| opens a thread, then goes back | phone | the thread alone, then the channel at the root message (`MURMURE-168`) | none |
-| widens the window from phone to desktop | phone, then desktop | the same channel, now with the sidebar beside it (`MURMURE-161`) | none |
+| opens a thread | desktop | the sidebar, the channel and the thread, side by side (`MURMURE-158`) | `ambre_app::shell::murmure_regions::a_desktop_shows_the_sidebar_the_channel_and_the_thread_side_by_side` |
+| opens a thread | tablet | the sidebar and the thread, with a way back to the channel (`MURMURE-159`) | `ambre_app::shell::murmure_regions::a_tablet_thread_replaces_the_channel_with_a_way_back` |
+| opens a thread, then goes back | phone | the thread alone, then the channel at the root message (`MURMURE-168`) | `ambre_app::shell::murmure_regions::back_shows_the_channel_at_the_root_then_the_list` |
+| widens the window from phone to desktop | phone, then desktop | the same channel, now with the sidebar beside it (`MURMURE-161`) | `ambre_app::shell::murmure_regions::the_layout_reads_the_three_widths` |
 
 ---
 
@@ -81,6 +90,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | the sidebar | a view of its own | beside the message list, collapsible | persistent |
 | the message list | a view of its own | beside the sidebar | the centre column |
 | the thread | a view of its own | in place of the message list | a right column, opened on demand |
+| the member list | a view of its own | in place of the message list | the right column, in place of a thread |
 
 **Two channels side by side.** Over the desktop width, a second channel opens beside the first,
 with its own list and composer (`MURMURE-383`). The window narrows, and the second pane closes
@@ -105,18 +115,39 @@ The channel list is a Murmure view inside it, not a second drawer.
 ```rust
 pub enum MurmurePane {
     ChannelList,
-    Channel(ChannelId),
+    Channel { channel: ChannelId, at: Option<MessageRef> },
     Thread { channel: ChannelId, root: MessageRef },
+    Members { channel: ChannelId },
 }
 pub struct MessageRef { pub segment: SegmentId, pub message: MessageId }
-pub struct SidebarEntry { pub channel: ChannelId, pub group: SidebarGroup, pub activity: Activity }
-pub enum SidebarGroup { Category(CategoryId), Personal(PersonalGroupId), Private, Direct, ToJoin }
-pub enum Activity { None, Some, Count { messages: MessageCount, mentions: MentionCount } }
-pub struct MessageCount(u32);
-pub struct MentionCount(u32);
+pub struct SidebarSection { pub group: SidebarGroup, pub title: Option<String>, pub entries: Vec<SidebarEntry> }
+pub struct SidebarEntry { pub channel: ChannelId, pub name: Option<String>, pub activity: Activity }
+pub enum SidebarGroup { Category { space: SpaceId, category: Option<CategoryId> }, Private, Direct, ToJoin }
+pub enum Activity { None, Some, Count { messages: UnreadCount, mentions: MentionCount } }
 ```
 
-**Code.** not built.
+The sidebar is rebuilt from what the Logic thread hands the view. That is the channels of the user,
+the catalogue of each space they name, the activity answer and the names of open channels. A space
+named for the first time is opened for its catalogue. Drawing the sidebar sends nothing.
+Selecting a joined channel opens it once, and selecting one to join joins it in its space.
+
+A channel that could not open is told with no cause, and its next selection opens it anew
+(`MURMURE-549`). A space that could not open is told too, and the next listing opens it anew
+(`MURMURE-550`).
+
+**A name, then a hint, then the members.** A channel shows what its `meta` reads once open, else the
+name sealed beside it (`MURMURE-490`). A direct message with neither shows its other members' display
+names, as the relay lists them (`MURMURE-492`). That name is composed for display and never stored.
+
+A channel keeps the message it shows, so back from a thread lands on its root (`MURMURE-168`).
+The pane names the region in focus, and the stylesheet alone decides which regions sit beside it.
+The member list of a space takes the panel a thread takes, beside the public channel it was opened
+from (`ambre-spec-murmure-members.md`). Back from it shows that channel.
+
+**Code.** `crates/ambre-murmure/src/layout.rs` holds the pane, and `crates/ambre-murmure/src/sidebar.rs`
+the sidebar. `crates/ambre-murmure/src/chrome.rs` maps them onto the regions of
+`crates/ambre-chrome/src/app_shell.rs`, and its relay absorbs the events. The launcher mounts them in
+`crates/ambre-app/src/shell/app_root.rs`, and `crates/ambre-app/styles.css` lays them out.
 
 ---
 
@@ -126,6 +157,7 @@ pub struct MentionCount(u32);
 |---|---|
 | a channel in the sidebar | the channel opens in the message list |
 | a reply count under a root | the thread opens, in the region its width gives it |
+| the members button of a channel header | the member list of the space opens in the panel, and a second press closes it |
 | the back control on a phone or a tablet | the previous view |
 | the collapse control of the sidebar on a tablet | the sidebar folds to a strip, and stays reachable |
 
@@ -148,7 +180,17 @@ in a cell of its own (`MURMURE-421`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing is built.** No Murmure view exists, and the adaptive chrome has no sidebar yet
-  (`CHROME-033`).
+* **The members a direct message shows can be stale.** They are read with the listing, so a
+  member who leaves or renames shows as before until the next one. A long list is never shortened.
+  It lands with the `A composed name that follows its members` Story (`ambre-roadmap.md` E5).
+* **The name a closed channel shows can be stale.** A seal that failed to reach the relay, or two
+  renames racing, leave an older name until the channel opens. It lands with the
+  `A stale channel name` Story (`ambre-roadmap.md` E5).
+* **A space that failed waits for the next listing.** No timer opens it again, so a quiet session
+  shows its channels to join only once a listing comes. A retry on a delay is not ruled.
+* **A space made before the relay knew spaces, and with no channel, is not listed.** Only dev data
+  holds one: the relay learns a space at its creation, or from its channels.
+* **The id of a Murmure route names nothing yet.** A page opens on the channel list. A link to a
+  channel or a message lands with the `A link to a message` Story (`ambre-roadmap.md` E5).
 * **The personal order of the sidebar is not here.** Groups, order, mute, hide and bookmarks are
   `features/ambre-spec-murmure-sidebar.md`.

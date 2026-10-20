@@ -268,6 +268,10 @@ pub struct CreateDocumentRequest {
     /// (`SYNC-132`).
     #[serde(default)]
     pub entry: Option<String>,
+    /// The document is a Murmure space, which its members list
+    /// (`SRV-216`).
+    #[serde(default)]
+    pub space: bool,
 }
 #[derive(serde::Serialize)]
 pub struct CreateDocumentResponse {
@@ -295,6 +299,10 @@ pub async fn create_document(
                 })
         })
         .transpose()?;
+    // Only a Murmure document is a space (`SRV-217`).
+    if req.space && req.doc_type != ambre_core::DocType::Murmure {
+        return Err(AppError::BadRequest("a space is a Murmure document".into()));
+    }
     let client_id = req.document_id;
     let (doc, created) = db::create_document(
         &state.db,
@@ -344,6 +352,10 @@ pub async fn create_document(
             entry.as_ref(),
         )
         .await?;
+        // An owner's retry registers the space it may have missed.
+        if req.space && doc.doc_type == ambre_core::DocType::Murmure {
+            db::register_space(&state.db, &ambre_core::SpaceId::from_document(doc_id)).await?;
+        }
     }
     tracing::info!(document_id = %doc_id, owner_id = %s.user_id, doc_type = %req.doc_type, created, "document create");
     Ok(axum::Json(CreateDocumentResponse {

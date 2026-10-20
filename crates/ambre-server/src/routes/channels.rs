@@ -89,30 +89,71 @@ pub struct MemberChannelJson {
     #[serde(with = "ambre_core::serde_id::space_id::option")]
     pub space_id: Option<ambre_core::SpaceId>,
     pub public: bool,
+    /// The channel's `meta`, which the sealed name binds.
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
+    /// The name sealed beside the channel's `meta`, base64, as the document
+    /// list carries one (`SRV-219`). The relay never reads it.
+    pub name_enc: Option<String>,
+    /// The caller's copy of the channel key, base64, and the hex exchange key
+    /// of whoever wrapped it, empty for a self-wrapped row.
+    pub doc_key_enc: String,
+    pub wrapper_exchange_pub_key: String,
+    /// For a direct message, the display names of its other members, which
+    /// the client composes a name from (`SRV-220`). Empty otherwise.
+    pub peers: Vec<String>,
+    /// The last number the relay gave in the channel's `meta`, zero for a
+    /// `meta` that holds nothing (`SRV-223`).
+    pub meta_last: ambre_core::Seq,
 }
 
 /// The channels of the caller.
 #[derive(serde::Serialize)]
 pub struct MemberChannelsJson {
     pub channels: Vec<MemberChannelJson>,
+    /// Every space of the caller, a space with no channel of theirs included.
+    #[serde(with = "ambre_core::serde_id::space_id::vec")]
+    pub spaces: Vec<ambre_core::SpaceId>,
 }
 
 /// `GET /api/channels`: every channel the caller is a member of, by its
-/// `meta` row, with its space and whether it is public (`SRV-191`).
+/// `meta` row, with its space and whether it is public (`SRV-191`). Beside
+/// them, every space whose document holds a row of the caller (`SRV-216`).
 pub async fn list_member_channels(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
 ) -> Result<axum::Json<MemberChannelsJson>, AppError> {
-    let channels = db::list_member_channels(&state.db, &auth.user_id)
-        .await?
+    let spaces = db::list_member_spaces(&state.db, &auth.user_id).await?;
+    let rows = db::list_member_channels(&state.db, &auth.user_id).await?;
+    let metas: Vec<ambre_core::DocumentId> =
+        rows.iter().map(|row| row.meta_id.document_id()).collect();
+    let counters = crate::redis_ops::document_seqs(&state.redis, &metas).await?;
+    let channels = rows
         .into_iter()
-        .map(|row| MemberChannelJson {
-            channel_id: row.id,
-            space_id: row.space_id,
-            public: row.is_public,
+        .zip(counters)
+        .map(|(row, counter)| {
+            // The live counter runs ahead of the register until a flush.
+            let live = counter.and_then(|c| i64::try_from(c).ok()).unwrap_or(0);
+            let last = u64::try_from(row.meta_durable_last.max(live)).unwrap_or(0);
+            use base64::Engine;
+            let base64 = base64::engine::general_purpose::URL_SAFE;
+            MemberChannelJson {
+                channel_id: row.id,
+                space_id: row.space_id,
+                public: row.is_public,
+                meta_id: row.meta_id,
+                name_enc: row.name_enc.map(|n| base64.encode(n)),
+                doc_key_enc: base64.encode(&row.doc_key_enc),
+                wrapper_exchange_pub_key: row
+                    .wrapper_exchange_pubkey
+                    .map(hex::encode)
+                    .unwrap_or_default(),
+                peers: row.peers,
+                meta_last: ambre_core::Seq(last),
+            }
         })
         .collect();
-    Ok(axum::Json(MemberChannelsJson { channels }))
+    Ok(axum::Json(MemberChannelsJson { channels, spaces }))
 }
 
 /// `GET /api/spaces/{id}/channels`: the channels the relay holds as public
@@ -1050,11 +1091,15 @@ mod tests {
     }
 
     async fn user(state: &AppState, email: &str) -> UserId {
+        named_user(state, email, "Test User").await
+    }
+
+    async fn named_user(state: &AppState, email: &str, display_name: &str) -> UserId {
         let signing = signing_key().verifying_key().to_bytes();
         let row = db::create_user(
             &state.db,
             email,
-            "Test User",
+            display_name,
             &[1; 32],
             &[2; 16],
             &signing,
@@ -1206,27 +1251,92 @@ mod tests {
         let state = crate::test_helpers::test_app_state(pool).await;
         let alice = user(&state, "alice@test.dev").await;
         let space = DocumentId::new();
+        let answer = create_as(&state, alice, space, ambre_core::DocType::Murmure, true).await;
+        assert_eq!(answer, StatusCode::OK);
+        assert_eq!(role_on(&state, space, alice).await, Some(Role::Owner));
+        assert_eq!(member_ids(&state, space).await, [alice]);
+    }
+
+    /// `who` creates `document` of `doc_type`, marked a space or not.
+    async fn create_as(
+        state: &Arc<AppState>,
+        who: UserId,
+        document: DocumentId,
+        doc_type: ambre_core::DocType,
+        space: bool,
+    ) -> StatusCode {
         let answer = crate::routes::create_document(
             State(state.clone()),
-            session(alice),
+            session(who),
             Json(crate::routes::CreateDocumentRequest {
-                doc_type: ambre_core::DocType::Murmure,
+                doc_type,
                 name_enc: None,
                 doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1u8; 48]),
-                document_id: Some(space),
+                document_id: Some(document),
                 entry: Some(signed_entry(
-                    space,
+                    document,
                     0,
-                    alice,
+                    who,
                     MembershipAct::Create,
                     Role::Owner,
                 )),
+                space,
             }),
         )
         .await;
-        assert_eq!(status(answer), StatusCode::OK);
-        assert_eq!(role_on(&state, space, alice).await, Some(Role::Owner));
-        assert_eq!(member_ids(&state, space).await, [alice]);
+        status(answer)
+    }
+
+    /// The spaces `who` lists.
+    async fn spaces_of(state: &Arc<AppState>, who: UserId) -> Vec<SpaceId> {
+        list_member_channels(State(state.clone()), session(who))
+            .await
+            .expect("listed")
+            .0
+            .spaces
+    }
+
+    /// `SRV-216`: a member of a space lists it, with no channel of theirs in
+    /// it. A Murmure document not created as a space is never listed, and a
+    /// stranger lists nothing.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_user_lists_every_space_they_are_a_member_of(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let (space, other) = (DocumentId::new(), DocumentId::new());
+        let murmure = ambre_core::DocType::Murmure;
+        assert_eq!(
+            create_as(&state, alice, space, murmure, true).await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            create_as(&state, alice, other, murmure, false).await,
+            StatusCode::OK
+        );
+        grant(&state, space, bob, Role::Viewer).await;
+        grant(&state, other, bob, Role::Viewer).await;
+
+        let space = SpaceId::from_document(space);
+        assert_eq!(spaces_of(&state, alice).await, [space]);
+        assert_eq!(spaces_of(&state, bob).await, [space]);
+        assert_eq!(spaces_of(&state, carol).await, []);
+    }
+
+    /// `SRV-217`: a document of another kind marked a space is refused, and
+    /// neither created nor listed.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn only_a_murmure_document_is_a_space(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let prose = DocumentId::new();
+        let answer = create_as(&state, alice, prose, ambre_core::DocType::Prose, true).await;
+        assert_eq!(answer, StatusCode::BAD_REQUEST);
+        assert_eq!(member_ids(&state, prose).await, []);
+        assert_eq!(spaces_of(&state, alice).await, []);
     }
 
     // --- Registering a public channel ---
@@ -1729,7 +1839,8 @@ mod tests {
                 session(who),
                 Path(document.to_string()),
                 Json(crate::routes::share::InviteRequest {
-                    invitee_email: invitee.into(),
+                    invitee_email: Some(invitee.into()),
+                    invitee_id: None,
                     role: Role::Editor,
                     doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([9u8; 48]),
                     key_id: ambre_core::KeyId::from_array(key),
@@ -1749,7 +1860,7 @@ mod tests {
         let state = crate::test_helpers::test_app_state(pool).await;
         let alice = user(&state, "alice@test.dev").await;
         let carol = user(&state, "carol@test.dev").await;
-        let space = space(&state, alice, &[]).await;
+        let space = space(&state, alice, &[(carol, Role::Editor)]).await;
         let channel = private_channel(&state, alice, space).await;
         let meta = channel.meta.document_id();
         let segment = channel.segment.document_id();
@@ -1769,13 +1880,15 @@ mod tests {
             invite(&state, alice, segment, "carol@test.dev", [2; 16]).await,
             StatusCode::CONFLICT
         );
-        let rows: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM document_members WHERE user_id = $1")
-                .bind(uuid::Uuid::from_bytes(*carol.as_bytes()))
-                .fetch_one(&state.db)
-                .await
-                .expect("count");
-        assert_eq!(rows, 0, "the refused invite adds no row");
+        let rows: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM document_members WHERE user_id = $1 AND document_id <> $2",
+        )
+        .bind(uuid::Uuid::from_bytes(*carol.as_bytes()))
+        .bind(uuid_of_doc(space.document_id()))
+        .fetch_one(&state.db)
+        .await
+        .expect("count");
+        assert_eq!(rows, 0, "the refused invite adds no row past the space");
 
         assert_eq!(
             invite(&state, alice, meta, "carol@test.dev", [2; 16]).await,
@@ -1792,6 +1905,54 @@ mod tests {
                 .expect("links"),
             vec![b"link".to_vec()],
             "the chain under meta serves the segment"
+        );
+    }
+
+    /// `SRV-225`: a channel of a space, private or public, admits the members
+    /// of that space alone. An invite of an account outside it is refused and
+    /// adds no row; once the account joins the space, the same invite lands.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_invite_into_a_channel_of_a_space_needs_a_member_of_it(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let private = private_channel(&state, alice, space).await;
+        let public = public_channel(&state, alice, space).await;
+        let rows = || async {
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM document_members WHERE user_id = $1")
+                .bind(uuid::Uuid::from_bytes(*carol.as_bytes()))
+                .fetch_one(&state.db)
+                .await
+                .expect("count")
+        };
+        for channel in [&private, &public] {
+            assert_eq!(
+                invite(
+                    &state,
+                    alice,
+                    channel.meta.document_id(),
+                    "carol@test.dev",
+                    [2; 16]
+                )
+                .await,
+                StatusCode::CONFLICT
+            );
+        }
+        assert_eq!(rows().await, 0, "a refused invite adds no row");
+
+        grant(&state, space.document_id(), carol, Role::Viewer).await;
+        assert_eq!(
+            invite(
+                &state,
+                alice,
+                private.meta.document_id(),
+                "carol@test.dev",
+                [2; 16]
+            )
+            .await,
+            StatusCode::OK
         );
     }
 
@@ -2508,6 +2669,127 @@ mod tests {
         assert_eq!(bobs, vec![(direct, None, false)]);
     }
 
+    /// `SRV-219`: the listing carries the name sealed beside each channel's
+    /// `meta`, untouched, and the caller's own copy of the key. The exchange
+    /// key of whoever wrapped it comes too. A channel never named has none.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_listed_channel_carries_its_sealed_name_and_the_callers_key(pool: sqlx::PgPool) {
+        use base64::Engine;
+        let base64 = base64::engine::general_purpose::URL_SAFE;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let req = direct_request(alice, &[bob]);
+        let meta = req.meta_id.document_id();
+        open_direct(&state, alice, req).await.expect("create");
+        let listed = |who: UserId| list_member_channels(State(state.clone()), session(who));
+        let first = listed(bob).await.expect("listed").0.channels;
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].meta_id.document_id(), meta);
+        assert_eq!(first[0].name_enc, None, "never named");
+
+        let sealed = base64.encode([9u8; 40]);
+        let renamed = crate::routes::rename_document(
+            State(state.clone()),
+            session(bob),
+            Path(meta.to_string()),
+            Json(crate::routes::RenameDocumentRequest {
+                name_enc: sealed.clone(),
+            }),
+        )
+        .await;
+        assert_eq!(status(renamed), StatusCode::OK);
+        let bobs = listed(bob).await.expect("listed").0.channels;
+        assert_eq!(bobs[0].name_enc.as_deref(), Some(sealed.as_str()));
+        assert_eq!(bobs[0].doc_key_enc, base64.encode([2u8; 48]));
+        assert_eq!(bobs[0].wrapper_exchange_pub_key, hex::encode([4u8; 32]));
+        let alices = listed(alice).await.expect("listed").0.channels;
+        assert_eq!(alices[0].name_enc.as_deref(), Some(sealed.as_str()));
+        assert_eq!(alices[0].doc_key_enc, base64.encode([1u8; 48]));
+    }
+
+    /// `SRV-220`: a direct message lists the display names of its other
+    /// members, by name, the caller left out. A channel of a space lists
+    /// none, whoever its members are.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_listed_direct_message_names_its_other_members(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = named_user(&state, "alice@test.dev", "Alice").await;
+        let bob = named_user(&state, "bob@test.dev", "Bob").await;
+        let carol = named_user(&state, "carol@test.dev", "Carol").await;
+        let space = space(&state, alice, &[(carol, Role::Editor)]).await;
+        let public = public_channel(&state, alice, space).await;
+        let req = direct_request(alice, &[carol, bob]);
+        let direct = req.channel_id;
+        open_direct(&state, alice, req).await.expect("create");
+
+        let peers = |who: UserId| {
+            let state = state.clone();
+            async move {
+                list_member_channels(State(state), session(who))
+                    .await
+                    .expect("listed")
+                    .0
+                    .channels
+                    .into_iter()
+                    .map(|c| (c.channel_id, c.peers))
+                    .collect::<std::collections::HashMap<_, _>>()
+            }
+        };
+        let alices = peers(alice).await;
+        assert_eq!(alices[&direct], ["Bob", "Carol"]);
+        assert!(alices[&public.id].is_empty(), "a channel of a space");
+        assert_eq!(peers(carol).await[&direct], ["Alice", "Bob"]);
+        assert_eq!(peers(bob).await[&direct], ["Alice", "Carol"]);
+    }
+
+    /// `SRV-223`: each listed channel carries the last number of its `meta`,
+    /// the higher of the ephemeral counter and the register's horizon. A
+    /// `meta` that holds nothing lists zero.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_listed_channel_carries_the_last_number_of_its_meta(pool: sqlx::PgPool) {
+        use rustis::commands::StringCommands;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let public = public_channel(&state, alice, space).await;
+        let private = private_channel(&state, alice, space).await;
+        let req = direct_request(alice, &[bob]);
+        let (direct, direct_meta) = (req.channel_id, req.meta_id.document_id());
+        open_direct(&state, alice, req).await.expect("create");
+        state
+            .redis
+            .set(format!("doc:{direct_meta}:seq"), 6)
+            .await
+            .expect("counter");
+        sqlx::query(
+            "INSERT INTO snapshots (document_id, author_pubkey, s3_key, covered_seq) \
+             VALUES ($1, $2, 'k', 4)",
+        )
+        .bind(uuid_of_doc(public.meta.document_id()))
+        .bind([1u8; 32].as_slice())
+        .execute(&state.db)
+        .await
+        .expect("snapshot");
+
+        let lasts: std::collections::HashMap<_, _> =
+            list_member_channels(State(state.clone()), session(alice))
+                .await
+                .expect("listed")
+                .0
+                .channels
+                .into_iter()
+                .map(|c| (c.channel_id, c.meta_last))
+                .collect();
+        assert_eq!(lasts[&direct], ambre_core::Seq(6), "the live counter");
+        assert_eq!(lasts[&public.id], ambre_core::Seq(4), "the register");
+        assert_eq!(lasts[&private.id], ambre_core::Seq(0), "nothing held");
+    }
+
     /// The next message on `stream`, decoded, or `None` after `millis`.
     async fn next_notice(
         stream: &mut rustis::client::PubSubStream,
@@ -2569,7 +2851,7 @@ mod tests {
             assert!(next_notice(stream, 300).await.is_none(), "a reuse spoke");
         }
 
-        let space = space(&state, alice, &[]).await;
+        let space = space(&state, alice, &[(carol, Role::Editor)]).await;
         let channel = private_channel(&state, alice, space).await;
         let meta = channel.meta.document_id();
         assert_eq!(
@@ -2884,6 +3166,65 @@ mod tests {
         for document in documents_of(&kept).into_iter().chain([direct_meta]) {
             assert!(exists(&state, document).await);
         }
+    }
+
+    /// `SRV-218`: a space delete reaches the topic of each member of the
+    /// space, one in no channel of it included. The delete of a document
+    /// that is no space tells its members nothing.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_space_delete_reaches_every_member_of_the_space(pool: sqlx::PgPool) {
+        use ambre_protocol::ws::{WsServerMsg, decode_server_msg};
+        use futures_util::StreamExt;
+        use rustis::commands::PubSubCommands;
+
+        let (state, _stub) = with_store(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let gone = space(&state, alice, &[(bob, Role::Viewer)]).await;
+        db::register_space(&state.db, &gone)
+            .await
+            .expect("register");
+        let plain = document(&state, alice).await;
+        grant(&state, plain, carol, Role::Viewer).await;
+        let mut topics = Vec::new();
+        for member in [bob, carol] {
+            let listener = rustis::client::Client::connect("redis://localhost:6379")
+                .await
+                .expect("redis");
+            topics.push(
+                listener
+                    .subscribe(format!("user:{member}"))
+                    .await
+                    .expect("subscribe"),
+            );
+        }
+        let mut outside = topics.pop().expect("carol's topic");
+        let mut inside = topics.pop().expect("bob's topic");
+
+        assert_eq!(delete_space(&state, alice, gone).await, StatusCode::OK);
+        let heard = tokio::time::timeout(std::time::Duration::from_secs(5), inside.next())
+            .await
+            .expect("the notice arrives")
+            .expect("a message")
+            .expect("readable");
+        let notice = decode_server_msg(heard.payload()).expect("decodes");
+        assert!(
+            matches!(notice, WsServerMsg::DocumentRevoked { document_id } if document_id == gone.document_id()),
+            "heard {notice:?}"
+        );
+
+        assert_eq!(
+            delete_space(&state, alice, SpaceId::from_document(plain)).await,
+            StatusCode::OK
+        );
+        let silent =
+            tokio::time::timeout(std::time::Duration::from_millis(300), outside.next()).await;
+        assert!(
+            silent.is_err(),
+            "a member of a document that is no space heard it"
+        );
     }
 
     /// A space delete from an editor or a stranger is refused, and every

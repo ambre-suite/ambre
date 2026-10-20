@@ -21,6 +21,9 @@ ambre-toile  = { path = "../ambre-toile" }
 # The Prose view state and its page painter; already in the graph through
 # ambre-logic, named here because the host drives the view directly.
 ambre-prose  = { path = "../ambre-prose" }
+# The Murmure pane and the chrome that lays it out; already in the graph through
+# ambre-logic, named here because the shell mounts that chrome.
+ambre-murmure = { path = "../ambre-murmure" }
 # `toile-pdf`: the deck's PDF export runs on the Logic thread, where the base
 # font faces live (`toile-pdf-export`). The launcher is the build that ships it.
 ambre-logic  = { path = "../ambre-logic", features = ["toile-pdf"] }
@@ -69,6 +72,8 @@ console_error_panic_hook = { workspace = true }
 wasm-bindgen-test = "0.3"
 # The recording surface, so the child paint pass is checked without a GPU.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
+# A conversation fed to a Murmure view, so a cell's copy has text to write.
+ambre-murmure = { path = "../ambre-murmure", features = ["testing"] }
 
 [lints]
 workspace = true

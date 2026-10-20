@@ -86,9 +86,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-163` | `FAIL` | A close that lost its race MUST delete the successor it created, and a close that failed MUST delete nothing. | `ambre-spec-sequencer.md`, `SRV-195`, `SRV-196` | `ambre_sync::sharing::tests::a_lost_close_deletes_the_successor_it_created` -- a won close creates then closes, a `created: false` answer deletes the minted successor, and a failed close sends no delete | none | verified |
 | `SYNC-164` | `FAIL` | Given a close that failed, the client MUST ask it again with the successor it already created, so no successor stays unregistered. | `SYNC-163`; `ambre-spec-sequencer.md`, `SRV-198` | `ambre_logic::channels::tests::a_failed_close_is_asked_again` -- the next send asks the same close into the same successor, and the answer makes it active; `ambre_sync::sharing::tests::a_close_asked_again_keeps_its_successor` -- the worker creates and closes into that successor again, and deletes nothing | none | verified |
 | `SYNC-165` | `POST` | Given a delta the relay refused for a locked segment, the worker MUST hand it and every later delta of its document to the Logic thread, and hold none. | this spec section 2; `ambre-spec-sequencer.md`, `SRV-115`; `SYNC-156` | `ambre_sync::updates::tests::a_delta_refused_for_the_lock_returns_to_logic_with_every_later_one` -- both deltas return once, in order, and the next delta leaves | none | verified |
-
 | `SYNC-166` | `FAIL` | A registration of amendments that lost its race MUST delete the document it created, and a failed one MUST delete nothing. | `ambre-spec-sequencer.md`, `SRV-201`, `SRV-202`; `SYNC-163` | `ambre_sync::sharing::tests::a_lost_registration_deletes_the_amendments_it_created` -- a won registration creates then registers, a `created: false` answer deletes the minted document and names the winner, and a failed one sends no delete | none | verified |
 | `SYNC-169` | `FAIL` | A thread registration that lost its race MUST delete the document it created, and a failed one MUST delete nothing. | `ambre-spec-sequencer.md`, `SRV-213`, `SRV-214`; `SYNC-166` | `ambre_sync::sharing::tests::a_lost_registration_deletes_the_thread_it_created` -- a won registration creates then registers, a `created: false` answer deletes the minted document and names the winner, and a failed one sends no delete | none | verified |
+| `SYNC-170` | `POST` | The lazy creation of a document MUST mark it a space when, and only when, the client made it as a new space. | `ambre-spec-server.md`, `SRV-216` | `ambre_sync::channels::tests::a_new_space_is_created_as_a_space` -- the space's creation is marked, another document's is not, a space closed before its upload is forgotten, and a materialized one leaves no trace | none | verified |
+| `SYNC-171` | `POST` | The worker MUST open each listed channel name under the user's key of its `meta`, and drop one that opens empty or fails. | `ambre-spec-server.md`, `SRV-219`; `SYNC-067` | `ambre_sync::channels::tests::a_listed_name_opens_under_the_users_key_of_its_meta` -- a name opens, one sealed for another meta, an empty one and a meta never named give none; `::a_channel_name_is_sealed_under_the_channel_key_for_its_meta` -- the seal holds no plaintext, opens for its meta alone, and a locked session seals nothing; `::a_listing_of_the_users_channels_forwards_their_places` -- the names reach the Logic thread with the latest listing | none | verified |
 
 ### 1.6 The session ends
 
@@ -96,6 +97,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-066` | `POST` | A sign-out MUST close the socket and clear every key. | `ambre-spec-zero-knowledge.md`, `ZK-002` | `ambre_sync::websocket::tests::a_sign_out_closes_the_socket_and_clears_every_key` -- the transport is disconnected, the seed, both keys, the tokens and every document are gone, and a later drop reopens nothing | none | verified |
 | `SYNC-100` | `FRAME` | A sign-out MUST leave no token behind it. | `ZK-006`; `ambre-spec-session.md`, `SRV-026` | `ambre_sync::websocket::tests::session_tokens_wipe_on_drop` -- both tokens are held in a type that wipes itself when dropped, so ending the session clears them | none | verified |
+| `SYNC-177` | `POST` | A sign-out MUST ask the relay to revoke the refresh token the session holds. | `ambre-spec-session.md`, `SRV-026` | `ambre_sync::http::tests::a_sign_out_revokes_the_refresh_token_it_holds` -- one request under the access token carries the refresh token, a refused access token makes it carry the token the renewal handed out, and a refusal is reported | none | verified |
 
 * **Budget.** the relay hop of `ambre-spec-budgets.md section 1`, one encode plus one transfer
   under 1 ms, and the two per-session holders of `section 6`. The socket carries no budget of its
@@ -103,7 +105,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 45 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 48 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.

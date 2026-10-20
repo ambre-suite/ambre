@@ -95,7 +95,7 @@ leptos_router = { version = "0.8", default-features = false }
 leptos_icons = { version = "0.7" }
 icondata     = { version = "0.7" }
 wgpu    = { version = "28.0", features = ["webgl"] }
-parley  = "0.7"
+parley  = "0.12"
 kurbo   = { version = "0.13", features = ["serde"] }
 peniko  = "0.6"
 bytemuck = { version = "1", features = ["derive"] }
@@ -166,6 +166,10 @@ web-sys = { version = "0.3.85", features = [
     # a larger dependency graph unified the feature in, so a crate tested alone
     # lost the method. Declared here, it is no longer an accident.
     "NodeList",
+    # The system notifications of an open tab (the Murmure notifications spec).
+    "Notification",
+    "NotificationOptions",
+    "NotificationPermission",
     "Location",
     "MediaQueryList",
     "MediaQueryListEvent",
@@ -178,6 +182,7 @@ web-sys = { version = "0.3.85", features = [
     "WorkerType",
     "Performance",
     "PointerEvent",
+    "PointerEventInit",
     "Request",
     "ResizeObserver",
     "ResizeObserverEntry",
@@ -255,9 +260,9 @@ jsonwebtoken      = "9"
 # Import/export
 docx-rs = "0.4"
 # default-features off: consumers (ambre-pdf) opt into only the vector/glyph
-# core, keeping the lazy-loaded PDF chunk small on wasm (no raster-images,
+# core, keeping the PDF code Main carries small on wasm (no raster-images,
 # simple-text, or rayon unless explicitly enabled).
-krilla = { version = "0.7", default-features = false }
+krilla = { version = "0.8", default-features = false }
 html5ever = "0.39"
 pulldown-cmark = { version = "0.13", default-features = false }
 
@@ -310,5 +315,12 @@ opt-level = 3
 lto = true
 codegen-units = 1
 
-[profile.release.package.ambre-app]
-opt-level = "z" # size optimization for the WASM binary
+# The two wasm builds Trunk ships (`crates/ambre-app/index.html`). The download
+# is the budget there (`ambre-spec-budgets.md` section 5), so every crate is
+# built for size, and the name section goes: 1 MB gzip of function names. "z"
+# over "s": "s" weighs 12% more in brotli on the Main instance. The relay keeps
+# `release`, built for speed.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+strip = "symbols"

@@ -112,6 +112,7 @@ impl LogicState {
                         self.document_channels.clear();
                         self.watched_threads.clear();
                         self.unplaced_threads.clear();
+                        self.listed_channels = Default::default();
                         self.closing_segments.clear();
                         self.close_successors.clear();
                         self.owed_replays.clear();
@@ -189,6 +190,12 @@ impl LogicState {
             LogicCommand::OpenChannel { channel_id } => self.open_channel(channel_id),
             LogicCommand::CloseChannel { channel_id } => self.close_channel(channel_id),
             LogicCommand::OpenDirectMessage { draft, now } => self.open_direct_message(draft, now),
+            LogicCommand::InviteToChannel {
+                id,
+                channel_id,
+                invitee,
+                now,
+            } => self.invite_to_channel(id, channel_id, invitee, now),
             LogicCommand::FetchActivity => self.send_to_sync(SyncCommand::FetchActivity),
             LogicCommand::ListMemberChannels => {
                 self.send_to_sync(SyncCommand::ListMemberChannels);
@@ -266,6 +273,14 @@ impl LogicState {
                 if self.handed_off(id, &evt) {
                     return;
                 }
+                // The erase of a deleted message's file, which no view awaits.
+                if self.erased(id, &evt) {
+                    return;
+                }
+                // The image of a preview, which the view awaits decoded.
+                if self.pictured(id, &evt) {
+                    return;
+                }
                 // A response to a request this Logic thread issued on behalf of a
                 // document (`toile-media`) is fed back into the owning engine. It
                 // is not forwarded to the UI. UI-issued requests are absent from
@@ -290,6 +305,7 @@ impl LogicState {
                         doc.state.set_display_name(display_name);
                     }
                     self.spaces_know_me(*user_id);
+                    self.retry_erases();
                 }
                 self.send_to_ui(UiEvent::Rest { id, evt });
             }
@@ -413,6 +429,9 @@ impl LogicState {
                 document_id,
                 connected,
             } => {
+                if connected {
+                    self.retry_erases();
+                }
                 self.send_to_ui(UiEvent::ConnectionStatus {
                     document_id,
                     connected,
@@ -490,6 +509,7 @@ impl LogicState {
             } => {
                 if Some(revoked_user_id) == self.my_user_id {
                     self.channel_revoked(document_id);
+                    self.space_revoked(document_id);
                 }
                 self.send_to_ui(UiEvent::MemberRevoked {
                     document_id,
@@ -628,9 +648,21 @@ impl LogicState {
                 self.space_channels(space_id, &channels);
             }
             // The sidebar learns of the channels, and none of them opens
-            // (the Murmure channels spec).
-            LogicEvent::MemberChannels { channels } => {
-                self.send_to_ui(UiEvent::MemberChannels { channels });
+            // (the Murmure channels spec). Each is watched unopened.
+            LogicEvent::MemberChannels {
+                channels,
+                spaces,
+                names,
+                peers,
+                metas,
+            } => {
+                self.send_to_ui(UiEvent::MemberChannels {
+                    channels,
+                    spaces,
+                    names,
+                    peers,
+                });
+                self.channels_listed(&metas);
             }
 
             // -- Meetings (participant push) -----------------------------------
@@ -656,9 +688,10 @@ impl LogicState {
             // -- Errors --------------------------------------------------------
             LogicEvent::DocumentOpenFailed {
                 document_id,
+                cause,
                 message,
             } => {
-                if !self.channel_document_failed(document_id, &message)
+                if !self.channel_document_failed(document_id, cause, &message)
                     && !self.space_document_failed(document_id, &message)
                 {
                     self.send_to_ui(UiEvent::DocumentOpenFailed {
@@ -686,6 +719,9 @@ impl LogicState {
                     && let Some(document_id) = self.rest_routes.remove(&id)
                 {
                     self.route_service_error(document_id, id, message);
+                    return;
+                }
+                if id.is_some_and(|id| self.erase_failed(id) || self.picture_failed(id)) {
                     return;
                 }
                 // A hand-off the relay refused fails the leave it held, which
@@ -1942,9 +1978,10 @@ mod tests {
                 document_id: doc,
                 invitee_email: "a@b.c".to_owned(),
             },
+            RestCommand::FetchMemberKey { user_id: user },
             RestCommand::InviteToDocument {
                 document_id: doc,
-                invitee_email: "a@b.c".to_owned(),
+                invitee_email: Some("a@b.c".to_owned()),
                 invitee: user,
                 role: Role::Editor,
                 expect_exchange_pub_key: [0; 32],
@@ -1972,6 +2009,10 @@ mod tests {
                 document_id: doc,
                 content_hash: "h".to_owned(),
             },
+            RestCommand::EraseMedia {
+                document_id: doc,
+                content_hash: "h".to_owned(),
+            },
             RestCommand::SealDocFile {
                 plaintext: secret(),
                 passphrase: secret(),
@@ -1979,6 +2020,16 @@ mod tests {
             RestCommand::OpenDocFile {
                 sealed: vec![1],
                 passphrase: secret(),
+            },
+            RestCommand::SealLocalRow {
+                place: ambre_bus::RowPlace::Document(doc),
+                plaintext: secret(),
+            },
+            RestCommand::OpenLocalRows {
+                rows: vec![ambre_bus::SealedRow {
+                    place: ambre_bus::RowPlace::Document(doc),
+                    sealed: vec![1],
+                }],
             },
             RestCommand::CreateMeeting {
                 name: "m".to_owned(),
@@ -2013,6 +2064,7 @@ mod tests {
                 | RestCommand::CreateDocument { .. }
                 | RestCommand::RenameDocument { .. }
                 | RestCommand::FetchInviteeKey { .. }
+                | RestCommand::FetchMemberKey { .. }
                 | RestCommand::InviteToDocument { .. }
                 | RestCommand::RevokeFromDocument { .. }
                 | RestCommand::LeaveDocument { .. }
@@ -2021,8 +2073,11 @@ mod tests {
                 | RestCommand::SearchUsers { .. }
                 | RestCommand::UploadMedia { .. }
                 | RestCommand::DownloadMedia { .. }
+                | RestCommand::EraseMedia { .. }
                 | RestCommand::SealDocFile { .. }
                 | RestCommand::OpenDocFile { .. }
+                | RestCommand::SealLocalRow { .. }
+                | RestCommand::OpenLocalRows { .. }
                 | RestCommand::CreateMeeting { .. }
                 | RestCommand::JoinMeeting { .. }
                 | RestCommand::LeaveMeeting { .. }
@@ -2306,6 +2361,7 @@ mod tests {
         let failed = DocumentId::new();
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: failed,
+            cause: ambre_bus::OpenFailure::Transient,
             message: "replay stopped".to_owned(),
         });
         let told: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();

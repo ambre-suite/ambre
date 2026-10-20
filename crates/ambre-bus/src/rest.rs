@@ -220,6 +220,23 @@ pub enum MemberStanding {
     Revoked,
 }
 
+/// Where a row sits in the local store. Its seal is bound to it, so a row
+/// moved to another place stops opening (`ambre-spec-residency.md` section 3).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RowPlace {
+    /// A snapshot or a delta of this document.
+    Document(DocumentId),
+    /// The draft the store keeps under this key.
+    Draft(String),
+}
+
+/// One row of the local store, as the store holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SealedRow {
+    pub place: RowPlace,
+    pub sealed: Vec<u8>,
+}
+
 /// User (search result).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserInfo {
@@ -298,6 +315,10 @@ pub enum RestCommand {
         document_id: DocumentId,
         invitee_email: String,
     },
+    /// Fetch the exchange key of a user the client already names, such as a
+    /// member of a space, **without wrapping**. The user compares it with the
+    /// pin before a direct message wraps a key for them. -> `MemberKey`.
+    FetchMemberKey { user_id: UserId },
     /// Phase 2 of the invite. `expect_exchange_pub_key` is the key the user confirmed
     /// (pinned) in phase 1. Sync re-fetches the invitee's key and wraps the Document Key
     /// **only if it still matches**. That closes the TOCTOU hole a compromised server holds
@@ -308,9 +329,12 @@ pub enum RestCommand {
     /// refuses the invite. `now` is the instant the user confirmed, since
     /// Logic has no clock. A direct message of two stamps its notice of
     /// the third member with it (the Murmure channels spec).
+    ///
+    /// `invitee_email` is `None` for a member known by id alone, such as a
+    /// member of a space: Sync then fetches the keys of `invitee` itself.
     InviteToDocument {
         document_id: DocumentId,
-        invitee_email: String,
+        invitee_email: Option<String>,
         invitee: UserId,
         role: Role,
         expect_exchange_pub_key: [u8; 32],
@@ -352,6 +376,15 @@ pub enum RestCommand {
         document_id: DocumentId,
         content_hash: String,
     },
+    /// Erase this user's upload of a media file. -> `MediaErased`.
+    ///
+    /// The relay removes the object once its last uploader asks
+    /// (`SRV-139`). A refusal leaves nothing of this user's to erase, so it
+    /// answers `MediaErased` too; only a failure to reach the relay is an error.
+    EraseMedia {
+        document_id: DocumentId,
+        content_hash: String,
+    },
 
     // -- The native file (`.ambre`) ----------------------------------------------
     //
@@ -376,6 +409,21 @@ pub enum RestCommand {
         sealed: Vec<u8>,
         passphrase: SecretBytes,
     },
+
+    // -- The local store (`ambre-spec-residency.md` section 3) -------------------
+    //
+    // Served inside the Sync worker too, under a key the session's seed derives
+    // there and nowhere else (`RESID-026`). Without a session there is no key,
+    // and both answer `LocalStoreLocked`.
+    //
+    /// Seal one row of the local store. -> `LocalRowSealed` / `LocalStoreLocked`.
+    SealLocalRow {
+        place: RowPlace,
+        plaintext: SecretBytes,
+    },
+    /// Open rows the local store holds. -> `LocalRowsOpened` /
+    /// `LocalStoreLocked`.
+    OpenLocalRows { rows: Vec<SealedRow> },
 
     // -- Meetings (Rendez-Vous) --------------------------------------------------
     /// Create an ephemeral meeting room. -> `MeetingCreated`.
@@ -460,6 +508,13 @@ pub enum RestEvent {
         exchange_pub_key: [u8; 32],
         fingerprint: String,
     },
+    /// The answer to `FetchMemberKey`: the key the relay serves for that
+    /// user, and its fingerprint, for the same comparison with the pin.
+    MemberKey {
+        user_id: UserId,
+        exchange_pub_key: [u8; 32],
+        fingerprint: String,
+    },
     InviteSent {
         document_id: DocumentId,
         user_id: UserId,
@@ -499,6 +554,10 @@ pub enum RestEvent {
         /// Decrypted raw media bytes, ready for display.
         data: Vec<u8>,
     },
+    MediaErased {
+        document_id: DocumentId,
+        content_hash: String,
+    },
 
     // -- The native file (`.ambre`) ----------------------------------------------
     /// The sealed file, ready for the user's disk.
@@ -519,6 +578,20 @@ pub enum RestEvent {
     /// tag cannot tell a wrong passphrase from a modified file, so naming one
     /// would be a guess. The surface says both (`DOCFILE-016`).
     DocFileOpenFailed,
+
+    // -- The local store ---------------------------------------------------------
+    /// The row, sealed for the store.
+    LocalRowSealed {
+        sealed: Vec<u8>,
+    },
+    /// The rows asked for, in their order. `None` is a row this session cannot
+    /// open. It was sealed under another key or at another place, modified, or
+    /// held in the clear before the store was sealed (`RESID-027`).
+    LocalRowsOpened {
+        rows: Vec<Option<SecretBytes>>,
+    },
+    /// No session holds a key yet, so nothing was sealed or opened.
+    LocalStoreLocked,
 
     // -- Meetings (Rendez-Vous) --------------------------------------------------
     MeetingCreated {

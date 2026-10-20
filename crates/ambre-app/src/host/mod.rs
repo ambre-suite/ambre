@@ -53,17 +53,21 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 
 // FrameHost and `run_with` live in sibling modules; both reach the shared types
 // (AppView, DocSwitcher, helpers) via `use super::*`.
+mod cell;
 mod frame;
 mod pipe;
 mod probe;
 
 pub(crate) use probe::{PageClock, mark};
+mod murmure;
 mod prose;
 mod run;
 mod web_embed;
 
+pub use ambre_murmure::view::{MurmureView, THREAD_CANVAS};
 pub(crate) use frame::send_faces;
 pub use frame::{FrameHost, MakeChild};
+pub use murmure::{DraftKeeper, page_reads};
 pub use prose::{ProseSignals, ProseView};
 
 /// Where a finger is in its gesture.
@@ -77,6 +81,15 @@ pub enum TouchPhase {
 }
 pub use run::run_with;
 
+/// Open a web address in a fresh tab with `noopener,noreferrer`. The page can
+/// neither reach back into this window nor learn where it came from. A
+/// followed Toile link and a clicked Murmure link both open through it.
+pub(crate) fn open_address(url: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.open_with_url_and_target_and_features(url, "_blank", "noopener,noreferrer");
+    }
+}
+
 /// Private clipboard MIME type carrying the base64 postcard
 /// [`ClipboardPayload`](ambre_bus::ClipboardPayload) for an internal round-trip
 /// on the *synchronous* `copy`/`paste` events (Ctrl+C/Ctrl+V). Browsers that
@@ -88,6 +101,10 @@ const AMBRE_CLIPBOARD_TYPE: &str = "application/x-ambre";
 /// signal the toolbar/menu Paste button uses, since it cannot ride a native
 /// `paste` event (`ambre-spec-clipboard.md`).
 pub(crate) const AMBRE_CLIPBOARD_WEB_TYPE: &str = "web application/x-ambre";
+
+/// How often a hidden page relays, in milliseconds (`CANVAS-075`). The
+/// browser spaces a hidden page's timers to a second at least.
+const HIDDEN_RELAY_PERIOD_MS: i32 = 1000;
 
 /// The ownership token under the `web ` prefix the asynchronous Clipboard API
 /// demands. The async publish writes it beside the payload so the whole-clipboard
@@ -117,6 +134,26 @@ pub(crate) fn base64_encode(bytes: &[u8]) -> String {
 /// Decode a base64 clipboard string back to bytes; `None` on malformed input.
 pub(crate) fn base64_decode(s: &str) -> Option<Vec<u8>> {
     BASE64.decode(s).ok()
+}
+
+/// The window is as wide as a desktop. The stylesheet decides, so a chord
+/// shows on the canvas exactly where the shell shows one (`CHROME-057`).
+pub(crate) fn desktop() -> bool {
+    web_sys::window().is_some_and(|w| desktop_in(&w))
+}
+
+/// [`desktop`] for a given window, so a test can ask a frame of its own width.
+/// It reads the sheet's `--desktop` token, which holds 1 at the desktop width.
+pub(crate) fn desktop_in(window: &web_sys::Window) -> bool {
+    let Some(root) = window.document().and_then(|d| d.document_element()) else {
+        return false;
+    };
+    window
+        .get_computed_style(&root)
+        .ok()
+        .flatten()
+        .and_then(|style| style.get_property_value("--desktop").ok())
+        .is_some_and(|value| value.trim() == "1")
 }
 
 /// Best-effort asynchronous publish of a copied range to the OS clipboard via
@@ -232,6 +269,8 @@ pub enum AppView {
     Toile(ToileView),
     /// A Prose (text) document.
     Prose(ProseView),
+    /// A Murmure page: its channels, not one document.
+    Murmure(MurmureView),
 }
 
 impl AppView {
@@ -241,6 +280,7 @@ impl AppView {
             AppView::Trame(v) => v.update(),
             AppView::Toile(v) => v.update(),
             AppView::Prose(v) => v.update(),
+            AppView::Murmure(v) => v.update(),
         }
     }
 
@@ -250,6 +290,7 @@ impl AppView {
             AppView::Trame(v) => v.plan_repaint(now_ms, hud_tick),
             AppView::Toile(v) => v.plan_repaint(now_ms, hud_tick),
             AppView::Prose(v) => v.plan_repaint(now_ms, hud_tick),
+            AppView::Murmure(v) => v.plan_repaint(now_ms, hud_tick),
         }
     }
 
@@ -265,6 +306,7 @@ impl AppView {
             AppView::Trame(v) => v.paint_content(surface, font_cx, text_cache, strip),
             AppView::Toile(v) => v.paint_content(surface, font_cx, text_cache, strip),
             AppView::Prose(v) => v.paint_content(surface, font_cx, text_cache, strip),
+            AppView::Murmure(v) => v.paint_content(surface, font_cx, text_cache, strip),
         }
     }
 
@@ -280,6 +322,7 @@ impl AppView {
             AppView::Trame(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
             AppView::Toile(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
             AppView::Prose(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
+            AppView::Murmure(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
         }
     }
 
@@ -289,6 +332,10 @@ impl AppView {
             AppView::Trame(v) => v.resize(width, height),
             AppView::Toile(v) => v.resize(width, height),
             AppView::Prose(v) => v.resize(width, height),
+            AppView::Murmure(v) => {
+                v.resize(width, height);
+                v.set_desktop(desktop());
+            }
         }
     }
 
@@ -298,6 +345,7 @@ impl AppView {
             AppView::Trame(v) => v.handle_input(ev),
             AppView::Toile(v) => v.handle_input(ev),
             AppView::Prose(v) => v.handle_input(ev),
+            AppView::Murmure(v) => v.handle_input(ev),
         }
     }
 
@@ -312,6 +360,12 @@ impl AppView {
             AppView::Trame(v) => v.clipboard_write(cut),
             AppView::Toile(v) => v.clipboard_write(cut),
             AppView::Prose(v) => v.clipboard_write(cut),
+            // The list's text is read-only: a cut leaves it where it is, and
+            // copies nothing. The composer's draft is cut like any text.
+            AppView::Murmure(v) => match v.clipboard(cut) {
+                Some(text) => ambre_bus::CopyOutcome::Text(text),
+                None => ambre_bus::CopyOutcome::Nothing,
+            },
         }
     }
 
@@ -323,6 +377,7 @@ impl AppView {
             AppView::Trame(v) => v.poll_clipboard(),
             AppView::Toile(v) => v.poll_clipboard(),
             AppView::Prose(v) => v.poll_clipboard(),
+            AppView::Murmure(_) => None,
         }
     }
 
@@ -336,13 +391,15 @@ impl AppView {
             AppView::Trame(v) => v.paste_clipboard(blob, own_copy),
             AppView::Toile(v) => v.paste_clipboard(blob, own_copy),
             AppView::Prose(v) => v.paste_clipboard(blob, own_copy),
+            // The composer takes the text mirror alone (the Murmure composer spec).
+            AppView::Murmure(v) => v.paste(&blob.text),
         }
     }
 
     /// Text dropped at a canvas point. Only Prose takes it.
     fn drop_text(&mut self, x: f32, y: f32, text: String) -> bool {
         match self {
-            AppView::Trame(_) | AppView::Toile(_) => false,
+            AppView::Trame(_) | AppView::Toile(_) | AppView::Murmure(_) => false,
             AppView::Prose(v) => v.drop_text(x, y, text),
         }
     }
@@ -370,6 +427,19 @@ impl AppView {
                 true
             }
             AppView::Prose(v) => v.touch(phase, x, y, now_ms),
+            AppView::Murmure(v) => {
+                match phase {
+                    TouchPhase::Down => v.touch_down(x, y, now_ms),
+                    TouchPhase::Move => {
+                        v.touch_move(x, y, now_ms);
+                    }
+                    TouchPhase::Up => {
+                        v.touch_up(now_ms);
+                    }
+                    TouchPhase::Cancel => v.touch_cancel(),
+                }
+                true
+            }
         }
     }
 
@@ -379,12 +449,40 @@ impl AppView {
         true
     }
 
+    /// Whether a press began a drag across read-only text. The view leaves
+    /// the press to the browser, yet the host captures the pointer, so the
+    /// drag keeps its moves past the canvas edge.
+    fn drags_text(&self) -> bool {
+        match self {
+            AppView::Murmure(v) => v.drags_text(),
+            AppView::Trame(_) | AppView::Toile(_) | AppView::Prose(_) => false,
+        }
+    }
+
+    /// Whether the page's text pipe writes into this view now. Only a Murmure
+    /// region shares the pipe with another canvas.
+    fn takes_text(&self) -> bool {
+        match self {
+            AppView::Murmure(v) => v.composer().focused(),
+            AppView::Trame(_) | AppView::Toile(_) | AppView::Prose(_) => false,
+        }
+    }
+
+    /// Another canvas of the page took the text pipe.
+    fn leave_text(&mut self) {
+        match self {
+            AppView::Murmure(v) => v.leave_composer(),
+            AppView::Trame(_) | AppView::Toile(_) | AppView::Prose(_) => {}
+        }
+    }
+
     /// Swap the active document in place, keeping the GPU surface.
     fn set_document(&mut self, document_id: DocumentId) {
         match self {
             AppView::Trame(v) => v.set_document(document_id),
             AppView::Toile(v) => v.set_document(document_id),
             AppView::Prose(v) => v.set_document(document_id),
+            AppView::Murmure(v) => v.set_document(document_id),
         }
     }
 
@@ -394,7 +492,7 @@ impl AppView {
     fn visible_embeds(&self) -> Vec<VisibleEmbed> {
         match self {
             AppView::Toile(v) => v.visible_embeds(),
-            AppView::Trame(_) | AppView::Prose(_) => Vec::new(),
+            AppView::Trame(_) | AppView::Prose(_) | AppView::Murmure(_) => Vec::new(),
         }
     }
 
@@ -404,7 +502,7 @@ impl AppView {
     fn visible_web_embeds(&self) -> Vec<VisibleWebEmbed> {
         match self {
             AppView::Toile(v) => v.visible_web_embeds(),
-            AppView::Trame(_) | AppView::Prose(_) => Vec::new(),
+            AppView::Trame(_) | AppView::Prose(_) | AppView::Murmure(_) => Vec::new(),
         }
     }
 
@@ -416,7 +514,27 @@ impl AppView {
     fn child_route(&self) -> Option<ElementId> {
         match self {
             AppView::Toile(v) => v.child_route(),
-            AppView::Trame(_) | AppView::Prose(_) => None,
+            AppView::Trame(_) | AppView::Prose(_) | AppView::Murmure(_) => None,
+        }
+    }
+
+    /// The ids of the canvases this view shows beside the content canvas, each
+    /// in a cell of its own (`CANVAS-070`). Only Murmure shows one: its thread.
+    fn cell_ids(&self) -> &'static [&'static str] {
+        match self {
+            AppView::Murmure(_) => &[THREAD_CANVAS],
+            AppView::Trame(_) | AppView::Toile(_) | AppView::Prose(_) => &[],
+        }
+    }
+
+    /// The view of the cell named `id`, at `width` x `height` logical pixels.
+    /// `None` for an id this view does not show.
+    fn cell_view(&self, id: &str, width: f64, height: f64) -> Option<AppView> {
+        match self {
+            AppView::Murmure(v) if id == THREAD_CANVAS => {
+                Some(AppView::Murmure(v.region(width, height)))
+            }
+            _ => None,
         }
     }
 
@@ -425,7 +543,7 @@ impl AppView {
     fn embed_to_child_space(&self, screen: Point) -> Option<Point> {
         match self {
             AppView::Toile(v) => v.embed_to_child_space(screen),
-            AppView::Trame(_) | AppView::Prose(_) => None,
+            AppView::Trame(_) | AppView::Prose(_) | AppView::Murmure(_) => None,
         }
     }
 }

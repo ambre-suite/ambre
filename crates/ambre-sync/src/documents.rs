@@ -169,6 +169,7 @@ impl SyncState {
                     doc_key_enc,
                     document_id: Some(document_id),
                     entry: Some(entry),
+                    space: false,
                 };
                 match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth)
                     .await
@@ -336,21 +337,22 @@ impl SyncState {
     }
 }
 
-/// One sealed name of the document list, with the wrapped key that opens it.
-/// Keys are base64 of `nonce || ciphertext`; the wrapper's exchange key is
-/// hex, empty for a self-wrapped owner row.
-struct ListedName<'a> {
-    document_id: DocumentId,
-    doc_key_enc: &'a str,
-    wrapper_exchange_pub_key: &'a str,
-    name_enc: &'a str,
+/// One sealed name of a listing, with the wrapped key that opens it: a
+/// document of the launcher, or the meta of a channel. Keys are base64 of
+/// `nonce || ciphertext`; the wrapper's exchange key is hex, empty for a
+/// self-wrapped owner row.
+pub(crate) struct ListedName<'a> {
+    pub(crate) document_id: DocumentId,
+    pub(crate) doc_key_enc: &'a str,
+    pub(crate) wrapper_exchange_pub_key: &'a str,
+    pub(crate) name_enc: &'a str,
 }
 
 impl ListedName<'_> {
     /// The plaintext name. A name sealed before the last rotation names an
     /// older key, which the chain recovers (`SYNC-042`, `SYNC-119`). `None` on
     /// any decode or crypto failure: the launcher shows "Untitled".
-    async fn open(
+    pub(crate) async fn open(
         &self,
         exchange_key: &x25519_dalek::StaticSecret,
         url_scheme: &str,
@@ -370,22 +372,11 @@ impl ListedName<'_> {
 
     /// The current key, ECDH-unwrapped against the wrapper's exchange key.
     fn unwrap_key(&self, exchange_key: &x25519_dalek::StaticSecret) -> Option<DocumentKey> {
-        let wrapped_bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(self.doc_key_enc)
-            .ok()?;
-        let (nonce, ciphertext) = wrapped_bytes.split_first_chunk::<24>()?;
-        let wrapped = ambre_crypto::WrappedKey {
-            nonce: *nonce,
-            ciphertext: ciphertext.to_vec(),
-        };
-        let wrapper_hex = if self.wrapper_exchange_pub_key.is_empty() {
-            // Self-wrapped owner row: the DH peer is our own public key.
-            hex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes())
-        } else {
-            self.wrapper_exchange_pub_key.to_owned()
-        };
-        let peer_pub: [u8; 32] = hex::decode(wrapper_hex).ok()?.try_into().ok()?;
-        ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()
+        unwrap_listed_key(
+            self.doc_key_enc,
+            self.wrapper_exchange_pub_key,
+            exchange_key,
+        )
     }
 
     fn sealed(&self) -> Option<Vec<u8>> {
@@ -395,10 +386,37 @@ impl ListedName<'_> {
     }
 }
 
+/// The key a listing wrapped for this user, ECDH-unwrapped against the
+/// wrapper's exchange key. The key is base64 of `nonce || ciphertext`, and
+/// the wrapper is hex, empty for a self-wrapped owner row. `None` on any
+/// decode or crypto failure.
+pub(crate) fn unwrap_listed_key(
+    doc_key_enc: &str,
+    wrapper_exchange_pub_key: &str,
+    exchange_key: &x25519_dalek::StaticSecret,
+) -> Option<DocumentKey> {
+    let wrapped_bytes = base64::engine::general_purpose::URL_SAFE
+        .decode(doc_key_enc)
+        .ok()?;
+    let (nonce, ciphertext) = wrapped_bytes.split_first_chunk::<24>()?;
+    let wrapped = ambre_crypto::WrappedKey {
+        nonce: *nonce,
+        ciphertext: ciphertext.to_vec(),
+    };
+    let wrapper_hex = if wrapper_exchange_pub_key.is_empty() {
+        // Self-wrapped owner row: the DH peer is our own public key.
+        hex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes())
+    } else {
+        wrapper_exchange_pub_key.to_owned()
+    };
+    let peer_pub: [u8; 32] = hex::decode(wrapper_hex).ok()?.try_into().ok()?;
+    ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()
+}
+
 /// Opens a sealed name with the key it names: `current`, or one the chain
 /// `links` reach from it. `None` on any failure: a name sealed for another
 /// document, a forged author, a key out of reach.
-fn open_name(
+pub(crate) fn open_name(
     document_id: DocumentId,
     current: &DocumentKey,
     bytes: &[u8],

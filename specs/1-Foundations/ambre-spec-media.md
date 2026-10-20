@@ -54,13 +54,24 @@ The application names an address it does not hold. The worker fetches the object
 | `SYNC-052` | `FAIL` | A download MUST refuse a blob that is not the one the address names. | this spec section 3 | `ambre_sync::media::tests::a_download_refuses_a_blob_the_address_does_not_name` -- it refuses a blob served in place of another, and one a member sealed under the address over other bytes, which only the recomputed address catches. It drives the open the leg calls, not the leg, which runs only in a browser | none | verified |
 | `SYNC-055` | `FAIL` | A blob that fails to open MUST be reported, never delivered half-read. | this spec section 3 | `ambre_sync::media::tests::a_blob_that_fails_to_open_delivers_nothing` -- a failed link or fetch, and a short, altered or foreign blob, each reach the application as an error for the request, and no byte is answered | none | verified |
 
+### 1.4 Take back a file
+
+The application names an address its user uploaded and no longer shows. The worker asks the relay
+to erase it (`ambre-spec-object-store.md`, `SRV-139`).
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-174` | `POST` | An erase MUST answer erased once the relay holds nothing of this user's under the address. | this spec section 3; `SRV-139`, `SRV-140` | `ambre_sync::media::tests::an_erase_answers_erased_unless_it_must_be_retried` -- a yes, a refusal and an absent document each answer erased, with the request | none | verified |
+| `SYNC-175` | `FRAME` | An erase MUST NOT tell the relay anything beyond the document and the address. | `ZK-007`; this spec section 3 | type-level -- the transport's erase takes a link alone and sends no body, and the fake transport checks the link ends in the address | none | verified |
+| `SYNC-176` | `FAIL` | An erase that met no answer, or a server error, MUST be reported. | this spec section 3; `SYNC-174` | `ambre_sync::media::tests::an_erase_answers_erased_unless_it_must_be_retried` -- a server error and a lost relay each reach the application as an error for the request, and answer nothing else | none | verified |
+
 * **Budget.** none of its own for the transfer. `ambre-spec-budgets.md section 1` budgets the first
   paint of a picture and the absence of a refetch, and both are the reading application's. The seal
   of a blob is charged to the crypto rows of the same table.
 * **Boundary.** this is the one path on which a whole file leaves the client. The bytes are sealed
   (`SYNC-049`). Beside them travel the size and an address keyed by the document key, which the
   relay cannot compute from a file it holds (`SYNC-050`, `SYNC-053`).
-* **Verification.** 15 `verified`. The address, the two requests and each leg through a fake
+* **Verification.** 18 `verified`. The address, the two requests and each leg through a fake
   transport are held on the host. The database tier round-trips a blob through a real store
   (`SYNC-139`). The browser tier carries a picture from one user's board to another's screen
   (`SYNC-140`).
@@ -137,7 +148,7 @@ media type stays with the application.
 
 **Code.**
 
-* `crates/ambre-sync/src/media.rs` -- the address, the seal, the two legs and the open;
+* `crates/ambre-sync/src/media.rs` -- the address, the seal, the two legs, the open and the erase;
 * `crates/ambre-server/src/routes/media.rs` -- the presigned links and the confirmation;
 * `crates/ambre-crypto/src/aead.rs` -- the cipher the blob takes directly;
 * `crates/ambre-crypto/src/commitment.rs` -- the keyed address.
@@ -155,6 +166,7 @@ picture.
 | a document opened that names an address the client does not hold | the application asks for the blob, once per address |
 | the same address named twice | one upload and one fetch, by construction |
 | a failed upload | the application takes back whatever it was about to insert |
+| a file its user takes back | the application names the address, and retries until the answer is erased |
 
 What a user sees is a picture that appears, a placeholder while it loads, or nothing at all. Which
 of the three, and what is painted in the meantime, is the application's own feature.

@@ -44,8 +44,8 @@ use ambre_bus::{
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
-    AppShell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header, StatusBar,
-    Tabs, ToastHost, Toasts, Toolbar, ZoomFactor,
+    AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
+    Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar, ZoomFactor,
 };
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
@@ -66,10 +66,14 @@ mod host;
 mod landing;
 /// The local store the Main thread drives, within its budget (`RESID-002`).
 mod local_store;
+/// The system notifications of an open tab.
+mod notify;
 mod route;
 mod signin;
 /// The recipient's key, compared and confirmed before a share.
 mod tofu;
+/// The seal of the local store's rows, asked of the Sync worker.
+mod vault;
 
 // The crate's unit tests (pure helpers in `route`/`host`) run under headless
 // Chrome via `wasm-pack test --headless --chrome` (`just test-wasm`). `--chrome`
@@ -243,6 +247,9 @@ struct Wiring {
     /// Set by `AppRoot` when the user confirms a TOFU prompt. The relay polls it,
     /// pins the key in `trusted_keys`, and dispatches phase 2 of the invite.
     tofu_confirm: RwSignal<Option<TofuPrompt>>,
+    /// Set by the landing's file picker with a plaintext `.ambre` container.
+    /// The relay polls it and stores the payload sealed (`RESID-025`).
+    opened_file: RwSignal<Option<platform::OpenedFile>>,
     /// Role selected in the invite form, carried across the two-phase invite. The
     /// phase-1 `FetchInviteeKey` does not carry it, so both the confirm path and
     /// the auto-proceed (Trusted) path grant the intended role.
@@ -279,6 +286,9 @@ struct Wiring {
     /// Whether the booted document is a Prose document: the canvas mounts the
     /// page view and the status bar shows the five figures.
     boot_is_prose: bool,
+    /// Whether the page is a Murmure page: the shell lays out its channel
+    /// list, its channel and its thread (the Murmure layout spec).
+    boot_is_murmure: bool,
     /// The five figures of the open Prose document, for the status bar slot
     /// (`PROSE-FEAT-040`). Published by the Prose view.
     prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
@@ -400,6 +410,8 @@ struct Wiring {
     trame_relay: trame_chrome::TrameRelay,
     /// Toile's panels' state, and the commands their intents become.
     toile_relay: toile_chrome::ToileRelay,
+    /// Murmure's pane and sidebar, and the commands its events call for.
+    murmure_relay: ambre_murmure::chrome::MurmureRelay,
 }
 
 /// Header status + loading state, derived from two independent signals carried
@@ -617,6 +629,7 @@ pub fn main() {
     // relay (trust decision + phase-2 dispatch).
     let tofu_prompt = RwSignal::new(None::<TofuPrompt>);
     let tofu_confirm = RwSignal::new(None::<TofuPrompt>);
+    let opened_file = RwSignal::new(None::<platform::OpenedFile>);
     let invite_role = RwSignal::new(Role::Editor);
     let me = RwSignal::new(None::<UserId>);
 
@@ -731,8 +744,10 @@ pub fn main() {
     // The routed document with its type (`/trame/<id>` -> (Trame, id)), kept for
     // the local restore. That restore must materialise the doc with the right
     // type if it wins the startup race against `OpenDocument`.
-    let boot_doc_typed = boot_route.doc();
+    // A Murmure page binds no document, so it restores and opens none.
+    let boot_doc_typed = boot_route.document();
     let boot_doc = boot_doc_typed.map(|(_, id)| id);
+    let boot_is_murmure = matches!(boot_route.doc(), Some((ambre_bus::DocType::Murmure, _)));
     // Cross-type in-session navigation reloads the page (the `DocSwitcher` only
     // swaps the id within one `AppView`). So the booted app kind is fixed here,
     // and gates both the render view (below) and the app-specific chrome (Find
@@ -746,6 +761,8 @@ pub fn main() {
         toile_chrome::bind_keys(&mut keymap);
     } else if boot_is_prose {
         ambre_prose::commands::bind_keys(&mut keymap);
+    } else if boot_is_murmure {
+        ambre_murmure::commands::bind_keys(&mut keymap);
     } else {
         trame_chrome::bind_keys(&mut keymap);
     }
@@ -850,8 +867,7 @@ pub fn main() {
     let members_slot: Slot<RwSignal<Vec<MemberInfo>>> = Rc::new(RefCell::new(None));
     let devmode_slot: Slot<RwSignal<Option<landing::SignInMode>>> = Rc::new(RefCell::new(None));
     let current_doc_slot: Slot<RwSignal<Option<DocumentId>>> = Rc::new(RefCell::new(None));
-    let relays_slot: Slot<(trame_chrome::TrameRelay, toile_chrome::ToileRelay)> =
-        Rc::new(RefCell::new(None));
+    let relays_slot: Slot<shell::Relays> = Rc::new(RefCell::new(None));
     let style_slot: Slot<trame_chrome::StyleState> = Rc::new(RefCell::new(None));
     let chrome_status_slot: Slot<RwSignal<ChromeStatus>> = Rc::new(RefCell::new(None));
 
@@ -879,6 +895,7 @@ pub fn main() {
         Rc::clone(&relays_slot),
         boot_is_toile,
         boot_is_prose,
+        boot_is_murmure,
         prose_figures,
         prose_signals,
         Rc::clone(&style_slot),
@@ -888,6 +905,7 @@ pub fn main() {
         formula_action,
         tofu_prompt,
         tofu_confirm,
+        opened_file,
         invite_role,
         me,
         sel_stats,
@@ -957,7 +975,8 @@ pub fn main() {
         .expect("current_doc signal created during mount");
     // Each application's relay, read back for the per-frame relay, which hands
     // it every event (`ARCH-018`).
-    let (trame_relay, toile_relay) = relays_slot.borrow().expect("relays created during mount");
+    let (trame_relay, toile_relay, murmure_relay) =
+        relays_slot.borrow().expect("relays created during mount");
     // Formatting-toolbar style state (`trame-cell-styles`), read back for the
     // per-frame relay, which hands it every event.
     let style_state = style_slot
@@ -988,11 +1007,22 @@ pub fn main() {
     let persist_store: Rc<RefCell<Option<local_store::LocalStore>>> = Rc::new(RefCell::new(None));
     // Set when the store will never open, so the writes waiting for it go.
     let persist_gone = Rc::new(std::cell::Cell::new(false));
+    // The Sync worker seals each row the store keeps and opens it again
+    // (`RESID-025`).
+    let vault = vault::Vault::new(ui_to_logic_tx.clone());
+    // Set once a session holds the key: the page's document comes back from
+    // its copy only then.
+    let session_seen = Rc::new(std::cell::Cell::new(false));
+    // The drafts the composer keeps go to the same store
+    // (`ambre-spec-murmure-composer.md`).
+    let draft_keeper = host::DraftKeeper::new(murmure_relay.drafts(), vault.clone());
     {
         let store_slot = Rc::clone(&persist_store);
+        let keeper = draft_keeper.clone();
         let gone = Rc::clone(&persist_gone);
-        let restore_tx = ui_to_logic_tx.clone();
         let full_tx = ui_to_logic_tx.clone();
+        let vault = vault.clone();
+        let session_seen = Rc::clone(&session_seen);
         wasm_bindgen_futures::spawn_local(async move {
             let store = match ambre_logic::persistence::PersistenceStore::open().await {
                 Ok(Ok(store)) => store,
@@ -1007,39 +1037,14 @@ pub fn main() {
                     return;
                 }
             };
-            if let Some((doc_type, document_id)) = boot_doc_typed {
-                let snapshot = store
-                    .load_snapshot(*document_id.as_bytes())
-                    .await
-                    .ok()
-                    .flatten();
-                let deltas = store
-                    .load_deltas(*document_id.as_bytes())
-                    .await
-                    .unwrap_or_default();
-                let sessions = store
-                    .load_sessions(*document_id.as_bytes())
-                    .await
-                    .unwrap_or_default();
-                // Sessions alone restore nothing: without local operations
-                // there is nothing of theirs left to send.
-                if snapshot.is_some() || !deltas.is_empty() {
-                    tracing::info!(
-                        "Persistence: restoring doc ({} snapshot bytes, {} deltas, {} sessions)",
-                        snapshot.as_ref().map_or(0, Vec::len),
-                        deltas.len(),
-                        sessions.len(),
-                    );
-                    let _ = restore_tx.try_send(LogicCommand::RestoreLocalSnapshot {
-                        document_id,
-                        doc_type,
-                        snapshot,
-                        deltas,
-                        sessions,
-                    });
-                }
+            keeper.store_opened(store.clone());
+            let local = local_store::LocalStore::open(store, full_tx, vault, boot_doc_typed).await;
+            // The page's document comes back from its copy once a session
+            // holds the key, whichever of the two came first.
+            if session_seen.get() {
+                local.signed_in();
             }
-            *store_slot.borrow_mut() = Some(local_store::LocalStore::open(store, full_tx).await);
+            *store_slot.borrow_mut() = Some(local);
         });
     }
 
@@ -1054,12 +1059,48 @@ pub fn main() {
     let notice_pump = notice_pub.clone();
     let persist_store_frame = Rc::clone(&persist_store);
     let persist_gone_frame = Rc::clone(&persist_gone);
+    let vault_frame = vault.clone();
+    let session_seen_frame = Rc::clone(&session_seen);
     let mut persist_waiting: Vec<(DocumentId, ambre_logic::PersistWrite)> = Vec::new();
     let mut last_anchor: Option<(f64, f64)> = None;
     let mut last_busy = false;
     let mut last_perf_push_ms: f64 = 0.0;
     let mut list_requested = false;
     let relay_tx = ui_to_logic_tx.clone();
+    // A click on a notification opens its channel at its message (the
+    // Murmure notifications spec). The permission is asked once per page.
+    let notice_asked = Rc::new(std::cell::Cell::new(false));
+    let open_noticed: notify::Opener = {
+        let tx = ui_to_logic_tx.clone();
+        Rc::new(move |channel, at| {
+            if let Some(command) = murmure_relay.open_at(channel, at) {
+                let _ = tx.try_send(command);
+            }
+        })
+    };
+    // A Murmure page refreshes this user's presence on each of its spaces once
+    // per refresh period (the Murmure members spec). It ticks the shown channel
+    // too (the Murmure typing spec). An interval, not the frame loop: a hidden
+    // tab pauses its frames, yet holds its spaces open. The interval lives as
+    // long as the page.
+    if boot_is_murmure {
+        let presence_tx = ui_to_logic_tx.clone();
+        let refresh = Closure::<dyn FnMut()>::new(move || {
+            let now = ambre_bus::Timestamp(js_sys::Date::now() as u64);
+            for command in murmure_relay.refresh_presence(now) {
+                if let Err(e) = presence_tx.try_send(command) {
+                    tracing::warn!("Presence refresh dropped, Logic channel full ({e:?})");
+                }
+            }
+        });
+        if let Some(window) = web_sys::window() {
+            let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(
+                refresh.as_ref().unchecked_ref(),
+                ambre_murmure::REFRESH_PERIOD_MS as i32,
+            );
+        }
+        refresh.forget();
+    }
     // The relay's view of the child fan-out registry: read to route a
     // nested document's events, pruned when a child receiver has been dropped.
     let child_routes_relay = Rc::clone(&child_routes);
@@ -1158,36 +1199,23 @@ pub fn main() {
                 }
             }
         }
+        vault_frame.flush();
         if let Some(local) = persist_store_frame.borrow().as_ref() {
             local.tick();
+            // Each write is sealed, then passes the store's ledger, which
+            // keeps it within its budget and meets the quota (`RESID-002`,
+            // `RESID-025`).
             for (document_id, write) in persist_waiting.drain(..) {
-                match write {
-                    // Read after every write queued before it, so the copy
-                    // holds what the document had when it left (`RESID-010`).
-                    ambre_logic::PersistWrite::ReadBack { doc_type } => {
-                        let store = local.store().clone();
-                        let tx = relay_tx.clone();
-                        wasm_bindgen_futures::spawn_local(async move {
-                            let key = *document_id.as_bytes();
-                            let snapshot = store.load_snapshot(key).await.ok().flatten();
-                            let deltas = store.load_deltas(key).await.unwrap_or_default();
-                            let sessions = store.load_sessions(key).await.unwrap_or_default();
-                            let _ = tx.try_send(LogicCommand::RestoreLocalSnapshot {
-                                document_id,
-                                doc_type,
-                                snapshot,
-                                deltas,
-                                sessions,
-                            });
-                        });
-                    }
-                    // Each write passes the store's ledger, which keeps it
-                    // within its budget and meets the quota (`RESID-002`).
-                    write => local.apply(document_id, write),
-                }
+                local.apply(document_id, write);
             }
         }
 
+        // A plaintext file the picker read: its payload lands sealed, as every
+        // copy does (`RESID-025`).
+        if let Some(file) = opened_file.get_untracked() {
+            opened_file.set(None);
+            platform::open_plaintext_container(file.0, toasts, vault_frame.clone());
+        }
         // TOFU: a confirmed prompt -> pin the fetched key in `trusted_keys` and
         // fire phase 2 of the invite (`ambre-spec-key-verification.md`). Handled here
         // rather than in `AppRoot` because the trusted-key store is Main-thread
@@ -1203,10 +1231,7 @@ pub fn main() {
                     }
                 },
                 |cmd| {
-                    let _ = relay_tx.try_send(LogicCommand::Rest {
-                        id: RequestId::next(),
-                        cmd,
-                    });
+                    let _ = relay_tx.try_send(cmd);
                 },
             );
         }
@@ -1235,6 +1260,31 @@ pub fn main() {
         // Mark the turn that takes Logic's answers off the channel: the mark
         // splits a keystroke's confirmation between the relay and the view.
         let mut relayed = false;
+        // TOFU: classify a fetched key against the pinned one. Trusted (same
+        // key) -> its request leaves straight away; new (no pin) or changed
+        // (divergence) -> the modal prompt decides. The pin is read off-thread
+        // (async IndexedDB), and the store borrow is never held across it.
+        let classify_against_pin = |prompt: TofuPrompt| {
+            let pin_rx = persist_store_frame
+                .borrow()
+                .as_ref()
+                .map(|s| s.store().load_trusted_key(*prompt.user_id.as_bytes()));
+            let relay = relay_tx.clone();
+            let role_sig = invite_role;
+            let prompt_sig = tofu_prompt;
+            wasm_bindgen_futures::spawn_local(async move {
+                let pinned = match pin_rx {
+                    Some(rx) => rx.await.ok().flatten(),
+                    None => None,
+                };
+                match tofu::classify(prompt, pinned, role_sig.get_untracked()) {
+                    tofu::Next::Proceed(cmd) => {
+                        let _ = relay.try_send(cmd);
+                    }
+                    tofu::Next::Ask(prompt) => prompt_sig.set(Some(prompt)),
+                }
+            });
+        };
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
             if !relayed {
                 relayed = true;
@@ -1247,6 +1297,13 @@ pub fn main() {
             // events (and untagged service events) fall through unchanged.
             if let Some(id) = child_of(&child_routes_relay, &ev) {
                 send_to_child(&child_routes_relay, &child_backlog_relay, id, ev);
+                continue;
+            }
+            // The seal of a local row this thread asked for, which no view
+            // awaits (`RESID-025`).
+            if let UiEvent::Rest { id, evt } = &ev
+                && vault_frame.answer(*id, evt)
+            {
                 continue;
             }
             // Mirror authoritative command-toggle state into the chrome store.
@@ -1273,10 +1330,18 @@ pub fn main() {
             toile_chrome::notify_event(&toasts, &ev);
             // Prose's conversion reports, the same way (`PROSE-IO-053`).
             ambre_prose::chrome::notify_event(&toasts, &ev);
+            // Murmure's root of a copy not reached, the same way.
+            ambre_murmure::chrome::notify_event(&toasts, &ev);
             // Each application fills its own panels from its own events
             // (`ARCH-018`). The launcher names no variant.
             trame_relay.absorb(&ev);
             toile_relay.absorb(&ev);
+            for command in murmure_relay.absorb(&ev) {
+                let _ = relay_tx.try_send(command);
+            }
+            if let Some(notice) = murmure_relay.notice(&ev, notify::page_visible()) {
+                notify::deliver(notice, &notice_asked, Rc::clone(&open_noticed));
+            }
             match &ev {
                 // Non-fatal sync warnings surface as a transient warning toast.
                 // They never reach the fatal path. The session keeps running and
@@ -1301,13 +1366,42 @@ pub fn main() {
                 } => {
                     username.set(Some(display_name.clone()));
                     me.set(Some(*user_id));
+                    draft_keeper.signed_in(*user_id);
+                    session_seen_frame.set(true);
+                    if let Some(local) = persist_store_frame.borrow().as_ref() {
+                        local.signed_in();
+                    }
                     if !list_requested {
                         list_requested = true;
                         let _ = relay_tx.try_send(LogicCommand::Rest {
                             id: RequestId::next(),
                             cmd: RestCommand::ListDocuments,
                         });
+                        // A Murmure page lists its channels and their activity.
+                        if boot_is_murmure {
+                            for command in ambre_murmure::chrome::MurmureRelay::boot() {
+                                let _ = relay_tx.try_send(command);
+                            }
+                        }
                     }
+                }
+                // The worker ended the session and asked the relay to revoke
+                // it (`CHROME-107`). The relays above deleted the drafts
+                // (`ambre-spec-murmure-composer.md`). Once that write has landed, the page boots
+                // home afresh and holds nothing of the session (`CHROME-108`).
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::LoggedOut,
+                    ..
+                } => {
+                    let keeper = draft_keeper.clone();
+                    wasm_bindgen_futures::spawn_local(async move {
+                        keeper.written().await;
+                        signin::leave_session(|url| {
+                            if let Some(window) = web_sys::window() {
+                                let _ = window.location().replace(url);
+                            }
+                        });
+                    });
                 }
                 // The provider's address: send the browser there (`CHROME-095`).
                 UiEvent::Rest {
@@ -1380,7 +1474,11 @@ pub fn main() {
                 UiEvent::Rest {
                     evt: ambre_bus::RestEvent::DocFileOpened { plaintext },
                     ..
-                } => platform::open_plaintext_container(plaintext.to_vec(), toasts),
+                } => platform::open_plaintext_container(
+                    plaintext.to_vec(),
+                    toasts,
+                    vault_frame.clone(),
+                ),
                 // One message for two causes, and that is the contract rather
                 // than laziness. The tag cannot tell a wrong passphrase from a
                 // modified file, and a message that named one would be a guess
@@ -1430,39 +1528,46 @@ pub fn main() {
                     ..
                 } => {
                     let prompt = TofuPrompt {
-                        document_id: *document_id,
+                        purpose: tofu::Purpose::Invite {
+                            document_id: *document_id,
+                            email: email.clone(),
+                        },
                         user_id: *user_id,
                         display_name: display_name.clone(),
-                        email: email.clone(),
                         exchange_pub_key: *exchange_pub_key,
                         fingerprint: fingerprint.clone(),
                         changed: false,
                     };
-                    // Read the pin off-thread (async IndexedDB); never hold the
-                    // store borrow across the await.
-                    let pin_rx = persist_store_frame
-                        .borrow()
-                        .as_ref()
-                        .map(|s| s.store().load_trusted_key(*prompt.user_id.as_bytes()));
-                    let relay = relay_tx.clone();
-                    let role_sig = invite_role;
-                    let prompt_sig = tofu_prompt;
-                    wasm_bindgen_futures::spawn_local(async move {
-                        let pinned = match pin_rx {
-                            Some(rx) => rx.await.ok().flatten(),
-                            None => None,
-                        };
-                        match tofu::classify(prompt, pinned, role_sig.get_untracked()) {
-                            // Trusted: unchanged key -> proceed without interrupting.
-                            tofu::Next::Invite(cmd) => {
-                                let _ = relay.try_send(LogicCommand::Rest {
-                                    id: RequestId::next(),
-                                    cmd,
-                                });
-                            }
-                            // New or changed: the modal decides.
-                            tofu::Next::Ask(prompt) => prompt_sig.set(Some(prompt)),
-                        }
+                    classify_against_pin(prompt);
+                }
+                // A member chosen in the Murmure palette, or for an invite into
+                // the shown channel. Their key passes the same check before a
+                // direct message or the invite wraps a key for them.
+                UiEvent::Rest {
+                    evt:
+                        ambre_bus::RestEvent::MemberKey {
+                            user_id,
+                            exchange_pub_key,
+                            fingerprint,
+                        },
+                    ..
+                } => {
+                    let display_name = murmure_relay
+                        .member_name(*user_id)
+                        .unwrap_or_else(|| "This member".to_owned());
+                    let purpose = match murmure_relay.take_invite(*user_id) {
+                        Some(channel_id) => tofu::Purpose::Channel { channel_id },
+                        None => tofu::Purpose::Direct {
+                            channel_id: ambre_bus::ChannelId::new(),
+                        },
+                    };
+                    classify_against_pin(TofuPrompt {
+                        purpose,
+                        user_id: *user_id,
+                        display_name,
+                        exchange_pub_key: *exchange_pub_key,
+                        fingerprint: fingerprint.clone(),
+                        changed: false,
                     });
                 }
                 // Revocation done (key rotation complete): confirm and refresh.
@@ -1726,7 +1831,20 @@ pub fn main() {
             // Pick the view by the booted document's type. Cross-type in-session
             // navigation is out of Phase 0: the `DocSwitcher` only swaps the id
             // within one `AppView`, so a Trame<->Toile hop reloads via the route.
-            if boot_is_prose {
+            if boot_is_murmure {
+                text_input.name_content(ambre_canvas::ContentKind::Conversation);
+                AppView::Murmure(host::MurmureView::new(
+                    Some(view_rx),
+                    Some(view_tx_logic),
+                    host::page_reads(
+                        murmure_relay,
+                        text_input,
+                        Rc::new(move |text: &str| toasts.warning(text.to_owned())),
+                    ),
+                    (w, h),
+                    theme_ctl,
+                ))
+            } else if boot_is_prose {
                 AppView::Prose(host::ProseView::new(
                     initial_doc,
                     view_tx_logic,

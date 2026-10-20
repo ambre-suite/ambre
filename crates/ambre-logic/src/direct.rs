@@ -8,7 +8,9 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelId, DirectMessageDraft, DirectMessageEvent, MurmureEvent, Timestamp};
+use ambre_bus::{
+    ChannelId, DirectMember, DirectMessageDraft, DirectMessageEvent, MurmureEvent, Role, Timestamp,
+};
 use ambre_murmure::{ChannelState, ChannelType};
 
 use crate::channels::HeldCommand;
@@ -139,6 +141,38 @@ impl LogicState {
                 true
             }
         }
+    }
+
+    /// An invite asked from an open channel goes on its `meta`, as an editor,
+    /// and takes the path of every invite, notice included. A member the
+    /// channel already lists is refused: a second invite would wrap the key
+    /// again, and announce a member who never left.
+    pub(crate) fn invite_to_channel(
+        &mut self,
+        id: RequestId,
+        channel_id: ChannelId,
+        invitee: DirectMember,
+        now: Timestamp,
+    ) {
+        let Some(meta) = self.channels.get(&channel_id).map(|c| c.meta_id()) else {
+            return self.refuse_invite(id, "the channel is not open".to_owned());
+        };
+        let listed = self
+            .channel_members
+            .get(&channel_id)
+            .is_some_and(|members| members.iter().any(|m| m.user_id == invitee.user_id));
+        if listed {
+            return self.refuse_invite(id, "already a member of the channel".to_owned());
+        }
+        let cmd = RestCommand::InviteToDocument {
+            document_id: meta.document_id(),
+            invitee_email: None,
+            invitee: invitee.user_id,
+            role: Role::Editor,
+            expect_exchange_pub_key: invitee.exchange_pub_key,
+            now,
+        };
+        self.handle_logic_command(LogicCommand::Rest { id, cmd });
     }
 
     /// Refuse an invite this thread did not let leave.
@@ -344,7 +378,7 @@ mod tests {
     fn invite(document_id: DocumentId, invitee: UserId) -> RestCommand {
         RestCommand::InviteToDocument {
             document_id,
-            invitee_email: "carol@test.local".to_owned(),
+            invitee_email: Some("carol@test.local".to_owned()),
             invitee,
             role: ambre_bus::Role::Editor,
             expect_exchange_pub_key: [3; 32],
@@ -445,8 +479,102 @@ mod tests {
         )));
     }
 
+    /// An invite asked from the open channel leaves on its `meta`, by id, as
+    /// an editor, with the key the user confirmed. A direct message of two
+    /// writes its notice first.
+    #[test]
+    fn an_invite_from_the_channel_leaves_on_its_meta_after_its_notice() {
+        let (mut state, _ui_rx, sync_rx) = harness();
+        let (channel_id, meta, segment) = created_with(&mut state, &sync_rx, 2);
+        ready(&mut state, segment.document_id());
+        drain(&sync_rx);
+        let (id, carol) = (RequestId::next(), bob());
+
+        state.handle_logic_command(LogicCommand::InviteToChannel {
+            id,
+            channel_id,
+            invitee: carol.clone(),
+            now: NOW,
+        });
+        let sent = drain(&sync_rx);
+        let notice = sent.iter().position(|c| {
+            matches!(
+                c,
+                SyncCommand::SendUpdate {
+                    summary: Some(_),
+                    ..
+                }
+            )
+        });
+        let invited = sent.iter().position(|c| {
+            matches!(c, SyncCommand::Rest {
+                id: sent,
+                cmd: RestCommand::InviteToDocument {
+                    document_id,
+                    invitee_email: None,
+                    invitee,
+                    role: ambre_bus::Role::Editor,
+                    expect_exchange_pub_key,
+                    now: NOW,
+                },
+            } if *sent == id
+                && *document_id == meta.document_id()
+                && *invitee == carol.user_id
+                && *expect_exchange_pub_key == carol.exchange_pub_key)
+        });
+        assert!(
+            matches!((notice, invited), (Some(n), Some(i)) if n < i),
+            "the notice, then the invite on meta: {sent:?}"
+        );
+    }
+
+    /// A member the channel lists, or a channel not open, is refused, and
+    /// nothing leaves.
+    #[test]
+    fn an_invite_of_a_listed_member_is_refused_and_nothing_leaves() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let (channel_id, _, segment) = created_with(&mut state, &sync_rx, 2);
+        ready(&mut state, segment.document_id());
+        drain(&sync_rx);
+        drain(&ui_rx);
+        let listed = state.channel_members[&channel_id][0].user_id;
+        let (first, second) = (RequestId::next(), RequestId::next());
+
+        let member = DirectMember {
+            user_id: listed,
+            exchange_pub_key: [9; 32],
+        };
+        state.handle_logic_command(LogicCommand::InviteToChannel {
+            id: first,
+            channel_id,
+            invitee: member,
+            now: NOW,
+        });
+        state.handle_logic_command(LogicCommand::InviteToChannel {
+            id: second,
+            channel_id: ChannelId::new(),
+            invitee: bob(),
+            now: NOW,
+        });
+
+        assert!(drain(&sync_rx).is_empty(), "no notice and no invite leave");
+        let refused: Vec<_> = drain(&ui_rx)
+            .into_iter()
+            .filter_map(|e| match e {
+                UiEvent::ApiError {
+                    id: Some(id),
+                    code: 409,
+                    ..
+                } => Some(id),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(refused, [first, second]);
+    }
+
     /// A name leaves as a delta on `meta`, and the view gets it. Clearing it
-    /// leaves the view with no name.
+    /// leaves the view with no name. Each name is also sealed beside meta, so
+    /// it shows before the channel opens (the Murmure layout spec).
     #[test]
     fn a_name_leaves_on_meta_and_reaches_the_view() {
         let (mut state, ui_rx, sync_rx) = harness();
@@ -470,12 +598,14 @@ mod tests {
                     name: name.map(str::to_owned),
                 },
             });
+            let shown = shown.map(str::to_owned);
             assert!(matches!(
                 drain(&sync_rx).as_slice(),
-                [SyncCommand::SendUpdate { document_id, summary: None, .. }]
-                    if *document_id == meta.document_id()
+                [
+                    SyncCommand::SendUpdate { document_id, summary: None, .. },
+                    SyncCommand::NameChannel { meta: sealed, name: sealed_name },
+                ] if *document_id == meta.document_id() && *sealed == meta && *sealed_name == shown
             ));
-            let shown = shown.map(str::to_owned);
             assert!(matches!(
                 drain(&ui_rx).as_slice(),
                 [UiEvent::Channel {

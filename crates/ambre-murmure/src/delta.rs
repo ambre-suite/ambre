@@ -8,7 +8,7 @@
 //! learn which user a PeerID stands for (`ambre-spec-op-authorship.md`).
 
 use ambre_core::authorship::{PEERS_MAP, PeerEntry, peer_key};
-use ambre_core::{DocumentId, UserId};
+use ambre_core::{DocumentId, MessageId, UserId};
 use loro::json::{JsonOpContent, JsonSchema, ListOp, MapOp};
 use loro::{
     Container, ContainerID, ContainerType, Index, LoroDoc, LoroValue, ValueOrContainer,
@@ -438,6 +438,23 @@ fn reaction_allowed(content: &JsonOpContent, user: UserId) -> Result<(), Refusal
         JsonOpContent::Map(MapOp::Delete { key }) if own(key) => Ok(()),
         _ => Err(Refusal::ForeignReaction),
     }
+}
+
+/// The messages a JSON update creates, in operation order. A message takes
+/// its identity once, when it is created, so a later write never names it.
+pub(crate) fn created_messages(update: &JsonSchema) -> Vec<MessageId> {
+    update
+        .changes
+        .iter()
+        .flat_map(|c| &c.ops)
+        .filter_map(|op| match &op.content {
+            JsonOpContent::Map(MapOp::Insert {
+                key,
+                value: LoroValue::String(id),
+            }) if key == MESSAGE_ID => MessageId::parse_str(id).ok(),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Whether `value` is the identifier of `user`.

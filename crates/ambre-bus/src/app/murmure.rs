@@ -17,8 +17,8 @@ use std::ops::Range;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CategoryId, ChannelDocumentKind, ChannelId, DocumentId, MessageId, SegmentId, Seq, SpaceId,
-    UserId,
+    CategoryId, ChannelDocumentKind, ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq,
+    SpaceId, UserId,
 };
 
 /// One document a channel groups, as the relay lists it.
@@ -34,11 +34,17 @@ pub struct ChannelDocument {
 pub struct DocumentActivity {
     pub channel_id: ChannelId,
     pub document_id: DocumentId,
+    /// A segment or a thread. A thread counts its mentions alone.
+    pub kind: ChannelDocumentKind,
     pub active: bool,
     /// The caller's own read cursor on the document: the sequence number it
     /// has read up to. The client counts against it once it holds the
     /// document.
     pub read: Seq,
+    /// The document's last number when the relay answered. A watch of a
+    /// document the client never held resumes after it; nothing counts with
+    /// it. `None` from a relay that predates it.
+    pub last: Option<Seq>,
 }
 
 /// Whether a channel holds something new, and how much once the client
@@ -108,6 +114,35 @@ pub struct MemberChannel {
     pub place: ChannelPlace,
 }
 
+/// The `meta` of a channel the user is a member of, as the relay's listing
+/// names it. The Logic thread watches a channel it never opened through it
+/// (the Murmure notifications spec).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelMeta {
+    pub channel_id: ChannelId,
+    pub meta: MetaId,
+    /// The last number the relay gave in `meta`, none from a relay that
+    /// lists none. A watch resumes after it.
+    pub last: Option<Seq>,
+}
+
+/// The name a channel not yet open shows, read from the name sealed beside
+/// its `meta`. The name its `meta` holds replaces it once the channel opens.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelName {
+    pub channel_id: ChannelId,
+    pub name: String,
+}
+
+/// The display names of a direct message's other members, as the relay
+/// lists them. The view composes a name from them for a direct message
+/// nobody named, and never stores it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectPeers {
+    pub channel_id: ChannelId,
+    pub names: Vec<String>,
+}
+
 /// How many messages of a channel are past the reader's cursor. A distinct
 /// type, so a count of mentions never takes its place.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -155,16 +190,129 @@ pub struct Mention {
     pub range: Range<usize>,
 }
 
+/// How a run of a message body reads (`MURMURE-194`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TextStyle {
+    Bold,
+    Italic,
+    /// Inline code: a marker typed in it stays text (`MURMURE-198`).
+    Code,
+    /// A link to an `http` or `https` address (`MURMURE-561`).
+    Link(String),
+    /// A block of code: its lines, the fences gone. A marker typed in it
+    /// stays text (`MURMURE-198`).
+    CodeBlock,
+    /// A quote: its lines, each with its line break.
+    Quote,
+    /// A list: one item per line, each with its line break.
+    List,
+}
+
+/// One style over the body of a message, and the run of text it covers.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StyleMark {
+    pub style: TextStyle,
+    /// In chars of the body.
+    pub range: Range<usize>,
+}
+
 /// A message the view hands the engine to send.
 ///
 /// The engine writes each mention as a `mention` mark over its range, and
-/// the summary lists what the marks name (`MURMURE-101`).
+/// the summary lists what the marks name (`MURMURE-101`). Each style is a
+/// mark of its own (`MURMURE-562`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessageDraft {
     /// The body, as the author typed it.
     pub text: String,
     /// Who the body names, in the order the author typed them.
     pub mentions: Vec<Mention>,
+    /// How its runs read, in text order.
+    pub styles: Vec<StyleMark>,
+}
+
+/// The address of a blob, as the Sync worker named it: sixty-four lowercase
+/// hexadecimal characters, keyed by the document key (`ambre-spec-media.md`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MediaRef(String);
+
+impl MediaRef {
+    /// The address `word` spells, or `None` for anything else.
+    pub fn parse(word: &str) -> Option<Self> {
+        (word.len() == 64
+            && word
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+        .then(|| Self(word.to_owned()))
+    }
+
+    /// The address, as the relay names it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// The media type of a file, as the browser named it, such as `image/png`.
+/// Shown and used to open the file; never sent to the relay (`SYNC-053`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MediaType(pub String);
+
+/// A size in bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ByteSize(pub u64);
+
+/// A file a message carries: its address, never its bytes (`MURMURE-017`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Attachment {
+    pub media_ref: MediaRef,
+    /// The file's name, as its author's file system gave it.
+    pub name: String,
+    pub media_type: MediaType,
+    pub size: ByteSize,
+}
+
+/// An image a message carries, decoded off the render thread at the size
+/// of its preview (`MURMURE-135`). A still image has one frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Picture {
+    pub width: u32,
+    pub height: u32,
+    /// Each frame in play order, never empty.
+    pub frames: Vec<PictureFrame>,
+}
+
+/// One frame of a [`Picture`]: non-premultiplied RGBA8, row-major, `width *
+/// height * 4` bytes, shown for `delay_ms`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PictureFrame {
+    pub pixels: Vec<u8>,
+    pub delay_ms: u32,
+}
+
+impl Picture {
+    /// The bytes its frames hold.
+    pub fn bytes(&self) -> usize {
+        self.frames.iter().map(|f| f.pixels.len()).sum()
+    }
+}
+
+/// A send the Logic thread holds until its author confirms the `@channel`
+/// in it (`MURMURE-231`). The view sends it again, or gives the draft back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldSend {
+    pub draft: MessageDraft,
+    /// The files the message carries, each already uploaded (`MURMURE-132`).
+    pub attachments: Vec<Attachment>,
+    /// The thread a reply goes to, `None` for a message of the channel.
+    pub reply: Option<HeldReply>,
+}
+
+/// The thread of a held reply.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldReply {
+    pub root: MessageId,
+    /// The reply also goes to the channel (`MURMURE-109`).
+    pub also_in_channel: bool,
 }
 
 /// A command for an open channel, UI thread -> Logic thread.
@@ -178,6 +326,9 @@ pub enum MurmureCommand {
     /// (`MURMURE-080`).
     SendMessage {
         draft: MessageDraft,
+        /// The files it carries. The view names only files the Sync worker
+        /// answered uploaded, under the channel's `meta` (`MURMURE-132`).
+        attachments: Vec<Attachment>,
         /// The instant the author sent it, stamped by the view.
         now: Timestamp,
         /// The author confirmed the `@channel` the Logic thread asked about
@@ -260,9 +411,33 @@ pub enum MurmureCommand {
     /// it. It expires the indicators and refreshes this user's presence in
     /// the channel (the Murmure typing and presence spec).
     Tick { now: Timestamp },
-    /// A keystroke in the composer of the channel (`MURMURE-124`). An
-    /// ephemeral, never a document write (`MURMURE-125`).
-    Typing { now: Timestamp },
+    /// A keystroke in the composer of the channel (`MURMURE-124`), or of the
+    /// thread under `thread`, its root (`MURMURE-536`). An ephemeral, never
+    /// a document write (`MURMURE-125`).
+    Typing {
+        now: Timestamp,
+        thread: Option<MessageId>,
+    },
+    /// Ask again for a segment the list shows as a band. Its key chain and
+    /// its bytes are fetched again from the relay (`MURMURE-514`).
+    Retry { segment: SegmentId },
+    /// Find the root of `thread`, which a copy names, down the older
+    /// segments, and answer [`MurmureEvent::RootFound`] once it is loaded.
+    SeekRoot { thread: DocumentId },
+    /// Upload a file for the composer, under the channel's `meta`, through
+    /// the shared media flow (`MURMURE-132`). The answer is the
+    /// `MediaUploaded` of request `id`, or an `ApiError` naming it. The view
+    /// holds no document of the channel, so the Logic thread names it.
+    UploadFile { id: crate::RequestId, data: Vec<u8> },
+    /// Fetch the file `media_ref` of a message, stored under the channel's
+    /// `meta`. The answer is the `MediaDownloaded` of request `id`.
+    FetchFile {
+        id: crate::RequestId,
+        media_ref: MediaRef,
+    },
+    /// Fetch the image `media_ref` of a message and decode it for its
+    /// preview. The answer is [`MurmureEvent::Picture`].
+    ShowPicture { media_ref: MediaRef },
 }
 
 impl MurmureCommand {
@@ -278,13 +453,19 @@ impl MurmureCommand {
             | Self::Unreact { .. }
             | Self::EditMessage { .. }
             | Self::DeleteMessage { .. }
-            | Self::Reply { .. } => true,
+            | Self::Reply { .. }
+            // A file uploads only for a message to carry it.
+            | Self::UploadFile { .. } => true,
             Self::LoadOlder { .. }
+            | Self::FetchFile { .. }
+            | Self::ShowPicture { .. }
             | Self::MarkRead
             | Self::MarkUnread { .. }
             | Self::MarkThreadRead { .. }
             | Self::Tick { .. }
-            | Self::Typing { .. } => false,
+            | Self::Typing { .. }
+            | Self::Retry { .. }
+            | Self::SeekRoot { .. } => false,
         }
     }
 }
@@ -302,6 +483,11 @@ pub struct MessageView {
     pub text: String,
     /// The `mention` marks of the body, in text order (`MURMURE-103`).
     pub mentions: Vec<Mention>,
+    /// The style marks of the body, in text order (`MURMURE-562`).
+    pub styles: Vec<StyleMark>,
+    /// The files it carries, in the order its author attached them. A
+    /// deleted message carries none (`MURMURE-240`).
+    pub attachments: Vec<Attachment>,
     /// One per emoji, in emoji order (`MURMURE-006`).
     pub reactions: Vec<Reaction>,
     /// What the channel announces, `None` for a message a member wrote. A
@@ -346,12 +532,22 @@ impl MessageView {
     /// `@` and that member's current name (`MURMURE-098`). A name `name_of`
     /// does not know keeps the text the author typed.
     pub fn shown(&self, name_of: impl Fn(UserId) -> Option<String>) -> String {
+        self.shown_at(name_of).0
+    }
+
+    /// The body as [`shown`](Self::shown) writes it, and the byte of it
+    /// where each char of the text starts, one past the last included. A
+    /// char a name took the place of starts past that name (`MURMURE-565`).
+    pub fn shown_at(&self, name_of: impl Fn(UserId) -> Option<String>) -> (String, Vec<usize>) {
         let mut shown = String::with_capacity(self.text.len());
+        let mut bytes = Vec::with_capacity(self.text.len() + 1);
         let mut at = 0;
         for (i, c) in self.text.chars().enumerate() {
             if i < at {
+                bytes.push(shown.len());
                 continue;
             }
+            bytes.push(shown.len());
             let mention = self.mentions.iter().find(|m| m.range.start == i);
             let named = mention.and_then(|m| match m.target {
                 MentionTarget::User(user) => name_of(user).map(|name| (m, name)),
@@ -366,7 +562,8 @@ impl MessageView {
                 None => shown.push(c),
             }
         }
-        shown
+        bytes.push(shown.len());
+        (shown, bytes)
     }
 }
 
@@ -420,6 +617,20 @@ pub enum MurmureEvent {
         thread: DocumentId,
         messages: Vec<MessageView>,
     },
+    /// The root of `thread`, which a copy names, lies in `segment`, now
+    /// loaded (the Murmure threads spec). Its thread is to open.
+    RootFound {
+        thread: DocumentId,
+        segment: SegmentId,
+        root: MessageId,
+    },
+    /// The root of `thread`, which a copy names, could not be reached (the
+    /// Murmure threads spec). Nothing opens.
+    RootLost { thread: DocumentId },
+    /// The first message past the read cursors, in list order, that another
+    /// member wrote. `None` when every held message is read. Sent each time
+    /// the count of the channel is known anew (`MURMURE-499`).
+    FirstUnread { message: Option<MessageId> },
     /// The channel could not open: the relay refused it, or one of its
     /// documents failed the checks. Nothing of it is held.
     OpenFailed { message: String },
@@ -431,20 +642,22 @@ pub enum MurmureEvent {
     /// another client, or the relay refused its open. Nothing of it is held
     /// any more (`MURMURE-468`, `MURMURE-469`).
     Left,
-    /// The other members who watch the channel, and those of them who type,
-    /// each in the order of their identifiers. Sent whenever either changes
-    /// (`MURMURE-124`, `MURMURE-126`).
+    /// The other members who watch the channel, those of them who type in
+    /// it, and those who type in each thread, by its root. Each list runs in
+    /// the order of the identifiers. Sent whenever one changes
+    /// (`MURMURE-124`, `MURMURE-126`, `MURMURE-536`).
     Watchers {
         watching: Vec<UserId>,
         typing: Vec<UserId>,
+        in_threads: Vec<(MessageId, Vec<UserId>)>,
     },
     /// The members of the channel, as the relay lists them: the `@` list of
     /// the composer offers them alone. Sent at the open and on every change.
     Members { members: Vec<crate::MemberInfo> },
     /// The draft mentions the whole channel, which holds `members` members.
-    /// Nothing was sent: the view asks the author, then sends it again
+    /// Nothing was sent: the view asks the author, then sends `held` again
     /// confirmed (`MURMURE-231`).
-    ConfirmChannelMention { members: usize },
+    ConfirmChannelMention { members: usize, held: HeldSend },
     /// A member reported the snapshot of `segment` as false, and the relay
     /// dropped it. The view names its author and the reporter; `None` for a
     /// key no member holds any more (`MURMURE-239`).
@@ -453,6 +666,34 @@ pub enum MurmureEvent {
         author: Option<UserId>,
         reporter: Option<UserId>,
     },
+    /// The older segment the view asked for cannot be read, for `cause`. It
+    /// holds the messages from `from` until `to`; `to` is `None` when no
+    /// later segment starts (`MURMURE-218`).
+    Unreadable {
+        segment: SegmentId,
+        cause: Unreadable,
+        from: Timestamp,
+        to: Option<Timestamp>,
+    },
+    /// The image `media_ref`, decoded for its preview, answering a
+    /// `ShowPicture`. `None` when it could not be fetched or decoded: the
+    /// view keeps its chip alone.
+    Picture {
+        media_ref: MediaRef,
+        picture: Option<Picture>,
+    },
+}
+
+/// Why a segment cannot be read. The engine names the cause, and the list
+/// names the remedy (the Murmure message list spec).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unreadable {
+    /// The key chain did not reach the key of this segment.
+    KeyNotReceived,
+    /// The member was invited without this history.
+    BeforeHistoryBoundary,
+    /// The key it names is held, and the segment does not open.
+    Damaged,
 }
 
 /// A channel key sealed under the key of its space (`MURMURE-157`).
@@ -699,11 +940,25 @@ pub enum SpaceEvent {
     },
     /// The space could not open. Nothing of it is held.
     OpenFailed { message: String },
+    /// The user is no longer a member of the space: they left it, an owner
+    /// removed them, or it was deleted. Nothing of it is held.
+    Left,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Topic;
+    use super::{MurmureCommand, Topic};
+    use ambre_core::SegmentId;
+
+    /// A retry fetches again what the channel already holds: it writes no
+    /// document, so a read-only member sends it too.
+    #[test]
+    fn a_retry_writes_no_document() {
+        let retry = MurmureCommand::Retry {
+            segment: SegmentId::from_bytes([7; 16]),
+        };
+        assert!(!retry.is_mutating());
+    }
 
     /// An empty topic is no topic: it cannot be built, nor decoded from the
     /// wire, so the catalogue never stores an empty string.

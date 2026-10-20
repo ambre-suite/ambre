@@ -31,7 +31,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use ambre_bus::{MentionTarget, Notice};
+use ambre_bus::{MentionTarget, Notice, StyleMark, TextStyle};
 use ambre_core::Uuid;
 use ambre_core::authorship::{PEERS_MAP, PeerEntry};
 use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, verdict};
@@ -40,11 +40,12 @@ use loro::{Container, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::channel::{folded_amendments, header_fold, read_messages};
 use crate::schema::{
-    AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS, CATALOGUE,
-    CATEGORIES, CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE,
-    DocumentKind, ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER,
-    HEADER_CHANNEL, HEADER_FOLDED, HEADER_FOLDED_SEQ, HEADER_KIND, HEADER_ROOT, HEADER_SEGMENT,
-    HEADER_SPACE, MENTION, MESSAGE_ALSO_IN_THREAD, MESSAGE_AUTHOR, MESSAGE_CONTENT,
+    AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS,
+    ATTACHMENT_MEDIA, ATTACHMENT_NAME, ATTACHMENT_SIZE, ATTACHMENT_TYPE, CATALOGUE, CATEGORIES,
+    CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, DocumentKind,
+    ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER, HEADER_CHANNEL,
+    HEADER_FOLDED, HEADER_FOLDED_SEQ, HEADER_KIND, HEADER_ROOT, HEADER_SEGMENT, HEADER_SPACE,
+    MENTION, MESSAGE_ALSO_IN_THREAD, MESSAGE_ATTACHMENTS, MESSAGE_AUTHOR, MESSAGE_CONTENT,
     MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS,
     MESSAGE_THREAD, MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT,
     SEGMENT_FOLDED, SEGMENT_STATE, SEGMENTS, SPACE, SPACE_NAME, SegmentState,
@@ -53,7 +54,7 @@ use crate::schema_shape::{
     ANY, AUTHOR, ID, KEYED_BY_ID, MEMBER, SCHEMA_SOURCE, amended, channel_of_every_key,
     declared_string_consts, scenario_root, scenario_thread, section_of, space_of_every_key,
 };
-use crate::{ChannelState, SpaceState};
+use crate::{ChannelState, SpaceState, style};
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../schema/readings.txt");
@@ -433,6 +434,10 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             };
             Some(format!("message {n} mentions {named}"))
         }
+        MESSAGE_CONTENT if stored.mark(2).is_some() => Some(format!(
+            "message {n} marks {}",
+            style_reading(stored, &message.styles)?
+        )),
         MESSAGE_CONTENT => Some(format!("message {n} reads {:?}", message.text)),
         // The entry is read by its key: the member and the emoji. Its value,
         // the instant, is kept for no reader yet.
@@ -461,8 +466,48 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         },
         MESSAGE_EDITED if message.edited => Some(format!("message {n} is edited")),
         MESSAGE_DELETED if message.deleted => Some(format!("message {n} is deleted")),
+        // A file is read through the attachments the view is given.
+        MESSAGE_ATTACHMENTS => {
+            let at = stored.at(2)?;
+            let file = message.attachments.get(at)?;
+            let f = at + 1;
+            match stored.key(3)? {
+                ATTACHMENT_MEDIA if stored.string()? == file.media_ref.as_str() => {
+                    Some(format!("message {n} carries file {f} by its address"))
+                }
+                ATTACHMENT_NAME => Some(format!(
+                    "message {n} carries file {f} named {:?}",
+                    file.name
+                )),
+                ATTACHMENT_TYPE => Some(format!(
+                    "message {n} carries file {f} of type {:?}",
+                    file.media_type.0
+                )),
+                ATTACHMENT_SIZE => Some(format!(
+                    "message {n} carries file {f} of {} bytes",
+                    file.size.0
+                )),
+                _ => None,
+            }
+        }
         _ => None,
     }
+}
+
+/// The reading of one style mark, through the styles the view is given. It
+/// holds the chars of the run under the same key, and what it makes of them.
+fn style_reading(stored: &Stored, styles: &[StyleMark]) -> Option<String> {
+    let mark = stored.mark(2)?;
+    let run = styles.iter().find(|run| style::key(&run.style) == mark)?;
+    let words = match &run.style {
+        TextStyle::Link(address) if stored.string() == Some(address.as_str()) => {
+            format!("a link to {address:?}")
+        }
+        TextStyle::Link(_) => return None,
+        _ if stored.value == LoroValue::Bool(true) => mark.to_owned(),
+        _ => return None,
+    };
+    Some(format!("chars {:?} {words}", run.range))
 }
 
 /// The reading of one amendment field, through the messages the view is
@@ -483,6 +528,10 @@ fn amendment_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
                 MentionTarget::User(_) => None,
             }
         }
+        AMENDMENT_CONTENT if stored.mark(2).is_some() => Some(format!(
+            "message {n} amended to mark {}",
+            style_reading(stored, &message.styles)?
+        )),
         AMENDMENT_CONTENT if message.edited => {
             Some(format!("message {n} amended to read {:?}", message.text))
         }

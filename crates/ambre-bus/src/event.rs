@@ -386,9 +386,19 @@ pub enum LogicEvent {
         space_id: SpaceId,
         channels: Vec<ChannelId>,
     },
-    /// Every channel this user is a member of, answering
+    /// Every channel and every space this user is a member of, answering
     /// [`SyncCommand::ListMemberChannels`](crate::SyncCommand::ListMemberChannels).
-    MemberChannels { channels: Vec<crate::MemberChannel> },
+    /// A space lists here with no channel of the user in it. `names` holds
+    /// each name the Sync worker opened beside a `meta`, and `peers` the
+    /// other members of each direct message, by display name. `metas`
+    /// names the `meta` of each channel whose key the worker holds.
+    MemberChannels {
+        channels: Vec<crate::MemberChannel>,
+        spaces: Vec<SpaceId>,
+        names: Vec<crate::ChannelName>,
+        peers: Vec<crate::DirectPeers>,
+        metas: Vec<crate::ChannelMeta>,
+    },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
     /// Another participant joined the meeting.
@@ -409,6 +419,7 @@ pub enum LogicEvent {
     /// to the UI.
     DocumentOpenFailed {
         document_id: DocumentId,
+        cause: OpenFailure,
         message: String,
     },
     /// Authentication error (incorrect passphrase, corrupted data, network).
@@ -437,6 +448,17 @@ pub enum LogicEvent {
     /// The relay speaks a newer wire version than this build. Only an update
     /// cures it, so the socket stays closed (`ambre-spec-sync.md`, `SYNC-137`).
     UpdateRequired,
+}
+
+/// Why a document could not open (`SYNC-173`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OpenFailure {
+    /// The key of the document has not reached this device. The wrap for
+    /// this user does not open, or the chain does not reach the named key.
+    KeyNotReceived,
+    /// The relay could not be reached, the session was not ready, or the
+    /// replay stopped. A later open may succeed.
+    Transient,
 }
 
 /// The relay's answer to a finalize lease request (the Murmure segments

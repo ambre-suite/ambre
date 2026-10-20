@@ -194,8 +194,23 @@
 * **Two binaries.** `ambre-app` carries UI plus Logic: wgpu, loro, leptos, the heavy one.
   `ambre-sync` carries crypto plus protocol plus gloo-net, small at ~6.8 MB unoptimized, with no
   wgpu, no loro and no leptos. Only crypto, protocol and serde are duplicated across the two; the heavy
-  dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable. **Total Main
-  budget < 2 MB gzip**, and Prose interop stays **lazy-loaded**.
+  dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable.
+* **The first download, Main plus Sync, < 2 MB brotli**, and Prose interop stays
+  **lazy-loaded**. At 10 Mbit/s, 2 MB takes 1.6 s, which leaves the rest of the README's 3 s
+  initial load on 4G to compile and boot.
+* **Counted in brotli, as served.** The release build writes a brotli copy at quality 11 beside
+  each compressible file (`scripts/trunk_post_build.py`). A static server sends it as it is, with
+  no compression per request. On the wasm it weighs 27% less than gzip at level 9.
+* **Cached for good after the first visit.** Every built file is named by a hash of its content
+  (`filehash` in `Trunk.toml`), so a deployment caches it as immutable. Only the page is asked
+  again, and a release downloads only the instance it changed.
+* **The first download breaks the budget today.** A release build weighs 3.07 MB brotli for Main
+  and 0.34 MB for Sync. The `wasm-release` profile builds every crate for size and strips the name
+  section, which took Main from 6.9 MB to 4.27 MB gzip. The `size` CI job holds each figure as a
+  ceiling (`scripts/wasm_size.py`), and a ceiling is not the budget. The roadmap story `The Main
+  instance within its download budget` closes the gap, and it needs the applications split out.
+* **wasm-opt stays off.** Binaryen 124 takes 7% off the raw Main wasm, and the result compresses
+  0.8% worse, in gzip and in brotli alike. The download is the budget, so the pass costs.
 
 | Contribution | Estimated raw | Notes |
 |---|---|---|
@@ -203,7 +218,7 @@
 | `swash` | ~120 KB | Glyph rasterization |
 | Fonts (Noto Sans plus Mono) | 0 KB binary | ~600 KB fetched and HTTP-cached: Regular plus Bold, Latin, Cyrillic, Greek |
 | Icon atlas blob (vertex buffers) | < 200 KB | ~500 tessellated icons |
-| `image` (PNG, JPEG, WebP) | ~60 KB | Feature-flagged, only the activated decoders |
+| `image` (PNG, JPEG, WebP, GIF) | ~60 KB | Feature-flagged, only the activated decoders |
 | `ambre-sync` logic | ~50 KB | Excluding its dependencies |
 | RustCrypto (chacha20, ed25519, blake2, hmac, argon2) | ~140 KB | Shared with `ambre-crypto`; Argon2 is there for login, and for a passphrase-sealed file, which reuses the same work factor rather than adding a second one (`ambre-spec-docfile.md`) |
 | `ruzstd` (compression and decompression) | ~80 KB | |
@@ -246,7 +261,8 @@
 | View state (content) | < 5 MB | Proportional to the visible content: cells, text runs |
 | Fonts in memory | < 10 MB | Base fonts plus lazily loaded ones |
 | Icon atlas | < 1 MB | Compiled vector blob |
-| **Total UI thread** | **< 41 MB** | Within the global < 100 MB |
+| Murmure decoded pictures, per page | < 16 MiB | `PICTURES_BYTES` in `ambre-murmure`, shared by the channel's region and the thread's. Evicted least recently painted, never a picture on screen, which may hold it past the cap. One picture holds at most 8 MiB of frames (`PICTURE_BYTES` in `ambre-logic`), decoded at most 480x320: an animation past it plays the frames that fit (`features/ambre-spec-murmure-attachments.md`) |
+| **Total UI thread** | **< 57 MB** | Within the global < 100 MB |
 | `SyncState` base, per session | < 1 MB | `MasterSeed`, `SigningKey`, `ExchangeKey`, plus `HashMap` overhead |
 | `SyncDocumentState`, per open document | < 1 MB | `DocumentKey`, counters, sync state, quarantine |
 | `quarantine`, per document | ~2 MB max | Capped at 1000 updates of ~2 KB average |
@@ -301,7 +317,7 @@ A duration a rule waits on before it acts. Each figure is a first estimate, to m
 | Duration | Target | Why this order of size | Method |
 |---|---|---|---|
 | Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | `FINALIZE_GRACE` in `ambre_server::routes::channels`, counted from the close and from the latest delta (`SRV-199`) |
-| Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | **none exists** |
+| Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | `GROUP_SPAN_MS` in `ambre_murmure::list` (`MURMURE-183`) |
 | Refresh period of the presence in a space or a channel | 60 s | a member list needs a state per minute, and the relay then writes one entry per member per minute (`MURMURE-445`, `MURMURE-126`) | `REFRESH_PERIOD_MS` in `ambre_murmure::members` |
 | Presence expiry in a space or a channel | 180 s | three refresh periods: one for the tick that dates a sample, one for a lost sample, one for two timers drifting apart (`MURMURE-445`, `MURMURE-126`) | `PRESENCE_EXPIRY_MS` in `ambre_murmure::members` |
 | Tick of an open channel | 1 s | a typing indicator lasts seconds, so its expiry needs a clock finer than it (`MURMURE-124`) | `TICK_MS` in `ambre_murmure::watchers` |

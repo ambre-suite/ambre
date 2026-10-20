@@ -44,8 +44,8 @@ use web_sys::{CloseEvent, MessageEvent};
 use ambre_bus::ActivitySummary;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, RequestId,
-    RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotId,
+    ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, MetaId, OpenFailure,
+    RequestId, RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotId,
     SnapshotPurpose, SnapshotVerdict, SpaceId, SyncCommand, UserId, UserInfo,
 };
 use ambre_core::{KeyId, PublicKey, SessionNonce};
@@ -142,6 +142,7 @@ pub mod fuzz;
 mod http;
 mod lifecycle;
 mod light;
+mod local_store;
 mod media;
 mod members;
 mod membership_log;
@@ -435,7 +436,7 @@ enum SyncEvent {
     MemberChannelsListed {
         /// The listing this answers, as `member_channels_asked` counted it.
         asked: u32,
-        result: Result<Vec<ambre_bus::MemberChannel>, String>,
+        result: Result<channels::MemberListing, String>,
     },
     /// The relay's activity answer (`SyncCommand::FetchActivity`,
     /// `SyncCommand::MarkAllRead`).
@@ -448,6 +449,7 @@ enum SyncEvent {
     /// silently opening with a random key (H3).
     OpenDocumentFailed {
         document_id: DocumentId,
+        cause: OpenFailure,
         message: String,
     },
     /// A local-only document was lazily materialized server-side. Flushes the
@@ -474,6 +476,14 @@ enum SyncEvent {
         user_id: UserId,
         display_name: String,
         email: String,
+        exchange_pub_key: [u8; 32],
+        fingerprint: String,
+    },
+    /// The key a user the client named is served with, and its fingerprint.
+    /// Nothing is wrapped: the Main thread compares it with the pin first.
+    MemberKeyReady {
+        id: RequestId,
+        user_id: UserId,
         exchange_pub_key: [u8; 32],
         fingerprint: String,
     },
@@ -567,6 +577,12 @@ enum SyncEvent {
     /// Media upload completed: the encrypted blob was PUT to S3 and the server
     /// confirmed the insertion in the `media` table.
     MediaUploaded {
+        id: RequestId,
+        document_id: DocumentId,
+        content_hash: String,
+    },
+    /// The relay holds no upload of this user's for the blob any more.
+    MediaErased {
         id: RequestId,
         document_id: DocumentId,
         content_hash: String,
@@ -1049,6 +1065,13 @@ pub struct SyncState {
     /// whole, so only the latest one is handed on: an older one that
     /// crossed it would drop a channel just added.
     member_channels_asked: u32,
+    /// The key of each channel's `meta` the latest listing wrapped for this
+    /// user. A channel never opened is watched under it (the Murmure
+    /// notifications spec).
+    listed_keys: HashMap<ChannelId, (MetaId, DocumentKey)>,
+    /// The documents of spaces this client created and the relay does not
+    /// hold yet. Their lazy creation marks them spaces (`SYNC-170`).
+    new_spaces: HashSet<DocumentId>,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Vec<u8>>>,
@@ -1142,6 +1165,8 @@ impl SyncState {
             #[cfg(not(target_arch = "wasm32"))]
             socket_opens: 0,
             member_channels_asked: 0,
+            listed_keys: HashMap::new(),
+            new_spaces: HashSet::new(),
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),
@@ -1396,7 +1421,9 @@ impl SyncState {
                 meta,
                 segment,
                 public,
-            } => self.handle_create_channel(channel_id, space_id, (meta, segment), public),
+                name,
+            } => self.handle_create_channel(channel_id, space_id, (meta, segment), public, name),
+            SyncCommand::NameChannel { meta, name } => self.handle_name_channel(meta, name),
             SyncCommand::JoinChannel {
                 channel_id,
                 space_id,
@@ -1456,6 +1483,12 @@ impl SyncState {
                 meta,
                 after,
             } => self.handle_watch_thread(thread, meta, after),
+            SyncCommand::WatchChannel {
+                channel_id,
+                meta,
+                meta_last,
+                documents,
+            } => self.handle_watch_channel(channel_id, (meta, meta_last), &documents),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
             SyncCommand::LeaveChannel { channel_id } => self.handle_leave_channel(channel_id),
             SyncCommand::CreateDirectMessage {
@@ -1468,6 +1501,7 @@ impl SyncState {
                 self.handle_list_space_channels(space_id)
             }
             SyncCommand::ListMemberChannels => self.handle_list_member_channels(),
+            SyncCommand::CreateSpace { space_id } => self.handle_create_space(space_id),
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),
@@ -1513,10 +1547,7 @@ impl SyncState {
             } => {
                 self.handle_recover_account(recovery_words, new_passphrase);
             }
-            RestCommand::Logout => {
-                self.handle_logout();
-                self.reply(id, RestEvent::LoggedOut);
-            }
+            RestCommand::Logout => self.handle_sign_out(id),
 
             // -- Document CRUD -------------------------------------------------
             RestCommand::ListDocuments => self.handle_list_documents(id),
@@ -1537,6 +1568,7 @@ impl SyncState {
             } => {
                 self.handle_fetch_invitee_key(id, document_id, invitee_email);
             }
+            RestCommand::FetchMemberKey { user_id } => self.handle_fetch_member_key(id, user_id),
             // The instant stamps a notice Logic already wrote; Sync has no
             // use for it.
             RestCommand::InviteToDocument {
@@ -1589,6 +1621,12 @@ impl SyncState {
             } => {
                 self.handle_download_media(id, document_id, content_hash);
             }
+            RestCommand::EraseMedia {
+                document_id,
+                content_hash,
+            } => {
+                self.handle_erase_media(id, document_id, content_hash);
+            }
 
             // -- The native file (`.ambre`) ------------------------------------
             RestCommand::SealDocFile {
@@ -1600,6 +1638,12 @@ impl SyncState {
             RestCommand::OpenDocFile { sealed, passphrase } => {
                 self.handle_open_doc_file(id, sealed, passphrase);
             }
+
+            // -- The local store -----------------------------------------------
+            RestCommand::SealLocalRow { place, plaintext } => {
+                self.handle_seal_local_row(id, place, plaintext);
+            }
+            RestCommand::OpenLocalRows { rows } => self.handle_open_local_rows(id, rows),
 
             // -- Meetings ------------------------------------------------------
             RestCommand::CreateMeeting { name } => tracing::info!("Sync: CreateMeeting '{name}'"),

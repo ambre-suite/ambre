@@ -9,7 +9,7 @@ use chacha20poly1305::aead::{Aead, Payload};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 
 use crate::error::CryptoError;
-use crate::keys::{DocumentKey, FileKey};
+use crate::keys::{DocumentKey, FileKey, StoreKey};
 
 /// Length of the XChaCha20 nonce, in bytes.
 pub const NONCE_LEN: usize = 24;
@@ -78,6 +78,46 @@ pub fn open_file(
     key: &FileKey,
 ) -> Result<Vec<u8>, CryptoError> {
     open_under(nonce, ciphertext, aad, key.as_bytes())
+}
+
+/// The first byte of a sealed row of the local store: the layout below.
+pub const ROW_VERSION: u8 = 1;
+
+/// Seals one row of the local store under the user's [`StoreKey`]: the
+/// version byte, a fresh nonce, then the ciphertext and its tag.
+///
+/// `context` names the row's place in the store, a document or a draft. It is
+/// the associated data, so a row moved under another name stops opening.
+///
+/// # Errors
+///
+/// [`CryptoError::EncryptionFailed`] when `plaintext` exceeds the size limit of
+/// XChaCha20-Poly1305.
+pub fn seal_row(plaintext: &[u8], context: &[u8], key: &StoreKey) -> Result<Vec<u8>, CryptoError> {
+    let (nonce, ciphertext) = seal_under(plaintext, context, key.as_bytes())?;
+    let mut row = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len());
+    row.push(ROW_VERSION);
+    row.extend_from_slice(&nonce);
+    row.extend_from_slice(&ciphertext);
+    Ok(row)
+}
+
+/// Opens a row [`seal_row`] sealed under the same `context`.
+///
+/// # Errors
+///
+/// [`CryptoError::AeadFailed`] for a row of another layout, a row too short to
+/// hold a nonce, a wrong key, another `context` or a modified row. The caller
+/// treats them alike: the row is not one this session can read.
+pub fn open_row(row: &[u8], context: &[u8], key: &StoreKey) -> Result<Vec<u8>, CryptoError> {
+    let Some((&ROW_VERSION, rest)) = row.split_first() else {
+        return Err(CryptoError::AeadFailed);
+    };
+    let (Some(nonce), Some(ciphertext)) = (rest.get(..NONCE_LEN), rest.get(NONCE_LEN..)) else {
+        return Err(CryptoError::AeadFailed);
+    };
+    let nonce: &[u8; NONCE_LEN] = nonce.try_into().map_err(|_| CryptoError::AeadFailed)?;
+    open_under(nonce, ciphertext, context, key.as_bytes())
 }
 
 /// Seals one document key under another, as a catalogue holds the key of a

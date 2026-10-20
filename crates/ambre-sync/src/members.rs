@@ -50,11 +50,38 @@ impl SyncState {
         });
     }
 
+    /// Fetch the exchange key of `user_id`, wrapping nothing. Delegates to
+    /// [`sharing::fetch_member_key_task`], as the invitee's fetch does.
+    pub(crate) fn handle_fetch_member_key(&self, id: RequestId, user_id: UserId) {
+        let logic_tx = self.logic_tx.clone();
+        let Some(tx) = self.event_tx.clone() else {
+            let _ = logic_tx.send(LogicEvent::ApiError {
+                id: None,
+                request: "FetchMemberKey".into(),
+                code: 503,
+                message: "Sync transport unavailable".into(),
+            });
+            return;
+        };
+        let params = sharing::FetchMemberKeyParams {
+            id,
+            user_id,
+            url_scheme: self.url_scheme,
+            api_base: self.api_base.clone(),
+        };
+        let http = sharing::GlooHttp {
+            auth: self.auth_context(),
+        };
+        wasm_bindgen_futures::spawn_local(async move {
+            sharing::fetch_member_key_task(&http, params, &tx, &logic_tx).await;
+        });
+    }
+
     pub(crate) fn handle_invite_to_document(
         &self,
         id: RequestId,
         document_id: DocumentId,
-        invitee_email: String,
+        invitee_email: Option<String>,
         invitee: UserId,
         role: Role,
         expect_exchange_pub_key: [u8; 32],
@@ -76,7 +103,7 @@ impl SyncState {
                 RestEvent::InviteSent {
                     document_id,
                     user_id: UserId::new(),
-                    display_name: invitee_email.clone(),
+                    display_name: invitee_email.unwrap_or_default(),
                 },
             );
             return;

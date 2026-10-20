@@ -63,6 +63,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-258` | `FAIL` | Given the last owner leaving a space that keeps other members, the client MUST first hand the owner role of the space document to one of them. | this spec section 3; `SRV-015` | `ambre_logic::spaces::tests::the_last_owner_hands_the_role_on_before_leaving`; `::a_leave_another_owner_covers_goes_at_once` -- the role passes before the leave, and a refusal fails the leave | none | verified |
 | `MURMURE-479` | `FAIL` | Given a member who joined the space again, a removal of the space log signed before that join MUST NOT verify a channel removal. | this spec section 3; `MURMURE-236` | `ambre_sync::membership_log::tests::a_space_word_follows_its_latest_entries_and_adds_no_member` -- a removal, then a join of the same member, removes no one from the channel | none | verified |
 | `MURMURE-480` | `FRAME` | The log of a space MUST NOT verify a member of one of its channels. | this spec section 3; `MURMURE-254` | `ambre_sync::membership_log::tests::a_space_word_follows_its_latest_entries_and_adds_no_member` -- an owner and an editor of the space stay unverified in a channel that holds no entry of theirs | none | verified |
+| `MURMURE-487` | `POST` | Given the relay's notice that the user lost a space, by a leave, a removal or a delete, the client MUST close the space and tell the view once. | this spec section 3; `ambre-spec-server.md`, `SRV-218`; `MURMURE-234` | `ambre_logic::spaces::tests::a_space_the_user_lost_closes_and_the_view_learns_it` -- the space closes and the view learns it once, where another user's removal or a document no space holds changes nothing | none | verified |
 
 ### 1.6 Delete a public channel or a space
 
@@ -86,7 +87,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 28 `verified`, 5 `unimplemented`. The engine, the Logic thread, the Sync worker
+* **Verification.** 29 `verified`, 5 `unimplemented`. The engine, the Logic thread, the Sync worker
   and the relay's database tier hold a new space, the catalogue and a signed self-join. The relay's
   database tier holds the leave and the delete. The Sync worker and the Logic thread hold the key
   rotation on a leave. The guest and the retention are unbuilt.

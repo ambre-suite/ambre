@@ -40,16 +40,17 @@ pub mod ui;
 pub use activity::{ActivityAnchor, ActivityKind, ActivitySummary};
 // The Murmure data plane, addressed to a channel rather than a document.
 pub use app::murmure::{
-    CatalogueEntry, CategoryView, ChannelActivity, ChannelDocument, ChannelMatches, ChannelPlace,
-    DirectMember, DirectMessageDraft, DirectMessageEvent, DocumentActivity, MemberChannel,
-    MemberView, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView,
-    MurmureCommand, MurmureEvent, Notice, Presence, PrivateChannelDraft, PublicChannelDraft,
-    Reaction, SealedChannelKey, SearchMatch, SpaceCommand, SpaceEvent, ThreadHead, Timestamp,
-    Topic, UnreadCount,
+    Attachment, ByteSize, CatalogueEntry, CategoryView, ChannelActivity, ChannelDocument,
+    ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, DirectMember, DirectMessageDraft,
+    DirectMessageEvent, DirectPeers, DocumentActivity, HeldReply, HeldSend, MediaRef, MediaType,
+    MemberChannel, MemberView, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft,
+    MessageView, MurmureCommand, MurmureEvent, Notice, Picture, PictureFrame, Presence,
+    PrivateChannelDraft, PublicChannelDraft, Reaction, SealedChannelKey, SearchMatch, SpaceCommand,
+    SpaceEvent, StyleMark, TextStyle, ThreadHead, Timestamp, Topic, UnreadCount, Unreadable,
 };
 pub use command::SyncCommand;
 pub use event::{
-    FoldAnswer, LeaseAnswer, LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict,
+    FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, SignedDelta, SnapshotPurpose, SnapshotVerdict,
 };
 // Trame data plane (command + event + value types) lives under `app::trame`;
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
@@ -65,8 +66,8 @@ pub use logic::{AppCommand, LogicCommand};
 pub use lossy::{LossyOutcome, send_lossy};
 pub use outbox::{Outbox, SendOutcome};
 pub use rest::{
-    DocumentSummary, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent, SecretBytes,
-    SecretString, UserInfo,
+    DocumentSummary, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent, RowPlace,
+    SealedRow, SecretBytes, SecretString, UserInfo,
 };
 pub use sink::CommandSink;
 pub use ui::{AppEvent, UiEvent};

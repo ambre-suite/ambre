@@ -1,0 +1,1930 @@
+// ambre-murmure/src/chrome.rs
+// ============================================================================
+// Murmure-SPECIFIC chrome (ambre-spec-architecture.md: per-app chrome lives in
+// the app crate, NOT the launcher). Built on the app-agnostic `ambre-chrome`
+// toolkit. It maps the pane onto the regions of the shell. It draws the
+// channel header the command bar holds, and the channel list of the sidebar
+// (the Murmure layout spec).
+//
+// Wasm-only, like the rest of the chrome stack (leptos CSR + DOM).
+// ============================================================================
+
+use std::collections::{HashMap, HashSet};
+
+use crate::commands::{
+    AskedAll, COMMANDS, KEYS, KeyPlace, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY,
+    PALETTE, PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, Picking, SEARCH, asked_all_title,
+    key_list, message_action, message_actions,
+};
+use crate::drafts::DraftShelf;
+use crate::emoji;
+use crate::markers::{Cover, MarkBar};
+use crate::mention_list::MentionList;
+use crate::uploads::PickedFile;
+use crate::{
+    Activity, MessageRef, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
+};
+use ambre_bus::AppCommand;
+use ambre_bus::{
+    ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MessageAt,
+    MurmureCommand, MurmureEvent, Presence, RequestId, RestCommand, RestEvent, SpaceCommand,
+    SpaceEvent, TextStyle, Timestamp, UiEvent,
+};
+use ambre_chrome::{
+    CommandHandler, FormatBar, FormatControl, KeyRoute, MenuEntry, PaletteEntry, Pressed,
+    ShellAction, ShellRegion, Toasts,
+};
+use ambre_commands::{CommandId, Locale};
+use ambre_core::{ChannelId, SpaceId, UserId};
+use leptos::prelude::*;
+
+/// What the user reads when the root of a copy could not be reached. Replying
+/// again starts a fresh seek (the Murmure threads spec).
+pub const ROOT_LOST: &str = "This thread cannot open: its first message could not be loaded.";
+
+/// What the user reads when a channel could not open. The cause stays in the
+/// log, where Logic wrote it (`MURMURE-549`).
+pub const CHANNEL_NOT_OPENED: &str = "This channel could not open. Select it again to retry.";
+
+/// What the user reads when a space could not open (`MURMURE-550`).
+pub const SPACE_NOT_OPENED: &str =
+    "A space could not open, so its channels to join are missing for now.";
+
+/// Surface a root the seek could not reach as a toast (the Murmure threads
+/// spec). A channel or a space that could not open is told the same way
+/// (`MURMURE-549`, `MURMURE-550`). The launcher names no Murmure variant. A
+/// no-op for every other event.
+pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
+    match ev {
+        UiEvent::Channel {
+            event: MurmureEvent::RootLost { .. },
+            ..
+        } => toasts.warning(ROOT_LOST),
+        UiEvent::Channel {
+            event: MurmureEvent::OpenFailed { .. },
+            ..
+        } => toasts.warning(CHANNEL_NOT_OPENED),
+        UiEvent::Space {
+            event: SpaceEvent::OpenFailed { .. },
+            ..
+        } => toasts.warning(SPACE_NOT_OPENED),
+        _ => {}
+    }
+}
+
+/// The region of the shell a pane is in. The channel list is the sidebar,
+/// a channel the content, and a thread or the member list the panel.
+pub fn focus_of(pane: MurmurePane) -> ShellRegion {
+    match pane {
+        MurmurePane::ChannelList => ShellRegion::Sidebar,
+        MurmurePane::Channel { .. } => ShellRegion::Content,
+        MurmurePane::Thread { .. } | MurmurePane::Members { .. } => ShellRegion::Panel,
+    }
+}
+
+/// Whether the panel is open: only while the user is in a thread or in the
+/// member list.
+pub fn panel_open(pane: MurmurePane) -> bool {
+    matches!(
+        pane,
+        MurmurePane::Thread { .. } | MurmurePane::Members { .. }
+    )
+}
+
+/// The accessible name of the panel: what it holds.
+pub fn panel_label(pane: MurmurePane) -> &'static str {
+    match pane {
+        MurmurePane::Members { .. } => "Members",
+        _ => "Thread",
+    }
+}
+
+/// The header of the current channel, in the command bar of the shell
+/// (`MURMURE-428`). Its back control goes to the pane before, and touches
+/// nothing but the pane (`MURMURE-168`, `MURMURE-169`). A public channel of
+/// a space shows a control that opens the member list of that space beside it.
+#[component]
+pub fn ChannelHeader(
+    /// The pane the user is in.
+    pane: RwSignal<MurmurePane>,
+    /// The name of the current channel, once its engine has read it.
+    #[prop(into)]
+    name: Signal<Option<String>>,
+    /// Whether the current channel shows the members of its space.
+    #[prop(into)]
+    has_members: Signal<bool>,
+) -> impl IntoView {
+    let members_open = move || matches!(pane.get(), MurmurePane::Members { .. });
+    let toggle_members = move |_| {
+        pane.update(|p| {
+            *p = match *p {
+                MurmurePane::Members { channel } => MurmurePane::channel(channel),
+                other => match other.shown_channel() {
+                    Some(channel) => MurmurePane::Members { channel },
+                    None => other,
+                },
+            }
+        })
+    };
+    view! {
+        <div class="murmure-channel-header">
+            <Show when=move || pane.get() != MurmurePane::ChannelList>
+                <button
+                    class="icon murmure-back"
+                    aria-label="Back"
+                    on:click=move |_| pane.update(|p| *p = p.back())
+                >
+                    "\u{2039}"
+                </button>
+            </Show>
+            <span class="murmure-channel-name">{move || name.get().unwrap_or_default()}</span>
+            <Show when=move || has_members.get()>
+                <button
+                    class="murmure-members-toggle"
+                    aria-pressed=move || ambre_chrome::aria_bool(members_open())
+                    on:click=toggle_members
+                >
+                    "Members"
+                </button>
+            </Show>
+        </div>
+    }
+}
+
+/// The member list of the space the current channel lies in (the Murmure
+/// members spec). Each row shows the avatar, the display name and the
+/// presence mark of one member (`MURMURE-441`, `MURMURE-442`). A member who
+/// watches the current channel takes the mark of it (`MURMURE-519`). The filter
+/// runs on what the page holds, and sends nothing (`MURMURE-454`). Choosing
+/// another member goes through the relay, as in the palette (`MURMURE-455`),
+/// and `send` carries what it answers.
+#[component]
+pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl IntoView {
+    let query = RwSignal::new(String::new());
+    let rows = relay.shown_members();
+    let watchers = relay.shown_watchers();
+    let found = move || {
+        rows.with(|members| {
+            query.with(|q| {
+                crate::find_members(members, q)
+                    .into_iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+        })
+    };
+    view! {
+        <div class="murmure-members">
+            <input
+                class="murmure-members-filter"
+                type="search"
+                aria-label="Find a member"
+                placeholder="Find a member"
+                prop:value=move || query.get()
+                on:input=move |ev| query.set(event_target_value(&ev))
+            />
+            <ul aria-label="Members">
+                {move || {
+                    let me = relay.me.get();
+                    let here = watchers.get();
+                    found()
+                        .into_iter()
+                        .map(|member| {
+                            let user = member.user_id;
+                            let here = here.contains(&user);
+                            let choose = (Some(user) != me)
+                                .then(|| {
+                                    Callback::new(move |()| {
+                                        if let Some(command) = relay.choose(*user.as_bytes()) {
+                                            send.run(command);
+                                        }
+                                    })
+                                });
+                            member_view(member, here, choose.map(|choose| (choose, "Message")))
+                        })
+                        .collect_view()
+                }}
+            </ul>
+        </div>
+    }
+}
+
+/// The invite control of a private channel or a direct message (the Murmure
+/// channels spec). It opens a list of the members the relay offers, behind
+/// a filter that sends nothing. Choosing one fetches their key for the check
+/// of the pin, and closes the list.
+#[component]
+pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl IntoView {
+    let open = RwSignal::new(false);
+    let query = RwSignal::new(String::new());
+    let target = relay.invite_target();
+    // Another channel closes the list.
+    Effect::new(move |_| {
+        target.track();
+        open.set(false);
+    });
+    let rows = relay.invitees();
+    let found = move || {
+        rows.with(|members| {
+            query.with(|q| {
+                crate::find_members(members, q)
+                    .into_iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+        })
+    };
+    view! {
+        <Show when=move || target.get().is_some()>
+            <div class="murmure-invite">
+                <button
+                    class="murmure-invite-toggle"
+                    aria-expanded=move || ambre_chrome::aria_bool(open.get())
+                    on:click=move |_| open.update(|o| *o = !*o)
+                >
+                    "Invite"
+                </button>
+                <Show when=move || open.get()>
+                    <div class="murmure-invite-picker">
+                        <input
+                            class="murmure-invite-filter"
+                            type="search"
+                            aria-label="Find a member to invite"
+                            placeholder="Find a member"
+                            prop:value=move || query.get()
+                            on:input=move |ev| query.set(event_target_value(&ev))
+                        />
+                        <ul aria-label="Invite a member">
+                            {move || {
+                                found()
+                                    .into_iter()
+                                    .map(|member| {
+                                        let user = member.user_id;
+                                        let choose = Callback::new(move |()| {
+                                            if let Some(command) = relay.invite(user) {
+                                                send.run(command);
+                                            }
+                                            open.set(false);
+                                            query.set(String::new());
+                                        });
+                                        member_view(member, false, Some((choose, "Invite")))
+                                    })
+                                    .collect_view()
+                            }}
+                        </ul>
+                    </div>
+                </Show>
+            </div>
+        </Show>
+    }
+}
+
+/// One member: the avatar, the name, then the presence mark. The marks
+/// differ in shape as well as in colour, and each carries its word for a
+/// screen reader (`MURMURE-443`, `MURMURE-520`). A member `here` watches the
+/// current channel. A row the user may act on is a button, titled by the verb
+/// of what it does; the user's own row is not.
+fn member_view(
+    member: MemberView,
+    here: bool,
+    choose: Option<(Callback<()>, &'static str)>,
+) -> impl IntoView {
+    let (state, word) = match member.presence {
+        _ if here => ("here", "In this channel"),
+        Presence::Online => ("online", "Online"),
+        Presence::Offline => ("offline", "Offline"),
+    };
+    let color = ambre_draw::peer_css(&member.user_id);
+    let name = member.display_name;
+    let who = view! {
+        <ambre_chrome::Avatar name=name.clone() color=color />
+        <span class="murmure-member-name">{name.clone()}</span>
+        <span class="murmure-presence" data-presence=state role="img" aria-label=word></span>
+    };
+    view! {
+        <li class="murmure-member">
+            {match choose {
+                Some((choose, verb)) => {
+                    view! {
+                        <button
+                            r#type="button"
+                            class="murmure-member-open"
+                            title=format!("{verb} {name}")
+                            on:click=move |_| choose.run(())
+                        >
+                            {who}
+                        </button>
+                    }
+                        .into_any()
+                }
+                None => who.into_any(),
+            }}
+        </li>
+    }
+}
+
+/// The view state of a Murmure page, fed by the events of the Logic thread
+/// (`ARCH-018`). The launcher hands it every event, and sends the commands
+/// it answers. It names no variant itself.
+#[derive(Clone, Copy)]
+pub struct MurmureRelay {
+    /// What the sidebar is drawn from.
+    pub sidebar: RwSignal<Sidebar>,
+    /// The pane the user is in.
+    pub pane: RwSignal<MurmurePane>,
+    /// The channels this page asked the Logic thread to open.
+    opened: RwSignal<HashSet<ChannelId>>,
+    /// The member list of each open space, as its last event drew it.
+    members: RwSignal<HashMap<SpaceId, Vec<MemberView>>>,
+    /// This user, once the session names them. The palette never offers a
+    /// direct message with oneself.
+    me: RwSignal<Option<UserId>>,
+    /// The search box of the command bar, closed until the find chord.
+    pub search: RwSignal<SearchBox>,
+    /// The member whose key was fetched for an invite, and the channel it
+    /// goes into. The answer becomes that invite, not a direct message.
+    inviting: RwSignal<Option<(UserId, ChannelId)>>,
+    /// The members of each open channel by name, as the Logic thread last
+    /// listed them. The invite control offers none of them, and the `@`
+    /// list offers them all (`MURMURE-551`).
+    channel_members: RwSignal<HashMap<ChannelId, HashMap<UserId, String>>>,
+    /// The `@` list a region of the page shows, `None` while none is open
+    /// (`MURMURE-555`).
+    pub mentions: RwSignal<Option<MentionList>>,
+    /// The entry a click picked in the `@` list, until its region takes it.
+    /// The flag names the thread's region.
+    picked: RwSignal<Option<(bool, usize)>>,
+    /// The format bar a region of the page shows, `None` while nothing is
+    /// selected (`MURMURE-432`).
+    pub mark_bar: RwSignal<Option<MarkBar>>,
+    /// The style a press on the format bar asked for, until its region takes
+    /// it. The flag names the thread's region.
+    pressed_mark: RwSignal<Option<(bool, TextStyle)>>,
+    /// The other members who watch each open channel, as the Logic thread
+    /// last heard them (`MURMURE-126`). A channel nobody watches has no entry.
+    watching: RwSignal<HashMap<ChannelId, HashSet<UserId>>>,
+    /// The message the actions are open on, as the view last found it under
+    /// a right-click or a long press. `None` once the menu closes.
+    pub target: RwSignal<Option<MessageTarget>>,
+    /// The deletion the dialog asks the member to confirm (`MURMURE-512`).
+    /// `None` once confirmed or cancelled.
+    pub deleting: RwSignal<Option<PendingDelete>>,
+    /// The message the member asked to edit, until the channel's region
+    /// loads it into the composer (`MURMURE-203`).
+    pub editing: RwSignal<Option<PendingEdit>>,
+    /// The list of keys shows (`MURMURE-540`).
+    pub keys: RwSignal<bool>,
+    /// The `@channel` the dialog asks the author about (`MURMURE-557`).
+    /// `None` once sent or cancelled.
+    pub asking_all: RwSignal<Option<AskedAll>>,
+    /// The send the author cancelled, until its region takes the draft back
+    /// (`MURMURE-558`).
+    returned: RwSignal<Option<AskedAll>>,
+    /// The drafts the device keeps. A lost channel takes its own, and a
+    /// sign-out takes them all (`MURMURE-215`, `MURMURE-216`).
+    drafts: StoredValue<DraftShelf, LocalStorage>,
+    /// What the emoji picker is open for, `None` while it is closed.
+    pub picking: RwSignal<Option<Picking>>,
+    /// The emoji the picker picked for a composer, until its region takes
+    /// it (`MURMURE-139`). The flag names the thread's region.
+    picked_emoji: RwSignal<Option<(bool, String)>>,
+    /// The files dropped on the channel's canvas, until its region takes
+    /// them to upload (`MURMURE-132`).
+    dropped_files: RwSignal<Vec<PickedFile>>,
+}
+
+/// The search box: whether it is open, the query typed, and the last answer
+/// to that query (the Murmure search spec).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchBox {
+    /// The box shows in the command bar.
+    pub open: bool,
+    /// The words typed.
+    pub query: String,
+    /// What the Logic thread answered for `query`, one entry per open channel.
+    pub channels: Vec<ChannelMatches>,
+}
+
+/// The matches of one channel, as the result list shows them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchGroup {
+    /// The channel a click on a match opens.
+    pub channel_id: ChannelId,
+    /// The name the sidebar shows.
+    pub name: String,
+    /// Each matching message, where a click opens it, and its text, in
+    /// channel order.
+    pub matches: Vec<(MessageRef, String)>,
+    /// Which part of its history was read, as "2 of 14 segments".
+    pub coverage: String,
+}
+
+/// "1 segment", or "2 segments": the coverage line counts in segments.
+fn segments(count: usize) -> String {
+    match count {
+        1 => "1 segment".to_owned(),
+        n => format!("{n} segments"),
+    }
+}
+
+/// What the search read, in all: "Searched 2 of 14 segments in 3 channels".
+/// A result list states its coverage, matches or not (`MURMURE-149`).
+pub fn coverage(channels: &[ChannelMatches]) -> String {
+    let covered: usize = channels.iter().map(|c| c.covered.len()).sum();
+    let listed: usize = channels.iter().map(|c| c.listed).sum();
+    let open = match channels.len() {
+        1 => "1 open channel".to_owned(),
+        n => format!("{n} open channels"),
+    };
+    format!("Searched {covered} of {} in {open}", segments(listed))
+}
+
+/// A system notification the view asks the page to raise (the Murmure
+/// notifications spec). It names the channel and why, never what was
+/// written: the summary it comes from holds no text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notice {
+    /// The channel a click opens.
+    pub channel_id: ChannelId,
+    /// The message a click rests the list on (`MURMURE-507`). A closed
+    /// channel names none, and opens at its latest message.
+    pub at: Option<MessageRef>,
+    /// What the notification says.
+    pub title: String,
+}
+
+impl Default for MurmureRelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MurmureRelay {
+    /// An empty sidebar on the channel list.
+    pub fn new() -> Self {
+        Self {
+            sidebar: RwSignal::new(Sidebar::default()),
+            pane: RwSignal::new(MurmurePane::default()),
+            opened: RwSignal::new(HashSet::new()),
+            members: RwSignal::new(HashMap::new()),
+            me: RwSignal::new(None),
+            search: RwSignal::new(SearchBox::default()),
+            inviting: RwSignal::new(None),
+            channel_members: RwSignal::new(HashMap::new()),
+            mentions: RwSignal::new(None),
+            picked: RwSignal::new(None),
+            mark_bar: RwSignal::new(None),
+            pressed_mark: RwSignal::new(None),
+            watching: RwSignal::new(HashMap::new()),
+            target: RwSignal::new(None),
+            deleting: RwSignal::new(None),
+            editing: RwSignal::new(None),
+            asking_all: RwSignal::new(None),
+            returned: RwSignal::new(None),
+            keys: RwSignal::new(false),
+            drafts: StoredValue::new_local(DraftShelf::default()),
+            picking: RwSignal::new(None),
+            picked_emoji: RwSignal::new(None),
+            dropped_files: RwSignal::new(Vec::new()),
+        }
+    }
+
+    /// The page read `file`, dropped on the channel's canvas.
+    pub fn drop_file(&self, file: PickedFile) {
+        self.dropped_files.update(|files| files.push(file));
+    }
+
+    /// The files dropped since the last call, taken once.
+    pub fn take_files(&self) -> Vec<PickedFile> {
+        self.dropped_files
+            .try_update_untracked(std::mem::take)
+            .unwrap_or_default()
+    }
+
+    /// Open the emoji picker on the composer of the region `in_thread`
+    /// (`MURMURE-139`).
+    pub fn ask_emoji(&self, in_thread: bool) {
+        self.picking.set(Some(Picking::Composer { in_thread }));
+    }
+
+    /// The member picked `emoji`, stamped `now`, and the picker closes. A
+    /// pick for a composer waits for its region, and a pick for a message
+    /// is the reaction to send (`MURMURE-139`, `MURMURE-140`). `None` with
+    /// the picker closed, or for a composer.
+    pub fn pick_emoji(&self, emoji: &str, now: Timestamp) -> Option<LogicCommand> {
+        let picking = self.picking.get_untracked()?;
+        self.picking.set(None);
+        match picking {
+            Picking::Composer { in_thread } => {
+                self.picked_emoji.set(Some((in_thread, emoji.to_owned())));
+                None
+            }
+            Picking::Reaction(pending) => Some(pending.command(emoji.to_owned(), now)),
+        }
+    }
+
+    /// The emoji picked for the composer of the region `in_thread`, taken
+    /// once.
+    pub fn take_emoji(&self, in_thread: bool) -> Option<String> {
+        let (region, emoji) = self.picked_emoji.get_untracked()?;
+        if region != in_thread {
+            return None;
+        }
+        self.picked_emoji.set(None);
+        Some(emoji)
+    }
+
+    /// The drafts the device keeps, which every region of the page shares.
+    pub fn drafts(&self) -> DraftShelf {
+        self.drafts.get_value()
+    }
+
+    /// Delete the drafts of `channels`, which the user lost (`MURMURE-215`).
+    fn forget_drafts(&self, channels: &[ChannelId]) {
+        let shelf = self.drafts();
+        for channel in channels {
+            shelf.forget_channel(*channel);
+        }
+    }
+
+    /// The menu of the target: one entry per action it offers, each a
+    /// command of the table (`MURMURE-419`). Empty with no target.
+    pub fn menu_entries(&self) -> Signal<Vec<MenuEntry>> {
+        let (target, me) = (self.target, self.me);
+        Signal::derive(move || {
+            let me = me.get();
+            target.with(|target| {
+                let Some(target) = target else {
+                    return Vec::new();
+                };
+                message_actions(target, me)
+                    .into_iter()
+                    .filter_map(|id| ambre_commands::find(COMMANDS, id))
+                    .map(|command| MenuEntry::command(command, &Locale::En))
+                    .collect()
+            })
+        })
+    }
+
+    /// What the action `id` does on the target, which the menu closes on.
+    /// `None` with no target, or for an id it does not offer.
+    pub fn act(&self, id: CommandId) -> Option<MessageAction> {
+        let target = self.target.get_untracked()?;
+        let action = message_action(id, &target, self.me.get_untracked())?;
+        self.target.set(None);
+        Some(action)
+    }
+
+    /// The command of the deletion the member confirmed, stamped `now`, and
+    /// the dialog closed (`MURMURE-512`). `None` with none asked.
+    pub fn confirm_delete(&self, now: Timestamp) -> Option<LogicCommand> {
+        let pending = self.deleting.get_untracked()?;
+        self.deleting.set(None);
+        Some(pending.command(now))
+    }
+
+    /// The send the author confirmed, stamped `now`, and the dialog closed
+    /// (`MURMURE-557`). `None` with none asked.
+    pub fn confirm_all(&self, now: Timestamp) -> Option<LogicCommand> {
+        let asked = self.asking_all.get_untracked()?;
+        self.asking_all.set(None);
+        Some(asked.command(now))
+    }
+
+    /// The author cancelled the send: the dialog closes, and the draft waits
+    /// for its region to take it back (`MURMURE-558`).
+    pub fn cancel_all(&self) {
+        if let Some(asked) = self.asking_all.get_untracked() {
+            self.asking_all.set(None);
+            self.returned.set(Some(asked));
+        }
+    }
+
+    /// The cancelled send, which one region takes once: the thread's region
+    /// a reply, the channel's region a message (`MURMURE-558`).
+    pub fn take_returned(&self, in_thread: bool) -> Option<AskedAll> {
+        let asked = self.returned.get_untracked()?;
+        if asked.in_thread() != in_thread {
+            return None;
+        }
+        self.returned.set(None);
+        Some(asked)
+    }
+
+    /// The edit the member asked for, which one region takes once
+    /// (`MURMURE-203`). The thread's region takes a reply, and the channel's
+    /// region the rest (`MURMURE-526`). `None` with none asked there.
+    pub fn take_edit(&self, in_thread: bool) -> Option<PendingEdit> {
+        let pending = self.editing.get_untracked()?;
+        if matches!(pending.at, MessageAt::Thread(_)) != in_thread {
+            return None;
+        }
+        self.editing.set(None);
+        Some(pending)
+    }
+
+    /// The signed-in member, `None` before the session names them.
+    pub fn me(&self) -> Option<UserId> {
+        self.me.get_untracked()
+    }
+
+    /// Open the search box, on the find chord (`MURMURE-213`). An open box
+    /// keeps its query.
+    pub fn open_search(&self) {
+        self.search.update(|s| s.open = true);
+    }
+
+    /// Close the search box, and forget its query and its answer.
+    pub fn close_search(&self) {
+        self.search.set(SearchBox::default());
+    }
+
+    /// Type `query` in the search box, and return the search it calls for.
+    /// A query with no word asks nothing. The last answer shows until the
+    /// new one arrives.
+    pub fn search_for(&self, query: String) -> Option<LogicCommand> {
+        let blank = query.trim().is_empty();
+        let changed = self
+            .search
+            .try_update(|s| {
+                let changed = s.query != query;
+                s.query.clone_from(&query);
+                if blank {
+                    s.channels.clear();
+                }
+                changed
+            })
+            .unwrap_or(false);
+        (changed && !blank).then_some(LogicCommand::SearchMessages { query })
+    }
+
+    /// The matches of the last answer, one group per channel with a match, in
+    /// the order the answer gives.
+    pub fn search_groups(&self) -> Signal<Vec<SearchGroup>> {
+        let (search, sidebar) = (self.search, self.sidebar);
+        Signal::derive(move || {
+            search.with(|s| {
+                s.channels
+                    .iter()
+                    .filter(|c| !c.matches.is_empty())
+                    .map(|c| SearchGroup {
+                        channel_id: c.channel_id,
+                        name: sidebar
+                            .with(|side| side.name_of(c.channel_id))
+                            .unwrap_or_else(|| "Unnamed channel".to_owned()),
+                        matches: c
+                            .matches
+                            .iter()
+                            .map(|m| {
+                                let at = MessageRef {
+                                    segment: m.segment,
+                                    message: m.message.id,
+                                };
+                                (at, m.message.text.clone())
+                            })
+                            .collect(),
+                        coverage: format!("{} of {}", c.covered.len(), segments(c.listed)),
+                    })
+                    .collect()
+            })
+        })
+    }
+
+    /// Choose the match `at` of `channel`: the box closes, and the channel
+    /// opens as a click on the sidebar opens it. Its list rests on the
+    /// message (`MURMURE-150`).
+    pub fn choose_result(&self, channel: ChannelId, at: MessageRef) -> Option<LogicCommand> {
+        self.close_search();
+        self.open_at(channel, Some(at))
+    }
+
+    /// Open `channel` as a click on the sidebar opens it, its list resting
+    /// on `at` when the channel shows (`MURMURE-507`). No other channel's
+    /// cursor moves (`MURMURE-508`).
+    pub fn open_at(&self, channel: ChannelId, at: Option<MessageRef>) -> Option<LogicCommand> {
+        let command = self.select(channel);
+        if at.is_some() && self.pane.get_untracked().shown_channel() == Some(channel) {
+            self.pane.set(MurmurePane::Channel { channel, at });
+        }
+        command
+    }
+
+    /// The notification an event calls for, if any (`MURMURE-143`). A
+    /// message that names the user notifies, and so does any message of a
+    /// direct message. The channel the user is reading notifies nothing
+    /// (`MURMURE-146`). A page that is not `visible` shows none to read.
+    pub fn notice(&self, ev: &UiEvent, visible: bool) -> Option<Notice> {
+        let UiEvent::NewMessage {
+            channel_id,
+            mention,
+            message,
+        } = *ev
+        else {
+            return None;
+        };
+        let at = message.map(|(segment, message)| MessageRef { segment, message });
+        let reading = visible && self.pane.get_untracked().shown_channel() == Some(channel_id);
+        if reading {
+            return None;
+        }
+        self.sidebar.with_untracked(|s| {
+            let direct = s.is_direct(channel_id);
+            let name = s.name_of(channel_id);
+            let title = match (direct, mention, name) {
+                (true, _, Some(name)) => format!("New message from {name}"),
+                (true, _, None) => "New direct message".to_owned(),
+                (false, true, Some(name)) => format!("You were mentioned in {name}"),
+                (false, true, None) => "You were mentioned".to_owned(),
+                (false, false, _) => return None,
+            };
+            Some(Notice {
+                channel_id,
+                at,
+                title,
+            })
+        })
+    }
+
+    /// Whether the channel the pane shows is a public channel of a space,
+    /// whose members the member list shows.
+    pub fn has_members(&self) -> Signal<bool> {
+        let (sidebar, pane) = (self.sidebar, self.pane);
+        Signal::derive(move || {
+            pane.get()
+                .shown_channel()
+                .is_some_and(|channel| sidebar.with(|s| s.public_space_of(channel).is_some()))
+        })
+    }
+
+    /// The member list of the space of the shown public channel, empty until
+    /// its first event.
+    pub fn shown_members(&self) -> Signal<Vec<MemberView>> {
+        let (sidebar, pane, members) = (self.sidebar, self.pane, self.members);
+        Signal::derive(move || {
+            let space = pane
+                .get()
+                .shown_channel()
+                .and_then(|channel| sidebar.with(|s| s.public_space_of(channel)));
+            space
+                .and_then(|space| members.with(|m| m.get(&space).cloned()))
+                .unwrap_or_default()
+        })
+    }
+
+    /// The members who watch the shown channel: the others the Logic thread
+    /// heard, and this user, who has it on screen. Empty with no channel
+    /// shown, so no list shows who reads another channel (`MURMURE-127`).
+    pub fn shown_watchers(&self) -> Signal<HashSet<UserId>> {
+        let (pane, watching, me) = (self.pane, self.watching, self.me);
+        Signal::derive(move || {
+            let Some(channel) = pane.get().shown_channel() else {
+                return HashSet::new();
+            };
+            let mut users = watching.with(|w| w.get(&channel).cloned().unwrap_or_default());
+            users.extend(me.get());
+            users
+        })
+    }
+
+    /// What the view sends once per refresh period: this user's presence on
+    /// every space of the sidebar. Each one also turns offline the members
+    /// whose presence expired (`MURMURE-445`). `now` is the view's clock.
+    ///
+    /// The shown channel is ticked too, since a hidden tab draws no frame
+    /// (`MURMURE-521`). A visible tab ticks it from its frames as well: the
+    /// Logic thread sends one sample per period whoever ticks.
+    pub fn refresh_presence(&self, now: Timestamp) -> Vec<LogicCommand> {
+        let mut commands: Vec<LogicCommand> = self.sidebar.with_untracked(|s| {
+            s.spaces()
+                .iter()
+                .map(|&space_id| LogicCommand::Space {
+                    space_id,
+                    command: SpaceCommand::RefreshPresence { now },
+                })
+                .collect()
+        });
+        if let Some(channel_id) = self.pane.get_untracked().shown_channel() {
+            commands.push(LogicCommand::Channel {
+                channel_id,
+                command: MurmureCommand::Tick { now },
+            });
+        }
+        commands
+    }
+
+    /// What a Murmure page asks once its session is ready: the channels of
+    /// its user and their activity. Neither opens a channel.
+    pub fn boot() -> [LogicCommand; 2] {
+        [
+            LogicCommand::ListMemberChannels,
+            LogicCommand::FetchActivity,
+        ]
+    }
+
+    /// The name of the channel the pane shows, once known.
+    pub fn channel_name(&self) -> Signal<Option<String>> {
+        let (sidebar, pane) = (self.sidebar, self.pane);
+        Signal::derive(move || {
+            let channel = pane.get().shown_channel()?;
+            sidebar.with(|s| s.name_of(channel))
+        })
+    }
+
+    /// Take one event, and return the commands it calls for: a space to
+    /// open for its catalogue, the channels to list again after a join.
+    pub fn absorb(&self, ev: &UiEvent) -> Vec<LogicCommand> {
+        match ev {
+            UiEvent::Rest {
+                evt: RestEvent::SessionReady { user_id, .. },
+                ..
+            } => {
+                self.me.set(Some(*user_id));
+                Vec::new()
+            }
+            // The next person on the device finds no draft (`MURMURE-216`).
+            UiEvent::Rest {
+                evt: RestEvent::LoggedOut,
+                ..
+            } => {
+                self.me.set(None);
+                self.drafts().sign_out();
+                Vec::new()
+            }
+            // The direct message a member was chosen for, created or found.
+            // The Logic thread opened it, so it shows and opens nothing more.
+            // The listing puts it in the sidebar.
+            UiEvent::DirectMessage {
+                event: DirectMessageEvent::Opened { channel_id },
+                ..
+            } => {
+                self.opened.update(|o| {
+                    o.insert(*channel_id);
+                });
+                self.pane.set(MurmurePane::channel(*channel_id));
+                vec![LogicCommand::ListMemberChannels]
+            }
+            UiEvent::MemberChannels {
+                channels,
+                spaces,
+                names,
+                peers,
+            } => self
+                .sidebar
+                .try_update(|s| {
+                    s.set_hints(names);
+                    s.set_peers(peers);
+                    s.set_member_channels(channels.clone(), spaces)
+                })
+                .unwrap_or_default()
+                .into_iter()
+                .map(|space_id| LogicCommand::OpenSpace { space_id })
+                .collect(),
+            UiEvent::ChannelActivity { channels } => {
+                self.sidebar.update(|s| s.set_activity(channels));
+                Vec::new()
+            }
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::Named { name },
+            } => {
+                self.sidebar
+                    .update(|s| s.set_name(*channel_id, name.clone()));
+                Vec::new()
+            }
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::Members { members },
+            } => {
+                let listed = members
+                    .iter()
+                    .map(|member| (member.user_id, member.display_name.clone()))
+                    .collect();
+                self.channel_members.update(|m| {
+                    m.insert(*channel_id, listed);
+                });
+                Vec::new()
+            }
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::ConfirmChannelMention { members, held },
+            } => {
+                self.asking_all.set(Some(AskedAll {
+                    channel: *channel_id,
+                    members: *members,
+                    held: held.clone(),
+                }));
+                Vec::new()
+            }
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::Watchers { watching, .. },
+            } => {
+                self.watching.update(|w| {
+                    if watching.is_empty() {
+                        w.remove(channel_id);
+                    } else {
+                        w.insert(*channel_id, watching.iter().copied().collect());
+                    }
+                });
+                Vec::new()
+            }
+            // The root a reply on a copy sought is loaded: its thread opens,
+            // unless the user went to another channel since (`MURMURE-545`).
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::RootFound { segment, root, .. },
+            } => {
+                if self.pane.get_untracked().shown_channel() == Some(*channel_id) {
+                    self.pane.set(MurmurePane::Thread {
+                        channel: *channel_id,
+                        root: MessageRef {
+                            segment: *segment,
+                            message: *root,
+                        },
+                    });
+                }
+                Vec::new()
+            }
+            // A channel that could not open stays in the sidebar, and the next
+            // selection opens it anew (`MURMURE-549`).
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::OpenFailed { .. },
+            } => {
+                self.drop_channels(&[*channel_id]);
+                Vec::new()
+            }
+            // A channel the user lost while it was open (`MURMURE-489`).
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::Left,
+            } => {
+                self.sidebar.update(|s| s.forget(*channel_id));
+                self.drop_channels(&[*channel_id]);
+                self.forget_drafts(&[*channel_id]);
+                Vec::new()
+            }
+            UiEvent::Space { space_id, event } => self.absorb_space(*space_id, event),
+            // An answer to the query the box holds. One to an older query, or
+            // to a box closed since, is dropped: typing outruns the answers.
+            UiEvent::MessageSearch { query, channels } => {
+                self.search.update(|s| {
+                    if s.open && s.query == *query {
+                        s.channels.clone_from(channels);
+                    }
+                });
+                Vec::new()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    fn absorb_space(&self, space: ambre_core::SpaceId, event: &SpaceEvent) -> Vec<LogicCommand> {
+        match event {
+            SpaceEvent::Catalogue {
+                name,
+                categories,
+                channels,
+            } => {
+                self.sidebar.update(|s| {
+                    s.set_catalogue(space, name.clone(), categories.clone(), channels.clone());
+                });
+                Vec::new()
+            }
+            SpaceEvent::Members { members } => {
+                self.members.update(|m| {
+                    m.insert(space, members.clone());
+                });
+                Vec::new()
+            }
+            // The join this page asked for: the channel shows at once, and
+            // the listing moves it among the joined ones.
+            SpaceEvent::Joined { channel_id } => {
+                let mut commands = vec![LogicCommand::ListMemberChannels];
+                commands.extend(self.show(*channel_id));
+                commands
+            }
+            SpaceEvent::ChannelLeft { channel_id } | SpaceEvent::ChannelDeleted { channel_id } => {
+                self.sidebar.update(|s| s.forget(*channel_id));
+                self.drop_channels(&[*channel_id]);
+                self.forget_drafts(&[*channel_id]);
+                Vec::new()
+            }
+            // A space that could not open keeps its joined channels, and the
+            // next listing opens it anew (`MURMURE-550`).
+            SpaceEvent::OpenFailed { .. } => {
+                self.sidebar.update(|s| s.space_failed(space));
+                Vec::new()
+            }
+            // The space leaves with every channel of it (`MURMURE-488`).
+            SpaceEvent::Left => {
+                let dropped = self
+                    .sidebar
+                    .try_update(|s| s.forget_space(space))
+                    .unwrap_or_default();
+                self.members.update(|m| {
+                    m.remove(&space);
+                });
+                self.drop_channels(&dropped);
+                self.forget_drafts(&dropped);
+                Vec::new()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// Forget the channels this page opened among `channels`, and leave the
+    /// pane that shows one of them.
+    fn drop_channels(&self, channels: &[ChannelId]) {
+        self.opened.update(|o| o.retain(|c| !channels.contains(c)));
+        self.channel_members
+            .update(|m| m.retain(|c, _| !channels.contains(c)));
+        self.watching
+            .update(|w| w.retain(|c, _| !channels.contains(c)));
+        let shown = self.pane.get_untracked().shown_channel();
+        if shown.is_some_and(|c| channels.contains(&c)) {
+            self.pane.set(MurmurePane::ChannelList);
+        }
+    }
+
+    /// Select a channel of the sidebar. A joined one shows in the content,
+    /// opened the first time only. One to join is joined first. Nothing is
+    /// sent for the channel left behind (`MURMURE-167`).
+    pub fn select(&self, channel: ChannelId) -> Option<LogicCommand> {
+        let to_join = self
+            .sidebar
+            .with_untracked(|s| (!s.is_member(channel)).then(|| s.listed_in(channel)));
+        match to_join {
+            Some(space) => space.map(|space_id| LogicCommand::Space {
+                space_id,
+                command: SpaceCommand::JoinChannel {
+                    channel_id: channel,
+                },
+            }),
+            None => self.show(channel),
+        }
+    }
+
+    /// What the palette lists before the commands: the channels in sidebar
+    /// order, each named as the sidebar names it (`MURMURE-172`). Then come
+    /// the other members of the space of the shown channel (`MURMURE-452`).
+    pub fn palette_entries(&self) -> Signal<Vec<PaletteEntry>> {
+        let (sidebar, members, me) = (self.sidebar, self.shown_members(), self.me);
+        Signal::derive(move || {
+            let mut entries: Vec<PaletteEntry> = sidebar.with(|s| {
+                s.sections()
+                    .into_iter()
+                    .flat_map(|section| {
+                        let words = GroupWords::of(section.group);
+                        section.entries.into_iter().map(move |entry| PaletteEntry {
+                            key: *entry.channel.as_bytes(),
+                            label: entry.name.unwrap_or_else(|| words.unnamed.to_owned()),
+                            hint: Some(words.hint),
+                        })
+                    })
+                    .collect()
+            });
+            let me = me.get();
+            members.with(|members| {
+                entries.extend(
+                    members
+                        .iter()
+                        .filter(|member| Some(member.user_id) != me)
+                        .map(|member| PaletteEntry {
+                            key: *member.user_id.as_bytes(),
+                            label: member.display_name.clone(),
+                            hint: Some("Member"),
+                        }),
+                );
+            });
+            entries
+        })
+    }
+
+    /// Choose the palette entry of `key`. A channel opens as a click on the
+    /// sidebar opens it (`MURMURE-173`). A member's key is fetched for the
+    /// check of the pin, which opens the direct message of the two
+    /// (`MURMURE-455`).
+    pub fn choose(&self, key: [u8; 16]) -> Option<LogicCommand> {
+        let user_id = UserId::from_bytes(key);
+        if self.member_name(user_id).is_some() && self.me.get_untracked() != Some(user_id) {
+            self.inviting.set(None);
+            return Some(LogicCommand::Rest {
+                id: RequestId::next(),
+                cmd: RestCommand::FetchMemberKey { user_id },
+            });
+        }
+        self.select(ChannelId::from_bytes(key))
+    }
+
+    /// The display name of `user` in an open space, if they are a member.
+    pub fn member_name(&self, user: UserId) -> Option<String> {
+        self.members.with_untracked(|spaces| {
+            spaces
+                .values()
+                .flatten()
+                .find(|member| member.user_id == user)
+                .map(|member| member.display_name.clone())
+        })
+    }
+
+    /// The shown channel, when the user may invite into it: a private
+    /// channel or a direct message of theirs. A space member joins a public
+    /// channel by themselves.
+    pub fn invite_target(&self) -> Signal<Option<ChannelId>> {
+        let (sidebar, pane) = (self.sidebar, self.pane);
+        Signal::derive(move || {
+            let channel = pane.get().shown_channel()?;
+            let place = sidebar.with(|s| s.place_of(channel))?;
+            (!matches!(place, ChannelPlace::Public(_))).then_some(channel)
+        })
+    }
+
+    /// Who the invite control offers: the members of the space of a private
+    /// channel, or of every open space for a direct message. Each comes
+    /// once, and neither this user nor a member of the channel does
+    /// (`MURMURE-501`).
+    pub fn invitees(&self) -> Signal<Vec<MemberView>> {
+        let (sidebar, members, me) = (self.sidebar, self.members, self.me);
+        let in_channel = self.channel_members;
+        let target = self.invite_target();
+        Signal::derive(move || {
+            let Some(channel) = target.get() else {
+                return Vec::new();
+            };
+            let spaces = sidebar.with(|s| match s.place_of(channel) {
+                Some(ChannelPlace::Private(space)) => vec![space],
+                _ => s.spaces().to_vec(),
+            });
+            let me = me.get();
+            let mut seen: HashSet<UserId> = in_channel.with(|m| {
+                m.get(&channel)
+                    .map(|listed| listed.keys().copied().collect())
+                    .unwrap_or_default()
+            });
+            seen.extend(me);
+            members.with(|m| {
+                spaces
+                    .iter()
+                    .filter_map(|space| m.get(space))
+                    .flatten()
+                    .filter(|v| seen.insert(v.user_id))
+                    .cloned()
+                    .collect()
+            })
+        })
+    }
+
+    /// Whether the Logic thread lists `user` among the members of `channel`.
+    fn in_channel(&self, channel: ChannelId, user: UserId) -> bool {
+        self.channel_members.with_untracked(|m| {
+            m.get(&channel)
+                .is_some_and(|listed| listed.contains_key(&user))
+        })
+    }
+
+    /// The members of `channel` by name, as the Logic thread last listed
+    /// them. The `@` list offers them (`MURMURE-551`).
+    pub fn members_of(&self, channel: ChannelId) -> Vec<(UserId, String)> {
+        self.channel_members.with_untracked(|m| {
+            m.get(&channel)
+                .map(|listed| listed.iter().map(|(u, n)| (*u, n.clone())).collect())
+                .unwrap_or_default()
+        })
+    }
+
+    /// Show the `@` list a region handed over, or close it. A region closes
+    /// only its own list, so the other region's stays (`MURMURE-555`).
+    pub fn show_mentions(&self, in_thread: bool, list: Option<MentionList>) {
+        let theirs = self
+            .mentions
+            .with_untracked(|shown| shown.as_ref().is_some_and(|s| s.in_thread != in_thread));
+        if list.is_some() || !theirs {
+            self.mentions.set(list);
+        }
+    }
+
+    /// A click on the entry `index` of the `@` list shown: its region takes
+    /// the pick at its next frame (`MURMURE-555`).
+    pub fn pick_mention(&self, index: usize) {
+        if let Some(in_thread) = self
+            .mentions
+            .with_untracked(|m| m.as_ref().map(|m| m.in_thread))
+        {
+            self.picked.set(Some((in_thread, index)));
+        }
+    }
+
+    /// The pick of the region `in_thread`, taken once.
+    pub fn take_pick(&self, in_thread: bool) -> Option<usize> {
+        let (region, index) = self.picked.get_untracked()?;
+        if region != in_thread {
+            return None;
+        }
+        self.picked.set(None);
+        Some(index)
+    }
+
+    /// Show the format bar a region handed over, or close it. A region
+    /// closes only its own bar (`MURMURE-432`).
+    pub fn show_bar(&self, in_thread: bool, bar: Option<MarkBar>) {
+        let theirs = self
+            .mark_bar
+            .with_untracked(|shown| shown.as_ref().is_some_and(|s| s.in_thread != in_thread));
+        if bar.is_some() || !theirs {
+            self.mark_bar.set(bar);
+        }
+    }
+
+    /// A press on the control of `style` in the format bar shown: its region
+    /// takes it at its next frame (`MURMURE-432`).
+    pub fn press_mark(&self, style: TextStyle) {
+        if let Some(in_thread) = self
+            .mark_bar
+            .with_untracked(|bar| bar.as_ref().map(|bar| bar.in_thread))
+        {
+            self.pressed_mark.set(Some((in_thread, style)));
+        }
+    }
+
+    /// The press on the bar of the region `in_thread`, taken once.
+    pub fn take_press(&self, in_thread: bool) -> Option<TextStyle> {
+        let (region, style) = self.pressed_mark.get_untracked()?;
+        if region != in_thread {
+            return None;
+        }
+        self.pressed_mark.set(None);
+        Some(style)
+    }
+
+    /// Invite `user` into the shown channel. Their key is fetched first, for
+    /// the check of the pin, and the invite leaves only once it passes. A
+    /// member of the channel is fetched nothing (`MURMURE-501`).
+    pub fn invite(&self, user: UserId) -> Option<LogicCommand> {
+        let channel = self.invite_target().get_untracked()?;
+        if self.me.get_untracked() == Some(user)
+            || self.member_name(user).is_none()
+            || self.in_channel(channel, user)
+        {
+            return None;
+        }
+        self.inviting.set(Some((user, channel)));
+        Some(LogicCommand::Rest {
+            id: RequestId::next(),
+            cmd: RestCommand::FetchMemberKey { user_id: user },
+        })
+    }
+
+    /// The channel a key fetched for `user` invites them into, taken once.
+    /// `None` means the key was fetched for a direct message.
+    pub fn take_invite(&self, user: UserId) -> Option<ChannelId> {
+        self.inviting
+            .try_update(|pending| match *pending {
+                Some((invitee, channel)) if invitee == user => {
+                    *pending = None;
+                    Some(channel)
+                }
+                _ => None,
+            })
+            .flatten()
+    }
+
+    /// Open the next channel with activity after the shown one, or the
+    /// previous one (`MURMURE-176`). It sends no read cursor: the channel
+    /// opens as a click opens it (`MURMURE-177`).
+    pub fn jump(&self, forward: bool) -> Option<LogicCommand> {
+        let from = self.pane.get_untracked().shown_channel();
+        let to = self
+            .sidebar
+            .with_untracked(|s| s.next_with_activity(from, forward))?;
+        self.select(to)
+    }
+
+    fn show(&self, channel: ChannelId) -> Option<LogicCommand> {
+        self.pane.set(MurmurePane::channel(channel));
+        let fresh = self
+            .opened
+            .try_update(|o| o.insert(channel))
+            .unwrap_or(false);
+        fresh.then_some(LogicCommand::OpenChannel {
+            channel_id: channel,
+        })
+    }
+}
+
+/// Murmure's half of the command path (`ARCH-018`). Its commands address the
+/// user's channels, not the routed document, so it sends them through `send`.
+/// It asks the shell for the palette alone.
+#[derive(Clone, Copy)]
+pub struct MurmureHandler {
+    pub relay: MurmureRelay,
+    pub send: Callback<LogicCommand>,
+}
+
+impl MurmureHandler {
+    /// Open the channel of the palette entry `key`, the palette closing
+    /// behind it (`MURMURE-173`).
+    pub fn choose(&self, key: [u8; 16]) {
+        if let Some(command) = self.relay.choose(key) {
+            self.send.run(command);
+        }
+    }
+
+    /// Run the command `id`. `false` for an id Murmure did not declare.
+    fn run(&self, id: CommandId) -> bool {
+        let command = match id {
+            NEXT_ACTIVITY => self.relay.jump(true),
+            PREVIOUS_ACTIVITY => self.relay.jump(false),
+            // The command of the unread feature, which the relay answers for
+            // every channel of the user (`MURMURE-180`).
+            MARK_ALL_READ => Some(LogicCommand::MarkAllRead),
+            SEARCH => {
+                self.relay.open_search();
+                None
+            }
+            KEYS => {
+                self.relay.keys.set(true);
+                None
+            }
+            _ => return false,
+        };
+        if let Some(command) = command {
+            self.send.run(command);
+        }
+        true
+    }
+}
+
+impl CommandHandler for MurmureHandler {
+    type Command = AppCommand;
+
+    fn on_command(&self, id: CommandId) -> Vec<ShellAction<AppCommand>> {
+        if id == PALETTE {
+            return vec![ShellAction::OpenPalette];
+        }
+        // An action of a message acts on the target of the menu. With none,
+        // as from the palette, it does nothing (`MURMURE-419`).
+        match self.relay.act(id) {
+            Some(MessageAction::Open(pane)) => self.relay.pane.set(pane),
+            Some(MessageAction::Send(command)) => self.send.run(command),
+            Some(MessageAction::Copy(text)) => return vec![ShellAction::CopyText(text)],
+            Some(MessageAction::ConfirmDelete(pending)) => self.relay.deleting.set(Some(pending)),
+            Some(MessageAction::Edit(pending)) => self.relay.editing.set(Some(pending)),
+            Some(MessageAction::React(pending)) => {
+                self.relay.picking.set(Some(Picking::Reaction(pending)));
+            }
+            None => {
+                self.run(id);
+            }
+        }
+        Vec::new()
+    }
+
+    fn on_key(&self, id: CommandId, in_text_field: bool) -> KeyRoute<AppCommand> {
+        if id == PALETTE {
+            return KeyRoute::Run(vec![ShellAction::OpenPalette]);
+        }
+        // A text field keeps Alt+Shift with an arrow, which extends its
+        // selection on a Mac. The find chord opens the search from any field,
+        // or the browser's find would take it (`MURMURE-213`).
+        if in_text_field && id != SEARCH {
+            return KeyRoute::Yield;
+        }
+        self.run(id);
+        KeyRoute::Run(Vec::new())
+    }
+
+    fn sealed_save(&self, _passphrase: String) -> Option<AppCommand> {
+        // Murmure declares no sealed save.
+        None
+    }
+}
+
+/// The channel list of the sidebar, one section per group (`MURMURE-163`,
+/// `MURMURE-164`). An entry shows the mark of its channel, or its counts
+/// once known (`MURMURE-165`). Selecting one goes through the relay, and
+/// `send` carries what the relay answers.
+#[component]
+pub fn ChannelList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl IntoView {
+    let sections = Memo::new(move |_| relay.sidebar.with(Sidebar::sections));
+    view! {
+        <nav class="murmure-channel-list" aria-label="Channels">
+            {move || {
+                sections
+                    .get()
+                    .into_iter()
+                    .map(|section| section_view(relay, send, section))
+                    .collect_view()
+            }}
+        </nav>
+    }
+}
+
+/// The search box of the command bar, open on the find chord (`MURMURE-213`).
+/// Each change of its words asks the Logic thread, and the answer lists the
+/// matches by channel under the coverage line (`MURMURE-149`). Escape closes
+/// it, and a match opens its channel. `send` carries what the relay answers.
+#[component]
+pub fn MessageSearch(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl IntoView {
+    let input = NodeRef::<leptos::html::Input>::new();
+    // The box takes the caret as it opens, and again on each find chord.
+    Effect::new(move |_| {
+        if relay.search.with(|s| s.open)
+            && let Some(el) = input.get()
+        {
+            let _ = el.focus();
+        }
+    });
+    let groups = relay.search_groups();
+    let answered = move || relay.search.with(|s| !s.query.trim().is_empty());
+    let on_input = move |ev| {
+        if let Some(command) = relay.search_for(event_target_value(&ev)) {
+            send.run(command);
+        }
+    };
+    let on_keydown = move |ev: leptos::ev::KeyboardEvent| {
+        if ev.key() == "Escape" {
+            relay.close_search();
+        }
+    };
+    view! {
+        <Show when=move || relay.search.with(|s| s.open)>
+            <div class="murmure-search" role="search">
+                <input
+                    node_ref=input
+                    class="murmure-search-field"
+                    type="search"
+                    aria-label="Search messages"
+                    placeholder="Search messages"
+                    prop:value=move || relay.search.with(|s| s.query.clone())
+                    on:input=on_input
+                    on:keydown=on_keydown
+                />
+                <Show when=answered>
+                    <div class="murmure-search-results">
+                        <p class="murmure-search-coverage">
+                            {move || relay.search.with(|s| coverage(&s.channels))}
+                        </p>
+                        {move || {
+                            groups
+                                .get()
+                                .into_iter()
+                                .map(|group| search_group_view(relay, send, group))
+                                .collect_view()
+                        }}
+                    </div>
+                </Show>
+            </div>
+        </Show>
+    }
+}
+
+/// The dialog that confirms the deletion the actions of a message asked for
+/// (`MURMURE-512`). A deletion cannot be undone, so nothing is sent before
+/// Delete. Cancel, Escape and the backdrop send nothing. `now` stamps it.
+#[component]
+pub fn DeleteConfirm(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    now: Callback<(), Timestamp>,
+) -> impl IntoView {
+    let open = RwSignal::new(false);
+    Effect::new(move |_| open.set(relay.deleting.with(Option::is_some)));
+    let cancel = move || relay.deleting.set(None);
+    let confirm = move |_| {
+        if let Some(command) = relay.confirm_delete(now.run(())) {
+            send.run(command);
+        }
+    };
+    view! {
+        <ambre_chrome::Dialog
+            open=open
+            on_close=Callback::new(move |()| cancel())
+            class="murmure-delete"
+            label="Delete message"
+        >
+            <h2>"Delete this message?"</h2>
+            <p>"It is deleted for every member of the channel. This cannot be undone."</p>
+            // Cancel comes first, so the focus the dialog opens on is never
+            // the irreversible choice.
+            <div class="ambre-dialog-actions">
+                <button class="murmure-delete-cancel" on:click=move |_| cancel()>"Cancel"</button>
+                <button class="ambre-btn-danger murmure-delete-confirm" on:click=confirm>
+                    "Delete"
+                </button>
+            </div>
+        </ambre_chrome::Dialog>
+    }
+}
+
+/// The dialog an `@channel` past the member threshold opens (`MURMURE-557`).
+/// Nothing leaves before Send. Cancel, Escape and the backdrop give the
+/// draft back to its composer (`MURMURE-558`). `now` stamps the send.
+#[component]
+pub fn ChannelMentionConfirm(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    now: Callback<(), Timestamp>,
+) -> impl IntoView {
+    let open = RwSignal::new(false);
+    Effect::new(move |_| open.set(relay.asking_all.with(Option::is_some)));
+    let title = move || {
+        relay
+            .asking_all
+            .with(|asked| asked.as_ref().map(|a| asked_all_title(a.members)))
+    };
+    let confirm = move |_| {
+        if let Some(command) = relay.confirm_all(now.run(())) {
+            send.run(command);
+        }
+    };
+    view! {
+        <ambre_chrome::Dialog
+            open=open
+            on_close=Callback::new(move |()| relay.cancel_all())
+            class="murmure-all"
+            label="Mention the whole channel"
+        >
+            <h2>{title}</h2>
+            <p>"Each member of the channel is notified of this message."</p>
+            // Cancel comes first, so the focus the dialog opens on notifies
+            // nobody.
+            <div class="ambre-dialog-actions">
+                <button class="murmure-all-cancel" on:click=move |_| relay.cancel_all()>
+                    "Cancel"
+                </button>
+                <button class="ambre-btn-primary murmure-all-confirm" on:click=confirm>
+                    "Send"
+                </button>
+            </div>
+        </ambre_chrome::Dialog>
+    }
+}
+
+/// The top-left of the canvas a region paints, in the viewport, `(0, 0)`
+/// with no such canvas in the page.
+fn canvas_origin(in_thread: bool) -> (f64, f64) {
+    let id = if in_thread {
+        crate::view::THREAD_CANVAS
+    } else {
+        crate::view::CHANNEL_CANVAS
+    };
+    leptos::web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.get_element_by_id(id))
+        .map(|canvas| {
+            let rect = canvas.get_bounding_client_rect();
+            (rect.left(), rect.top())
+        })
+        .unwrap_or_default()
+}
+
+/// The `@` list of a composer, hung above its caret (`MURMURE-555`). The
+/// pipe keeps the focus, so the composer takes its keys. A press on an
+/// entry picks it and leaves the focus where it was.
+#[component]
+pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
+    move || {
+        relay.mentions.get().map(|list| {
+            let (left, top) = canvas_origin(list.in_thread);
+            let (x, y) = (left + f64::from(list.at.0), top + f64::from(list.at.1));
+            let entries = list
+                .entries
+                .into_iter()
+                .enumerate()
+                .map(|(index, name)| {
+                    let chosen = (index == list.chosen).to_string();
+                    let pick = move |ev: leptos::ev::MouseEvent| {
+                        ev.prevent_default();
+                        relay.pick_mention(index);
+                    };
+                    view! {
+                        <li role="option" class="murmure-mention" aria-selected=chosen on:mousedown=pick>
+                            {name}
+                        </li>
+                    }
+                })
+                .collect_view();
+            view! {
+                <ul
+                    class="murmure-mentions"
+                    role="listbox"
+                    aria-label="Mention a member"
+                    style=format!("left: {x}px; top: {y}px;")
+                >
+                    {entries}
+                </ul>
+            }
+        })
+    }
+}
+
+/// The format bar of a composer, over its selection: the shared bar Prose
+/// shows, with the Murmure marks alone (`MURMURE-432`, `CHROME-105`). A
+/// press toggles its style and leaves the focus where it was.
+#[component]
+pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
+    move || {
+        relay.mark_bar.get().map(|bar| {
+            let (left, top) = canvas_origin(bar.in_thread);
+            let anchor = (left + f64::from(bar.at.0), top + f64::from(bar.at.1));
+            let controls = bar
+                .controls
+                .into_iter()
+                .map(|(style, cover)| {
+                    let label = crate::markers::MARK_BAR
+                        .iter()
+                        .find(|(shown, _)| *shown == style)
+                        .map(|(_, label)| (*label).to_owned())
+                        .unwrap_or_default();
+                    let pressed = match cover {
+                        Cover::Whole => Pressed::On,
+                        Cover::Part => Pressed::Mixed,
+                        Cover::None => Pressed::Off,
+                    };
+                    FormatControl {
+                        label,
+                        pressed,
+                        on_press: Callback::new(move |()| relay.press_mark(style.clone())),
+                    }
+                })
+                .collect();
+            view! { <FormatBar anchor=anchor controls=controls /> }
+        })
+    }
+}
+
+/// The emoji picker, open on a composer or on a message (`MURMURE-139`,
+/// `MURMURE-140`). The field filters the table by name, and Enter picks the
+/// first match. Its emoji come from the table the client holds, so it sends
+/// no request (`MURMURE-141`). Escape, the backdrop and Cancel pick nothing.
+/// `now` stamps a reaction.
+#[component]
+pub fn EmojiPicker(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    now: Callback<(), Timestamp>,
+) -> impl IntoView {
+    let open = RwSignal::new(false);
+    let query = RwSignal::new(String::new());
+    Effect::new(move |_| {
+        let picking = relay.picking.with(Option::is_some);
+        if picking {
+            query.set(String::new());
+        }
+        open.set(picking);
+    });
+    let pick = move |emoji: &str| {
+        if let Some(command) = relay.pick_emoji(emoji, now.run(())) {
+            send.run(command);
+        }
+    };
+    let title = move || match relay.picking.get() {
+        Some(Picking::Reaction(_)) => "Add a reaction",
+        _ => "Insert an emoji",
+    };
+    view! {
+        <ambre_chrome::Dialog
+            open=open
+            on_close=Callback::new(move |()| relay.picking.set(None))
+            class="murmure-emoji"
+            label="Emoji"
+        >
+            <h2>{title}</h2>
+            <input
+                r#type="search"
+                class="murmure-emoji-search"
+                aria-label="Search emoji"
+                placeholder="Search emoji"
+                prop:value=move || query.get()
+                on:input=move |ev| query.set(event_target_value(&ev))
+                on:keydown=move |ev| {
+                    if ev.key() == "Enter" {
+                        ev.prevent_default();
+                        if let Some(first) = emoji::search(&query.get_untracked()).first() {
+                            pick(first);
+                        }
+                    }
+                }
+            />
+            <div class="murmure-emoji-grid" role="group" aria-label="Emoji">
+                {move || {
+                    emoji::search(&query.get())
+                        .into_iter()
+                        .map(|e| {
+                            let name = emoji::name_of(e).unwrap_or(e);
+                            view! {
+                                <button
+                                    r#type="button"
+                                    class="murmure-emoji-pick"
+                                    aria-label=name
+                                    title=name
+                                    on:click=move |_| pick(e)
+                                >
+                                    {e}
+                                </button>
+                            }
+                        })
+                        .collect_view()
+                }}
+            </div>
+            <div class="ambre-dialog-actions">
+                <button class="murmure-emoji-cancel" on:click=move |_| relay.picking.set(None)>
+                    "Cancel"
+                </button>
+            </div>
+        </ambre_chrome::Dialog>
+    }
+}
+
+/// The list of the keys Murmure takes, open on the keys command
+/// (`MURMURE-540`). Each row names a key, what it does and where. Its keys
+/// show at every width (`MURMURE-542`). Escape, the backdrop and Close close
+/// it.
+#[component]
+pub fn KeyList(relay: MurmureRelay) -> impl IntoView {
+    let rows = key_list(&Locale::En);
+    view! {
+        <ambre_chrome::Dialog open=relay.keys class="murmure-keys" label="Keyboard shortcuts">
+            <h2>"Keyboard shortcuts"</h2>
+            <table class="murmure-keys-table">
+                <thead>
+                    <tr>
+                        <th scope="col">"Key"</th>
+                        <th scope="col">"Action"</th>
+                        <th scope="col">"Where"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows
+                        .clone()
+                        .into_iter()
+                        .map(|row| {
+                            view! {
+                                <tr>
+                                    // Not the chip of a menu, which hides below
+                                    // the desktop width: here the keys are what
+                                    // the member asked to read.
+                                    <td>
+                                        <kbd class="murmure-keys-key">{row.keys.to_string()}</kbd>
+                                    </td>
+                                    <td>{row.action}</td>
+                                    <td>{KeyPlace::words(row.place)}</td>
+                                </tr>
+                            }
+                        })
+                        .collect_view()}
+                </tbody>
+            </table>
+            <div class="ambre-dialog-actions">
+                <button class="murmure-keys-close" on:click=move |_| relay.keys.set(false)>
+                    "Close"
+                </button>
+            </div>
+        </ambre_chrome::Dialog>
+    }
+}
+
+fn search_group_view(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    group: SearchGroup,
+) -> impl IntoView {
+    let channel = group.channel_id;
+    view! {
+        <section class="murmure-search-group">
+            <h3 class="murmure-search-channel">
+                {group.name}
+                <span class="murmure-search-segments">{group.coverage}</span>
+            </h3>
+            <ul>
+                {group
+                    .matches
+                    .into_iter()
+                    .map(|(at, text)| {
+                        view! {
+                            <li>
+                                <button
+                                    r#type="button"
+                                    class="murmure-search-match"
+                                    on:click=move |_| {
+                                        if let Some(command) = relay.choose_result(channel, at) {
+                                            send.run(command);
+                                        }
+                                    }
+                                >
+                                    {text}
+                                </button>
+                            </li>
+                        }
+                    })
+                    .collect_view()}
+            </ul>
+        </section>
+    }
+}
+
+/// What the chrome calls a group of the sidebar, and an entry with no name.
+#[derive(Clone, Copy)]
+struct GroupWords {
+    /// The word of the group in the markup.
+    word: &'static str,
+    /// The title of a section with none of its own.
+    title: &'static str,
+    /// The hint of an entry in the palette.
+    hint: &'static str,
+    /// The label of an entry nothing named yet.
+    unnamed: &'static str,
+}
+
+impl GroupWords {
+    fn of(group: SidebarGroup) -> Self {
+        let (word, title, hint) = match group {
+            SidebarGroup::Category { .. } => ("category", "Channels", "Channel"),
+            SidebarGroup::Private => ("private", "Private channels", "Private channel"),
+            SidebarGroup::Direct => ("direct", "Direct messages", "Direct message"),
+            SidebarGroup::ToJoin => ("to-join", "Channels to join", "To join"),
+        };
+        let unnamed = match group {
+            SidebarGroup::Direct => "Direct message",
+            _ => "Private channel",
+        };
+        Self {
+            word,
+            title,
+            hint,
+            unnamed,
+        }
+    }
+}
+
+fn section_view(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    section: SidebarSection,
+) -> impl IntoView {
+    let GroupWords {
+        word,
+        title: fallback,
+        unnamed,
+        ..
+    } = GroupWords::of(section.group);
+    let title = section.title.unwrap_or_else(|| fallback.to_owned());
+    view! {
+        <section class="murmure-section" data-group=word>
+            <h3 class="murmure-section-title">{title}</h3>
+            <ul>
+                {section
+                    .entries
+                    .into_iter()
+                    .map(|entry| entry_view(relay, send, entry, unnamed))
+                    .collect_view()}
+            </ul>
+        </section>
+    }
+}
+
+fn entry_view(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    entry: SidebarEntry,
+    unnamed: &'static str,
+) -> impl IntoView {
+    let channel = entry.channel;
+    let current = move || (relay.pane.get().shown_channel() == Some(channel)).then_some("page");
+    let badge = match entry.activity {
+        Activity::None => None,
+        Activity::Some => {
+            Some(view! { <span class="murmure-mark" aria-label="New messages"></span> }.into_any())
+        }
+        Activity::Count { messages, mentions } => Some(
+            view! {
+                {(mentions.0 > 0).then(|| view! {
+                    <span class="murmure-mentions" aria-label="Mentions">{mentions.0}</span>
+                })}
+                {(messages.0 > 0).then(|| view! {
+                    <span class="murmure-count" aria-label="Unread messages">{messages.0}</span>
+                })}
+            }
+            .into_any(),
+        ),
+    };
+    view! {
+        <li>
+            <button
+                class="murmure-entry"
+                aria-current=current
+                on:click=move |_| {
+                    if let Some(command) = relay.select(channel) {
+                        send.run(command);
+                    }
+                }
+            >
+                <span class="murmure-entry-name">
+                    {entry.name.unwrap_or_else(|| unnamed.to_owned())}
+                </span>
+                {badge}
+            </button>
+        </li>
+    }
+}

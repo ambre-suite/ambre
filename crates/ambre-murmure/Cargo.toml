@@ -5,10 +5,22 @@ edition = "2024"
 license.workspace = true
 description = "Secure messaging application for Ambre — E2EE channels, segments"
 
+[features]
+# A conversation fed to a view, for the browser tests of the host. Non-default:
+# only ambre-app's wasm dev-dependency turns it on.
+testing = []
+
 [dependencies]
 ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }
 ambre-draw = { path = "../ambre-draw" }
+# The text cache and the design tokens the message list paints with, as
+# ambre-trame's grid does (`MURMURE-188`).
+ambre-canvas = { path = "../ambre-canvas" }
+
+# The command registry the shell's palette and keymap read, as ambre-prose's
+# table does. A leaf with an empty dependency table (`UI-THREAD-027`).
+ambre-commands = { path = "../ambre-commands" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -18,9 +30,28 @@ unicode-segmentation = { workspace = true }
 # CRDT
 loro = { workspace = true }
 
+# Murmure-specific chrome (the `chrome` module): the channel header and the
+# regions of the layout. Wasm-only -- leptos CSR + DOM, like ambre-chrome --
+# so it is scoped to the wasm32 target and never compiled into host logic tests.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ambre-chrome = { path = "../ambre-chrome" }
+leptos       = { workspace = true }
+
 [dev-dependencies]
 criterion = { workspace = true }
+# Headless paint tests: the RecordingSurface mock of the drawing surface.
+ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 serde_json = { workspace = true }
+
+# The relay tests drive the chrome state in headless Chrome
+# (`tests/chrome_relay.rs`, `just test-wasm`), as ambre-prose's do.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+# The confirmation of a deletion is clicked in a real dialog.
+wasm-bindgen         = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys               = { workspace = true }
+web-sys              = { workspace = true }
 
 [[bench]]
 name = "segment"

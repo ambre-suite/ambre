@@ -15,33 +15,33 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | implemented | 11 |  |
-| `murmure-mentions` | A member names another in a message with `@`. | implemented | 13 |  |
-| `murmure-messages` | A member writes a message, edits it, or deletes it. | implemented | 22 |  |
+| `murmure-composer` | The field where a member writes. | implemented | 45 |  |
+| `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | implemented | 14 |  |
+| `murmure-keyboard` | No frequent action in Murmure needs the mouse. | implemented | 21 |  |
+| `murmure-mentions` | A member names another in a message with `@`. | implemented | 23 |  |
+| `murmure-messages` | A member writes a message, edits it, or deletes it. | implemented | 25 |  |
 | `murmure-reactions` | A member answers a message with an emoji. | implemented | 7 |  |
 | `murmure-segments` | A channel grows for years and still opens fast. | implemented | 26 |  |
-| `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 49 |  |
-| `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 21 |  |
-| `murmure-search` | A member finds a message by its words, in the channels they have loaded. | partial | 17 |  |
-| `murmure-spaces` | A team gathers in a space. | partial | 33 |  |
-| `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | partial | 19 |  |
-| `murmure-typing-presence` | A member sees who is in the channel and who is typing. | partial | 9 |  |
-| `murmure-unread` | The sidebar shows where something new is, and how much. | partial | 15 |  |
-| `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
+| `murmure-unread` | The sidebar shows where something new is, and how much. | implemented | 17 |  |
+| `murmure-attachments` | A member drops a file or an image into a message. | partial | 14 |  |
+| `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 53 |  |
+| `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | partial | 14 |  |
+| `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | partial | 26 |  |
+| `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 23 |  |
+| `murmure-message-list` | The conversation of a channel, newest at the bottom. | partial | 39 |  |
+| `murmure-notifications` | A member learns that someone mentioned them or wrote to them directly. | partial | 19 |  |
+| `murmure-search` | A member finds a message by its words, in the channels they have loaded. | partial | 18 |  |
+| `murmure-spaces` | A team gathers in a space. | partial | 34 |  |
+| `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | partial | 28 |  |
+| `murmure-typing-presence` | A member sees who is in the channel and who is typing. | partial | 16 |  |
 | `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
 | `murmure-calls` | A member starts a video call from a channel in one click. | design-only | 7 |  |
-| `murmure-composer` | The field where a member writes. | design-only | 25 |  |
-| `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | design-only | 13 |  |
 | `murmure-forums` | A forum is a channel of posts. | design-only | 11 |  |
 | `murmure-import` | A team moving from Slack or Discord brings its history along. | design-only | 11 |  |
-| `murmure-keyboard` | No frequent action in Murmure needs the mouse. | design-only | 13 |  |
-| `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | design-only | 19 |  |
 | `murmure-link-previews` | A link in a message shows a preview: the title and image of a web page, or the name of an Ambre document. | design-only | 8 |  |
 | `murmure-message-links` | A member copies a link to one message and pastes it anywhere. | design-only | 8 |  |
-| `murmure-message-list` | The conversation of a channel, newest at the bottom. | design-only | 31 |  |
 | `murmure-moderation` | A moderator removes the message of another member. | design-only | 10 |  |
-| `murmure-notifications` | A member learns that someone mentioned them or wrote to them directly. | design-only | 15 |  |
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 5 implemented, 7 partial, 16 design-only. 463 contract rows, 0 loose.**
+**28 features: 8 implemented, 11 partial, 9 design-only. 555 contract rows, 0 loose.**

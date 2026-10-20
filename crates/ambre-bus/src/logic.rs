@@ -24,8 +24,8 @@
 //!   kept explicit.
 
 use crate::{
-    ChannelId, DirectMessageDraft, DocType, DocumentId, MurmureCommand, RequestId, RestCommand,
-    SpaceCommand, SpaceId, Timestamp,
+    ChannelId, DirectMember, DirectMessageDraft, DocType, DocumentId, MurmureCommand, RequestId,
+    RestCommand, SpaceCommand, SpaceId, Timestamp,
 };
 use ambre_core::SessionNonce;
 
@@ -151,6 +151,17 @@ pub enum LogicCommand {
     OpenDirectMessage {
         draft: DirectMessageDraft,
         /// The instant of a creation, stamped by the view.
+        now: Timestamp,
+    },
+
+    /// Invite `invitee` into an open channel, as an editor, on its `meta`
+    /// (the Murmure channels spec). The key is the one the user confirmed.
+    /// Answered as a [`crate::RestCommand::InviteToDocument`] under `id`.
+    InviteToChannel {
+        id: RequestId,
+        channel_id: ChannelId,
+        invitee: DirectMember,
+        /// The instant the user confirmed, which stamps a notice.
         now: Timestamp,
     },
 

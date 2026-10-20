@@ -17,7 +17,6 @@ use loro::{
 use super::{ChannelState, Created, Held, Sent};
 use crate::delta::{self, Arrival, Rules, Signer};
 use crate::error::MurmureError;
-use crate::mention;
 use crate::schema::{
     self, AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS,
     DeletedBy, DocumentKind, HEADER, HEADER_SEGMENT, MENTION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT,
@@ -25,6 +24,7 @@ use crate::schema::{
 };
 use crate::sequence::Sequence;
 use crate::session::Session;
+use crate::{mention, style};
 
 /// An amendments document whose bytes are still arriving.
 #[derive(Debug)]
@@ -458,10 +458,12 @@ fn write_edit(
     if len > 0 {
         content.unmark(0..len, MENTION)?;
     }
+    style::clear(&content)?;
     content
         .update(&draft.text, UpdateOptions::default())
         .map_err(|error| MurmureError::Crdt(error.to_string()))?;
-    mention::write(doc, &content, &draft.mentions, channel)
+    mention::write(doc, &content, &draft.mentions, channel)?;
+    style::write(doc, &content, &draft.styles)
 }
 
 /// The edited body of one amendment entry, `None` when it has none.
@@ -490,10 +492,13 @@ pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channe
         if schema::flag(&entry, AMENDMENT_DELETED) {
             view.text.clear();
             view.mentions.clear();
+            view.styles.clear();
+            view.attachments.clear();
             view.deleted = true;
         } else if let Some(content) = entry_content(&entry) {
             view.text = content.to_string();
             view.mentions = mention::read(&content, channel);
+            view.styles = style::read(&content);
             view.edited = true;
         }
     }

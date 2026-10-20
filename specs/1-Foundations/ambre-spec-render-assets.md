@@ -25,13 +25,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-017` | `INV` | Every font family label MUST resolve to a loaded face before shaping; an unmatched label MUST NOT reach the shaper. | this spec section 2 | `ambre_canvas::text_cache::tests::family_labels_map_to_registered_faces`; `::registered_face_names_pass_through` | none | verified |
+| `CANVAS-081` | `INV` | A layout shaped with styled spans MUST be cached apart from the same text with other spans, and a span off the text MUST shape nothing. | this spec section 2; `MURMURE-565` | `ambre_canvas::text_cache::tests::each_set_of_spans_shapes_and_caches_apart` -- a bold span adds a face and widens the text, a span past the end shapes one face, and the same set hits | none | verified |
+| `CANVAS-084` | `INV` | A span's indent MUST start each line of the paragraphs it holds that far right, a wrapped line too, and keep the line within the width. | this spec section 2; `MURMURE-570` | `ambre_canvas::text_cache::tests::an_indent_starts_each_line_of_its_paragraphs_past_it` -- each wrapped line of the held paragraph starts at the indent and ends within the width, the paragraphs around it start at the edge, and CR LF counts as one break | none | verified |
 | `CANVAS-067` | `INV` | A face the application has loaded MUST be held by every thread that measures text, never by the thread that fetched it alone. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- it opens one document before the delivery and one after, and reads the face count back off both | none | verified |
 | `CANVAS-069` | `INV` | The context the UI thread shapes on MUST hold only the faces the application loaded into it: a face of the machine MUST NOT be discoverable from it. | this spec section 2; `PROSE-114` | `ambre_canvas::fonts::tests::a_built_context_discovers_no_face_of_the_machine` -- it asks for families a desktop carries; structural -- `font_context_from` builds on `font_context_from_bytes`, the one constructor, which starts from `ambre_draw::sealed_font_context`; `ambre_draw::text::tests::a_sealed_context_discovers_no_face_of_the_machine` -- that context, asked for the same families | none | verified |
 | `CANVAS-018` | `INV` | A font MUST NOT be embedded in a binary. | this spec section 3; `ambre-spec-budgets.md section 5` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses an `include_bytes!` of a font file on any Rust line | none | verified |
 | `CANVAS-051` | `INV` | A font MUST be fetched from the same origin. | this spec section 3; `UI-THREAD-004` | `ambre_canvas::fonts::tests::every_face_is_fetched_from_the_page_origin` -- every base and lazy face path, refused a scheme or a host | none | verified |
 | `CANVAS-019` | `OBS` | A layout mixing text and colour emoji MUST paint both: a colour glyph through the colour atlas, a mask glyph through the alpha atlas. | this spec section 2 | `ambre_canvas::render::atlas::tests::an_emoji_rasterizes_to_colour_and_a_letter_to_a_mask` -- the raster; `ambre_canvas::render::surface::tests::a_mask_glyph_and_a_colour_glyph_land_in_their_own_batch` -- the batch each one is drawn through | none | verified |
 | `CANVAS-020` | `INV` | The colour atlas MUST NOT be allocated at full size before the first colour glyph appears. | this spec section 2; `ambre-spec-budgets.md section 6` | `ambre_canvas::render::atlas::tests::the_color_atlas_is_grown_only_for_a_color_glyph` -- no request without a colour glyph, one with the first | none | verified |
-| `CANVAS-007` | `INV` | Every decoded image MUST pass through one bounded cache, whichever application decoded it. | this spec section 2; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `One media cache` Story (`ambre-roadmap.md` E8). Toile holds a `MediaCache` in its own Logic module and no other application has one | unimplemented |
+| `CANVAS-007` | `INV` | Every decoded image MUST pass through one bounded cache, whichever application decoded it. | this spec section 2; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `One media cache` Story (`ambre-roadmap.md` E8). Toile holds a `MediaCache` in its own Logic module, and Murmure a shelf of its own in the view | unimplemented |
 | `CANVAS-023` | `INV` | An icon MUST stay a vector buffer: it MUST NOT be rasterized into a bitmap atlas. | this spec section 2 | not built | unbuilt -- lands with the `The icon pipeline` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `CANVAS-024` | `INV` | An icon MUST be tessellated at build time, never on the frame path. | this spec section 2 | not built | unbuilt -- lands with the `The icon pipeline` Story (`ambre-roadmap.md` E6) | unimplemented |
 
@@ -65,10 +67,10 @@ keep the allocation where it is.
 * **Boundary.** the font fetch is the one network path this layer opens, same-origin by
   `CANVAS-018` and the single exception `UI-THREAD-004` names to the UI thread's ban. This layer
   holds no key and reaches no relay.
-* **Verification.** 15 `verified`, 3 `unimplemented`. The atlases and the layout cache are driven
-  on the host past their capacity, and what survives is compared with what it drew before. The
-  font fetch and its origin are read from the paths, and a source gate refuses an embedded face.
-  The send of a late face runs in the browser tier, through the function the boot send calls.
+* **Verification.** 17 `verified`, 3 `unimplemented`. The atlases and the layout cache are driven on
+  the host past their capacity, and what survives is compared with what it drew before. The font
+  fetch and its origin are read from the paths, and a source gate refuses an embedded face. The send
+  of a late face runs in the browser tier, through the function the boot send calls.
 
 ---
 
@@ -116,8 +118,9 @@ of ours.
 **From a string to pixels.** Four stages, and a cache between each pair.
 
 1. `TextCache` keys a Parley `Layout` on the text, the size, the wrap width, the alignment, the
-   weight, the slant, the emergency-break flag and the family. A hit costs nothing; a miss shapes
-   (`CANVAS-022`).
+   weight, the slant, the emergency-break flag and the family. The styled spans join the key
+   (`CANVAS-081`). A span's indent starts the lines of its paragraphs past it (`CANVAS-084`).
+   A hit costs nothing; a miss shapes (`CANVAS-022`).
 2. every string the cache shapes is offered to the lazy loader. It fetches a face the first time it
    sees a codepoint the base faces cannot cover (`CANVAS-006`).
 3. Swash rasterizes each glyph, keyed on the font blob id, the glyph id and the size.
@@ -156,7 +159,7 @@ At run time the blob loads once and each icon is one draw call through the paths
 (`CANVAS-023`, `CANVAS-024`).
 
 **The images.** A decoded image is RGBA8 pixels, produced by the `image` crate with only the PNG,
-JPEG and WebP decoders compiled in. One bounded LRU serves every consumer: a board picture, a
+JPEG, WebP and GIF decoders compiled in. One bounded LRU serves every consumer: a board picture, a
 sheet chart, an inline illustration. The memory budget is therefore one number rather than the sum
 of three nobody set together (`CANVAS-007`). Toile is the heaviest consumer, so the **cap** may need
 revisiting; the **mechanism** stays common.
