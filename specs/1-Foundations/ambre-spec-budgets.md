@@ -194,10 +194,10 @@
 * **Two binaries.** `ambre-app` carries UI plus Logic: wgpu, loro, leptos, the heavy one.
   `ambre-sync` carries crypto plus protocol plus gloo-net, small at ~6.8 MB unoptimized, with no
   wgpu, no loro and no leptos. Only crypto, protocol and serde are duplicated across the two; the heavy
-  dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable. **The first
-  download, Main plus Sync, < 2 MB brotli**, and Prose interop stays **lazy-loaded**. At 10 Mbit/s,
-  2 MB takes 1.6 s, which leaves the rest of the README's 3 s initial load on 4G to compile and
-  boot.
+  dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable.
+* **The first download, Main plus Sync, < 2 MB brotli**, and Prose interop stays
+  **lazy-loaded**. At 10 Mbit/s, 2 MB takes 1.6 s, which leaves the rest of the README's 3 s
+  initial load on 4G to compile and boot.
 * **Counted in brotli, as served.** The release build writes a brotli copy at quality 11 beside
   each compressible file (`scripts/trunk_post_build.py`). A static server sends it as it is, with
   no compression per request. On the wasm it weighs 27% less than gzip at level 9.
