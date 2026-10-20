@@ -11,7 +11,7 @@
 // through the `use super::*` glob.
 
 use ambre_core::{
-    DocType, Uuid,
+    DocType, DocumentId,
     docfile::{AmbreHeader, DocFileError, read_ambre_plaintext_as, write_ambre_plaintext},
     schema::SchemaError,
 };
@@ -23,7 +23,7 @@ use super::*;
 ///
 /// Pure and crypto-free (`FIXTURE-007`). Protection, when it applies, is a
 /// separate stage owned by `ambre-sync` (`docfile`).
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Option<Vec<u8>> {
+pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Option<Vec<u8>> {
     // `None` rather than a header over nothing, as the board half answers
     // (`TOILE-IO-069`). A valid file that opens empty reads as a document the
     // user emptied.
@@ -58,7 +58,7 @@ impl TrameState {
     /// document's identity. The registry does (`ambre-logic`), and a fixture
     /// generator pins it from its seed (`ambre-spec-fixtures.md`).
     /// `None` when the document could not be read, so no file is written.
-    pub fn export_ambre_plaintext(&self, doc_id: Uuid) -> Option<Vec<u8>> {
+    pub fn export_ambre_plaintext(&self, doc_id: DocumentId) -> Option<Vec<u8>> {
         export_ambre_plaintext(&self.doc, doc_id)
     }
 
@@ -78,7 +78,7 @@ impl TrameState {
     pub fn import_ambre_plaintext(
         &mut self,
         data: &[u8],
-    ) -> Result<(Uuid, Vec<TrameEvent>), DocFileError> {
+    ) -> Result<(DocumentId, Vec<TrameEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
         // The container has said its piece; the schema register inside the
         // payload is a separate gate and it runs before any container is used
@@ -109,8 +109,8 @@ mod tests {
     use super::*;
     use ambre_core::docfile::{AMBRE_VERSION, HEADER_LEN};
 
-    fn doc_id() -> Uuid {
-        Uuid::from_bytes([
+    fn doc_id() -> DocumentId {
+        DocumentId::from_bytes([
             0x01, 0x8f, 0x2a, 0x3b, 0x7c, 0x4d, 0x70, 0x00, 0x80, 0x00, 0x11, 0x22, 0x33, 0x44,
             0x55, 0x66,
         ])

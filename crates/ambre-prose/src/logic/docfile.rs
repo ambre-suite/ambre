@@ -9,7 +9,7 @@ use ambre_core::docfile::{
     AmbreHeader, DocFileError, read_ambre_plaintext_as, write_ambre_plaintext,
 };
 use ambre_core::schema::SchemaError;
-use ambre_core::{DocType, Uuid};
+use ambre_core::{DocType, DocumentId};
 use loro::{ExportMode, LoroDoc};
 
 use crate::events::ProseEvent;
@@ -23,7 +23,7 @@ use super::ProseState;
 /// (`PROSE-IO-059`). `None` when the document cannot be read: a header over
 /// nothing would open as a document the user emptied.
 #[must_use]
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Option<Vec<u8>> {
+pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Option<Vec<u8>> {
     let payload = doc
         .export(ExportMode::Snapshot)
         .inspect_err(|e| tracing::error!("Prose: .ambre export failed, writing no file: {e:?}"))
@@ -52,7 +52,7 @@ impl ProseState {
     /// identity, not the engine. It reads through `&self`, so an export
     /// changes nothing and emits no delta (`PROSE-IO-017`).
     #[must_use]
-    pub fn export_ambre_plaintext(&self, doc_id: Uuid) -> Option<Vec<u8>> {
+    pub fn export_ambre_plaintext(&self, doc_id: DocumentId) -> Option<Vec<u8>> {
         export_ambre_plaintext(&self.doc, doc_id)
     }
 
@@ -69,7 +69,7 @@ impl ProseState {
     pub fn import_ambre_plaintext(
         &mut self,
         data: &[u8],
-    ) -> Result<(Uuid, Vec<ProseEvent>), DocFileError> {
+    ) -> Result<(DocumentId, Vec<ProseEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
         let events = self.import_snapshot(&header.payload).map_err(|e| match e {
             // Bytes the engine will not read already have a name in the
@@ -88,8 +88,8 @@ mod tests {
     use super::*;
     use crate::events::ProseCommand;
 
-    fn doc_id() -> Uuid {
-        Uuid::from_bytes([
+    fn doc_id() -> DocumentId {
+        DocumentId::from_bytes([
             0x01, 0x8f, 0x2a, 0x3b, 0x7c, 0x4d, 0x70, 0x00, 0x80, 0x00, 0x11, 0x22, 0x33, 0x44,
             0x55, 0x66,
         ])

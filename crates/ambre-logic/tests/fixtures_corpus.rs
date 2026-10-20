@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 
 use ambre_bus::TrameCommand;
 use ambre_core::docfile::{AMBRE_VERSION, DocFileError, HEADER_LEN, write_ambre_plaintext};
-use ambre_core::{DocType, FixtureGen, ShapeBody, Uuid, seeded_document_id};
+use ambre_core::{DocType, DocumentId, FixtureGen, ShapeBody, seeded_document_id};
 use ambre_logic::DocState;
 use ambre_logic::fixtures::{
     self, FixtureError, canonical_dump, digest_of, generate_into, load_fixture_from, manifest_for,
@@ -321,7 +321,7 @@ fn a_written_fixture_loads_back_through_the_production_importer() {
     write_fixture(&TRAME, dir.path()).expect("writes");
     let (id, state) = load_fixture_from(dir.path(), TRAME.name()).expect("loads");
     // The `document_id` survives the round trip and is the one the seed derives.
-    assert_eq!(*id.as_uuid(), seeded_document_id(TRAME.seed()));
+    assert_eq!(id, seeded_document_id(TRAME.seed()));
     assert_eq!(state.doc_type(), DocType::Trame);
 }
 
@@ -414,7 +414,7 @@ fn the_corpus_root_is_resolved_from_the_manifest_dir_not_the_cwd() {
 #[test]
 fn every_header_failure_is_typed_and_none_of_them_panics() {
     let good = TRAME.build();
-    let doc_id = Uuid::from_bytes([0x33; 16]);
+    let doc_id = DocumentId::from_bytes([0x33; 16]);
 
     let cases: Vec<(&str, Vec<u8>, DocFileError)> = vec![
         (
@@ -502,14 +502,22 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
     // Unreachable for any fixture this spec produces, which excludes Murmure.
     // Present so the loader degrades when it arrives: a panic here would be a
     // corpus that cannot be inspected at all.
-    let murmure = write_ambre_plaintext(DocType::Murmure, Uuid::from_bytes([0x44; 16]), b"payload");
+    let murmure = write_ambre_plaintext(
+        DocType::Murmure,
+        DocumentId::from_bytes([0x44; 16]),
+        b"payload",
+    );
     match fixtures::import_fixture(&murmure) {
         Err(FixtureError::NoEngine { doc_type }) => assert_eq!(doc_type, DocType::Murmure),
         other => panic!("expected NoEngine, got {other:?}"),
     }
     // Prose has an engine now: a Prose header over bytes it refuses is a
     // container failure, typed like any other.
-    let prose = write_ambre_plaintext(DocType::Prose, Uuid::from_bytes([0x44; 16]), b"payload");
+    let prose = write_ambre_plaintext(
+        DocType::Prose,
+        DocumentId::from_bytes([0x44; 16]),
+        b"payload",
+    );
     match fixtures::import_fixture(&prose) {
         Err(FixtureError::Container(DocFileError::PayloadRejected)) => {}
         other => panic!("expected PayloadRejected, got {other:?}"),

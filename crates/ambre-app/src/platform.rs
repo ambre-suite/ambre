@@ -752,7 +752,7 @@ fn read_container(
         ));
         return None;
     }
-    Some((header.document_id.into(), header.doc_type, header.payload))
+    Some((header.document_id, header.doc_type, header.payload))
 }
 
 /// Store a container's sealed payload as the document's copy, and navigate
@@ -772,9 +772,7 @@ async fn store_container(
     };
     // Durable, not fire-and-forget: the navigation below unloads the page,
     // and an open transaction goes with it.
-    let committed = store
-        .save_snapshot_committed(*document_id.as_bytes(), sealed)
-        .await;
+    let committed = store.save_snapshot_committed(document_id, sealed).await;
     if committed != Ok(true) {
         toasts.error("Ambre could not store that file locally");
         return;

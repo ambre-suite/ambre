@@ -53,7 +53,7 @@
 
 use thiserror::Error;
 
-use crate::{DocType, Uuid};
+use crate::{DocType, DocumentId, Uuid};
 
 /// Magic bytes `"AMBR"` (`0x414D4252`), offset 0.
 pub const AMBRE_MAGIC: [u8; 4] = *b"AMBR";
@@ -124,7 +124,7 @@ pub struct AmbreHeader {
     /// re-dispatches on mismatch (dispatch rule) rather than coercing.
     pub doc_type: DocType,
     /// Document identity, UUID v7.
-    pub document_id: Uuid,
+    pub document_id: DocumentId,
     /// Offset 22 onward: the raw Loro snapshot, uncompressed and unencrypted.
     pub payload: Vec<u8>,
 }
@@ -254,7 +254,11 @@ pub fn classify(data: &[u8]) -> Result<ContainerKind, DocFileError> {
 ///
 /// The writer rule lives here and nowhere else -- there is no parameter for the
 /// version, because there is no backward-compatible write mode.
-pub fn write_ambre_plaintext(doc_type: DocType, document_id: Uuid, payload: &[u8]) -> Vec<u8> {
+pub fn write_ambre_plaintext(
+    doc_type: DocType,
+    document_id: DocumentId,
+    payload: &[u8],
+) -> Vec<u8> {
     let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
     out.extend_from_slice(&AMBRE_MAGIC);
     out.push(AMBRE_VERSION);
@@ -307,8 +311,9 @@ pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     let doc_type =
         DocType::from_u8(raw_type).ok_or(DocFileError::UnknownDocType { found: raw_type })?;
     // Infallible: the slice is exactly 16 bytes wide by construction.
-    let document_id =
-        Uuid::from_slice(&head[DOCUMENT_ID_AT..]).map_err(|_| DocFileError::TruncatedHeader)?;
+    let document_id = Uuid::from_slice(&head[DOCUMENT_ID_AT..])
+        .map(DocumentId::from_uuid)
+        .map_err(|_| DocFileError::TruncatedHeader)?;
     Ok(AmbreHeader {
         version,
         doc_type,
@@ -573,8 +578,8 @@ mod tests {
         0x01,
     ];
 
-    fn doc_id() -> Uuid {
-        Uuid::from_bytes(DOC_ID)
+    fn doc_id() -> DocumentId {
+        DocumentId::from_bytes(DOC_ID)
     }
 
     fn sample(doc_type: DocType) -> Vec<u8> {

@@ -199,7 +199,7 @@ nor either read rule (`DOCFILE-007`).
 // ambre-core
 
 /// The writer rule: no version parameter, because there is no write mode to pick.
-pub fn write_ambre_plaintext(doc_type: DocType, document_id: Uuid, payload: &[u8]) -> Vec<u8>;
+pub fn write_ambre_plaintext(doc_type: DocType, document_id: DocumentId, payload: &[u8]) -> Vec<u8>;
 
 /// Any `DocType`, version-recovery rule applied. What a file-open router reads
 /// before it knows which app to hand the bytes to.
@@ -220,7 +220,7 @@ pub fn migrate_ambre(from: u8, bytes: &[u8]) -> Result<Vec<u8>, DocFileError>;
 pub struct AmbreHeader {
     pub version: u8,
     pub doc_type: DocType,
-    pub document_id: Uuid,
+    pub document_id: DocumentId,
     /// Offset 22 onward: the raw Loro snapshot.
     pub payload: Vec<u8>,
 }
@@ -274,7 +274,7 @@ application's `LoroDoc`; the header handling is not reimplemented per applicatio
 
 ```rust
 /// Header + uncompressed, unencrypted snapshot. Pure; no crypto (`DOCFILE-006`).
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Vec<u8>;
+pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Vec<u8>;
 
 /// Validates magic, version and doc_type, and returns the payload. The caller
 /// compares the returned `DocType` against its own and re-dispatches on

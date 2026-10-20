@@ -840,7 +840,7 @@ mod tests {
         let (id, _) = reopened
             .import_ambre_plaintext(&bytes)
             .expect("the file opens");
-        assert_eq!(id, document_id.into());
+        assert_eq!(id, document_id);
     }
 
     /// `PROSE-062`: one outcome, three destinations.
@@ -1011,8 +1011,7 @@ mod tests {
                 .expect("the command wrote a valid container");
             assert_eq!(header.doc_type, doc_type, "the header names the wrong app");
             assert_eq!(
-                header.document_id,
-                ambre_bus::Uuid::from(document_id),
+                header.document_id, document_id,
                 "the file would open as a different document than the one saved"
             );
         }
@@ -1047,7 +1046,7 @@ mod tests {
         // live, and the file's payload arrives the way the store hands it over.
         let (mut reopened, ui, _sync) = harness();
         reopened.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
-            document_id: header.document_id.into(),
+            document_id: header.document_id,
             doc_type: header.doc_type,
             snapshot: Some(header.payload),
             deltas: Vec::new(),

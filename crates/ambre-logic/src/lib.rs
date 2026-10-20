@@ -274,15 +274,15 @@ impl DocState {
         match self {
             DocState::Trame(state) => Some((
                 "workbook.ambre".to_owned(),
-                state.export_ambre_plaintext(document_id.into())?,
+                state.export_ambre_plaintext(document_id)?,
             )),
             DocState::Toile(state) => Some((
                 "board.ambre".to_owned(),
-                state.export_ambre_plaintext(document_id.into())?,
+                state.export_ambre_plaintext(document_id)?,
             )),
             DocState::Prose(state) => Some((
                 "document.ambre".to_owned(),
-                state.export_ambre_plaintext(document_id.into())?,
+                state.export_ambre_plaintext(document_id)?,
             )),
         }
     }

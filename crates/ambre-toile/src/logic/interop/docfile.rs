@@ -12,7 +12,7 @@
 use loro::{ExportMode, LoroDoc};
 
 use ambre_core::{
-    DocType, Uuid,
+    DocType, DocumentId,
     docfile::{AmbreHeader, DocFileError, read_ambre_plaintext_as, write_ambre_plaintext},
 };
 
@@ -21,7 +21,7 @@ use ambre_core::{
 ///
 /// Pure and crypto-free (I4). Protection, when it applies, is a separate stage
 /// owned by `ambre-sync` (`docfile`).
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Option<Vec<u8>> {
+pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Option<Vec<u8>> {
     // `None` rather than a header over nothing (`TOILE-IO-069`). A well-formed
     // file carrying the right document id and an empty board is what the user
     // cannot tell from a board they emptied themselves.

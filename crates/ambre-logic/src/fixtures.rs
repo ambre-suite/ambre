@@ -504,7 +504,7 @@ pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureErr
         DocState::Toile(toile) => toile.import_ambre_plaintext(bytes).map(|(id, _events)| id),
         DocState::Prose(prose) => prose.import_ambre_plaintext(bytes).map(|(id, _events)| id),
     }?;
-    Ok((DocumentId::from_uuid(document_id), state))
+    Ok((document_id, state))
 }
 
 /// `<dir>/<name>.ambre`. `name` may carry `/` (`"trame/formula_dag_deep"`), which

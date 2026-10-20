@@ -503,7 +503,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
 fn a_sealed_file_round_trips_through_the_service_plane() {
     let (mut state, rx, _mock) = setup(false);
     let doc_id = ambre_core::DocumentId::new();
-    let plaintext = ambre_core::write_ambre_plaintext(DocType::Prose, *doc_id.as_uuid(), b"body");
+    let plaintext = ambre_core::write_ambre_plaintext(DocType::Prose, doc_id, b"body");
 
     let seal_id = RequestId::next();
     send_rest(
@@ -545,7 +545,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
             assert_eq!(&*opened, &plaintext[..]);
             let header = ambre_core::read_ambre_plaintext(&opened).expect("plaintext header");
             assert_eq!(header.doc_type, DocType::Prose);
-            assert_eq!(header.document_id, *doc_id.as_uuid());
+            assert_eq!(header.document_id, doc_id);
         }
         other => panic!("expected DocFileOpened, got {other:?}"),
     }
@@ -554,11 +554,8 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
 #[test]
 fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
     let (mut state, rx, _mock) = setup(false);
-    let plaintext = ambre_core::write_ambre_plaintext(
-        DocType::Prose,
-        *ambre_core::DocumentId::new().as_uuid(),
-        b"body",
-    );
+    let plaintext =
+        ambre_core::write_ambre_plaintext(DocType::Prose, ambre_core::DocumentId::new(), b"body");
 
     let seal_id = RequestId::next();
     send_rest(
@@ -615,11 +612,8 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
 #[test]
 fn opening_a_plaintext_file_fails_without_deriving_a_key() {
     let (mut state, rx, _mock) = setup(false);
-    let plaintext = ambre_core::write_ambre_plaintext(
-        DocType::Prose,
-        *ambre_core::DocumentId::new().as_uuid(),
-        b"body",
-    );
+    let plaintext =
+        ambre_core::write_ambre_plaintext(DocType::Prose, ambre_core::DocumentId::new(), b"body");
 
     // The header says plaintext, so the answer comes from the parse. Nothing
     // pays the work factor: an unsealed file is not a guessing attempt.

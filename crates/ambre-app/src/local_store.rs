@@ -74,7 +74,7 @@ impl LocalStore {
         PersistenceStore::request_persistent();
         let mut ledger = StoreLedger::default();
         for (id, meta) in store.load_meta().await.unwrap_or_default() {
-            ledger.restore(DocumentId::from_bytes(id), meta);
+            ledger.restore(id, meta);
         }
         Self {
             inner: Rc::new(Inner {
@@ -135,22 +135,19 @@ impl LocalStore {
     fn land(&self, id: DocumentId, write: PersistWrite) {
         let observed = self.inner.ledger.borrow_mut().observe(id, &write);
         for gone in &observed.evict {
-            self.inner.store.delete_snapshot(*gone.as_bytes());
+            self.inner.store.delete_snapshot(*gone);
         }
         if observed.record
             && let Some(meta) = self.inner.ledger.borrow().meta(id)
         {
-            self.inner.store.save_meta(*id.as_bytes(), &meta);
+            self.inner.store.save_meta(id, &meta);
         }
-        let key = *id.as_bytes();
         match write {
             PersistWrite::Snapshot(_) | PersistWrite::Delta(_) => {
                 self.write(id, write, Attempt::First);
             }
-            PersistWrite::Session { peer, nonce } => {
-                self.inner.store.save_session(key, peer, nonce)
-            }
-            PersistWrite::ForgetSession { peer } => self.inner.store.forget_session(key, peer),
+            PersistWrite::Session { peer, nonce } => self.inner.store.save_session(id, peer, nonce),
+            PersistWrite::ForgetSession { peer } => self.inner.store.forget_session(id, peer),
             // The relay holds every change: what the quota held back is a
             // copy it can serve again.
             PersistWrite::Sent => self.inner.held.borrow_mut().retain(|(held, _)| *held != id),
@@ -169,10 +166,9 @@ impl LocalStore {
         let this = self.clone();
         wasm_bindgen_futures::spawn_local(async move {
             let store = &this.inner.store;
-            let key = *document_id.as_bytes();
-            let snapshot = store.load_snapshot(key).await.ok().flatten();
-            let deltas = store.load_deltas(key).await.unwrap_or_default();
-            let sessions = store.load_sessions(key).await.unwrap_or_default();
+            let snapshot = store.load_snapshot(document_id).await.ok().flatten();
+            let deltas = store.load_deltas(document_id).await.unwrap_or_default();
+            let sessions = store.load_sessions(document_id).await.unwrap_or_default();
             let has_snapshot = snapshot.is_some();
             let rows: Vec<SealedRow> = snapshot
                 .into_iter()
@@ -224,7 +220,7 @@ impl LocalStore {
 
     /// Drop the document's copy from the store and from the ledger.
     fn forget(&self, id: DocumentId) {
-        self.inner.store.delete_snapshot(*id.as_bytes());
+        self.inner.store.delete_snapshot(id);
         self.inner.ledger.borrow_mut().forget(id);
     }
 
@@ -244,10 +240,9 @@ impl LocalStore {
 
     /// Write a snapshot or a delta, and meet its outcome once it lands.
     fn write(&self, id: DocumentId, write: PersistWrite, attempt: Attempt) {
-        let key = *id.as_bytes();
         let landed = match &write {
-            PersistWrite::Snapshot(bytes) => self.inner.store.save_snapshot(key, bytes),
-            PersistWrite::Delta(bytes) => self.inner.store.save_delta(key, bytes),
+            PersistWrite::Snapshot(bytes) => self.inner.store.save_snapshot(id, bytes),
+            PersistWrite::Delta(bytes) => self.inner.store.save_delta(id, bytes),
             _ => return,
         };
         let this = self.clone();
@@ -276,7 +271,7 @@ impl LocalStore {
         match decision {
             Refusal::Retry { evict } => {
                 for gone in &evict {
-                    self.inner.store.delete_snapshot(*gone.as_bytes());
+                    self.inner.store.delete_snapshot(*gone);
                 }
                 self.write(id, write, Attempt::Retry);
             }
@@ -397,13 +392,12 @@ mod tests {
                 sealed: b"sealed document".to_vec(),
             },
         );
-        let key = *doc.as_bytes();
         assert_eq!(
-            store.load_snapshot(key).await.unwrap().as_deref(),
+            store.load_snapshot(doc).await.unwrap().as_deref(),
             Some(b"sealed document".as_slice())
         );
         assert_eq!(
-            store.load_deltas(key).await.unwrap(),
+            store.load_deltas(doc).await.unwrap(),
             [b"sealed edit".to_vec()]
         );
 
@@ -449,8 +443,8 @@ mod tests {
             },
         );
         assert_eq!(restored(&logic_rx).await, (None, Vec::new()));
-        assert_eq!(store.load_snapshot(key).await.unwrap(), None);
-        assert!(store.load_deltas(key).await.unwrap().is_empty());
+        assert_eq!(store.load_snapshot(doc).await.unwrap(), None);
+        assert!(store.load_deltas(doc).await.unwrap().is_empty());
         drop(vault_tx);
     }
 }

@@ -21,7 +21,7 @@ use web_sys::{IdbDatabase, IdbOpenDbRequest, IdbTransactionMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ambre_core::SessionNonce;
+use ambre_core::{DocumentId, SessionNonce};
 use futures_channel::oneshot;
 
 use crate::store_ledger::Meta;
@@ -202,7 +202,7 @@ impl PersistenceStore {
     /// receiver says how it ended, so a quota refusal can be met (`RESID-017`).
     pub fn save_snapshot(
         &self,
-        document_id: [u8; 16],
+        document_id: DocumentId,
         snapshot: &[u8],
     ) -> oneshot::Receiver<Stored> {
         outcome(self.write_snapshot(document_id, snapshot))
@@ -212,8 +212,8 @@ impl PersistenceStore {
     ///
     /// The next [`save_snapshot`](Self::save_snapshot) folds it away. The
     /// receiver says how the write ended.
-    pub fn save_delta(&self, document_id: [u8; 16], delta: &[u8]) -> oneshot::Receiver<Stored> {
-        let hex = id_to_hex(&document_id);
+    pub fn save_delta(&self, document_id: DocumentId, delta: &[u8]) -> oneshot::Receiver<Stored> {
+        let hex = id_to_hex(document_id.as_bytes());
         let key = format!("{hex}:{}", unique_suffix());
         let txn = match self
             .db
@@ -237,8 +237,8 @@ impl PersistenceStore {
 
     /// Write the ledger's row for a document (fire-and-forget). A row lost
     /// here only counts the document less precisely after a reload.
-    pub fn save_meta(&self, document_id: [u8; 16], meta: &Meta) {
-        let hex = id_to_hex(&document_id);
+    pub fn save_meta(&self, document_id: DocumentId, meta: &Meta) {
+        let hex = id_to_hex(document_id.as_bytes());
         if let Err(e) = self
             .db
             .transaction_with_str_and_mode(STORE_META, IdbTransactionMode::Readwrite)
@@ -256,7 +256,7 @@ impl PersistenceStore {
 
     /// Load every ledger row, keyed by its document. Resolves to an empty
     /// list when the read failed; a row that does not decode is skipped.
-    pub fn load_meta(&self) -> oneshot::Receiver<Vec<([u8; 16], Meta)>> {
+    pub fn load_meta(&self) -> oneshot::Receiver<Vec<(DocumentId, Meta)>> {
         let (tx, rx) = answer();
         let Ok(txn) = self.db.transaction_with_str(STORE_META) else {
             tx.send(Vec::new());
@@ -287,7 +287,7 @@ impl PersistenceStore {
                     .iter()
                     .zip(rows.iter())
                     .filter_map(|(key, row)| {
-                        let id = hex_to_id(&key.as_string()?)?;
+                        let id = DocumentId::from_bytes(hex_to_id(&key.as_string()?)?);
                         let row = row.dyn_into::<Uint8Array>().ok()?.to_vec();
                         Some((id, Meta::decode(&row)?))
                     })
@@ -328,10 +328,10 @@ impl PersistenceStore {
     /// `None` when the transaction could not be opened or written to.
     fn write_snapshot(
         &self,
-        document_id: [u8; 16],
+        document_id: DocumentId,
         snapshot: &[u8],
     ) -> Option<web_sys::IdbTransaction> {
-        let key = id_to_hex(&document_id);
+        let key = id_to_hex(document_id.as_bytes());
         let stores = js_sys::Array::of2(
             &JsValue::from_str(STORE_SNAPSHOTS),
             &JsValue::from_str(STORE_DELTAS),
@@ -385,7 +385,7 @@ impl PersistenceStore {
     /// the file did not land instead of navigating to an empty document.
     pub fn save_snapshot_committed(
         &self,
-        document_id: [u8; 16],
+        document_id: DocumentId,
         snapshot: Vec<u8>,
     ) -> oneshot::Receiver<bool> {
         let (tx, rx) = answer();
@@ -422,9 +422,9 @@ impl PersistenceStore {
     ///
     /// Returns a one-shot receiver resolving to `Some(bytes)` if a snapshot
     /// exists, or `None` (no snapshot / read error). Awaited on the Main thread.
-    pub fn load_snapshot(&self, document_id: [u8; 16]) -> oneshot::Receiver<Option<Vec<u8>>> {
+    pub fn load_snapshot(&self, document_id: DocumentId) -> oneshot::Receiver<Option<Vec<u8>>> {
         let (tx, rx) = answer();
-        let key = id_to_hex(&document_id);
+        let key = id_to_hex(document_id.as_bytes());
 
         let txn = match self.db.transaction_with_str(STORE_SNAPSHOTS) {
             Ok(t) => t,
@@ -476,9 +476,9 @@ impl PersistenceStore {
     /// Load every delta written since a document's snapshot, in no set order.
     ///
     /// Resolves to an empty list when there is none or the read failed.
-    pub fn load_deltas(&self, document_id: [u8; 16]) -> oneshot::Receiver<Vec<Vec<u8>>> {
+    pub fn load_deltas(&self, document_id: DocumentId) -> oneshot::Receiver<Vec<Vec<u8>>> {
         let (tx, rx) = answer();
-        let key = id_to_hex(&document_id);
+        let key = id_to_hex(document_id.as_bytes());
         let request = self
             .db
             .transaction_with_str(STORE_DELTAS)
@@ -524,8 +524,8 @@ impl PersistenceStore {
     ///
     /// Written at the session identity, before any of its operations
     /// (`AUTHOR-028`). A lost row only loses that session's unsent tail.
-    pub fn save_session(&self, document_id: [u8; 16], peer: u64, nonce: SessionNonce) {
-        let hex = id_to_hex(&document_id);
+    pub fn save_session(&self, document_id: DocumentId, peer: u64, nonce: SessionNonce) {
+        let hex = id_to_hex(document_id.as_bytes());
         let Some(store) = self.sessions_store(&hex) else {
             return;
         };
@@ -540,8 +540,8 @@ impl PersistenceStore {
     }
 
     /// Drop one session the relay already holds whole (fire-and-forget).
-    pub fn forget_session(&self, document_id: [u8; 16], peer: u64) {
-        let hex = id_to_hex(&document_id);
+    pub fn forget_session(&self, document_id: DocumentId, peer: u64) {
+        let hex = id_to_hex(document_id.as_bytes());
         let Some(store) = self.sessions_store(&hex) else {
             return;
         };
@@ -571,10 +571,10 @@ impl PersistenceStore {
     /// of the wrong length is skipped.
     pub fn load_sessions(
         &self,
-        document_id: [u8; 16],
+        document_id: DocumentId,
     ) -> oneshot::Receiver<Vec<(u64, SessionNonce)>> {
         let (tx, rx) = answer();
-        let key = id_to_hex(&document_id);
+        let key = id_to_hex(document_id.as_bytes());
         let request = self
             .db
             .transaction_with_str(STORE_SESSIONS)
@@ -711,8 +711,8 @@ impl PersistenceStore {
 
     /// Remove a document's snapshot, its deltas, its sessions and its ledger
     /// row: the copy leaves the store, and a reopen fetches it (`RESID-012`).
-    pub fn delete_snapshot(&self, document_id: [u8; 16]) {
-        let key = id_to_hex(&document_id);
+    pub fn delete_snapshot(&self, document_id: DocumentId) {
+        let key = id_to_hex(document_id.as_bytes());
         let stores = js_sys::Array::of4(
             &JsValue::from_str(STORE_SNAPSHOTS),
             &JsValue::from_str(STORE_DELTAS),
@@ -999,7 +999,7 @@ mod wasm_tests {
     /// Recreate the pre-TOFU (v1) database shape: version 1 with ONLY the
     /// `snapshots` store, holding one snapshot row. This is the state every
     /// existing user's browser is in before this upgrade ships.
-    async fn seed_v1_with_snapshot(name: &str, doc_id: [u8; 16], bytes: &[u8]) {
+    async fn seed_v1_with_snapshot(name: &str, doc_id: DocumentId, bytes: &[u8]) {
         let (tx, rx) = answer::<()>();
         let req = factory().open_with_u32(name, 1).expect("open v1");
 
@@ -1012,7 +1012,7 @@ mod wasm_tests {
         req.set_onupgradeneeded(Some(upgrade.as_ref().unchecked_ref()));
         upgrade.forget();
 
-        let key = id_to_hex(&doc_id);
+        let key = id_to_hex(doc_id.as_bytes());
         let payload = bytes.to_vec();
         let tx2 = tx.clone();
         let success = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
@@ -1085,7 +1085,7 @@ mod wasm_tests {
         let name = "ambre-test-migration-v1-v2";
         delete_db(name).await;
 
-        let doc = [3u8; 16];
+        let doc = DocumentId::from_bytes([3; 16]);
         let snapshot = vec![1u8, 2, 3, 4, 5];
         seed_v1_with_snapshot(name, doc, &snapshot).await;
 
@@ -1114,8 +1114,8 @@ mod wasm_tests {
             .await
             .expect("channel")
             .expect("store opens");
-        let doc = [5u8; 16];
-        let other = [6u8; 16];
+        let doc = DocumentId::from_bytes([5; 16]);
+        let other = DocumentId::from_bytes([6; 16]);
         assert!(store.load_deltas(doc).await.unwrap().is_empty());
 
         store.save_delta(doc, &[1]);
@@ -1153,8 +1153,8 @@ mod wasm_tests {
             .await
             .expect("channel")
             .expect("store opens");
-        let doc = [8u8; 16];
-        let hex = id_to_hex(&doc);
+        let doc = DocumentId::from_bytes([8; 16]);
+        let hex = id_to_hex(doc.as_bytes());
         let (mine, theirs) = (format!("{hex}:a"), "z/b".to_owned());
         assert_eq!(store.save_snapshot(doc, &[1]).await, Ok(Stored::Done));
         store.save_delta(doc, &[2]);
@@ -1197,18 +1197,20 @@ mod wasm_tests {
             .await
             .expect("channel")
             .expect("store opens");
-        let (doc, other) = ([9u8; 16], [10u8; 16]);
+        let (doc, other) = (
+            DocumentId::from_bytes([9; 16]),
+            DocumentId::from_bytes([10; 16]),
+        );
         let mut ledger = StoreLedger::default();
-        let id = ambre_bus::DocumentId::from_bytes(doc);
-        ledger.observe(id, &crate::PersistWrite::Shown);
-        ledger.observe(id, &crate::PersistWrite::Snapshot(vec![1; 40]));
-        let meta = ledger.meta(id).expect("held");
+        ledger.observe(doc, &crate::PersistWrite::Shown);
+        ledger.observe(doc, &crate::PersistWrite::Snapshot(vec![1; 40]));
+        let meta = ledger.meta(doc).expect("held");
         store.save_meta(doc, &meta);
         store.save_meta(other, &meta);
         let rows = store.load_meta().await.unwrap();
         assert_eq!(rows, vec![(doc, meta), (other, meta)]);
         store.delete_snapshot(doc);
-        let rows: Vec<([u8; 16], Meta)> = store.load_meta().await.unwrap();
+        let rows: Vec<(DocumentId, Meta)> = store.load_meta().await.unwrap();
         assert_eq!(rows, vec![(other, meta)]);
     }
 
@@ -1222,8 +1224,8 @@ mod wasm_tests {
             .await
             .expect("channel")
             .expect("store opens");
-        let doc = [7u8; 16];
-        let other = [8u8; 16];
+        let doc = DocumentId::from_bytes([7; 16]);
+        let other = DocumentId::from_bytes([8; 16]);
         let (one, two) = (SessionNonce([1; 16]), SessionNonce([2; 16]));
 
         store.save_session(doc, 11, one);
@@ -1245,7 +1247,7 @@ mod wasm_tests {
     async fn upgrade_v1_to_current_adds_deltas_and_sessions() {
         let name = "ambre-test-migration-deltas";
         delete_db(name).await;
-        let doc = [8u8; 16];
+        let doc = DocumentId::from_bytes([8; 16]);
         seed_v1_with_snapshot(name, doc, &[1, 2]).await;
         let store = PersistenceStore::open_named(name)
             .await
