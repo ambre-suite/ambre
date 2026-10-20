@@ -159,7 +159,9 @@ def scratch(tmp: str) -> Path:
             "    pub fn pan_by_screen(&mut self, step: ScrollStep) {\n        self.center += step.x();\n    }\n",
             "    fn accumulate(&mut self, step: ScrollStep) {\n        self.accum_y += step.y();\n    }\n"
             "    fn apply(&mut self, grid: &mut G) {\n        grid.scroll_by(1, 0);\n    }\n",
+            "    pub fn scroll_by(&mut self, step: ScrollStep) {\n        let moved = self.scroll_y - step.y();\n    }\n",
         ),
+        strict=True,
     ):
         write(root, rel, f"impl V {{\n{setter}}}\n")
     for rel, holder in cb.SIGNAL_HOLDERS.items():
