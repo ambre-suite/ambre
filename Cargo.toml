@@ -260,9 +260,9 @@ jsonwebtoken      = "9"
 # Import/export
 docx-rs = "0.4"
 # default-features off: consumers (ambre-pdf) opt into only the vector/glyph
-# core, keeping the lazy-loaded PDF chunk small on wasm (no raster-images,
+# core, keeping the PDF code Main carries small on wasm (no raster-images,
 # simple-text, or rayon unless explicitly enabled).
-krilla = { version = "0.7", default-features = false }
+krilla = { version = "0.8", default-features = false }
 html5ever = "0.39"
 pulldown-cmark = { version = "0.13", default-features = false }
 

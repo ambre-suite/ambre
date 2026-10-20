@@ -30,7 +30,7 @@ BUDGET = 2_000_000
 # Today's figures, rounded up to the next 10 KB. Lowered by any change that
 # shrinks a download, and never raised to fit one that grows it.
 CEILINGS = {
-    "Main": 3_100_000,
+    "Main": 3_070_000,
     "Sync": 340_000,
 }
 
