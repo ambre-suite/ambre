@@ -56,8 +56,10 @@ pub fn batch_key(
     document_id: &ambre_core::DocumentId,
     first: i64,
     last: i64,
-) -> String {
-    format!("{env_prefix}/documents/{document_id}/batches/{first:010}-{last:010}")
+) -> ambre_core::ObjectKey {
+    ambre_core::ObjectKey(format!(
+        "{env_prefix}/documents/{document_id}/batches/{first:010}-{last:010}"
+    ))
 }
 
 /// Encodes a batch: each delta's number and its sealed envelope, unchanged
@@ -156,7 +158,7 @@ pub async fn trim(state: &AppState) -> Result<u64, AppError> {
             .send()
             .await
         {
-            tracing::warn!(key, error = %e, "trimmed batch delete failed");
+            tracing::warn!(key = %key, error = %e, "trimmed batch delete failed");
         }
     }
     Ok(trim.rows)
@@ -165,7 +167,7 @@ pub async fn trim(state: &AppState) -> Result<u64, AppError> {
 /// The batch objects one replay has fetched, each fetched once (`SRV-155`).
 #[derive(Default)]
 pub struct BatchCache {
-    held: HashMap<String, BTreeMap<i64, Payload>>,
+    held: HashMap<ambre_core::ObjectKey, BTreeMap<i64, Payload>>,
 }
 
 impl BatchCache {
@@ -173,9 +175,9 @@ impl BatchCache {
     /// not hold. A batch that fails to load stays out, and its deltas read as
     /// missing.
     pub async fn load(&mut self, state: &AppState, rows: &[crate::db::UpdateRow]) {
-        let mut wanted: Vec<&str> = rows
+        let mut wanted: Vec<&ambre_core::ObjectKey> = rows
             .iter()
-            .filter_map(|r| r.batch_key.as_deref())
+            .filter_map(|r| r.batch_key.as_ref())
             .filter(|k| !self.held.contains_key(*k))
             .collect();
         wanted.sort_unstable();
@@ -187,18 +189,18 @@ impl BatchCache {
         for (key, got) in futures_util::future::join_all(fetches).await {
             match got.map(|bytes| bytes.map(|b| decode_batch(&b))) {
                 Ok(Some(Ok(frames))) => {
-                    self.held.insert(key.to_owned(), frames);
+                    self.held.insert(key.clone(), frames);
                 }
                 Ok(Some(Err(e))) | Err(e) => {
-                    tracing::error!(key, error = %e, "replay: batch read failed")
+                    tracing::error!(key = %key, error = %e, "replay: batch read failed")
                 }
-                Ok(None) => tracing::error!(key, "replay: batch object missing"),
+                Ok(None) => tracing::error!(key = %key, "replay: batch object missing"),
             }
         }
     }
 
     /// The frame of delta `seq` in batch `key`, when the batch is held.
-    pub fn frame(&self, key: &str, seq: i64) -> Option<Payload> {
+    pub fn frame(&self, key: &ambre_core::ObjectKey, seq: i64) -> Option<Payload> {
         self.held.get(key)?.get(&seq).cloned()
     }
 
@@ -299,11 +301,17 @@ mod db_tests {
         state: &AppState,
         doc: &ambre_core::DocumentId,
     ) -> Vec<(i64, bool, Option<String>)> {
-        crate::db::get_updates_after(&state.db, doc, 0, 1000)
+        crate::db::get_updates_after(&state.db, doc, ambre_core::Seq(0), 1000)
             .await
             .unwrap()
             .into_iter()
-            .map(|r| (r.seq, r.wire.is_some(), r.batch_key))
+            .map(|r| {
+                (
+                    r.seq.to_i64_saturating(),
+                    r.wire.is_some(),
+                    r.batch_key.map(|k| k.0),
+                )
+            })
             .collect()
     }
 
@@ -363,11 +371,12 @@ mod db_tests {
                 .all(|(_, w, b)| !w && b.as_deref() == Some(key.as_str()))
         );
         assert!(rows.iter().skip(136).all(|(_, w, b)| *w && b.is_none()));
-        let held: BTreeMap<i64, Vec<u8>> = decode_batch(&Payload::new(stub.object(&key).unwrap()))
-            .unwrap()
-            .into_iter()
-            .map(|(s, f)| (s, f.expose_bytes().to_vec()))
-            .collect();
+        let held: BTreeMap<i64, Vec<u8>> =
+            decode_batch(&Payload::new(stub.object(key.as_str()).unwrap()))
+                .unwrap()
+                .into_iter()
+                .map(|(s, f)| (s, f.expose_bytes().to_vec()))
+                .collect();
         let expected: BTreeMap<i64, Vec<u8>> = (1..=136).map(|s| (s, frame(s))).collect();
         assert_eq!(
             held, expected,
@@ -428,17 +437,29 @@ mod db_tests {
         move_to_batch(&state, &doc, Some(0)).await.unwrap();
         let older = batch_key(&state.config.s3_env_prefix, &doc, 1, 5);
         let newer = batch_key(&state.config.s3_env_prefix, &doc, 6, 10);
-        assert_eq!(stub.keys(), [older.clone(), newer.clone()]);
+        assert_eq!(stub.keys(), [older.0.clone(), newer.0.clone()]);
 
         let clocks = serde_json::json!({});
-        let snap =
-            crate::db::create_snapshot(&state.db, &doc, &[5u8; 32], None, None, &clocks, "snap", 7)
-                .await
-                .unwrap();
+        let snap = crate::db::create_snapshot(
+            &state.db,
+            &doc,
+            &[5u8; 32],
+            None,
+            None,
+            &clocks,
+            &ambre_core::ObjectKey::from("snap"),
+            ambre_core::Seq(7),
+        )
+        .await
+        .unwrap();
         crate::db::confirm_snapshot(&state.db, &doc, &snap, &[9u8; 32])
             .await
             .unwrap();
         assert_eq!(trim(&state).await.unwrap(), 7);
-        assert_eq!(stub.keys(), [newer], "the batch still naming 8 to 10 stays");
+        assert_eq!(
+            stub.keys(),
+            [newer.0],
+            "the batch still naming 8 to 10 stays"
+        );
     }
 }

@@ -85,7 +85,7 @@ pub async fn make_sweeps_due(pool: &PgPool) {
 pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId {
     let user = db::create_user(
         pool,
-        email,
+        &ambre_core::Email::from(email),
         "Test User",
         &[1u8; 32],
         &[2u8; 16],

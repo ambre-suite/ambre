@@ -720,13 +720,13 @@ impl LogicState {
             );
             return;
         }
-        self.apply_remote(document_id, Order::Update(Seq(delta.seq)), &delta.payload);
+        self.apply_remote(document_id, Order::Update(delta.seq), &delta.payload);
         self.track_waiting(document_id, &[(delta.seq, delta.payload.as_slice())]);
     }
 
     /// Note what the deltas just applied wait on, and drop what the document
     /// now holds. A document left waiting for good is reported (`AUTHOR-025`).
-    pub(crate) fn track_waiting(&mut self, document_id: DocumentId, applied: &[(u64, &[u8])]) {
+    pub(crate) fn track_waiting(&mut self, document_id: DocumentId, applied: &[(Seq, &[u8])]) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
@@ -761,7 +761,7 @@ impl LogicState {
     /// Note the relay's number of a delta, and what it carries when it was
     /// accepted. A snapshot check reads which deltas a horizon covers from
     /// it (`AUTHOR-016`).
-    fn record_seq(&mut self, document_id: DocumentId, seq: u64, payload: Option<&Vec<u8>>) {
+    fn record_seq(&mut self, document_id: DocumentId, seq: Seq, payload: Option<&Vec<u8>>) {
         if let Some(doc) = self.docs.get_mut(&document_id) {
             doc.ledger.record(seq, payload.map(Vec::as_slice));
             if let Some(payload) = payload {
@@ -779,7 +779,7 @@ impl LogicState {
         {
             return;
         }
-        let accepted: Vec<(u64, Vec<u8>)> = deltas
+        let accepted: Vec<(Seq, Vec<u8>)> = deltas
             .into_iter()
             .filter_map(|delta| {
                 let accepted = authored_by(&delta.payload, delta.peer);
@@ -999,7 +999,7 @@ impl LogicState {
     pub(crate) fn export_covered_snapshot(
         &self,
         document_id: DocumentId,
-    ) -> Option<(Vec<u8>, u64)> {
+    ) -> Option<(Vec<u8>, Seq)> {
         let doc = self.docs.get(&document_id)?;
         Some((doc.state.export_snapshot(), doc.ledger.contiguous_end()))
     }
@@ -1025,8 +1025,8 @@ impl LogicState {
 
     /// Import a snapshot whose contents are trusted, and count the deltas a
     /// later snapshot must hold from its horizon on (`AUTHOR-015`).
-    pub(crate) fn adopt_snapshot(&mut self, document_id: DocumentId, payload: &[u8], covered: u64) {
-        self.apply_remote(document_id, Order::Snapshot(Seq(covered)), payload);
+    pub(crate) fn adopt_snapshot(&mut self, document_id: DocumentId, payload: &[u8], covered: Seq) {
+        self.apply_remote(document_id, Order::Snapshot(covered), payload);
         if let Some(doc) = self.docs.get_mut(&document_id) {
             let base = doc.state.crdt().oplog_vv();
             doc.ledger.reset(covered, base);
@@ -1045,7 +1045,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         snapshot_id: SnapshotId,
-        covered: u64,
+        covered: Seq,
         payload: &[u8],
         purpose: SnapshotPurpose,
     ) {

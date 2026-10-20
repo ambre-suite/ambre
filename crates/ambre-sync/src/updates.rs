@@ -261,7 +261,7 @@ impl SyncState {
                 self.send_to_logic(LogicEvent::PendingSnapshot {
                     document_id,
                     snapshot_id,
-                    covered_seq: covered_seq.0,
+                    covered_seq,
                     payload,
                     purpose: SnapshotPurpose::Confirm,
                 });
@@ -313,7 +313,7 @@ impl SyncState {
                     self.send_to_logic(LogicEvent::RemoteSnapshot {
                         document_id,
                         payload,
-                        covered_seq: check.covered_seq.0,
+                        covered_seq: check.covered_seq,
                     });
                 }
                 // The open waited on this verdict (`check_held_snapshot`).
@@ -407,7 +407,7 @@ impl SyncState {
                 self.send_to_logic(LogicEvent::PendingSnapshot {
                     document_id,
                     snapshot_id: held.snapshot_id,
-                    covered_seq: held.covered_seq.0,
+                    covered_seq: held.covered_seq,
                     payload,
                     purpose: SnapshotPurpose::Open,
                 });
@@ -503,7 +503,7 @@ impl SyncState {
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self
                 .author_pub_key()
-                .map(|key| hex::encode(key.as_array()))
+                .map(|key| ambre_core::SigningKeyHex::encode(key.as_array()))
                 .unwrap_or_default();
             wasm_bindgen_futures::spawn_local(async move {
                 let members_url =
@@ -617,7 +617,7 @@ impl SyncState {
                             let (start_id, start_covered) = match (others, &meta.reference) {
                                 (false, _) => (Some(meta.snapshot_id), meta.covered_seq),
                                 (true, Some(r)) => (Some(r.snapshot_id), r.covered_seq),
-                                (true, None) => (None, 0),
+                                (true, None) => (None, Seq::ZERO),
                             };
                             if others {
                                 let blob = http::download_snapshot(
@@ -630,16 +630,15 @@ impl SyncState {
                                 .await;
                                 held_snapshot = blob.map(|blob| HeldSnapshot {
                                     snapshot_id: meta.snapshot_id,
-                                    covered_seq: Seq(u64::try_from(meta.covered_seq).unwrap_or(0)),
+                                    covered_seq: meta.covered_seq,
                                     blob,
                                 });
                             }
                             // The local copy already folds in the relay's
                             // snapshot: no download, and the replay starts
                             // after the copy's horizon (`RESID-010`).
-                            let resumed = resume.filter(|horizon| {
-                                light::resumes(*horizon, u64::try_from(start_covered).unwrap_or(0))
-                            });
+                            let resumed =
+                                resume.filter(|horizon| light::resumes(*horizon, start_covered));
                             let payload = match (start_id, resumed) {
                                 (Some(id), None) => {
                                     http::download_snapshot(url_scheme, &api_base, doc_id, id, auth)
@@ -653,10 +652,8 @@ impl SyncState {
                             // history that was never applied (data loss).
                             match (payload, resumed) {
                                 (Some(payload), _) => (Some(payload), snap_id, start_covered),
-                                (None, Some(horizon)) => {
-                                    (None, snap_id, i64::try_from(horizon.0).unwrap_or(i64::MAX))
-                                }
-                                (None, None) => (None, None, 0),
+                                (None, Some(horizon)) => (None, snap_id, horizon),
+                                (None, None) => (None, None, Seq::ZERO),
                             }
                         }
                         // No snapshot yet, or a transient error: fall back to the
@@ -664,15 +661,13 @@ impl SyncState {
                         // With no snapshot on the relay, a local copy still
                         // spares the replay of what it holds (`RESID-010`).
                         Ok(None) => match resume {
-                            Some(horizon) => {
-                                (None, None, i64::try_from(horizon.0).unwrap_or(i64::MAX))
-                            }
-                            None => (None, None, 0),
+                            Some(horizon) => (None, None, horizon),
+                            None => (None, None, Seq::ZERO),
                         },
-                        Err(_) => (None, None, 0),
+                        Err(_) => (None, None, Seq::ZERO),
                     }
                 } else {
-                    (None, None, 0)
+                    (None, None, Seq::ZERO)
                 };
                 // Register the downloaded snapshot's real id as the known parent so
                 // post-snapshot deltas are not quarantined. Without a download, fall
@@ -686,7 +681,7 @@ impl SyncState {
                     doc_key,
                     snapshot_payload,
                     snapshot_id,
-                    covered_seq: Seq(covered_seq as u64),
+                    covered_seq,
                     held_snapshot,
                     doc_type,
                     server_created,
@@ -741,9 +736,9 @@ impl SyncState {
             exchange_key,
             members.iter().map(|m| {
                 (
-                    m.exchange_pub_key.as_str(),
+                    &m.exchange_pub_key,
                     m.doc_key_enc.as_str(),
-                    m.wrapper_exchange_pub_key.as_str(),
+                    &m.wrapper_exchange_pub_key,
                 )
             }),
         )
@@ -778,9 +773,7 @@ impl SyncState {
         let role =
             crate::sharing::own_role(resp.members.iter().map(|m| (m.user_id, m.role)), my_user_id);
         let signing_keys = crate::sharing::presence_directory(
-            resp.members
-                .iter()
-                .map(|m| (m.user_id, m.signing_pub_key.as_str())),
+            resp.members.iter().map(|m| (m.user_id, &m.signing_pub_key)),
         );
         Ok(OpenedMembers {
             doc_key,
@@ -1457,7 +1450,7 @@ impl SyncState {
     ) -> Result<SnapshotUpload, String> {
         let signing_key = self.signing_key.as_ref().ok_or("session keys not ready")?;
         let pub_key = self.author_pub_key().ok_or("session keys not ready")?;
-        let author_pubkey = hex::encode(pub_key.as_array());
+        let author_pubkey = ambre_core::SigningKeyHex::encode(pub_key.as_array());
         let doc_state = self
             .documents
             .get(&document_id)
@@ -1483,7 +1476,7 @@ impl SyncState {
         Ok(SnapshotUpload {
             document_id,
             author_pubkey,
-            covered_seq: i64::try_from(covered_seq.0).unwrap_or(i64::MAX),
+            covered_seq,
             blob,
         })
     }
@@ -1559,9 +1552,9 @@ pub(crate) struct SnapshotUpload {
     /// The document it compacts.
     pub document_id: DocumentId,
     /// Its author's signing key, in hex.
-    pub author_pubkey: String,
+    pub author_pubkey: ambre_core::SigningKeyHex,
     /// The last delta it covers.
-    pub covered_seq: i64,
+    pub covered_seq: Seq,
     /// The sealed blob.
     pub blob: pipeline::SealedBlob,
 }
@@ -1700,12 +1693,12 @@ mod tests {
         let wrapper_pub = x25519_dalek::PublicKey::from(wrapper).to_bytes();
         http::MemberEntry {
             user_id: uid,
-            signing_pub_key: hex::encode([uid.as_bytes()[0]; 32]),
-            exchange_pub_key: hex::encode(holder_pub),
+            signing_pub_key: ambre_core::SigningKeyHex::encode([uid.as_bytes()[0]; 32]),
+            exchange_pub_key: ambre_core::ExchangeKeyHex::encode(holder_pub),
             doc_key_enc: crate::sharing::wrap_anchored_b64(wrapper, &holder_pub, doc_key, None)
                 .unwrap(),
             role,
-            wrapper_exchange_pub_key: hex::encode(wrapper_pub),
+            wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex::encode(wrapper_pub),
         }
     }
 
@@ -2030,7 +2023,7 @@ mod tests {
             })
             .collect();
         let expected = SignedDelta {
-            seq: 1,
+            seq: ambre_bus::Seq(1),
             payload: b"hello".to_vec(),
             nonce: TEST_NONCE,
             peer: ambre_crypto::peer::derive_peer_id(&signer, &TEST_NONCE),
@@ -2672,7 +2665,7 @@ mod tests {
         assert!(
             after_replay.iter().any(|e| matches!(
                 e,
-                LogicEvent::PendingSnapshot { payload, covered_seq: 9, purpose: SnapshotPurpose::Open, .. }
+                LogicEvent::PendingSnapshot { payload, covered_seq: ambre_bus::Seq(9), purpose: SnapshotPurpose::Open, .. }
                     if payload == b"latest"
             )),
             "the held snapshot is checked after the replay: {after_replay:?}"
@@ -2874,7 +2867,7 @@ mod tests {
             state.check_held_snapshot(doc);
             assert!(matches!(
                 &drain(&rx)[..],
-                [LogicEvent::PendingSnapshot { payload, covered_seq: 7, purpose: SnapshotPurpose::Open, .. }]
+                [LogicEvent::PendingSnapshot { payload, covered_seq: ambre_bus::Seq(7), purpose: SnapshotPurpose::Open, .. }]
                     if payload == b"base"
             ));
 
@@ -2896,7 +2889,7 @@ mod tests {
                 assert!(matches!(
                     &events[..],
                     [
-                        LogicEvent::RemoteSnapshot { payload, covered_seq: 7, .. },
+                        LogicEvent::RemoteSnapshot { payload, covered_seq: ambre_bus::Seq(7), .. },
                         LogicEvent::DocumentReady { .. },
                     ] if payload == b"base"
                 ));
@@ -2998,8 +2991,8 @@ mod tests {
             };
             SnapshotUpload {
                 document_id: doc,
-                author_pubkey: hex::encode(sk.verifying_key().to_bytes()),
-                covered_seq: 3,
+                author_pubkey: ambre_core::SigningKeyHex::encode(sk.verifying_key().to_bytes()),
+                covered_seq: ambre_bus::Seq(3),
                 blob: pipeline::snapshot_blob(b"base", public_data, &key, &sk).unwrap(),
             }
         };
@@ -3280,7 +3273,13 @@ mod tests {
         state.set_mock_ws(ws_tx);
         let (channel, segment) = (ChannelId::new(), ambre_bus::SegmentId::from_document(doc));
         let finalize = |state: &SyncState| {
-            state.handle_finalize_segment(channel, segment, ambre_bus::LeaseId::new(), 3, b"s");
+            state.handle_finalize_segment(
+                channel,
+                segment,
+                ambre_bus::LeaseId::new(),
+                ambre_bus::Seq(3),
+                b"s",
+            );
         };
         let withdrawn = |events: &[LogicEvent]| -> Vec<bool> {
             events
@@ -3605,7 +3604,7 @@ mod tests {
         let unwrapped = |wrapper: &x25519_dalek::StaticSecret, named: Option<String>| {
             let mut row = member_row(me, &my_xk, wrapper, &doc_key, ambre_core::Role::Editor);
             if let Some(named) = named {
-                row.wrapper_exchange_pub_key = named;
+                row.wrapper_exchange_pub_key = ambre_core::ExchangeKeyHex(named);
             }
             SyncState::unwrap_document_key(&my_xk, &[row]).map(|key| key.id())
         };

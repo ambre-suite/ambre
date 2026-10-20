@@ -726,9 +726,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
                                 .is_some_and(landing::SignInMode::is_dev)
                                 && !raw.contains('@')
                             {
-                                format!("{raw}@dev.local")
+                                ambre_bus::Email(format!("{raw}@dev.local"))
                             } else {
-                                raw.to_owned()
+                                ambre_bus::Email::from(raw)
                             };
                             // TOFU phase 1 (`ambre-spec-key-verification.md`): fetch the
                             // invitee's key + fingerprint without wrapping. The role

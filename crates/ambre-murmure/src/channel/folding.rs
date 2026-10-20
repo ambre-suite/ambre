@@ -11,7 +11,7 @@
 //! The engine reads no clock: each delay is stamped by the next tick.
 
 use ambre_bus::{FoldAnswer, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
-use ambre_core::{ChannelId, DocumentId, LeaseId, SegmentId};
+use ambre_core::{ChannelId, DocumentId, LeaseId, SegmentId, Seq};
 use loro::{Container, ExportMode, LoroDoc, UpdateOptions, ValueOrContainer, VersionVector};
 
 use super::amending::{entry_content, folded_amendments, segment_entry};
@@ -59,9 +59,9 @@ enum Step {
 #[derive(Debug, Clone, Copy)]
 struct Grant {
     lease: LeaseId,
-    horizon: u64,
+    horizon: Seq,
     amendments: DocumentId,
-    amendments_seq: u64,
+    amendments_seq: Seq,
     expires_in: u64,
 }
 
@@ -73,11 +73,11 @@ pub struct FoldSnapshot {
     /// The lease the commit names.
     pub lease: LeaseId,
     /// The last delta of the segment it covers, the one the relay returned.
-    pub horizon: u64,
+    pub horizon: Seq,
     /// The amendments document it folds in.
     pub amendments: DocumentId,
     /// The last delta number of those amendments it holds.
-    pub amendments_seq: u64,
+    pub amendments_seq: Seq,
     /// The shallow snapshot, framed as every channel snapshot is.
     pub payload: Vec<u8>,
 }
@@ -231,7 +231,7 @@ impl ChannelState {
             self.fold_failed(segment);
             return Ok(None);
         }
-        let reached = self.delivered(grant.amendments).0;
+        let reached = self.delivered(grant.amendments);
         if reached < grant.amendments_seq || now >= until {
             return Ok(None);
         }
@@ -260,7 +260,7 @@ impl ChannelState {
         &self,
         segment: SegmentId,
         amendments: DocumentId,
-        reached: u64,
+        reached: Seq,
     ) -> Result<LoroDoc, MurmureError> {
         let document_id = segment.document_id();
         let doc = self
@@ -311,11 +311,11 @@ impl ChannelState {
         document_id: DocumentId,
         theirs: &LoroDoc,
         amendments: DocumentId,
-        seq: u64,
+        seq: Seq,
     ) -> SnapshotVerdict {
         let segment = SegmentId::from_document(document_id);
         let held = self.amendments.get(&segment).map(|held| held.id);
-        if held != Some(amendments) || self.delivered(amendments).0 != seq {
+        if held != Some(amendments) || self.delivered(amendments) != seq {
             return SnapshotVerdict::Unchecked;
         }
         match self.folded(segment, amendments, seq) {
@@ -396,7 +396,7 @@ impl ChannelState {
             let Some(read) = self.read_segment(segment) else {
                 continue;
             };
-            let reached = self.delivered(amendments).0;
+            let reached = self.delivered(amendments);
             let relayed = self.relayed_amendments(segment, amendments)?;
             if let Some(doc) = self.doc(segment.document_id()) {
                 fold_into(doc, &relayed, self.channel_id, amendments, reached)?;
@@ -432,7 +432,7 @@ impl ChannelState {
         let doc = self
             .doc(segment.document_id())
             .ok_or(MurmureError::NotHeld(segment.document_id()))?;
-        let reached = self.delivered(amendments.id).0;
+        let reached = self.delivered(amendments.id);
         fold_into(
             doc,
             &amendments.doc,
@@ -456,10 +456,13 @@ fn unsequenced(segment: SegmentId, folded: &[MessageView], read: Vec<MessageView
 
 /// The amendments document and the number a snapshot header names, `None`
 /// for a snapshot that folds nothing.
-pub(crate) fn header_fold(doc: &LoroDoc) -> Option<(DocumentId, u64)> {
+pub(crate) fn header_fold(doc: &LoroDoc) -> Option<(DocumentId, Seq)> {
     let header = doc.get_map(HEADER);
     let amendments = DocumentId::parse_str(&schema::string(&header, HEADER_FOLDED)?).ok()?;
-    Some((amendments, schema::unsigned(&header, HEADER_FOLDED_SEQ)?))
+    Some((
+        amendments,
+        Seq(schema::unsigned(&header, HEADER_FOLDED_SEQ)?),
+    ))
 }
 
 /// Fold `amendments` into the messages of `segment`, as a reader reads them
@@ -478,7 +481,7 @@ fn fold_into(
     amendments: &LoroDoc,
     channel: ChannelId,
     amendments_id: DocumentId,
-    reached: u64,
+    reached: Seq,
 ) -> Result<(), MurmureError> {
     let root = amendments.get_map(AMENDMENTS);
     let threads = amendments.get_map(AMENDMENT_THREADS);
@@ -530,7 +533,7 @@ fn fold_into(
     header.insert(HEADER_FOLDED, amendments_id.to_string())?;
     header.insert(
         HEADER_FOLDED_SEQ,
-        i64::try_from(reached).unwrap_or(i64::MAX),
+        i64::try_from(reached.0).unwrap_or(i64::MAX),
     )?;
     Ok(())
 }

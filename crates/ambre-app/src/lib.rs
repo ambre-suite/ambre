@@ -1534,7 +1534,7 @@ pub fn main() {
                         },
                         user_id: *user_id,
                         display_name: display_name.clone(),
-                        exchange_pub_key: *exchange_pub_key,
+                        exchange_pub_key: exchange_pub_key.clone(),
                         fingerprint: fingerprint.clone(),
                         changed: false,
                     };
@@ -1565,7 +1565,7 @@ pub fn main() {
                         purpose,
                         user_id: *user_id,
                         display_name,
-                        exchange_pub_key: *exchange_pub_key,
+                        exchange_pub_key: exchange_pub_key.clone(),
                         fingerprint: fingerprint.clone(),
                         changed: false,
                     });

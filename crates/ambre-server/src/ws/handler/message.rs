@@ -434,7 +434,8 @@ pub(crate) async fn handle_update(
             }
         };
 
-    let s3_key = crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, seq);
+    let s3_key =
+        crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, ambre_core::Seq(seq));
 
     // Serialize the full sealed Update up front: it is both what we dead-letter on
     // an index-write failure and what we persist for verbatim replay below.
@@ -562,7 +563,7 @@ async fn store_index_row(
     doc_id: DocumentId,
     update: &ambre_protocol::Update,
     seq: u64,
-    s3_key: &str,
+    s3_key: &ambre_core::ObjectKey,
     wire: &Payload,
 ) -> Result<bool, AppError> {
     let author = update.public_data.pub_key.as_array();
@@ -717,7 +718,7 @@ pub(crate) async fn handle_request_missing(
     // declares itself hydrated, never re-requesting the tail. Paging replays the
     // full history in order across several messages instead.
     const PAGE_SIZE: i64 = 1000;
-    let mut cursor = after_seq.0 as i64;
+    let mut cursor = after_seq;
     let mut first_page = true;
     let mut batches = crate::hot_tail::BatchCache::default();
     loop {
@@ -731,7 +732,7 @@ pub(crate) async fn handle_request_missing(
                 tracing::error!(error = %e, "failed to get updates after seq");
                 let msg = Payload::server_msg(&WsServerMsg::ReplayStopped {
                     document_id,
-                    after_seq: ambre_protocol::messages::Seq(cursor as u64),
+                    after_seq: cursor,
                 });
                 let _ = outbound_tx.send(msg).await;
                 return;
@@ -777,11 +778,11 @@ pub(crate) async fn handle_request_missing(
         let pending = &pending;
         let held = &batches;
         let fetches = updates.into_iter().map(|row| {
-            let seq = row.seq as u64;
+            let seq = row.seq.0;
             async move {
                 let wire = match (row.wire, row.batch_key, row.s3_key) {
                     (Some(wire), _, _) => Some(wire),
-                    (None, Some(key), _) => held.frame(&key, row.seq),
+                    (None, Some(key), _) => held.frame(&key, row.seq.to_i64_saturating()),
                     (None, None, Some(key)) => {
                         match crate::s3::fetch_object(&state.s3, &state.s3_bucket, &key).await {
                             Ok(Some(bytes)) => Some(bytes),
@@ -820,9 +821,7 @@ pub(crate) async fn handle_request_missing(
         let fetched = futures_util::future::join_all(fetches).await;
         let (seq_updates, unreadable) = contiguous_prefix(fetched);
         // The last delta this page delivers, or the cursor it started past.
-        let delivered = seq_updates
-            .last()
-            .map_or(ambre_protocol::messages::Seq(cursor as u64), |u| u.seq);
+        let delivered = seq_updates.last().map_or(cursor, |u| u.seq);
 
         let msg = Payload::server_msg(&WsServerMsg::MissingUpdates {
             document_id,
@@ -846,7 +845,7 @@ pub(crate) async fn handle_request_missing(
             return;
         }
         cursor = next_cursor;
-        batches.forget_through(cursor);
+        batches.forget_through(cursor.to_i64_saturating());
     }
 }
 
@@ -1944,7 +1943,7 @@ mod access_tests {
             .unwrap();
         assert_eq!(history, 0, "no number, no clock, no pending entry");
         assert!(
-            db::get_updates_after(&pool, &doc_id, 0, 10)
+            db::get_updates_after(&pool, &doc_id, ambre_core::Seq(0), 10)
                 .await
                 .unwrap()
                 .is_empty()
@@ -2480,7 +2479,7 @@ mod hot_tail_tests {
         let pending_key = format!("doc:{doc_id}:pending");
 
         handle_update(&state, &mut conn, signed_update(&key, doc_id, 1, 16), &tx).await;
-        let rows = db::get_updates_after(&state.db, &doc_id, 0, 10)
+        let rows = db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(0), 10)
             .await
             .unwrap();
         assert!(matches!(rows.as_slice(), [r] if r.wire.is_some() && r.s3_key.is_none()));
@@ -2495,7 +2494,7 @@ mod hot_tail_tests {
             &tx,
         )
         .await;
-        let rows = db::get_updates_after(&state.db, &doc_id, 1, 10)
+        let rows = db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(1), 10)
             .await
             .unwrap();
         assert!(matches!(rows.as_slice(), [r] if r.wire.is_none() && r.s3_key.is_some()));
@@ -2531,7 +2530,7 @@ mod hot_tail_tests {
         let (tx, _rx) = mpsc::channel::<Payload>(8);
         let (second_tx, mut second_rx) = mpsc::channel::<Payload>(8);
         let stored = |state: Arc<AppState>| async move {
-            db::get_updates_after(&state.db, &doc_id, 0, 10)
+            db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(0), 10)
                 .await
                 .unwrap()
                 .len()
@@ -2605,7 +2604,7 @@ mod hot_tail_tests {
         let batch = crate::hot_tail::batch_key(&state.config.s3_env_prefix, &doc_id, 1, 4);
         assert_eq!(replay(&state, &mut conn, doc_id).await, before);
         assert_eq!(
-            stub.gets(&batch),
+            stub.gets(batch.as_str()),
             1,
             "the batch is read once for its four deltas"
         );

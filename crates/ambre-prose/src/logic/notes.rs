@@ -4,7 +4,7 @@
 //! call is one carrier character marked with the entry's identity. The identity is minted once, by
 //! the peer that inserts the note (`PROSE-FEAT-096`, `PROSE-087`).
 
-use ambre_core::Uuid;
+use ambre_core::FootnoteId;
 use loro::{LoroMap, LoroText, TreeID, UpdateOptions};
 
 use crate::doc;
@@ -46,7 +46,7 @@ impl ProseState {
     }
 
     /// Rewrite the body of note `id`, and nothing else.
-    pub(super) fn edit_footnote(&mut self, id: &Uuid, text: &str) -> ProseOutcome {
+    pub(super) fn edit_footnote(&mut self, id: &FootnoteId, text: &str) -> ProseOutcome {
         let Some(body) = note::body(&self.doc, id) else {
             return ProseOutcome::refused(ProseRefusal::NoSuchFootnote(*id));
         };
@@ -61,7 +61,7 @@ impl ProseState {
     /// Only the call characters leave the text they sat in
     /// (`PROSE-FEAT-101`). The calls are removed from the last one back, so an
     /// earlier offset still names its character.
-    pub(super) fn delete_footnote(&mut self, id: &Uuid) -> ProseOutcome {
+    pub(super) fn delete_footnote(&mut self, id: &FootnoteId) -> ProseOutcome {
         if note::entry(&self.doc, id).is_none() {
             return ProseOutcome::refused(ProseRefusal::NoSuchFootnote(*id));
         }
@@ -96,7 +96,7 @@ impl ProseState {
     /// The entry of a new note, and the block holding its text. That block is a
     /// root paragraph marked as a note, so the body flow never meets it
     /// (`PROSE-FEAT-305`).
-    fn write_note(&self, id: &Uuid, text: &str) -> Result<(), String> {
+    fn write_note(&self, id: &FootnoteId, text: &str) -> Result<(), String> {
         let block = write_note_block(&self.doc, text)?;
         let annots = self.doc.get_map(doc::ANNOTS);
         let entry = annots
@@ -196,8 +196,8 @@ mod tests {
         (state, ids)
     }
 
-    fn add(state: &mut ProseState, block: BlockId, pos: u32, text: &str) -> Uuid {
-        let before: Vec<Uuid> = state.footnotes().iter().map(|n| n.footnote_id).collect();
+    fn add(state: &mut ProseState, block: BlockId, pos: u32, text: &str) -> FootnoteId {
+        let before: Vec<FootnoteId> = state.footnotes().iter().map(|n| n.footnote_id).collect();
         state.handle_command(ProseCommand::InsertFootnote {
             block_id: block,
             pos,
@@ -404,7 +404,7 @@ mod tests {
         let (mut state, ids) = document(1, &["text"]);
         let real = add(&mut state, ids[0], 4, "a note");
         let annots = state.document().get_map(doc::ANNOTS);
-        let shaped_alike = Uuid::new();
+        let shaped_alike = FootnoteId::new();
         let entry = annots
             .insert_container(&shaped_alike.to_hyphenated(), LoroMap::new())
             .expect("an entry");
@@ -413,7 +413,7 @@ mod tests {
             .expect("a text")
             .insert(0, "no kind")
             .expect("written");
-        let other = Uuid::new();
+        let other = FootnoteId::new();
         let entry = annots
             .insert_container(&other.to_hyphenated(), LoroMap::new())
             .expect("an entry");

@@ -92,7 +92,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         doc_type: DocType,
-        horizon: u64,
+        horizon: Seq,
         restored: HeldRestore,
         sessions: Vec<(u64, SessionNonce)>,
     ) {
@@ -195,7 +195,8 @@ mod tests {
         let document_id = DocumentId::new();
         state.open_with_identity(document_id, DocType::Prose);
         if let Some(doc) = state.docs.get_mut(&document_id) {
-            doc.ledger.reset(4, doc.state.crdt().oplog_vv());
+            doc.ledger
+                .reset(ambre_core::Seq(4), doc.state.crdt().oplog_vv());
         }
         drain(&sync);
         drain(&persist);
@@ -223,7 +224,10 @@ mod tests {
         assert!(
             matches!(
                 commands.as_slice(),
-                [SyncCommand::ReleaseDocument { applied_seq: 4, .. }]
+                [SyncCommand::ReleaseDocument {
+                    applied_seq: ambre_core::Seq(4),
+                    ..
+                }]
             ),
             "got {commands:?}"
         );
@@ -284,7 +288,7 @@ mod tests {
             [SyncCommand::OpenDocument { .. }]
         ));
         let doc = state.docs.get(&document_id).expect("reopened");
-        assert_eq!(doc.ledger.contiguous_end(), 4);
+        assert_eq!(doc.ledger.contiguous_end(), ambre_core::Seq(4));
         assert!(drain(&ui).iter().any(|event| matches!(
             event,
             UiEvent::Activity { counters, .. } if *counters == ActivityCounters::default()

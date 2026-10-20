@@ -94,8 +94,11 @@ fn amended() -> Amended {
         .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
         .expect("adopt");
     assert_eq!(alice.lease_to_ask(NOW), Some(segment));
-    alice.lease_granted(segment, LeaseId::new(), 0, LEASE_MS);
-    let sealed = alice.final_snapshot(NOW, 0).expect("export").expect("in");
+    alice.lease_granted(segment, LeaseId::new(), ambre_core::Seq(0), LEASE_MS);
+    let sealed = alice
+        .final_snapshot(NOW, ambre_core::Seq(0))
+        .expect("export")
+        .expect("in");
     alice.mark_final(segment).expect("mark");
     assert_eq!(alice.final_segments(), vec![segment]);
 
@@ -190,9 +193,9 @@ impl Amended {
             self.segment,
             FoldAnswer::Granted {
                 lease: LeaseId::new(),
-                horizon: 0,
+                horizon: ambre_core::Seq(0),
                 amendments: self.amendments,
-                amendments_seq: 3,
+                amendments_seq: ambre_core::Seq(3),
                 expires_in: LEASE_MS,
             },
         );
@@ -290,9 +293,9 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
         segment,
         FoldAnswer::Granted {
             lease,
-            horizon: 0,
+            horizon: ambre_core::Seq(0),
             amendments,
-            amendments_seq: 4,
+            amendments_seq: ambre_core::Seq(4),
             expires_in: LEASE_MS,
         },
     );
@@ -304,9 +307,9 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
         segment,
         FoldAnswer::Granted {
             lease,
-            horizon: 0,
+            horizon: ambre_core::Seq(0),
             amendments,
-            amendments_seq: 3,
+            amendments_seq: ambre_core::Seq(3),
             expires_in: LEASE_MS,
         },
     );
@@ -316,8 +319,11 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
         .expect("fold")
         .expect("in");
     assert_eq!((fold.segment, fold.lease), (segment, lease));
-    assert_eq!((fold.horizon, fold.amendments), (0, amendments));
-    assert_eq!(fold.amendments_seq, 3);
+    assert_eq!(
+        (fold.horizon, fold.amendments),
+        (ambre_core::Seq(0), amendments)
+    );
+    assert_eq!(fold.amendments_seq, ambre_core::Seq(3));
     assert!(holds(&fold.payload, "uno"));
     assert!(
         !holds(&fold.payload, "two"),
@@ -373,9 +379,9 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
         segment,
         FoldAnswer::Granted {
             lease: LeaseId::new(),
-            horizon: 0,
+            horizon: ambre_core::Seq(0),
             amendments: DocumentId::new(),
-            amendments_seq: 1,
+            amendments_seq: ambre_core::Seq(1),
             expires_in: LEASE_MS,
         },
     );
@@ -390,9 +396,9 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
         segment,
         FoldAnswer::Granted {
             lease: LeaseId::new(),
-            horizon: 0,
+            horizon: ambre_core::Seq(0),
             amendments,
-            amendments_seq: 9,
+            amendments_seq: ambre_core::Seq(9),
             expires_in: LEASE_MS,
         },
     );
@@ -418,7 +424,7 @@ fn another_member_checks_the_fold_by_folding_its_own_copy() {
     let document_id = segment.document_id();
     let before = bob.messages(segment).expect("held");
     assert_eq!(
-        bob.check_snapshot(document_id, 0, &fold.payload)
+        bob.check_snapshot(document_id, ambre_core::Seq(0), &fold.payload)
             .expect("check"),
         SnapshotVerdict::Match { extras: Vec::new() }
     );
@@ -441,14 +447,15 @@ fn another_member_checks_the_fold_by_folding_its_own_copy() {
         .export(ExportMode::shallow_snapshot(&forged.oplog_frontiers()))
         .expect("export");
     assert_eq!(
-        bob.check_snapshot(document_id, 0, &forged).expect("check"),
+        bob.check_snapshot(document_id, ambre_core::Seq(0), &forged)
+            .expect("check"),
         SnapshotVerdict::Mismatch
     );
 
     let short = amended.bob(2);
     assert_eq!(
         short
-            .check_snapshot(document_id, 0, &fold.payload)
+            .check_snapshot(document_id, ambre_core::Seq(0), &fold.payload)
             .expect("check"),
         SnapshotVerdict::Unchecked,
         "he misses an amendment the fold holds"
@@ -472,7 +479,7 @@ fn a_change_past_the_fold_leaves_it_unchecked() {
     bob.apply_signed(amendments, Seq(4), &later.delta, amended.signer())
         .expect("applies");
     assert_eq!(
-        bob.check_snapshot(segment.document_id(), 0, &fold.payload)
+        bob.check_snapshot(segment.document_id(), ambre_core::Seq(0), &fold.payload)
             .expect("check"),
         SnapshotVerdict::Unchecked
     );

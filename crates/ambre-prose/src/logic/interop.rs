@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::Uuid;
+use ambre_core::FootnoteId;
 use loro::{LoroValue, TreeID};
 
 use ambre_bus::app::prose::{
@@ -298,7 +298,7 @@ fn marked_of(run: &IrRun) -> MarkedRun {
 }
 
 /// A run of the document as the form holds it.
-fn ir_run(run: MarkedRun, notes: &HashMap<Uuid, u32>) -> IrRun {
+fn ir_run(run: MarkedRun, notes: &HashMap<FootnoteId, u32>) -> IrRun {
     let mut out = IrRun::plain(run.text);
     for (key, value) in run.marks {
         let on = !matches!(value, LoroValue::Null | LoroValue::Bool(false));
@@ -324,7 +324,7 @@ fn ir_run(run: MarkedRun, notes: &HashMap<Uuid, u32>) -> IrRun {
             "ref" => out.cross_ref = true,
             "fn" => {
                 if let LoroValue::String(id) = value
-                    && let Ok(id) = Uuid::parse_str(&id)
+                    && let Ok(id) = FootnoteId::parse_str(&id)
                 {
                     out.footnote_ref = notes.get(&id).copied();
                 }
@@ -340,7 +340,8 @@ impl ProseState {
     /// reads (`PROSE-IO-046`). It writes nothing (`PROSE-IO-017`).
     pub(crate) fn walk(&self) -> ProseIr {
         let tree = doc::blocks(&self.doc);
-        let notes: HashMap<Uuid, u32> = crate::note::ordinals(&self.doc).into_iter().collect();
+        let notes: HashMap<FootnoteId, u32> =
+            crate::note::ordinals(&self.doc).into_iter().collect();
         let bands = doc::read_bands(&self.doc);
         let mut footnotes = Vec::new();
         for (id, ordinal) in crate::note::ordinals(&self.doc) {
@@ -368,7 +369,7 @@ impl ProseState {
         &self,
         tree: &loro::LoroTree,
         parent: Option<TreeID>,
-        notes: &HashMap<Uuid, u32>,
+        notes: &HashMap<FootnoteId, u32>,
     ) -> Vec<IrBlock> {
         let ids = match parent {
             None => doc::roots(tree),
@@ -383,7 +384,7 @@ impl ProseState {
         &self,
         tree: &loro::LoroTree,
         id: TreeID,
-        notes: &HashMap<Uuid, u32>,
+        notes: &HashMap<FootnoteId, u32>,
     ) -> Option<IrBlock> {
         let runs = || -> Vec<IrRun> {
             self.body_of(&id)

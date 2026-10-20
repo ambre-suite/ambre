@@ -117,8 +117,8 @@ impl FromRequestParts<Arc<AppState>> for AccountSession {
 /// A freshly minted access + refresh pair, returned to the client in the login
 /// and refresh response bodies (never as cookies).
 pub struct TokenPair {
-    pub access_token: String,
-    pub refresh_token: String,
+    pub access_token: ambre_protocol::ws::AccessToken,
+    pub refresh_token: ambre_protocol::ws::RefreshToken,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
     pub access_expires_in: u64,
 }
@@ -161,8 +161,8 @@ pub async fn issue_session(
     .await?;
 
     Ok(TokenPair {
-        access_token,
-        refresh_token,
+        access_token: ambre_protocol::ws::AccessToken::new(access_token),
+        refresh_token: ambre_protocol::ws::RefreshToken::new(refresh_token),
         access_expires_in: access_ttl,
     })
 }
@@ -202,7 +202,10 @@ mod tests {
         state.redis.clone().close().await.unwrap();
 
         let (mut parts, ()) = axum::http::Request::get("/api/documents")
-            .header(AUTHORIZATION, format!("Bearer {}", pair.access_token))
+            .header(
+                AUTHORIZATION,
+                format!("Bearer {}", pair.access_token.expose()),
+            )
             .body(())
             .unwrap()
             .into_parts();

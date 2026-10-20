@@ -1722,7 +1722,7 @@ mod tests {
 
     fn thread(block: BlockId, start: u32, end: u32) -> crate::events::CommentThread {
         crate::events::CommentThread {
-            comment_id: ambre_core::Uuid::new(),
+            comment_id: ambre_core::CommentId::new(),
             anchor_block: Some(block),
             anchor_start: start,
             anchor_end: end,

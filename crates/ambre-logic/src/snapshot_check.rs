@@ -15,6 +15,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ambre_bus::{SnapshotPurpose as Purpose, SnapshotVerdict as Outcome};
+use ambre_core::Seq;
 use ambre_core::authorship::{PEERS_MAP, peer_key};
 use loro::{
     Counter, IdSpan, LoroDoc, LoroValue, PeerID, ValueOrContainer, VersionVector, json::JsonChange,
@@ -29,28 +30,28 @@ use loro::{
 pub(crate) struct SeqLedger {
     /// The last sequence number a snapshot this client imported covers. The
     /// deltas at or below it are folded into `base`.
-    floor: u64,
+    floor: Seq,
     /// The version the document held at `floor`.
     base: VersionVector,
     /// Each delta past `floor`: its PeerID and the counter it ends at, or
     /// `None` for a delta refused or unreadable, which carries nothing.
-    ends: BTreeMap<u64, Option<(PeerID, Counter)>>,
+    ends: BTreeMap<Seq, Option<(PeerID, Counter)>>,
 }
 
 impl SeqLedger {
     /// Start again from a snapshot covering every delta up to `covered`, after
     /// which the document stood at `base`. The deltas past `covered` already
     /// recorded stay.
-    pub(crate) fn reset(&mut self, covered: u64, base: VersionVector) {
+    pub(crate) fn reset(&mut self, covered: Seq, base: VersionVector) {
         self.floor = covered;
         self.base = base;
-        self.ends = self.ends.split_off(&(covered + 1));
+        self.ends = self.ends.split_off(&covered.after());
     }
 
     /// Start again from a snapshot covering every delta up to `covered`, for
     /// a document no snapshot check reads: only its horizon counts. A
     /// snapshot covering less than the floor changes nothing.
-    pub(crate) fn raise_floor(&mut self, covered: u64) {
+    pub(crate) fn raise_floor(&mut self, covered: Seq) {
         if covered > self.floor {
             self.reset(covered, VersionVector::default());
         }
@@ -58,8 +59,8 @@ impl SeqLedger {
 
     /// Record the delta the relay numbered `seq`. `payload` is `None` when the
     /// delta was refused. A seq of 0 is no relay's number and is ignored.
-    pub(crate) fn record(&mut self, seq: u64, payload: Option<&[u8]>) {
-        if seq == 0 || seq <= self.floor {
+    pub(crate) fn record(&mut self, seq: Seq, payload: Option<&[u8]>) {
+        if seq == Seq::ZERO || seq <= self.floor {
             return;
         }
         let end = payload
@@ -75,16 +76,16 @@ impl SeqLedger {
     }
 
     /// The last seq a snapshot this client imported covers.
-    pub(crate) fn floor(&self) -> u64 {
+    pub(crate) fn floor(&self) -> Seq {
         self.floor
     }
 
     /// The last seq this client holds with no gap below it. A snapshot built
     /// here covers up to it and no further.
-    pub(crate) fn contiguous_end(&self) -> u64 {
+    pub(crate) fn contiguous_end(&self) -> Seq {
         let mut end = self.floor;
         for seq in self.ends.keys() {
-            if *seq != end + 1 {
+            if *seq != end.after() {
                 break;
             }
             end = *seq;
@@ -94,11 +95,11 @@ impl SeqLedger {
 
     /// Fold every delta up to `covered` into the base, once a snapshot that
     /// covers them matched. A gap below `covered` leaves the ledger as it is.
-    pub(crate) fn fold_through(&mut self, covered: u64) {
+    pub(crate) fn fold_through(&mut self, covered: Seq) {
         if covered <= self.floor || self.contiguous_end() < covered {
             return;
         }
-        let rest = self.ends.split_off(&(covered + 1));
+        let rest = self.ends.split_off(&covered.after());
         for (peer, end) in std::mem::replace(&mut self.ends, rest)
             .into_values()
             .flatten()
@@ -117,7 +118,7 @@ pub(crate) fn check_snapshot(
     own: &LoroDoc,
     ledger: &SeqLedger,
     snapshot: &[u8],
-    covered: u64,
+    covered: Seq,
     purpose: Purpose,
 ) -> Outcome {
     if covered < ledger.floor {
@@ -302,7 +303,7 @@ mod tests {
             let bytes = delta(&alice, &from);
             bob.import(&bytes).expect("import");
             seq += 1;
-            ledger.record(seq, Some(&bytes));
+            ledger.record(ambre_core::Seq(seq), Some(&bytes));
         };
         for (i, ch) in "hello world".chars().enumerate() {
             send(&|| text.insert(i, &ch.to_string()).expect("insert"));
@@ -387,7 +388,7 @@ mod tests {
         let from = bob.oplog_vv();
         bob.get_text("t").insert(0, "B").expect("insert");
         bob.commit();
-        let seq = ledger.contiguous_end() + 1;
+        let seq = ledger.contiguous_end().after();
         ledger.record(seq, Some(&delta(&bob, &from)));
         assert_eq!(
             check_snapshot(&bob, &ledger, &early, seq, Purpose::Confirm),
@@ -399,7 +400,7 @@ mod tests {
     fn a_gap_in_the_covered_deltas_leaves_the_snapshot_unchecked() {
         let (alice, bob, ledger) = typed_history();
         let snapshot = alice.export(ExportMode::Snapshot).expect("snapshot");
-        let past = ledger.contiguous_end() + 2;
+        let past = ledger.contiguous_end().after().after();
         assert_eq!(
             check_snapshot(&bob, &ledger, &snapshot, past, Purpose::Confirm),
             Outcome::Unchecked
@@ -433,7 +434,13 @@ mod tests {
         alice.commit();
         let before = (bob.oplog_vv(), bob.get_deep_value());
         let snapshot = alice.export(ExportMode::Snapshot).expect("snapshot");
-        let _ = check_snapshot(&bob, &ledger, &snapshot, 1, Purpose::Confirm);
+        let _ = check_snapshot(
+            &bob,
+            &ledger,
+            &snapshot,
+            ambre_core::Seq(1),
+            Purpose::Confirm,
+        );
         assert_eq!(before, (bob.oplog_vv(), bob.get_deep_value()));
     }
 
@@ -441,8 +448,8 @@ mod tests {
     fn a_match_folds_the_covered_deltas_into_the_base() {
         let (_, bob, mut ledger) = typed_history();
         let end = ledger.contiguous_end();
-        ledger.fold_through(end - 1);
-        assert_eq!(ledger.floor, end - 1);
+        ledger.fold_through(end.before());
+        assert_eq!(ledger.floor, end.before());
         assert_eq!(ledger.ends.len(), 1);
         assert!(ledger.base.get(&1).is_some());
         let _ = bob;

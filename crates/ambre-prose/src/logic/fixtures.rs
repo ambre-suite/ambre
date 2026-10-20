@@ -130,7 +130,7 @@ impl ProseState {
                     continue;
                 };
                 if let Some(LoroValue::String(note)) = attributes.get(doc::K_FOOTNOTE)
-                    && let Some(uuid) = ambre_core::Uuid::parse_str(note.as_str()).ok()
+                    && let Some(uuid) = ambre_core::FootnoteId::parse_str(note.as_str()).ok()
                     && let Some(block) = crate::note::block(&self.doc, &uuid)
                 {
                     notes.push(block);

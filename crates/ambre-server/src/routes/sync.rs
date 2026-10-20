@@ -29,15 +29,15 @@ fn parse_snap_id(s: &str) -> Result<ambre_core::SnapshotId, AppError> {
 pub struct SnapshotResponse {
     #[serde(with = "ambre_core::serde_id::snapshot_id")]
     pub snapshot_id: ambre_core::SnapshotId,
-    pub s3_key: String,
+    pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` folded into this snapshot, so the client can gate its
     /// post-open `RequestMissing` and skip the already-replayed history.
-    pub covered_seq: i64,
+    pub covered_seq: ambre_core::Seq,
     /// Who vouched for it: `confirmed` or `self` (`SRV-128`).
     pub status: db::SnapshotStatus,
     /// The author's signing key, hex, which a self-confirmed snapshot is checked
     /// against (`AUTHOR-022`).
-    pub author_pubkey: String,
+    pub author_pubkey: ambre_core::SigningKeyHex,
     /// For a self-confirmed snapshot, the reference snapshot an open starts
     /// from, `None` when no member other than an author confirmed one yet.
     pub reference: Option<ReferenceSnapshot>,
@@ -48,7 +48,7 @@ pub struct SnapshotResponse {
 pub struct ReferenceSnapshot {
     #[serde(with = "ambre_core::serde_id::snapshot_id")]
     pub snapshot_id: ambre_core::SnapshotId,
-    pub covered_seq: i64,
+    pub covered_seq: ambre_core::Seq,
 }
 
 pub async fn get_snapshot_metadata(
@@ -81,7 +81,7 @@ pub async fn get_snapshot_metadata(
         s3_key: snap.s3_key,
         covered_seq: snap.covered_seq,
         status: snap.status,
-        author_pubkey: hex::encode(&snap.author_pubkey),
+        author_pubkey: ambre_core::SigningKeyHex::encode(&snap.author_pubkey),
         reference,
     }))
 }
@@ -130,7 +130,7 @@ pub async fn confirm_snapshot(
             tracing::warn!(s3_key = %key, error = %e, "replaced snapshot: S3 delete failed");
         }
     }
-    if !crate::redis_ops::seal_folded(&state.redis, &fold.amendments, fold.folded_seq).await? {
+    if !crate::redis_ops::seal_folded(&state.redis, &fold.amendments, fold.folded_seq.0).await? {
         return Ok(axum::Json(ConfirmedSnapshotJson { folded: None }));
     }
     crate::deletion::delete_document(&state, &fold.amendments).await?;
@@ -227,15 +227,15 @@ pub struct CreateSnapshotRequest {
     #[allow(dead_code)]
     #[serde(with = "ambre_core::serde_id::snapshot_id")]
     pub snapshot_id: ambre_core::SnapshotId,
-    pub author_pubkey: String,
+    pub author_pubkey: ambre_core::SigningKeyHex,
     pub parent_hash: Option<String>,
     pub parent_snapshot_proof: Option<String>,
     pub update_clocks: serde_json::Value,
-    pub s3_key: String,
+    pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` the snapshot author had applied at upload time.
     /// Defaults to 0 for older clients (full replay preserved).
     #[serde(default)]
-    pub covered_seq: i64,
+    pub covered_seq: ambre_core::Seq,
 }
 #[derive(serde::Serialize)]
 pub struct CreateSnapshotResponse {
@@ -266,7 +266,7 @@ pub async fn create_snapshot(
         return Err(AppError::BadRequest("invalid s3_key for document".into()));
     }
 
-    let apk = hex::decode(&req.author_pubkey).map_err(|e| AppError::Conflict {
+    let apk = hex::decode(req.author_pubkey.as_str()).map_err(|e| AppError::Conflict {
         detail: e.to_string(),
     })?;
     // Bind the snapshot author to the session identity, like the WS `Update`
@@ -299,8 +299,8 @@ pub async fn create_snapshot(
     // the counter would stop the relay asking for snapshots of the document.
     // A cold counter reads 0 and bounds nothing.
     let last = crate::redis_ops::current_seq(&state.redis, &doc_id).await?;
-    let covered = u64::try_from(req.covered_seq).unwrap_or(0);
-    if last > 0 && covered > last {
+    let covered = req.covered_seq;
+    if last > 0 && covered.0 > last {
         return Err(AppError::BadRequest(
             "covered_seq past the last delta".into(),
         ));
@@ -314,14 +314,14 @@ pub async fn create_snapshot(
         pp.as_deref(),
         &req.update_clocks,
         &req.s3_key,
-        req.covered_seq.max(0),
+        covered,
     )
     .await?;
     let msg =
         crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::SnapshotAvailable {
             document_id: doc_id,
             snapshot_id: sid,
-            covered_seq: ambre_protocol::messages::Seq(covered),
+            covered_seq: covered,
         });
     let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;
     Ok(axum::Json(CreateSnapshotResponse { snapshot_id: sid }))
@@ -332,14 +332,14 @@ pub async fn create_snapshot(
 /// bound into the presigned PUT URL so the upload cannot exceed it.
 #[derive(serde::Deserialize)]
 pub struct SnapshotUploadUrlRequest {
-    pub size_bytes: u64,
+    pub size_bytes: ambre_core::ByteSize,
 }
 
 /// Presigned PUT URL for direct client-to-S3 upload of an encrypted snapshot.
 #[derive(serde::Serialize)]
 pub struct SnapshotUploadUrlResponse {
     pub upload_url: String,
-    pub s3_key: String,
+    pub s3_key: ambre_core::ObjectKey,
 }
 
 pub async fn snapshot_upload_url(
@@ -359,10 +359,11 @@ pub async fn snapshot_upload_url(
     // Reject an oversized snapshot before handing out an upload URL. Bind the
     // declared size into the presigned PUT, so the actual upload cannot exceed
     // it.
-    if req.size_bytes == 0 || req.size_bytes > state.config.snapshot_max_bytes {
+    if req.size_bytes == ambre_core::ByteSize(0) || req.size_bytes > state.config.snapshot_max_bytes
+    {
         return Err(AppError::PayloadTooLarge(format!(
             "snapshot size {} bytes outside 1..={}",
-            req.size_bytes, state.config.snapshot_max_bytes
+            req.size_bytes.0, state.config.snapshot_max_bytes.0
         )));
     }
 
@@ -427,18 +428,18 @@ pub async fn snapshot_download_url(
 /// Query parameters for delta retrieval (reconnect catch-up).
 #[derive(serde::Deserialize)]
 pub struct DeltasQuery {
-    pub after_seq: Option<i64>,
+    pub after_seq: Option<ambre_core::Seq>,
     pub limit: Option<i64>,
 }
 /// One delta entry in the response list.
 #[derive(serde::Serialize)]
 pub struct DeltaEntry {
-    pub seq: i64,
+    pub seq: ambre_core::Seq,
     pub clock: i64,
-    pub author_pubkey: String,
+    pub author_pubkey: ambre_core::SigningKeyHex,
     /// The object of its own, for a delta over the inline size. A delta in the
     /// hot tail or in a batch has none, and is read over the socket replay.
-    pub s3_key: Option<String>,
+    pub s3_key: Option<ambre_core::ObjectKey>,
 }
 #[derive(serde::Serialize)]
 pub struct DeltasResponse {
@@ -456,7 +457,7 @@ pub async fn get_deltas(
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    let after = params.after_seq.unwrap_or(0);
+    let after = params.after_seq.unwrap_or(ambre_core::Seq::ZERO);
     // Clamp the page size (M16): an unbounded `limit` forces a full-table scan of
     // `updates` and a large response allocation. 1..=1000 is a trivial guard.
     let limit = params.limit.unwrap_or(100).clamp(1, 1000);
@@ -466,7 +467,7 @@ pub async fn get_deltas(
         .map(|u| DeltaEntry {
             seq: u.seq,
             clock: u.clock,
-            author_pubkey: hex::encode(&u.author_pubkey),
+            author_pubkey: ambre_core::SigningKeyHex::encode(&u.author_pubkey),
             s3_key: u.s3_key,
         })
         .collect();

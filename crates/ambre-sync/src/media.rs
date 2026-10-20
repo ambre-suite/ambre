@@ -407,8 +407,8 @@ async fn upload_leg(
         .post_json(
             &format!("{base}/media/upload-url"),
             &http::UploadUrlRequest {
-                content_hash: content_hash.to_owned(),
-                size_bytes: size,
+                content_hash: ambre_core::ContentHash::from(content_hash),
+                size_bytes: ambre_core::ByteSize(size),
             },
         )
         .await
@@ -420,8 +420,8 @@ async fn upload_leg(
     http.post_json::<_, http::WriteAnswer>(
         &format!("{base}/media"),
         &http::ConfirmUploadRequest {
-            content_hash: content_hash.to_owned(),
-            size_bytes: size as i64,
+            content_hash: ambre_core::ContentHash::from(content_hash),
+            size_bytes: ambre_core::ByteSize(size),
         },
     )
     .await
@@ -441,7 +441,7 @@ async fn download_leg(
         .post_json(
             &format!("{base}/media/download-url"),
             &http::DownloadUrlRequest {
-                content_hash: content_hash.to_owned(),
+                content_hash: ambre_core::ContentHash::from(content_hash),
             },
         )
         .await

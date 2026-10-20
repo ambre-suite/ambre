@@ -107,7 +107,7 @@ pub(crate) async fn checked_entry(
 pub struct InviteRequest {
     /// The invitee by email, as a document's share dialog names them.
     #[serde(default)]
-    pub invitee_email: Option<String>,
+    pub invitee_email: Option<ambre_core::Email>,
     /// The invitee by identity, as a member of a space is known to the
     /// others. A request names one of the two (`SRV-224`).
     #[serde(default, with = "ambre_core::serde_id::user_id::option")]

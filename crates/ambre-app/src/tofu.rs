@@ -18,7 +18,7 @@ pub(crate) enum Purpose {
     /// An invitation to a document, sent to the recipient's email.
     Invite {
         document_id: DocumentId,
-        email: String,
+        email: ambre_bus::Email,
     },
     /// The direct message of this user and the recipient alone (the Murmure
     /// members spec). `channel_id` names the request.
@@ -45,7 +45,7 @@ pub(crate) struct TofuPrompt {
     pub(crate) display_name: String,
     /// Raw X25519 key the server just returned: pinned on confirmation and
     /// sent beside the request, so Sync wraps only if it still matches.
-    pub(crate) exchange_pub_key: [u8; 32],
+    pub(crate) exchange_pub_key: ambre_core::PublicKey,
     /// Preformatted fingerprint (`ambre_crypto::fingerprint`); displayed verbatim.
     pub(crate) fingerprint: String,
     /// `false` = new (first contact), `true` = changed (diverged from the pin).
@@ -56,7 +56,7 @@ impl TofuPrompt {
     /// The email the prompt shows under the name, for an invitation alone.
     fn email(&self) -> Option<&str> {
         match &self.purpose {
-            Purpose::Invite { email, .. } => Some(email),
+            Purpose::Invite { email, .. } => Some(email.as_str()),
             Purpose::Direct { .. } | Purpose::Channel { .. } => None,
         }
     }
@@ -75,7 +75,9 @@ pub(crate) enum Next {
 /// `role` is the one an invitation grants; a direct message ignores it.
 pub(crate) fn classify(prompt: TofuPrompt, pinned: Option<[u8; 32]>, role: Role) -> Next {
     match pinned {
-        Some(key) if key == prompt.exchange_pub_key => Next::Proceed(request(&prompt, role)),
+        Some(key) if key == *prompt.exchange_pub_key.as_array() => {
+            Next::Proceed(request(&prompt, role))
+        }
         Some(_) => Next::Ask(TofuPrompt {
             changed: true,
             ..prompt
@@ -95,7 +97,10 @@ pub(crate) fn confirm(
     pin: impl FnOnce([u8; 16], [u8; 32]),
     dispatch: impl FnOnce(LogicCommand),
 ) {
-    pin(*prompt.user_id.as_bytes(), prompt.exchange_pub_key);
+    pin(
+        *prompt.user_id.as_bytes(),
+        *prompt.exchange_pub_key.as_array(),
+    );
     dispatch(request(prompt, role));
 }
 
@@ -115,7 +120,7 @@ fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
                 invitee_email: Some(email.clone()),
                 invitee: prompt.user_id,
                 role,
-                expect_exchange_pub_key: prompt.exchange_pub_key,
+                expect_exchange_pub_key: prompt.exchange_pub_key.clone(),
                 now,
             },
         },
@@ -124,7 +129,7 @@ fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
                 channel_id: *channel_id,
                 members: vec![DirectMember {
                     user_id: prompt.user_id,
-                    exchange_pub_key: prompt.exchange_pub_key,
+                    exchange_pub_key: prompt.exchange_pub_key.clone(),
                 }],
             },
             now,
@@ -134,7 +139,7 @@ fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
             channel_id: *channel_id,
             invitee: DirectMember {
                 user_id: prompt.user_id,
-                exchange_pub_key: prompt.exchange_pub_key,
+                exchange_pub_key: prompt.exchange_pub_key.clone(),
             },
             now,
         },
@@ -259,11 +264,11 @@ mod tests {
         TofuPrompt {
             purpose: Purpose::Invite {
                 document_id: DocumentId::new(),
-                email: "bob@test.local".to_owned(),
+                email: ambre_core::Email::from("bob@test.local"),
             },
             user_id: UserId::new(),
             display_name: "Bob".to_owned(),
-            exchange_pub_key: [byte; 32],
+            exchange_pub_key: ambre_core::PublicKey::from_array([byte; 32]),
             fingerprint: "ABCD EFGH".to_owned(),
             changed: false,
         }
@@ -289,7 +294,7 @@ mod tests {
                         ..
                     },
                 ..
-            }) => Some(*expect_exchange_pub_key),
+            }) => Some(*(*expect_exchange_pub_key).as_array()),
             _ => None,
         }
     }
@@ -323,7 +328,7 @@ mod tests {
         };
         let expected = vec![DirectMember {
             user_id: prompt.user_id,
-            exchange_pub_key: [6; 32],
+            exchange_pub_key: ambre_core::PublicKey::from_array([6; 32]),
         }];
         let Next::Proceed(LogicCommand::OpenDirectMessage { draft, .. }) =
             classify(prompt.clone(), Some([6; 32]), Role::Viewer)
@@ -376,7 +381,7 @@ mod tests {
             invitee,
             DirectMember {
                 user_id: prompt.user_id,
-                exchange_pub_key: [7; 32],
+                exchange_pub_key: ambre_core::PublicKey::from_array([7; 32]),
             }
         );
     }
@@ -405,8 +410,10 @@ mod tests {
                     panic!("not an invitation: {cmd:?}");
                 };
                 assert_eq!(role, Role::Viewer);
-                log.borrow_mut()
-                    .push(format!("dispatch {}", expect_exchange_pub_key[0]));
+                log.borrow_mut().push(format!(
+                    "dispatch {}",
+                    expect_exchange_pub_key.as_array()[0]
+                ));
             },
         );
         let pin = format!("pin {:?} 4", prompt.user_id.as_bytes());

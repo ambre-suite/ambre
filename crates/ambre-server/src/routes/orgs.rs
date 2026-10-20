@@ -17,7 +17,7 @@ use crate::state::AppState;
 pub struct CreateOrgRequest {
     pub name: String,
     /// X25519 organization public key (hex encoded).
-    pub org_pubkey: String,
+    pub org_pubkey: ambre_core::ExchangeKeyHex,
     pub shamir_threshold: i16,
     pub shamir_total: i16,
     /// First member (owner) encrypted Shamir share (base64 or hex).
@@ -28,7 +28,7 @@ pub struct CreateOrgResponse {
     #[serde(with = "ambre_core::serde_id::org_id")]
     pub id: ambre_core::OrgId,
     pub name: String,
-    pub org_pubkey: String,
+    pub org_pubkey: ambre_core::ExchangeKeyHex,
     pub shamir_threshold: i16,
     pub shamir_total: i16,
 }
@@ -37,7 +37,7 @@ fn org_to_response(org: &db::OrganizationRow) -> CreateOrgResponse {
     CreateOrgResponse {
         id: org.id,
         name: org.name.clone(),
-        org_pubkey: hex::encode(&org.org_pubkey),
+        org_pubkey: ambre_core::ExchangeKeyHex::encode(&org.org_pubkey),
         shamir_threshold: org.shamir_threshold,
         shamir_total: org.shamir_total,
     }
@@ -67,7 +67,7 @@ pub struct UpdateMemberRoleRequest {
 pub struct OrgMemberResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub email: String,
+    pub email: ambre_core::Email,
     pub display_name: String,
     /// Serialized as its lowercase word.
     pub role: Role,
@@ -177,7 +177,7 @@ pub async fn create_org(
 
     validate_shamir_params(req.shamir_threshold, req.shamir_total)?;
 
-    let org_pubkey = hex::decode(&req.org_pubkey).map_err(|e| AppError::Conflict {
+    let org_pubkey = hex::decode(req.org_pubkey.as_str()).map_err(|e| AppError::Conflict {
         detail: format!("invalid org_pubkey hex: {e}"),
     })?;
     let owner_share_enc = req
@@ -573,7 +573,10 @@ mod tests {
         assert_eq!(resp.name, "Test Org");
         assert_eq!(resp.shamir_threshold, 3);
         assert_eq!(resp.shamir_total, 5);
-        assert_eq!(resp.org_pubkey, hex::encode(vec![0u8; 32]));
+        assert_eq!(
+            resp.org_pubkey,
+            ambre_core::ExchangeKeyHex::encode(vec![0u8; 32])
+        );
     }
 
     #[test]
@@ -591,7 +594,7 @@ mod tests {
             resp.user_id.to_string(),
             "00000000-0000-0000-0000-000000000001"
         );
-        assert_eq!(resp.email, "user@test.com");
+        assert_eq!(resp.email, ambre_core::Email::from("user@test.com"));
         assert_eq!(resp.display_name, "Test User");
         assert_eq!(resp.role, Role::Admin);
         assert_eq!(resp.has_shamir_share, Some(true));
@@ -838,7 +841,7 @@ mod tests {
         }
 
         async fn user_id(state: &crate::state::AppState, email: &str) -> String {
-            crate::db::get_user_by_email(&state.db, email)
+            crate::db::get_user_by_email(&state.db, &ambre_core::Email::from(email))
                 .await
                 .unwrap()
                 .unwrap()
@@ -858,24 +861,33 @@ mod tests {
             let owner = setup_org_user(&app, "owner@ambre.app", 10).await;
             let admin = setup_org_user(&app, "admin@ambre.app", 11).await;
             let _third = setup_org_user(&app, "member@ambre.app", 12).await;
-            let owner_uid = crate::db::get_user_by_email(&state.db, "owner@ambre.app")
-                .await
-                .unwrap()
-                .unwrap()
-                .id
-                .to_string();
-            let admin_uid = crate::db::get_user_by_email(&state.db, "admin@ambre.app")
-                .await
-                .unwrap()
-                .unwrap()
-                .id
-                .to_string();
-            let member_uid = crate::db::get_user_by_email(&state.db, "member@ambre.app")
-                .await
-                .unwrap()
-                .unwrap()
-                .id
-                .to_string();
+            let owner_uid = crate::db::get_user_by_email(
+                &state.db,
+                &ambre_core::Email::from("owner@ambre.app"),
+            )
+            .await
+            .unwrap()
+            .unwrap()
+            .id
+            .to_string();
+            let admin_uid = crate::db::get_user_by_email(
+                &state.db,
+                &ambre_core::Email::from("admin@ambre.app"),
+            )
+            .await
+            .unwrap()
+            .unwrap()
+            .id
+            .to_string();
+            let member_uid = crate::db::get_user_by_email(
+                &state.db,
+                &ambre_core::Email::from("member@ambre.app"),
+            )
+            .await
+            .unwrap()
+            .unwrap()
+            .id
+            .to_string();
 
             // Owner creates the org and promotes `admin` to admin.
             let create = serde_json::json!({

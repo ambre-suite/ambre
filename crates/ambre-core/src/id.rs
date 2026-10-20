@@ -51,6 +51,11 @@ macro_rules! define_id {
                 self.0.as_bytes()
             }
 
+            /// The hyphenated lowercase form, as a key in a CRDT map names it.
+            pub fn to_hyphenated(&self) -> String {
+                self.0.to_hyphenated()
+            }
+
             /// Parses an identifier from its string representation.
             ///
             /// Accepts both hyphenated and non-hyphenated forms.
@@ -175,6 +180,27 @@ define_id! {
     /// (the Murmure schema). A position in a list moves with every concurrent
     /// append, so a pin or a reply names the message by this value instead.
     MessageId
+}
+
+define_id! {
+    /// Identifies a Prose footnote, minted by the peer that inserts it. A
+    /// distinct type, so a comment or a suggestion never takes its place.
+    FootnoteId
+}
+
+define_id! {
+    /// Identifies a Prose comment thread, minted by the peer that opens it.
+    CommentId
+}
+
+define_id! {
+    /// Identifies one reply inside a Prose comment thread.
+    ReplyId
+}
+
+define_id! {
+    /// Identifies a Prose suggestion, minted by the peer that proposes it.
+    SuggestionId
 }
 
 define_id! {

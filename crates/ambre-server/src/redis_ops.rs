@@ -233,7 +233,7 @@ pub async fn append_pending_delta(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
     seq: u64,
-    s3_key: &str,
+    s3_key: &ambre_core::ObjectKey,
     update_wire: &Payload,
 ) -> Result<(), AppError> {
     let key = format!("doc:{document_id}:pending");
@@ -397,7 +397,7 @@ pub async fn push_dead_letter(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
     seq: u64,
-    s3_key: &str,
+    s3_key: &ambre_core::ObjectKey,
     update_wire: &Payload,
 ) -> Result<(), AppError> {
     guarded_rpush(
@@ -1563,9 +1563,15 @@ mod redis_integration_tests {
         let _: Result<usize, _> = redis.srem(FLUSH_DIRTY_SET, [pending_key.as_str()]).await;
 
         // Appending a delta marks the pending list dirty.
-        append_pending_delta(&redis, &doc, 1, "s3-x", &Payload::new(vec![1, 2, 3]))
-            .await
-            .unwrap();
+        append_pending_delta(
+            &redis,
+            &doc,
+            1,
+            &ambre_core::ObjectKey::from("s3-x"),
+            &Payload::new(vec![1, 2, 3]),
+        )
+        .await
+        .unwrap();
         let members = dirty_pending_keys(&redis).await.unwrap();
         assert!(
             members.contains(&pending_key),
@@ -1604,12 +1610,24 @@ mod redis_integration_tests {
         let key = format!("doc:{doc}:pending");
         let _ = redis.del([key.as_str()]).await;
 
-        append_pending_delta(&redis, &doc, 7, "s3-a", &Payload::new(vec![1, 2, 3]))
-            .await
-            .unwrap();
-        append_pending_delta(&redis, &doc, 8, "s3-b", &Payload::new(vec![4, 5]))
-            .await
-            .unwrap();
+        append_pending_delta(
+            &redis,
+            &doc,
+            7,
+            &ambre_core::ObjectKey::from("s3-a"),
+            &Payload::new(vec![1, 2, 3]),
+        )
+        .await
+        .unwrap();
+        append_pending_delta(
+            &redis,
+            &doc,
+            8,
+            &ambre_core::ObjectKey::from("s3-b"),
+            &Payload::new(vec![4, 5]),
+        )
+        .await
+        .unwrap();
 
         let map = get_pending_deltas_map(&redis, &doc).await.unwrap();
         assert_eq!(map.len(), 2);

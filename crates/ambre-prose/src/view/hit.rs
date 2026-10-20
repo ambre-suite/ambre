@@ -114,7 +114,7 @@ pub(crate) struct BandSlot {
 /// holding its text, and its top and bottom from the top of the page.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct NoteSlot {
-    pub footnote_id: ambre_core::Uuid,
+    pub footnote_id: ambre_core::FootnoteId,
     pub block: TreeID,
     pub top: f32,
     pub bottom: f32,

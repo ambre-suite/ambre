@@ -40,7 +40,7 @@ pub struct DocItem {
     pub doc_type: DocType,
     pub name: Option<String>,
     /// Epoch milliseconds of the last modification (routing metadata, plaintext).
-    pub updated_at: u64,
+    pub updated_at: ambre_bus::Timestamp,
     /// Total member count; `> 1` => shared.
     pub member_count: u32,
 }
@@ -521,7 +521,8 @@ fn DeleteConfirm(
 
 /// Formats an epoch-millisecond timestamp as a coarse relative time ("2 h ago").
 /// `0` (no server timestamp) renders as an empty string rather than a fake date.
-fn rel_time(updated_at_ms: u64) -> String {
+fn rel_time(updated_at: ambre_bus::Timestamp) -> String {
+    let updated_at_ms = updated_at.0;
     if updated_at_ms == 0 {
         return String::new();
     }

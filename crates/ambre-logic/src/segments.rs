@@ -129,7 +129,7 @@ impl LogicState {
         let covered = self
             .channel_ledgers
             .get(&closing.document_id())
-            .map_or(0, snapshot_check::SeqLedger::contiguous_end);
+            .map_or(Seq::ZERO, snapshot_check::SeqLedger::contiguous_end);
         match channel.final_snapshot(now, covered) {
             Ok(Some(snapshot)) => self.send_to_sync(SyncCommand::FinalizeSegment {
                 channel_id,

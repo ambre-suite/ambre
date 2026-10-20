@@ -30,16 +30,18 @@ impl IdSource {
         }
     }
 
-    /// The next id.
-    pub(super) fn mint(&self) -> Uuid {
-        match self {
+    /// The next id, of whichever annotation kind the caller names. Every kind
+    /// draws from the one counter, so no two annotations share an id.
+    pub(super) fn mint<T: From<Uuid>>(&self) -> T {
+        let uuid = match self {
             Self::Random => Uuid::new(),
             Self::Seeded { peer, next } => {
                 let counter = next.get();
                 next.set(counter.wrapping_add(1));
                 Uuid::from_bytes(pack(*peer, counter).to_be_bytes())
             }
-        }
+        };
+        T::from(uuid)
     }
 }
 

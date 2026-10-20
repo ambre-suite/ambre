@@ -1950,7 +1950,7 @@ mod tests {
             },
             RestCommand::SetupAccount {
                 passphrase: secret(),
-                email: "a@b.c".to_owned(),
+                email: ambre_core::Email::from("a@b.c"),
                 display_name: "A".to_owned(),
             },
             RestCommand::DevLogin {
@@ -1975,15 +1975,15 @@ mod tests {
             },
             RestCommand::FetchInviteeKey {
                 document_id: doc,
-                invitee_email: "a@b.c".to_owned(),
+                invitee_email: ambre_core::Email::from("a@b.c"),
             },
             RestCommand::FetchMemberKey { user_id: user },
             RestCommand::InviteToDocument {
                 document_id: doc,
-                invitee_email: Some("a@b.c".to_owned()),
+                invitee_email: Some(ambre_core::Email::from("a@b.c")),
                 invitee: user,
                 role: Role::Editor,
-                expect_exchange_pub_key: [0; 32],
+                expect_exchange_pub_key: ambre_core::PublicKey::from_array([0; 32]),
                 now: ambre_bus::Timestamp(0),
             },
             RestCommand::RevokeFromDocument {

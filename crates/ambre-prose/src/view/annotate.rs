@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::Uuid;
+use ambre_core::{CommentId, SuggestionId};
 
 use crate::events::{BlockId, CommentThread, LinkSpan, ProseCommand, SuggestionKind, tree_id};
 use crate::ui::ProseUiState;
@@ -32,7 +32,7 @@ impl ScreenRect {
 /// The suggestion under the pointer, and the piece of it the pointer is on.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HoveredSuggestion {
-    pub suggestion_id: Uuid,
+    pub suggestion_id: SuggestionId,
     pub kind: SuggestionKind,
     pub rect: ScreenRect,
 }
@@ -40,7 +40,7 @@ pub struct HoveredSuggestion {
 /// Where a comment thread's anchor starts, for the panel to line it up with.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ThreadAnchor {
-    pub comment_id: Uuid,
+    pub comment_id: CommentId,
     pub y_px: f32,
 }
 
@@ -60,20 +60,20 @@ pub struct PanelThread {
 pub enum AnnotationIntent {
     /// Bring a thread's anchor into view.
     Focus {
-        comment_id: Uuid,
+        comment_id: CommentId,
     },
     Reply {
-        comment_id: Uuid,
+        comment_id: CommentId,
         text: String,
     },
     Resolve {
-        comment_id: Uuid,
+        comment_id: CommentId,
     },
     Accept {
-        suggestion_id: Uuid,
+        suggestion_id: SuggestionId,
     },
     Reject {
-        suggestion_id: Uuid,
+        suggestion_id: SuggestionId,
     },
 }
 
@@ -241,7 +241,10 @@ impl ProseUiState {
     /// when it held text (`PROSE-UI-232`). A draft whose thread is still open
     /// stays, wherever the thread moved (`PROSE-UI-231`).
     #[must_use]
-    pub fn lost_drafts(&self, drafts: &HashMap<Uuid, String>) -> Vec<(Uuid, Option<&'static str>)> {
+    pub fn lost_drafts(
+        &self,
+        drafts: &HashMap<CommentId, String>,
+    ) -> Vec<(CommentId, Option<&'static str>)> {
         drafts
             .iter()
             .filter_map(|(id, text)| {
@@ -320,7 +323,7 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
-    use ambre_core::{UserId, Uuid};
+    use ambre_core::{CommentId, SuggestionId, UserId};
 
     use crate::events::{
         BlockId, CommentThread, ProseEvent, Suggestion, SuggestionKind, SuggestionSpan, block_id,
@@ -350,7 +353,7 @@ mod tests {
 
     fn suggestion(block: BlockId, kind: SuggestionKind, start: u32, end: u32) -> Suggestion {
         Suggestion {
-            suggestion_id: Uuid::new(),
+            suggestion_id: SuggestionId::new(),
             kind,
             author: "Ann".to_owned(),
             user_id: UserId::from_bytes([3; 16]),
@@ -415,7 +418,7 @@ mod tests {
         let mut ui = view(3);
         let (a, c) = (text_block(&ui, 0), text_block(&ui, 2));
         let thread = |block, resolved| CommentThread {
-            comment_id: Uuid::new(),
+            comment_id: CommentId::new(),
             anchor_block: Some(block),
             anchor_start: 4,
             anchor_end: 9,
@@ -452,7 +455,7 @@ mod tests {
         let mut ui = view(3);
         let (a, c) = (text_block(&ui, 0), text_block(&ui, 2));
         let thread = |block| CommentThread {
-            comment_id: Uuid::new(),
+            comment_id: CommentId::new(),
             anchor_block: Some(block),
             anchor_start: 0,
             anchor_end: 3,
@@ -478,7 +481,7 @@ mod tests {
         use crate::events::ProseCommand;
         let mut ui = view(80);
         let far = text_block(&ui, 60);
-        let id = Uuid::new();
+        let id = CommentId::new();
         ui.apply_event(&ProseEvent::CommentsUpdated {
             threads: vec![CommentThread {
                 comment_id: id,
@@ -516,13 +519,28 @@ mod tests {
             ui.take_intent(AnnotationIntent::Resolve { comment_id: id }, 5),
             Some(ProseCommand::ResolveComment { comment_id: id })
         );
+        let suggestion = SuggestionId::new();
         assert_eq!(
-            ui.take_intent(AnnotationIntent::Accept { suggestion_id: id }, 5),
-            Some(ProseCommand::AcceptSuggestion { suggestion_id: id })
+            ui.take_intent(
+                AnnotationIntent::Accept {
+                    suggestion_id: suggestion
+                },
+                5
+            ),
+            Some(ProseCommand::AcceptSuggestion {
+                suggestion_id: suggestion
+            })
         );
         assert_eq!(
-            ui.take_intent(AnnotationIntent::Reject { suggestion_id: id }, 5),
-            Some(ProseCommand::RejectSuggestion { suggestion_id: id })
+            ui.take_intent(
+                AnnotationIntent::Reject {
+                    suggestion_id: suggestion
+                },
+                5
+            ),
+            Some(ProseCommand::RejectSuggestion {
+                suggestion_id: suggestion
+            })
         );
     }
 
@@ -532,7 +550,7 @@ mod tests {
         let mut ui = view(3);
         let a = text_block(&ui, 0);
         let thread = || CommentThread {
-            comment_id: Uuid::new(),
+            comment_id: CommentId::new(),
             anchor_block: Some(a),
             anchor_start: 4,
             anchor_end: 9,

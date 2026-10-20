@@ -131,7 +131,7 @@ impl ToileState {
                 _ => None,
             },
             media_hash: match kind {
-                ElementKind::Image => Some(str_of(&em, "hash")),
+                ElementKind::Image => Some(ambre_core::ContentHash(str_of(&em, "hash"))),
                 _ => None,
             },
             // The plaintext thumbnail, re-encoded as the PNG the export writes

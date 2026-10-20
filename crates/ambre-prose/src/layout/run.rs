@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use ambre_core::Uuid;
+use ambre_core::FootnoteId;
 use ambre_draw::{BoundingBox, Layout, ParleyBrush};
 use loro::TreeID;
 use parley::{Affinity, Cursor, Selection};
@@ -793,7 +793,7 @@ pub struct ShapedLayout {
     /// notes alike.
     pub blocks: HashMap<TreeID, ShapedRun>,
     /// The number of every footnote the window draws, beside its text.
-    pub notes: HashMap<Uuid, ShapedRun>,
+    pub notes: HashMap<FootnoteId, ShapedRun>,
     /// The cells of every table of the window, placed and shaped.
     pub tables: HashMap<TreeID, Arc<TableShape>>,
     /// Where each text block a cell of `tables` holds sits: its table, its
@@ -852,7 +852,7 @@ impl ShapedLayout {
         version: u64,
         layout: Arc<PageLayout>,
         blocks: HashMap<TreeID, ShapedRun>,
-        notes: HashMap<Uuid, ShapedRun>,
+        notes: HashMap<FootnoteId, ShapedRun>,
         tables: HashMap<TreeID, Arc<TableShape>>,
     ) -> Self {
         let ends = text_ends(layout.blocks.iter().map(|block| {

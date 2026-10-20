@@ -463,7 +463,7 @@ impl ToileState {
         let mut created = 0;
         for blob in blobs {
             let key = blob.hash.as_str();
-            if !blob.hash.is_resolved() || media.get(key).is_some() {
+            if !crate::logic::interop::media::is_resolved(&blob.hash) || media.get(key).is_some() {
                 // No address from Sync yet, or the entry already exists
                 // (dedup). A placeholder token never becomes a key.
                 continue;
@@ -684,7 +684,11 @@ mod tests {
         )
         .expect("a picture");
         let minted = decoded.media[0].clone();
-        assert!(!minted.hash.is_resolved(), "{:?}", minted.hash);
+        assert!(
+            !crate::logic::interop::media::is_resolved(&minted.hash),
+            "{:?}",
+            minted.hash
+        );
         assert_eq!(
             st.seed_media(&[minted, blob("pending:7", 1, 1, "image/png")]),
             0

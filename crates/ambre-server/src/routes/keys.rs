@@ -14,8 +14,8 @@ use crate::state::AppState;
 pub struct StoreMasterKeysRequest {
     pub master_key_enc: String,
     pub master_key_salt: String,
-    pub signing_pubkey: String,
-    pub exchange_pubkey: String,
+    pub signing_pubkey: ambre_core::SigningKeyHex,
+    pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 
 pub async fn store_master_keys(
@@ -35,10 +35,10 @@ pub async fn store_master_keys(
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
-    let spk = hex::decode(&req.signing_pubkey).map_err(|e| AppError::Conflict {
+    let spk = hex::decode(req.signing_pubkey.as_str()).map_err(|e| AppError::Conflict {
         detail: e.to_string(),
     })?;
-    let epk = hex::decode(&req.exchange_pubkey).map_err(|e| AppError::Conflict {
+    let epk = hex::decode(req.exchange_pubkey.as_str()).map_err(|e| AppError::Conflict {
         detail: e.to_string(),
     })?;
 
@@ -99,8 +99,8 @@ pub async fn store_master_keys(
 #[derive(serde::Serialize)]
 pub struct KeysStoredResponse {
     pub status: ambre_core::WriteStatus,
-    pub access_token: String,
-    pub refresh_token: String,
+    pub access_token: ambre_protocol::ws::AccessToken,
+    pub refresh_token: ambre_protocol::ws::RefreshToken,
     /// Access-token lifetime in seconds.
     pub access_expires_in: u64,
 }
@@ -111,8 +111,8 @@ pub struct KeysStoredResponse {
 pub struct MasterKeysResponse {
     pub master_key_enc: String,
     pub master_key_salt: String,
-    pub signing_pubkey: String,
-    pub exchange_pubkey: String,
+    pub signing_pubkey: ambre_core::SigningKeyHex,
+    pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 
 pub async fn get_master_keys(
@@ -136,8 +136,14 @@ pub async fn get_master_keys(
             .map(|v| base64::engine::general_purpose::URL_SAFE.encode(v))
             .unwrap_or_default(),
         // Empty until the key setup, like the master material above.
-        signing_pubkey: u.signing_pubkey.map(hex::encode).unwrap_or_default(),
-        exchange_pubkey: u.exchange_pubkey.map(hex::encode).unwrap_or_default(),
+        signing_pubkey: u
+            .signing_pubkey
+            .map(ambre_core::SigningKeyHex::encode)
+            .unwrap_or_default(),
+        exchange_pubkey: u
+            .exchange_pubkey
+            .map(ambre_core::ExchangeKeyHex::encode)
+            .unwrap_or_default(),
     }))
 }
 

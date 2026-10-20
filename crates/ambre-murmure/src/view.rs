@@ -3285,7 +3285,7 @@ mod tests {
     fn drop_file(page: &mut Page, channel: ChannelId, name: &str) -> RequestId {
         page.dropped.borrow_mut().push(PickedFile {
             name: name.to_owned(),
-            media_type: String::new(),
+            media_type: MediaType(String::new()),
             data: vec![7; 3],
         });
         frame_with_fonts(&mut page.view);

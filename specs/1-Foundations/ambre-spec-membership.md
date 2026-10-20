@@ -187,7 +187,7 @@ pub struct MembershipEntry {
     pub document: DocumentId,
     pub position: u64,                  // the place in the log, from zero
     pub member: UserId,
-    pub member_key: [u8; 32],           // the member's signing key
+    pub member_key: PublicKey,          // the member's signing key
     pub act: MembershipAct,
     pub role: Role,
     pub key: Option<KeyId>,             // the key an invite or a self-join wraps

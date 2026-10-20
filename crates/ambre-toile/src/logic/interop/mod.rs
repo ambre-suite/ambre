@@ -201,7 +201,7 @@ pub struct ExportElement {
     /// For `Text` / `Sticky`: the plain body.
     pub text: Option<String>,
     /// For `Image`: the media content hash referencing a `MediaBlob`.
-    pub media_hash: Option<String>,
+    pub media_hash: Option<ambre_core::ContentHash>,
     /// For `Image`: the PNG bytes the export writes inline, so a reader outside
     /// Ambre resolves the picture (`TOILE-IO-087`). This is the thumbnail the
     /// board holds in plaintext; the full blob is ciphertext on the relay and

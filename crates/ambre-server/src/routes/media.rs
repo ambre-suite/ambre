@@ -24,15 +24,15 @@ fn parse_doc_id(s: &str) -> Result<ambre_core::DocumentId, AppError> {
 /// cannot compute from any file it has (`SRV-059`).
 #[derive(serde::Deserialize)]
 pub struct UploadUrlRequest {
-    pub content_hash: String,
+    pub content_hash: ambre_core::ContentHash,
     /// Declared size of the encrypted blob. Validated against `media_max_bytes`
     /// and bound into the presigned PUT URL so the upload cannot exceed it.
-    pub size_bytes: u64,
+    pub size_bytes: ambre_core::ByteSize,
 }
 #[derive(serde::Serialize)]
 pub struct UploadUrlResponse {
     pub upload_url: String,
-    pub s3_key: String,
+    pub s3_key: ambre_core::ObjectKey,
 }
 
 pub async fn media_upload_url(
@@ -55,10 +55,10 @@ pub async fn media_upload_url(
     // Reject an oversized blob before handing out an upload URL. Bind the
     // declared size into the presigned PUT, so the actual upload cannot exceed
     // it.
-    if req.size_bytes == 0 || req.size_bytes > state.config.media_max_bytes {
+    if req.size_bytes == ambre_core::ByteSize(0) || req.size_bytes > state.config.media_max_bytes {
         return Err(AppError::PayloadTooLarge(format!(
             "media size {} bytes outside 1..={}",
-            req.size_bytes, state.config.media_max_bytes
+            req.size_bytes.0, state.config.media_max_bytes.0
         )));
     }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
@@ -79,7 +79,7 @@ pub async fn media_upload_url(
 /// Request for a presigned S3 download URL by content hash.
 #[derive(serde::Deserialize)]
 pub struct DownloadUrlRequest {
-    pub content_hash: String,
+    pub content_hash: ambre_core::ContentHash,
 }
 #[derive(serde::Serialize)]
 pub struct DownloadUrlResponse {
@@ -121,8 +121,8 @@ pub async fn media_download_url(
 /// (`SYNC-053`).
 #[derive(serde::Deserialize)]
 pub struct ConfirmUploadRequest {
-    pub content_hash: String,
-    pub size_bytes: i64,
+    pub content_hash: ambre_core::ContentHash,
+    pub size_bytes: ambre_core::ByteSize,
 }
 
 pub async fn media_confirm_upload(
@@ -148,10 +148,10 @@ pub async fn media_confirm_upload(
     }
     // Mirror the upload-url cap so a recorded `media` row can never claim a size
     // the upload path would have refused.
-    if req.size_bytes <= 0 || req.size_bytes as u64 > state.config.media_max_bytes {
+    if req.size_bytes == ambre_core::ByteSize(0) || req.size_bytes > state.config.media_max_bytes {
         return Err(AppError::PayloadTooLarge(format!(
             "media size {} bytes outside 1..={}",
-            req.size_bytes, state.config.media_max_bytes
+            req.size_bytes.0, state.config.media_max_bytes.0
         )));
     }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
@@ -174,7 +174,7 @@ pub async fn media_confirm_upload(
 #[derive(serde::Serialize)]
 pub struct MediaConfirmed {
     pub status: ambre_core::WriteStatus,
-    pub content_hash: String,
+    pub content_hash: ambre_core::ContentHash,
 }
 
 /// Erases the caller's upload of a blob (`SRV-139`).
@@ -187,7 +187,7 @@ pub struct MediaConfirmed {
 pub async fn media_erase(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((document_id, content_hash)): Path<(String, String)>,
+    Path((document_id, content_hash)): Path<(String, ambre_core::ContentHash)>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
@@ -223,5 +223,5 @@ pub async fn media_erase(
 #[derive(serde::Serialize)]
 pub struct MediaErased {
     pub status: ambre_core::WriteStatus,
-    pub content_hash: String,
+    pub content_hash: ambre_core::ContentHash,
 }

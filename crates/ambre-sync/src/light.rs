@@ -102,8 +102,8 @@ impl LightSubscription {
 /// Whether a reopen resumes from the copy the client holds, rather than from
 /// the relay's snapshot (`RESID-010`). It resumes when that snapshot folds in
 /// nothing past the horizon.
-pub(crate) fn resumes(horizon: Seq, relay_covered: u64) -> bool {
-    relay_covered <= horizon.0
+pub(crate) fn resumes(horizon: Seq, relay_covered: Seq) -> bool {
+    relay_covered <= horizon
 }
 
 impl SyncState {
@@ -366,7 +366,7 @@ mod tests {
 
     /// A state with one open document, released at `applied`.
     fn released(
-        applied: u64,
+        applied: Seq,
     ) -> (
         SyncState,
         ambre_bus::conduit::Receiver<LogicEvent>,
@@ -426,7 +426,7 @@ mod tests {
     /// and its cursors, and its full session is gone.
     #[test]
     fn an_evicted_document_costs_only_a_light_subscription() {
-        let (state, _rx, document_id, _, _) = released(5);
+        let (state, _rx, document_id, _, _) = released(ambre_bus::Seq(5));
         assert_eq!(state.documents_len(), 0);
         assert!(!state.session_nonces.contains_key(&document_id));
         assert_eq!(state.light_doc_type(document_id), Some(DocType::Trame));
@@ -439,7 +439,7 @@ mod tests {
     /// the Logic thread but the counters.
     #[test]
     fn a_light_update_moves_its_counters_from_the_summary() {
-        let (mut state, rx, document_id, doc_key, snapshot) = released(9);
+        let (mut state, rx, document_id, doc_key, snapshot) = released(ambre_bus::Seq(9));
         drain(&rx);
         state.receive_update(
             Seq(10),
@@ -462,7 +462,7 @@ mod tests {
     /// open, marks the document active and counts nothing.
     #[test]
     fn a_light_update_with_no_summary_marks_activity_alone() {
-        let (mut state, rx, document_id, doc_key, snapshot) = released(9);
+        let (mut state, rx, document_id, doc_key, snapshot) = released(ambre_bus::Seq(9));
         drain(&rx);
         state.receive_update(Seq(10), update(document_id, snapshot, &doc_key, None));
         let stranger = DocumentKey::generate();
@@ -488,7 +488,7 @@ mod tests {
     /// another, moves no counter and marks nothing.
     #[test]
     fn an_update_this_user_signed_counts_nothing() {
-        let (mut state, rx, document_id, doc_key, snapshot) = released(9);
+        let (mut state, rx, document_id, doc_key, snapshot) = released(ambre_bus::Seq(9));
         drain(&rx);
         state.signing_key = Some(MasterSeed::from_array([2; 32]).derive_signing_key());
         state.receive_update(
@@ -536,7 +536,7 @@ mod tests {
         }
         state.handle_command(SyncCommand::ReleaseDocument {
             document_id,
-            applied_seq: 0,
+            applied_seq: ambre_bus::Seq(0),
         });
         assert_eq!(
             state.documents_len(),
@@ -555,10 +555,13 @@ mod tests {
     /// horizon when the relay's snapshot folds in nothing past it.
     #[test]
     fn a_reopen_resumes_after_the_horizon_it_holds() {
-        let (mut state, _rx, document_id, _, _) = released(5);
-        assert!(resumes(Seq(5), 5));
-        assert!(resumes(Seq(5), 0));
-        assert!(!resumes(Seq(5), 6), "a newer relay snapshot was skipped");
+        let (mut state, _rx, document_id, _, _) = released(ambre_bus::Seq(5));
+        assert!(resumes(Seq(5), ambre_bus::Seq(5)));
+        assert!(resumes(Seq(5), ambre_bus::Seq(0)));
+        assert!(
+            !resumes(Seq(5), ambre_bus::Seq(6)),
+            "a newer relay snapshot was skipped"
+        );
         assert_eq!(state.take_light(document_id), Some(Seq(5)));
         assert_eq!(state.take_light(document_id), None);
     }
@@ -566,7 +569,7 @@ mod tests {
     /// The horizon never passes what the session itself received.
     #[test]
     fn the_horizon_never_passes_what_the_session_received() {
-        let (mut state, _rx, document_id, _, _) = released(40);
+        let (mut state, _rx, document_id, _, _) = released(ambre_bus::Seq(40));
         assert_eq!(state.take_light(document_id), Some(Seq(9)));
     }
 
@@ -575,7 +578,7 @@ mod tests {
     /// as any light document's.
     #[test]
     fn a_watched_segment_counts_from_its_first_number() {
-        let (mut state, rx, meta, doc_key, _) = released(9);
+        let (mut state, rx, meta, doc_key, _) = released(ambre_bus::Seq(9));
         drain(&rx);
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
@@ -621,7 +624,7 @@ mod tests {
     /// spec). Nothing past the cursor is counted twice, and no document loads.
     #[test]
     fn a_watched_thread_counts_after_its_read_cursor() {
-        let (mut state, rx, meta, doc_key, _) = released(9);
+        let (mut state, rx, meta, doc_key, _) = released(ambre_bus::Seq(9));
         drain(&rx);
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
@@ -947,7 +950,7 @@ mod tests {
     /// thread (the Murmure threads spec).
     #[test]
     fn a_thread_signal_reaches_logic_only_for_a_thread_not_held() {
-        let (mut state, rx, held, _, _) = released(9);
+        let (mut state, rx, held, _, _) = released(ambre_bus::Seq(9));
         drain(&rx);
         let open = DocumentId::new();
         let doc = SyncDocumentState::new(open, DocumentKey::generate(), DocType::Murmure, true);

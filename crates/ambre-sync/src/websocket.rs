@@ -687,7 +687,7 @@ impl SyncState {
                         self.send_to_logic(LogicEvent::RemoteSnapshot {
                             document_id,
                             payload,
-                            covered_seq: covered_seq.0,
+                            covered_seq,
                         });
                     }
                     Some(Err(e)) => {

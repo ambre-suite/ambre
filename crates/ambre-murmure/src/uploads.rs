@@ -17,7 +17,7 @@ use crate::composer::DraftOf;
 pub struct PickedFile {
     pub name: String,
     /// The type the browser named, empty when it named none.
-    pub media_type: String,
+    pub media_type: MediaType,
     pub data: Vec<u8>,
 }
 
@@ -38,7 +38,7 @@ const UNKNOWN_TYPE: &str = "application/octet-stream";
 impl PickedFile {
     /// The type the attachment records.
     pub fn media_type(&self) -> MediaType {
-        match self.media_type.trim() {
+        match self.media_type.as_str().trim() {
             "" => MediaType(UNKNOWN_TYPE.to_owned()),
             named => MediaType(named.to_owned()),
         }

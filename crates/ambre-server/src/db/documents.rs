@@ -212,7 +212,12 @@ pub async fn begin_deletion(
 ) -> Result<Vec<super::DeletedChannel>, AppError> {
     let did = id_to_uuid(*document_id);
     let mut tx = pool.begin().await?;
-    let channels = super::channels::delete_space_channels_in(&mut tx, did, sweep_due).await?;
+    let channels = super::channels::delete_space_channels_in(
+        &mut tx,
+        ambre_core::SpaceId::from_document(*document_id),
+        sweep_due,
+    )
+    .await?;
     begin_deletions_in(&mut tx, &[did], sweep_due).await?;
     tx.commit().await?;
     Ok(channels)

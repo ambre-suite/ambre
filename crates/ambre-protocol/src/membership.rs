@@ -7,7 +7,7 @@
 //! what the relay serves (`SYNC-103`). The relay stores the entries and checks
 //! the signature, and computes no digest.
 
-use ambre_core::{DocumentId, KeyId, Role, UserId};
+use ambre_core::{DocumentId, KeyId, PublicKey, Role, UserId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::SerializationError;
@@ -75,7 +75,7 @@ pub struct MembershipEntry {
     pub member: UserId,
     /// The member's signing key, so an entry that member signs later checks
     /// against the log alone.
-    pub member_key: [u8; 32],
+    pub member_key: ambre_core::PublicKey,
     /// What the entry records.
     pub act: MembershipAct,
     /// The member's role after the entry.
@@ -98,7 +98,7 @@ struct Signed<'a> {
     document: &'a DocumentId,
     position: u64,
     member: &'a UserId,
-    member_key: &'a [u8; 32],
+    member_key: &'a PublicKey,
     act: MembershipAct,
     role: Role,
     key: &'a Option<KeyId>,
@@ -166,7 +166,7 @@ mod tests {
             document: DocumentId::from_bytes([1; 16]),
             position: 1,
             member: UserId::from_bytes([2; 16]),
-            member_key: [3; 32],
+            member_key: PublicKey::from_array([3; 32]),
             act: MembershipAct::Invite,
             role: Role::Editor,
             key: Some(KeyId::from_array([4; 16])),
@@ -188,7 +188,7 @@ mod tests {
             |e| e.document = DocumentId::from_bytes([9; 16]),
             |e| e.position = 2,
             |e| e.member = UserId::from_bytes([9; 16]),
-            |e| e.member_key = [9; 32],
+            |e| e.member_key = PublicKey::from_array([9; 32]),
             |e| e.act = MembershipAct::Revoke,
             |e| e.role = Role::Viewer,
             |e| e.key = None,

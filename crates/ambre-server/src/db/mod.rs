@@ -43,6 +43,12 @@ fn decode_doc_type(word: &str) -> Result<ambre_core::DocType, sqlx::Error> {
         .map_err(|e: ambre_core::error::DocTypeError| sqlx::Error::Decode(Box::new(e)))
 }
 
+/// A stored sequence number column, as a [`Seq`](ambre_core::Seq). A
+/// negative value is a decode error: the relay numbers from zero up.
+fn decode_seq(value: i64) -> Result<ambre_core::Seq, sqlx::Error> {
+    ambre_core::Seq::try_from(value).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+}
+
 fn uuid_to_core(u: uuid::Uuid) -> ambre_core::Uuid {
     ambre_core::Uuid::from_bytes(*u.as_bytes())
 }
@@ -105,7 +111,7 @@ mod tests {
         // A snapshot row needs an owning document, which needs an owner user (FKs).
         let user = create_user(
             &pool,
-            "snap@test.dev",
+            &ambre_core::Email::from("snap@test.dev"),
             "Snap",
             &[1u8; 32],
             &[2u8; 16],
@@ -130,8 +136,8 @@ mod tests {
             None,
             None,
             &clocks,
-            "s3/key/snap",
-            1500,
+            &ambre_core::ObjectKey::from("s3/key/snap"),
+            ambre_core::Seq(1500),
         )
         .await
         .expect("create snapshot");
@@ -145,15 +151,15 @@ mod tests {
             .expect("query latest")
             .expect("snapshot exists");
         assert_eq!(latest.id, sid);
-        assert_eq!(latest.s3_key, "s3/key/snap");
-        assert_eq!(latest.covered_seq, 1500);
+        assert_eq!(latest.s3_key, ambre_core::ObjectKey::from("s3/key/snap"));
+        assert_eq!(latest.covered_seq, ambre_core::Seq(1500));
 
         // get_snapshot (the download-url path) carries it too.
         let by_id = get_snapshot(&pool, &document_id, &sid)
             .await
             .expect("query by id")
             .expect("snapshot exists");
-        assert_eq!(by_id.covered_seq, 1500);
+        assert_eq!(by_id.covered_seq, ambre_core::Seq(1500));
 
         // IDOR regression guard: resolving the same snapshot id under a foreign
         // document must return None (never leak another document's blob).
@@ -173,7 +179,7 @@ mod tests {
     async fn purge_superseded_updates_trims_covered_deltas(pool: PgPool) {
         let user = create_user(
             &pool,
-            "purge@test.dev",
+            &ambre_core::Email::from("purge@test.dev"),
             "Purge",
             &[1u8; 32],
             &[2u8; 16],
@@ -199,7 +205,7 @@ mod tests {
                 &snap,
                 seq,
                 seq,
-                &format!("k{seq}"),
+                &ambre_core::ObjectKey(format!("k{seq}")),
             )
             .await
             .expect("insert update");
@@ -213,8 +219,8 @@ mod tests {
             None,
             None,
             &serde_json::json!({}),
-            "s3/snap",
-            6,
+            &ambre_core::ObjectKey::from("s3/snap"),
+            ambre_core::Seq(6),
         )
         .await
         .expect("create snapshot");
@@ -228,10 +234,13 @@ mod tests {
             "seq 1..=6 are covered by the snapshot and purged"
         );
 
-        let remaining = get_updates_after(&pool, &document_id, 0, 100)
+        let remaining = get_updates_after(&pool, &document_id, ambre_core::Seq(0), 100)
             .await
             .expect("list remaining");
-        let seqs: Vec<i64> = remaining.iter().map(|u| u.seq).collect();
+        let seqs: Vec<i64> = remaining
+            .iter()
+            .map(|u| u.seq.to_i64_saturating())
+            .collect();
         assert_eq!(seqs, vec![7, 8, 9, 10], "only the uncovered tail survives");
     }
 
@@ -243,7 +252,7 @@ mod tests {
     async fn purge_horizon_is_min_covered_seq(pool: PgPool) {
         let user = create_user(
             &pool,
-            "horizon@test.dev",
+            &ambre_core::Email::from("horizon@test.dev"),
             "Horizon",
             &[1u8; 32],
             &[2u8; 16],
@@ -268,7 +277,7 @@ mod tests {
                 &snap,
                 seq,
                 seq,
-                &format!("k{seq}"),
+                &ambre_core::ObjectKey(format!("k{seq}")),
             )
             .await
             .expect("insert update");
@@ -282,8 +291,8 @@ mod tests {
                 None,
                 None,
                 &serde_json::json!({}),
-                &format!("s3/snap-{covered}"),
-                covered,
+                &ambre_core::ObjectKey(format!("s3/snap-{covered}")),
+                ambre_core::Seq::try_from(covered).expect("a relay number"),
             )
             .await
             .expect("create snapshot");
@@ -298,10 +307,13 @@ mod tests {
             "MIN(3, 8) = 3, so only seq 1..=3 are purged"
         );
 
-        let remaining = get_updates_after(&pool, &document_id, 0, 100)
+        let remaining = get_updates_after(&pool, &document_id, ambre_core::Seq(0), 100)
             .await
             .expect("list remaining");
-        let seqs: Vec<i64> = remaining.iter().map(|u| u.seq).collect();
+        let seqs: Vec<i64> = remaining
+            .iter()
+            .map(|u| u.seq.to_i64_saturating())
+            .collect();
         assert_eq!(seqs, vec![4, 5, 6, 7, 8, 9, 10]);
     }
 }

@@ -196,10 +196,11 @@ impl SyncState {
         let exchange_key = master_seed.derive_exchange_key();
 
         if let Some(tx) = event_tx {
-            let signing_pub_key = hex::encode(signing_key.verifying_key().to_bytes());
+            let signing_pub_key =
+                ambre_core::SigningKeyHex::encode(signing_key.verifying_key().to_bytes());
             let exchange_pub_key = {
                 let pub_key = x25519_dalek::PublicKey::from(&exchange_key);
-                hex::encode(pub_key.as_bytes())
+                ambre_core::ExchangeKeyHex::encode(pub_key.as_bytes())
             };
             wasm_bindgen_futures::spawn_local(async move {
                 let url = format!("{url_scheme}://{api_base}/api/auth/dev/login");
@@ -215,7 +216,7 @@ impl SyncState {
                             id,
                             user_id,
                             display_name: resp.display_name,
-                            email: String::new(),
+                            email: ambre_core::Email(String::new()),
                             master_seed,
                             signing_key,
                             exchange_key,
@@ -242,7 +243,7 @@ impl SyncState {
                 RestEvent::SessionReady {
                     user_id: UserId::new(),
                     display_name: username,
-                    email: String::new(),
+                    email: ambre_core::Email(String::new()),
                 },
             );
         }
@@ -363,7 +364,7 @@ impl SyncState {
         &mut self,
         id: RequestId,
         passphrase: SecretBytes,
-        email: String,
+        email: ambre_core::Email,
         display_name: String,
     ) {
         tracing::info!("Sync: SetupAccount");
@@ -379,10 +380,11 @@ impl SyncState {
                 let recovery_words = encode(master_seed.recovery_bytes());
                 let signing_key = master_seed.derive_signing_key();
                 let exchange_key = master_seed.derive_exchange_key();
-                let signing_pub_key = hex::encode(signing_key.verifying_key().to_bytes());
+                let signing_pub_key =
+                    ambre_core::SigningKeyHex::encode(signing_key.verifying_key().to_bytes());
                 let exchange_pub_key = {
                     let pub_key = x25519_dalek::PublicKey::from(&exchange_key);
-                    hex::encode(pub_key.as_bytes())
+                    ambre_core::ExchangeKeyHex::encode(pub_key.as_bytes())
                 };
                 // Each step below fails only on a broken platform or a bug. The
                 // account is not created then, and the user reads why.

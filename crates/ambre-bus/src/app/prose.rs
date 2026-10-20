@@ -30,7 +30,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use ambre_core::{UserId, Uuid};
+use ambre_core::{CommentId, FootnoteId, ReplyId, SuggestionId, UserId};
 
 // =============================================================================
 // Block identity (`ambre-spec-prose-schema.md section 2`)
@@ -533,7 +533,7 @@ pub struct FindMatch {
 /// kept for the author to review (`PROSE-FEAT-098`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FootnoteEntry {
-    pub footnote_id: Uuid,
+    pub footnote_id: FootnoteId,
     pub ordinal: Option<u32>,
     pub text: String,
 }
@@ -544,10 +544,10 @@ pub struct FootnoteEntry {
 /// command carried (`PROSE-FEAT-077`). The stamp is display only.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommentReply {
-    pub reply_id: Uuid,
+    pub reply_id: ReplyId,
     pub author: String,
     pub user_id: UserId,
-    pub created_at: u64,
+    pub created_at: crate::Timestamp,
     pub text: String,
 }
 
@@ -557,7 +557,7 @@ pub struct CommentReply {
 /// `orphaned` is set (`PROSE-FEAT-202`, `PROSE-FEAT-203`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommentThread {
-    pub comment_id: Uuid,
+    pub comment_id: CommentId,
     pub anchor_block: Option<BlockId>,
     pub anchor_start: u32,
     pub anchor_end: u32,
@@ -598,7 +598,7 @@ pub struct LinkSpan {
 /// spans and stays one suggestion (`PROSE-FEAT-259`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Suggestion {
-    pub suggestion_id: Uuid,
+    pub suggestion_id: SuggestionId,
     pub kind: SuggestionKind,
     pub author: String,
     pub user_id: UserId,
@@ -981,12 +981,12 @@ pub enum ProseCommand {
     },
     /// Rewrite a note's body.
     EditFootnote {
-        footnote_id: Uuid,
+        footnote_id: FootnoteId,
         new_text: String,
     },
     /// Remove a note and every call to it (`PROSE-FEAT-070`).
     DeleteFootnote {
-        footnote_id: Uuid,
+        footnote_id: FootnoteId,
     },
 
     // -- Comments (`features/ambre-spec-prose-comments.md`) --
@@ -1000,32 +1000,32 @@ pub enum ProseCommand {
     },
     /// A reply at the end of the thread, which reopens it (`PROSE-FEAT-079`).
     ReplyToComment {
-        comment_id: Uuid,
+        comment_id: CommentId,
         text: String,
         now_ms: u64,
     },
     /// Close a thread.
     ResolveComment {
-        comment_id: Uuid,
+        comment_id: CommentId,
     },
     /// Reopen a thread, with no reply added.
     ReopenComment {
-        comment_id: Uuid,
+        comment_id: CommentId,
     },
     /// Remove a thread and its mark, and leave the text.
     DeleteComment {
-        comment_id: Uuid,
+        comment_id: CommentId,
     },
     /// Remove one of the caller's replies, or the thread when it is the head
     /// (`PROSE-FEAT-081`).
     DeleteReply {
-        comment_id: Uuid,
-        reply_id: Uuid,
+        comment_id: CommentId,
+        reply_id: ReplyId,
     },
     /// Rewrite one of the caller's replies (`PROSE-FEAT-080`).
     EditCommentReply {
-        comment_id: Uuid,
-        reply_id: Uuid,
+        comment_id: CommentId,
+        reply_id: ReplyId,
         new_text: String,
     },
 
@@ -1037,11 +1037,11 @@ pub enum ProseCommand {
     },
     /// Apply every span of one suggestion (`PROSE-FEAT-083`).
     AcceptSuggestion {
-        suggestion_id: Uuid,
+        suggestion_id: SuggestionId,
     },
     /// Cancel every span of one suggestion (`PROSE-FEAT-273`).
     RejectSuggestion {
-        suggestion_id: Uuid,
+        suggestion_id: SuggestionId,
     },
     /// Apply every pending suggestion.
     AcceptAllSuggestions,
@@ -1528,7 +1528,7 @@ pub enum ProseRefusal {
     FootnoteInNote,
     /// The command names a footnote the document does not hold.
     #[error("footnote {0} is not in the document")]
-    NoSuchFootnote(Uuid),
+    NoSuchFootnote(FootnoteId),
     /// A comment asked for in a header or a footer, drawn on every page.
     #[error("a header or a footer cannot hold a comment")]
     CommentInBand,
@@ -1538,10 +1538,10 @@ pub enum ProseRefusal {
     CommentInNote,
     /// The command names a comment thread the document does not hold.
     #[error("comment {0} is not in the document")]
-    NoSuchComment(Uuid),
+    NoSuchComment(CommentId),
     /// The command names a reply the thread does not hold.
     #[error("reply {0} is not in the thread")]
-    NoSuchReply(Uuid),
+    NoSuchReply(ReplyId),
     /// A reply edited or deleted by someone other than its author
     /// (`PROSE-FEAT-080`, `PROSE-FEAT-198`).
     #[error("only its author can change a reply")]

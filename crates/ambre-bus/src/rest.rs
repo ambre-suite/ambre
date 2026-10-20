@@ -190,7 +190,7 @@ pub struct DocumentSummary {
     pub name: Option<String>,
     pub role: Role,
     /// Epoch milliseconds.
-    pub updated_at: u64,
+    pub updated_at: crate::Timestamp,
     /// Total member count (routing metadata, plaintext). `> 1` => shared.
     pub member_count: u32,
 }
@@ -200,7 +200,7 @@ pub struct DocumentSummary {
 pub struct MemberInfo {
     pub user_id: UserId,
     pub display_name: String,
-    pub email: String,
+    pub email: ambre_core::Email,
     pub role: Role,
     /// What the signed membership log says of this row
     /// (`ambre-spec-membership.md`, `SYNC-103`).
@@ -242,7 +242,7 @@ pub struct SealedRow {
 pub struct UserInfo {
     pub user_id: UserId,
     pub display_name: String,
-    pub email: String,
+    pub email: ambre_core::Email,
 }
 
 // -----------------------------------------------------------------------------
@@ -267,7 +267,7 @@ pub enum RestCommand {
     /// handle other members resolve when sharing a document.
     SetupAccount {
         passphrase: SecretBytes,
-        email: String,
+        email: ambre_core::Email,
         display_name: String,
     },
     /// Dev-only: authenticate as `username` (created on the fly server-side),
@@ -313,7 +313,7 @@ pub enum RestCommand {
     /// -> `InviteeKey`.
     FetchInviteeKey {
         document_id: DocumentId,
-        invitee_email: String,
+        invitee_email: ambre_core::Email,
     },
     /// Fetch the exchange key of a user the client already names, such as a
     /// member of a space, **without wrapping**. The user compares it with the
@@ -334,10 +334,10 @@ pub enum RestCommand {
     /// member of a space: Sync then fetches the keys of `invitee` itself.
     InviteToDocument {
         document_id: DocumentId,
-        invitee_email: Option<String>,
+        invitee_email: Option<ambre_core::Email>,
         invitee: UserId,
         role: Role,
-        expect_exchange_pub_key: [u8; 32],
+        expect_exchange_pub_key: ambre_core::PublicKey,
         now: Timestamp,
     },
     /// Revoke a member (triggers the full key-rotation sequence). -> `RevocationComplete`.
@@ -466,7 +466,7 @@ pub enum RestEvent {
     SessionReady {
         user_id: UserId,
         display_name: String,
-        email: String,
+        email: ambre_core::Email,
     },
     /// First connection: no keys on the server -- the UI must show onboarding.
     AccountSetupRequired,
@@ -504,15 +504,15 @@ pub enum RestEvent {
         document_id: DocumentId,
         user_id: UserId,
         display_name: String,
-        email: String,
-        exchange_pub_key: [u8; 32],
+        email: ambre_core::Email,
+        exchange_pub_key: ambre_core::PublicKey,
         fingerprint: String,
     },
     /// The answer to `FetchMemberKey`: the key the relay serves for that
     /// user, and its fingerprint, for the same comparison with the pin.
     MemberKey {
         user_id: UserId,
-        exchange_pub_key: [u8; 32],
+        exchange_pub_key: ambre_core::PublicKey,
         fingerprint: String,
     },
     InviteSent {
@@ -618,7 +618,7 @@ pub enum RestEvent {
     ProviderSignedIn {
         user_id: UserId,
         display_name: String,
-        email: String,
+        email: ambre_core::Email,
         keys_stored: bool,
     },
 }

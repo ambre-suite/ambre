@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ambre_bus::app::prose::{BlockType, ParagraphStyle};
-use ambre_core::Uuid;
+use ambre_core::FootnoteId;
 use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroMap, LoroTree, LoroValue, TreeID};
 
@@ -159,7 +159,12 @@ pub const NOTE_GAP_PX: f32 = 4.0;
 /// the caret reads a note like any other text (`PROSE-UI-187`).
 /// One reachable note: its id, its ordinal, its text and the marked spans
 /// of it (`PROSE-UI-207`).
-pub(crate) type NoteKey = (Uuid, u32, String, Vec<crate::layout::measure::MarkedSpan>);
+pub(crate) type NoteKey = (
+    FootnoteId,
+    u32,
+    String,
+    Vec<crate::layout::measure::MarkedSpan>,
+);
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct NotePlan {
@@ -168,11 +173,11 @@ pub(crate) struct NotePlan {
     /// still holds.
     pub(crate) key: Vec<NoteKey>,
     /// The calls of each block: the code-point offset and the note.
-    calls: HashMap<TreeID, Vec<(u32, Uuid)>>,
+    calls: HashMap<TreeID, Vec<(u32, FootnoteId)>>,
     /// Each note's ordinal, shaped height and block.
-    notes: HashMap<Uuid, (u32, f32, TreeID)>,
+    notes: HashMap<FootnoteId, (u32, f32, TreeID)>,
     /// Each note's number as it was shaped.
-    pub(crate) numbers: HashMap<Uuid, ShapedRun>,
+    pub(crate) numbers: HashMap<FootnoteId, ShapedRun>,
     /// Each note's text as it was shaped, under the note's block, indented
     /// past its number.
     pub(crate) texts: Vec<(TreeID, ShapedRun)>,
@@ -231,9 +236,9 @@ impl NotePlan {
             texts.push((block, run));
             notes.insert(*id, (*ordinal, height, block));
         }
-        let mut calls: HashMap<TreeID, Vec<(u32, Uuid)>> = HashMap::new();
+        let mut calls: HashMap<TreeID, Vec<(u32, FootnoteId)>> = HashMap::new();
         for anchor in doc::anchors(document, doc::K_FOOTNOTE) {
-            let Ok(id) = Uuid::parse_str(&anchor.value) else {
+            let Ok(id) = FootnoteId::parse_str(&anchor.value) else {
                 continue;
             };
             if notes.contains_key(&id) {
@@ -259,12 +264,12 @@ impl NotePlan {
     }
 
     /// The calls of `block`, the line of each still to find.
-    fn calls_of(&self, block: &TreeID) -> &[(u32, Uuid)] {
+    fn calls_of(&self, block: &TreeID) -> &[(u32, FootnoteId)] {
         self.calls.get(block).map_or(&[], Vec::as_slice)
     }
 
     /// One call, placed on `line`.
-    fn call(&self, id: &Uuid, line: u32) -> Option<NoteCall> {
+    fn call(&self, id: &FootnoteId, line: u32) -> Option<NoteCall> {
         let (ordinal, height_px, block_id) = *self.notes.get(id)?;
         Some(NoteCall {
             footnote_id: *id,

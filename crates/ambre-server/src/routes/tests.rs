@@ -587,10 +587,24 @@ mod handler_tests {
         ));
         let frame = crate::payload::Payload::new(vec![1]);
         assert!(gone(
-            crate::redis_ops::append_pending_delta(redis, &doc, 8, "k", &frame).await
+            crate::redis_ops::append_pending_delta(
+                redis,
+                &doc,
+                8,
+                &ambre_core::ObjectKey::from("k"),
+                &frame
+            )
+            .await
         ));
         assert!(gone(
-            crate::redis_ops::push_dead_letter(redis, &doc, 8, "k", &frame).await
+            crate::redis_ops::push_dead_letter(
+                redis,
+                &doc,
+                8,
+                &ambre_core::ObjectKey::from("k"),
+                &frame
+            )
+            .await
         ));
         let sample = ambre_protocol::messages::Ciphertext(b"blob".to_vec());
         assert!(gone(
@@ -1015,7 +1029,7 @@ mod handler_tests {
             document: doc,
             position,
             member: member.0,
-            member_key: member.1.verifying_key().to_bytes(),
+            member_key: ambre_core::PublicKey::from_array(member.1.verifying_key().to_bytes()),
             act,
             role,
             key: (act == ambre_protocol::MembershipAct::Invite)
@@ -1247,11 +1261,13 @@ mod handler_tests {
             app.clone().oneshot(with_peer(request))
         };
 
-        let bearer = format!("Bearer {}", minted.access_token);
+        let bearer = format!("Bearer {}", minted.access_token.expose());
         let (listed, _) = status_and_code(&app_other, get_with("/api/documents", &bearer)).await;
         assert_eq!(listed, StatusCode::OK, "a token minted elsewhere");
 
-        let renewed = refresh(&app_other, &minted.refresh_token).await.unwrap();
+        let renewed = refresh(&app_other, minted.refresh_token.expose())
+            .await
+            .unwrap();
         assert_eq!(renewed.status(), StatusCode::OK);
         let body = axum::body::to_bytes(renewed.into_body(), 4096)
             .await
@@ -1313,7 +1329,10 @@ mod handler_tests {
             .unwrap();
         let sign_out = |refresh: &str| {
             Request::post("/api/auth/logout")
-                .header("authorization", format!("Bearer {}", mine.access_token))
+                .header(
+                    "authorization",
+                    format!("Bearer {}", mine.access_token.expose()),
+                )
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::json!({ "refresh_token": refresh }).to_string(),
@@ -1323,16 +1342,20 @@ mod handler_tests {
 
         let resp = app
             .clone()
-            .oneshot(sign_out(&theirs.refresh_token))
+            .oneshot(sign_out(theirs.refresh_token.expose()))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let alive = crate::redis_ops::refresh_get(&state.redis, &theirs.refresh_token).await;
+        let alive =
+            crate::redis_ops::refresh_get(&state.redis, theirs.refresh_token.expose()).await;
         assert!(alive.unwrap().is_some(), "a stranger's session survives");
 
-        let resp = app.oneshot(sign_out(&mine.refresh_token)).await.unwrap();
+        let resp = app
+            .oneshot(sign_out(mine.refresh_token.expose()))
+            .await
+            .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let gone = crate::redis_ops::refresh_get(&state.redis, &mine.refresh_token).await;
+        let gone = crate::redis_ops::refresh_get(&state.redis, mine.refresh_token.expose()).await;
         assert!(gone.unwrap().is_none(), "the caller's own session ends");
     }
 
@@ -1353,7 +1376,7 @@ mod handler_tests {
             let tokens = crate::auth::issue_session(&state, ambre_core::UserId::new(), None)
                 .await
                 .unwrap();
-            let claims = state.jwt.verify(&tokens.access_token).unwrap();
+            let claims = state.jwt.verify(tokens.access_token.expose()).unwrap();
             assert_eq!(claims.exp - claims.iat, minted);
             assert_eq!(tokens.access_expires_in, minted);
         }
@@ -1391,9 +1414,17 @@ mod handler_tests {
         let doc = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
         let snapshot = ambre_core::SnapshotId::from_bytes([0u8; 16]);
         for seq in 1..=1_005 {
-            crate::db::insert_update(&pool, &doc, &[1u8; 32], &snapshot, seq, seq, "k")
-                .await
-                .unwrap();
+            crate::db::insert_update(
+                &pool,
+                &doc,
+                &[1u8; 32],
+                &snapshot,
+                seq,
+                seq,
+                &ambre_core::ObjectKey::from("k"),
+            )
+            .await
+            .unwrap();
         }
         for (asked, served) in [("5000", 1_000), ("0", 1), ("-3", 1)] {
             let resp = app
@@ -1637,7 +1668,7 @@ mod handler_tests {
             &state.db,
             "google",
             "sub-1",
-            "new@example.com",
+            &ambre_core::Email::from("new@example.com"),
             "New",
         )
         .await
@@ -1647,12 +1678,12 @@ mod handler_tests {
         let tokens = crate::auth::issue_session(&state, user.id, None)
             .await
             .unwrap();
-        let setup = format!("Bearer {}", tokens.access_token);
+        let setup = format!("Bearer {}", tokens.access_token.expose());
 
         let refused = status_and_code(&app, get_with("/api/documents", &setup)).await;
         assert_eq!(refused, (StatusCode::FORBIDDEN, "SETUP_REQUIRED".into()));
         assert!(matches!(
-            crate::auth::authenticate_token(&state, &tokens.access_token),
+            crate::auth::authenticate_token(&state, tokens.access_token.expose()),
             Err(crate::error::AppError::SetupRequired)
         ));
         let (me, _) = status_and_code(&app, get_with("/api/auth/me", &setup)).await;
@@ -1716,7 +1747,7 @@ mod handler_tests {
             &state.db,
             "google",
             "sub-2",
-            "keyless@example.com",
+            &ambre_core::Email::from("keyless@example.com"),
             "Keyless",
         )
         .await
@@ -1799,9 +1830,15 @@ mod handler_tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn an_account_holds_both_keys_or_neither(pool: sqlx::PgPool) {
-        let user = crate::db::upsert_user_from_oidc(&pool, "google", "sub-3", "c@example.com", "C")
-            .await
-            .unwrap();
+        let user = crate::db::upsert_user_from_oidc(
+            &pool,
+            "google",
+            "sub-3",
+            &ambre_core::Email::from("c@example.com"),
+            "C",
+        )
+        .await
+        .unwrap();
         let half = sqlx::query("UPDATE users SET signing_pubkey = $2 WHERE id = $1")
             .bind(crate::db::id_to_uuid(user.id))
             .bind(vec![5u8; 32])
@@ -1817,14 +1854,22 @@ mod handler_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn the_socket_refuses_a_session_without_keys(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
-        let user =
-            crate::db::upsert_user_from_oidc(&state.db, "google", "sub-4", "d@example.com", "D")
-                .await
-                .unwrap();
+        let user = crate::db::upsert_user_from_oidc(
+            &state.db,
+            "google",
+            "sub-4",
+            &ambre_core::Email::from("d@example.com"),
+            "D",
+        )
+        .await
+        .unwrap();
         let tokens = crate::auth::issue_session(&state, user.id, None)
             .await
             .unwrap();
-        assert_eq!(first_close_code(state, &tokens.access_token).await, 4403);
+        assert_eq!(
+            first_close_code(state, tokens.access_token.expose()).await,
+            4403
+        );
     }
 
     /// `SRV-046`: an upgrade refused on authentication closes with a code of its
@@ -2508,9 +2553,13 @@ mod handler_tests {
         let hash = "e".repeat(64);
         let env = Config::default().s3_env_prefix;
         let doc = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
-        let media = crate::s3::format_s3_media_key(&env, &doc, &hash);
+        let media = crate::s3::format_s3_media_key(
+            &env,
+            &doc,
+            &ambre_core::ContentHash::from(hash.as_str()),
+        );
         let snapshot = format!("{env}/documents/{doc_id}/snapshots/s1");
-        let stub = S3Stub::spawn([media.clone(), snapshot.clone()]).await;
+        let stub = S3Stub::spawn([media.0.clone(), snapshot.clone()]).await;
         let state = test_app_state_with_s3(pool, offline_s3(Some(&stub.endpoint))).await;
         let app = shipped_router(state.clone());
         let confirm = serde_json::json!({ "content_hash": hash, "size_bytes": 7 });
@@ -2522,6 +2571,7 @@ mod handler_tests {
                 StatusCode::OK
             );
         }
+        let hash = ambre_core::ContentHash::from(hash.as_str());
         let held = || crate::db::document_holds_media(&state.db, &doc, &hash);
 
         assert_eq!(
@@ -2534,7 +2584,7 @@ mod handler_tests {
             StatusCode::OK
         );
         assert!(held().await.unwrap(), "the second uploader keeps the blob");
-        assert!(stub.object(&media).is_some());
+        assert!(stub.object(media.as_str()).is_some());
 
         assert_eq!(
             delete_status(&app, &second, erase.clone()).await,
@@ -2733,8 +2783,8 @@ mod handler_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_blob_above_its_kind_cap_is_refused(pool: sqlx::PgPool) {
         let state = test_app_state_presigning(pool).await;
-        let media_cap = state.config.media_max_bytes;
-        let snapshot_cap = state.config.snapshot_max_bytes;
+        let media_cap = state.config.media_max_bytes.0;
+        let snapshot_cap = state.config.snapshot_max_bytes.0;
         let setup = build_test_router(state.clone());
         let app = shipped_router(state);
         let owner = setup_and_get_auth(&setup).await;
@@ -3077,7 +3127,7 @@ mod handler_tests {
                 &ambre_core::SnapshotId::new(),
                 seq,
                 seq,
-                &format!("k{seq}"),
+                &ambre_core::ObjectKey(format!("k{seq}")),
             )
             .await
             .unwrap();
@@ -3107,7 +3157,8 @@ mod handler_tests {
         assert_eq!(status, StatusCode::NO_CONTENT);
         let held = crate::db::get_snapshot(&state.db, &document, &snapshot).await;
         assert!(held.unwrap().is_none(), "the pending snapshot is dropped");
-        let deltas = crate::db::get_updates_after(&state.db, &document, 0, 10).await;
+        let deltas =
+            crate::db::get_updates_after(&state.db, &document, ambre_core::Seq(0), 10).await;
         assert_eq!(deltas.unwrap().len(), 3, "no delta is dropped with it");
         let heard = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
             .await
@@ -3137,7 +3188,7 @@ mod handler_tests {
     }
 
     async fn doc_user_id(state: &AppState, email: &str) -> String {
-        crate::db::get_user_by_email(&state.db, email)
+        crate::db::get_user_by_email(&state.db, &ambre_core::Email::from(email))
             .await
             .unwrap()
             .unwrap()

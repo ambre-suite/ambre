@@ -7,7 +7,7 @@
 //! never share a value. A span can carry an insertion and a deletion at once
 //! (`PROSE-FEAT-258`). Nothing in this module writes.
 
-use ambre_core::{UserId, Uuid};
+use ambre_core::{SuggestionId, UserId};
 use loro::{Container, LoroDoc, LoroMap, LoroText, LoroValue, TreeID, ValueOrContainer};
 
 use crate::doc;
@@ -24,7 +24,7 @@ const ROOT_DELETE: &str = "sd";
 
 /// The mark key of suggestion `id`.
 #[must_use]
-pub(crate) fn mark_key(kind: SuggestionKind, id: &Uuid) -> String {
+pub(crate) fn mark_key(kind: SuggestionKind, id: &SuggestionId) -> String {
     let root = match kind {
         SuggestionKind::Insertion => ROOT_INSERT,
         SuggestionKind::Deletion => ROOT_DELETE,
@@ -34,19 +34,19 @@ pub(crate) fn mark_key(kind: SuggestionKind, id: &Uuid) -> String {
 
 /// The suggestion a mark key names, when it is one.
 #[must_use]
-pub(crate) fn of_key(key: &str) -> Option<(SuggestionKind, Uuid)> {
+pub(crate) fn of_key(key: &str) -> Option<(SuggestionKind, SuggestionId)> {
     let (root, id) = key.split_once(':')?;
     let kind = match root {
         ROOT_INSERT => SuggestionKind::Insertion,
         ROOT_DELETE => SuggestionKind::Deletion,
         _ => return None,
     };
-    Some((kind, Uuid::parse_str(id).ok()?))
+    Some((kind, SuggestionId::parse_str(id).ok()?))
 }
 
 /// The entry of suggestion `id`, when `annots` holds one of that kind.
 #[must_use]
-pub(crate) fn entry(document: &LoroDoc, id: &Uuid) -> Option<LoroMap> {
+pub(crate) fn entry(document: &LoroDoc, id: &SuggestionId) -> Option<LoroMap> {
     let annots = document.get_map(doc::ANNOTS);
     let Some(ValueOrContainer::Container(Container::Map(map))) = annots.get(&id.to_hyphenated())
     else {
@@ -71,7 +71,7 @@ pub(crate) struct Run {
     pub start: u32,
     pub end: u32,
     /// Every suggestion mark on the run.
-    pub marks: Vec<(SuggestionKind, Uuid)>,
+    pub marks: Vec<(SuggestionKind, SuggestionId)>,
 }
 
 /// The runs of one block, clipped to `start..end`, each with the suggestion
@@ -88,7 +88,7 @@ pub(crate) fn runs(document: &LoroDoc, block: &TreeID, start: u32, end: u32) -> 
         let run_end = offset.saturating_add(length);
         let (from, to) = (offset.max(start), run_end.min(end));
         if from < to {
-            let mut marks: Vec<(SuggestionKind, Uuid)> = attributes
+            let mut marks: Vec<(SuggestionKind, SuggestionId)> = attributes
                 .iter()
                 .flat_map(|attributes| attributes.keys())
                 .filter_map(|key| of_key(key))
@@ -143,8 +143,8 @@ pub(crate) fn strip_inherited(body: &LoroText, start: usize, end: usize) -> Resu
 pub(crate) fn spans(
     document: &LoroDoc,
     blocks: &[TreeID],
-) -> Vec<(Uuid, SuggestionKind, TreeID, u32, u32)> {
-    let mut out: Vec<(Uuid, SuggestionKind, TreeID, u32, u32)> = Vec::new();
+) -> Vec<(SuggestionId, SuggestionKind, TreeID, u32, u32)> {
+    let mut out: Vec<(SuggestionId, SuggestionKind, TreeID, u32, u32)> = Vec::new();
     for block in blocks {
         for run in runs(document, block, 0, u32::MAX) {
             for (kind, id) in run.marks {

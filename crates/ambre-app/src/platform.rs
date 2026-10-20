@@ -523,7 +523,7 @@ pub(crate) fn install_murmure_file_drop(relay: ambre_murmure::chrome::MurmureRel
                     };
                     relay.drop_file(ambre_murmure::uploads::PickedFile {
                         name: file.name(),
-                        media_type: file.type_(),
+                        media_type: ambre_bus::MediaType(file.type_()),
                         data: js_sys::Uint8Array::new(&buf).to_vec(),
                     });
                 });

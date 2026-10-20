@@ -186,7 +186,7 @@ impl Log {
         entry.act == MembershipAct::Create
             && entry.author == entry.member
             && entry.role == Role::Owner
-            && signed_by(entry, &entry.member_key)
+            && signed_by(entry, entry.member_key.as_array())
     }
 
     /// Whether the state so far allows `entry`, and its author signed it.
@@ -219,7 +219,7 @@ impl Log {
             }
         };
         let key = match entry.act {
-            MembershipAct::SelfJoin => Some(&entry.member_key),
+            MembershipAct::SelfJoin => Some(entry.member_key.as_array()),
             _ => author.map(|held| &held.key),
         };
         allowed && key.is_some_and(|key| signed_by(entry, key))
@@ -233,7 +233,7 @@ impl Log {
                     entry.member,
                     Held {
                         role: entry.role,
-                        key: entry.member_key,
+                        key: *entry.member_key.as_array(),
                         present: true,
                         wraps: entry.key,
                     },
@@ -301,7 +301,7 @@ fn signed_by(entry: &MembershipEntry, key: &[u8; 32]) -> bool {
 pub(crate) struct Draft {
     pub document: DocumentId,
     pub member: UserId,
-    pub member_key: [u8; 32],
+    pub member_key: ambre_core::PublicKey,
     pub act: MembershipAct,
     pub role: Role,
     pub key: Option<KeyId>,
@@ -399,7 +399,7 @@ pub(crate) mod tests {
         let draft = Draft {
             document: DOC,
             member: member.id,
-            member_key: member.public(),
+            member_key: ambre_core::PublicKey::from_array(member.public()),
             act,
             role,
             key: Some(KeyId::from_array([log.len() as u8; 16])),

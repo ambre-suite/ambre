@@ -242,7 +242,7 @@ enum SyncEvent {
         id: RequestId,
         user_id: UserId,
         display_name: String,
-        email: String,
+        email: ambre_core::Email,
         master_seed: MasterSeed,
         signing_key: SigningKey,
         exchange_key: StaticSecret,
@@ -254,7 +254,7 @@ enum SyncEvent {
         id: RequestId,
         user_id: UserId,
         display_name: String,
-        email: String,
+        email: ambre_core::Email,
         keys_stored: bool,
         tokens: http::TokenPair,
     },
@@ -475,8 +475,8 @@ enum SyncEvent {
         document_id: DocumentId,
         user_id: UserId,
         display_name: String,
-        email: String,
-        exchange_pub_key: [u8; 32],
+        email: ambre_core::Email,
+        exchange_pub_key: ambre_core::PublicKey,
         fingerprint: String,
     },
     /// The key a user the client named is served with, and its fingerprint.
@@ -484,7 +484,7 @@ enum SyncEvent {
     MemberKeyReady {
         id: RequestId,
         user_id: UserId,
-        exchange_pub_key: [u8; 32],
+        exchange_pub_key: ambre_core::PublicKey,
         fingerprint: String,
     },
     /// Invite completed: the invitee's DocumentKey was wrapped via ECDH and the
@@ -950,7 +950,7 @@ impl SyncDocumentState {
         let body = pipeline::split_update_body(self.open_update_named(update)?)?;
         let signer = *update.public_data.pub_key.as_array();
         Ok(SignedDelta {
-            seq: seq.0,
+            seq,
             peer: ambre_crypto::peer::derive_peer_id(&signer, &body.nonce),
             nonce: body.nonce,
             user: self.signing_keys.get(&signer).copied(),
@@ -1358,7 +1358,7 @@ impl SyncState {
             SyncCommand::ReleaseDocument {
                 document_id,
                 applied_seq,
-            } => self.handle_release_document(document_id, Seq(applied_seq)),
+            } => self.handle_release_document(document_id, applied_seq),
             SyncCommand::SendUpdate {
                 document_id,
                 payload,
@@ -1380,7 +1380,7 @@ impl SyncState {
                 payload,
                 covered_seq,
             } => {
-                self.handle_send_snapshot(document_id, payload, Seq(covered_seq));
+                self.handle_send_snapshot(document_id, payload, covered_seq);
             }
             SyncCommand::SnapshotVerdict {
                 document_id,

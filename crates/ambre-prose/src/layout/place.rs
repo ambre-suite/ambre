@@ -6,7 +6,7 @@
 //! and the constraint order of section 2 decides which one gives way.
 
 use ambre_bus::app::prose::BlockType;
-use ambre_core::Uuid;
+use ambre_core::FootnoteId;
 use std::sync::Arc;
 
 use loro::TreeID;
@@ -24,7 +24,7 @@ pub const NOTE_SEPARATOR_PX: f32 = 8.0;
 /// One footnote a block calls, as pass 0 numbered and measured it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NoteCall {
-    pub footnote_id: Uuid,
+    pub footnote_id: FootnoteId,
     /// The block holding the note's text (`PROSE-FEAT-305`).
     pub block_id: TreeID,
     /// Counted before placement, from the calls in document order
@@ -39,7 +39,7 @@ pub struct NoteCall {
 /// A footnote placed at the foot of a page (`PROSE-015`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct FootnoteLayout {
-    pub footnote_id: Uuid,
+    pub footnote_id: FootnoteId,
     /// The block holding the note's text, the caret's address in it.
     pub block_id: TreeID,
     pub ordinal: u32,

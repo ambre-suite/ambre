@@ -504,7 +504,7 @@ struct LiveDoc {
     /// The document reopens from the local store after leaving memory, at
     /// this horizon. Sync is asked to open it once the read lands
     /// (`RESID-010`).
-    restoring: Option<u64>,
+    restoring: Option<Seq>,
     /// The deltas of a replay not yet imported, one slice a pass
     /// (`SYNC-131`).
     replay: replay::ReplayQueue,
@@ -836,7 +836,7 @@ struct LogicState {
     /// The documents that left memory when their view closed, each with the
     /// horizon its local copy holds. Sync keeps a light subscription for each
     /// (`RESID-004`), and a reopen resumes after the horizon (`RESID-010`).
-    evicted: HashMap<DocumentId, u64>,
+    evicted: HashMap<DocumentId, Seq>,
     /// The documents whose unsent change the browser refuses to store. While
     /// any is, no local edit is taken (`RESID-018`).
     store_full: HashSet<DocumentId>,
@@ -1137,7 +1137,7 @@ fn remote_delta(seq: u64, payload: Vec<u8>) -> ambre_bus::SignedDelta {
         .and_then(|meta| meta.partial_end_vv.keys().next().copied())
         .unwrap_or_default();
     ambre_bus::SignedDelta {
-        seq,
+        seq: ambre_core::Seq(seq),
         payload,
         nonce: ambre_core::SessionNonce([0; 16]),
         peer,
@@ -1663,7 +1663,7 @@ mod authorship_tests {
 
     fn signed(payload: Vec<u8>, peer: u64) -> SignedDelta {
         SignedDelta {
-            seq: 0,
+            seq: ambre_core::Seq(0),
             payload,
             nonce: SessionNonce([0; 16]),
             peer,
@@ -1861,7 +1861,7 @@ mod authorship_tests {
     /// Alice's delta, numbered `seq` by the relay, reaches the rig.
     fn receive(rig: &mut Rig, payload: Vec<u8>, seq: u64) {
         let mut delta = signed(payload, ALICE);
-        delta.seq = seq;
+        delta.seq = ambre_core::Seq(seq);
         rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id: rig.document_id,
             delta,
@@ -1873,7 +1873,7 @@ mod authorship_tests {
         rig.state.handle_logic_event(LogicEvent::PendingSnapshot {
             document_id: rig.document_id,
             snapshot_id: SnapshotId::genesis(rig.document_id),
-            covered_seq: covered,
+            covered_seq: ambre_core::Seq(covered),
             payload,
             purpose: SnapshotPurpose::Confirm,
         });
@@ -1987,7 +1987,7 @@ mod authorship_tests {
         rig.state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: rig.document_id,
             payload: snapshot_of(std::slice::from_ref(&hers)),
-            covered_seq: 5,
+            covered_seq: ambre_core::Seq(5),
         });
         assert_eq!(
             verdict(&mut rig, snapshot_of(&[hers]), 3),
@@ -2009,7 +2009,7 @@ mod authorship_tests {
             SyncCommand::SendSnapshot { covered_seq, .. } => Some(covered_seq),
             _ => None,
         });
-        assert_eq!(covered, Some(1));
+        assert_eq!(covered, Some(ambre_core::Seq(1)));
     }
 
     /// One open document still waiting for its session identity, with the

@@ -20,7 +20,7 @@ use crate::{
     MessageId, RequestId, RestEvent, Role, SealedChannelKey, SegmentId, SnapshotId, SpaceId,
     UserId,
 };
-use ambre_core::SessionNonce;
+use ambre_core::{Seq, SessionNonce};
 
 // -----------------------------------------------------------------------------
 // LogicEvent
@@ -73,7 +73,7 @@ pub enum LogicEvent {
         payload: Vec<u8>,
         /// The last delta `seq` it folds in, 0 when unknown. The Logic thread
         /// counts the deltas a later snapshot must hold from it (`AUTHOR-016`).
-        covered_seq: u64,
+        covered_seq: Seq,
     },
 
     /// A snapshot to check before anything trusts it
@@ -84,7 +84,7 @@ pub enum LogicEvent {
         document_id: DocumentId,
         snapshot_id: SnapshotId,
         /// The last delta `seq` it claims to fold in.
-        covered_seq: u64,
+        covered_seq: Seq,
         /// Decrypted and decompressed, as in `RemoteSnapshot`.
         payload: Vec<u8>,
         purpose: SnapshotPurpose,
@@ -469,7 +469,7 @@ pub enum LeaseAnswer {
     /// snapshot covers the deltas up to `horizon`.
     Granted {
         lease: LeaseId,
-        horizon: u64,
+        horizon: Seq,
         expires_in: u64,
     },
     /// No lease yet: ask again in `retry_in` milliseconds. The grace period
@@ -485,9 +485,9 @@ pub enum FoldAnswer {
     /// `amendments` up to at least `amendments_seq`.
     Granted {
         lease: LeaseId,
-        horizon: u64,
+        horizon: Seq,
         amendments: DocumentId,
-        amendments_seq: u64,
+        amendments_seq: Seq,
         expires_in: u64,
     },
     /// No lease yet: ask again in `retry_in` milliseconds. The fold delay
@@ -529,7 +529,7 @@ pub enum SnapshotVerdict {
 pub struct SignedDelta {
     /// The number the relay gave it. The Logic thread's snapshot check reads
     /// which deltas a horizon covers from it (`AUTHOR-016`).
-    pub seq: u64,
+    pub seq: Seq,
     /// The Loro update, decrypted and decompressed.
     pub payload: Vec<u8>,
     /// The session nonce of its author, opened from inside the ciphertext.

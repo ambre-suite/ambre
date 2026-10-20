@@ -58,17 +58,22 @@ pub fn format_s3_snapshot_key(
     env_prefix: &str,
     document_id: &ambre_core::DocumentId,
     snapshot_id: &ambre_core::SnapshotId,
-) -> String {
-    format!("{env_prefix}/documents/{document_id}/snapshots/{snapshot_id}")
+) -> ambre_core::ObjectKey {
+    ambre_core::ObjectKey(format!(
+        "{env_prefix}/documents/{document_id}/snapshots/{snapshot_id}"
+    ))
 }
 
 /// S3 object key for a delta blob (zero-padded seq).
 pub fn format_s3_delta_key(
     env_prefix: &str,
     document_id: &ambre_core::DocumentId,
-    seq: u64,
-) -> String {
-    format!("{env_prefix}/documents/{document_id}/deltas/{seq:010}")
+    seq: ambre_core::Seq,
+) -> ambre_core::ObjectKey {
+    let seq = seq.0;
+    ambre_core::ObjectKey(format!(
+        "{env_prefix}/documents/{document_id}/deltas/{seq:010}"
+    ))
 }
 
 /// Validates a client-supplied media `content_hash` before it is interpolated
@@ -78,7 +83,8 @@ pub fn format_s3_delta_key(
 /// Enforcing that shape rejects path-traversal payloads (`../`, absolute keys)
 /// that would otherwise let a caller read/write objects outside the document's
 /// own media prefix.
-pub fn is_valid_content_hash(content_hash: &str) -> bool {
+pub fn is_valid_content_hash(content_hash: &ambre_core::ContentHash) -> bool {
+    let content_hash = content_hash.as_str();
     content_hash.len() == 64
         && content_hash
             .bytes()
@@ -97,10 +103,10 @@ pub fn is_valid_content_hash(content_hash: &str) -> bool {
 pub fn is_valid_snapshot_key(
     env_prefix: &str,
     document_id: &ambre_core::DocumentId,
-    s3_key: &str,
+    s3_key: &ambre_core::ObjectKey,
 ) -> bool {
     let expected_prefix = format!("{env_prefix}/documents/{document_id}/snapshots/");
-    let Some(id) = s3_key.strip_prefix(&expected_prefix) else {
+    let Some(id) = s3_key.as_str().strip_prefix(&expected_prefix) else {
         return false;
     };
     !id.is_empty() && !id.contains('/')
@@ -110,9 +116,12 @@ pub fn is_valid_snapshot_key(
 pub fn format_s3_media_key(
     env_prefix: &str,
     document_id: &ambre_core::DocumentId,
-    content_hash: &str,
-) -> String {
-    format!("{env_prefix}/documents/{document_id}/media/{content_hash}")
+    content_hash: &ambre_core::ContentHash,
+) -> ambre_core::ObjectKey {
+    let content_hash = content_hash.as_str();
+    ambre_core::ObjectKey(format!(
+        "{env_prefix}/documents/{document_id}/media/{content_hash}"
+    ))
 }
 
 /// The longest a presigned URL may live: 15 minutes (`ZK-014`, `SRV-052`).
@@ -136,17 +145,17 @@ fn presign_lifetime(ttl_secs: u64) -> Duration {
 pub async fn generate_presigned_upload_url(
     s3: &S3Client,
     bucket: &str,
-    key: &str,
+    key: &ambre_core::ObjectKey,
     ttl_secs: u64,
-    content_length: u64,
+    content_length: ambre_core::ByteSize,
 ) -> Result<String, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl_secs))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
     s3.put_object()
         .bucket(bucket)
-        .key(key)
-        .content_length(content_length as i64)
+        .key(key.as_str())
+        .content_length(i64::try_from(content_length.0).unwrap_or(i64::MAX))
         .presigned(config)
         .await
         .map(|req| req.uri().to_string())
@@ -157,7 +166,7 @@ pub async fn generate_presigned_upload_url(
 pub async fn generate_presigned_download_url(
     s3: &S3Client,
     bucket: &str,
-    key: &str,
+    key: &ambre_core::ObjectKey,
     ttl_secs: u64,
 ) -> Result<String, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl_secs))
@@ -165,7 +174,7 @@ pub async fn generate_presigned_download_url(
 
     s3.get_object()
         .bucket(bucket)
-        .key(key)
+        .key(key.as_str())
         .presigned(config)
         .await
         .map(|req| req.uri().to_string())
@@ -239,9 +248,15 @@ pub async fn delete_prefix(s3: &S3Client, bucket: &str, prefix: &str) -> Result<
 pub async fn fetch_object(
     s3: &S3Client,
     bucket: &str,
-    key: &str,
+    key: &ambre_core::ObjectKey,
 ) -> Result<Option<Payload>, AppError> {
-    match s3.get_object().bucket(bucket).key(key).send().await {
+    match s3
+        .get_object()
+        .bucket(bucket)
+        .key(key.as_str())
+        .send()
+        .await
+    {
         Ok(out) => Payload::read_body(out.body)
             .await
             .map(Some)
@@ -451,7 +466,7 @@ trait DrainSink {
     /// Stores one delta under its object key. An error is retryable.
     fn store(
         &mut self,
-        s3_key: &str,
+        s3_key: &ambre_core::ObjectKey,
         wire: Payload,
     ) -> impl Future<Output = Result<(), String>> + Send;
     /// Keeps an entry that will never parse where an operator can read it.
@@ -465,7 +480,7 @@ struct S3Sink<'a> {
 }
 
 impl DrainSink for S3Sink<'_> {
-    async fn store(&mut self, s3_key: &str, wire: Payload) -> Result<(), String> {
+    async fn store(&mut self, s3_key: &ambre_core::ObjectKey, wire: Payload) -> Result<(), String> {
         self.state
             .s3
             .put_object()
@@ -516,13 +531,13 @@ async fn drain_front(pending_key: &str, entries: &[Payload], sink: &mut impl Dra
 
         match sink.store(&s3_key, update_wire).await {
             Ok(()) => {
-                tracing::debug!(s3_key, seq, "flushed delta to S3");
+                tracing::debug!(s3_key = %s3_key, seq, "flushed delta to S3");
                 processed += 1;
             }
             Err(e) => {
                 // Transient (retryable) failure: stop here so the front trim
                 // keeps this entry and everything after it for the next cycle.
-                tracing::error!(s3_key, seq, error = %e, "flush: S3 upload failed, will retry");
+                tracing::error!(s3_key = %s3_key, seq, error = %e, "flush: S3 upload failed, will retry");
                 break;
             }
         }
@@ -536,7 +551,7 @@ mod tests {
     use ambre_core::{DocumentId, SnapshotId};
 
     /// A pending entry as `append_pending_delta` stores it.
-    fn entry(s3_key: &str, seq: u64) -> String {
+    fn entry(s3_key: &ambre_core::ObjectKey, seq: u64) -> String {
         use base64::Engine;
         serde_json::json!({
             "seq": seq,
@@ -551,11 +566,11 @@ mod tests {
     #[tokio::test]
     async fn a_partial_flush_trims_only_what_it_stored() {
         let entries: Vec<Payload> = [
-            entry("d/1", 1),
+            entry(&ambre_core::ObjectKey::from("d/1"), 1),
             "not json".to_owned(),
-            entry("d/3", 3),
-            entry("d/4", 4),
-            entry("d/5", 5),
+            entry(&ambre_core::ObjectKey::from("d/3"), 3),
+            entry(&ambre_core::ObjectKey::from("d/4"), 4),
+            entry(&ambre_core::ObjectKey::from("d/5"), 5),
         ]
         .into_iter()
         .map(|b| Payload::new(b.into_bytes()))
@@ -567,11 +582,15 @@ mod tests {
             dead: Vec<Vec<u8>>,
         }
         impl DrainSink for Flaky {
-            async fn store(&mut self, s3_key: &str, _wire: Payload) -> Result<(), String> {
-                if s3_key == "d/4" {
+            async fn store(
+                &mut self,
+                s3_key: &ambre_core::ObjectKey,
+                _wire: Payload,
+            ) -> Result<(), String> {
+                if s3_key.as_str() == "d/4" {
                     return Err("unavailable".to_owned());
                 }
-                self.stored.push(s3_key.to_owned());
+                self.stored.push(s3_key.0.clone());
                 Ok(())
             }
             async fn dead_letter(&mut self, entry: &Payload) {
@@ -592,7 +611,10 @@ mod tests {
             .collect();
         assert_eq!(
             kept,
-            [entry("d/4", 4).as_bytes(), entry("d/5", 5).as_bytes()]
+            [
+                entry(&ambre_core::ObjectKey::from("d/4"), 4).as_bytes(),
+                entry(&ambre_core::ObjectKey::from("d/5"), 5).as_bytes()
+            ]
         );
     }
 
@@ -601,9 +623,12 @@ mod tests {
         let doc_id = DocumentId::from_bytes([0u8; 16]);
         let snap_id = SnapshotId::from_bytes([1u8; 16]);
         let key = format_s3_snapshot_key("dev", &doc_id, &snap_id);
-        assert!(key.starts_with("dev/documents/"));
-        assert!(key.contains("/snapshots/"));
-        assert_eq!(key, format!("dev/documents/{doc_id}/snapshots/{snap_id}"));
+        assert!(key.as_str().starts_with("dev/documents/"));
+        assert!(key.as_str().contains("/snapshots/"));
+        assert_eq!(
+            key.as_str(),
+            format!("dev/documents/{doc_id}/snapshots/{snap_id}")
+        );
     }
 
     #[test]
@@ -613,37 +638,37 @@ mod tests {
         let dev_key = format_s3_snapshot_key("dev", &doc_id, &snap_id);
         let prod_key = format_s3_snapshot_key("prod", &doc_id, &snap_id);
         assert_ne!(dev_key, prod_key);
-        assert!(prod_key.starts_with("prod/"));
+        assert!(prod_key.as_str().starts_with("prod/"));
     }
 
     #[test]
     fn delta_key_zero_pads_seq() {
         let doc_id = DocumentId::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key("dev", &doc_id, 42);
-        assert!(key.ends_with("deltas/0000000042"));
+        let key = format_s3_delta_key("dev", &doc_id, ambre_core::Seq(42));
+        assert!(key.as_str().ends_with("deltas/0000000042"));
     }
 
     #[test]
     fn delta_key_pads_small_seq() {
         let doc_id = DocumentId::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key("dev", &doc_id, 7);
-        assert!(key.ends_with("deltas/0000000007"));
+        let key = format_s3_delta_key("dev", &doc_id, ambre_core::Seq(7));
+        assert!(key.as_str().ends_with("deltas/0000000007"));
     }
 
     #[test]
     fn delta_key_handles_large_seq() {
         let doc_id = DocumentId::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key("dev", &doc_id, 9999999999u64);
-        assert!(key.ends_with("deltas/9999999999"));
+        let key = format_s3_delta_key("dev", &doc_id, ambre_core::Seq(9999999999u64));
+        assert!(key.as_str().ends_with("deltas/9999999999"));
     }
 
     #[test]
     fn media_key_content_addressed() {
         let doc_id = DocumentId::from_bytes([3u8; 16]);
         let hash = "abc123def456";
-        let key = format_s3_media_key("dev", &doc_id, hash);
-        assert!(key.ends_with("media/abc123def456"));
-        assert!(key.contains("/documents/"));
+        let key = format_s3_media_key("dev", &doc_id, &ambre_core::ContentHash::from(hash));
+        assert!(key.as_str().ends_with("media/abc123def456"));
+        assert!(key.as_str().contains("/documents/"));
     }
 
     #[test]
@@ -662,17 +687,19 @@ mod tests {
         assert!(!is_valid_snapshot_key(
             "dev",
             &doc,
-            &format!("dev/documents/{doc}/snapshots/../../{other}/snapshots/x")
+            &ambre_core::ObjectKey(format!(
+                "dev/documents/{doc}/snapshots/../../{other}/snapshots/x"
+            ))
         ));
         assert!(!is_valid_snapshot_key(
             "dev",
             &doc,
-            &format!("dev/documents/{doc}/snapshots/")
+            &ambre_core::ObjectKey(format!("dev/documents/{doc}/snapshots/"))
         ));
         assert!(!is_valid_snapshot_key(
             "dev",
             &doc,
-            &format!("dev/documents/{doc}/snapshots/a/b")
+            &ambre_core::ObjectKey(format!("dev/documents/{doc}/snapshots/a/b"))
         ));
     }
 
@@ -698,10 +725,15 @@ mod tests {
     #[tokio::test]
     async fn presigned_upload_url_signs_content_length() {
         let s3 = test_s3_client();
-        let url =
-            generate_presigned_upload_url(&s3, "bucket", "dev/documents/x/media/y", 900, 4096)
-                .await
-                .expect("presign");
+        let url = generate_presigned_upload_url(
+            &s3,
+            "bucket",
+            &ambre_core::ObjectKey::from("dev/documents/x/media/y"),
+            900,
+            ambre_core::ByteSize(4096),
+        )
+        .await
+        .expect("presign");
         let lower = url.to_lowercase();
         // SigV4 lists signed headers in `X-Amz-SignedHeaders`; content-length
         // must be among them for S3 to enforce it.
@@ -721,34 +753,59 @@ mod tests {
     async fn a_presigned_url_never_outlives_fifteen_minutes() {
         let s3 = test_s3_client();
         let day = 24 * 3600;
-        let up = generate_presigned_upload_url(&s3, "bucket", "k", day, 1)
-            .await
-            .expect("presign");
-        let down = generate_presigned_download_url(&s3, "bucket", "k", day)
-            .await
-            .expect("presign");
+        let up = generate_presigned_upload_url(
+            &s3,
+            "bucket",
+            &ambre_core::ObjectKey::from("k"),
+            day,
+            ambre_core::ByteSize(1),
+        )
+        .await
+        .expect("presign");
+        let down =
+            generate_presigned_download_url(&s3, "bucket", &ambre_core::ObjectKey::from("k"), day)
+                .await
+                .expect("presign");
         for url in [up, down] {
             assert!(url.contains("X-Amz-Expires=900"), "{url}");
         }
-        let short = generate_presigned_download_url(&s3, "bucket", "k", 60)
-            .await
-            .expect("presign");
+        let short =
+            generate_presigned_download_url(&s3, "bucket", &ambre_core::ObjectKey::from("k"), 60)
+                .await
+                .expect("presign");
         assert!(short.contains("X-Amz-Expires=60"), "{short}");
     }
 
     #[test]
     fn content_hash_validation() {
         let valid = "a".repeat(64);
-        assert!(is_valid_content_hash(&valid));
-        assert!(is_valid_content_hash(&"0123456789abcdef".repeat(4)));
+        assert!(is_valid_content_hash(&ambre_core::ContentHash::from(
+            valid.as_str()
+        )));
+        assert!(is_valid_content_hash(&ambre_core::ContentHash(
+            "0123456789abcdef".repeat(4)
+        )));
 
         // Path traversal payloads and non-canonical shapes are rejected.
-        assert!(!is_valid_content_hash("../../snapshots/x"));
-        assert!(!is_valid_content_hash(&format!("../{}", "a".repeat(60))));
-        assert!(!is_valid_content_hash(&"A".repeat(64))); // uppercase
-        assert!(!is_valid_content_hash(&"g".repeat(64))); // non-hex
-        assert!(!is_valid_content_hash(&"a".repeat(63))); // too short
-        assert!(!is_valid_content_hash(&"a".repeat(65))); // too long
-        assert!(!is_valid_content_hash(""));
+        assert!(!is_valid_content_hash(&ambre_core::ContentHash::from(
+            "../../snapshots/x"
+        )));
+        assert!(!is_valid_content_hash(&ambre_core::ContentHash(format!(
+            "../{}",
+            "a".repeat(60)
+        ))));
+        assert!(!is_valid_content_hash(&ambre_core::ContentHash(
+            "A".repeat(64)
+        ))); // uppercase
+        assert!(!is_valid_content_hash(&ambre_core::ContentHash(
+            "g".repeat(64)
+        ))); // non-hex
+        assert!(!is_valid_content_hash(&ambre_core::ContentHash(
+            "a".repeat(63)
+        ))); // too short
+        assert!(!is_valid_content_hash(&ambre_core::ContentHash(
+            "a".repeat(65)
+        ))); // too long
+        assert!(!is_valid_content_hash(&ambre_core::ContentHash::from("")));
     }
 }

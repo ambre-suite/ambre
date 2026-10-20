@@ -2,7 +2,8 @@
 //!
 //! - [`Uuid`]: UUIDv7 wrapper (`[u8; 16]`)
 //! - [`DocumentId`], [`UserId`], [`ChannelId`], [`SpaceId`], [`MetaId`], [`SegmentId`],
-//!   [`CategoryId`], [`MeetingId`], [`SnapshotId`]:
+//!   [`CategoryId`], [`MeetingId`], [`SnapshotId`], and the Prose annotation ids
+//!   [`FootnoteId`], [`CommentId`], [`ReplyId`], [`SuggestionId`]:
 //!   strongly-typed identifiers (distinct newtypes over `Uuid`)
 //! - [`DocType`]: enum of document types (Prose, Trame, Toile, Murmure)
 //! - [`PublicKey`]: wrapper `[u8; 32]` for Ed25519 or X25519
@@ -27,13 +28,17 @@ pub mod authorship;
 pub mod channel_kind;
 pub mod doc_type;
 pub mod docfile;
+pub mod email;
 pub mod error;
 /// Fixture machinery (`ambre-spec-fixtures.md`). Behind the non-default
 /// `fixtures` feature so no client build can reach it (I4).
 #[cfg(feature = "fixtures")]
 pub mod fixtures;
 pub mod id;
+pub mod key_hex;
 pub mod key_id;
+pub mod media;
+pub mod object_key;
 pub mod public_key;
 /// Which documents a client holds, and which leave first
 /// (`ambre-spec-residency.md`).
@@ -61,6 +66,7 @@ pub use docfile::{
     migrate_ambre, parse_sealed_header, read_ambre_plaintext, read_ambre_plaintext_as, sealed_aad,
     write_ambre_plaintext, write_ambre_sealed,
 };
+pub use email::Email;
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
 #[cfg(feature = "fixtures")]
 pub use fixtures::{
@@ -68,10 +74,13 @@ pub use fixtures::{
     seeded_document_id,
 };
 pub use id::{
-    CategoryId, ChannelId, DocumentId, LeaseId, MeetingId, MessageId, MetaId, OrgId, SegmentId,
-    SnapshotId, SpaceId, UserId,
+    CategoryId, ChannelId, CommentId, DocumentId, FootnoteId, LeaseId, MeetingId, MessageId,
+    MetaId, OrgId, ReplyId, SegmentId, SnapshotId, SpaceId, SuggestionId, UserId,
 };
+pub use key_hex::{ExchangeKeyHex, SigningKeyHex};
 pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
+pub use media::{ByteSize, ContentHash, MediaType};
+pub use object_key::ObjectKey;
 pub use public_key::PublicKey;
 pub use role::Role;
 pub use schema::{

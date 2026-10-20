@@ -262,7 +262,7 @@ fn dropped_files_wait_for_the_region_and_are_taken_once() {
     let relay = MurmureRelay::new();
     let file = |name: &str| ambre_murmure::uploads::PickedFile {
         name: name.to_owned(),
-        media_type: "image/png".to_owned(),
+        media_type: ambre_bus::MediaType("image/png".to_owned()),
         data: vec![1],
     };
     relay.drop_file(file("a.png"));
@@ -417,7 +417,7 @@ fn a_space_with_members() -> (Owner, MurmureRelay, ChannelId, [UserId; 3]) {
         evt: RestEvent::SessionReady {
             user_id: users[0],
             display_name: "Alice".to_owned(),
-            email: "alice@test.local".to_owned(),
+            email: ambre_bus::Email::from("alice@test.local"),
         },
     });
     relay.absorb(&UiEvent::MemberChannels {
@@ -663,7 +663,7 @@ fn the_invite_control_offers_no_member_of_the_channel() {
     let info = |user_id| MemberInfo {
         user_id,
         display_name: String::new(),
-        email: String::new(),
+        email: ambre_bus::Email(String::new()),
         role: Role::Editor,
         standing: MemberStanding::Verified,
     };
@@ -880,7 +880,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         evt: RestEvent::SessionReady {
             user_id: me,
             display_name: "Alice".to_owned(),
-            email: "alice@test.local".to_owned(),
+            email: ambre_bus::Email::from("alice@test.local"),
         },
     });
     let (handler, sent) = handler(relay);
@@ -943,7 +943,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         evt: RestEvent::SessionReady {
             user_id: me,
             display_name: "Alice".to_owned(),
-            email: "alice@test.local".to_owned(),
+            email: ambre_bus::Email::from("alice@test.local"),
         },
     });
     let (handler, sent) = handler(relay);

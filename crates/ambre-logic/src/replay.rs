@@ -20,11 +20,11 @@ use std::collections::VecDeque;
 pub(crate) const REPLAY_SLICE_BYTES: usize = 64 << 10;
 
 /// The deltas of a replay not yet imported, oldest first, with their seq.
-pub(crate) type ReplayQueue = VecDeque<(u64, Vec<u8>)>;
+pub(crate) type ReplayQueue = VecDeque<(Seq, Vec<u8>)>;
 
 impl LogicState {
     /// Queue the accepted deltas of a replay, and import its first slice now.
-    pub(crate) fn replay(&mut self, document_id: DocumentId, accepted: Vec<(u64, Vec<u8>)>) {
+    pub(crate) fn replay(&mut self, document_id: DocumentId, accepted: Vec<(Seq, Vec<u8>)>) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
@@ -59,9 +59,9 @@ impl LogicState {
             return;
         }
         let done = doc.replay.is_empty();
-        let (seqs, payloads): (Vec<u64>, Vec<Vec<u8>>) = slice.into_iter().unzip();
+        let (seqs, payloads): (Vec<Seq>, Vec<Vec<u8>>) = slice.into_iter().unzip();
         self.merge_batch(document_id, &payloads);
-        let applied: Vec<(u64, &[u8])> = seqs
+        let applied: Vec<(Seq, &[u8])> = seqs
             .into_iter()
             .zip(payloads.iter().map(Vec::as_slice))
             .collect();
@@ -112,7 +112,7 @@ impl LogicState {
 }
 
 /// Take the oldest deltas up to [`REPLAY_SLICE_BYTES`], and at least one.
-fn take_slice(queue: &mut ReplayQueue) -> Vec<(u64, Vec<u8>)> {
+fn take_slice(queue: &mut ReplayQueue) -> Vec<(Seq, Vec<u8>)> {
     let mut bytes = 0usize;
     let mut slice = Vec::new();
     while let Some((_, payload)) = queue.front() {
@@ -147,7 +147,7 @@ mod tests {
             .update
             .expect("an edit writes a delta");
         SignedDelta {
-            seq: peer,
+            seq: ambre_core::Seq(peer),
             payload,
             nonce: SessionNonce([0; 16]),
             peer,
@@ -203,9 +203,12 @@ mod tests {
     /// A slice always takes one delta, even one past the slice size.
     #[test]
     fn a_slice_takes_one_delta_whatever_its_size() {
-        let mut queue: ReplayQueue = [(1, vec![0; REPLAY_SLICE_BYTES * 2]), (2, vec![0; 1])]
-            .into_iter()
-            .collect();
+        let mut queue: ReplayQueue = [
+            (ambre_core::Seq(1), vec![0; REPLAY_SLICE_BYTES * 2]),
+            (ambre_core::Seq(2), vec![0; 1]),
+        ]
+        .into_iter()
+        .collect();
         assert_eq!(take_slice(&mut queue).len(), 1);
         assert_eq!(take_slice(&mut queue).len(), 1);
         assert!(take_slice(&mut queue).is_empty());

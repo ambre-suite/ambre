@@ -4,7 +4,7 @@
 //! Driven through the engine: a note is written by its command, and the
 //! layout read back is the one the view is handed.
 
-use ambre_core::Uuid;
+use ambre_core::FootnoteId;
 use loro::TreeID;
 
 use crate::events::{BlockId, BlockInit, ProseCommand, tree_id};
@@ -42,8 +42,8 @@ fn document(texts: &[String]) -> (ProseState, Vec<BlockId>) {
     (state, ids)
 }
 
-fn add(state: &mut ProseState, block: BlockId, pos: u32, text: &str) -> Uuid {
-    let before: Vec<Uuid> = note::ordinals(state.document())
+fn add(state: &mut ProseState, block: BlockId, pos: u32, text: &str) -> FootnoteId {
+    let before: Vec<FootnoteId> = note::ordinals(state.document())
         .into_iter()
         .map(|(id, _)| id)
         .collect();
@@ -73,8 +73,8 @@ fn page_of_line(layout: &PageLayout, block: &TreeID, line: u32) -> Option<u32> {
 }
 
 /// Every note the layout placed, by identity: its ordinal and its page.
-fn placed(layout: &PageLayout) -> Vec<(Uuid, u32, u32)> {
-    let mut out: Vec<(Uuid, u32, u32)> = (0..layout.page_count)
+fn placed(layout: &PageLayout) -> Vec<(FootnoteId, u32, u32)> {
+    let mut out: Vec<(FootnoteId, u32, u32)> = (0..layout.page_count)
         .flat_map(|page| layout.footnotes_on_page(page))
         .map(|note| (note.footnote_id, note.ordinal, note.page))
         .collect();
@@ -121,7 +121,8 @@ fn every_note_is_numbered_from_its_call_before_any_block_is_placed() {
     let later = add(&mut state, ids[1], 6, "later");
     let earlier = add(&mut state, ids[0], 5, "earlier");
     let layout = shipped_paginator().full(state.document()).clone();
-    let ordinals: Vec<(Uuid, u32)> = placed(&layout).iter().map(|(id, n, _)| (*id, *n)).collect();
+    let ordinals: Vec<(FootnoteId, u32)> =
+        placed(&layout).iter().map(|(id, n, _)| (*id, *n)).collect();
     assert_eq!(ordinals, vec![(earlier, 1), (later, 2)]);
     assert_eq!(ordinals, note::ordinals(state.document()));
 }

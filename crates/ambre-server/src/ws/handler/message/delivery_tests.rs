@@ -88,10 +88,10 @@ async fn a_refused_index_write_is_retried_until_the_row_lands(pool: sqlx::PgPool
 
     handle_update(&state, &mut conn, signed_update(&key, doc_id, 1, 16), &tx).await;
 
-    let rows = db::get_updates_after(&state.db, &doc_id, 0, 10)
+    let rows = db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(0), 10)
         .await
         .unwrap();
-    assert!(matches!(rows.as_slice(), [r] if r.seq == 1 && r.wire.is_some()));
+    assert!(matches!(rows.as_slice(), [r] if r.seq == ambre_core::Seq(1) && r.wire.is_some()));
     assert!(dead_letters(&state, doc_id).await.is_empty());
     forget(&state, doc_id).await;
 }
@@ -115,15 +115,16 @@ async fn an_index_write_that_never_lands_leaves_the_whole_frame(pool: sqlx::PgPo
     handle_update(&state, &mut conn, update.clone(), &tx).await;
 
     assert!(
-        db::get_updates_after(&state.db, &doc_id, 0, 10)
+        db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(0), 10)
             .await
             .unwrap()
             .is_empty()
     );
-    let object = crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, 1);
+    let object =
+        crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, ambre_core::Seq(1));
     match dead_letters(&state, doc_id).await.as_slice() {
         [(1, s3_key, wire)] => {
-            assert_eq!(s3_key, &object);
+            assert_eq!(s3_key, &object.0);
             assert_eq!(wire, &postcard::to_allocvec(&update).unwrap());
             let kept: ambre_protocol::Update = postcard::from_bytes(wire).unwrap();
             assert!(verify_update_signature(&kept.public_data.pub_key, &kept).is_ok());
@@ -156,7 +157,7 @@ async fn a_refused_queue_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
 
     handle_update(&state, &mut conn, update.clone(), &tx).await;
 
-    let rows = db::get_updates_after(&state.db, &doc_id, 0, 10)
+    let rows = db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(0), 10)
         .await
         .unwrap();
     assert!(matches!(rows.as_slice(), [r] if r.wire.is_some() && r.s3_key.is_none()));
@@ -272,15 +273,24 @@ async fn a_page_read_out_of_order_is_sent_in_order(pool: sqlx::PgPool) {
         )
         .await;
         // The first delta's read is held longest, the last one's not at all.
-        let object = crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, clock);
-        stub.delay(object, Duration::from_millis(100 * (3 - clock)));
+        let object = crate::s3::format_s3_delta_key(
+            &state.config.s3_env_prefix,
+            &doc_id,
+            ambre_core::Seq(clock),
+        );
+        stub.delay(object.0, Duration::from_millis(100 * (3 - clock)));
     }
 
     let sent = replayed(&replay(&state, &mut conn, doc_id).await);
     let seqs: Vec<u64> = sent.iter().map(|d| d.seq.0).collect();
     assert_eq!(seqs, [1, 2, 3]);
-    let first = crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, 1);
-    assert_eq!(stub.gets(&first), 1, "each delta was asked of the store");
+    let first =
+        crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, ambre_core::Seq(1));
+    assert_eq!(
+        stub.gets(first.as_str()),
+        1,
+        "each delta was asked of the store"
+    );
     forget(&state, doc_id).await;
 }
 

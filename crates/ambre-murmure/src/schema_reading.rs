@@ -332,7 +332,7 @@ fn header_reading(reader: &Reader<'_>, stored: &Stored, key: &str) -> Option<Str
     // A fold is read through the check a fold snapshot passes.
     if key == HEADER_FOLDED_SEQ {
         let (_, seq) = header_fold(reader.doc(stored.kind))?;
-        return Some(format!("folds its amendments up to delta {seq}"));
+        return Some(format!("folds its amendments up to delta {}", seq.0));
     }
     let value = stored.string()?;
     match key {

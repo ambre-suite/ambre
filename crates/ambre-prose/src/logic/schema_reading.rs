@@ -448,7 +448,11 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
 fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let id = Uuid::parse_str(stored.key(0)?).ok()?;
     let field = stored.key(1)?;
-    if let Some(thread) = reader.comments().into_iter().find(|t| t.comment_id == id) {
+    if let Some(thread) = reader
+        .comments()
+        .into_iter()
+        .find(|t| *t.comment_id.as_uuid() == id)
+    {
         let anchor = thread.anchor_block.map(crate::events::tree_id);
         return Some(match field {
             doc::ANNOT_KIND => "a comment thread".to_owned(),
@@ -463,7 +467,7 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
                     doc::REPLY_ID => format!("is {}", reply.reply_id.to_hyphenated()),
                     doc::REPLY_AUTHOR => format!("by {:?}", reply.author),
                     doc::REPLY_USER => format!("by user {}", reply.user_id),
-                    doc::REPLY_CREATED => format!("at {} ms", reply.created_at),
+                    doc::REPLY_CREATED => format!("at {} ms", reply.created_at.0),
                     doc::ANNOT_TEXT => format!("reads {:?}", reply.text),
                     _ => return None,
                 };
@@ -472,7 +476,11 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
             _ => return None,
         });
     }
-    if let Some(note) = reader.footnotes().into_iter().find(|n| n.footnote_id == id) {
+    if let Some(note) = reader
+        .footnotes()
+        .into_iter()
+        .find(|n| *n.footnote_id.as_uuid() == id)
+    {
         return Some(match field {
             doc::ANNOT_KIND => format!("footnote {:?}", note.ordinal),
             doc::ANNOT_NOTE_BLOCK => format!("note reads {:?}", note.text),
@@ -482,7 +490,7 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let suggestion = reader
         .suggestions()
         .into_iter()
-        .find(|s| s.suggestion_id == id)?;
+        .find(|s| *s.suggestion_id.as_uuid() == id)?;
     Some(match field {
         doc::ANNOT_KIND => format!("a suggested {:?}", suggestion.kind),
         "author" => format!("suggested by {:?}", suggestion.author),
@@ -548,7 +556,7 @@ fn mark_reading(
             crate::band::resolve(&reader.doc, block, 0, pages)
         )
     } else if mark == doc::K_FOOTNOTE {
-        let id = Uuid::parse_str(stored.string()?).ok();
+        let id = ambre_core::FootnoteId::parse_str(stored.string()?).ok();
         match reader
             .footnotes()
             .into_iter()
@@ -571,7 +579,7 @@ fn mark_reading(
             None => "refers to nothing".to_owned(),
         }
     } else if let Some(thread) = mark.strip_prefix("cm:") {
-        let id = Uuid::parse_str(thread).ok();
+        let id = ambre_core::CommentId::parse_str(thread).ok();
         match reader
             .comments()
             .into_iter()

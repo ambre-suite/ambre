@@ -252,14 +252,10 @@ impl MediaRef {
     }
 }
 
-/// The media type of a file, as the browser named it, such as `image/png`.
-/// Shown and used to open the file; never sent to the relay (`SYNC-053`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MediaType(pub String);
-
-/// A size in bytes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ByteSize(pub u64);
+// A file's media type is shown and used to open the file, and never sent to
+// the relay (`SYNC-053`). Both types live in `ambre-core`, which the relay's
+// media routes share.
+pub use ambre_core::{ByteSize, MediaType};
 
 /// A file a message carries: its address, never its bytes (`MURMURE-017`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -832,7 +828,7 @@ pub struct PrivateChannelDraft {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirectMember {
     pub user_id: UserId,
-    pub exchange_pub_key: [u8; 32],
+    pub exchange_pub_key: ambre_core::PublicKey,
 }
 
 /// A direct message the view asks for: this user and `members`.

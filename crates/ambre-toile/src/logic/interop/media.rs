@@ -13,26 +13,18 @@
 
 use std::collections::HashMap;
 
-/// Opaque content-address key for a media blob (blake2b of the plaintext,).
-/// A newtype so an ordinary `String` (an element id, a url) can never be mistaken
-/// for a media key. The hash itself is computed Sync-side; interop only routes it.
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub struct ContentHash(pub String);
+/// The content address of a media blob. The hash itself is computed
+/// Sync-side; interop only routes it.
+pub use ambre_core::ContentHash;
 
 /// The prefix of the token an import names a blob by until Sync returns its
 /// address. It is never an address, so it never becomes a key.
 pub(crate) const PLACEHOLDER_PREFIX: &str = "pending:";
 
-impl ContentHash {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// Whether this is an address Sync returned. An empty key and a
-    /// placeholder token are not (`TOILE-IO-059`).
-    pub fn is_resolved(&self) -> bool {
-        !self.0.is_empty() && !self.0.starts_with(PLACEHOLDER_PREFIX)
-    }
+/// Whether `hash` is an address Sync returned. An empty key and a
+/// placeholder token are not (`TOILE-IO-059`).
+pub fn is_resolved(hash: &ContentHash) -> bool {
+    !hash.0.is_empty() && !hash.0.starts_with(PLACEHOLDER_PREFIX)
 }
 
 /// Lifecycle of one cached blob. `Loading` is in-flight (a download was issued,

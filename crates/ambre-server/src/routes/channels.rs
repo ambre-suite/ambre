@@ -98,7 +98,7 @@ pub struct MemberChannelJson {
     /// The caller's copy of the channel key, base64, and the hex exchange key
     /// of whoever wrapped it, empty for a self-wrapped row.
     pub doc_key_enc: String,
-    pub wrapper_exchange_pub_key: String,
+    pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
     /// For a direct message, the display names of its other members, which
     /// the client composes a name from (`SRV-220`). Empty otherwise.
     pub peers: Vec<String>,
@@ -146,7 +146,7 @@ pub async fn list_member_channels(
                 doc_key_enc: base64.encode(&row.doc_key_enc),
                 wrapper_exchange_pub_key: row
                     .wrapper_exchange_pubkey
-                    .map(hex::encode)
+                    .map(ambre_core::ExchangeKeyHex::encode)
                     .unwrap_or_default(),
                 peers: row.peers,
                 meta_last: ambre_core::Seq(last),
@@ -428,7 +428,7 @@ pub struct GrantedLeaseJson {
     #[serde(with = "ambre_core::serde_id::lease_id")]
     pub lease_id: ambre_core::LeaseId,
     /// The last delta number the final snapshot covers.
-    pub horizon: u64,
+    pub horizon: ambre_core::Seq,
     /// Milliseconds before the lease expires.
     pub expires_in: u64,
 }
@@ -493,7 +493,7 @@ pub async fn take_finalize_lease(
             horizon,
             expires_in,
         } => {
-            tracing::info!(channel_id = %channel_id, segment = %segment, horizon, "finalize lease granted");
+            tracing::info!(channel_id = %channel_id, segment = %segment, horizon = horizon.0, "finalize lease granted");
             FinalizeLeaseJson {
                 lease: Some(GrantedLeaseJson {
                     lease_id,
@@ -552,12 +552,12 @@ pub struct GrantedFoldJson {
     #[serde(with = "ambre_core::serde_id::lease_id")]
     pub lease_id: ambre_core::LeaseId,
     /// The last delta number of the segment, which the fold snapshot covers.
-    pub horizon: u64,
+    pub horizon: ambre_core::Seq,
     /// The amendments document to fold.
     #[serde(with = "ambre_core::serde_id::document_id")]
     pub amendments: ambre_core::DocumentId,
     /// The last delta number of the amendments the fold holds.
-    pub amendments_seq: u64,
+    pub amendments_seq: ambre_core::Seq,
     /// Milliseconds before the lease expires.
     pub expires_in: u64,
 }
@@ -570,7 +570,7 @@ pub struct FoldSegmentRequest {
     pub lease_id: ambre_core::LeaseId,
     #[serde(with = "ambre_core::serde_id::snapshot_id")]
     pub snapshot_id: ambre_core::SnapshotId,
-    pub amendments_seq: u64,
+    pub amendments_seq: ambre_core::Seq,
 }
 
 /// `POST /api/channels/{id}/segments/{segment}/fold-lease`: take the lease
@@ -601,7 +601,7 @@ pub async fn take_fold_lease(
             amendments_seq,
             expires_in,
         } => {
-            tracing::info!(channel_id = %channel_id, segment = %segment, amendments = %amendments, amendments_seq, "fold lease granted");
+            tracing::info!(channel_id = %channel_id, segment = %segment, amendments = %amendments, amendments_seq = amendments_seq.0, "fold lease granted");
             FoldLeaseJson {
                 lease: Some(GrantedFoldJson {
                     lease_id,
@@ -640,7 +640,7 @@ pub async fn fold_segment(
         req.amendments_seq,
     )
     .await?;
-    tracing::info!(channel_id = %channel_id, segment = %segment, snapshot_id = %req.snapshot_id, amendments_seq = req.amendments_seq, "amendments folded");
+    tracing::info!(channel_id = %channel_id, segment = %segment, snapshot_id = %req.snapshot_id, amendments_seq = req.amendments_seq.0, "amendments folded");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1041,7 +1041,7 @@ mod tests {
             document,
             position,
             member: who,
-            member_key: key.verifying_key().to_bytes(),
+            member_key: ambre_core::PublicKey::from_array(key.verifying_key().to_bytes()),
             act,
             role,
             key: None,
@@ -1098,7 +1098,7 @@ mod tests {
         let signing = signing_key().verifying_key().to_bytes();
         let row = db::create_user(
             &state.db,
-            email,
+            &ambre_core::Email::from(email),
             display_name,
             &[1; 32],
             &[2; 16],
@@ -2106,7 +2106,7 @@ mod tests {
         let env = &state.config.s3_env_prefix;
         let documents = |c: &Channel| [c.meta.document_id(), c.segment.document_id()];
         for document in documents(&gone).into_iter().chain(documents(&kept)) {
-            stub.put(crate::s3::format_s3_delta_key(env, &document, 1));
+            stub.put(crate::s3::format_s3_delta_key(env, &document, ambre_core::Seq(1)).0);
         }
 
         assert_eq!(delete(&state, alice, gone.id).await, StatusCode::NO_CONTENT);
@@ -2130,7 +2130,7 @@ mod tests {
         left.sort();
         let mut expected: Vec<String> = documents(&kept)
             .iter()
-            .map(|d| crate::s3::format_s3_delta_key(env, d, 1))
+            .map(|d| crate::s3::format_s3_delta_key(env, d, ambre_core::Seq(1)).0)
             .collect();
         expected.sort();
         assert_eq!(left, expected);
@@ -2537,7 +2537,7 @@ mod tests {
             document,
             position,
             member,
-            member_key: signing.verifying_key().to_bytes(),
+            member_key: ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes()),
             act,
             role,
             key,
@@ -2703,7 +2703,10 @@ mod tests {
         let bobs = listed(bob).await.expect("listed").0.channels;
         assert_eq!(bobs[0].name_enc.as_deref(), Some(sealed.as_str()));
         assert_eq!(bobs[0].doc_key_enc, base64.encode([2u8; 48]));
-        assert_eq!(bobs[0].wrapper_exchange_pub_key, hex::encode([4u8; 32]));
+        assert_eq!(
+            bobs[0].wrapper_exchange_pub_key,
+            ambre_core::ExchangeKeyHex::encode([4u8; 32])
+        );
         let alices = listed(alice).await.expect("listed").0.channels;
         assert_eq!(alices[0].name_enc.as_deref(), Some(sealed.as_str()));
         assert_eq!(alices[0].doc_key_enc, base64.encode([1u8; 48]));
@@ -3629,9 +3632,17 @@ mod tests {
     /// A delta of `document` at `seq`, stored `age` ago.
     async fn delta(state: &AppState, document: DocumentId, seq: i64, age: &str) {
         let snapshot = ambre_core::SnapshotId::new();
-        db::insert_update(&state.db, &document, &[1; 32], &snapshot, seq, seq, "k")
-            .await
-            .expect("insert");
+        db::insert_update(
+            &state.db,
+            &document,
+            &[1; 32],
+            &snapshot,
+            seq,
+            seq,
+            &ambre_core::ObjectKey::from("k"),
+        )
+        .await
+        .expect("insert");
         sqlx::query(
             "UPDATE updates SET created_at = now() - $2::interval \
              WHERE document_id = $1 AND seq = $3",
@@ -3652,7 +3663,14 @@ mod tests {
     ) -> ambre_core::SnapshotId {
         let clocks = serde_json::json!({});
         db::create_snapshot(
-            &state.db, &document, &[1; 32], None, None, &clocks, "s", covered,
+            &state.db,
+            &document,
+            &[1; 32],
+            None,
+            None,
+            &clocks,
+            &ambre_core::ObjectKey::from("s"),
+            ambre_core::Seq::try_from(covered).expect("a relay number"),
         )
         .await
         .expect("snapshot")
@@ -3723,7 +3741,7 @@ mod tests {
             .expect("age");
         let granted = lease(&state, alice, &channel).await.expect("lease");
         let held = granted.lease.expect("the grace period has passed");
-        assert_eq!(held.horizon, 4);
+        assert_eq!(held.horizon, ambre_core::Seq(4));
         assert_eq!(held.expires_in, FINALIZE_LEASE.as_millis() as u64);
         assert!(
             db::segment_locked(&state.db, &segment)
@@ -3776,7 +3794,7 @@ mod tests {
 
         let granted = lease(&state, bob, &channel).await.expect("lease");
         let held = granted.lease.expect("a rotation lock waits out no grace");
-        assert_eq!(held.horizon, 3);
+        assert_eq!(held.horizon, ambre_core::Seq(3));
         forget_store(&state, &channel).await;
     }
 
@@ -3990,7 +4008,7 @@ mod tests {
 
         let again = lease(&state, bob, &channel).await.expect("lease");
         let again = again.lease.expect("no grace period this time");
-        assert_eq!(again.horizon, 2);
+        assert_eq!(again.horizon, ambre_core::Seq(2));
         let resealed = snapshot(&state, segment, 2).await;
         assert_eq!(
             finalize(&state, bob, &channel, again.lease_id, resealed).await,
@@ -4102,7 +4120,7 @@ mod tests {
                 Json(FoldSegmentRequest {
                     lease_id,
                     snapshot_id,
-                    amendments_seq,
+                    amendments_seq: ambre_core::Seq(amendments_seq),
                 }),
             )
             .await,
@@ -4224,7 +4242,7 @@ mod tests {
         let held = held.lease.expect("granted");
         assert_eq!(
             (held.horizon, held.amendments, held.amendments_seq),
-            (2, amendments, 3)
+            (ambre_core::Seq(2), amendments, ambre_core::Seq(3))
         );
         let second = fold_lease(&state, bob, &channel).await.expect("lease");
         assert!(second.lease.is_none(), "one writer at a time");
@@ -4288,7 +4306,7 @@ mod tests {
         assert_eq!(folded(&state, amendments).await.0, None);
         let again = fold_lease(&state, bob, &channel).await.expect("lease");
         let again = again.lease.expect("owed at once");
-        assert_eq!(again.amendments_seq, 4);
+        assert_eq!(again.amendments_seq, ambre_core::Seq(4));
         forget_store(&state, &channel).await;
         set_seq(&state, amendments, 0).await;
     }
@@ -4346,7 +4364,7 @@ mod tests {
         .expect("age");
         let held = fold_lease(&state, bob, &channel).await.expect("lease");
         let held = held.lease.expect("granted");
-        assert_eq!(held.amendments_seq, 4);
+        assert_eq!(held.amendments_seq, ambre_core::Seq(4));
         let second = snapshot(&state, segment, 2).await;
         assert_eq!(
             fold(&state, bob, &channel, held.lease_id, second, 4).await,

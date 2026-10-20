@@ -40,8 +40,8 @@ pub async fn auth_config(
 #[derive(serde::Deserialize)]
 pub struct DevLoginRequest {
     pub username: String,
-    pub signing_pub_key: String,
-    pub exchange_pub_key: String,
+    pub signing_pub_key: ambre_core::SigningKeyHex,
+    pub exchange_pub_key: ambre_core::ExchangeKeyHex,
 }
 
 /// Response for `POST /api/auth/dev/login`.
@@ -51,9 +51,9 @@ pub struct DevLoginResponse {
     pub user_id: ambre_core::UserId,
     pub display_name: String,
     /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
-    pub access_token: String,
+    pub access_token: ambre_protocol::ws::AccessToken,
     /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
-    pub refresh_token: String,
+    pub refresh_token: ambre_protocol::ws::RefreshToken,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
     pub access_expires_in: u64,
 }
@@ -76,9 +76,9 @@ pub async fn dev_login(
         return Err(AppError::BadRequest("username must not be empty".into()));
     }
 
-    let signing_pubkey = hex::decode(&req.signing_pub_key)
+    let signing_pubkey = hex::decode(req.signing_pub_key.as_str())
         .map_err(|e| AppError::BadRequest(format!("invalid signing_pub_key: {e}")))?;
-    let exchange_pubkey = hex::decode(&req.exchange_pub_key)
+    let exchange_pubkey = hex::decode(req.exchange_pub_key.as_str())
         .map_err(|e| AppError::BadRequest(format!("invalid exchange_pub_key: {e}")))?;
 
     let user =
@@ -125,14 +125,14 @@ fn account_session_key(user: &db::UserRow) -> Result<Option<ambre_core::PublicKe
 /// Request body for `POST /api/auth/refresh`: the opaque refresh token.
 #[derive(serde::Deserialize)]
 pub struct RefreshRequest {
-    pub refresh_token: String,
+    pub refresh_token: ambre_protocol::ws::RefreshToken,
 }
 
 /// Response for `POST /api/auth/refresh`: a freshly rotated token pair.
 #[derive(serde::Serialize)]
 pub struct RefreshResponse {
-    pub access_token: String,
-    pub refresh_token: String,
+    pub access_token: ambre_protocol::ws::AccessToken,
+    pub refresh_token: ambre_protocol::ws::RefreshToken,
     pub access_expires_in: u64,
 }
 
@@ -149,7 +149,7 @@ pub async fn refresh(
     State(state): State<Arc<AppState>>,
     Json(req): Json<RefreshRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let data = redis_ops::refresh_consume(&state.redis, &req.refresh_token)
+    let data = redis_ops::refresh_consume(&state.redis, req.refresh_token.expose())
         .await?
         .ok_or(AppError::Unauthorized)?;
     let tokens = auth::issue_session(&state, data.user_id, data.signing_pubkey).await?;
@@ -185,7 +185,7 @@ pub async fn oidc_login(
     redis_ops::oidc_state_set(
         &state.redis,
         &login_resp.state,
-        &auth_state.pkce_verifier_secret,
+        auth_state.pkce_verifier_secret.expose(),
         &auth_state.nonce.secret().clone(),
     )
     .await?;
@@ -214,7 +214,7 @@ pub async fn oidc_callback(
 
     use openidconnect::Nonce;
     let stored_state = oidc::OidcAuthState {
-        pkce_verifier_secret: pkce_verifier,
+        pkce_verifier_secret: oidc::OidcSecret::new(pkce_verifier),
         nonce: Nonce::new(nonce_str),
     };
 
@@ -230,7 +230,7 @@ pub async fn oidc_callback(
             "OIDC provider returned an unverified email".into(),
         ));
     }
-    let email = claims.email().map(|e| e.to_string()).unwrap_or_default();
+    let email = ambre_core::Email(claims.email().map(|e| e.to_string()).unwrap_or_default());
     let display_name = claims
         .name()
         .and_then(|l| l.get(None).map(|s| s.to_string()))
@@ -240,7 +240,7 @@ pub async fn oidc_callback(
                 .given_name()
                 .and_then(|l| l.get(None).map(|s| s.to_string()))
         })
-        .unwrap_or_else(|| email.clone());
+        .unwrap_or_else(|| email.as_str().to_owned());
 
     let user =
         db::upsert_user_from_oidc(&state.db, &provider, &oidc_subject, &email, &display_name)

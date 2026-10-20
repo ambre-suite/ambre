@@ -15,7 +15,7 @@
 
 use ambre_bus::app::prose::{ProseError, ProseRefusal};
 use ambre_bus::{AppEvent, DocumentId, UiEvent};
-use ambre_core::{UserId, Uuid};
+use ambre_core::{CommentId, ReplyId, UserId};
 use ambre_prose::chrome::{self, ProseCommentsPanel, ProseSignals};
 use ambre_prose::events::{CommentReply, CommentThread, ProseEvent};
 use ambre_prose::ui::ProseUiState;
@@ -39,7 +39,7 @@ where
     container
 }
 
-fn thread(id: Uuid, replies: &[&str]) -> CommentThread {
+fn thread(id: CommentId, replies: &[&str]) -> CommentThread {
     CommentThread {
         comment_id: id,
         anchor_block: None,
@@ -50,10 +50,10 @@ fn thread(id: Uuid, replies: &[&str]) -> CommentThread {
         replies: replies
             .iter()
             .map(|text| CommentReply {
-                reply_id: Uuid::new(),
+                reply_id: ReplyId::new(),
                 author: "Bob".to_owned(),
                 user_id: UserId::from_bytes([2; 16]),
-                created_at: 0,
+                created_at: ambre_bus::Timestamp(0),
                 text: (*text).to_owned(),
             })
             .collect(),
@@ -74,7 +74,7 @@ fn input_of(root: &web_sys::Element, nth: u32) -> web_sys::HtmlInputElement {
 #[wasm_bindgen_test]
 async fn a_reply_being_typed_survives_its_thread_moving() {
     let signals = ProseSignals::new();
-    let (first, second) = (Uuid::new(), Uuid::new());
+    let (first, second) = (CommentId::new(), CommentId::new());
     signals.threads.set(vec![
         PanelThread {
             thread: thread(first, &["Is this right?"]),
@@ -140,7 +140,7 @@ fn a_thread_deleted_under_a_draft_is_told() {
     let owner = Owner::new();
     owner.set();
     let signals = ProseSignals::new();
-    let (kept, gone) = (Uuid::new(), Uuid::new());
+    let (kept, gone) = (CommentId::new(), CommentId::new());
     signals.drafts.update(|drafts| {
         drafts.insert(kept, "still here".to_owned());
         drafts.insert(gone, "half a reply".to_owned());
@@ -176,7 +176,7 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
             document_id: DocumentId::new(),
             event: AppEvent::Prose(ProseEvent::Error(ProseError::new(
                 "replying to the comment",
-                ProseRefusal::NoSuchComment(Uuid::new()),
+                ProseRefusal::NoSuchComment(CommentId::new()),
             ))),
         },
     );

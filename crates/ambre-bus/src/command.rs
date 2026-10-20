@@ -63,7 +63,7 @@ pub enum SyncCommand {
     ReleaseDocument {
         document_id: DocumentId,
         /// The highest relay number the evicted copy holds.
-        applied_seq: u64,
+        applied_seq: Seq,
     },
 
     /// Raw CRDT delta produced by `LoroDoc::export_updates()`.
@@ -92,7 +92,7 @@ pub enum SyncCommand {
         payload: Vec<u8>,
         /// The last delta `seq` the Logic thread holds with no gap below it.
         /// The snapshot claims to fold in every delta up to it (`SRV-083`).
-        covered_seq: u64,
+        covered_seq: Seq,
     },
 
     /// The Logic thread's verdict on a [`LogicEvent::PendingSnapshot`]
@@ -217,7 +217,7 @@ pub enum SyncCommand {
         channel_id: ChannelId,
         segment: SegmentId,
         lease: LeaseId,
-        horizon: u64,
+        horizon: Seq,
         payload: Vec<u8>,
     },
     /// Ask the relay for the lease that folds the amendments of the final
@@ -237,8 +237,8 @@ pub enum SyncCommand {
         channel_id: ChannelId,
         segment: SegmentId,
         lease: LeaseId,
-        horizon: u64,
-        amendments_seq: u64,
+        horizon: Seq,
+        amendments_seq: Seq,
         payload: Vec<u8>,
     },
     /// Count a segment of a closed channel as a light subscription, from its

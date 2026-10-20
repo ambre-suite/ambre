@@ -18,7 +18,7 @@ impl SyncState {
         &self,
         id: RequestId,
         document_id: DocumentId,
-        invitee_email: String,
+        invitee_email: ambre_core::Email,
     ) {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
@@ -81,10 +81,10 @@ impl SyncState {
         &self,
         id: RequestId,
         document_id: DocumentId,
-        invitee_email: Option<String>,
+        invitee_email: Option<ambre_core::Email>,
         invitee: UserId,
         role: Role,
-        expect_exchange_pub_key: [u8; 32],
+        expect_exchange_pub_key: ambre_core::PublicKey,
     ) {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
@@ -103,7 +103,7 @@ impl SyncState {
                 RestEvent::InviteSent {
                     document_id,
                     user_id: UserId::new(),
-                    display_name: invitee_email.unwrap_or_default(),
+                    display_name: invitee_email.map(|email| email.0).unwrap_or_default(),
                 },
             );
             return;

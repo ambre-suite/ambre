@@ -8,7 +8,7 @@
 //! each delay is stamped by the next tick.
 
 use ambre_bus::Timestamp;
-use ambre_core::{LeaseId, SegmentId};
+use ambre_core::{LeaseId, SegmentId, Seq};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use super::ChannelState;
@@ -42,7 +42,7 @@ enum Step {
     /// The snapshot leaves once the deltas up to `horizon` are in.
     Held {
         lease: LeaseId,
-        horizon: u64,
+        horizon: Seq,
         expires_in: u64,
         until: Option<Timestamp>,
     },
@@ -59,7 +59,7 @@ pub struct FinalSnapshot {
     /// The lease the commit names.
     pub lease: LeaseId,
     /// The last delta it covers, the one the relay returned.
-    pub horizon: u64,
+    pub horizon: Seq,
     /// The shallow snapshot, framed as every channel snapshot is.
     pub payload: Vec<u8>,
 }
@@ -138,7 +138,7 @@ impl ChannelState {
         &mut self,
         segment: SegmentId,
         lease: LeaseId,
-        horizon: u64,
+        horizon: Seq,
         expires_in: u64,
     ) {
         if let Some(finalizing) = self.finalize_step(segment) {
@@ -198,7 +198,7 @@ impl ChannelState {
     pub fn final_snapshot(
         &mut self,
         now: Timestamp,
-        covered: u64,
+        covered: Seq,
     ) -> Result<Option<FinalSnapshot>, MurmureError> {
         let Some(segment) = self.finalizing_id() else {
             return Ok(None);

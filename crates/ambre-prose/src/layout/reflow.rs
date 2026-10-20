@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ambre_bus::app::prose::BlockType;
-use ambre_core::Uuid;
+use ambre_core::FootnoteId;
 use loro::{LoroDoc, TreeID};
 
 use crate::doc;
@@ -142,7 +142,7 @@ impl Paginator {
         let range = start..end.max(start);
         let blocks = all.get(range.clone()).unwrap_or_default();
         let measured = self.measured.get(range).unwrap_or_default();
-        let called: HashSet<Uuid> = blocks
+        let called: HashSet<FootnoteId> = blocks
             .iter()
             .flat_map(|block| block.notes.iter().map(|note| note.footnote_id))
             .collect();

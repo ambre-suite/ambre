@@ -37,20 +37,20 @@ fn parse_user_id(s: &str) -> Result<ambre_core::UserId, AppError> {
 pub struct SetupAccountRequest {
     /// User-supplied login handle. Recorded verbatim (N3) and resolved by other
     /// members when sharing a document (`get_user_by_email`).
-    pub email: String,
+    pub email: ambre_core::Email,
     /// User-supplied display name (N3).
     pub display_name: String,
     pub master_key_enc: String,
     pub master_key_salt: String,
-    pub signing_pubkey: String,
-    pub exchange_pubkey: String,
+    pub signing_pubkey: ambre_core::SigningKeyHex,
+    pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 
 /// Bounds the client-supplied identity: a syntactically plausible, length-bounded
 /// email and a non-empty, length-bounded display name. Full email verification is
 /// out of scope; this only rejects obvious garbage and unbounded input.
-fn validate_identity(email: &str, display_name: &str) -> Result<(), AppError> {
-    let email = email.trim();
+fn validate_identity(email: &ambre_core::Email, display_name: &str) -> Result<(), AppError> {
+    let email = email.as_str().trim();
     let name = display_name.trim();
     let email_ok = (3..=254).contains(&email.len())
         && email.contains('@')
@@ -70,8 +70,8 @@ fn validate_identity(email: &str, display_name: &str) -> Result<(), AppError> {
 pub struct SetupAccountResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub access_token: String,
-    pub refresh_token: String,
+    pub access_token: ambre_protocol::ws::AccessToken,
+    pub refresh_token: ambre_protocol::ws::RefreshToken,
     pub access_expires_in: u64,
 }
 
@@ -91,16 +91,16 @@ pub async fn setup_account(
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
-    let spk = hex::decode(&req.signing_pubkey).map_err(|e| AppError::Conflict {
+    let spk = hex::decode(req.signing_pubkey.as_str()).map_err(|e| AppError::Conflict {
         detail: e.to_string(),
     })?;
-    let epk = hex::decode(&req.exchange_pubkey).map_err(|e| AppError::Conflict {
+    let epk = hex::decode(req.exchange_pubkey.as_str()).map_err(|e| AppError::Conflict {
         detail: e.to_string(),
     })?;
 
     let user = db::create_user(
         &state.db,
-        req.email.trim(),
+        &ambre_core::Email::from(req.email.as_str().trim()),
         req.display_name.trim(),
         &mk_enc,
         &mk_salt,
@@ -132,7 +132,7 @@ pub async fn setup_account(
 pub struct MeResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub email: String,
+    pub email: ambre_core::Email,
     pub display_name: String,
 }
 
@@ -159,7 +159,7 @@ pub async fn me(
 #[derive(serde::Deserialize)]
 pub struct LogoutRequest {
     #[serde(default)]
-    pub refresh_token: Option<String>,
+    pub refresh_token: Option<ambre_protocol::ws::RefreshToken>,
 }
 
 pub async fn logout(
@@ -167,7 +167,11 @@ pub async fn logout(
     auth: auth::AccountSession,
     Json(req): Json<LogoutRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    if let Some(token) = req.refresh_token.as_deref() {
+    if let Some(token) = req
+        .refresh_token
+        .as_ref()
+        .map(ambre_protocol::ws::RefreshToken::expose)
+    {
         // Only revoke a token that actually belongs to the caller. Without this an
         // authenticated user could delete another user's refresh token (session
         // revocation of a third party) by presenting it here. The token is an
@@ -205,7 +209,7 @@ pub struct DocumentSummaryJson {
     /// ECDH-unwraps the doc key with it to decrypt the name for the launcher.
     /// Empty when unknown (self-wrapped owner row): the client falls back to its
     /// own key.
-    pub wrapper_exchange_pub_key: String,
+    pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
     /// Total member count (routing metadata). `> 1` => shared.
     pub member_count: u32,
     pub updated_at: String,
@@ -239,7 +243,7 @@ pub async fn list_documents(
                 doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&d.doc_key_enc),
                 wrapper_exchange_pub_key: d
                     .wrapper_exchange_pubkey
-                    .map(hex::encode)
+                    .map(ambre_core::ExchangeKeyHex::encode)
                     .unwrap_or_default(),
                 member_count: d.member_count.max(0) as u32,
                 updated_at: d.updated_at.to_rfc3339(),
@@ -482,14 +486,14 @@ pub async fn delete_document(
 pub struct UserInfoJson {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub id: ambre_core::UserId,
-    pub email: String,
+    pub email: ambre_core::Email,
     /// Whether the email was provider-verified (OIDC) vs self-asserted at
     /// `/auth/setup` (#3). The share UI should flag an unverified recipient for
     /// the TOFU out-of-band key check. Additive field; older clients ignore it.
     pub email_verified: bool,
     pub display_name: String,
-    pub signing_pubkey: String,
-    pub exchange_pubkey: String,
+    pub signing_pubkey: ambre_core::SigningKeyHex,
+    pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 #[derive(serde::Serialize)]
 pub struct UserSearchResult {
@@ -498,8 +502,8 @@ pub struct UserSearchResult {
 /// Public keys for a user, fetched by the inviter during sharing.
 #[derive(serde::Serialize)]
 pub struct PubkeysResponse {
-    pub signing_pubkey: String,
-    pub exchange_pubkey: String,
+    pub signing_pubkey: ambre_core::SigningKeyHex,
+    pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 
 pub async fn search_users(
@@ -525,8 +529,8 @@ pub async fn search_users(
                 email: u.email,
                 email_verified: u.email_verified,
                 display_name: u.display_name,
-                signing_pubkey: hex::encode(&u.signing_pubkey),
-                exchange_pubkey: hex::encode(&u.exchange_pubkey),
+                signing_pubkey: ambre_core::SigningKeyHex::encode(&u.signing_pubkey),
+                exchange_pubkey: ambre_core::ExchangeKeyHex::encode(&u.exchange_pubkey),
             }
         })
         .collect();
@@ -550,8 +554,8 @@ pub async fn get_pubkeys(
         return Err(AppError::NotFound { resource: "user" });
     };
     Ok(axum::Json(PubkeysResponse {
-        signing_pubkey: hex::encode(signing_pubkey),
-        exchange_pubkey: hex::encode(exchange_pubkey),
+        signing_pubkey: ambre_core::SigningKeyHex::encode(signing_pubkey),
+        exchange_pubkey: ambre_core::ExchangeKeyHex::encode(exchange_pubkey),
     }))
 }
 
@@ -566,20 +570,20 @@ pub async fn get_pubkeys(
 pub struct MemberInfoJson {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub email: String,
+    pub email: ambre_core::Email,
     /// Whether the member's email was provider-verified (#3). Additive field;
     /// older clients ignore it.
     pub email_verified: bool,
     pub display_name: String,
     /// Serialized as its lowercase word.
     pub role: Role,
-    pub signing_pub_key: String,
-    pub exchange_pub_key: String,
+    pub signing_pub_key: ambre_core::SigningKeyHex,
+    pub exchange_pub_key: ambre_core::ExchangeKeyHex,
     pub doc_key_enc: String,
     /// Exchange public key of whoever wrapped `doc_key_enc` (the inviter, or the
     /// member themselves at creation). The recipient unwraps via ECDH against
     /// THIS key, not its own. Falls back to the member's own key for legacy rows.
-    pub wrapper_exchange_pub_key: String,
+    pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
 }
 
 pub async fn list_document_members(
@@ -614,10 +618,10 @@ pub async fn list_document_members(
                 email_verified: m.email_verified,
                 display_name: m.display_name,
                 role: m.role,
-                signing_pub_key: hex::encode(&m.signing_pubkey),
-                exchange_pub_key: hex::encode(&m.exchange_pubkey),
+                signing_pub_key: ambre_core::SigningKeyHex::encode(&m.signing_pubkey),
+                exchange_pub_key: ambre_core::ExchangeKeyHex::encode(&m.exchange_pubkey),
                 doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
-                wrapper_exchange_pub_key: hex::encode(
+                wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex::encode(
                     m.wrapper_exchange_pubkey
                         .as_ref()
                         .unwrap_or(&m.exchange_pubkey),
@@ -706,25 +710,27 @@ mod tests {
 
     #[test]
     fn validate_identity_accepts_plausible_input() {
-        assert!(validate_identity("alice@example.com", "Alice").is_ok());
-        assert!(validate_identity("  bob@ambre.app  ", "  Bob  ").is_ok());
+        assert!(validate_identity(&ambre_core::Email::from("alice@example.com"), "Alice").is_ok());
+        assert!(
+            validate_identity(&ambre_core::Email::from("  bob@ambre.app  "), "  Bob  ").is_ok()
+        );
     }
 
     #[test]
     fn validate_identity_rejects_bad_email() {
-        assert!(validate_identity("no-at-sign", "Alice").is_err());
-        assert!(validate_identity("@example.com", "Alice").is_err());
-        assert!(validate_identity("alice@", "Alice").is_err());
-        assert!(validate_identity("", "Alice").is_err());
+        assert!(validate_identity(&ambre_core::Email::from("no-at-sign"), "Alice").is_err());
+        assert!(validate_identity(&ambre_core::Email::from("@example.com"), "Alice").is_err());
+        assert!(validate_identity(&ambre_core::Email::from("alice@"), "Alice").is_err());
+        assert!(validate_identity(&ambre_core::Email::from(""), "Alice").is_err());
         let long = format!("{}@x.com", "a".repeat(300));
-        assert!(validate_identity(&long, "Alice").is_err());
+        assert!(validate_identity(&ambre_core::Email::from(long.as_str()), "Alice").is_err());
     }
 
     #[test]
     fn validate_identity_rejects_bad_display_name() {
-        assert!(validate_identity("alice@example.com", "").is_err());
-        assert!(validate_identity("alice@example.com", "   ").is_err());
+        assert!(validate_identity(&ambre_core::Email::from("alice@example.com"), "").is_err());
+        assert!(validate_identity(&ambre_core::Email::from("alice@example.com"), "   ").is_err());
         let long = "x".repeat(129);
-        assert!(validate_identity("alice@example.com", &long).is_err());
+        assert!(validate_identity(&ambre_core::Email::from("alice@example.com"), &long).is_err());
     }
 }

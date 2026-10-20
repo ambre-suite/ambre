@@ -576,7 +576,7 @@ pub enum FinalizeLease {
     /// to `horizon`, and commits it before `expires_in` runs out.
     Granted {
         lease_id: ambre_core::LeaseId,
-        horizon: u64,
+        horizon: ambre_core::Seq,
         expires_in: std::time::Duration,
     },
     /// No lease now: ask again after `retry_in`.
@@ -669,7 +669,7 @@ pub async fn take_finalize_lease(
     tx.commit().await?;
     Ok(FinalizeLease::Granted {
         lease_id,
-        horizon: horizon.unsigned_abs(),
+        horizon: ambre_core::Seq(horizon.unsigned_abs()),
         expires_in: terms.lease,
     })
 }
@@ -796,9 +796,9 @@ pub enum FoldLease {
     /// `amendments_seq` into the snapshot of the segment at `horizon`.
     Granted {
         lease_id: ambre_core::LeaseId,
-        horizon: u64,
+        horizon: ambre_core::Seq,
         amendments: ambre_core::DocumentId,
-        amendments_seq: u64,
+        amendments_seq: ambre_core::Seq,
         expires_in: std::time::Duration,
     },
     /// No lease now: ask again after `retry_in`.
@@ -904,9 +904,9 @@ pub async fn take_fold_lease(
     tx.commit().await?;
     Ok(FoldLease::Granted {
         lease_id,
-        horizon: horizon.unsigned_abs(),
+        horizon: ambre_core::Seq(horizon.unsigned_abs()),
         amendments,
-        amendments_seq: seq,
+        amendments_seq: ambre_core::Seq(seq),
         expires_in: terms.lease,
     })
 }
@@ -939,15 +939,15 @@ pub async fn commit_fold(
     segment: ambre_core::SegmentId,
     lease_id: ambre_core::LeaseId,
     snapshot_id: ambre_core::SnapshotId,
-    amendments_seq: u64,
+    amendments_seq: ambre_core::Seq,
 ) -> Result<(), AppError> {
     let document = id_to_uuid(segment.document_id());
     let (lease_id, snapshot_id) = (id_to_uuid(lease_id), id_to_uuid(snapshot_id));
     let conflict = |detail: &str| AppError::Conflict {
         detail: detail.into(),
     };
-    let seq =
-        i64::try_from(amendments_seq).map_err(|_| conflict("the delta number is out of range"))?;
+    let seq = i64::try_from(amendments_seq.0)
+        .map_err(|_| conflict("the delta number is out of range"))?;
     let mut tx = pool.begin().await?;
     let row: Option<FoldCommitRow> = sqlx::query_as(
         "SELECT d.state, d.lease_id AS held, COALESCE(d.lease_until > now(), false) AS live, \
@@ -1012,8 +1012,8 @@ pub async fn commit_fold(
 #[derive(Debug, PartialEq, Eq)]
 pub struct SettledFold {
     pub amendments: ambre_core::DocumentId,
-    pub folded_seq: u64,
-    pub dropped_keys: Vec<String>,
+    pub folded_seq: ambre_core::Seq,
+    pub dropped_keys: Vec<ambre_core::ObjectKey>,
 }
 
 /// Settle the fold `snapshot_id` makes of the amendments of the segment
@@ -1057,8 +1057,11 @@ pub async fn settle_fold(
     tx.commit().await?;
     Ok(Some(SettledFold {
         amendments: uuid_row_to_id(amendments),
-        folded_seq: folded_seq.unwrap_or(0).unsigned_abs(),
-        dropped_keys,
+        folded_seq: ambre_core::Seq(folded_seq.unwrap_or(0).unsigned_abs()),
+        dropped_keys: dropped_keys
+            .into_iter()
+            .map(ambre_core::ObjectKey)
+            .collect(),
     }))
 }
 
@@ -1120,7 +1123,7 @@ pub async fn delete_channel(
     .bind(channel)
     .fetch_all(&mut *tx)
     .await?;
-    let documents = delete_channel_in(&mut tx, channel, sweep_due).await?;
+    let documents = delete_channel_in(&mut tx, *channel_id, sweep_due).await?;
     tx.commit().await?;
     Ok(DeletedChannel {
         meta: meta.map(uuid_row_to_id),
@@ -1133,9 +1136,10 @@ pub async fn delete_channel(
 /// deletes one, in identifier order (`SRV-143`).
 pub(super) async fn delete_space_channels_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    space: uuid::Uuid,
+    space: ambre_core::SpaceId,
     sweep_due: i64,
 ) -> Result<Vec<DeletedChannel>, AppError> {
+    let space = id_to_uuid(space);
     let channels: Vec<(uuid::Uuid, Option<uuid::Uuid>)> = sqlx::query_as(
         "SELECT c.id, d.document_id FROM channels c \
          LEFT JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
@@ -1146,11 +1150,13 @@ pub(super) async fn delete_space_channels_in(
     .await?;
     let mut deleted = Vec::with_capacity(channels.len());
     for (channel, meta) in channels {
+        let channel: ambre_core::ChannelId = uuid_row_to_id(channel);
+        let meta: Option<ambre_core::DocumentId> = meta.map(uuid_row_to_id);
         let members: Vec<uuid::Uuid> = match meta {
             Some(meta) => {
                 super::members::lock_document(tx, meta).await?;
                 sqlx::query_scalar("SELECT user_id FROM document_members WHERE document_id = $1")
-                    .bind(meta)
+                    .bind(id_to_uuid(meta))
                     .fetch_all(&mut **tx)
                     .await?
             }
@@ -1158,7 +1164,7 @@ pub(super) async fn delete_space_channels_in(
         };
         let documents = delete_channel_in(tx, channel, sweep_due).await?;
         deleted.push(DeletedChannel {
-            meta: meta.map(uuid_row_to_id),
+            meta,
             documents,
             members: members.into_iter().map(uuid_row_to_id).collect(),
         });
@@ -1185,9 +1191,10 @@ pub struct DeletedChannel {
 /// member reaches a document through the channel past the commit.
 pub(super) async fn delete_channel_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    channel: uuid::Uuid,
+    channel: ambre_core::ChannelId,
     sweep_due: i64,
 ) -> Result<Vec<ambre_core::DocumentId>, AppError> {
+    let channel = id_to_uuid(channel);
     let held: Option<uuid::Uuid> =
         sqlx::query_scalar("SELECT id FROM channels WHERE id = $1 FOR UPDATE")
             .bind(channel)
@@ -1241,10 +1248,13 @@ pub async fn private_channels_of_member(
 /// after the space, as a self-join takes them.
 pub(super) async fn leave_space_channels_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    space: uuid::Uuid,
-    user: uuid::Uuid,
+    space: ambre_core::SpaceId,
+    user: ambre_core::UserId,
     sweep_due: i64,
 ) -> Result<Option<super::SpaceLeave>, AppError> {
+    let space = id_to_uuid(space);
+    let user_typed = user;
+    let user = id_to_uuid(user);
     let any: bool =
         sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM channels WHERE space_id = $1)")
             .bind(space)
@@ -1265,21 +1275,22 @@ pub(super) async fn leave_space_channels_in(
     .await?;
     let mut leave = super::SpaceLeave::default();
     for (channel, meta, public) in channels {
-        super::members::lock_document(tx, meta).await?;
+        let channel: ambre_core::ChannelId = uuid_row_to_id(channel);
+        let meta_id: ambre_core::DocumentId = uuid_row_to_id(meta);
+        super::members::lock_document(tx, meta_id).await?;
         let members: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM document_members WHERE document_id = $1")
                 .bind(meta)
                 .fetch_one(&mut **tx)
                 .await?;
-        super::members::drop_member_row(tx, meta, user).await?;
-        let meta_id = uuid_row_to_id(meta);
+        super::members::drop_member_row(tx, meta_id, user_typed).await?;
         if members == 1 && !public {
             let documents = delete_channel_in(tx, channel, sweep_due).await?;
             leave.deleted.push((meta_id, documents));
             continue;
         }
         if !public {
-            super::members::owe_rotation(tx, meta).await?;
+            super::members::owe_rotation(tx, meta_id).await?;
             leave.owed.push(meta_id);
         }
         leave.left.push(meta_id);
@@ -1291,16 +1302,18 @@ pub(super) async fn leave_space_channels_in(
 /// for any other document.
 pub(super) async fn channel_of_meta(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: uuid::Uuid,
-) -> Result<Option<(uuid::Uuid, bool)>, AppError> {
-    Ok(sqlx::query_as(
+    document_id: ambre_core::DocumentId,
+) -> Result<Option<(ambre_core::ChannelId, bool)>, AppError> {
+    let document_id = id_to_uuid(document_id);
+    let row: Option<(uuid::Uuid, bool)> = sqlx::query_as(
         "SELECT c.id, c.is_public FROM channel_documents d \
          JOIN channels c ON c.id = d.channel_id \
          WHERE d.document_id = $1 AND d.kind = 'meta'",
     )
     .bind(document_id)
     .fetch_optional(&mut **tx)
-    .await?)
+    .await?;
+    Ok(row.map(|(channel, public)| (uuid_row_to_id(channel), public)))
 }
 
 /// Add `user_id` to the members of a channel's `meta`, unless a row is there.
@@ -1342,7 +1355,7 @@ pub async fn add_channel_member_if_absent(
     if !member {
         return Err(AppError::Forbidden);
     }
-    super::members::lock_document(&mut tx, did).await?;
+    super::members::lock_document(&mut tx, meta_id.document_id()).await?;
     let done = sqlx::query(
         "INSERT INTO document_members (document_id, user_id, role, doc_key_enc, invited_by) \
          VALUES ($1, $2, $3, $4, $2) ON CONFLICT (document_id, user_id) DO NOTHING",
@@ -1355,7 +1368,7 @@ pub async fn add_channel_member_if_absent(
     .await?;
     let joined = done.rows_affected() == 1;
     if joined {
-        super::members::record_change(&mut tx, did, entry).await?;
+        super::members::record_change(&mut tx, meta_id.document_id(), entry).await?;
     }
     tx.commit().await?;
     Ok(joined)
@@ -1476,7 +1489,7 @@ pub async fn find_or_create_direct_message(
         .await?;
     }
     for entry in new.entries {
-        super::members::append_entry(&mut tx, meta, entry).await?;
+        super::members::append_entry(&mut tx, new.meta_id.document_id(), entry).await?;
     }
     tx.commit().await?;
     Ok(DirectMessage::Created)

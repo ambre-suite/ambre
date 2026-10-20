@@ -148,8 +148,9 @@ pub enum CopyOutcome {
 }
 // Re-export core types so that users don't need to depend on ambre-core directly.
 pub use ambre_core::{
-    CategoryId, ChannelDocumentKind, ChannelId, DocType, DocumentId, LeaseId, MeetingId, MessageId,
-    MetaId, PublicKey, Role, SegmentId, Seq, SnapshotId, SpaceId, UserId, Uuid,
+    CategoryId, ChannelDocumentKind, ChannelId, CommentId, DocType, DocumentId, Email, FootnoteId,
+    LeaseId, MeetingId, MessageId, MetaId, PublicKey, ReplyId, Role, SegmentId, Seq, SnapshotId,
+    SpaceId, SuggestionId, UserId, Uuid,
 };
 
 #[cfg(test)]

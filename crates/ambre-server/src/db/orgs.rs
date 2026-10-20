@@ -22,7 +22,8 @@ pub struct OrganizationRow {
 pub struct OrgMemberRow {
     #[sqlx(try_from = "PgId")]
     pub user_id: ambre_core::UserId,
-    pub email: String,
+    #[sqlx(try_from = "String")]
+    pub email: ambre_core::Email,
     pub display_name: String,
     #[sqlx(try_from = "String")]
     pub role: ambre_core::Role,

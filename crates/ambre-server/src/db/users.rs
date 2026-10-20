@@ -11,7 +11,7 @@ pub struct UserRow {
     pub oidc_provider: Option<String>,
     #[allow(dead_code)]
     pub oidc_subject: Option<String>,
-    pub email: String,
+    pub email: ambre_core::Email,
     /// Whether `email` was proven by a provider (OIDC/dev) rather than merely
     /// self-asserted at `/auth/setup`. A verified email wins any collision (#3):
     /// an OIDC login reclaims an unverified holder's email.
@@ -29,7 +29,7 @@ pub struct UserRow {
 #[derive(Debug)]
 pub struct UserInfoRow {
     pub id: ambre_core::UserId,
-    pub email: String,
+    pub email: ambre_core::Email,
     /// Whether the email was provider-verified (see [`UserRow::email_verified`]).
     /// Surfaced in search so the sharer sees the TOFU signal for an unverified,
     /// possibly-squatted recipient before wrapping the doc key to them (#3).
@@ -57,7 +57,7 @@ pub async fn get_user(
             id: r.try_get::<PgId, _>("id")?.into(),
             oidc_provider: r.try_get("oidc_provider")?,
             oidc_subject: r.try_get("oidc_subject")?,
-            email: r.try_get("email")?,
+            email: ambre_core::Email(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
             display_name: r.try_get("display_name")?,
             master_key_enc: r.try_get("master_key_enc")?,
@@ -87,11 +87,14 @@ fn map_email_conflict(e: sqlx::Error) -> AppError {
 
 /// Fetches a user by email address. Case-insensitive, matching the
 /// `users_email_lower_unique` index, so at most one row can match.
-pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<UserRow>, AppError> {
+pub async fn get_user_by_email(
+    pool: &PgPool,
+    email: &ambre_core::Email,
+) -> Result<Option<UserRow>, AppError> {
     let row = sqlx::query(
         "SELECT id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey FROM users WHERE lower(email) = lower($1)"
     )
-    .bind(email)
+    .bind(email.as_str())
     .fetch_optional(pool)
     .await?;
 
@@ -100,7 +103,7 @@ pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User
             id: r.try_get::<PgId, _>("id")?.into(),
             oidc_provider: r.try_get("oidc_provider")?,
             oidc_subject: r.try_get("oidc_subject")?,
-            email: r.try_get("email")?,
+            email: ambre_core::Email(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
             display_name: r.try_get("display_name")?,
             master_key_enc: r.try_get("master_key_enc")?,
@@ -118,7 +121,7 @@ pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User
 /// via `map_email_conflict` (N5).
 pub async fn create_user(
     pool: &PgPool,
-    email: &str,
+    email: &ambre_core::Email,
     display_name: &str,
     master_key_enc: &[u8],
     master_key_salt: &[u8],
@@ -128,7 +131,7 @@ pub async fn create_user(
     let row = sqlx::query(
         "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey"
     )
-    .bind(email)
+    .bind(email.as_str())
     .bind(display_name)
     .bind(master_key_enc)
     .bind(master_key_salt)
@@ -144,7 +147,7 @@ pub async fn create_user(
         id: row.try_get::<PgId, _>("id")?.into(),
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
-        email: row.try_get("email")?,
+        email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: row.try_get("display_name")?,
         master_key_enc: row.try_get("master_key_enc")?,
@@ -176,7 +179,7 @@ pub async fn upsert_user_from_oidc(
     pool: &PgPool,
     oidc_provider: &str,
     oidc_subject: &str,
-    email: &str,
+    email: &ambre_core::Email,
     display_name: &str,
 ) -> Result<UserRow, AppError> {
     let mut tx = pool.begin().await?;
@@ -193,7 +196,7 @@ pub async fn upsert_user_from_oidc(
            AND email_verified = false \
            AND (oidc_provider IS DISTINCT FROM $2 OR oidc_subject IS DISTINCT FROM $3)",
     )
-    .bind(email)
+    .bind(email.as_str())
     .bind(oidc_provider)
     .bind(oidc_subject)
     .execute(&mut *tx)
@@ -204,7 +207,7 @@ pub async fn upsert_user_from_oidc(
     )
     .bind(oidc_provider)
     .bind(oidc_subject)
-    .bind(email)
+    .bind(email.as_str())
     .bind(display_name)
     .fetch_one(&mut *tx)
     .await
@@ -215,7 +218,7 @@ pub async fn upsert_user_from_oidc(
         id: row.try_get::<PgId, _>("id")?.into(),
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
-        email: row.try_get("email")?,
+        email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: row.try_get("display_name")?,
         master_key_enc: row.try_get("master_key_enc")?,
@@ -270,7 +273,7 @@ pub async fn dev_upsert_user(
         id: row.try_get::<PgId, _>("id")?.into(),
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
-        email: row.try_get("email")?,
+        email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: row.try_get("display_name")?,
         master_key_enc: row.try_get("master_key_enc")?,
@@ -305,7 +308,7 @@ pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>
         .map(|r| {
             Ok(UserInfoRow {
                 id: r.try_get::<PgId, _>("id")?.into(),
-                email: r.try_get("email")?,
+                email: ambre_core::Email(r.try_get("email")?),
                 email_verified: r.try_get("email_verified")?,
                 display_name: r.try_get("display_name")?,
                 signing_pubkey: r.try_get("signing_pubkey")?,
@@ -382,7 +385,7 @@ mod tests {
     async fn oidc_login_reclaims_email_from_unverified_squatter(pool: PgPool) {
         let squatter = create_user(
             &pool,
-            "alice@example.com",
+            &ambre_core::Email::from("alice@example.com"),
             "Alice",
             &[1u8; 32],
             &[2u8; 16],
@@ -393,14 +396,20 @@ mod tests {
         .expect("setup account");
         assert!(!squatter.email_verified, "a setup email is unverified");
 
-        let oidc = upsert_user_from_oidc(&pool, "google", "sub-123", "Alice@example.com", "Alice")
-            .await
-            .expect("verified login must reclaim the squatted email");
+        let oidc = upsert_user_from_oidc(
+            &pool,
+            "google",
+            "sub-123",
+            &ambre_core::Email::from("Alice@example.com"),
+            "Alice",
+        )
+        .await
+        .expect("verified login must reclaim the squatted email");
         assert!(oidc.email_verified, "the OIDC email is verified");
         assert_ne!(oidc.id, squatter.id, "a distinct OIDC identity");
 
         // The email now resolves to the verified OIDC account, not the squatter.
-        let resolved = get_user_by_email(&pool, "alice@example.com")
+        let resolved = get_user_by_email(&pool, &ambre_core::Email::from("alice@example.com"))
             .await
             .expect("query")
             .expect("email still resolves");
@@ -412,7 +421,7 @@ mod tests {
             .expect("query")
             .expect("squatter row still exists");
         assert_ne!(
-            squatter_now.email.to_lowercase(),
+            squatter_now.email.as_str().to_lowercase(),
             "alice@example.com",
             "the squatter no longer holds the reclaimed email"
         );
@@ -423,13 +432,19 @@ mod tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn verified_email_cannot_be_squatted_by_setup(pool: PgPool) {
-        upsert_user_from_oidc(&pool, "google", "sub-1", "dave@example.com", "Dave")
-            .await
-            .expect("verified login");
+        upsert_user_from_oidc(
+            &pool,
+            "google",
+            "sub-1",
+            &ambre_core::Email::from("dave@example.com"),
+            "Dave",
+        )
+        .await
+        .expect("verified login");
 
         let err = create_user(
             &pool,
-            "DAVE@example.com",
+            &ambre_core::Email::from("DAVE@example.com"),
             "Impostor",
             &[9u8; 32],
             &[8u8; 16],
@@ -447,13 +462,25 @@ mod tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn verified_email_collision_is_conflict(pool: PgPool) {
-        upsert_user_from_oidc(&pool, "google", "sub-a", "erin@example.com", "Erin")
-            .await
-            .expect("first verified login");
+        upsert_user_from_oidc(
+            &pool,
+            "google",
+            "sub-a",
+            &ambre_core::Email::from("erin@example.com"),
+            "Erin",
+        )
+        .await
+        .expect("first verified login");
 
-        let err = upsert_user_from_oidc(&pool, "github", "sub-b", "erin@example.com", "Erin")
-            .await
-            .expect_err("a second verified identity must not steal the email");
+        let err = upsert_user_from_oidc(
+            &pool,
+            "github",
+            "sub-b",
+            &ambre_core::Email::from("erin@example.com"),
+            "Erin",
+        )
+        .await
+        .expect_err("a second verified identity must not steal the email");
         assert!(matches!(err, AppError::Conflict { .. }), "got {err:?}");
     }
 
@@ -462,12 +489,24 @@ mod tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn oidc_relogin_keeps_its_own_email(pool: PgPool) {
-        let first = upsert_user_from_oidc(&pool, "google", "sub-x", "frank@example.com", "Frank")
-            .await
-            .expect("first login");
-        let second = upsert_user_from_oidc(&pool, "google", "sub-x", "frank@example.com", "Frank")
-            .await
-            .expect("re-login must not self-conflict");
+        let first = upsert_user_from_oidc(
+            &pool,
+            "google",
+            "sub-x",
+            &ambre_core::Email::from("frank@example.com"),
+            "Frank",
+        )
+        .await
+        .expect("first login");
+        let second = upsert_user_from_oidc(
+            &pool,
+            "google",
+            "sub-x",
+            &ambre_core::Email::from("frank@example.com"),
+            "Frank",
+        )
+        .await
+        .expect("re-login must not self-conflict");
         assert_eq!(first.id, second.id);
         assert!(second.email_verified);
     }
@@ -478,7 +517,7 @@ mod tests {
     async fn create_user_duplicate_email_is_conflict(pool: PgPool) {
         create_user(
             &pool,
-            "bob@example.com",
+            &ambre_core::Email::from("bob@example.com"),
             "Bob",
             &[1u8; 32],
             &[2u8; 16],
@@ -490,7 +529,7 @@ mod tests {
 
         let err = create_user(
             &pool,
-            "BOB@example.com",
+            &ambre_core::Email::from("BOB@example.com"),
             "Impostor",
             &[9u8; 32],
             &[8u8; 16],
@@ -509,7 +548,7 @@ mod tests {
     async fn get_user_by_email_is_case_insensitive(pool: PgPool) {
         let created = create_user(
             &pool,
-            "carol@example.com",
+            &ambre_core::Email::from("carol@example.com"),
             "Carol",
             &[1u8; 32],
             &[2u8; 16],
@@ -519,7 +558,7 @@ mod tests {
         .await
         .expect("create user");
 
-        let found = get_user_by_email(&pool, "CAROL@EXAMPLE.COM")
+        let found = get_user_by_email(&pool, &ambre_core::Email::from("CAROL@EXAMPLE.COM"))
             .await
             .expect("query")
             .expect("must resolve despite case difference");

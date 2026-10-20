@@ -72,17 +72,41 @@ pub struct CallbackRequest {
 pub struct CallbackResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub email: String,
+    pub email: ambre_core::Email,
     pub display_name: String,
     /// True when the user row was just created (no master key yet).
     /// The client should prompt the user to set up their master key.
     pub is_new_user: bool,
     /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
-    pub access_token: String,
+    pub access_token: ambre_protocol::ws::AccessToken,
     /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
-    pub refresh_token: String,
+    pub refresh_token: ambre_protocol::ws::RefreshToken,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
     pub access_expires_in: u64,
+}
+
+/// A secret of the OIDC exchange: the client secret the provider issued, or
+/// a PKCE verifier. `Debug` prints no byte of it, so a logged `Config` or
+/// sign-in state carries none.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct OidcSecret(String);
+
+impl OidcSecret {
+    /// Wraps the secret text.
+    pub fn new(secret: String) -> Self {
+        Self(secret)
+    }
+
+    /// The secret text, for the one call that presents it.
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for OidcSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OidcSecret(<redacted>)")
+    }
 }
 
 /// Transient OIDC authorization state stored in Redis (TTL 10 min).
@@ -91,7 +115,7 @@ pub struct CallbackResponse {
 /// be presented again during token exchange to prevent authorization
 /// code interception.
 pub struct OidcAuthState {
-    pub pkce_verifier_secret: String,
+    pub pkce_verifier_secret: OidcSecret,
     pub nonce: Nonce,
 }
 
@@ -192,7 +216,7 @@ pub async fn login_url(
     let verifier_secret = pkce_verifier.secret().clone();
 
     let oidc_state = OidcAuthState {
-        pkce_verifier_secret: verifier_secret,
+        pkce_verifier_secret: OidcSecret::new(verifier_secret),
         nonce,
     };
 
@@ -215,7 +239,8 @@ pub async fn exchange_code(
     stored_state: &OidcAuthState,
 ) -> Result<CoreIdTokenClaims, AppError> {
     let auth_code = AuthorizationCode::new(code);
-    let pkce_verifier = PkceCodeVerifier::new(stored_state.pkce_verifier_secret.clone());
+    let pkce_verifier =
+        PkceCodeVerifier::new(stored_state.pkce_verifier_secret.expose().to_owned());
 
     let http_client = &provider.http_client;
     let client_with_redirect = provider
@@ -506,7 +531,9 @@ mod tests {
 
         let (login, kept) = login_url(provider).await.unwrap();
         let other_verifier = OidcAuthState {
-            pkce_verifier_secret: "a-verifier-the-sign-in-never-made-0123456789".into(),
+            pkce_verifier_secret: OidcSecret::new(
+                "a-verifier-the-sign-in-never-made-0123456789".into(),
+            ),
             nonce: kept.nonce.clone(),
         };
         let code = stub.authorize(&login.url);

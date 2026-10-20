@@ -18,10 +18,10 @@ pub struct SnapshotRow {
     pub parent_snapshot_proof: Option<Vec<u8>>,
     #[allow(dead_code)]
     pub update_clocks: serde_json::Value,
-    pub s3_key: String,
+    pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` folded into this snapshot. Clients gate their
     /// post-open `RequestMissing` on this value to skip the replayed history.
-    pub covered_seq: i64,
+    pub covered_seq: ambre_core::Seq,
     /// Who vouched for it (`SRV-126`).
     pub status: SnapshotStatus,
     #[allow(dead_code)]
@@ -50,8 +50,8 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
         parent_hash: r.try_get("parent_hash")?,
         parent_snapshot_proof: r.try_get("parent_snapshot_proof")?,
         update_clocks: r.try_get("update_clocks")?,
-        s3_key: r.try_get("s3_key")?,
-        covered_seq: r.try_get("covered_seq")?,
+        s3_key: ambre_core::ObjectKey(r.try_get("s3_key")?),
+        covered_seq: decode_seq(r.try_get("covered_seq")?)?,
         status: parse_status(&status)?,
         created_at: r.try_get("created_at")?,
     })
@@ -66,13 +66,13 @@ pub struct UpdateRow {
     #[allow(dead_code)]
     pub snapshot_id: ambre_core::SnapshotId,
     pub clock: i64,
-    pub seq: i64,
+    pub seq: ambre_core::Seq,
     /// The object of its own, for a delta over the inline size (`SRV-149`).
-    pub s3_key: Option<String>,
+    pub s3_key: Option<ambre_core::ObjectKey>,
     /// The sealed envelope itself, for a delta in the hot tail (`SRV-148`).
     pub wire: Option<Payload>,
     /// The batch object that holds the frame (`SRV-151`).
-    pub batch_key: Option<String>,
+    pub batch_key: Option<ambre_core::ObjectKey>,
     #[allow(dead_code)]
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -100,7 +100,7 @@ pub struct Trim {
     /// The rows removed.
     pub rows: u64,
     /// The batch objects no row names any more, which the caller deletes.
-    pub batch_keys: Vec<String>,
+    pub batch_keys: Vec<ambre_core::ObjectKey>,
 }
 
 /// Inserts snapshot metadata and returns the assigned `SnapshotId`.
@@ -112,8 +112,8 @@ pub async fn create_snapshot(
     parent_hash: Option<&[u8]>,
     parent_snapshot_proof: Option<&[u8]>,
     update_clocks: &serde_json::Value,
-    s3_key: &str,
-    covered_seq: i64,
+    s3_key: &ambre_core::ObjectKey,
+    covered_seq: ambre_core::Seq,
 ) -> Result<ambre_core::SnapshotId, AppError> {
     let did = id_to_uuid(*document_id);
     let snapshot_id = uuid::Uuid::now_v7();
@@ -126,8 +126,8 @@ pub async fn create_snapshot(
     .bind(parent_hash)
     .bind(parent_snapshot_proof)
     .bind(update_clocks)
-    .bind(s3_key)
-    .bind(covered_seq)
+    .bind(s3_key.as_str())
+    .bind(covered_seq.to_i64_saturating())
     .execute(pool)
     .await?;
 
@@ -222,7 +222,7 @@ pub async fn confirm_snapshot(
 #[derive(Debug, PartialEq, Eq)]
 pub struct DroppedSnapshot {
     /// Its object key, for the caller to delete.
-    pub s3_key: String,
+    pub s3_key: ambre_core::ObjectKey,
     /// Whether it was the final snapshot of a segment, which is then to be
     /// finalized again.
     pub refinalize: bool,
@@ -263,7 +263,10 @@ pub async fn drop_pending_snapshot(
     .rows_affected()
         == 1;
     tx.commit().await?;
-    Ok(Some(DroppedSnapshot { s3_key, refinalize }))
+    Ok(Some(DroppedSnapshot {
+        s3_key: ambre_core::ObjectKey(s3_key),
+        refinalize,
+    }))
 }
 
 /// The highest delta a served snapshot of the document folds in, 0 with none.
@@ -312,7 +315,7 @@ pub async fn insert_update(
     snapshot_id: &ambre_core::SnapshotId,
     clock: i64,
     seq: i64,
-    s3_key: &str,
+    s3_key: &ambre_core::ObjectKey,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let sid = id_to_uuid(*snapshot_id);
@@ -324,7 +327,7 @@ pub async fn insert_update(
     .bind(sid)
     .bind(clock)
     .bind(seq)
-    .bind(s3_key)
+    .bind(s3_key.as_str())
     .execute(pool)
     .await?;
     Ok(())
@@ -428,7 +431,7 @@ pub async fn point_rows_at_batch(
     tx: &mut sqlx::PgConnection,
     document_id: &ambre_core::DocumentId,
     seqs: &[i64],
-    batch_key: &str,
+    batch_key: &ambre_core::ObjectKey,
 ) -> Result<u64, AppError> {
     let moved = sqlx::query(
         "UPDATE updates SET wire = NULL, batch_key = $3 \
@@ -436,7 +439,7 @@ pub async fn point_rows_at_batch(
     )
     .bind(id_to_uuid(*document_id))
     .bind(seqs)
-    .bind(batch_key)
+    .bind(batch_key.as_str())
     .execute(tx)
     .await?
     .rows_affected();
@@ -467,7 +470,7 @@ pub async fn idle_inline_documents(
 pub async fn get_updates_after(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    after_seq: i64,
+    after_seq: ambre_core::Seq,
     limit: i64,
 ) -> Result<Vec<UpdateRow>, AppError> {
     let did = id_to_uuid(*document_id);
@@ -475,7 +478,7 @@ pub async fn get_updates_after(
         "SELECT document_id, author_pubkey, snapshot_id, clock, seq, s3_key, wire, batch_key, created_at FROM updates WHERE document_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3"
     )
     .bind(did)
-    .bind(after_seq)
+    .bind(after_seq.to_i64_saturating())
     .bind(limit)
     .fetch_all(pool)
     .await?;
@@ -487,10 +490,14 @@ pub async fn get_updates_after(
                 author_pubkey: r.try_get("author_pubkey")?,
                 snapshot_id: r.try_get::<PgId, _>("snapshot_id")?.into(),
                 clock: r.try_get("clock")?,
-                seq: r.try_get("seq")?,
-                s3_key: r.try_get("s3_key")?,
+                seq: decode_seq(r.try_get("seq")?)?,
+                s3_key: r
+                    .try_get::<Option<String>, _>("s3_key")?
+                    .map(ambre_core::ObjectKey),
                 wire: r.try_get("wire")?,
-                batch_key: r.try_get("batch_key")?,
+                batch_key: r
+                    .try_get::<Option<String>, _>("batch_key")?
+                    .map(ambre_core::ObjectKey),
                 created_at: r.try_get("created_at")?,
             })
         })
@@ -615,7 +622,7 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
     .await?;
     Ok(Trim {
         rows: u64::try_from(rows).unwrap_or(0),
-        batch_keys,
+        batch_keys: batch_keys.into_iter().map(ambre_core::ObjectKey).collect(),
     })
 }
 
@@ -624,9 +631,9 @@ pub async fn insert_media(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     uploaded_by: &ambre_core::UserId,
-    content_hash: &str,
-    size_bytes: i64,
-    s3_key: &str,
+    content_hash: &ambre_core::ContentHash,
+    size_bytes: ambre_core::ByteSize,
+    s3_key: &ambre_core::ObjectKey,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*uploaded_by);
@@ -640,18 +647,18 @@ pub async fn insert_media(
     sqlx::query(
         "INSERT INTO media (id, document_id, uploaded_by, size_bytes, s3_key) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (document_id, id) DO NOTHING"
     )
-    .bind(content_hash)
+    .bind(content_hash.as_str())
     .bind(did)
     .bind(uid)
-    .bind(size_bytes)
-    .bind(s3_key)
+    .bind(i64::try_from(size_bytes.0).unwrap_or(i64::MAX))
+    .bind(s3_key.as_str())
     .execute(&mut *tx)
     .await?;
     sqlx::query(
         "INSERT INTO media_uploaders (document_id, id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
     )
     .bind(did)
-    .bind(content_hash)
+    .bind(content_hash.as_str())
     .bind(uid)
     .execute(&mut *tx)
     .await?;
@@ -667,7 +674,7 @@ pub enum MediaErase {
     /// Another uploader still holds the blob, so the object stays.
     Kept,
     /// The last claim went: the object under this key must go with the row.
-    Last { s3_key: String },
+    Last { s3_key: ambre_core::ObjectKey },
 }
 
 /// Erases `user`'s claim on a blob of `document_id`, inside `tx`.
@@ -679,7 +686,7 @@ pub async fn erase_media_claim(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: &ambre_core::DocumentId,
     user: &ambre_core::UserId,
-    content_hash: &str,
+    content_hash: &ambre_core::ContentHash,
 ) -> Result<MediaErase, AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user);
@@ -687,7 +694,7 @@ pub async fn erase_media_claim(
         "SELECT s3_key FROM media WHERE document_id = $1 AND id = $2 FOR UPDATE",
     )
     .bind(did)
-    .bind(content_hash)
+    .bind(content_hash.as_str())
     .fetch_optional(&mut **tx)
     .await?;
     let Some(s3_key) = s3_key else {
@@ -697,7 +704,7 @@ pub async fn erase_media_claim(
         "DELETE FROM media_uploaders WHERE document_id = $1 AND id = $2 AND user_id = $3",
     )
     .bind(did)
-    .bind(content_hash)
+    .bind(content_hash.as_str())
     .bind(uid)
     .execute(&mut **tx)
     .await?
@@ -709,7 +716,7 @@ pub async fn erase_media_claim(
         "SELECT EXISTS (SELECT 1 FROM media_uploaders WHERE document_id = $1 AND id = $2)",
     )
     .bind(did)
-    .bind(content_hash)
+    .bind(content_hash.as_str())
     .fetch_one(&mut **tx)
     .await?;
     if others {
@@ -717,24 +724,26 @@ pub async fn erase_media_claim(
     }
     sqlx::query("DELETE FROM media WHERE document_id = $1 AND id = $2")
         .bind(did)
-        .bind(content_hash)
+        .bind(content_hash.as_str())
         .execute(&mut **tx)
         .await?;
-    Ok(MediaErase::Last { s3_key })
+    Ok(MediaErase::Last {
+        s3_key: ambre_core::ObjectKey(s3_key),
+    })
 }
 
 /// Whether the media index records `content_hash` in `document_id`.
 pub async fn document_holds_media(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    content_hash: &str,
+    content_hash: &ambre_core::ContentHash,
 ) -> Result<bool, AppError> {
     let did = id_to_uuid(*document_id);
     let held: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM media WHERE document_id = $1 AND id = $2)",
     )
     .bind(did)
-    .bind(content_hash)
+    .bind(content_hash.as_str())
     .fetch_one(pool)
     .await?;
     Ok(held)
@@ -745,7 +754,8 @@ pub async fn document_holds_media(
 pub struct CompactSnapshot {
     #[sqlx(try_from = "PgId")]
     pub id: ambre_core::SnapshotId,
-    pub s3_key: String,
+    #[sqlx(try_from = "String")]
+    pub s3_key: ambre_core::ObjectKey,
 }
 
 /// Finds snapshots beyond the keep limit (oldest N) per document.

@@ -144,9 +144,17 @@ mod db_tests {
     /// Stores delta `seq` under `author`.
     async fn delta(state: &AppState, doc: &ambre_core::DocumentId, author: &[u8; 32], seq: i64) {
         let tag = ambre_core::SnapshotId::new();
-        db::insert_update(&state.db, doc, author, &tag, seq, seq, &format!("k{seq}"))
-            .await
-            .unwrap();
+        db::insert_update(
+            &state.db,
+            doc,
+            author,
+            &tag,
+            seq,
+            seq,
+            &ambre_core::ObjectKey(format!("k{seq}")),
+        )
+        .await
+        .unwrap();
     }
 
     /// Stores a pending snapshot by `author` folding in `covered`.
@@ -158,6 +166,8 @@ mod db_tests {
     ) -> ambre_core::SnapshotId {
         let json = serde_json::json!({});
         let key = format!("s3/{covered}");
+        let key = ambre_core::ObjectKey(key);
+        let covered = ambre_core::Seq::try_from(covered).expect("a relay number");
         db::create_snapshot(&state.db, doc, author, None, None, &json, &key, covered)
             .await
             .unwrap()
@@ -165,11 +175,16 @@ mod db_tests {
 
     /// Each remaining delta's number and author tag.
     async fn rows(state: &AppState, doc: &ambre_core::DocumentId) -> Vec<(i64, u8)> {
-        db::get_updates_after(&state.db, doc, 0, 1000)
+        db::get_updates_after(&state.db, doc, ambre_core::Seq(0), 1000)
             .await
             .unwrap()
             .into_iter()
-            .map(|r| (r.seq, r.author_pubkey.first().copied().unwrap_or(0)))
+            .map(|r| {
+                (
+                    r.seq.to_i64_saturating(),
+                    r.author_pubkey.first().copied().unwrap_or(0),
+                )
+            })
             .collect()
     }
 

@@ -228,7 +228,7 @@ impl LogicState {
 
     /// The snapshot of a space document, for the relay's compaction, with the
     /// relay's number of the last delta it folds in (`SRV-083`).
-    pub(crate) fn space_snapshot(&self, document_id: DocumentId) -> Option<(Vec<u8>, u64)> {
+    pub(crate) fn space_snapshot(&self, document_id: DocumentId) -> Option<(Vec<u8>, Seq)> {
         let space = self.spaces.get(&SpaceId::from_document(document_id))?;
         let payload = space
             .state
@@ -238,7 +238,7 @@ impl LogicState {
         let covered = self
             .channel_ledgers
             .get(&document_id)
-            .map_or(0, crate::snapshot_check::SeqLedger::contiguous_end);
+            .map_or(Seq::ZERO, crate::snapshot_check::SeqLedger::contiguous_end);
         Some((payload, covered))
     }
 
@@ -994,7 +994,7 @@ mod tests {
         state.grant_identity(space_id.document_id());
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload: stored.snapshot().expect("snapshot"),
         });
         ready(state, space_id.document_id(), role);
@@ -1080,7 +1080,7 @@ mod tests {
         let _ = drain(&sync);
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload: stored.snapshot().expect("snapshot"),
         });
         assert!(
@@ -1207,7 +1207,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload: stored.snapshot().expect("snapshot"),
         });
         ready(&mut state, space_id.document_id(), Role::Viewer);
@@ -1367,7 +1367,7 @@ mod tests {
         bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
         bob.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload: alice.snapshot().expect("snapshot"),
         });
         ready(&mut bob, space_id.document_id(), Role::Editor);
@@ -1436,7 +1436,7 @@ mod tests {
         bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
         bob.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload: alice.snapshot().expect("snapshot"),
         });
         ready(&mut bob, space_id.document_id(), role);
@@ -1638,7 +1638,7 @@ mod tests {
         viewer.grant_identity(space_id.document_id());
         viewer.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload,
         });
         ready(&mut viewer, space_id.document_id(), Role::Viewer);
@@ -2019,7 +2019,7 @@ mod tests {
         MemberInfo {
             user_id,
             display_name: name.to_owned(),
-            email: format!("{name}@example.org"),
+            email: ambre_core::Email(format!("{name}@example.org")),
             role: Role::Editor,
             standing: ambre_bus::MemberStanding::Verified,
         }
@@ -2038,7 +2038,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload: stored.snapshot().expect("snapshot"),
         });
         ready(state, space_id.document_id(), Role::Editor);
@@ -2073,7 +2073,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload: stored.snapshot().expect("snapshot"),
         });
         assert!(
@@ -2098,7 +2098,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload: stored.snapshot().expect("snapshot"),
         });
         let _ = drain(&sync);
@@ -2197,7 +2197,7 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload: stored.snapshot().expect("snapshot"),
         });
         ready(&mut state, space_id.document_id(), Role::Editor);

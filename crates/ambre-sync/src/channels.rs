@@ -1037,7 +1037,9 @@ pub(crate) fn self_join_entry(
     let draft = membership_log::Draft {
         document: meta,
         member: author.user_id,
-        member_key: author.signing_key.verifying_key().to_bytes(),
+        member_key: ambre_core::PublicKey::from_array(
+            author.signing_key.verifying_key().to_bytes(),
+        ),
         act: ambre_protocol::MembershipAct::SelfJoin,
         role: head.role,
         key: Some(key),
@@ -1082,8 +1084,9 @@ pub(crate) fn direct_message_request(
         let draft = membership_log::Draft {
             document,
             member,
-            member_key: *signing_keys
+            member_key: signing_keys
                 .get(&member)
+                .map(|key| ambre_core::PublicKey::from_array(*key))
                 .ok_or("a member has no signing key")?,
             act,
             role,
@@ -1105,7 +1108,7 @@ pub(crate) fn direct_message_request(
     let members = members
         .iter()
         .map(|(m, _)| {
-            wrap(&m.exchange_pub_key).map(|doc_key_enc| http::DirectMemberJson {
+            wrap(m.exchange_pub_key.as_array()).map(|doc_key_enc| http::DirectMemberJson {
                 user_id: m.user_id,
                 doc_key_enc,
             })
@@ -1124,9 +1127,12 @@ pub(crate) fn direct_message_request(
 
 /// Refuse a member whose exchange key, as the relay serves it now, is not
 /// the one the view pinned for them.
-pub(crate) fn check_pinned(member: &DirectMember, served_hex: &str) -> Result<(), String> {
+pub(crate) fn check_pinned(
+    member: &DirectMember,
+    served_hex: &ambre_core::ExchangeKeyHex,
+) -> Result<(), String> {
     let served = crate::sharing::decode_exchange_pubkey(served_hex)?;
-    if served == member.exchange_pub_key {
+    if served == *member.exchange_pub_key.as_array() {
         Ok(())
     } else {
         Err(format!(
@@ -1707,7 +1713,7 @@ pub(crate) mod tests {
             meta_id: meta,
             name_enc,
             doc_key_enc: doc_key_enc.clone(),
-            wrapper_exchange_pub_key: String::new(),
+            wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex(String::new()),
             peers: Vec::new(),
             meta_last: None,
         };
@@ -1868,7 +1874,9 @@ pub(crate) mod tests {
     fn member_of(exchange_key: &StaticSecret) -> DirectMember {
         DirectMember {
             user_id: UserId::new(),
-            exchange_pub_key: x25519_dalek::PublicKey::from(exchange_key).to_bytes(),
+            exchange_pub_key: ambre_core::PublicKey::from_array(
+                x25519_dalek::PublicKey::from(exchange_key).to_bytes(),
+            ),
         }
     }
 
@@ -1938,10 +1946,16 @@ pub(crate) mod tests {
     #[test]
     fn a_key_other_than_the_pinned_one_is_refused() {
         let bob = member_of(&exchange_key(2));
-        assert!(check_pinned(&bob, &hex::encode(bob.exchange_pub_key)).is_ok());
+        assert!(
+            check_pinned(
+                &bob,
+                &ambre_core::ExchangeKeyHex::encode(bob.exchange_pub_key.as_array())
+            )
+            .is_ok()
+        );
         let other = x25519_dalek::PublicKey::from(&exchange_key(3)).to_bytes();
-        assert!(check_pinned(&bob, &hex::encode(other)).is_err());
-        assert!(check_pinned(&bob, "not hex").is_err());
+        assert!(check_pinned(&bob, &ambre_core::ExchangeKeyHex::encode(other)).is_err());
+        assert!(check_pinned(&bob, &ambre_core::ExchangeKeyHex("not hex".to_owned())).is_err());
     }
 
     #[test]

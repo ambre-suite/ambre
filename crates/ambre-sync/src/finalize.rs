@@ -7,7 +7,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelId, LeaseAnswer, LeaseId, SegmentId};
+use ambre_bus::{ChannelId, LeaseAnswer, LeaseId, SegmentId, Seq};
 
 use crate::updates::{SnapshotUpload, upload_snapshot};
 
@@ -83,7 +83,7 @@ impl SyncState {
         channel_id: ChannelId,
         segment: SegmentId,
         lease: LeaseId,
-        horizon: u64,
+        horizon: Seq,
         payload: &[u8],
     ) {
         let document_id = segment.document_id();
@@ -96,7 +96,7 @@ impl SyncState {
         if !doc_state.rekey.settled() {
             return self.finalize_failed(channel_id, segment, false, "an edit is unanswered");
         }
-        let upload = match self.snapshot_upload(document_id, payload, Seq(horizon)) {
+        let upload = match self.snapshot_upload(document_id, payload, horizon) {
             Ok(upload) => upload,
             Err(message) => return self.finalize_failed(channel_id, segment, false, &message),
         };
@@ -150,7 +150,7 @@ mod tests {
     const BASE: &str = "https://relay.test";
 
     /// A sealed snapshot of `document_id` covering the deltas up to `horizon`.
-    fn upload(document_id: DocumentId, horizon: i64) -> SnapshotUpload {
+    fn upload(document_id: DocumentId, horizon: Seq) -> SnapshotUpload {
         let key = DocumentKey::generate();
         let sk = MasterSeed::generate().derive_signing_key();
         let public_data = SnapshotPublicData {
@@ -163,7 +163,7 @@ mod tests {
         };
         SnapshotUpload {
             document_id,
-            author_pubkey: hex::encode(sk.verifying_key().to_bytes()),
+            author_pubkey: ambre_core::SigningKeyHex::encode(sk.verifying_key().to_bytes()),
             covered_seq: horizon,
             blob: pipeline::snapshot_blob(b"final", public_data, &key, &sk).expect("seal"),
         }
@@ -194,7 +194,7 @@ mod tests {
             granted,
             Ok(LeaseAnswer::Granted {
                 lease,
-                horizon: 41,
+                horizon: ambre_bus::Seq(41),
                 expires_in: 30_000
             })
         );
@@ -239,7 +239,7 @@ mod tests {
             channel,
             segment,
             lease,
-            upload(document, 41),
+            upload(document, ambre_bus::Seq(41)),
         )
         .await;
         assert_eq!(committed, Ok(()));

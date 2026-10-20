@@ -43,7 +43,7 @@ impl SyncState {
                                 // (NaN -> 0 when the server timestamp is absent).
                                 updated_at: {
                                     let ms = js_sys::Date::parse(&e.updated_at);
-                                    if ms.is_nan() { 0 } else { ms as u64 }
+                                    ambre_bus::Timestamp(if ms.is_nan() { 0 } else { ms as u64 })
                                 },
                                 member_count: e.member_count.max(1),
                             });
@@ -67,7 +67,7 @@ impl SyncState {
                     doc_type: *doc_type,
                     name: Some(name.clone()),
                     role: Role::Owner,
-                    updated_at: 0,
+                    updated_at: ambre_bus::Timestamp(0),
                     member_count: 1,
                 })
                 .collect();
@@ -344,7 +344,7 @@ impl SyncState {
 pub(crate) struct ListedName<'a> {
     pub(crate) document_id: DocumentId,
     pub(crate) doc_key_enc: &'a str,
-    pub(crate) wrapper_exchange_pub_key: &'a str,
+    pub(crate) wrapper_exchange_pub_key: &'a ambre_core::ExchangeKeyHex,
     pub(crate) name_enc: &'a str,
 }
 
@@ -392,7 +392,7 @@ impl ListedName<'_> {
 /// decode or crypto failure.
 pub(crate) fn unwrap_listed_key(
     doc_key_enc: &str,
-    wrapper_exchange_pub_key: &str,
+    wrapper_exchange_pub_key: &ambre_core::ExchangeKeyHex,
     exchange_key: &x25519_dalek::StaticSecret,
 ) -> Option<DocumentKey> {
     let wrapped_bytes = base64::engine::general_purpose::URL_SAFE
@@ -405,11 +405,11 @@ pub(crate) fn unwrap_listed_key(
     };
     let wrapper_hex = if wrapper_exchange_pub_key.is_empty() {
         // Self-wrapped owner row: the DH peer is our own public key.
-        hex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes())
+        ambre_core::ExchangeKeyHex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes())
     } else {
-        wrapper_exchange_pub_key.to_owned()
+        wrapper_exchange_pub_key.clone()
     };
-    let peer_pub: [u8; 32] = hex::decode(wrapper_hex).ok()?.try_into().ok()?;
+    let peer_pub: [u8; 32] = hex::decode(wrapper_hex.as_str()).ok()?.try_into().ok()?;
     ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()
 }
 

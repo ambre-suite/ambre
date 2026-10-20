@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ambre_core::RefusalCode;
+use ambre_core::{RefusalCode, Seq};
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -643,12 +643,12 @@ pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
 #[derive(Serialize)]
 #[allow(dead_code)]
 pub(crate) struct SetupAccountRequest {
-    pub email: String,
+    pub email: ambre_core::Email,
     pub display_name: String,
     pub master_key_enc: String,
     pub master_key_salt: String,
-    pub signing_pubkey: String,
-    pub exchange_pubkey: String,
+    pub signing_pubkey: ambre_core::SigningKeyHex,
+    pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 
 #[derive(Deserialize)]
@@ -664,8 +664,8 @@ pub(crate) struct SetupAccountResponse {
 #[derive(Serialize)]
 pub(crate) struct DevLoginRequest {
     pub username: String,
-    pub signing_pub_key: String,
-    pub exchange_pub_key: String,
+    pub signing_pub_key: ambre_core::SigningKeyHex,
+    pub exchange_pub_key: ambre_core::ExchangeKeyHex,
 }
 
 #[derive(Deserialize)]
@@ -697,7 +697,7 @@ pub(crate) struct ProviderCallbackRequest {
 pub(crate) struct ProviderCallbackResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub email: String,
+    pub email: ambre_core::Email,
     pub display_name: String,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
@@ -723,8 +723,8 @@ impl MasterKeyResponse {
 pub(crate) struct SetupKeyRequest {
     pub master_key_enc: String,
     pub master_key_salt: String,
-    pub signing_pubkey: String,
-    pub exchange_pubkey: String,
+    pub signing_pubkey: ambre_core::SigningKeyHex,
+    pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 
 #[derive(Deserialize)]
@@ -741,7 +741,7 @@ pub(crate) struct AuthMeResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
     pub display_name: String,
-    pub email: String,
+    pub email: ambre_core::Email,
 }
 
 /// `GET /api/channels/{id}/documents`: the documents a channel groups.
@@ -823,7 +823,7 @@ pub(crate) struct MemberChannelEntry {
     /// Base64 of `nonce || ciphertext`.
     pub doc_key_enc: String,
     /// Hex, empty for a self-wrapped row.
-    pub wrapper_exchange_pub_key: String,
+    pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
     /// The display names of a direct message's other members (`SRV-220`).
     #[serde(default)]
     pub peers: Vec<String>,
@@ -914,7 +914,7 @@ pub(crate) struct DocumentEntry {
     /// Exchange pubkey (hex) of whoever wrapped `doc_key_enc`. Empty => fall back
     /// to our own key (self-wrapped owner row).
     #[serde(default)]
-    pub wrapper_exchange_pub_key: String,
+    pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
     /// Total member count; `> 1` => shared.
     #[serde(default)]
     pub member_count: u32,
@@ -1026,7 +1026,7 @@ pub(crate) struct GrantedLeaseResponse {
     #[serde(with = "ambre_core::serde_id::lease_id")]
     pub lease_id: ambre_core::LeaseId,
     /// The last delta the final snapshot covers.
-    pub horizon: u64,
+    pub horizon: Seq,
     /// Milliseconds before the lease expires.
     pub expires_in: u64,
 }
@@ -1056,12 +1056,12 @@ pub(crate) struct GrantedFoldResponse {
     #[serde(with = "ambre_core::serde_id::lease_id")]
     pub lease_id: ambre_core::LeaseId,
     /// The last delta of the segment the fold snapshot covers.
-    pub horizon: u64,
+    pub horizon: Seq,
     /// The amendments document to fold.
     #[serde(with = "ambre_core::serde_id::document_id")]
     pub amendments: ambre_core::DocumentId,
     /// The last delta of the amendments the fold holds at least.
-    pub amendments_seq: u64,
+    pub amendments_seq: Seq,
     /// Milliseconds before the lease expires.
     pub expires_in: u64,
 }
@@ -1075,7 +1075,7 @@ pub(crate) struct FoldSegmentRequest {
     #[serde(with = "ambre_core::serde_id::snapshot_id")]
     pub snapshot_id: ambre_core::SnapshotId,
     /// The last delta of the amendments the fold holds.
-    pub amendments_seq: u64,
+    pub amendments_seq: Seq,
 }
 
 /// `POST /api/documents/{id}/snapshots/{snapshot}/confirm`: the amendments
@@ -1182,8 +1182,8 @@ pub(crate) struct MembersResponse {
 pub(crate) struct MemberEntry {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub signing_pub_key: String,
-    pub exchange_pub_key: String,
+    pub signing_pub_key: ambre_core::SigningKeyHex,
+    pub exchange_pub_key: ambre_core::ExchangeKeyHex,
     pub doc_key_enc: String,
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
@@ -1191,7 +1191,7 @@ pub(crate) struct MemberEntry {
     /// use this peer key, not our own `exchange_pub_key`. Optional for resilience
     /// against older servers; the unwrap falls back to `exchange_pub_key`.
     #[serde(default)]
-    pub wrapper_exchange_pub_key: String,
+    pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
 }
 
 /// Response of `GET /api/documents/{id}/snapshot`: the latest snapshot's id and
@@ -1201,16 +1201,16 @@ pub(crate) struct SnapshotMetadataResponse {
     #[serde(with = "ambre_core::serde_id::snapshot_id")]
     pub snapshot_id: ambre_core::SnapshotId,
     #[allow(dead_code)]
-    pub s3_key: String,
+    pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` folded into the snapshot: the open path gates its
     /// `RequestMissing` on this to skip the already-replayed history.
-    pub covered_seq: i64,
+    pub covered_seq: Seq,
     /// `confirmed`, or `self` when only its author vouched for it (`SRV-128`).
     pub status: ambre_core::SnapshotStatus,
     /// The author's signing key, hex. A `self` snapshot of this very user opens
     /// as it is.
     #[serde(default)]
-    pub author_pubkey: String,
+    pub author_pubkey: ambre_core::SigningKeyHex,
     /// For a `self` snapshot, the latest one another member confirmed, which
     /// the open starts from (`SRV-131`, `AUTHOR-022`).
     #[serde(default)]
@@ -1222,7 +1222,7 @@ pub(crate) struct SnapshotMetadataResponse {
 pub(crate) struct ReferenceSnapshot {
     #[serde(with = "ambre_core::serde_id::snapshot_id")]
     pub snapshot_id: ambre_core::SnapshotId,
-    pub covered_seq: i64,
+    pub covered_seq: Seq,
 }
 
 /// Body of `POST /api/documents/{id}/snapshots/{snapshot_id}/report`: the
@@ -1237,7 +1237,7 @@ pub(crate) struct ReportSnapshotRequest {
 #[derive(Deserialize)]
 pub(crate) struct SnapshotUploadUrlResponse {
     pub upload_url: String,
-    pub s3_key: String,
+    pub s3_key: ambre_core::ObjectKey,
 }
 
 /// Body of `POST /api/documents/{id}/snapshot` (confirm upload + insert metadata).
@@ -1246,13 +1246,13 @@ pub(crate) struct SnapshotUploadUrlResponse {
 pub(crate) struct CreateSnapshotRequest {
     #[serde(with = "ambre_core::serde_id::snapshot_id")]
     pub snapshot_id: ambre_core::SnapshotId,
-    pub author_pubkey: String,
+    pub author_pubkey: ambre_core::SigningKeyHex,
     pub parent_hash: Option<String>,
     pub parent_snapshot_proof: Option<String>,
     pub update_clocks: serde_json::Value,
-    pub s3_key: String,
+    pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` this client had applied when it took the snapshot.
-    pub covered_seq: i64,
+    pub covered_seq: Seq,
 }
 
 #[derive(Deserialize)]
@@ -1282,25 +1282,25 @@ pub(crate) struct UserSearchResult {
 pub(crate) struct UserInfoEntry {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub id: ambre_core::UserId,
-    pub email: String,
+    pub email: ambre_core::Email,
     pub display_name: String,
     /// The key an invitation's entry names for the invitee (`SYNC-132`).
-    pub signing_pubkey: String,
-    pub exchange_pubkey: String,
+    pub signing_pubkey: ambre_core::SigningKeyHex,
+    pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct PubkeysResponse {
-    pub signing_pubkey: String,
-    pub exchange_pubkey: String,
+    pub signing_pubkey: ambre_core::SigningKeyHex,
+    pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 
 #[derive(Serialize)]
 pub(crate) struct InviteRequest {
     /// One of the two names the invitee (`SRV-224`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub invitee_email: Option<String>,
+    pub invitee_email: Option<ambre_core::Email>,
     #[serde(
         skip_serializing_if = "Option::is_none",
         with = "ambre_core::serde_id::user_id::option"
@@ -1462,10 +1462,10 @@ pub(crate) struct DocumentMemberEntry {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
     pub display_name: String,
-    pub email: String,
+    pub email: ambre_core::Email,
     /// Ed25519 verifying key: feeds the presence directory (`presence_directory`).
-    pub signing_pub_key: String,
-    pub exchange_pub_key: String,
+    pub signing_pub_key: ambre_core::SigningKeyHex,
+    pub exchange_pub_key: ambre_core::ExchangeKeyHex,
     pub doc_key_enc: String,
     /// The relay's column, which the signed log overrides (`SYNC-110`). An
     /// unknown word refuses the whole answer when it is read (`SRV-180`).
@@ -1474,27 +1474,27 @@ pub(crate) struct DocumentMemberEntry {
     /// Exchange key of whoever wrapped `doc_key_enc`. Our own row unwraps
     /// against it, which yields the log anchor (`SYNC-104`).
     #[serde(default)]
-    pub wrapper_exchange_pub_key: String,
+    pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
 }
 
 /// Asks for a link to put one sealed blob. It names the keyed address and the
 /// sealed size, and nothing else of the blob (`SYNC-053`).
 #[derive(Serialize)]
 pub(crate) struct UploadUrlRequest {
-    pub content_hash: String,
-    pub size_bytes: u64,
+    pub content_hash: ambre_core::ContentHash,
+    pub size_bytes: ambre_core::ByteSize,
 }
 
 #[derive(Deserialize)]
 pub(crate) struct UploadUrlResponse {
     pub upload_url: String,
     #[allow(dead_code)]
-    pub s3_key: String,
+    pub s3_key: ambre_core::ObjectKey,
 }
 
 #[derive(Serialize)]
 pub(crate) struct DownloadUrlRequest {
-    pub content_hash: String,
+    pub content_hash: ambre_core::ContentHash,
 }
 
 #[derive(Deserialize)]
@@ -1505,8 +1505,8 @@ pub(crate) struct DownloadUrlResponse {
 /// Confirms one put. The same two fields as [`UploadUrlRequest`] (`SYNC-053`).
 #[derive(Serialize)]
 pub(crate) struct ConfirmUploadRequest {
-    pub content_hash: String,
-    pub size_bytes: i64,
+    pub content_hash: ambre_core::ContentHash,
+    pub size_bytes: ambre_core::ByteSize,
 }
 
 /// A transport that answers from a script and keeps every request it was
@@ -2014,12 +2014,12 @@ mod tests {
         };
         let expected = ["content_hash", "size_bytes"];
         let ask = UploadUrlRequest {
-            content_hash: "ab".repeat(32),
-            size_bytes: 64,
+            content_hash: ambre_core::ContentHash("ab".repeat(32)),
+            size_bytes: ambre_core::ByteSize(64),
         };
         let confirm = ConfirmUploadRequest {
-            content_hash: "ab".repeat(32),
-            size_bytes: 64,
+            content_hash: ambre_core::ContentHash("ab".repeat(32)),
+            size_bytes: ambre_core::ByteSize(64),
         };
         assert_eq!(
             fields(serde_json::to_value(&ask).expect("serializes")),

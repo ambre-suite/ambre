@@ -7,7 +7,7 @@
 //! reads this copy and never writes it (`MURMURE-153`).
 
 use ambre_bus::SnapshotVerdict;
-use ambre_core::DocumentId;
+use ambre_core::{DocumentId, Seq};
 use loro::{LoroDoc, VersionVector};
 
 use super::{ChannelState, folding};
@@ -29,13 +29,13 @@ impl ChannelState {
     pub fn check_snapshot(
         &self,
         document_id: DocumentId,
-        covered: u64,
+        covered: Seq,
         snapshot: &[u8],
     ) -> Result<SnapshotVerdict, MurmureError> {
         let own = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        if self.delivered(document_id).0 != covered {
+        if self.delivered(document_id) != covered {
             return Ok(SnapshotVerdict::Unchecked);
         }
         let theirs = LoroDoc::new();

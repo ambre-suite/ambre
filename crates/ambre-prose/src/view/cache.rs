@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::Uuid;
+use ambre_core::FootnoteId;
 use loro::TreeID;
 
 use crate::layout::run::{ParleyRunData, ShapedRun};
@@ -22,7 +22,7 @@ pub const RUN_CACHE_RUNS: usize = 500;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RunKey {
     Block(TreeID),
-    Note(Uuid),
+    Note(FootnoteId),
 }
 
 /// The drawing half of a run: where each of its glyph runs sits, in the

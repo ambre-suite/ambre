@@ -103,7 +103,12 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
     assert_eq!(alice.wants_close(), Some(alice.active_id()), "asked again");
     let closing = alice.active_id();
     close_created(&mut alice);
-    alice.lease_granted(closing, ambre_core::LeaseId::new(), 1, 60_000);
+    alice.lease_granted(
+        closing,
+        ambre_core::LeaseId::new(),
+        ambre_core::Seq(1),
+        60_000,
+    );
     alice.mark_final(closing).expect("mark").expect("a delta");
     assert_eq!(alice.closing_id(), None, "the slot is free");
     alice.send(&draft("two"), author, NOW).expect("send");

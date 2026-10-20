@@ -912,7 +912,7 @@ async fn a_click_on_another_member_fetches_their_key() {
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
             display_name: "Alice Martin".to_owned(),
-            email: "alice@test.local".to_owned(),
+            email: ambre_core::Email::from("alice@test.local"),
         },
     };
     assert!(frame.absorb(session).await.is_empty());
@@ -949,7 +949,7 @@ async fn the_invite_control_offers_the_other_members_and_fetches_a_key() {
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
             display_name: "Alice Martin".to_owned(),
-            email: "alice@test.local".to_owned(),
+            email: ambre_core::Email::from("alice@test.local"),
         },
     };
     assert!(frame.absorb(session).await.is_empty());
@@ -1037,7 +1037,7 @@ async fn the_member_list_marks_who_watches_the_channel() {
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
             display_name: "Alice".to_owned(),
-            email: "alice@test.local".to_owned(),
+            email: ambre_core::Email::from("alice@test.local"),
         },
     };
     assert!(frame.absorb(session).await.is_empty());

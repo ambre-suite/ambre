@@ -223,7 +223,7 @@ fn logic_event_roundtrips_through_postcard() {
     roundtrip_event(&LogicEvent::RemoteUpdate {
         document_id: doc,
         delta: ambre_bus::SignedDelta {
-            seq: 8,
+            seq: ambre_bus::Seq(8),
             payload: vec![3, 1, 4, 1, 5, 9],
             nonce: ambre_core::SessionNonce([2; 16]),
             peer: 7,
@@ -386,7 +386,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
     let user = UserId::new();
     let snapshot = SnapshotId::genesis(doc);
     let delta = SignedDelta {
-        seq: 3,
+        seq: ambre_bus::Seq(3),
         payload: vec![1, 2, 255],
         nonce: SessionNonce([4; 16]),
         peer: 9,
@@ -408,7 +408,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::CloseDocument { document_id: doc },
         SyncCommand::ReleaseDocument {
             document_id: doc,
-            applied_seq: 12,
+            applied_seq: ambre_bus::Seq(12),
         },
         SyncCommand::SendUpdate {
             document_id: doc,
@@ -428,7 +428,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::SendSnapshot {
             document_id: doc,
             payload: vec![1; 4],
-            covered_seq: 40,
+            covered_seq: ambre_bus::Seq(40),
         },
         SyncCommand::SnapshotVerdict {
             document_id: doc,
@@ -492,7 +492,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             segment,
             lease: LeaseId::new(),
-            horizon: 42,
+            horizon: ambre_bus::Seq(42),
             payload: vec![4; 3],
         },
         SyncCommand::TakeFoldLease {
@@ -503,8 +503,8 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             segment,
             lease: LeaseId::new(),
-            horizon: 42,
-            amendments_seq: 7,
+            horizon: ambre_bus::Seq(42),
+            amendments_seq: ambre_bus::Seq(7),
             payload: vec![5; 3],
         },
         SyncCommand::WatchSegment { segment, meta },
@@ -530,7 +530,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             members: vec![DirectMember {
                 user_id: user,
-                exchange_pub_key: [7; 32],
+                exchange_pub_key: ambre_core::PublicKey::from_array([7; 32]),
             }],
         },
         SyncCommand::HoldInbound,
@@ -572,12 +572,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::RemoteSnapshot {
             document_id: doc,
             payload: vec![9; 3],
-            covered_seq: 30,
+            covered_seq: ambre_bus::Seq(30),
         },
         LogicEvent::PendingSnapshot {
             document_id: doc,
             snapshot_id: snapshot,
-            covered_seq: 31,
+            covered_seq: ambre_bus::Seq(31),
             payload: vec![4],
             purpose: SnapshotPurpose::Open,
         },
@@ -711,7 +711,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             answer: LeaseAnswer::Granted {
                 lease: LeaseId::new(),
-                horizon: 42,
+                horizon: ambre_bus::Seq(42),
                 expires_in: 30_000,
             },
         },
@@ -730,9 +730,9 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             answer: FoldAnswer::Granted {
                 lease: LeaseId::new(),
-                horizon: 42,
+                horizon: ambre_bus::Seq(42),
                 amendments: DocumentId::new(),
-                amendments_seq: 7,
+                amendments_seq: ambre_bus::Seq(7),
                 expires_in: 30_000,
             },
         },
@@ -877,10 +877,10 @@ fn request_id_echo_is_preserved_across_the_hop() {
         id,
         cmd: RestCommand::InviteToDocument {
             document_id: DocumentId::new(),
-            invitee_email: Some("x@y.z".to_string()),
+            invitee_email: Some(ambre_bus::Email::from("x@y.z")),
             invitee: UserId::new(),
             role: Role::Editor,
-            expect_exchange_pub_key: [0u8; 32],
+            expect_exchange_pub_key: ambre_core::PublicKey::from_array([0u8; 32]),
             now: Timestamp(0),
         },
     };

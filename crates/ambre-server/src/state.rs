@@ -51,10 +51,10 @@ pub struct Config {
     /// The declared size is validated against this cap, and then bound into the
     /// presigned PUT URL (`Content-Length`). A member cannot upload an
     /// arbitrarily large object to the bucket.
-    pub media_max_bytes: u64,
+    pub media_max_bytes: ambre_core::ByteSize,
     /// Maximum size in bytes of a single encrypted snapshot blob (default 50 MiB).
     /// Bound into the presigned PUT URL exactly like `media_max_bytes`.
-    pub snapshot_max_bytes: u64,
+    pub snapshot_max_bytes: ambre_core::ByteSize,
     /// Maximum size in bytes of a single encrypted delta (`Update`) ciphertext
     /// carried inline over the WebSocket (default 4 MiB). A CRDT delta is small;
     /// a large blob belongs on the media path. Bounding this stops an authorized
@@ -70,7 +70,7 @@ pub struct Config {
     pub oidc_google_client_id: String,
     /// Google OIDC client secret.
     #[allow(dead_code)]
-    pub oidc_google_client_secret: String,
+    pub oidc_google_client_secret: crate::oidc::OidcSecret,
     /// Google OIDC redirect URI (for example "http://localhost:3000/api/auth/google/callback").
     #[allow(dead_code)]
     pub oidc_google_redirect_uri: String,
@@ -111,12 +111,12 @@ impl Default for Config {
             access_ttl_secs: 900,
             refresh_ttl_secs: 30 * 24 * 3600,
             presigned_url_ttl_secs: 900,
-            media_max_bytes: 100 * 1024 * 1024,
-            snapshot_max_bytes: 50 * 1024 * 1024,
+            media_max_bytes: ambre_core::ByteSize(100 * 1024 * 1024),
+            snapshot_max_bytes: ambre_core::ByteSize(50 * 1024 * 1024),
             delta_max_bytes: 4 * 1024 * 1024,
             s3_env_prefix: "dev-ambre".into(),
             oidc_google_client_id: String::new(),
-            oidc_google_client_secret: String::new(),
+            oidc_google_client_secret: crate::oidc::OidcSecret::default(),
             oidc_google_redirect_uri: String::new(),
             dev_mode: false,
             trust_proxy_headers: false,

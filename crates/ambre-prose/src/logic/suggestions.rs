@@ -5,7 +5,7 @@
 //! `annots` naming its author. An intercepted edit is one commit, so an undo
 //! takes back the text, the mark and the entry together.
 
-use ambre_core::Uuid;
+use ambre_core::SuggestionId;
 use loro::{LoroMap, TreeID};
 
 use crate::doc;
@@ -19,7 +19,7 @@ use super::ProseState;
 /// (`PROSE-FEAT-085`), and starts another when it does not (`PROSE-FEAT-086`).
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Burst {
-    id: Uuid,
+    id: SuggestionId,
     kind: SuggestionKind,
     block: TreeID,
     start: u32,
@@ -207,7 +207,7 @@ impl ProseState {
     /// `PROSE-FEAT-273`). A suggestion no longer in the document is nothing
     /// to do, so a second accept changes nothing (`PROSE-FEAT-084`,
     /// `PROSE-FEAT-274`).
-    pub(super) fn resolve_suggestion(&mut self, id: &Uuid, accept: bool) -> ProseOutcome {
+    pub(super) fn resolve_suggestion(&mut self, id: &SuggestionId, accept: bool) -> ProseOutcome {
         match self.settle_suggestion(id, accept) {
             Ok(false) => ProseOutcome::nothing(),
             Ok(true) => {
@@ -223,7 +223,7 @@ impl ProseState {
     /// the command starts: the command runs to its end before any remote
     /// delta is read.
     pub(super) fn resolve_all(&mut self, accept: bool) -> ProseOutcome {
-        let ids: Vec<Uuid> = self
+        let ids: Vec<SuggestionId> = self
             .suggestions()
             .into_iter()
             .map(|s| s.suggestion_id)
@@ -250,7 +250,7 @@ impl ProseState {
     /// another suggestion carries is left alone (`PROSE-FEAT-271`,
     /// `PROSE-FEAT-275`). A rejected insertion leaves no trace: its text, its
     /// mark and its entry all go (`PROSE-FEAT-004`).
-    fn settle_suggestion(&mut self, id: &Uuid, accept: bool) -> Result<bool, String> {
+    fn settle_suggestion(&mut self, id: &SuggestionId, accept: bool) -> Result<bool, String> {
         let spans: Vec<_> = suggest::spans(&self.doc, &suggest::text_blocks(&self.doc))
             .into_iter()
             .filter(|(other, ..)| other == id)
@@ -346,7 +346,7 @@ impl ProseState {
     /// What a delete does to one run, read from the entries its marks point
     /// at and never from where the run sits (`PROSE-FEAT-260`).
     fn treatment(&self, run: &suggest::Run, me: Option<ambre_core::UserId>) -> Treatment {
-        let owned_by_me = |id: &Uuid| {
+        let owned_by_me = |id: &SuggestionId| {
             suggest::entry(&self.doc, id)
                 .and_then(|entry| suggest::owner(&entry))
                 .is_some_and(|owner| Some(owner) == me)
@@ -372,7 +372,13 @@ impl ProseState {
     /// The suggestion an edit of `kind` over `start..end` in `block` joins.
     /// It is the open burst, when that burst is of the same kind and block,
     /// touches the range, and is still in the document.
-    fn joining(&self, kind: SuggestionKind, block: &TreeID, start: u32, end: u32) -> Option<Uuid> {
+    fn joining(
+        &self,
+        kind: SuggestionKind,
+        block: &TreeID,
+        start: u32,
+        end: u32,
+    ) -> Option<SuggestionId> {
         let burst = self.burst?;
         let touches =
             burst.kind == kind && burst.block == *block && start <= burst.end && end >= burst.start;
@@ -381,7 +387,7 @@ impl ProseState {
 
     fn extend_burst(
         &mut self,
-        id: Uuid,
+        id: SuggestionId,
         kind: SuggestionKind,
         block: &TreeID,
         start: u32,
@@ -410,7 +416,7 @@ impl ProseState {
     /// The burst after a delete: a marked deletion extends or opens one, and
     /// removing the caller's own typed text shrinks the insertion it came
     /// from.
-    fn after_delete(&mut self, plan: &[(TreeID, u32, u32, Treatment)], id: Option<Uuid>) {
+    fn after_delete(&mut self, plan: &[(TreeID, u32, u32, Treatment)], id: Option<SuggestionId>) {
         let removed: u32 = plan
             .iter()
             .filter(|(.., treatment)| *treatment == Treatment::Remove)
@@ -436,9 +442,9 @@ impl ProseState {
     /// A new suggestion's entry: its kind and its author, from the session's
     /// identity and never from a command (`PROSE-FEAT-262`,
     /// `PROSE-FEAT-082`).
-    fn write_entry(&self) -> Result<Uuid, String> {
+    fn write_entry(&self) -> Result<SuggestionId, String> {
         let user = self.my_user_id.ok_or("no identity")?;
-        let id = self.ids.mint();
+        let id: SuggestionId = self.ids.mint();
         let entry: LoroMap = self
             .doc
             .get_map(doc::ANNOTS)
@@ -996,7 +1002,7 @@ mod tests {
         state.handle_command(ProseCommand::Undo);
         assert_eq!(text(&state, ids[0]), "Hello");
         assert!(state.suggestions().is_empty());
-        assert!(crate::suggest::entry(&state.doc, &Uuid::new()).is_none());
+        assert!(crate::suggest::entry(&state.doc, &SuggestionId::new()).is_none());
         assert_eq!(state.doc.get_map(doc::ANNOTS).len(), 0);
     }
 

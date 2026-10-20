@@ -7,7 +7,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelId, FoldAnswer, LeaseId, SegmentId};
+use ambre_bus::{ChannelId, FoldAnswer, LeaseId, SegmentId, Seq};
 
 use crate::updates::{SnapshotUpload, upload_snapshot};
 
@@ -41,7 +41,7 @@ pub(crate) async fn take_fold_lease(
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FoldReach {
     pub lease: LeaseId,
-    pub amendments_seq: u64,
+    pub amendments_seq: Seq,
 }
 
 /// Upload the fold snapshot of `segment`, then commit it under the lease of
@@ -91,11 +91,11 @@ impl SyncState {
         channel_id: ChannelId,
         segment: SegmentId,
         reach: FoldReach,
-        horizon: u64,
+        horizon: Seq,
         payload: &[u8],
     ) {
         let document_id = segment.document_id();
-        let upload = match self.snapshot_upload(document_id, payload, Seq(horizon)) {
+        let upload = match self.snapshot_upload(document_id, payload, horizon) {
             Ok(upload) => upload,
             Err(message) => return self.fold_failed(channel_id, segment, &message),
         };
@@ -144,7 +144,7 @@ mod tests {
     const BASE: &str = "https://relay.test";
 
     /// A sealed snapshot of `document_id` covering the deltas up to `horizon`.
-    fn upload(document_id: DocumentId, horizon: i64) -> SnapshotUpload {
+    fn upload(document_id: DocumentId, horizon: Seq) -> SnapshotUpload {
         let key = DocumentKey::generate();
         let sk = MasterSeed::generate().derive_signing_key();
         let public_data = SnapshotPublicData {
@@ -157,7 +157,7 @@ mod tests {
         };
         SnapshotUpload {
             document_id,
-            author_pubkey: hex::encode(sk.verifying_key().to_bytes()),
+            author_pubkey: ambre_core::SigningKeyHex::encode(sk.verifying_key().to_bytes()),
             covered_seq: horizon,
             blob: pipeline::snapshot_blob(b"fold", public_data, &key, &sk).expect("seal"),
         }
@@ -194,9 +194,9 @@ mod tests {
             granted,
             Ok(FoldAnswer::Granted {
                 lease,
-                horizon: 41,
+                horizon: ambre_bus::Seq(41),
                 amendments,
-                amendments_seq: 7,
+                amendments_seq: ambre_bus::Seq(7),
                 expires_in: 30_000
             })
         );
@@ -233,10 +233,10 @@ mod tests {
             Ok((204, serde_json::Value::Null)),
         ]);
         let auth = session("access-1", "refresh-1");
-        let upload = upload(segment.document_id(), 41);
+        let upload = upload(segment.document_id(), ambre_bus::Seq(41));
         let reach = FoldReach {
             lease,
-            amendments_seq: 7,
+            amendments_seq: ambre_bus::Seq(7),
         };
         let committed = commit_fold(&transport, &auth, BASE, channel, segment, reach, upload).await;
         assert_eq!(committed, Ok(()));

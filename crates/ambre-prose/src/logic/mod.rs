@@ -124,7 +124,7 @@ pub struct ProseState {
     my_name: Option<String>,
     /// The threads the last whole-text walk found with no mark. A keystroke
     /// does not walk the text again for them (`comments::refresh_anchors`).
-    orphans: std::collections::HashSet<ambre_core::Uuid>,
+    orphans: std::collections::HashSet<ambre_core::CommentId>,
     /// Whether this session turns typing and deleting into suggestions.
     /// Per session, never shared (`features/ambre-spec-prose-engine.md`).
     suggesting: bool,

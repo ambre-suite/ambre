@@ -102,9 +102,11 @@ pub async fn channel_activity(
 /// rows, so a removal from it deletes the cursors of the whole channel.
 pub(super) async fn delete_read_cursors_of(
     conn: &mut sqlx::PgConnection,
-    document_id: uuid::Uuid,
-    user_id: uuid::Uuid,
+    document_id: ambre_core::DocumentId,
+    user_id: ambre_core::UserId,
 ) -> Result<(), AppError> {
+    let document_id = id_to_uuid(document_id);
+    let user_id = id_to_uuid(user_id);
     sqlx::query(
         "DELETE FROM read_cursors WHERE user_id = $2 AND ( \
              document_id = $1 OR document_id IN ( \

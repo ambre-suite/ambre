@@ -47,9 +47,9 @@ pub(crate) struct ClosedChannel {
     counted: HashMap<DocumentId, Counts>,
     /// The horizon of each document's copy in the local store, until a
     /// reopen asks for it.
-    copies: HashMap<DocumentId, u64>,
+    copies: HashMap<DocumentId, Seq>,
     /// The copies a reopen is reading back, each with its horizon.
-    reading: HashMap<DocumentId, u64>,
+    reading: HashMap<DocumentId, Seq>,
 }
 
 /// Every document of an open channel that may carry a read cursor: those it
@@ -462,7 +462,7 @@ impl LogicState {
             let horizon = self
                 .channel_ledgers
                 .remove(&document_id)
-                .map_or(0, |ledger| ledger.contiguous_end());
+                .map_or(Seq::ZERO, |ledger| ledger.contiguous_end());
             self.forget_murmure_session(document_id);
             // The copy carries the relay's numbers it knows, so a reopen
             // counts from it. One that fails to export is fetched whole.
@@ -475,7 +475,7 @@ impl LogicState {
                 }
                 Err(error) => {
                     tracing::warn!("Logic: no local copy of {document_id}: {error}");
-                    0
+                    Seq::ZERO
                 }
             };
             self.send_to_sync(SyncCommand::ReleaseDocument {
@@ -536,7 +536,7 @@ impl LogicState {
         else {
             return;
         };
-        let horizon = closed.reading.remove(&document_id).unwrap_or(0);
+        let horizon = closed.reading.remove(&document_id).unwrap_or(Seq::ZERO);
         // An opening that ended meanwhile closed the subscription already.
         let Some(opening) = self
             .opening
@@ -547,7 +547,7 @@ impl LogicState {
             return;
         };
         if let Some(copy) = snapshot {
-            opening.receive_at(document_id, Some(Order::Snapshot(Seq(horizon))), &copy);
+            opening.receive_at(document_id, Some(Order::Snapshot(horizon)), &copy);
             for delta in deltas {
                 opening.receive(document_id, delta);
             }
@@ -948,7 +948,7 @@ impl LogicState {
 
     /// The snapshot of a channel document, for the relay's compaction, with
     /// the last delta it folds in (`SRV-083`).
-    pub(crate) fn channel_snapshot(&self, document_id: DocumentId) -> Option<(Vec<u8>, u64)> {
+    pub(crate) fn channel_snapshot(&self, document_id: DocumentId) -> Option<(Vec<u8>, Seq)> {
         let channel = self.channels.values().find(|c| c.holds(document_id))?;
         let payload = channel
             .snapshot(document_id)
@@ -957,7 +957,7 @@ impl LogicState {
         let covered = self
             .channel_ledgers
             .get(&document_id)
-            .map_or(0, snapshot_check::SeqLedger::contiguous_end);
+            .map_or(Seq::ZERO, snapshot_check::SeqLedger::contiguous_end);
         Some((payload, covered))
     }
 
@@ -968,7 +968,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         snapshot_id: ambre_bus::SnapshotId,
-        covered: u64,
+        covered: Seq,
         payload: &[u8],
         purpose: ambre_bus::SnapshotPurpose,
     ) {
@@ -976,8 +976,8 @@ impl LogicState {
             return;
         };
         let ledger = self.channel_ledgers.get(&document_id);
-        let floor = ledger.map_or(0, snapshot_check::SeqLedger::floor);
-        let end = ledger.map_or(0, snapshot_check::SeqLedger::contiguous_end);
+        let floor = ledger.map_or(Seq::ZERO, snapshot_check::SeqLedger::floor);
+        let end = ledger.map_or(Seq::ZERO, snapshot_check::SeqLedger::contiguous_end);
         let confirm = purpose == ambre_bus::SnapshotPurpose::Confirm;
         let verdict = if covered < floor || (confirm && end < covered) {
             SnapshotVerdict::Unchecked
@@ -1008,7 +1008,7 @@ impl LogicState {
     pub(crate) fn record_channel_seq(
         &mut self,
         document_id: DocumentId,
-        seq: u64,
+        seq: Seq,
         payload: Option<&[u8]>,
     ) {
         if self.holds_murmure(document_id) {
@@ -1021,7 +1021,7 @@ impl LogicState {
 
     /// Note a snapshot the relay served for a channel or a space document.
     /// A reopen resumes after the deltas it covers (`RESID-010`).
-    pub(crate) fn note_murmure_snapshot(&mut self, document_id: DocumentId, covered: u64) {
+    pub(crate) fn note_murmure_snapshot(&mut self, document_id: DocumentId, covered: Seq) {
         if self.holds_murmure(document_id) {
             self.channel_ledgers
                 .entry(document_id)
@@ -1922,12 +1922,8 @@ impl LogicState {
             // A segment still opening is checked once it is ready, against
             // its registry then.
             for delta in deltas {
-                let kept = opening.receive_signed(
-                    document_id,
-                    Seq(delta.seq),
-                    &delta.payload,
-                    signer(delta),
-                );
+                let kept =
+                    opening.receive_signed(document_id, delta.seq, &delta.payload, signer(delta));
                 verdicts.push(kept.map(|()| Vec::new()));
             }
         } else if let Some((&channel_id, channel)) = self
@@ -1938,7 +1934,7 @@ impl LogicState {
             for delta in deltas {
                 verdicts.push(channel.apply_signed(
                     document_id,
-                    Seq(delta.seq),
+                    delta.seq,
                     &delta.payload,
                     signer(delta),
                 ));
@@ -2097,7 +2093,7 @@ mod tests {
             evt: RestEvent::SessionReady {
                 user_id: user,
                 display_name: "alice".to_owned(),
-                email: "alice@example.com".to_owned(),
+                email: ambre_core::Email::from("alice@example.com"),
             },
         });
     }
@@ -2292,7 +2288,7 @@ mod tests {
         bob.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id,
             delta: ambre_bus::SignedDelta {
-                seq: 1,
+                seq: ambre_core::Seq(1),
                 payload,
                 nonce: ambre_core::SessionNonce([0; 16]),
                 peer,
@@ -2371,7 +2367,7 @@ mod tests {
             deltas.push((
                 document_id,
                 ambre_bus::SignedDelta {
-                    seq,
+                    seq: ambre_core::Seq(seq),
                     payload,
                     nonce: ambre_core::SessionNonce([0; 16]),
                     peer,
@@ -2643,7 +2639,7 @@ mod tests {
             })
             .collect();
         assert_eq!(copies.len(), 2, "each document reaches the store");
-        let horizons: HashMap<DocumentId, u64> = drain(&sync)
+        let horizons: HashMap<DocumentId, Seq> = drain(&sync)
             .into_iter()
             .filter_map(|command| match command {
                 SyncCommand::ReleaseDocument {
@@ -2655,7 +2651,7 @@ mod tests {
             .collect();
         assert_eq!(
             horizons,
-            HashMap::from([(meta, 1), (active, 1)]),
+            HashMap::from([(meta, ambre_core::Seq(1)), (active, ambre_core::Seq(1))]),
             "each light subscription keeps its horizon"
         );
 
@@ -2766,7 +2762,7 @@ mod tests {
     fn serve(state: &mut LogicState, stored: &ChannelState, document_id: DocumentId) {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id,
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload: stored.snapshot(document_id).expect("snapshot"),
         });
         state.handle_logic_event(LogicEvent::DocumentReady {
@@ -4177,7 +4173,7 @@ mod tests {
         MemberInfo {
             user_id,
             display_name: "bob".to_owned(),
-            email: "bob@example.org".to_owned(),
+            email: ambre_core::Email::from("bob@example.org"),
             role: Role::Editor,
             standing: ambre_bus::MemberStanding::Verified,
         }
@@ -4466,7 +4462,7 @@ mod tests {
     }
 
     /// The finalize commands Logic sent: a lease request names no horizon.
-    fn finalizes(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, Option<u64>)> {
+    fn finalizes(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, Option<ambre_core::Seq>)> {
         drain(sync)
             .into_iter()
             .filter_map(|c| match c {
@@ -4517,7 +4513,7 @@ mod tests {
             segment: closing,
             answer: LeaseAnswer::Granted {
                 lease: LeaseId::new(),
-                horizon: 1,
+                horizon: ambre_core::Seq(1),
                 expires_in: 30_000,
             },
         });
@@ -4527,13 +4523,13 @@ mod tests {
             MurmureCommand::Tick { now: at(7_000) },
         );
         assert!(finalizes(&sync).is_empty(), "the horizon is not in");
-        state.record_channel_seq(closing.document_id(), 1, None);
+        state.record_channel_seq(closing.document_id(), ambre_core::Seq(1), None);
         command(
             &mut state,
             channel_id,
             MurmureCommand::Tick { now: at(8_000) },
         );
-        assert_eq!(finalizes(&sync), [(closing, Some(1))]);
+        assert_eq!(finalizes(&sync), [(closing, Some(ambre_core::Seq(1)))]);
 
         state.handle_logic_event(LogicEvent::SegmentFinalized {
             channel_id,
@@ -4562,12 +4558,12 @@ mod tests {
             segment,
             answer: LeaseAnswer::Granted {
                 lease: LeaseId::new(),
-                horizon: 1,
+                horizon: ambre_core::Seq(1),
                 expires_in: 30_000,
             },
         });
         command(state, channel_id, MurmureCommand::Tick { now });
-        assert_eq!(finalizes(sync), [(segment, Some(1))]);
+        assert_eq!(finalizes(sync), [(segment, Some(ambre_core::Seq(1)))]);
         state.handle_logic_event(LogicEvent::SegmentFinalized {
             channel_id,
             segment,
@@ -4583,7 +4579,7 @@ mod tests {
         sync: &Receiver<SyncCommand>,
     ) -> (ChannelId, SegmentId, SegmentId) {
         let (channel_id, closed) = closed_channel(state, sync);
-        state.record_channel_seq(closed.document_id(), 1, None);
+        state.record_channel_seq(closed.document_id(), ambre_core::Seq(1), None);
         finalize_at_one(state, sync, channel_id, closed, NOW);
         let channel = &state.channels[&channel_id];
         let (meta, active) = (channel.meta_id(), channel.active_id());
@@ -4778,7 +4774,7 @@ mod tests {
         drain(&ui);
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: segment.document_id(),
-            covered_seq: 1,
+            covered_seq: ambre_core::Seq(1),
             payload: vec![0xff; 8],
         });
         state.handle_logic_event(LogicEvent::DocumentReady {
@@ -4796,7 +4792,7 @@ mod tests {
     fn a_dropped_final_snapshot_is_shown_and_sealed_again() {
         let (mut state, ui, sync) = harness();
         let (channel_id, closing) = closed_channel(&mut state, &sync);
-        state.record_channel_seq(closing.document_id(), 1, None);
+        state.record_channel_seq(closing.document_id(), ambre_core::Seq(1), None);
         finalize_at_one(&mut state, &sync, channel_id, closing, NOW);
         drain(&sync);
         drain(&ui);
@@ -5107,7 +5103,7 @@ mod tests {
     // --- The fold of the amendments of a final segment ---
 
     /// The fold commands Logic sent: a lease request names no reach.
-    fn folds(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, Option<u64>)> {
+    fn folds(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, Option<ambre_core::Seq>)> {
         drain(sync)
             .into_iter()
             .filter_map(|c| match c {
@@ -5130,7 +5126,7 @@ mod tests {
         sync: &Receiver<SyncCommand>,
     ) -> (ChannelId, SegmentId, MessageId, DocumentId) {
         let (channel_id, closing) = closed_channel(state, sync);
-        state.record_channel_seq(closing.document_id(), 1, None);
+        state.record_channel_seq(closing.document_id(), ambre_core::Seq(1), None);
         finalize_at_one(state, sync, channel_id, closing, NOW);
         drain(sync);
         let message = state.channels[&channel_id].messages(closing).expect("held")[0].id;
@@ -5183,9 +5179,9 @@ mod tests {
             segment,
             answer: FoldAnswer::Granted {
                 lease: LeaseId::new(),
-                horizon: 1,
+                horizon: ambre_core::Seq(1),
                 amendments,
-                amendments_seq: 0,
+                amendments_seq: ambre_core::Seq(0),
                 expires_in: 30_000,
             },
         });
@@ -5194,7 +5190,11 @@ mod tests {
             channel_id,
             MurmureCommand::Tick { now: at(2_004) },
         );
-        assert_eq!(folds(&sync), [(segment, Some(0))], "the fold leaves");
+        assert_eq!(
+            folds(&sync),
+            [(segment, Some(ambre_core::Seq(0)))],
+            "the fold leaves"
+        );
         state.handle_logic_event(LogicEvent::SegmentFolded {
             channel_id,
             segment,
@@ -5340,7 +5340,7 @@ mod tests {
         state: &mut LogicState,
         sync: &Receiver<SyncCommand>,
         document_id: DocumentId,
-        covered: u64,
+        covered: Seq,
         payload: Vec<u8>,
     ) -> SnapshotVerdict {
         state.handle_logic_event(LogicEvent::PendingSnapshot {
@@ -5378,9 +5378,9 @@ mod tests {
             channel_verdict(&mut state, &sync, document_id, covered, b"loro?".to_vec()),
             SnapshotVerdict::Mismatch
         );
-        state.record_channel_seq(document_id, 2, None);
+        state.record_channel_seq(document_id, ambre_core::Seq(2), None);
         assert_eq!(
-            channel_verdict(&mut state, &sync, document_id, 2, payload),
+            channel_verdict(&mut state, &sync, document_id, ambre_core::Seq(2), payload),
             SnapshotVerdict::Unchecked,
             "the delta numbered 1 is missing"
         );
@@ -5944,7 +5944,7 @@ mod tests {
             .expect("adopt");
         channel.thread_linked(closed, root, thread).expect("link");
         let probe = channel.snapshot(thread).expect("thread");
-        state.record_channel_seq(closed.document_id(), 1, None);
+        state.record_channel_seq(closed.document_id(), ambre_core::Seq(1), None);
         finalize_at_one(&mut state, &sync, channel_id, closed, NOW);
         let channel = &state.channels[&channel_id];
         let (meta, active) = (channel.meta_id(), channel.active_id());
@@ -5961,7 +5961,7 @@ mod tests {
         let deliver = |state: &mut LogicState, document_id, payload: &[u8]| {
             state.handle_logic_event(LogicEvent::RemoteSnapshot {
                 document_id,
-                covered_seq: 1,
+                covered_seq: ambre_core::Seq(1),
                 payload: payload.to_vec(),
             });
             state.handle_logic_event(LogicEvent::DocumentReady {

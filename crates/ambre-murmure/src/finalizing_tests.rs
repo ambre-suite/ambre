@@ -152,18 +152,25 @@ fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
 
     let lease = LeaseId::new();
     assert_eq!(state.lease_to_ask(NOW), Some(closing));
-    state.lease_granted(closing, lease, 7, LEASE_MS);
-    let early = state.final_snapshot(NOW, 6).expect("export");
+    state.lease_granted(closing, lease, ambre_core::Seq(7), LEASE_MS);
+    let early = state
+        .final_snapshot(NOW, ambre_core::Seq(6))
+        .expect("export");
     assert!(early.is_none(), "a delta below the horizon is missing");
-    let snapshot = state.final_snapshot(at(1), 7).expect("export");
+    let snapshot = state
+        .final_snapshot(at(1), ambre_core::Seq(7))
+        .expect("export");
     let snapshot = snapshot.expect("every delta is in");
     assert_eq!(snapshot.segment, closing);
     assert_eq!(snapshot.lease, lease);
-    assert_eq!(snapshot.horizon, 7);
+    assert_eq!(snapshot.horizon, ambre_core::Seq(7));
     assert!(holds(&snapshot.payload, "zanzibar-quokka"));
     assert!(!holds(&snapshot.payload, "marzipan-wombat"), "shallow");
     assert!(
-        state.final_snapshot(at(2), 7).expect("export").is_none(),
+        state
+            .final_snapshot(at(2), ambre_core::Seq(7))
+            .expect("export")
+            .is_none(),
         "sealed once"
     );
 
@@ -178,10 +185,17 @@ fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
 fn a_lease_that_runs_out_is_asked_again() {
     let (mut state, closing) = closed_with(&["one"]);
     assert_eq!(state.lease_to_ask(NOW), Some(closing));
-    state.lease_granted(closing, LeaseId::new(), 9, LEASE_MS);
-    assert!(state.final_snapshot(NOW, 1).expect("export").is_none());
+    state.lease_granted(closing, LeaseId::new(), ambre_core::Seq(9), LEASE_MS);
+    assert!(
+        state
+            .final_snapshot(NOW, ambre_core::Seq(1))
+            .expect("export")
+            .is_none()
+    );
     assert_eq!(state.lease_to_ask(at(LEASE_MS - 1)), None, "still held");
-    let late = state.final_snapshot(at(LEASE_MS), 9).expect("export");
+    let late = state
+        .final_snapshot(at(LEASE_MS), ambre_core::Seq(9))
+        .expect("export");
     assert!(late.is_none(), "the lease ran out");
     assert_eq!(state.lease_to_ask(at(LEASE_MS)), Some(closing));
 }
@@ -197,8 +211,11 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
     let mut bob = peer_of(&alice);
     let before = alice.messages(closing).expect("messages");
     assert_eq!(alice.lease_to_ask(NOW), Some(closing));
-    alice.lease_granted(closing, LeaseId::new(), 2, LEASE_MS);
-    let snapshot = alice.final_snapshot(NOW, 2).expect("export").expect("in");
+    alice.lease_granted(closing, LeaseId::new(), ambre_core::Seq(2), LEASE_MS);
+    let snapshot = alice
+        .final_snapshot(NOW, ambre_core::Seq(2))
+        .expect("export")
+        .expect("in");
 
     let meta = alice.mark_final(closing).expect("mark").expect("a delta");
     assert_eq!(alice.closing_id(), None, "the slot is free");
@@ -240,8 +257,11 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
     let (mut alice, closing) = closed_with(&["one", "two"]);
     let mut bob = peer_of(&alice);
     assert_eq!(alice.lease_to_ask(NOW), Some(closing));
-    alice.lease_granted(closing, LeaseId::new(), 2, LEASE_MS);
-    alice.final_snapshot(NOW, 2).expect("export").expect("in");
+    alice.lease_granted(closing, LeaseId::new(), ambre_core::Seq(2), LEASE_MS);
+    alice
+        .final_snapshot(NOW, ambre_core::Seq(2))
+        .expect("export")
+        .expect("in");
     let meta = alice.mark_final(closing).expect("mark").expect("a delta");
     bob.apply_remote(bob.meta_id().document_id(), &meta)
         .expect("meta");
@@ -255,8 +275,11 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
     assert_eq!(bob.finalizing_id(), Some(closing));
     assert_eq!(bob.lease_to_ask(NOW), Some(closing));
     let lease = LeaseId::new();
-    bob.lease_granted(closing, lease, 2, LEASE_MS);
-    let snapshot = bob.final_snapshot(NOW, 2).expect("export").expect("in");
+    bob.lease_granted(closing, lease, ambre_core::Seq(2), LEASE_MS);
+    let snapshot = bob
+        .final_snapshot(NOW, ambre_core::Seq(2))
+        .expect("export")
+        .expect("in");
     assert_eq!((snapshot.segment, snapshot.lease), (closing, lease));
     assert!(holds(&snapshot.payload, "two"));
     assert_eq!(
@@ -303,8 +326,11 @@ fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, Vec<u
         .close_into(closing, SegmentId::new(), true, NOW)
         .expect("close");
     assert_eq!(alice.lease_to_ask(NOW), Some(closing));
-    alice.lease_granted(closing, LeaseId::new(), 2, LEASE_MS);
-    let snapshot = alice.final_snapshot(NOW, 2).expect("export").expect("in");
+    alice.lease_granted(closing, LeaseId::new(), ambre_core::Seq(2), LEASE_MS);
+    let snapshot = alice
+        .final_snapshot(NOW, ambre_core::Seq(2))
+        .expect("export")
+        .expect("in");
     (alice, bob, closing, snapshot.payload)
 }
 
@@ -330,14 +356,16 @@ fn a_member_holding_the_deltas_confirms_the_final_snapshot() {
     let messages = bob.messages(closing).expect("held");
     let sent = payload.clone();
     assert_eq!(
-        bob.check_snapshot(document_id, 2, &payload).expect("check"),
+        bob.check_snapshot(document_id, ambre_core::Seq(2), &payload)
+            .expect("check"),
         SnapshotVerdict::Match { extras: Vec::new() }
     );
     assert_eq!(bob.doc(document_id).expect("held").oplog_vv(), before);
     assert_eq!(bob.messages(closing).expect("held"), messages);
     assert_eq!(payload, sent, "the snapshot is only read");
     assert_eq!(
-        bob.check_snapshot(document_id, 1, &payload).expect("check"),
+        bob.check_snapshot(document_id, ambre_core::Seq(1), &payload)
+            .expect("check"),
         SnapshotVerdict::Unchecked,
         "his copy holds a delta past what it covers"
     );
@@ -356,7 +384,8 @@ fn a_final_snapshot_at_odds_with_the_deltas_is_refused() {
         doc.get_list(MESSAGES).push("planted").expect("push");
     });
     assert_eq!(
-        bob.check_snapshot(document_id, 2, &added).expect("check"),
+        bob.check_snapshot(document_id, ambre_core::Seq(2), &added)
+            .expect("check"),
         SnapshotVerdict::Mismatch
     );
     let doc = alice.doc(document_id).expect("held");
@@ -372,11 +401,12 @@ fn a_final_snapshot_at_odds_with_the_deltas_is_refused() {
         .export(ExportMode::shallow_snapshot(&early.oplog_frontiers()))
         .expect("export");
     assert_eq!(
-        bob.check_snapshot(document_id, 2, &dropped).expect("check"),
+        bob.check_snapshot(document_id, ambre_core::Seq(2), &dropped)
+            .expect("check"),
         SnapshotVerdict::Mismatch
     );
     assert_eq!(
-        bob.check_snapshot(document_id, 2, b"not a snapshot")
+        bob.check_snapshot(document_id, ambre_core::Seq(2), b"not a snapshot")
             .expect("check"),
         SnapshotVerdict::Mismatch
     );
