@@ -3,7 +3,9 @@
 //! The belt starts the binary on a free port in dev mode, so the page signs in
 //! with a name and no provider. The page reaches it through the belt's own
 //! server, which forwards `/api` there, as Trunk's proxy does in development.
-//! The relay needs its three backing services (`just services-up`).
+//! The relay needs its three backing services (`just services-up`). It signs
+//! its object store requests with the keys of the local store, never with the
+//! shell's AWS keys: `BELT_S3_ACCESS_KEY` and `BELT_S3_SECRET_KEY` name others.
 
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -25,6 +27,11 @@ fn binary() -> String {
     })
 }
 
+/// The variable `name`, or `default` when it is unset.
+fn belt_var(name: &str, default: &str) -> String {
+    std::env::var(name).unwrap_or_else(|_| default.to_owned())
+}
+
 impl Relay {
     /// Starts the relay and waits until it answers.
     pub async fn start() -> Self {
@@ -41,6 +48,17 @@ impl Relay {
             .env(
                 "S3_ENDPOINT",
                 std::env::var("S3_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".into()),
+            )
+            // The relay reads its object store keys from the AWS variables. An
+            // AWS profile in the shell would sign the uploads with a key the
+            // local store refuses, so the belt names the store's own keys.
+            .env(
+                "AWS_ACCESS_KEY_ID",
+                belt_var("BELT_S3_ACCESS_KEY", "minioadmin"),
+            )
+            .env(
+                "AWS_SECRET_ACCESS_KEY",
+                belt_var("BELT_S3_SECRET_KEY", "minioadmin"),
             )
             .stdout(Stdio::null())
             .stderr(if std::env::var_os("BELT_VERBOSE").is_some() {
