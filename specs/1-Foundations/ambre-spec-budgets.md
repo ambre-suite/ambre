@@ -204,7 +204,7 @@
 * **Cached for good after the first visit.** Every built file is named by a hash of its content
   (`filehash` in `Trunk.toml`), so a deployment caches it as immutable. Only the page is asked
   again, and a release downloads only the instance it changed.
-* **The first download breaks the budget today.** A release build weighs 3.12 MB brotli for Main
+* **The first download breaks the budget today.** A release build weighs 3.07 MB brotli for Main
   and 0.34 MB for Sync. The `wasm-release` profile builds every crate for size and strips the name
   section, which took Main from 6.9 MB to 4.27 MB gzip. The `size` CI job holds each figure as a
   ceiling (`scripts/wasm_size.py`), and a ceiling is not the budget. The roadmap story `The Main
