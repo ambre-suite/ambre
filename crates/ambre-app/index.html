@@ -21,8 +21,11 @@
         (fails with `[parse exception: invalid code after misc prefix: 17]`).
         Re-enable once Trunk picks up Binaryen 117+, or wire a manual
         wasm-opt post-step with a newer binaryen.
+
+        A release build uses the `wasm-release` cargo profile of the workspace
+        manifest: built for size, without the name section.
     -->
-    <link data-trunk rel="rust" data-wasm-opt="0" />
+    <link data-trunk rel="rust" data-wasm-opt="0" data-cargo-profile-release="wasm-release" />
 
     <!-- Sync worker: a SEPARATE wasm-bindgen artifact. Trunk emits
          `ambre-sync_loader.js` (classic worker, `importScripts`); ambre-app
@@ -30,7 +33,7 @@
          `wasm_bindgen(...)`, which creates the worker's own shared memory and
          invokes `#[wasm_bindgen(start)]`. -->
     <link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker"
-          data-loader-shim="true" data-wasm-opt="0" />
+          data-loader-shim="true" data-wasm-opt="0" data-cargo-profile-release="wasm-release" />
 
     <!-- App-shell layout styling. Colour/spacing/font tokens are injected at
          startup from the generated theme.css (tokens.ron -> build.rs). -->

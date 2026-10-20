@@ -129,6 +129,12 @@ fixtures-bench: fixtures-bench-corpus
 instructions:
     python3 scripts/instructions.py
 
+# The download of the Main instance against its ceiling and its budget
+# (`ambre-spec-budgets.md` section 5). Builds the release Trunk ships.
+size:
+    trunk build --release
+    python3 scripts/wasm_size.py
+
 # The `db` feature flips the `cfg_attr(not(feature = "db"), ignore = ...)` gate
 # off so the otherwise ignored tests run. Bring services up first with
 # `just services-up` (CI declares them as `services:` instead).

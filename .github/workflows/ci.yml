@@ -350,6 +350,28 @@ jobs:
           BELT_CHROME: ${{ steps.chrome.outputs.chrome-path }}
 
   # ---------------------------------------------------------------------------
+  # size -- the release build Trunk ships, and the gzip of the Main instance
+  # against its ceiling (`scripts/wasm_size.py`, budgets spec section 5).
+  # ---------------------------------------------------------------------------
+  size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just and trunk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,trunk
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: size
+          # Only the default branch writes caches; feature branches restore
+          # from main without consuming the shared 10 GB budget (avoids eviction).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: just size
+
+  # ---------------------------------------------------------------------------
   # test-wasm -- `cfg(target_arch = "wasm32")` surfaces (the application chrome:
   # leptos CSR + DOM) under headless Chrome via `wasm-pack test`. The pinned
   # nightly + rust-src (rust-toolchain.toml) supply `-Z build-std` for
