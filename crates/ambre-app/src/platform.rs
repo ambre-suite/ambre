@@ -261,9 +261,17 @@ pub(crate) fn sync_warning_message(code: SyncWarningCode) -> &'static str {
 /// `data-type="worker"` wasm artifact, and emits this `importScripts`-based
 /// loader. The loader is a CLASSIC worker: it calls `wasm_bindgen(...)`, which
 /// creates the worker's own shared `WebAssembly.Memory` and runs
-/// `#[wasm_bindgen(start)]`. `filehash` is off (Trunk.toml), so the path is
-/// stable.
-const SYNC_WORKER_URL: &str = "/ambre-sync_loader.js";
+/// `#[wasm_bindgen(start)]`. `filehash` hashes its name (Trunk.toml), so the
+/// post-build hook writes it into the page's `ambre-sync-worker` meta. `None`
+/// when the page carries no address.
+fn sync_worker_url() -> Option<String> {
+    web_sys::window()?
+        .document()?
+        .query_selector(r#"meta[name="ambre-sync-worker"]"#)
+        .ok()??
+        .get_attribute("content")
+        .filter(|url| !url.is_empty())
+}
 
 /// Fetch the server's public auth config (`GET /api/auth/config`) and return
 /// its `dev_mode` flag. Same-origin, unauthenticated; on any failure (network,
@@ -303,7 +311,8 @@ pub(crate) fn spawn_sync_worker(
     start: Rc<RefCell<ambre_bus::start::StartGate>>,
 ) -> web_sys::Worker {
     // Classic worker (the Trunk loader uses `importScripts`); not a module worker.
-    let worker = web_sys::Worker::new(SYNC_WORKER_URL).expect("failed to spawn Sync worker");
+    let url = sync_worker_url().expect("the page carries no Sync worker address");
+    let worker = web_sys::Worker::new(&url).expect("failed to spawn Sync worker");
     let to_worker = worker.clone();
 
     let onmessage =

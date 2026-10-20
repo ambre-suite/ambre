@@ -50,7 +50,7 @@ which is the one register every budget of the workspace is a row of.
 | **Render framerate** | 60+ FPS | Smooth interaction, no jank. Render thread must never be blocked by computation. |
 | **Content display latency** | < 15 ms | Between user action (scroll, input) and visual update. Users should perceive no lag. |
 | **Inter-user latency** | < 300 ms | Between one user's input and display on a collaborator's screen. Network-dependent, but client processing adds no more than 50 ms. |
-| **Initial load time** | < 3 s on 4G | First interactive display. WASM binary < 2 MB gzipped. |
+| **Initial load time** | < 3 s on 4G | First interactive display. First wasm download < 2 MB brotli. |
 | **Client memory** | < 100 MB | For a typical document. Proportional to document size, not its history. |
 
 **Architectural orientation:** 3 isolated WASM workers (render / business logic / encrypted sync),

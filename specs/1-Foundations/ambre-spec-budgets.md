@@ -194,13 +194,23 @@
 * **Two binaries.** `ambre-app` carries UI plus Logic: wgpu, loro, leptos, the heavy one.
   `ambre-sync` carries crypto plus protocol plus gloo-net, small at ~6.8 MB unoptimized, with no
   wgpu, no loro and no leptos. Only crypto, protocol and serde are duplicated across the two; the heavy
-  dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable. **Total Main
-  budget < 2 MB gzip**, and Prose interop stays **lazy-loaded**.
-* **The Main instance breaks it today.** A release build weighs 4.27 MB gzip. The `wasm-release`
-  profile builds every crate for size and strips the name section, which took it from 6.9 MB. The
-  `size` CI job holds that figure as a ceiling (`scripts/wasm_size.py`), and the ceiling is not
-  the budget. The roadmap story `The Main instance within its download budget` closes the gap.
-* **The Sync worker weighs 0.42 MB gzip** in the same build.
+  dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable. **The first
+  download, Main plus Sync, < 2 MB brotli**, and Prose interop stays **lazy-loaded**. At 10 Mbit/s,
+  2 MB takes 1.6 s, which leaves the rest of the README's 3 s initial load on 4G to compile and
+  boot.
+* **Counted in brotli, as served.** The release build writes a brotli copy at quality 11 beside
+  each compressible file (`scripts/trunk_post_build.py`). A static server sends it as it is, with
+  no compression per request. On the wasm it weighs 27% less than gzip at level 9.
+* **Cached for good after the first visit.** Every built file is named by a hash of its content
+  (`filehash` in `Trunk.toml`), so a deployment caches it as immutable. Only the page is asked
+  again, and a release downloads only the instance it changed.
+* **The first download breaks the budget today.** A release build weighs 3.12 MB brotli for Main
+  and 0.34 MB for Sync. The `wasm-release` profile builds every crate for size and strips the name
+  section, which took Main from 6.9 MB to 4.27 MB gzip. The `size` CI job holds each figure as a
+  ceiling (`scripts/wasm_size.py`), and a ceiling is not the budget. The roadmap story `The Main
+  instance within its download budget` closes the gap, and it needs the applications split out.
+* **wasm-opt stays off.** Binaryen 124 takes 7% off the raw Main wasm, and the result compresses
+  0.8% worse, in gzip and in brotli alike. The download is the budget, so the pass costs.
 
 | Contribution | Estimated raw | Notes |
 |---|---|---|

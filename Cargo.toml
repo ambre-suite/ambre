@@ -317,8 +317,9 @@ codegen-units = 1
 
 # The two wasm builds Trunk ships (`crates/ambre-app/index.html`). The download
 # is the budget there (`ambre-spec-budgets.md` section 5), so every crate is
-# built for size, and the name section goes: 1 MB gzip of function names. The
-# relay keeps `release`, built for speed.
+# built for size, and the name section goes: 1 MB gzip of function names. "z"
+# over "s": "s" weighs 12% more in brotli on the Main instance. The relay keeps
+# `release`, built for speed.
 [profile.wasm-release]
 inherits = "release"
 opt-level = "z"
