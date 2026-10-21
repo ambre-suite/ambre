@@ -44,8 +44,8 @@ impl ProseState {
             // `u64::MAX` is never a peer: without a scaffolding identity,
             // nothing is subtracted.
             peers: fixture_peer_count(
-                self.doc.oplog_vv().keys().copied(),
-                super::scaffold_identity().unwrap_or(u64::MAX),
+                self.doc.oplog_vv().keys().copied().map(ambre_core::PeerId),
+                super::scaffold_identity().unwrap_or(ambre_core::PeerId(u64::MAX)),
             ),
             body: ShapeBody::Prose { blocks, characters },
         }
@@ -340,7 +340,7 @@ fn root_after(state: &ProseState, after: TreeID) -> Result<TreeID, String> {
 }
 
 fn build_styled_document(seed: u64) -> Result<ProseState, String> {
-    let mut state = ProseState::with_peer(seed).ok_or("no document")?;
+    let mut state = ProseState::with_peer(ambre_core::PeerId(seed)).ok_or("no document")?;
     state.set_user_id(UserId::from_uuid(seeded_document_id(AUTHOR_SEED).into()));
     state.set_display_name("Fixture Author".to_owned());
 
@@ -495,7 +495,7 @@ mod tests {
 
     #[test]
     fn the_shape_counts_the_blocks_and_the_characters() {
-        let mut state = ProseState::with_peer(7).expect("a document is built");
+        let mut state = ProseState::with_peer(ambre_core::PeerId(7)).expect("a document is built");
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
@@ -515,8 +515,8 @@ mod tests {
 
     #[test]
     fn two_documents_holding_the_same_content_dump_alike() {
-        let mut first = ProseState::with_peer(1).expect("a document is built");
-        let mut second = ProseState::with_peer(2).expect("a document is built");
+        let mut first = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+        let mut second = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document is built");
         for state in [&mut first, &mut second] {
             let block = state.root_blocks()[0];
             state.handle_command(ProseCommand::InsertText {

@@ -628,7 +628,7 @@ mod tests {
     use ambre_bus::app::prose::{ConversionWarning, InteropError, MarkdownFlavor};
 
     fn document() -> ProseState {
-        ProseState::with_peer(1).expect("a document is built")
+        ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built")
     }
 
     fn import(state: &mut ProseState, markdown: &str) -> ProseOutcome {

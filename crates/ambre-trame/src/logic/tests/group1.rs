@@ -644,7 +644,7 @@ fn multi_sheet_isolation_and_name_lookup() {
     other
         .push(
             Uid {
-                peer: 1,
+                peer: ambre_core::PeerId(1),
                 counter: 0,
             }
             .to_key_part()

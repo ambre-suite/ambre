@@ -414,7 +414,7 @@ impl DocState {
 
     /// Write under the session identity Sync issued (`AUTHOR-002`), whichever
     /// application owns the document. `false` when the engine refused it.
-    fn adopt_session(&mut self, peer: u64, entry: Vec<u8>) -> bool {
+    fn adopt_session(&mut self, peer: ambre_core::PeerId, entry: Vec<u8>) -> bool {
         match self {
             DocState::Trame(state) => state.adopt_session(peer, entry),
             DocState::Toile(state) => state.adopt_session(peer, entry),
@@ -431,11 +431,11 @@ impl DocState {
 /// passes: a snapshot carries the whole history, every author's included.
 /// Bytes the engine cannot read are refused too, since nothing in them can be
 /// attributed.
-fn authored_by(payload: &[u8], peer: u64) -> bool {
+fn authored_by(payload: &[u8], peer: ambre_core::PeerId) -> bool {
     match loro::LoroDoc::decode_import_blob_meta(payload, false) {
         Ok(meta) => {
             meta.mode == loro::EncodedBlobMode::Updates
-                && meta.partial_end_vv.keys().all(|p| *p == peer)
+                && meta.partial_end_vv.keys().all(|p| *p == peer.0)
         }
         Err(_) => false,
     }
@@ -444,10 +444,10 @@ fn authored_by(payload: &[u8], peer: u64) -> bool {
 /// [`authored_by`] for a payload of either form: a binary update, or the JSON
 /// update a segment delta travels as (the Murmure messages spec).
 #[cfg(test)]
-fn sent_by(payload: &[u8], peer: u64) -> bool {
+fn sent_by(payload: &[u8], peer: ambre_core::PeerId) -> bool {
     authored_by(payload, peer)
         || serde_json::from_slice::<loro::json::JsonSchema>(payload).is_ok_and(|update| {
-            !update.changes.is_empty() && update.changes.iter().all(|c| c.id.peer == peer)
+            !update.changes.is_empty() && update.changes.iter().all(|c| c.id.peer == peer.0)
         })
 }
 
@@ -478,7 +478,7 @@ struct LiveDoc {
     /// The PeerID this session writes the document under, once Sync issued it
     /// (`AUTHOR-002`). Until then no edit is taken: an operation written under
     /// the provisional PeerID could never travel (`AUTHOR-008`).
-    identity: Option<u64>,
+    identity: Option<ambre_core::PeerId>,
     /// The local restores that arrived before the identity, applied once it
     /// lands. A restore may write under the document's PeerID, and that write
     /// must be one the session can send.
@@ -500,7 +500,7 @@ struct LiveDoc {
     relay: loro::VersionVector,
     /// The earlier sessions of this user on the document, read back from the
     /// local store: each PeerID with the nonce it derives from.
-    earlier: Vec<(u64, SessionNonce)>,
+    earlier: Vec<(ambre_core::PeerId, SessionNonce)>,
     /// The document reopens from the local store after leaving memory, at
     /// this horizon. Sync is asked to open it once the read lands
     /// (`RESID-010`).
@@ -581,12 +581,12 @@ impl LogicState {
 
     /// The session identity Sync would issue for `document_id`, under a PeerID
     /// no other call of this test binary hands out.
-    pub(crate) fn grant_identity(&mut self, document_id: DocumentId) -> u64 {
+    pub(crate) fn grant_identity(&mut self, document_id: DocumentId) -> ambre_core::PeerId {
         let peer = test_peer();
         self.handle_logic_event(LogicEvent::SessionIdentity {
             document_id,
             peer,
-            entry: peer.to_le_bytes().to_vec(),
+            entry: peer.0.to_le_bytes().to_vec(),
             nonce: SessionNonce([0; 16]),
         });
         peer
@@ -595,9 +595,9 @@ impl LogicState {
 
 /// A PeerID no other call of this test binary hands out.
 #[cfg(test)]
-fn test_peer() -> u64 {
+fn test_peer() -> ambre_core::PeerId {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x1000);
-    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ambre_core::PeerId(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
 }
 
 /// `channel` with every document under a session identity of its own, as
@@ -607,7 +607,7 @@ fn identified(mut channel: ambre_murmure::ChannelState) -> ambre_murmure::Channe
     for document_id in channel.document_ids() {
         let peer = test_peer();
         channel
-            .adopt_session(document_id, peer, peer.to_le_bytes().to_vec())
+            .adopt_session(document_id, peer, peer.0.to_le_bytes().to_vec())
             .expect("adopt");
     }
     channel
@@ -636,10 +636,13 @@ pub enum PersistWrite {
     Delta(Vec<u8>),
     /// A session's PeerID and the nonce it derives from, kept so a later
     /// open sends what the session left unsent (`AUTHOR-028`).
-    Session { peer: u64, nonce: SessionNonce },
+    Session {
+        peer: ambre_core::PeerId,
+        nonce: SessionNonce,
+    },
     /// An earlier session whose operations the relay holds: nothing of it is
     /// left to send.
-    ForgetSession { peer: u64 },
+    ForgetSession { peer: ambre_core::PeerId },
     /// Not a write: the document left memory and reopens. The Main thread
     /// reads it back and answers with a `RestoreLocalSnapshot`, empty when
     /// the store holds nothing (`RESID-010`, `RESID-012`).
@@ -782,7 +785,7 @@ struct LogicState {
     /// The session identity Sync issued for a channel or a space document
     /// that no open channel or space holds yet, adopted once one does
     /// (`AUTHOR-002`).
-    murmure_identities: HashMap<DocumentId, (u64, Vec<u8>)>,
+    murmure_identities: HashMap<DocumentId, (ambre_core::PeerId, Vec<u8>)>,
     /// The channel and space commands that write a document whose session
     /// identity has not landed, in the order they came (`AUTHOR-026`).
     murmure_waiting: HashMap<DocumentId, Vec<channels::HeldCommand>>,
@@ -1140,7 +1143,7 @@ fn remote_delta(seq: u64, payload: Vec<u8>) -> ambre_bus::SignedDelta {
         seq: ambre_core::Seq(seq),
         payload,
         nonce: ambre_core::SessionNonce([0; 16]),
-        peer,
+        peer: ambre_core::PeerId(peer),
         user: None,
         summary: None,
     }
@@ -1601,15 +1604,15 @@ mod authorship_tests {
     use ambre_core::authorship::{PEERS_MAP, peer_key};
     use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
-    const ALICE: u64 = 0xA11CE;
-    const MALLORY: u64 = 0xBAD;
+    const ALICE: ambre_core::PeerId = ambre_core::PeerId(0xA11CE);
+    const MALLORY: ambre_core::PeerId = ambre_core::PeerId(0xBAD);
 
     struct Rig {
         state: LogicState,
         sync: Receiver<SyncCommand>,
         ui: Receiver<UiEvent>,
         document_id: DocumentId,
-        peer: u64,
+        peer: ambre_core::PeerId,
     }
 
     /// One open workbook holding its session identity, its opening drained.
@@ -1636,9 +1639,9 @@ mod authorship_tests {
     }
 
     /// The delta a session writing under `peer` sends for one cell edit.
-    fn written_by(peer: u64, text: &str) -> Vec<u8> {
+    fn written_by(peer: ambre_core::PeerId, text: &str) -> Vec<u8> {
         let mut author = TrameState::new();
-        assert!(author.adopt_session(peer, peer.to_le_bytes().to_vec()));
+        assert!(author.adopt_session(peer, peer.0.to_le_bytes().to_vec()));
         author
             .handle_command(TrameCommand::SetCellText {
                 row: 0,
@@ -1661,7 +1664,7 @@ mod authorship_tests {
         doc.export(ExportMode::updates(&base)).expect("an export")
     }
 
-    fn signed(payload: Vec<u8>, peer: u64) -> SignedDelta {
+    fn signed(payload: Vec<u8>, peer: ambre_core::PeerId) -> SignedDelta {
         SignedDelta {
             seq: ambre_core::Seq(0),
             payload,
@@ -1699,9 +1702,13 @@ mod authorship_tests {
     }
 
     /// The PeerIDs whose operations a delta carries.
-    fn authors(delta: &[u8]) -> Vec<u64> {
+    fn authors(delta: &[u8]) -> Vec<ambre_core::PeerId> {
         let meta = LoroDoc::decode_import_blob_meta(delta, false).expect("a readable delta");
-        meta.partial_end_vv.keys().copied().collect()
+        meta.partial_end_vv
+            .keys()
+            .copied()
+            .map(ambre_core::PeerId)
+            .collect()
     }
 
     /// `AUTHOR-012`, `AUTHOR-014`: a delta Mallory signs over Alice's
@@ -1744,8 +1751,8 @@ mod authorship_tests {
             ],
         });
         let held = held(&rig);
-        assert!(held.get(&ALICE).is_some(), "the honest delta was dropped");
-        assert!(held.get(&MALLORY).is_none(), "the forged delta landed");
+        assert!(held.get(&ALICE.0).is_some(), "the honest delta was dropped");
+        assert!(held.get(&MALLORY.0).is_none(), "the forged delta landed");
     }
 
     /// `AUTHOR-007`: the verdict reads the delta and its signer alone, so two
@@ -1756,7 +1763,10 @@ mod authorship_tests {
             signed(written_by(ALICE, "hers"), ALICE),
             signed(written_by(ALICE, "forged"), MALLORY),
             signed(
-                merged(&[written_by(MALLORY, "a"), written_by(ALICE + 1, "b")]),
+                merged(&[
+                    written_by(MALLORY, "a"),
+                    written_by(ambre_core::PeerId(ALICE.0 + 1), "b"),
+                ]),
                 MALLORY,
             ),
         ];
@@ -1770,7 +1780,7 @@ mod authorship_tests {
                     });
                 }
                 let mut held = held(&rig);
-                held.remove(&rig.peer);
+                held.remove(&rig.peer.0);
                 held
             })
             .collect();
@@ -1802,7 +1812,7 @@ mod authorship_tests {
         };
         let [left, right] = tabs.each_ref().map(read);
         assert_eq!(left, right, "the two tabs diverged");
-        assert!(left.0.get(&tabs[0].peer).is_some() && left.0.get(&tabs[1].peer).is_some());
+        assert!(left.0.get(&tabs[0].peer.0).is_some() && left.0.get(&tabs[1].peer.0).is_some());
     }
 
     /// `AUTHOR-008`, `AUTHOR-009`, `AUTHOR-011`: a session that never edits
@@ -1834,7 +1844,7 @@ mod authorship_tests {
         let after = registry(&reader);
         assert_eq!(
             after.get(&peer_key(rig.peer)),
-            Some(&LoroValue::Binary(rig.peer.to_le_bytes().to_vec().into()))
+            Some(&LoroValue::Binary(rig.peer.0.to_le_bytes().to_vec().into()))
         );
         assert_eq!(
             after.len(),
@@ -1887,16 +1897,16 @@ mod authorship_tests {
     }
 
     /// A delta Alice writes on a scaffolding another build wrote under `peer`.
-    fn on_foreign_scaffold(peer: u64) -> Vec<u8> {
+    fn on_foreign_scaffold(peer: ambre_core::PeerId) -> Vec<u8> {
         let doc = LoroDoc::new();
-        doc.set_peer_id(peer)
+        doc.set_peer_id(peer.0)
             .expect("a fresh document takes a peer id");
         doc.get_map("meta")
             .insert("schema_version", 99)
             .expect("an insert");
         doc.commit();
         let base = doc.oplog_vv();
-        doc.set_peer_id(ALICE).expect("a peer id");
+        doc.set_peer_id(ALICE.0).expect("a peer id");
         doc.get_map("meta").insert("note", "x").expect("an insert");
         doc.commit();
         doc.export(ExportMode::updates(&base)).expect("an export")
@@ -1929,14 +1939,14 @@ mod authorship_tests {
     fn a_delta_waiting_on_a_foreign_scaffold_reports_the_document() {
         let mut rig = rig();
         receive(&mut rig, written_by(ALICE, "ours"), 1);
-        receive(&mut rig, on_foreign_scaffold(0x5CAF), 2);
+        receive(&mut rig, on_foreign_scaffold(ambre_core::PeerId(0x5CAF)), 2);
         assert!(
             !told_unreadable(&rig),
             "reported before the replay was done"
         );
         ready(&mut rig);
         assert!(told_unreadable(&rig), "the document was not reported");
-        receive(&mut rig, on_foreign_scaffold(0x5CAF), 3);
+        receive(&mut rig, on_foreign_scaffold(ambre_core::PeerId(0x5CAF)), 3);
         assert!(!told_unreadable(&rig), "the document was reported twice");
 
         let mut clean = rig_with_ready();
@@ -1949,7 +1959,7 @@ mod authorship_tests {
     #[test]
     fn a_delta_past_a_gap_is_not_reported() {
         let mut rig = rig_with_ready();
-        receive(&mut rig, on_foreign_scaffold(0x5CAF), 3);
+        receive(&mut rig, on_foreign_scaffold(ambre_core::PeerId(0x5CAF)), 3);
         assert!(!told_unreadable(&rig));
     }
 
@@ -2031,7 +2041,7 @@ mod authorship_tests {
             sync,
             ui,
             document_id,
-            peer: 0,
+            peer: ambre_core::PeerId(0),
         };
         (rig, persist)
     }
@@ -2074,7 +2084,7 @@ mod authorship_tests {
     /// write under whatever PeerID the document holds then (`PROSE-027`).
     fn emptied_page() -> Vec<u8> {
         let doc = LoroDoc::new();
-        doc.set_peer_id(ALICE).expect("a PeerID");
+        doc.set_peer_id(ALICE.0).expect("a PeerID");
         let page = DocState::new(DocType::Prose).expect("a page");
         doc.import(&page.export_snapshot())
             .expect("the scaffolding");
@@ -2091,7 +2101,7 @@ mod authorship_tests {
     /// nothing written under a PeerID but the cache's and the session's.
     #[test]
     fn a_cached_document_shows_before_the_identity_and_is_rebuilt_under_it() {
-        let logged = written_by(ALICE + 1, "logged");
+        let logged = written_by(ambre_core::PeerId(ALICE.0 + 1), "logged");
         let cases = [
             (
                 DocType::Trame,
@@ -2138,7 +2148,7 @@ mod authorship_tests {
             let strangers: Vec<u64> = held
                 .keys()
                 .copied()
-                .filter(|p| *p != peer && restored.get(p).is_none())
+                .filter(|p| *p != peer.0 && restored.get(p).is_none())
                 .collect();
             assert!(
                 strangers.is_empty(),
@@ -2148,9 +2158,9 @@ mod authorship_tests {
     }
 
     /// The deltas one session writing under `peer` sends, one per text.
-    fn session_wrote(peer: u64, texts: &[&str]) -> Vec<Vec<u8>> {
+    fn session_wrote(peer: ambre_core::PeerId, texts: &[&str]) -> Vec<Vec<u8>> {
         let mut author = TrameState::new();
-        assert!(author.adopt_session(peer, peer.to_le_bytes().to_vec()));
+        assert!(author.adopt_session(peer, peer.0.to_le_bytes().to_vec()));
         texts
             .iter()
             .map(|text| {
@@ -2169,7 +2179,14 @@ mod authorship_tests {
     /// A document cached with both of Alice's deltas and her session, then
     /// identified. The relay replays the first `relayed` of her deltas before
     /// the replay ends. Returns what Logic sent and saved.
-    fn reopened(relayed: usize) -> (Vec<SyncCommand>, Vec<PersistWrite>, Vec<Vec<u8>>, u64) {
+    fn reopened(
+        relayed: usize,
+    ) -> (
+        Vec<SyncCommand>,
+        Vec<PersistWrite>,
+        Vec<Vec<u8>>,
+        ambre_core::PeerId,
+    ) {
         let hers = session_wrote(ALICE, &["one", "two"]);
         let (mut rig, persist) = unidentified(DocType::Trame);
         rig.state
@@ -2218,8 +2235,8 @@ mod authorship_tests {
         let meta = LoroDoc::decode_import_blob_meta(payload, false).expect("a readable delta");
         let first = LoroDoc::decode_import_blob_meta(&hers[0], false).expect("her first delta");
         assert_eq!(
-            meta.partial_start_vv.get(&ALICE),
-            first.partial_end_vv.get(&ALICE),
+            meta.partial_start_vv.get(&ALICE.0),
+            first.partial_end_vv.get(&ALICE.0),
             "the unsent delta does not start where the relay's copy ends"
         );
         assert!(

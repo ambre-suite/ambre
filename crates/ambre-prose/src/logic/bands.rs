@@ -165,7 +165,7 @@ impl ProseState {
     /// resolves the same date, whatever its own clock says. A collaborator's
     /// change is dated by the collaborator, so nothing here stamps it.
     pub(super) fn stamp_modified(&mut self, now_ms: u64) -> ProseOutcome {
-        let ours = self.doc.oplog_vv().get(&self.peer).copied().unwrap_or(0);
+        let ours = self.doc.oplog_vv().get(&self.peer.0).copied().unwrap_or(0);
         if ours <= self.stamped_counter {
             return ProseOutcome::nothing();
         }
@@ -175,7 +175,7 @@ impl ProseState {
         }
         self.doc.set_next_commit_origin(STAMP_ORIGIN);
         let outcome = self.commit_with(Vec::new());
-        self.stamped_counter = self.doc.oplog_vv().get(&self.peer).copied().unwrap_or(0);
+        self.stamped_counter = self.doc.oplog_vv().get(&self.peer.0).copied().unwrap_or(0);
         outcome
     }
 
@@ -545,8 +545,8 @@ pub(crate) mod tests {
 
     /// Two peers, each holding the other's opening state.
     fn two_peers() -> (ProseState, ProseState) {
-        let mut alice = ProseState::with_peer(1).expect("alice");
-        let bob = ProseState::with_peer(2).expect("bob");
+        let mut alice = ProseState::with_peer(ambre_core::PeerId(1)).expect("alice");
+        let bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("bob");
         let snapshot = alice.export_snapshot();
         let mut bob = bob;
         bob.import_snapshot(&snapshot)

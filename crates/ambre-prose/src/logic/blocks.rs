@@ -814,7 +814,7 @@ mod tests {
 
     #[test]
     fn a_deleted_block_keeps_its_node_and_names_the_session_that_hid_it() {
-        let mut state = ProseState::with_peer(7).expect("a document is built");
+        let mut state = ProseState::with_peer(ambre_core::PeerId(7)).expect("a document is built");
         let first = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertBlock {
             parent_id: None,
@@ -844,7 +844,7 @@ mod tests {
     #[test]
     fn a_hidden_table_hides_every_block_under_it() {
         use crate::logic::tables::tests::{cell_at, document_with_table, first_block_of};
-        let (mut state, table) = document_with_table(1, 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
         let cell = cell_at(&state, table, 1, 1);
         let paragraph = first_block_of(&state, cell);
         let table_id = crate::events::block_id(table);

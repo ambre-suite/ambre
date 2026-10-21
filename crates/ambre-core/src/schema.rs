@@ -183,7 +183,7 @@ pub fn migrate_schema<D>(
 /// moves with a library or a toolchain. It never returns `u64::MAX`, the one
 /// identity the CRDT engine reserves.
 #[must_use]
-pub fn migration_peer(frontiers: impl IntoIterator<Item = (u64, i32)>) -> u64 {
+pub fn migration_peer(frontiers: impl IntoIterator<Item = (u64, i32)>) -> crate::PeerId {
     let mut heads: Vec<(u64, i32)> = frontiers.into_iter().collect();
     heads.sort_unstable();
     let mut hash = Fnv::new(b"ambre-schema-migration");
@@ -209,7 +209,7 @@ pub fn migration_peer(frontiers: impl IntoIterator<Item = (u64, i32)>) -> u64 {
 /// different changes under one identifier. The hash and its reserved value are
 /// those of [`migration_peer`].
 #[must_use]
-pub fn scaffold_peer(scaffold: &[u8]) -> u64 {
+pub fn scaffold_peer(scaffold: &[u8]) -> crate::PeerId {
     let mut hash = Fnv::new(b"ambre-scaffold");
     hash.feed(scaffold);
     hash.peer()
@@ -247,12 +247,12 @@ impl Fnv {
 
     /// The hash as a peer identity: never `u64::MAX`, which the CRDT engine
     /// reserves.
-    fn peer(self) -> u64 {
-        if self.0 == u64::MAX {
+    fn peer(self) -> crate::PeerId {
+        crate::PeerId(if self.0 == u64::MAX {
             self.0 - 1
         } else {
             self.0
-        }
+        })
     }
 }
 
@@ -365,7 +365,10 @@ mod tests {
         assert_ne!(migration_peer(heads), migration_peer([(7, 41)]));
         // Pinned: a peer on another build must derive the same identity.
         assert_eq!(migration_peer([]), migration_peer(Vec::new()));
-        assert_eq!(migration_peer([(1, 0)]), 0xe0f9_c7c0_c2dd_425e);
+        assert_eq!(
+            migration_peer([(1, 0)]),
+            crate::PeerId(0xe0f9_c7c0_c2dd_425e)
+        );
     }
 
     /// One scaffolding derives one identity, and any other derives another.

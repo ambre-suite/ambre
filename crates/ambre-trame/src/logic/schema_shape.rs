@@ -327,7 +327,7 @@ pub(super) fn declared_string_consts(source: &str) -> Vec<String> {
 /// and a styled cell. It is deliberately not a realistic workbook: its job is
 /// width, and the coverage assertion fails when it stops having it.
 pub(super) fn workbook_of_every_key() -> TrameState {
-    let mut state = TrameState::with_peer(1);
+    let mut state = TrameState::with_peer(ambre_core::PeerId(1));
     state.handle_command(TrameCommand::SetCellText {
         row: 0,
         col: 0,
@@ -465,7 +465,10 @@ fn canonical(from: u32) -> LoroDoc {
         }),
         // A positional formula the `2 -> 3` step names by its cells.
         2 => workbook_at(Some(2), |doc| {
-            let uid = |counter| Uid { peer: 1, counter };
+            let uid = |counter| Uid {
+                peer: ambre_core::PeerId(1),
+                counter,
+            };
             let rows = doc.get_movable_list(rows_list_name(DEFAULT_SHEET));
             for counter in 0..3 {
                 rows.push(uid(counter).to_key_part()).expect("a row");
@@ -495,7 +498,7 @@ fn steps_written() -> Vec<String> {
             scratch.import(&stored).expect("the snapshot imports");
             let heads = scratch.oplog_frontiers();
             scratch
-                .set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))))
+                .set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))).0)
                 .expect("the migration identity");
             let before = scratch.oplog_vv();
             (step.apply)(&scratch).expect("the step runs on its canonical workbook");

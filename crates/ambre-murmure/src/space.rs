@@ -98,7 +98,7 @@ impl SpaceState {
     /// [`MurmureError::Crdt`] when Loro refuses a write or the export.
     pub fn adopt_session(
         &mut self,
-        peer: u64,
+        peer: ambre_core::PeerId,
         entry: Vec<u8>,
     ) -> Result<Option<Vec<u8>>, MurmureError> {
         if self.session.map(Session::peer) == Some(peer) {
@@ -122,7 +122,7 @@ impl SpaceState {
     #[cfg(test)]
     pub(crate) fn identify(mut self) -> Self {
         let peer = crate::session::next_peer();
-        self.adopt_session(peer, peer.to_le_bytes().to_vec())
+        self.adopt_session(peer, peer.0.to_le_bytes().to_vec())
             .expect("adopt");
         self
     }

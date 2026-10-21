@@ -226,7 +226,7 @@ fn logic_event_roundtrips_through_postcard() {
             seq: ambre_bus::Seq(8),
             payload: vec![3, 1, 4, 1, 5, 9],
             nonce: ambre_core::SessionNonce([2; 16]),
-            peer: 7,
+            peer: ambre_core::PeerId(7),
             user: Some(UserId::from_bytes([1; 16])),
             summary: Some(ambre_bus::ActivitySummary {
                 kind: ambre_bus::ActivityKind::Content,
@@ -238,7 +238,7 @@ fn logic_event_roundtrips_through_postcard() {
     });
     roundtrip_event(&LogicEvent::SessionIdentity {
         document_id: doc,
-        peer: 7,
+        peer: ambre_core::PeerId(7),
         entry: vec![8; 96],
         nonce: ambre_core::SessionNonce([9; 16]),
     });
@@ -389,7 +389,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         seq: ambre_bus::Seq(3),
         payload: vec![1, 2, 255],
         nonce: SessionNonce([4; 16]),
-        peer: 9,
+        peer: ambre_core::PeerId(9),
         user: Some(user),
         summary: None,
     };
@@ -435,7 +435,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             snapshot_id: snapshot,
             purpose: SnapshotPurpose::Confirm,
             verdict: SnapshotVerdict::Match {
-                extras: vec![(41, vec![2, 3])],
+                extras: vec![(ambre_core::PeerId(41), vec![2, 3])],
             },
         },
         SyncCommand::SendEphemeral {
@@ -557,7 +557,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::SessionIdentity {
             document_id: doc,
-            peer: 9,
+            peer: ambre_core::PeerId(9),
             entry: vec![3; 8],
             nonce: SessionNonce([1; 16]),
         },
@@ -965,7 +965,7 @@ fn writing_commands_are_mutating() {
         AppCommand::Toile(ToileCommand::Undo),
         // Reacting writes a per-user CRDT entry (`toile-reactions`): not presence.
         AppCommand::Toile(ToileCommand::React {
-            target: ElementId::mint(1, 1),
+            target: ElementId::mint(ambre_core::PeerId(1), 1),
             reaction: None,
         }),
     ];

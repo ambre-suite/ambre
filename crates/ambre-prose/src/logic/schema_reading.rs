@@ -623,7 +623,7 @@ fn mark_reading(
 /// A document opened from `state`'s snapshot, through the full-state read
 /// every reload takes, and laid out once as the view would.
 fn reopened(state: &ProseState) -> ProseState {
-    let mut reader = ProseState::with_peer(2).expect("a document is built");
+    let mut reader = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document is built");
     reader
         .import_snapshot(&state.export_snapshot())
         .expect("a document this build wrote reopens");

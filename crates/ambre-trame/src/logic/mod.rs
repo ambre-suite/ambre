@@ -283,8 +283,8 @@ fn write_scaffold(doc: &LoroDoc) {
     clippy::expect_used,
     reason = "a fresh document with no op takes a peer id and exports"
 )]
-fn scaffold_identity() -> u64 {
-    static PEER: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+fn scaffold_identity() -> ambre_core::PeerId {
+    static PEER: std::sync::OnceLock<ambre_core::PeerId> = std::sync::OnceLock::new();
     *PEER.get_or_init(|| {
         let scratch = LoroDoc::new();
         scratch
@@ -334,10 +334,10 @@ impl TrameState {
         clippy::expect_used,
         reason = "a fresh document with no op takes a peer id"
     )]
-    pub fn with_peer(peer: u64) -> Self {
+    pub fn with_peer(peer: ambre_core::PeerId) -> Self {
         let doc = LoroDoc::new();
         // `set_peer_id` before any op: Trame's sheet ids capture it.
-        doc.set_peer_id(peer)
+        doc.set_peer_id(peer.0)
             .expect("a fresh LoroDoc accepts a peer id");
         // No wall clock in the ops: a recorded timestamp would differ between two
         // runs of the same generator and defeat the byte diff of `fixtures`.
@@ -358,7 +358,7 @@ impl TrameState {
         // copy is one change. Under the workbook's own identity, a reader that
         // has sent nothing would import each change against the whole history
         // (`TRAME-231`).
-        doc.set_peer_id(scaffold_identity())
+        doc.set_peer_id(scaffold_identity().0)
             .expect("a document outside a transaction takes a peer id");
         write_scaffold(&doc);
         doc.commit();

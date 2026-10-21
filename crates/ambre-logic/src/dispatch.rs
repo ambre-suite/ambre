@@ -836,7 +836,8 @@ mod tests {
     fn a_prose_document_saves_to_a_native_file_and_reopens() {
         let document_id = DocumentId::new();
         let bytes = exported_file(DocType::Prose, document_id);
-        let mut reopened = ambre_prose::logic::ProseState::with_peer(9).expect("a document");
+        let mut reopened =
+            ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId(9)).expect("a document");
         let (id, _) = reopened
             .import_ambre_plaintext(&bytes)
             .expect("the file opens");

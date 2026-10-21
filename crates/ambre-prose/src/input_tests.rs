@@ -23,7 +23,7 @@ struct Rig {
 impl Rig {
     /// A document holding one paragraph per entry, laid out and in view.
     fn new(paragraphs: &[&str]) -> Self {
-        let mut logic = ProseState::with_peer(1).expect("a document is built");
+        let mut logic = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
         logic.load_faces(&crate::layout::fonts::shipped_faces());
         for text in paragraphs {
             append(&mut logic, BlockInit::Paragraph, text);
@@ -316,7 +316,7 @@ fn a_confirmed_run_leaves_the_draft_once_it_is_laid_out() {
 /// A second peer over the same document, for the changes the view did not
 /// make.
 fn a_collaborator(rig: &Rig) -> ProseState {
-    let mut other = ProseState::with_peer(2).expect("a document is built");
+    let mut other = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document is built");
     other
         .import_snapshot(&rig.logic.export_snapshot())
         .expect("the snapshot imports");
@@ -625,7 +625,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     ));
     // The view invented no block: there is no caret until one is laid out.
     assert!(ui.cursor.is_none());
-    let mut logic = ProseState::with_peer(1).expect("a document is built");
+    let mut logic = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
     logic.load_faces(&crate::layout::fonts::shipped_faces());
     let mut shaped = logic.shaped_layout();
     shaped.version = 2;
@@ -639,7 +639,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
 #[test]
 fn a_press_on_a_layout_with_no_page_leaves_the_caret() {
     let mut ui = ProseUiState::default();
-    let block = BlockId::new(1, 0);
+    let block = BlockId::new(ambre_core::PeerId(1), 0);
     ui.set_caret((block, 3));
     let consumed = ui.handle_input(
         &ProseInput::Press {

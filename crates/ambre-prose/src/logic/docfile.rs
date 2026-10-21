@@ -98,7 +98,7 @@ mod tests {
     /// A document with text and a mark, so the round trip is asserted on more
     /// than an empty paragraph.
     fn populated() -> ProseState {
-        let mut state = ProseState::with_peer(3).expect("a document is built");
+        let mut state = ProseState::with_peer(ambre_core::PeerId(3)).expect("a document is built");
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
@@ -144,7 +144,8 @@ mod tests {
         bare.import(&header.payload).expect("the payload imports");
         assert_eq!(export_ambre_plaintext(&bare, doc_id()), Some(bytes.clone()));
 
-        let mut restored = ProseState::with_peer(4).expect("a document is built");
+        let mut restored =
+            ProseState::with_peer(ambre_core::PeerId(4)).expect("a document is built");
         let (id, _events) = restored
             .import_ambre_plaintext(&bytes)
             .expect("a Prose container");

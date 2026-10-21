@@ -181,7 +181,7 @@ impl TrameState {
     /// concurrent materialize/insert ops never collide.
     pub(super) fn mint_uid(&mut self) -> Uid {
         let uid = Uid {
-            peer: self.doc.peer_id(),
+            peer: ambre_core::PeerId(self.doc.peer_id()),
             counter: self.uid_counter,
         };
         self.uid_counter += 1;

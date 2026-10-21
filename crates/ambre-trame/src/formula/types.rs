@@ -766,13 +766,13 @@ mod tests {
 
     fn row_uid(p: u32) -> Uid {
         Uid {
-            peer: 1,
+            peer: ambre_core::PeerId(1),
             counter: p,
         }
     }
     fn col_uid(p: u32) -> Uid {
         Uid {
-            peer: 2,
+            peer: ambre_core::PeerId(2),
             counter: p,
         }
     }

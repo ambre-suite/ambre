@@ -200,7 +200,7 @@ mod tests {
 
     fn block() -> BlockId {
         BlockId {
-            peer: 1,
+            peer: ambre_core::PeerId(1),
             counter: 0,
         }
     }

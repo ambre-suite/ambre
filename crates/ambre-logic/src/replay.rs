@@ -135,9 +135,9 @@ mod tests {
     use ambre_core::SessionNonce;
 
     /// A delta a session of `peer` wrote, carrying `bytes` of cell text.
-    fn written_by(peer: u64, bytes: usize) -> SignedDelta {
+    fn written_by(peer: ambre_core::PeerId, bytes: usize) -> SignedDelta {
         let mut author = TrameState::new();
-        assert!(author.adopt_session(peer, peer.to_le_bytes().to_vec()));
+        assert!(author.adopt_session(peer, peer.0.to_le_bytes().to_vec()));
         let payload = author
             .handle_command(TrameCommand::SetCellText {
                 row: 0,
@@ -147,7 +147,7 @@ mod tests {
             .update
             .expect("an edit writes a delta");
         SignedDelta {
-            seq: ambre_core::Seq(peer),
+            seq: ambre_core::Seq(peer.0),
             payload,
             nonce: SessionNonce([0; 16]),
             peer,
@@ -167,7 +167,9 @@ mod tests {
         let mut state = LogicState::new(to_ui, test_link().0, to_persist);
         let document_id = DocumentId::new();
         state.open_with_identity(document_id, DocType::Trame);
-        let deltas: Vec<SignedDelta> = (1..=8).map(|peer| written_by(peer, 20 << 10)).collect();
+        let deltas: Vec<SignedDelta> = (1..=8)
+            .map(|peer| written_by(ambre_core::PeerId(peer), 20 << 10))
+            .collect();
         let (from_ui_tx, from_ui) = ambre_bus::conduit::to_worker(64, &Doorbell::new());
         let (from_sync_tx, from_sync) = ambre_bus::conduit::to_worker(64, &Doorbell::new());
         drop(from_ui_tx);

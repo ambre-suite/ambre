@@ -426,7 +426,7 @@ fn created(outcome: &ToileOutcome) -> ElementId {
 /// board: its job is width, and the coverage assertion fails when it stops
 /// having it.
 pub(super) fn board_of_every_key() -> ToileState {
-    let mut st = ToileState::with_peer(1);
+    let mut st = ToileState::with_peer(ambre_core::PeerId(1));
     st.set_user_id(UserId::from_bytes([7; 16]));
 
     let create = |st: &mut ToileState, kind, at: Point, content, correlate| {
@@ -753,7 +753,7 @@ fn steps_written() -> Vec<String> {
             scratch.import(&stored).expect("the snapshot imports");
             let heads = scratch.oplog_frontiers();
             scratch
-                .set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))))
+                .set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))).0)
                 .expect("the migration identity");
             let before = scratch.oplog_vv();
             (step.apply)(&scratch).expect("the step runs on its canonical board");

@@ -26,7 +26,7 @@ fn corpus(fragment: &str) -> String {
 /// A document with one empty paragraph, and a paste of `html` into it.
 fn paste(html: &str) -> impl FnMut() -> (ProseState, ProseCommand) + '_ {
     move || {
-        let Some(state) = ProseState::with_peer(1) else {
+        let Some(state) = ProseState::with_peer(ambre_core::authorship::PeerId(1)) else {
             panic!("a document is built");
         };
         let Some(&first) = state.root_blocks().first() else {

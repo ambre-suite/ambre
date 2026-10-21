@@ -19,7 +19,7 @@ use crate::numbering;
 /// no character of it can be read as a delimiter.
 #[derive(Serialize, Deserialize)]
 struct Record {
-    peer: u64,
+    peer: ambre_core::PeerId,
     counter: i32,
     /// 0 a page number, 1 a section number, 2 a label.
     kind: u8,
@@ -35,7 +35,7 @@ pub fn encode(target: TreeID, kind: &CrossRefKind) -> String {
         CrossRefKind::CustomText(label) => (2, label.clone()),
     };
     let record = Record {
-        peer: target.peer,
+        peer: ambre_core::PeerId(target.peer),
         counter: target.counter,
         kind: code,
         label,
@@ -67,7 +67,7 @@ pub fn decode(value: &str) -> Option<(TreeID, CrossRefKind)> {
         2 => CrossRefKind::CustomText(record.label),
         _ => return None,
     };
-    Some((TreeID::new(record.peer, record.counter), kind))
+    Some((TreeID::new(record.peer.0, record.counter), kind))
 }
 
 /// What a reference to `target` shows, or `None` for the broken mark

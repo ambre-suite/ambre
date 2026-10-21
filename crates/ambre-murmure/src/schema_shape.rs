@@ -208,7 +208,9 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
         (state.meta_id().document_id(), META_PEER),
         (state.active_id().document_id(), SEGMENT_PEER),
     ] {
-        state.adopt_session(id, peer, entry()).expect("adopt");
+        state
+            .adopt_session(id, ambre_core::PeerId(peer), entry())
+            .expect("adopt");
     }
     // The first message carries a file, by its address alone.
     let file = Attachment {
@@ -282,7 +284,7 @@ fn reply_in_thread(state: &mut ChannelState, segment: SegmentId, root: MessageId
         panic!("a root with no thread creates one");
     };
     state
-        .adopt_session(thread, THREAD_PEER, entry())
+        .adopt_session(thread, ambre_core::PeerId(THREAD_PEER), entry())
         .expect("adopt");
     state.thread_linked(segment, root, thread).expect("link");
     let reply = MessageDraft {
@@ -323,7 +325,11 @@ fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
         .close_into(segment, successor, true, Timestamp(1_700_000_000_006))
         .expect("close");
     state
-        .adopt_session(successor.document_id(), SUCCESSOR_PEER, entry())
+        .adopt_session(
+            successor.document_id(),
+            ambre_core::PeerId(SUCCESSOR_PEER),
+            entry(),
+        )
         .expect("adopt");
     state
         .relocate_locked(segment.document_id(), &[])
@@ -335,7 +341,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
         panic!("a locked segment with no amendments creates them");
     };
     state
-        .adopt_session(amendments, AMENDMENTS_PEER, entry())
+        .adopt_session(amendments, ambre_core::PeerId(AMENDMENTS_PEER), entry())
         .expect("adopt");
     state.amendments_linked(segment, amendments).expect("link");
     let messages = state.messages(segment).expect("held");
@@ -397,7 +403,9 @@ pub(crate) fn amended(state: &ChannelState) -> (SegmentId, DocumentId) {
 pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
     let mut space =
         SpaceState::create(SpaceId::new(), "Acme", Timestamp(1_700_000_000_000)).expect("create");
-    space.adopt_session(SPACE_PEER, entry()).expect("adopt");
+    space
+        .adopt_session(ambre_core::PeerId(SPACE_PEER), entry())
+        .expect("adopt");
     let category = CategoryId::new();
     space.put_category(category, "Teams", 0).expect("category");
     let topic = Topic::new("everything").expect("a topic");
@@ -607,7 +615,7 @@ fn steps_written() -> Vec<String> {
             let doc = LoroDoc::new();
             doc.import(&stored).expect("the snapshot imports");
             let heads = doc.oplog_frontiers();
-            doc.set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))))
+            doc.set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))).0)
                 .expect("the migration identity");
             let before = doc.oplog_vv();
             (step.apply)(&doc).expect("the step runs on its canonical document");

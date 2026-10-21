@@ -60,7 +60,7 @@ impl FixtureGen for Gen {
         self.version
     }
     fn build(&self) -> Vec<u8> {
-        let mut state = TrameState::with_peer(self.seed);
+        let mut state = TrameState::with_peer(ambre_core::PeerId(self.seed));
         state.handle_command(TrameCommand::SetCellsBatch {
             cells: (0..self.filler)
                 .map(|row| (row, 0, format!("row {row}")))

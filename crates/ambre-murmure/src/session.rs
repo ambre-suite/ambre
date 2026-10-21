@@ -15,7 +15,7 @@ use crate::error::MurmureError;
 /// operations have left for the relay.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Session {
-    peer: u64,
+    peer: ambre_core::PeerId,
     /// The counter of this PeerID up to which every operation was exported.
     sent: i32,
 }
@@ -28,17 +28,21 @@ impl Session {
     ///
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses the PeerID or the write.
-    pub(crate) fn adopt(doc: &LoroDoc, peer: u64, entry: Vec<u8>) -> Result<Self, MurmureError> {
+    pub(crate) fn adopt(
+        doc: &LoroDoc,
+        peer: ambre_core::PeerId,
+        entry: Vec<u8>,
+    ) -> Result<Self, MurmureError> {
         doc.commit();
-        doc.set_peer_id(peer)?;
-        let sent = doc.oplog_vv().get(&peer).copied().unwrap_or(0);
+        doc.set_peer_id(peer.0)?;
+        let sent = doc.oplog_vv().get(&peer.0).copied().unwrap_or(0);
         doc.get_map(PEERS_MAP).insert(&peer_key(peer), entry)?;
         doc.commit_with(CommitOptions::new().origin(PEERS_ORIGIN));
         Ok(Self { peer, sent })
     }
 
     /// The PeerID this session writes under.
-    pub(crate) fn peer(self) -> u64 {
+    pub(crate) fn peer(self) -> ambre_core::PeerId {
         self.peer
     }
 
@@ -56,8 +60,8 @@ impl Session {
     /// [`MurmureError::Crdt`] when Loro refuses the export.
     pub(crate) fn export(&mut self, doc: &LoroDoc) -> Result<Vec<u8>, MurmureError> {
         doc.commit();
-        let end = doc.oplog_vv().get(&self.peer).copied().unwrap_or(0);
-        let span = IdSpan::new(self.peer, self.sent, end);
+        let end = doc.oplog_vv().get(&self.peer.0).copied().unwrap_or(0);
+        let span = IdSpan::new(self.peer.0, self.sent, end);
         let delta = doc.export(ExportMode::updates_in_range(vec![span]))?;
         self.sent = end;
         Ok(delta)
@@ -73,17 +77,17 @@ impl Session {
         doc.commit();
         let end = doc.oplog_vv();
         let mut start = end.clone();
-        start.insert(self.peer, self.sent);
+        start.insert(self.peer.0, self.sent);
         let update = doc.export_json_updates_without_peer_compression(&start, &end);
-        self.sent = end.get(&self.peer).copied().unwrap_or(0);
+        self.sent = end.get(&self.peer.0).copied().unwrap_or(0);
         crate::delta::encode(&update)
     }
 }
 
 /// A fresh PeerID per call, as the Sync worker issues one per opened document.
 #[cfg(test)]
-pub(crate) fn next_peer() -> u64 {
+pub(crate) fn next_peer() -> ambre_core::PeerId {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0x1000);
-    NEXT.fetch_add(1, Ordering::Relaxed)
+    ambre_core::PeerId(NEXT.fetch_add(1, Ordering::Relaxed))
 }

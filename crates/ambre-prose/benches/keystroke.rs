@@ -38,7 +38,7 @@ fn faces() -> Vec<Vec<u8>> {
 /// The probe's long document, laid out once, with the caret at the end of
 /// its last paragraph.
 fn document() -> (ProseState, ambre_bus::app::prose::BlockId, u32) {
-    let Some(mut state) = ProseState::with_peer(1) else {
+    let Some(mut state) = ProseState::with_peer(ambre_core::authorship::PeerId(1)) else {
         panic!("a document is built");
     };
     state.load_faces(&faces());

@@ -42,7 +42,7 @@ pub enum LogicEvent {
     SessionIdentity {
         document_id: DocumentId,
         /// The PeerID, derived from the signing key and the session nonce.
-        peer: u64,
+        peer: ambre_core::PeerId,
         /// The encoded registry entry of `peer` (`ambre_core::PeerEntry`).
         entry: Vec<u8>,
         /// The nonce `peer` derives from. The Logic thread keeps it in the
@@ -512,7 +512,9 @@ pub enum SnapshotVerdict {
     /// Every operation both sides hold is the same. `extras` names each PeerID
     /// only the snapshot holds, with its registry entry. The snapshot passes
     /// only if each entry resolves to its author (`AUTHOR-021`).
-    Match { extras: Vec<(u64, Vec<u8>)> },
+    Match {
+        extras: Vec<(ambre_core::PeerId, Vec<u8>)>,
+    },
     /// The snapshot contradicts a delta it covers (`AUTHOR-017`).
     Mismatch,
     /// The client lacks what a verdict needs, and says nothing.
@@ -535,7 +537,7 @@ pub struct SignedDelta {
     /// The session nonce of its author, opened from inside the ciphertext.
     pub nonce: SessionNonce,
     /// The only PeerID its operations may carry.
-    pub peer: u64,
+    pub peer: ambre_core::PeerId,
     /// The member the signing key resolves to, `None` when the directory does
     /// not name it (`AUTHOR-013`).
     pub user: Option<UserId>,

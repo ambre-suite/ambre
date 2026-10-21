@@ -51,11 +51,11 @@ fn cell(row: u32, col: u32) -> CellId {
     CellId::bound(
         0,
         Uid {
-            peer: 1,
+            peer: ambre_core::PeerId(1),
             counter: row,
         },
         Uid {
-            peer: 2,
+            peer: ambre_core::PeerId(2),
             counter: col,
         },
     )

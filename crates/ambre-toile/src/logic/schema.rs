@@ -299,7 +299,7 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
             let heads = scratch.oplog_frontiers();
             let peer = migration_peer(heads.iter().map(|id| (id.peer, id.counter)));
             scratch
-                .set_peer_id(peer)
+                .set_peer_id(peer.0)
                 .map_err(|e| SchemaError::MigrationFailed {
                     from: found,
                     to: SCHEMA_VERSION,
@@ -537,9 +537,9 @@ mod tests {
         doc.commit();
         let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
 
-        let open = |peer: u64| {
+        let open = |peer: ambre_core::PeerId| {
             let live = LoroDoc::new();
-            live.set_peer_id(peer).expect("a peer of its own");
+            live.set_peer_id(peer.0).expect("a peer of its own");
             live.import(&gate(&bytes).expect("version 3 migrates"))
                 .expect("imports");
             live
@@ -554,7 +554,7 @@ mod tests {
                 .and_then(|c| c.into_text().ok())
                 .expect("the body is a text")
         };
-        let (a, b) = (open(1), open(2));
+        let (a, b) = (open(ambre_core::PeerId(1)), open(ambre_core::PeerId(2)));
         body(&a).insert(0, "now ").expect("a types");
         a.commit();
         body(&b).insert(8, " and eggs").expect("b types");

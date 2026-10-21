@@ -215,7 +215,7 @@ pub struct ChannelState {
     /// The successor another client created, whose bytes are in `pending`.
     successor: Option<SegmentId>,
     /// The identity issued for that successor, adopted once it is admitted.
-    successor_session: Option<(u64, Vec<u8>)>,
+    successor_session: Option<(ambre_core::PeerId, Vec<u8>)>,
     /// The successor that failed to open, fetched again on a later tick.
     successor_retry: Option<closing::Retry>,
     /// The finalization of the closing segment, as this client drives it.
@@ -303,7 +303,7 @@ impl ChannelState {
     pub fn adopt_session(
         &mut self,
         document_id: DocumentId,
-        peer: u64,
+        peer: ambre_core::PeerId,
         entry: Vec<u8>,
     ) -> Result<Option<Vec<u8>>, MurmureError> {
         let channel_id = self.channel_id;
@@ -353,7 +353,7 @@ impl ChannelState {
         let ids: Vec<DocumentId> = self.live().map(|held| held.id).collect();
         for id in ids {
             let peer = crate::session::next_peer();
-            self.adopt_session(id, peer, peer.to_le_bytes().to_vec())
+            self.adopt_session(id, peer, peer.0.to_le_bytes().to_vec())
                 .expect("adopt");
         }
         self
@@ -1453,7 +1453,7 @@ impl ChannelState {
         }
         if let Some(held) = self.held_mut(document_id) {
             if let Some(session) = held.session {
-                fresh.set_peer_id(session.peer())?;
+                fresh.set_peer_id(session.peer().0)?;
             }
             held.doc = fresh;
         } else if let Some(doc) = self.loaded.get_mut(&SegmentId::from_document(document_id)) {
@@ -1575,7 +1575,7 @@ impl ChannelState {
 
     /// The PeerID this session writes `document_id` under, `None` before the
     /// Sync worker issued it.
-    pub fn peer(&self, document_id: DocumentId) -> Option<u64> {
+    pub fn peer(&self, document_id: DocumentId) -> Option<ambre_core::PeerId> {
         self.live()
             .find(|held| held.id == document_id)
             .and_then(|held| held.session)

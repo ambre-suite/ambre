@@ -558,7 +558,7 @@ fn import_current(
             // (`AUTHOR-024`). No write of this session can land before its
             // own PeerID replaces it (`AUTHOR-029`).
             let heads = doc.oplog_frontiers();
-            doc.set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))))?;
+            doc.set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))).0)?;
             migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &doc)?;
         }
     }

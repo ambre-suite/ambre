@@ -46,7 +46,7 @@ fn closing_with(texts: &[&str], author: UserId) -> (ChannelState, SegmentId) {
         .expect("close");
     let peer = next_peer();
     state
-        .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+        .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt");
     (state, closing)
 }
@@ -70,7 +70,7 @@ fn amended(state: &mut ChannelState, segment: SegmentId) -> (DocumentId, Vec<u8>
     };
     let peer = next_peer();
     let first = state
-        .adopt_session(amendments, peer, peer.to_le_bytes().to_vec())
+        .adopt_session(amendments, peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt")
         .expect("the header travels");
     let linked = state.amendments_linked(segment, amendments).expect("link");
@@ -132,7 +132,7 @@ fn bob_holding(
         .expect("the header waits");
     bob.older_ready(amendments).expect("admitted");
     let peer = next_peer();
-    bob.adopt_session(amendments, peer, peer.to_le_bytes().to_vec())
+    bob.adopt_session(amendments, peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt");
     assert_eq!(bob.amendments_id(segment), Some(amendments));
     bob
@@ -442,7 +442,7 @@ fn locked_thread(
     };
     let peer = next_peer();
     state
-        .adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+        .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt");
     let linked = state.thread_linked(segment, root, thread).expect("link");
     (thread, linked.root.expect("the amendments record it"))

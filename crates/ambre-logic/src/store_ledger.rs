@@ -377,7 +377,12 @@ mod tests {
         assert!(ledger.observe(doc(1), &PersistWrite::Delta(vec![1])).record);
         assert!(
             !ledger
-                .observe(doc(1), &PersistWrite::ForgetSession { peer: 1 })
+                .observe(
+                    doc(1),
+                    &PersistWrite::ForgetSession {
+                        peer: ambre_core::PeerId(1)
+                    }
+                )
                 .record
         );
         assert_eq!(Meta::decode(&[0; 3]), None);

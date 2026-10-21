@@ -273,7 +273,7 @@ pub(crate) mod tests {
     /// A document of `paragraphs` paragraphs of `words` words each, laid out
     /// on the faces the application ships.
     pub(crate) fn laid_out(paragraphs: usize, words: usize) -> (ProseState, ShapedLayout) {
-        let mut state = ProseState::with_peer(1).expect("a document is built");
+        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let text = vec!["word"; words].join(" ");
         for _ in 0..paragraphs {
@@ -635,7 +635,7 @@ pub(crate) mod tests {
     #[test]
     fn an_edit_from_another_peer_reshapes_the_block_it_wrote() {
         let (mut alice, _) = laid_out(4, 30);
-        let mut bob = ProseState::with_peer(2).expect("a document is built");
+        let mut bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document is built");
         bob.load_faces(&crate::layout::fonts::shipped_faces());
         bob.import_snapshot(&alice.export_snapshot())
             .expect("the seed imports");

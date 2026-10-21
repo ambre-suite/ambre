@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn a_link_is_listed_whole_across_the_marks_inside_it() {
-        let mut state = ProseState::with_peer(1).expect("a document is built");
+        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
         let block = append(&mut state, BlockInit::Paragraph, "see the site now");
         let events = mark(&mut state, block, (4, 12), "a", "https://example.org/");
         let expected = vec![LinkSpan {

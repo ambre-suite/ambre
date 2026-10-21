@@ -453,7 +453,7 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
             let heads = scratch.oplog_frontiers();
             let peer = migration_peer(heads.iter().map(|id| (id.peer, id.counter)));
             scratch
-                .set_peer_id(peer)
+                .set_peer_id(peer.0)
                 .map_err(|e| SchemaError::MigrationFailed {
                     from: found,
                     to: SCHEMA_VERSION,

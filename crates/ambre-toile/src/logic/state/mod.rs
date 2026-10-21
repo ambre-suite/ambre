@@ -148,7 +148,7 @@ pub struct ToileState {
     board_walks: Cell<u64>,
     /// Per-session monotonic id-minting counter.
     counter: u32,
-    peer: u64,
+    peer: ambre_core::PeerId,
     /// Last viewport the UI reported; drives culling.
     viewport: Viewport,
     /// How many viewport requests this state applied. Stamped on every frame
@@ -266,8 +266,8 @@ fn write_scaffold(doc: &LoroDoc) {
     clippy::expect_used,
     reason = "a fresh document with no op takes a peer id and exports"
 )]
-fn scaffold_identity() -> u64 {
-    static PEER: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+fn scaffold_identity() -> ambre_core::PeerId {
+    static PEER: std::sync::OnceLock<ambre_core::PeerId> = std::sync::OnceLock::new();
     *PEER.get_or_init(|| {
         let scratch = LoroDoc::new();
         scratch
@@ -323,10 +323,10 @@ impl ToileState {
         clippy::expect_used,
         reason = "a fresh document with no op takes a peer id"
     )]
-    pub fn with_peer(peer: u64) -> Self {
+    pub fn with_peer(peer: ambre_core::PeerId) -> Self {
         let doc = LoroDoc::new();
         // `set_peer_id` before any op: every minted element id captures it.
-        doc.set_peer_id(peer)
+        doc.set_peer_id(peer.0)
             .expect("a fresh LoroDoc accepts a peer id");
         // No wall clock in the ops: a recorded timestamp would differ between two
         // runs of the same generator and defeat the byte diff of `fixtures`.
@@ -347,7 +347,7 @@ impl ToileState {
         // copy is one change. Under the board's own identity, a reader that has
         // sent nothing would import each change against the whole history
         // (`TOILE-265`).
-        doc.set_peer_id(scaffold_identity())
+        doc.set_peer_id(scaffold_identity().0)
             .expect("a document outside a transaction takes a peer id");
         write_scaffold(&doc);
         doc.commit();
@@ -377,7 +377,7 @@ impl ToileState {
             wires_gone: std::cell::RefCell::default(),
             board_walks: Cell::new(0),
             counter: 0,
-            peer,
+            peer: ambre_core::PeerId(peer),
             viewport: Viewport::default(),
             viewport_version: 0,
             exported_vv: VersionVector::default(),
@@ -407,10 +407,10 @@ impl ToileState {
     /// written now, before any edit opens an undo group it would split. Every
     /// id minted from here on carries the new PeerID. `false` when the CRDT
     /// engine refused the identity, and then nothing changed.
-    pub fn adopt_session(&mut self, peer: u64, entry: Vec<u8>) -> bool {
+    pub fn adopt_session(&mut self, peer: ambre_core::PeerId, entry: Vec<u8>) -> bool {
         use ambre_core::authorship::{PEERS_MAP, PEERS_ORIGIN, peer_key};
         self.doc.commit();
-        if let Err(e) = self.doc.set_peer_id(peer) {
+        if let Err(e) = self.doc.set_peer_id(peer.0) {
             tracing::error!("Toile: the session identity was refused: {e:?}");
             return false;
         }
@@ -420,7 +420,7 @@ impl ToileState {
             Ok(()) => {
                 self.doc
                     .commit_with(loro::CommitOptions::new().origin(PEERS_ORIGIN));
-                self.doc.oplog_vv().get(&peer).copied()
+                self.doc.oplog_vv().get(&peer.0).copied()
             }
             Err(e) => {
                 tracing::error!("Toile: the registry entry was refused: {e:?}");
@@ -1087,7 +1087,7 @@ impl ToileState {
         // The registry entry alone is no edit: it waits for the first one and
         // travels with it (`AUTHOR-009`).
         if let Some(end) = self.entry_end {
-            if current.get(&self.peer) == Some(&end) {
+            if current.get(&self.peer.0) == Some(&end) {
                 return None;
             }
             self.entry_end = None;
@@ -1139,14 +1139,14 @@ impl ToileState {
     ///   cannot resolve a dependency keeps the edit pending forever rather than
     ///   showing it.
     fn absorb_imported(&mut self) {
-        let ours = self.exported_vv.get(&self.peer).copied();
+        let ours = self.exported_vv.get(&self.peer.0).copied();
         self.exported_vv = self.doc.oplog_vv();
         match ours {
             Some(counter) => {
-                self.exported_vv.insert(self.peer, counter);
+                self.exported_vv.insert(self.peer.0, counter);
             }
             None => {
-                self.exported_vv.remove(&self.peer);
+                self.exported_vv.remove(&self.peer.0);
             }
         }
     }

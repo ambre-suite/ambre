@@ -66,7 +66,7 @@ impl FixtureGen for TrameGen {
         self.version
     }
     fn build(&self) -> Vec<u8> {
-        let mut state = TrameState::with_peer(self.seed);
+        let mut state = TrameState::with_peer(ambre_core::PeerId(self.seed));
         for (row, text) in [(0, "21"), (1, "=A1*2"), (2, "plain")] {
             state.handle_command(TrameCommand::SetCellText {
                 row,
@@ -100,7 +100,7 @@ impl FixtureGen for ToileGen {
         1
     }
     fn build(&self) -> Vec<u8> {
-        let mut state = ToileState::with_peer(self.seed);
+        let mut state = ToileState::with_peer(ambre_core::PeerId(self.seed));
         for i in 0..3 {
             state.handle_command(ToileCommand::CreateElement {
                 kind: ElementKind::Shape(ShapeKind::Rect),
@@ -568,8 +568,8 @@ fn a_solo_document_reports_one_peer_and_a_merged_one_reports_two() {
     // subtract exactly that one, so a solo document still reports one.
     assert_eq!(shape_of(&solo).peers, 1, "one author");
 
-    let mut alice = TrameState::with_peer(1);
-    let mut bob = TrameState::with_peer(2);
+    let mut alice = TrameState::with_peer(ambre_core::PeerId(1));
+    let mut bob = TrameState::with_peer(ambre_core::PeerId(2));
     alice.handle_command(TrameCommand::SetCellText {
         row: 0,
         col: 0,
@@ -610,7 +610,7 @@ fn the_canonical_dump_is_blind_to_the_route_a_document_took() {
     // The property the frozen belt rests on, and the reason it rejects a
     // byte or state comparison. Two documents agreeing on every user-visible
     // value still differ in op history, peer ids and commit timestamps.
-    let build = |peer: u64, reversed: bool| {
+    let build = |peer: ambre_core::PeerId, reversed: bool| {
         let mut state = TrameState::with_peer(peer);
         let mut writes = vec![(0u32, "first"), (1u32, "second")];
         if reversed {
@@ -626,8 +626,8 @@ fn the_canonical_dump_is_blind_to_the_route_a_document_took() {
         DocState::Trame(Box::new(state))
     };
     // Different peers, different write order -- same content.
-    let one = build(11, false);
-    let two = build(22, true);
+    let one = build(ambre_core::PeerId(11), false);
+    let two = build(ambre_core::PeerId(22), true);
     assert_ne!(
         one.export_snapshot(),
         two.export_snapshot(),
@@ -637,7 +637,7 @@ fn the_canonical_dump_is_blind_to_the_route_a_document_took() {
 
     // And a real content difference still shows.
     let three = {
-        let mut state = TrameState::with_peer(11);
+        let mut state = TrameState::with_peer(ambre_core::PeerId(11));
         state.handle_command(TrameCommand::SetCellText {
             row: 0,
             col: 0,
@@ -653,7 +653,7 @@ fn a_toile_dump_names_nodes_by_paint_order_not_by_element_id() {
     // An `ElementId` is `(peer, counter)` -- exactly what two documents reached by
     // different routes are allowed to differ in. Z-order is user-visible, so it
     // makes the canonical index.
-    let build = |peer: u64| {
+    let build = |peer: ambre_core::PeerId| {
         let mut state = ToileState::with_peer(peer);
         for i in 0..2 {
             state.handle_command(ToileCommand::CreateElement {
@@ -667,8 +667,8 @@ fn a_toile_dump_names_nodes_by_paint_order_not_by_element_id() {
         }
         DocState::Toile(Box::new(state))
     };
-    let one = build(101);
-    let two = build(202);
+    let one = build(ambre_core::PeerId(101));
+    let two = build(ambre_core::PeerId(202));
     assert_ne!(one.export_snapshot(), two.export_snapshot());
     let dump = canonical_dump(&one);
     assert_eq!(dump, canonical_dump(&two));

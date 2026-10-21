@@ -128,13 +128,14 @@ entry   = Ed25519 signature over b"ambre-peer-entry-v1" || document || peer_id |
 A PeerID of `u64::MAX` is moved to the value below it, because Loro reserves that one.
 
 ```rust
+pub struct PeerId(pub u64);
 pub struct SessionNonce(pub [u8; 16]);
 pub struct PeerEntry {
     pub user: UserId,
     pub nonce: SessionNonce,
     pub signature: [u8; 64],   // by `user`, over the document, the PeerID and the nonce
 }
-pub fn derive_peer_id(signing_pub: &[u8; 32], nonce: &SessionNonce) -> u64;
+pub fn derive_peer_id(signing_pub: &[u8; 32], nonce: &SessionNonce) -> PeerId;
 ```
 
 **Sync derives, Logic compares.** The Sync worker holds the signing key and the directory, so it

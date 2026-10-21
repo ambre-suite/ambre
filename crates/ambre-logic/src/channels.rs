@@ -329,7 +329,7 @@ impl LogicState {
     pub(crate) fn adopt_murmure_session(
         &mut self,
         document_id: DocumentId,
-        peer: u64,
+        peer: ambre_core::PeerId,
         entry: Vec<u8>,
     ) {
         let space = ambre_bus::SpaceId::from_document(document_id);
@@ -4864,7 +4864,7 @@ mod tests {
             .channels
             .get_mut(&channel_id)
             .expect("open")
-            .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+            .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
             .expect("adopt");
         drain(&sync);
         drain(&ui);
@@ -5889,7 +5889,7 @@ mod tests {
         };
         let peer = crate::test_peer();
         m.alice
-            .adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+            .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
             .expect("adopt");
         let named = m
             .alice
@@ -5942,7 +5942,7 @@ mod tests {
         };
         let peer = crate::test_peer();
         channel
-            .adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+            .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
             .expect("adopt");
         channel.thread_linked(closed, root, thread).expect("link");
         let probe = channel.snapshot(thread).expect("thread");
@@ -6083,7 +6083,7 @@ mod tests {
         };
         let peer = crate::test_peer();
         m.alice
-            .adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+            .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
             .expect("adopt");
         let named = m
             .alice

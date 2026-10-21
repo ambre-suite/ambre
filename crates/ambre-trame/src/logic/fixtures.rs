@@ -186,7 +186,7 @@ impl TrameState {
     /// peer, so a restored solo document still reports one author.
     fn fixture_peer_count(&self) -> u8 {
         fixture_peer_count(
-            self.doc.oplog_vv().keys().copied(),
+            self.doc.oplog_vv().keys().copied().map(ambre_core::PeerId),
             super::scaffold_identity(),
         )
     }
@@ -268,7 +268,7 @@ impl FixtureGen for TrameFixture {
 
     fn build(&self) -> Vec<u8> {
         let seed = self.seed();
-        let mut state = TrameState::with_peer(seed);
+        let mut state = TrameState::with_peer(ambre_core::PeerId(seed));
         match self {
             Self::GridLiterals => build_grid_literals(&mut state),
             Self::FormulaDag => build_formula_dag(&mut state),
@@ -397,7 +397,7 @@ fn build_multi_sheet(state: &mut TrameState) {
 /// That is what merging two documents born apart looks like, and the corpus wants
 /// it on record.
 fn build_two_peer_merge(state: &mut TrameState, seed: u64) {
-    let mut other = TrameState::with_peer(seed ^ 0xFFFF_FFFF);
+    let mut other = TrameState::with_peer(ambre_core::PeerId(seed ^ 0xFFFF_FFFF));
     state.handle_command(TrameCommand::SetCellsBatch {
         cells: (0..10)
             .map(|row| (row, 0, format!("local {row}")))
@@ -514,7 +514,7 @@ impl FixtureGen for TrameBenchFixture {
 
     fn build(&self) -> Vec<u8> {
         let seed = self.seed();
-        let mut state = TrameState::with_peer(seed);
+        let mut state = TrameState::with_peer(ambre_core::PeerId(seed));
         match self {
             Self::DenseGrid100k => build_literal_grid(&mut state, 12_500, 8),
             Self::FormulaGrid100k => build_formula_grid(&mut state),

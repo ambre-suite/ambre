@@ -91,7 +91,7 @@ fn amended() -> Amended {
         .expect("close");
     let peer = next_peer();
     alice
-        .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+        .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt");
     assert_eq!(alice.lease_to_ask(NOW), Some(segment));
     alice.lease_granted(
@@ -113,7 +113,7 @@ fn amended() -> Amended {
     };
     let peer = next_peer();
     let first = alice
-        .adopt_session(amendments, peer, peer.to_le_bytes().to_vec())
+        .adopt_session(amendments, peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt")
         .expect("the header travels");
     let meta = alice

@@ -68,7 +68,7 @@ mod tests {
     /// before a caret exists.
     #[test]
     fn a_page_announces_the_block_at_the_caret() {
-        let mut logic = ProseState::with_peer(1).expect("a document is built");
+        let mut logic = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
         logic.load_faces(&crate::layout::fonts::shipped_faces());
         let title = append(&mut logic, BlockInit::Heading { level: 1 }, "Introduction");
         let body = append(&mut logic, BlockInit::Paragraph, "");

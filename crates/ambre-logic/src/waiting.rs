@@ -76,11 +76,11 @@ mod tests {
     use loro::{ExportMode, VersionVector};
 
     /// A document under `peer` holding `text` on top of `base`'s history.
-    fn on_top(base: &LoroDoc, peer: u64, text: &str) -> (LoroDoc, Vec<u8>) {
+    fn on_top(base: &LoroDoc, peer: ambre_core::PeerId, text: &str) -> (LoroDoc, Vec<u8>) {
         let doc = LoroDoc::new();
         doc.import(&base.export(ExportMode::all_updates()).expect("export"))
             .expect("import");
-        doc.set_peer_id(peer).expect("peer");
+        doc.set_peer_id(peer.0).expect("peer");
         let from: VersionVector = doc.oplog_vv();
         doc.get_text("t").insert(0, text).expect("insert");
         doc.commit();
@@ -88,9 +88,9 @@ mod tests {
         (doc, delta)
     }
 
-    fn scaffold(peer: u64) -> LoroDoc {
+    fn scaffold(peer: ambre_core::PeerId) -> LoroDoc {
         let doc = LoroDoc::new();
-        doc.set_peer_id(peer).expect("peer");
+        doc.set_peer_id(peer.0).expect("peer");
         doc.get_map("meta").insert("v", 1).expect("insert");
         doc.commit();
         doc
@@ -98,8 +98,8 @@ mod tests {
 
     #[test]
     fn a_delta_on_a_scaffold_the_reader_never_wrote_waits_on_it() {
-        let (_, delta) = on_top(&scaffold(7), 1, "a");
-        let reader = scaffold(8);
+        let (_, delta) = on_top(&scaffold(ambre_core::PeerId(7)), ambre_core::PeerId(1), "a");
+        let reader = scaffold(ambre_core::PeerId(8));
         reader.import(&delta).expect("import");
         let mut waiting = Waiting::default();
         waiting.note(ambre_core::Seq(1), &delta, &reader);
@@ -116,8 +116,8 @@ mod tests {
 
     #[test]
     fn a_delta_on_the_readers_own_scaffold_waits_on_nothing() {
-        let (_, delta) = on_top(&scaffold(7), 1, "a");
-        let reader = scaffold(7);
+        let (_, delta) = on_top(&scaffold(ambre_core::PeerId(7)), ambre_core::PeerId(1), "a");
+        let reader = scaffold(ambre_core::PeerId(7));
         reader.import(&delta).expect("import");
         let mut waiting = Waiting::default();
         waiting.note(ambre_core::Seq(1), &delta, &reader);
@@ -126,10 +126,10 @@ mod tests {
 
     #[test]
     fn a_delta_waiting_on_one_not_yet_held_is_not_reported() {
-        let base = scaffold(7);
-        let (first_doc, first) = on_top(&base, 1, "a");
-        let (_, second) = on_top(&first_doc, 2, "b");
-        let reader = scaffold(7);
+        let base = scaffold(ambre_core::PeerId(7));
+        let (first_doc, first) = on_top(&base, ambre_core::PeerId(1), "a");
+        let (_, second) = on_top(&first_doc, ambre_core::PeerId(2), "b");
+        let reader = scaffold(ambre_core::PeerId(7));
         reader.import(&second).expect("import");
         let mut waiting = Waiting::default();
         waiting.note(ambre_core::Seq(2), &second, &reader);

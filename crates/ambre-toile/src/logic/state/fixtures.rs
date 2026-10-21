@@ -61,7 +61,7 @@ impl ToileState {
         FixtureShape {
             // The loader's own pinned peer is not an author of the document.
             peers: fixture_peer_count(
-                self.doc.oplog_vv().keys().copied(),
+                self.doc.oplog_vv().keys().copied().map(ambre_core::PeerId),
                 super::scaffold_identity(),
             ),
             body: ShapeBody::Toile {
@@ -267,7 +267,7 @@ impl FixtureGen for ToileFixture {
 
     fn build(&self) -> Vec<u8> {
         let seed = self.seed();
-        let mut state = ToileState::with_peer(seed);
+        let mut state = ToileState::with_peer(ambre_core::PeerId(seed));
         match self {
             Self::ShapesAndFrame => build_shapes_and_frame(&mut state),
             Self::ConnectorsAndGroups => build_connectors_and_groups(&mut state),
@@ -489,7 +489,7 @@ impl FixtureGen for ToileBenchFixture {
 
     fn build(&self) -> Vec<u8> {
         let seed = self.seed();
-        let mut state = ToileState::with_peer(seed);
+        let mut state = ToileState::with_peer(ambre_core::PeerId(seed));
         match self {
             // 100 tiles of 500 on a 4 000-unit pitch: far wider than one
             // viewport, so a cull that returned everything shows up as a figure.

@@ -61,7 +61,7 @@ pub mod uuid;
 pub mod version;
 
 // Re-export the main types for convenient use.
-pub use authorship::{PeerEntry, SessionNonce};
+pub use authorship::{PeerEntry, PeerId, SessionNonce};
 pub use channel_kind::ChannelDocumentKind;
 pub use credential::{OidcCode, OidcState, PresignedUrl};
 pub use doc_type::DocType;

@@ -18,12 +18,15 @@ pub(super) enum IdSource {
     /// The pinned peer and the next counter, packed into a version 8 id.
     /// Interior mutability, because the writers that mint read the state
     /// through `&self`.
-    Seeded { peer: u64, next: Cell<u64> },
+    Seeded {
+        peer: ambre_core::PeerId,
+        next: Cell<u64>,
+    },
 }
 
 impl IdSource {
     /// The sequence for a pinned peer, starting at zero.
-    pub(super) fn seeded(peer: u64) -> Self {
+    pub(super) fn seeded(peer: ambre_core::PeerId) -> Self {
         Self::Seeded {
             peer,
             next: Cell::new(0),
@@ -48,10 +51,10 @@ impl IdSource {
 /// `peer` in the high half and `counter` in the low half, with the version
 /// nibble set to 8 and the variant bits to RFC 9562. The six bits those take
 /// cost nothing here: a pinned peer builds one document, alone.
-fn pack(peer: u64, counter: u64) -> u128 {
+fn pack(peer: ambre_core::PeerId, counter: u64) -> u128 {
     const VERSION: u128 = 0xF << 76;
     const VARIANT: u128 = 0b11 << 62;
-    let raw = (u128::from(peer) << 64) | u128::from(counter);
+    let raw = (u128::from(peer.0) << 64) | u128::from(counter);
     (raw & !VERSION & !VARIANT) | (0x8 << 76) | (0b10 << 62)
 }
 
@@ -63,8 +66,8 @@ mod tests {
     /// inside it.
     #[test]
     fn a_seeded_source_repeats_its_sequence_and_never_an_id() {
-        let first = IdSource::seeded(0x5EED);
-        let second = IdSource::seeded(0x5EED);
+        let first = IdSource::seeded(ambre_core::PeerId(0x5EED));
+        let second = IdSource::seeded(ambre_core::PeerId(0x5EED));
         let a: Vec<Uuid> = (0..4).map(|_| first.mint()).collect();
         let b: Vec<Uuid> = (0..4).map(|_| second.mint()).collect();
         assert_eq!(a, b);
@@ -76,7 +79,7 @@ mod tests {
     /// The packed id reads as a version 8 id of the RFC variant.
     #[test]
     fn a_seeded_id_carries_version_8() {
-        let bytes = pack(u64::MAX, u64::MAX).to_be_bytes();
+        let bytes = pack(ambre_core::PeerId(u64::MAX), u64::MAX).to_be_bytes();
         assert_eq!(bytes[6] >> 4, 0x8);
         assert_eq!(bytes[8] >> 6, 0b10);
     }

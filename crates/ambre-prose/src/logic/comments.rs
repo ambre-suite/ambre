@@ -359,7 +359,7 @@ mod tests {
     }
 
     /// A one-paragraph document holding `text`, written by `user`.
-    fn document(peer: u64, user: UserId, text: &str) -> (ProseState, BlockId) {
+    fn document(peer: ambre_core::PeerId, user: UserId, text: &str) -> (ProseState, BlockId) {
         let mut state = ProseState::with_peer(peer).expect("a document");
         state.set_user_id(user);
         state.set_display_name(format!("user {peer}"));
@@ -373,7 +373,7 @@ mod tests {
     }
 
     /// A second peer holding `from`'s document, signed in as `user`.
-    fn join(from: &ProseState, peer: u64, user: UserId) -> ProseState {
+    fn join(from: &ProseState, peer: ambre_core::PeerId, user: UserId) -> ProseState {
         let mut state = ProseState::with_peer(peer).expect("a document");
         state.set_user_id(user);
         state
@@ -443,7 +443,7 @@ mod tests {
     /// character outside it (`PROSE-FEAT-188`).
     #[test]
     fn a_thread_marks_its_range_and_no_character_outside_it() {
-        let (mut state, block) = document(1, ALICE, "Hello brave world");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello brave world");
         let id = open(&mut state, block, (6, 11), "Why brave?");
         let runs: Vec<(u32, u32)> = comment::runs(&state.doc, &comment::text_blocks(&state.doc))
             .into_iter()
@@ -462,7 +462,7 @@ mod tests {
     /// (`PROSE-FEAT-189`).
     #[test]
     fn opening_a_thread_touches_neither_the_text_nor_another_thread() {
-        let (mut state, block) = document(1, ALICE, "Hello brave world");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello brave world");
         let first = open(&mut state, block, (0, 11), "First.");
         let before = thread(&state, first);
         open(&mut state, block, (6, 17), "Second.");
@@ -474,7 +474,7 @@ mod tests {
     /// user are refused, and write nothing (`PROSE-FEAT-295`).
     #[test]
     fn a_thread_is_refused_in_a_band_on_an_empty_range_or_with_no_user() {
-        let (mut state, block) = document(1, ALICE, "Hello");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let add = |state: &mut ProseState, block, range| {
             refusal(&state.handle_command(ProseCommand::AddComment {
                 block_id: block,
@@ -496,7 +496,7 @@ mod tests {
             add(&mut state, header, (0, 2)),
             Some(ProseRefusal::CommentInBand)
         );
-        let mut anonymous = ProseState::with_peer(2).expect("a document");
+        let mut anonymous = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document");
         let root = anonymous.root_blocks()[0];
         anonymous.handle_command(ProseCommand::InsertText {
             block_id: root,
@@ -514,7 +514,7 @@ mod tests {
     /// none (`PROSE-FEAT-077`).
     #[test]
     fn the_author_is_stamped_from_the_session() {
-        let (mut state, block) = document(1, ALICE, "Hello");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "Mine.");
         let head = thread(&state, id).replies.remove(0);
         assert_eq!(head.user_id, ALICE);
@@ -526,7 +526,7 @@ mod tests {
     /// (`PROSE-FEAT-190`, `PROSE-FEAT-186`).
     #[test]
     fn a_reply_lands_last_whatever_its_stamp() {
-        let (mut state, block) = document(1, ALICE, "Hello");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "One.");
         reply(&mut state, id, "Two.", 5);
         reply(&mut state, id, "Three.", 1);
@@ -536,7 +536,7 @@ mod tests {
     /// A reply to a closed thread reopens it (`PROSE-FEAT-079`).
     #[test]
     fn a_reply_reopens_a_resolved_thread() {
-        let (mut state, block) = document(1, ALICE, "Hello");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "One.");
         state.handle_command(ProseCommand::ResolveComment { comment_id: id });
         assert!(thread(&state, id).resolved);
@@ -548,7 +548,7 @@ mod tests {
     /// thread (`PROSE-FEAT-191`).
     #[test]
     fn a_reply_touches_nothing_but_its_own_list() {
-        let (mut state, block) = document(1, ALICE, "Hello world");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello world");
         let id = open(&mut state, block, (0, 5), "One.");
         let other = open(&mut state, block, (6, 11), "Other.");
         let before = thread(&state, other);
@@ -563,7 +563,7 @@ mod tests {
     /// `PROSE-FEAT-194`).
     #[test]
     fn resolving_and_reopening_flip_the_flag_alone() {
-        let (mut state, block) = document(1, ALICE, "Hello world");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello world");
         let id = open(&mut state, block, (0, 5), "One.");
         let other = open(&mut state, block, (3, 11), "Other.");
         let before = thread(&state, other);
@@ -581,9 +581,9 @@ mod tests {
     /// it (`PROSE-FEAT-187`).
     #[test]
     fn another_member_may_close_reopen_and_delete_a_thread() {
-        let (mut alice, block) = document(1, ALICE, "Hello");
+        let (mut alice, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut alice, block, (0, 5), "Mine.");
-        let mut bob = join(&alice, 2, BOB);
+        let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
         for command in [
             ProseCommand::ResolveComment { comment_id: id },
             ProseCommand::ReopenComment { comment_id: id },
@@ -599,7 +599,7 @@ mod tests {
     /// `PROSE-FEAT-080`, `PROSE-FEAT-196`).
     #[test]
     fn a_reply_is_edited_in_place_by_its_author_alone() {
-        let (mut alice, block) = document(1, ALICE, "Hello");
+        let (mut alice, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut alice, block, (0, 5), "One.");
         reply(&mut alice, id, "Two.", 11);
         alice.handle_command(ProseCommand::ResolveComment { comment_id: id });
@@ -609,7 +609,7 @@ mod tests {
             reply_id: second,
             new_text: text.to_owned(),
         };
-        let mut bob = join(&alice, 2, BOB);
+        let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
         assert_eq!(
             refusal(&bob.handle_command(edit("Forged."))),
             Some(ProseRefusal::NotYourReply)
@@ -629,7 +629,7 @@ mod tests {
     /// `PROSE-FEAT-198`, `PROSE-FEAT-199`).
     #[test]
     fn a_reply_is_deleted_by_its_author_alone() {
-        let (mut alice, block) = document(1, ALICE, "Hello");
+        let (mut alice, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut alice, block, (0, 5), "One.");
         for (text, at) in [("Two.", 11), ("Three.", 12)] {
             reply(&mut alice, id, text, at);
@@ -640,7 +640,7 @@ mod tests {
             comment_id: id,
             reply_id: second,
         };
-        let mut bob = join(&alice, 2, BOB);
+        let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
         assert_eq!(
             refusal(&bob.handle_command(delete.clone())),
             Some(ProseRefusal::NotYourReply)
@@ -655,7 +655,7 @@ mod tests {
     /// Deleting the opening reply deletes the thread (`PROSE-FEAT-081`).
     #[test]
     fn deleting_the_head_deletes_the_thread() {
-        let (mut state, block) = document(1, ALICE, "Hello");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "One.");
         reply(&mut state, id, "Two.", 11);
         let head = thread(&state, id).replies[0].reply_id;
@@ -672,7 +672,7 @@ mod tests {
     /// (`PROSE-FEAT-200`, `PROSE-FEAT-279`, `PROSE-FEAT-201`).
     #[test]
     fn deleting_a_thread_leaves_the_text_and_the_thread_beside_it() {
-        let (mut state, block) = document(1, ALICE, "Hello brave world");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello brave world");
         let gone = open(&mut state, block, (0, 11), "Gone.");
         let kept = open(&mut state, block, (6, 17), "Kept.");
         state.handle_command(ProseCommand::DeleteComment { comment_id: gone });
@@ -692,7 +692,7 @@ mod tests {
     /// `PROSE-FEAT-185`).
     #[test]
     fn the_cache_follows_the_mark_and_never_overrules_it() {
-        let (mut state, block) = document(1, ALICE, "Hello world");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello world");
         let id = open(&mut state, block, (6, 11), "World.");
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
@@ -718,7 +718,7 @@ mod tests {
     /// `PROSE-FEAT-203`, `PROSE-FEAT-204`).
     #[test]
     fn deleting_the_range_orphans_the_thread_where_it_last_was() {
-        let (mut state, block) = document(1, ALICE, "Hello brave world");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello brave world");
         let id = open(&mut state, block, (6, 11), "Brave?");
         let other = open(&mut state, block, (12, 17), "World.");
         state.handle_command(ProseCommand::ResolveComment { comment_id: id });
@@ -740,9 +740,9 @@ mod tests {
     /// (`PROSE-FEAT-001`).
     #[test]
     fn a_thread_keeps_its_identity_through_edits_and_peers() {
-        let (mut alice, block) = document(1, ALICE, "Hello");
+        let (mut alice, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut alice, block, (0, 5), "One.");
-        let mut bob = join(&alice, 2, BOB);
+        let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
         send(
             &mut alice,
             &mut bob,
@@ -773,8 +773,8 @@ mod tests {
     /// (`PROSE-FEAT-078`).
     #[test]
     fn two_threads_over_shared_characters_keep_their_own_spans() {
-        let (mut alice, block) = document(1, ALICE, "Hello brave world");
-        let mut bob = join(&alice, 2, BOB);
+        let (mut alice, block) = document(ambre_core::PeerId(1), ALICE, "Hello brave world");
+        let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
         let mine = alice.handle_command(ProseCommand::AddComment {
             block_id: block,
             range: (0, 11),
@@ -818,7 +818,7 @@ mod tests {
     /// (`PROSE-FEAT-296`).
     #[test]
     fn an_undo_never_retracts_a_comment() {
-        let (mut state, block) = document(1, ALICE, "Hello");
+        let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "One.");
         reply(&mut state, id, "Two.", 11);
         state.handle_command(ProseCommand::Undo);
@@ -831,10 +831,10 @@ mod tests {
     /// alike (`PROSE-FEAT-297`).
     #[test]
     fn a_reply_racing_the_deletion_of_its_thread_is_lost() {
-        let (mut alice, block) = document(1, ALICE, "Hello");
+        let (mut alice, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut alice, block, (0, 5), "One.");
         let head = thread(&alice, id).replies[0].reply_id;
-        let mut bob = join(&alice, 2, BOB);
+        let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
         let deleted = alice.handle_command(ProseCommand::DeleteReply {
             comment_id: id,
             reply_id: head,
@@ -854,9 +854,9 @@ mod tests {
         fn a_thread_stays_on_its_text_under_concurrent_edits(
             edits in proptest::collection::vec((any::<bool>(), any::<bool>(), 0_u32..40, 1_u32..4), 1..12)
         ) {
-            let (mut alice, block) = document(1, ALICE, "aaaa bbbb cccc");
+            let (mut alice, block) = document(ambre_core::PeerId(1), ALICE, "aaaa bbbb cccc");
             let id = open(&mut alice, block, (5, 9), "On b.");
-            let mut bob = join(&alice, 2, BOB);
+            let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
             let mut pending: Vec<(bool, Vec<u8>)> = Vec::new();
             for (by_alice, insert, at, len) in edits {
                 let state = if by_alice { &mut alice } else { &mut bob };

@@ -51,7 +51,7 @@ pub type TargetId = ElementId;
 
 impl ElementId {
     /// Mint from the document `PeerID` and a per-session monotonic counter.
-    pub fn mint(peer: u64, counter: u32) -> Self {
+    pub fn mint(peer: ambre_core::PeerId, counter: u32) -> Self {
         Self(format!("{peer:016x}_{counter:08x}"))
     }
     pub fn as_str(&self) -> &str {
@@ -61,7 +61,7 @@ impl ElementId {
 
 impl ConnectorId {
     /// Mint from the document `PeerID` and a per-session monotonic counter.
-    pub fn mint(peer: u64, counter: u32) -> Self {
+    pub fn mint(peer: ambre_core::PeerId, counter: u32) -> Self {
         Self(format!("{peer:016x}_{counter:08x}"))
     }
     pub fn as_str(&self) -> &str {

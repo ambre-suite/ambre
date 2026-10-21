@@ -276,7 +276,7 @@ fn a_message_carries_the_author_who_signed_it_and_no_other() {
     );
     // Nor does an operation under another PeerID than the signer's.
     let elsewhere = Signer {
-        peer: alice.signer().peer + 1,
+        peer: ambre_core::PeerId(alice.signer().peer.0 + 1),
         ..alice.signer()
     };
     assert_eq!(
@@ -410,8 +410,8 @@ fn a_later_session_of_the_author_edits_its_own_message() {
     // and the messages the author holds.
     let peer = alice.signer().peer;
     assert_eq!(
-        carol.doc().oplog_vv().get(&peer),
-        alice.doc().oplog_vv().get(&peer)
+        carol.doc().oplog_vv().get(&peer.0),
+        alice.doc().oplog_vv().get(&peer.0)
     );
     assert_eq!(
         carol.doc().get_list(MESSAGES).get_deep_value(),
@@ -571,7 +571,7 @@ fn a_meta_delta_under_another_peer_is_refused() {
         user: Some(alice.user),
     };
     let elsewhere = Signer {
-        peer: by.peer + 1,
+        peer: ambre_core::PeerId(by.peer.0 + 1),
         ..by
     };
     assert_eq!(

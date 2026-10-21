@@ -30,7 +30,7 @@ use loro::{LoroMovableList, LoroValue};
 /// value of an element in a `rows_/cols_` `LoroMovableList`. `Copy + Eq + Hash`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Uid {
-    pub peer: u64,
+    pub peer: ambre_core::PeerId,
     pub counter: u32,
 }
 
@@ -46,7 +46,7 @@ impl Uid {
     pub fn parse(s: &str) -> Option<Self> {
         let (peer, ctr) = s.split_once('_')?;
         Some(Uid {
-            peer: u64::from_str_radix(peer, 16).ok()?,
+            peer: ambre_core::PeerId(u64::from_str_radix(peer, 16).ok()?),
             counter: u32::from_str_radix(ctr, 16).ok()?,
         })
     }
@@ -262,7 +262,7 @@ mod tests {
         for i in 0..n_rows {
             rows.push(
                 Uid {
-                    peer: 1,
+                    peer: ambre_core::PeerId(1),
                     counter: i as u32,
                 }
                 .to_key_part()
@@ -273,7 +273,7 @@ mod tests {
         for i in 0..n_cols {
             cols.push(
                 Uid {
-                    peer: 2,
+                    peer: ambre_core::PeerId(2),
                     counter: i as u32,
                 }
                 .to_key_part()
@@ -340,7 +340,7 @@ mod tests {
 
         // Insert a synthetic id at position 0: the old row 0 becomes row 1.
         let new_id = Uid {
-            peer: 999,
+            peer: ambre_core::PeerId(999),
             counter: 7,
         };
         idx.apply_insert_row(0, new_id);
@@ -383,11 +383,11 @@ mod tests {
     #[test]
     fn cell_key_is_fixed_length_and_stable() {
         let r = Uid {
-            peer: 0x1234_5678_9abc_def0,
+            peer: ambre_core::PeerId(0x1234_5678_9abc_def0),
             counter: 0xffff_ffff,
         };
         let c = Uid {
-            peer: 1,
+            peer: ambre_core::PeerId(1),
             counter: 2,
         };
         let key = cell_key(r, c);
@@ -440,7 +440,7 @@ mod tests {
                 let rows = doc.get_movable_list("rows");
                 let cols = doc.get_movable_list("cols");
                 for (n, op) in ops.into_iter().enumerate() {
-                    let id = Uid { peer: 9, counter: n as u32 };
+                    let id = Uid { peer: ambre_core::PeerId(9), counter: n as u32 };
                     let key = id.to_key_part();
                     let (nr, nc) = (idx.row_len(), idx.col_len());
                     match op {

@@ -168,7 +168,7 @@ pub(crate) fn check_snapshot(
         }
         if theirs_end > ours {
             match registry_entry(&theirs, peer) {
-                Some(entry) => extras.push((peer, entry)),
+                Some(entry) => extras.push((ambre_core::PeerId(peer), entry)),
                 None => return Outcome::Unchecked,
             }
         }
@@ -178,7 +178,10 @@ pub(crate) fn check_snapshot(
 
 /// The registry entry `doc` holds for `peer` (`AUTHOR-019`).
 fn registry_entry(doc: &LoroDoc, peer: PeerID) -> Option<Vec<u8>> {
-    match doc.get_map(PEERS_MAP).get(&peer_key(peer)) {
+    match doc
+        .get_map(PEERS_MAP)
+        .get(&peer_key(ambre_core::PeerId(peer)))
+    {
         Some(ValueOrContainer::Value(LoroValue::Binary(bytes))) => Some(bytes.to_vec()),
         _ => None,
     }
@@ -415,14 +418,14 @@ mod tests {
         alice.get_text("t").insert(0, "A").expect("insert");
         alice
             .get_map(PEERS_MAP)
-            .insert(&peer_key(1), vec![7_u8; 4])
+            .insert(&peer_key(ambre_core::PeerId(1)), vec![7_u8; 4])
             .expect("entry");
         alice.commit();
         let snapshot = alice.export(ExportMode::Snapshot).expect("snapshot");
         assert_eq!(
             check_snapshot(&bob, &ledger, &snapshot, covered, Purpose::Confirm),
             Outcome::Match {
-                extras: vec![(1, vec![7_u8; 4])]
+                extras: vec![(ambre_core::PeerId(1), vec![7_u8; 4])]
             }
         );
     }

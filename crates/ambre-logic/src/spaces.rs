@@ -132,7 +132,7 @@ impl LogicState {
     pub(crate) fn adopt_space_session(
         &mut self,
         document_id: DocumentId,
-        peer: u64,
+        peer: ambre_core::PeerId,
         entry: Vec<u8>,
     ) -> Option<Result<Option<Vec<u8>>, ambre_murmure::MurmureError>> {
         let space = self.spaces.get_mut(&SpaceId::from_document(document_id))?;
@@ -1006,7 +1006,7 @@ mod tests {
     fn identified_space(mut space: SpaceState) -> SpaceState {
         let peer = crate::test_peer();
         space
-            .adopt_session(peer, peer.to_le_bytes().to_vec())
+            .adopt_session(peer, peer.0.to_le_bytes().to_vec())
             .expect("adopt");
         space
     }

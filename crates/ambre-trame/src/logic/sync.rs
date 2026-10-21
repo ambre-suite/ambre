@@ -12,14 +12,14 @@ use super::*;
 /// Write the registry entry of `peer` under its own origin, which the undo
 /// manager excludes (`AUTHOR-009`). Answers the PeerID's counter past the
 /// entry, or `None` when the engine refused the write.
-fn write_entry(doc: &LoroDoc, peer: u64, entry: Vec<u8>) -> Option<i32> {
+fn write_entry(doc: &LoroDoc, peer: ambre_core::PeerId, entry: Vec<u8>) -> Option<i32> {
     use ambre_core::authorship::{PEERS_MAP, PEERS_ORIGIN, peer_key};
     if let Err(e) = doc.get_map(PEERS_MAP).insert(&peer_key(peer), entry) {
         tracing::error!("[Logic] the registry entry was refused: {e:?}");
         return None;
     }
     doc.commit_with(loro::CommitOptions::new().origin(PEERS_ORIGIN));
-    doc.oplog_vv().get(&peer).copied()
+    doc.oplog_vv().get(&peer.0).copied()
 }
 
 impl TrameState {
@@ -68,9 +68,9 @@ impl TrameState {
     /// operations are not this session's to send (`AUTHOR-008`). The entry is
     /// written now, before any edit opens an undo group it would split. `false`
     /// when the CRDT engine refused the identity, and then nothing changed.
-    pub fn adopt_session(&mut self, peer: u64, entry: Vec<u8>) -> bool {
+    pub fn adopt_session(&mut self, peer: ambre_core::PeerId, entry: Vec<u8>) -> bool {
         self.doc.commit();
-        if let Err(e) = self.doc.set_peer_id(peer) {
+        if let Err(e) = self.doc.set_peer_id(peer.0) {
             tracing::error!("[Logic] the session identity was refused: {e:?}");
             return false;
         }

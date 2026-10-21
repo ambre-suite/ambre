@@ -976,7 +976,7 @@ mod tests {
     #[test]
     fn the_draft_echo_never_reaches_the_wire() {
         let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(4);
-        let block = BlockId::new(1, 0);
+        let block = BlockId::new(ambre_core::PeerId(1), 0);
         let mut state = ProseUiState::default();
         state.draft.push_str(1, "hel", &block, 0);
         send_command(
@@ -1003,7 +1003,7 @@ mod tests {
 
     #[test]
     fn a_confirming_change_clears_the_draft_it_covers() {
-        let block = BlockId::new(1, 0);
+        let block = BlockId::new(ambre_core::PeerId(1), 0);
         let mut state = ProseUiState::default();
         state.draft.push_str(1, "hel", &block, 0);
         // A change alone keeps the draft: the text is not laid out yet.
@@ -1030,7 +1030,7 @@ mod tests {
 
     #[test]
     fn an_event_carrying_no_change_leaves_the_draft_alone() {
-        let block = BlockId::new(1, 0);
+        let block = BlockId::new(ambre_core::PeerId(1), 0);
         let mut state = ProseUiState::default();
         state.draft.push_str(1, "hel", &block, 0);
         state.apply_event(&ProseEvent::MediaArrived {
@@ -1042,8 +1042,8 @@ mod tests {
 
     #[test]
     fn a_split_leaves_the_caret_at_the_start_of_the_new_paragraph() {
-        let source = BlockId::new(1, 0);
-        let new_block = BlockId::new(1, 4);
+        let source = BlockId::new(ambre_core::PeerId(1), 0);
+        let new_block = BlockId::new(ambre_core::PeerId(1), 4);
         let mut state = ProseUiState::default();
         state.apply_event(&ProseEvent::BlockSplit { source, new_block });
         let cursor = state.cursor.expect("the caret moved");
@@ -1053,8 +1053,8 @@ mod tests {
 
     #[test]
     fn the_draft_lays_its_entries_over_the_laid_text_in_order() {
-        let block = BlockId::new(1, 0);
-        let other = BlockId::new(1, 1);
+        let block = BlockId::new(ambre_core::PeerId(1), 0);
+        let other = BlockId::new(ambre_core::PeerId(1), 1);
         let mut draft = DraftBuffer::default();
         draft.push_str(1, "he", &block, 0);
         draft.push_str(2, "llo", &block, 2);
@@ -1098,7 +1098,7 @@ mod tests {
     fn a_closed_search_leaves_nothing_highlighted() {
         let mut ui = ProseUiState::default();
         let hit = FindMatch {
-            block_id: BlockId::new(1, 0),
+            block_id: BlockId::new(ambre_core::PeerId(1), 0),
             range: (0, 3),
         };
         ui.apply_event(&ProseEvent::FindResults {

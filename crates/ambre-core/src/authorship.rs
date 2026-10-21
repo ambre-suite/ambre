@@ -26,6 +26,28 @@ pub const PEERS_MAP: &str = "peers";
 /// stack: the entry is no gesture of the user.
 pub const PEERS_ORIGIN: &str = "ambre-peers";
 
+/// The Loro PeerID of one writing session (`AUTHOR-001`). A distinct type,
+/// so an op counter, a sequence number or a lamport stamp never takes its
+/// place. `#[serde(transparent)]`, so it reads and writes the bare integer.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct PeerId(pub u64);
+
+impl std::fmt::Display for PeerId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// The spelling an element id and a registry key carry.
+impl std::fmt::LowerHex for PeerId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::LowerHex::fmt(&self.0, f)
+    }
+}
+
 /// 128 random bits drawn when a client opens a document (`AUTHOR-002`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct SessionNonce(pub [u8; SESSION_NONCE_LEN]);
@@ -72,7 +94,7 @@ impl PeerEntry {
 
 /// The registry key of a PeerID: sixteen lowercase hex digits.
 #[must_use]
-pub fn peer_key(peer: u64) -> String {
+pub fn peer_key(peer: PeerId) -> String {
     format!("{peer:016x}")
 }
 
@@ -91,6 +113,6 @@ mod tests {
         assert_eq!(bytes.len(), PEER_ENTRY_LEN);
         assert_eq!(PeerEntry::from_bytes(&bytes), Some(entry));
         assert_eq!(PeerEntry::from_bytes(&bytes[1..]), None);
-        assert_eq!(peer_key(0xab), "00000000000000ab");
+        assert_eq!(peer_key(PeerId(0xab)), "00000000000000ab");
     }
 }

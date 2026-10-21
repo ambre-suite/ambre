@@ -101,7 +101,7 @@ pub enum LogicCommand {
         /// The earlier sessions of this user on the document: each PeerID with
         /// the nonce it derives from, so what one left unsent travels
         /// (`AUTHOR-028`).
-        sessions: Vec<(u64, SessionNonce)>,
+        sessions: Vec<(ambre_core::PeerId, SessionNonce)>,
     },
 
     /// The browser refused to store a change of `document_id` that the relay

@@ -6,7 +6,9 @@
 //! peer_id = first 64 bits of BLAKE2b(b"ambre-peer-v1" || signing_pubkey || nonce)
 //! ```
 
-use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN, SessionNonce};
+use ambre_core::authorship::{
+    ENTRY_SIGNATURE_LEN, PeerEntry, PeerId, SESSION_NONCE_LEN, SessionNonce,
+};
 use ambre_core::{DocumentId, UserId};
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
@@ -30,7 +32,7 @@ pub fn draw_nonce() -> SessionNonce {
 /// The CRDT engine reserves `u64::MAX`, so a hash that lands on it takes the
 /// value below. Both ends derive alike, so the check still holds.
 #[must_use]
-pub fn derive_peer_id(signing_pub: &[u8; 32], nonce: &SessionNonce) -> u64 {
+pub fn derive_peer_id(signing_pub: &[u8; 32], nonce: &SessionNonce) -> PeerId {
     let digest = Blake2b512::new()
         .chain_update(PEER_DOMAIN)
         .chain_update(signing_pub)
@@ -40,16 +42,16 @@ pub fn derive_peer_id(signing_pub: &[u8; 32], nonce: &SessionNonce) -> u64 {
     for (out, byte) in head.iter_mut().zip(digest.iter()) {
         *out = *byte;
     }
-    u64::from_le_bytes(head).min(u64::MAX - 1)
+    PeerId(u64::from_le_bytes(head).min(u64::MAX - 1))
 }
 
 /// The bytes a registry entry signs: the document, the PeerID and the nonce,
 /// behind their own domain. Every field has a fixed length.
-fn entry_transcript(document: DocumentId, peer: u64, nonce: &SessionNonce) -> Vec<u8> {
+fn entry_transcript(document: DocumentId, peer: PeerId, nonce: &SessionNonce) -> Vec<u8> {
     let mut msg = Vec::with_capacity(ENTRY_DOMAIN.len() + 16 + 8 + SESSION_NONCE_LEN);
     msg.extend_from_slice(ENTRY_DOMAIN);
     msg.extend_from_slice(document.as_bytes());
-    msg.extend_from_slice(&peer.to_le_bytes());
+    msg.extend_from_slice(&peer.0.to_le_bytes());
     msg.extend_from_slice(&nonce.0);
     msg
 }
@@ -61,7 +63,7 @@ pub fn session_identity(
     user: UserId,
     document: DocumentId,
     nonce: SessionNonce,
-) -> (u64, PeerEntry) {
+) -> (PeerId, PeerEntry) {
     let peer = derive_peer_id(&signing_key.verifying_key().to_bytes(), &nonce);
     let signature = signing_key
         .sign(&entry_transcript(document, peer, &nonce))
@@ -83,7 +85,7 @@ pub fn session_identity(
 pub fn entry_resolves(
     entry: &PeerEntry,
     document: DocumentId,
-    peer: u64,
+    peer: PeerId,
     user_key: &[u8; 32],
 ) -> bool {
     if derive_peer_id(user_key, &entry.nonce) != peer {
@@ -110,7 +112,7 @@ pub fn entry_resolves(
 pub fn resolve_peer(
     entry: Option<&PeerEntry>,
     document: DocumentId,
-    peer: u64,
+    peer: PeerId,
     key_of: impl Fn(UserId) -> Option<[u8; 32]>,
 ) -> Option<UserId> {
     let entry = entry?;
@@ -147,7 +149,7 @@ mod tests {
         // Computed outside Rust: the first eight bytes, little-endian, of
         // Python's `hashlib.blake2b(b"ambre-peer-v1" + bytes([1]*32) + bytes([9]*16))`.
         let pinned = derive_peer_id(&[1; 32], &nonce);
-        assert_eq!(pinned, 0x280d_a166_ca77_5390);
+        assert_eq!(pinned, ambre_core::PeerId(0x280d_a166_ca77_5390));
     }
 
     #[test]

@@ -391,7 +391,7 @@ mod tests {
     }
 
     fn document() -> (ProseState, BlockId) {
-        let state = ProseState::with_peer(1).expect("a document is built");
+        let state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
         let first = state.root_blocks()[0];
         (state, first)
     }

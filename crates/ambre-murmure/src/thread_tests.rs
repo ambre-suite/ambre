@@ -77,7 +77,7 @@ fn threaded(state: &mut ChannelState, root: MessageId) -> (DocumentId, Vec<u8>, 
     };
     let peer = next_peer();
     let first = state
-        .adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+        .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt")
         .expect("the header travels");
     let linked = state
@@ -131,7 +131,7 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
     ));
     let peer = next_peer();
     state
-        .adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+        .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt");
     state
         .thread_linked(state.active_id(), root, thread)
@@ -179,7 +179,7 @@ fn a_failed_link_drops_the_own_thread_and_a_locked_root_waits() {
         .expect("close");
     let peer = next_peer();
     state
-        .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+        .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt");
     state
         .relocate_locked(segment.document_id(), &[])
@@ -442,7 +442,7 @@ fn a_reply_takes_no_thread_field_from_another_member() {
     .expect("waits");
     bob.older_ready(thread).expect("admitted");
     let peer = next_peer();
-    bob.adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+    bob.adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt");
     let bob_doc = bob.doc(thread).expect("held");
     let before = bob_doc.oplog_vv();
@@ -482,7 +482,7 @@ fn peer_with_thread(
     }
     bob.older_ready(thread).expect("admitted");
     let peer = next_peer();
-    bob.adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+    bob.adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt");
     bob
 }

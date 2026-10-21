@@ -170,11 +170,11 @@ mod tests {
         CellId::bound(
             0,
             Uid {
-                peer: 1,
+                peer: ambre_core::PeerId(1),
                 counter: row,
             },
             Uid {
-                peer: 2,
+                peer: ambre_core::PeerId(2),
                 counter: col,
             },
         )

@@ -524,14 +524,19 @@ impl PersistenceStore {
     ///
     /// Written at the session identity, before any of its operations
     /// (`AUTHOR-028`). A lost row only loses that session's unsent tail.
-    pub fn save_session(&self, document_id: DocumentId, peer: u64, nonce: SessionNonce) {
+    pub fn save_session(
+        &self,
+        document_id: DocumentId,
+        peer: ambre_core::PeerId,
+        nonce: SessionNonce,
+    ) {
         let hex = id_to_hex(document_id.as_bytes());
         let Some(store) = self.sessions_store(&hex) else {
             return;
         };
         let mut value = [0u8; 24];
         let (head, tail) = value.split_at_mut(8);
-        head.copy_from_slice(&peer.to_le_bytes());
+        head.copy_from_slice(&peer.0.to_le_bytes());
         tail.copy_from_slice(&nonce.0);
         let key = JsValue::from_str(&format!("{hex}:{peer}"));
         if let Err(e) = store.put_with_key(bytes_to_js(&value).as_ref(), &key) {
@@ -540,7 +545,7 @@ impl PersistenceStore {
     }
 
     /// Drop one session the relay already holds whole (fire-and-forget).
-    pub fn forget_session(&self, document_id: DocumentId, peer: u64) {
+    pub fn forget_session(&self, document_id: DocumentId, peer: ambre_core::PeerId) {
         let hex = id_to_hex(document_id.as_bytes());
         let Some(store) = self.sessions_store(&hex) else {
             return;
@@ -572,7 +577,7 @@ impl PersistenceStore {
     pub fn load_sessions(
         &self,
         document_id: DocumentId,
-    ) -> oneshot::Receiver<Vec<(u64, SessionNonce)>> {
+    ) -> oneshot::Receiver<Vec<(ambre_core::PeerId, SessionNonce)>> {
         let (tx, rx) = answer();
         let key = id_to_hex(document_id.as_bytes());
         let request = self
@@ -907,10 +912,13 @@ fn hex_to_id(hex: &str) -> Option<[u8; 16]> {
 
 /// Parse one `sessions` row: the PeerID's eight little-endian bytes, then
 /// the sixteen bytes of the nonce. `None` for any other length.
-fn session_of(row: &[u8]) -> Option<(u64, SessionNonce)> {
+fn session_of(row: &[u8]) -> Option<(ambre_core::PeerId, SessionNonce)> {
     let (peer, nonce) = row.split_first_chunk::<8>()?;
     let nonce = <[u8; 16]>::try_from(nonce).ok()?;
-    Some((u64::from_le_bytes(*peer), SessionNonce(nonce)))
+    Some((
+        ambre_core::PeerId(u64::from_le_bytes(*peer)),
+        SessionNonce(nonce),
+    ))
 }
 
 /// The key range holding every row of the document keyed `hex`, in a store

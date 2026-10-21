@@ -212,7 +212,7 @@ impl ChannelState {
     pub(super) fn note_successor_session(
         &mut self,
         segment: SegmentId,
-        peer: u64,
+        peer: ambre_core::PeerId,
         entry: Vec<u8>,
     ) -> bool {
         if self.successor != Some(segment) {

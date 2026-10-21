@@ -40,12 +40,12 @@ impl ProseState {
             .filter(|id| !tree.is_node_deleted(id).unwrap_or(true))
             .filter(|id| {
                 self.marker_of(id)
-                    .is_some_and(|peer| !self.session_runs(peer))
+                    .is_some_and(|peer| !self.session_runs(ambre_core::PeerId(peer)))
             })
             .filter(|id| {
                 Self::subtree(&tree, *id).iter().all(|node| {
                     self.marker_of(node)
-                        .is_none_or(|peer| !self.session_runs(peer))
+                        .is_none_or(|peer| !self.session_runs(ambre_core::PeerId(peer)))
                 })
             })
             .collect();
@@ -96,7 +96,7 @@ impl ProseState {
 
     /// Whether the session behind `peer` runs: it is this one, or the user the
     /// registry names for it has a session open on this document.
-    fn session_runs(&self, peer: u64) -> bool {
+    fn session_runs(&self, peer: ambre_core::PeerId) -> bool {
         if peer == self.peer {
             return true;
         }
@@ -135,8 +135,8 @@ mod tests {
     /// registry ties to his user. Bob adds a block and hides it, and Alice
     /// reads both writes.
     fn bob_hid_a_block() -> (ProseState, ProseState, BlockId) {
-        let mut alice = ProseState::with_peer(1).expect("a document is built");
-        let mut bob = ProseState::with_peer(2).expect("a document is built");
+        let mut alice = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+        let mut bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document is built");
         bob.import_snapshot(&alice.export_snapshot())
             .expect("the seed imports");
         let entry = PeerEntry {
@@ -144,7 +144,7 @@ mod tests {
             nonce: SessionNonce([9; 16]),
             signature: [0; 64],
         };
-        assert!(bob.adopt_session(22, entry.to_bytes()));
+        assert!(bob.adopt_session(ambre_core::PeerId(22), entry.to_bytes()));
         let first = bob.root_blocks()[0];
         bob.handle_command(ProseCommand::InsertBlock {
             parent_id: None,

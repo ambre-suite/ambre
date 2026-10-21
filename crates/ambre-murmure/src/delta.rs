@@ -31,7 +31,7 @@ pub const JSON_SCHEMA_VERSION: u8 = 1;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Signer {
     /// The only PeerID the operations of the delta may carry (`AUTHOR-012`).
-    pub peer: u64,
+    pub peer: ambre_core::PeerId,
     /// The member the signing key resolves to, `None` when the directory does
     /// not name it (`AUTHOR-013`).
     pub user: Option<UserId>,
@@ -169,16 +169,16 @@ fn restore_entries(update: &mut JsonSchema) {
 pub(crate) fn check(
     update: &JsonSchema,
     signer: Signer,
-    registered: impl Fn(u64) -> Option<UserId>,
+    registered: impl Fn(ambre_core::PeerId) -> Option<UserId>,
     reactions: impl Fn(&ContainerID) -> bool,
     thread_of: impl Fn(&ContainerID) -> Option<Option<String>>,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
-    if update.changes.iter().any(|c| c.id.peer != signer.peer) {
+    if update.changes.iter().any(|c| c.id.peer != signer.peer.0) {
         return Err(Refusal::NotSigners);
     }
     // A container this session created is the signer's own.
-    let owner = |peer: u64| {
+    let owner = |peer: ambre_core::PeerId| {
         if peer == signer.peer {
             Some(user)
         } else {
@@ -201,7 +201,7 @@ pub(crate) fn check(
                 // A message, its body and every child of it belong to the
                 // user whose PeerID created them. Its `thread` field is the
                 // one exception (`MURMURE-255`).
-                if owner(*peer) != Some(user) {
+                if owner(ambre_core::PeerId(*peer)) != Some(user) {
                     if thread_set(&op.content, thread_of(id)) {
                         continue;
                     }
@@ -271,21 +271,21 @@ pub(crate) fn check(
 pub(crate) fn check_amendments(
     update: &JsonSchema,
     signer: Signer,
-    registered: impl Fn(u64) -> Option<UserId>,
+    registered: impl Fn(ambre_core::PeerId) -> Option<UserId>,
     author_of: impl Fn(&str) -> Option<UserId>,
     thread_of: impl Fn(&str) -> Option<String>,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
-    if update.changes.iter().any(|c| c.id.peer != signer.peer) {
+    if update.changes.iter().any(|c| c.id.peer != signer.peer.0) {
         return Err(Refusal::NotSigners);
     }
     for op in update.changes.iter().flat_map(|c| &c.ops) {
         match &op.container {
             ContainerID::Normal { peer, .. } => {
-                let owner = if *peer == signer.peer {
+                let owner = if *peer == signer.peer.0 {
                     Some(user)
                 } else {
-                    registered(*peer)
+                    registered(ambre_core::PeerId(*peer))
                 };
                 if owner != Some(user) {
                     return Err(Refusal::ForeignMessage);
@@ -408,7 +408,11 @@ pub(crate) fn thread_field(doc: &LoroDoc, id: &ContainerID) -> Option<Option<Str
 /// Whether a registry write is the signer's own: its PeerID's key alone. An
 /// entry that reads as one must name the signer. An unreadable one names
 /// nobody, so it grants nothing.
-fn entry_allowed(content: &JsonOpContent, peer: u64, user: UserId) -> Result<(), Refusal> {
+fn entry_allowed(
+    content: &JsonOpContent,
+    peer: ambre_core::PeerId,
+    user: UserId,
+) -> Result<(), Refusal> {
     let JsonOpContent::Map(MapOp::Insert { key, value }) = content else {
         return Err(Refusal::ForeignEntry);
     };
@@ -468,7 +472,7 @@ fn is_root(id: &ContainerID, root: &str, kind: ContainerType) -> bool {
 
 /// The user the registry of `doc` names for `peer`, `None` when its entry is
 /// absent or unreadable (`AUTHOR-006`).
-pub(crate) fn registered(doc: &LoroDoc, peer: u64) -> Option<UserId> {
+pub(crate) fn registered(doc: &LoroDoc, peer: ambre_core::PeerId) -> Option<UserId> {
     let ValueOrContainer::Value(LoroValue::Binary(bytes)) =
         doc.get_map(PEERS_MAP).get(&peer_key(peer))?
     else {
@@ -589,9 +593,9 @@ pub(crate) fn import_arrivals(
 
 /// Whether every operation of a binary update was written under `peer`
 /// (`AUTHOR-012`). The `meta` document travels binary, and is checked so.
-pub(crate) fn binary_by(payload: &[u8], peer: u64) -> bool {
+pub(crate) fn binary_by(payload: &[u8], peer: ambre_core::PeerId) -> bool {
     LoroDoc::decode_import_blob_meta(payload, false).is_ok_and(|meta| {
         meta.mode == loro::EncodedBlobMode::Updates
-            && meta.partial_end_vv.keys().all(|p| *p == peer)
+            && meta.partial_end_vv.keys().all(|p| *p == peer.0)
     })
 }

@@ -237,7 +237,7 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
             let heads = scratch.oplog_frontiers();
             let peer = migration_peer(heads.iter().map(|id| (id.peer, id.counter)));
             scratch
-                .set_peer_id(peer)
+                .set_peer_id(peer.0)
                 .map_err(|e| SchemaError::MigrationFailed {
                     from: found,
                     to: SCHEMA_VERSION,
@@ -320,7 +320,7 @@ mod tests {
     /// left the block set alone would still be a write.
     #[test]
     fn a_document_from_a_newer_client_is_refused_and_changes_nothing() {
-        let mut state = ProseState::with_peer(1).expect("a document is built");
+        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
         let root = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: root,

@@ -440,7 +440,7 @@ fn comment_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
 /// A board opened from `state`'s snapshot, through the full-state read every
 /// reload takes.
 fn reopened(state: &ToileState) -> ToileState {
-    let mut reader = ToileState::with_peer(2);
+    let mut reader = ToileState::with_peer(ambre_core::PeerId(2));
     reader
         .import_snapshot(&state.export_snapshot())
         .expect("a board this build wrote reopens");

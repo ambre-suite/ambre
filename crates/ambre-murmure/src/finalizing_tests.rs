@@ -45,7 +45,7 @@ fn closed_with(texts: &[&str]) -> (ChannelState, SegmentId) {
         .expect("close");
     let peer = next_peer();
     state
-        .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+        .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt");
     (state, closing)
 }
@@ -416,7 +416,7 @@ fn a_final_snapshot_at_odds_with_the_deltas_is_refused() {
     let (alice, bob, closing, _payload) = finalized_for(2);
     let document_id = closing.document_id();
     let added = forged(&alice, closing, |doc| {
-        doc.set_peer_id(next_peer()).expect("peer");
+        doc.set_peer_id(next_peer().0).expect("peer");
         doc.get_list(MESSAGES).push("planted").expect("push");
     });
     assert_eq!(

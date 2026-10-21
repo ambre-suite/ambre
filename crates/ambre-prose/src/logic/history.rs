@@ -88,7 +88,7 @@ mod tests {
     }
 
     fn typed() -> (ProseState, crate::events::BlockId) {
-        let mut state = ProseState::with_peer(1).expect("a document");
+        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document");
         let block = *state.root_blocks().first().expect("a root block");
         state.handle_command(ProseCommand::InsertText {
             block_id: block,

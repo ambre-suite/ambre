@@ -589,7 +589,7 @@ impl LogicState {
     pub(crate) fn adopt_session(
         &mut self,
         document_id: DocumentId,
-        peer: u64,
+        peer: ambre_core::PeerId,
         entry: Vec<u8>,
         nonce: SessionNonce,
     ) {
@@ -634,7 +634,7 @@ impl LogicState {
     pub(crate) fn note_earlier_sessions(
         &mut self,
         document_id: DocumentId,
-        sessions: Vec<(u64, SessionNonce)>,
+        sessions: Vec<(ambre_core::PeerId, SessionNonce)>,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
@@ -668,13 +668,13 @@ impl LogicState {
             if Some(peer) == doc.identity {
                 continue;
             }
-            let end = held.get(&peer).copied().unwrap_or(0);
-            let start = doc.relay.get(&peer).copied().unwrap_or(0);
+            let end = held.get(&peer.0).copied().unwrap_or(0);
+            let start = doc.relay.get(&peer.0).copied().unwrap_or(0);
             if end <= start {
                 forgotten.push(peer);
                 continue;
             }
-            let span = loro::IdSpan::new(peer, start, end);
+            let span = loro::IdSpan::new(peer.0, start, end);
             match doc
                 .state
                 .crdt()

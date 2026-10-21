@@ -46,13 +46,13 @@ use ambre_core::{CommentId, FootnoteId, ReplyId, SuggestionId, UserId};
 /// key and a log line therefore read the same on both sides of the boundary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BlockId {
-    pub peer: u64,
+    pub peer: ambre_core::PeerId,
     pub counter: i32,
 }
 
 impl BlockId {
     #[must_use]
-    pub const fn new(peer: u64, counter: i32) -> Self {
+    pub const fn new(peer: ambre_core::PeerId, counter: i32) -> Self {
         Self { peer, counter }
     }
 }
@@ -1598,7 +1598,7 @@ mod tests {
     #[test]
     fn presence_is_not_a_mutation() {
         let pos = CursorPosition {
-            block_id: BlockId::new(1, 0),
+            block_id: BlockId::new(ambre_core::PeerId(1), 0),
             offset: 0,
             anchor: None,
         };
@@ -1606,7 +1606,7 @@ mod tests {
         assert!(!ProseCommand::Noop.is_mutating());
         assert!(
             ProseCommand::SplitBlock {
-                block_id: BlockId::new(1, 0),
+                block_id: BlockId::new(ambre_core::PeerId(1), 0),
                 pos: 0
             }
             .is_mutating()

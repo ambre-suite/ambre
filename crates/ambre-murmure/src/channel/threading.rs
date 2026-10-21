@@ -40,7 +40,7 @@ pub(super) struct Pending {
     /// Its payloads, in the order they came.
     pub(super) arrivals: Vec<Arrival>,
     /// The identity issued for it, adopted once it is admitted.
-    session: Option<(u64, Vec<u8>)>,
+    session: Option<(ambre_core::PeerId, Vec<u8>)>,
 }
 
 impl Pending {
@@ -350,7 +350,7 @@ impl ChannelState {
     pub(super) fn note_thread_session(
         &mut self,
         document_id: DocumentId,
-        peer: u64,
+        peer: ambre_core::PeerId,
         entry: Vec<u8>,
     ) -> bool {
         let Some(pending) = self.threads_pending.get_mut(&document_id) else {

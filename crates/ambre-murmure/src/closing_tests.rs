@@ -56,7 +56,7 @@ fn close_created(state: &mut ChannelState) -> (SegmentId, Vec<u8>, Vec<u8>) {
     assert_eq!(closed.fetch, None, "the creator fetches nothing");
     let peer = next_peer();
     let first = state
-        .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+        .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt")
         .expect("the successor's first update");
     (successor, closed.meta, first)
@@ -380,7 +380,7 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
         .expect("arrival");
     bob.older_ready(successor.document_id()).expect("ready");
     let peer = next_peer();
-    bob.adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+    bob.adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
         .expect("adopt");
 
     let relocated = bob

@@ -1859,11 +1859,11 @@ fn derive_populates_the_group_edge_on_members() {
 /// peer learns the two parents in its own order, and both name the same one.
 #[test]
 fn an_element_bound_into_two_groups_names_one_on_both_peers() {
-    let mut a = ToileState::with_peer(1);
+    let mut a = ToileState::with_peer(ambre_core::PeerId(1));
     let x = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
     let y = create_rect(&mut a, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
     let z = create_rect(&mut a, Point::new(40.0, 0.0), Size::new(10.0, 10.0));
-    let mut b = ToileState::with_peer(2);
+    let mut b = ToileState::with_peer(ambre_core::PeerId(2));
     b.import_snapshot(&a.export_snapshot())
         .expect("a snapshot this build wrote reads back at the current schema");
 
@@ -6106,10 +6106,10 @@ fn a_restyle_naming_a_missing_element_answers_an_error() {
 #[test]
 fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
     // Shared base: one element, its history known to both peers.
-    let mut a = ToileState::with_peer(1);
+    let mut a = ToileState::with_peer(ambre_core::PeerId(1));
     let id = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
     let base = a.export_snapshot();
-    let mut b = ToileState::with_peer(2);
+    let mut b = ToileState::with_peer(ambre_core::PeerId(2));
     b.import_snapshot(&base)
         .expect("a snapshot this build wrote reads back at the current schema");
 
@@ -6265,10 +6265,10 @@ fn order_of(st: &ToileState, node: &NodeId) -> usize {
 /// the arrow dangling on both boards, its record whole on each.
 #[test]
 fn an_arrow_whose_end_a_peer_deleted_keeps_its_record() {
-    let mut a = ToileState::with_peer(1);
+    let mut a = ToileState::with_peer(ambre_core::PeerId(1));
     let from = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
     let to = create_rect(&mut a, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
-    let mut b = ToileState::with_peer(2);
+    let mut b = ToileState::with_peer(ambre_core::PeerId(2));
     b.apply_remote(&a.export_snapshot());
     let conn = connect(&mut a, from.clone(), to.clone());
     let joined = a.connector_of(&conn).expect("the arrow is stored");

@@ -319,7 +319,7 @@ pub(super) fn declared_mark_roots(source: &str) -> Vec<String> {
 /// registered root. It is deliberately not a realistic document: its job is
 /// width, and the coverage assertion fails when it stops having it.
 pub(super) fn document_of_every_key() -> ProseState {
-    let mut state = ProseState::with_peer(1).expect("a document is built");
+    let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
     let root = state.root_blocks()[0];
     state.handle_command(ProseCommand::InsertText {
         block_id: root,
@@ -641,7 +641,7 @@ fn steps_written() -> Vec<String> {
             scratch.import(&stored).expect("the snapshot imports");
             let heads = scratch.oplog_frontiers();
             scratch
-                .set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))))
+                .set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))).0)
                 .expect("the migration identity");
             let before = scratch.oplog_vv();
             (step.apply)(&scratch).expect("the step runs on its canonical document");
