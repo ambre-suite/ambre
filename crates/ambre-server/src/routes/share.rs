@@ -315,7 +315,7 @@ pub async fn revoke_from_document(
     // A leave of a space raises it on each private channel it leaves too.
     let mut owing = vec![doc_id];
     owing.extend(db::private_channels_of_member(&state.db, &doc_id, &target).await?);
-    let sweep_due = crate::deletion::sweep_due_stored(&state);
+    let sweep_due = crate::deletion::sweep_due(&state);
     let removed = match raise_debt_mirrors(&state, &owing).await {
         Ok(()) => {
             db::remove_document_member(&state.db, &doc_id, &target, entry.as_ref(), sweep_due).await
@@ -427,7 +427,7 @@ pub async fn revoke_and_rotate(
     // A removal from a space leaves each of its private channels owing a
     // rotation (`SRV-136`), so their mirrors are raised first.
     let owing = db::private_channels_of_member(&state.db, &doc_id, &target).await?;
-    let sweep_due = crate::deletion::sweep_due_stored(&state);
+    let sweep_due = crate::deletion::sweep_due(&state);
     let revoked = match raise_debt_mirrors(&state, &owing).await {
         Ok(()) => {
             db::revoke_and_rotate(
@@ -521,7 +521,7 @@ async fn announce_space_leave(
     state: &AppState,
     leave: &db::SpaceLeave,
     target: &ambre_core::UserId,
-    sweep_due: i64,
+    sweep_due: ambre_core::UnixSeconds,
 ) {
     for meta in &leave.left {
         crate::redis_ops::members_changed(&state.redis, meta).await;

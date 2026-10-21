@@ -1,9 +1,10 @@
-//! Spans of time, as the relay's JSON counts them.
+//! Spans and instants of time, as the relay's JSON counts them.
 //!
 //! The relay counts a lease in milliseconds and a token's life in seconds.
 //! A bare integer lets one reach a place that expects the other, a factor
-//! of a thousand off. One type per unit keeps them apart. Each is
-//! `#[serde(transparent)]`, so it reads and writes the bare integer.
+//! of a thousand off. One type per unit keeps them apart, and an instant is
+//! kept apart from a span. Each is `#[serde(transparent)]`, so it reads and
+//! writes the bare integer.
 
 use std::time::Duration;
 
@@ -42,9 +43,35 @@ impl Seconds {
     }
 }
 
+/// An instant in whole seconds since the Unix epoch: the clock of a token's
+/// `iat` and `exp`, and of a delete's second sweep.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct UnixSeconds(pub u64);
+
+impl UnixSeconds {
+    /// The instant `span` after this one, saturating at `u64::MAX`.
+    #[must_use]
+    pub const fn plus(self, span: Seconds) -> Self {
+        Self(self.0.saturating_add(span.0))
+    }
+
+    /// The span from `earlier` to this instant, zero when `earlier` is later.
+    pub const fn since(self, earlier: Self) -> Seconds {
+        Seconds(self.0.saturating_sub(earlier.0))
+    }
+
+    /// The instant as a Postgres `BIGINT` stores it, saturating at `i64::MAX`.
+    pub fn to_i64_saturating(self) -> i64 {
+        i64::try_from(self.0).unwrap_or(i64::MAX)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Millis, Seconds};
+    use super::{Millis, Seconds, UnixSeconds};
     use std::time::Duration;
 
     #[test]
@@ -58,5 +85,13 @@ mod tests {
         assert_eq!(Millis(1500).to_duration(), Duration::from_millis(1500));
         assert_eq!(Seconds(2).to_duration(), Duration::from_secs(2));
         assert_eq!(Millis::from_duration(Duration::from_secs(3)), Millis(3000));
+    }
+
+    #[test]
+    fn an_instant_moves_by_a_span_and_never_goes_below_zero() {
+        assert_eq!(UnixSeconds(100).plus(Seconds(20)), UnixSeconds(120));
+        assert_eq!(UnixSeconds(100).since(UnixSeconds(40)), Seconds(60));
+        assert_eq!(UnixSeconds(40).since(UnixSeconds(100)), Seconds(0));
+        assert_eq!(UnixSeconds(u64::MAX).to_i64_saturating(), i64::MAX);
     }
 }

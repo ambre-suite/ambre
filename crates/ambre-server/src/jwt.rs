@@ -30,9 +30,9 @@ use serde::{Deserialize, Serialize};
 pub struct Claims {
     pub sub: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub spk: Option<String>,
-    pub iat: u64,
-    pub exp: u64,
+    pub spk: Option<ambre_core::SigningKeyHex>,
+    pub iat: ambre_core::UnixSeconds,
+    pub exp: ambre_core::UnixSeconds,
 }
 
 /// Server signing/verifying material, derived once from the seed at startup.
@@ -91,11 +91,10 @@ impl JwtKeys {
 mod tests {
     use super::*;
 
-    fn now() -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
+    use ambre_core::{Seconds, SigningKeyHex, UnixSeconds};
+
+    fn now() -> UnixSeconds {
+        crate::s3::unix_now()
     }
 
     #[test]
@@ -104,9 +103,9 @@ mod tests {
         let iat = now();
         let claims = Claims {
             sub: "11111111-1111-7111-8111-111111111111".into(),
-            spk: Some("ab".repeat(32)),
+            spk: Some(SigningKeyHex("ab".repeat(32))),
             iat,
-            exp: iat + 900,
+            exp: iat.plus(Seconds(900)),
         };
         let token = keys.mint(&claims).expect("mint");
         let decoded = keys.verify(&token).expect("verify");
@@ -117,12 +116,12 @@ mod tests {
     #[test]
     fn expired_token_is_rejected() {
         let keys = JwtKeys::from_seed(&[9u8; 32]);
-        let iat = now() - 10_000;
+        let iat = UnixSeconds(now().0 - 10_000);
         let claims = Claims {
             sub: "x".into(),
-            spk: Some("y".into()),
+            spk: Some(SigningKeyHex("y".into())),
             iat,
-            exp: iat + 1, // long past
+            exp: iat.plus(Seconds(1)), // long past
         };
         let token = keys.mint(&claims).expect("mint");
         assert!(keys.verify(&token).is_err());
@@ -136,9 +135,9 @@ mod tests {
         let token = a
             .mint(&Claims {
                 sub: "s".into(),
-                spk: Some("p".into()),
+                spk: Some(SigningKeyHex("p".into())),
                 iat,
-                exp: iat + 900,
+                exp: iat.plus(Seconds(900)),
             })
             .expect("mint");
         assert!(b.verify(&token).is_err());

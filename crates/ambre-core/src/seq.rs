@@ -39,6 +39,12 @@ impl Seq {
 }
 
 /// A signed 64-bit column read back. A negative value is no relay's number.
+impl std::fmt::Display for Seq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 impl TryFrom<i64> for Seq {
     type Error = std::num::TryFromIntError;
 

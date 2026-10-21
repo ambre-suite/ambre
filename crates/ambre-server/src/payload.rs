@@ -101,7 +101,11 @@ impl Payload {
 
     /// A pending entry: the delta's number, its object key and its full sealed
     /// frame. The frame is what a replay and the flusher both read back.
-    pub fn pending_entry(seq: u64, s3_key: &ambre_core::ObjectKey, wire: &Payload) -> Self {
+    pub fn pending_entry(
+        seq: ambre_core::Seq,
+        s3_key: &ambre_core::ObjectKey,
+        wire: &Payload,
+    ) -> Self {
         use base64::Engine;
         let entry = serde_json::json!({
             "seq": seq,
@@ -183,7 +187,7 @@ mod tests {
     #[test]
     fn a_pending_entry_reads_back() {
         let entry = Payload::pending_entry(
-            7,
+            ambre_core::Seq(7),
             &ambre_core::ObjectKey::from("d/7"),
             &Payload::new(vec![9, 8]),
         );

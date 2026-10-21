@@ -286,9 +286,18 @@ mod db_tests {
     ) -> InlineInsert {
         let snap = ambre_core::SnapshotId::new();
         let wire = Payload::new(wire.to_vec());
-        crate::db::insert_inline_update(&state.db, doc, &[5u8; 32], &snap, seq, seq, &wire, cap)
-            .await
-            .unwrap()
+        crate::db::insert_inline_update(
+            &state.db,
+            doc,
+            &[5u8; 32],
+            &snap,
+            ambre_protocol::messages::Clock(seq.unsigned_abs()),
+            ambre_core::Seq(seq.unsigned_abs()),
+            &wire,
+            cap,
+        )
+        .await
+        .unwrap()
     }
 
     /// The frame of delta `seq`: a few bytes no other delta has.

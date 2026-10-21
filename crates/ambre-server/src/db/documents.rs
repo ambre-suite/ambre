@@ -187,11 +187,11 @@ pub async fn rename_document(
 }
 
 /// A delete marked in the register and not finished: its rows may still be
-/// there, and its second sweep is due at `sweep_due` (Unix seconds).
+/// there, and its second sweep is due at `sweep_due`.
 #[derive(Debug)]
 pub struct PendingDeletion {
     pub document_id: ambre_core::DocumentId,
-    pub sweep_due: i64,
+    pub sweep_due: ambre_core::UnixSeconds,
     /// Whether the document row is still there: the delete stopped before its
     /// last step.
     pub rows_left: bool,
@@ -208,7 +208,7 @@ pub struct PendingDeletion {
 pub async fn begin_deletion(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    sweep_due: i64,
+    sweep_due: ambre_core::UnixSeconds,
 ) -> Result<Vec<super::DeletedChannel>, AppError> {
     let did = id_to_uuid(*document_id);
     let mut tx = pool.begin().await?;
@@ -229,7 +229,7 @@ pub async fn begin_deletion(
 pub(super) async fn begin_deletions_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     documents: &[uuid::Uuid],
-    sweep_due: i64,
+    sweep_due: ambre_core::UnixSeconds,
 ) -> Result<(), AppError> {
     sqlx::query(
         "INSERT INTO document_deletions (document_id, sweep_due) \
@@ -238,7 +238,7 @@ pub(super) async fn begin_deletions_in(
          SET sweep_due = GREATEST(document_deletions.sweep_due, EXCLUDED.sweep_due)",
     )
     .bind(documents)
-    .bind(sweep_due)
+    .bind(sweep_due.to_i64_saturating())
     .execute(&mut **tx)
     .await?;
     Ok(())
@@ -261,7 +261,8 @@ pub async fn pending_deletions(
         .into_iter()
         .map(|(id, sweep_due, rows_left)| PendingDeletion {
             document_id: uuid_row_to_id(id),
-            sweep_due,
+            // A negative mark, which no relay writes, is due at once.
+            sweep_due: ambre_core::UnixSeconds(u64::try_from(sweep_due).unwrap_or(0)),
             rows_left,
         })
         .collect())
@@ -272,11 +273,11 @@ pub async fn pending_deletions(
 pub async fn end_deletion(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    swept_at: i64,
+    swept_at: ambre_core::UnixSeconds,
 ) -> Result<(), AppError> {
     sqlx::query("DELETE FROM document_deletions WHERE document_id = $1 AND sweep_due <= $2")
         .bind(id_to_uuid(*document_id))
-        .bind(swept_at)
+        .bind(swept_at.to_i64_saturating())
         .execute(pool)
         .await?;
     Ok(())

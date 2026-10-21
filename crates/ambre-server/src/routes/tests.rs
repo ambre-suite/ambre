@@ -583,14 +583,20 @@ mod handler_tests {
             matches!(r, Err(AppError::NotFound { .. }))
         }
         assert!(gone(
-            crate::redis_ops::verify_clock_and_assign_seq(redis, &doc, "aa", 4).await
+            crate::redis_ops::verify_clock_and_assign_seq(
+                redis,
+                &doc,
+                "aa",
+                ambre_protocol::messages::Clock(4)
+            )
+            .await
         ));
         let frame = crate::payload::Payload::new(vec![1]);
         assert!(gone(
             crate::redis_ops::append_pending_delta(
                 redis,
                 &doc,
-                8,
+                ambre_core::Seq(8),
                 &ambre_core::ObjectKey::from("k"),
                 &frame
             )
@@ -600,7 +606,7 @@ mod handler_tests {
             crate::redis_ops::push_dead_letter(
                 redis,
                 &doc,
-                8,
+                ambre_core::Seq(8),
                 &ambre_core::ObjectKey::from("k"),
                 &frame
             )
@@ -610,9 +616,14 @@ mod handler_tests {
         assert!(gone(
             crate::redis_ops::doc_presence_update(redis, &doc, "aa", &sample, 15).await
         ));
-        crate::redis_ops::seed_clock_state(redis, &doc, 9, &[("aa".into(), 9)])
-            .await
-            .unwrap();
+        crate::redis_ops::seed_clock_state(
+            redis,
+            &doc,
+            ambre_core::Seq(9),
+            &[("aa".into(), ambre_protocol::messages::Clock(9))],
+        )
+        .await
+        .unwrap();
         crate::redis_ops::doc_session_open(redis, &doc, "aa")
             .await
             .unwrap();
@@ -1377,7 +1388,7 @@ mod handler_tests {
                 .await
                 .unwrap();
             let claims = state.jwt.verify(tokens.access_token.expose()).unwrap();
-            assert_eq!(claims.exp - claims.iat, minted);
+            assert_eq!(claims.exp.since(claims.iat), ambre_core::Seconds(minted));
             assert_eq!(tokens.access_expires_in, ambre_core::Seconds(minted));
         }
     }
@@ -1413,14 +1424,14 @@ mod handler_tests {
         let doc_id = create_test_doc(&app, &auth).await;
         let doc = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
         let snapshot = ambre_core::SnapshotId::from_bytes([0u8; 16]);
-        for seq in 1..=1_005 {
+        for seq in 1..=1_005u64 {
             crate::db::insert_update(
                 &pool,
                 &doc,
                 &[1u8; 32],
                 &snapshot,
-                seq,
-                seq,
+                ambre_protocol::messages::Clock(seq),
+                ambre_core::Seq(seq),
                 &ambre_core::ObjectKey::from("k"),
             )
             .await
@@ -3125,8 +3136,8 @@ mod handler_tests {
                 &document,
                 &[3u8; 32],
                 &ambre_core::SnapshotId::new(),
-                seq,
-                seq,
+                ambre_protocol::messages::Clock(seq.unsigned_abs()),
+                ambre_core::Seq(seq.unsigned_abs()),
                 &ambre_core::ObjectKey(format!("k{seq}")),
             )
             .await

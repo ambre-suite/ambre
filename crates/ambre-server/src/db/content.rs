@@ -65,7 +65,7 @@ pub struct UpdateRow {
     pub author_pubkey: Vec<u8>,
     #[allow(dead_code)]
     pub snapshot_id: ambre_core::SnapshotId,
-    pub clock: i64,
+    pub clock: ambre_protocol::messages::Clock,
     pub seq: ambre_core::Seq,
     /// The object of its own, for a delta over the inline size (`SRV-149`).
     pub s3_key: Option<ambre_core::ObjectKey>,
@@ -274,14 +274,14 @@ pub async fn drop_pending_snapshot(
 pub async fn served_horizon(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-) -> Result<i64, AppError> {
+) -> Result<ambre_core::Seq, AppError> {
     let horizon: Option<i64> = sqlx::query_scalar(
         "SELECT MAX(covered_seq) FROM snapshots WHERE document_id = $1 AND status <> 'pending'",
     )
     .bind(id_to_uuid(*document_id))
     .fetch_one(pool)
     .await?;
-    Ok(horizon.unwrap_or(0))
+    Ok(horizon.map(decode_seq).transpose()?.unwrap_or_default())
 }
 
 /// Fetches a specific snapshot by id, scoped to its owning document.
@@ -313,8 +313,8 @@ pub async fn insert_update(
     document_id: &ambre_core::DocumentId,
     author_pubkey: &[u8],
     snapshot_id: &ambre_core::SnapshotId,
-    clock: i64,
-    seq: i64,
+    clock: ambre_protocol::messages::Clock,
+    seq: ambre_core::Seq,
     s3_key: &ambre_core::ObjectKey,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
@@ -325,8 +325,8 @@ pub async fn insert_update(
     .bind(did)
     .bind(author_pubkey)
     .bind(sid)
-    .bind(clock)
-    .bind(seq)
+    .bind(clock.to_i64_saturating())
+    .bind(seq.to_i64_saturating())
     .bind(s3_key.as_str())
     .execute(pool)
     .await?;
@@ -343,8 +343,8 @@ pub async fn insert_inline_update(
     document_id: &ambre_core::DocumentId,
     author_pubkey: &[u8],
     snapshot_id: &ambre_core::SnapshotId,
-    clock: i64,
-    seq: i64,
+    clock: ambre_protocol::messages::Clock,
+    seq: ambre_core::Seq,
     wire: &Payload,
     cap: InlineCap,
 ) -> Result<InlineInsert, AppError> {
@@ -364,8 +364,8 @@ pub async fn insert_inline_update(
     .bind(id_to_uuid(*document_id))
     .bind(author_pubkey)
     .bind(id_to_uuid(*snapshot_id))
-    .bind(clock)
-    .bind(seq)
+    .bind(clock.to_i64_saturating())
+    .bind(seq.to_i64_saturating())
     .bind(wire)
     .bind(cap.deltas)
     .bind(cap.bytes)
@@ -388,7 +388,7 @@ pub async fn insert_inline_update(
 pub async fn attach_wire(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    seq: i64,
+    seq: ambre_core::Seq,
     wire: &Payload,
 ) -> Result<bool, AppError> {
     let attached = sqlx::query(
@@ -396,7 +396,7 @@ pub async fn attach_wire(
          WHERE document_id = $1 AND seq = $2 AND wire IS NULL AND batch_key IS NULL",
     )
     .bind(id_to_uuid(*document_id))
-    .bind(seq)
+    .bind(seq.to_i64_saturating())
     .bind(wire)
     .execute(pool)
     .await?
@@ -489,7 +489,7 @@ pub async fn get_updates_after(
                 document_id: r.try_get::<PgId, _>("document_id")?.into(),
                 author_pubkey: r.try_get("author_pubkey")?,
                 snapshot_id: r.try_get::<PgId, _>("snapshot_id")?.into(),
-                clock: r.try_get("clock")?,
+                clock: decode_clock(r.try_get("clock")?)?,
                 seq: decode_seq(r.try_get("seq")?)?,
                 s3_key: r
                     .try_get::<Option<String>, _>("s3_key")?
@@ -512,9 +512,9 @@ pub async fn get_updates_after(
 #[derive(Debug, Default)]
 pub struct ClockState {
     /// Highest `seq` ever assigned for the document (0 when it has no updates).
-    pub max_seq: i64,
+    pub max_seq: ambre_core::Seq,
     /// Per-author `(author_pubkey, max_clock)` high-water marks.
-    pub author_clocks: Vec<(Vec<u8>, i64)>,
+    pub author_clocks: Vec<(Vec<u8>, ambre_protocol::messages::Clock)>,
 }
 
 /// Reads the durable clock/seq high-water marks for a document from the `updates`
@@ -536,8 +536,8 @@ pub async fn get_clock_state(
     let mut state = ClockState::default();
     for r in &rows {
         let author: Vec<u8> = r.try_get("author_pubkey")?;
-        let max_clock: i64 = r.try_get("max_clock")?;
-        let max_seq: i64 = r.try_get("max_seq")?;
+        let max_clock = decode_clock(r.try_get("max_clock")?)?;
+        let max_seq = decode_seq(r.try_get("max_seq")?)?;
         state.max_seq = state.max_seq.max(max_seq);
         state.author_clocks.push((author, max_clock));
     }

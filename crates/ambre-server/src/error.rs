@@ -39,7 +39,10 @@ pub enum AppError {
 
     #[allow(dead_code)]
     #[error("Clock mismatch: expected {expected}, got {got}")]
-    ClockMismatch { expected: u64, got: u64 },
+    ClockMismatch {
+        expected: ambre_protocol::messages::Clock,
+        got: ambre_protocol::messages::Clock,
+    },
 
     /// The document owes a rotation, so a frame under any key it held is
     /// refused (`SRV-123`).
@@ -257,8 +260,8 @@ mod tests {
     #[tokio::test]
     async fn clock_mismatch_returns_409() {
         let r = AppError::ClockMismatch {
-            expected: 5,
-            got: 7,
+            expected: ambre_protocol::messages::Clock(5),
+            got: ambre_protocol::messages::Clock(7),
         }
         .into_response();
         assert_eq!(r.status(), StatusCode::CONFLICT);

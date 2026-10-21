@@ -24,12 +24,12 @@ pub async fn delete_document(
 ) -> Result<(), AppError> {
     let sweep_due = sweep_due(state);
     let space_members = crate::db::space_members(&state.db, document_id).await?;
-    let channels = crate::db::begin_deletion(&state.db, document_id, unix_i64(sweep_due)).await?;
+    let channels = crate::db::begin_deletion(&state.db, document_id, sweep_due).await?;
     for member in &space_members {
         crate::routes::notify_removed(state, document_id, member).await;
     }
     for channel in &channels {
-        empty_marked(state, &channel.documents, unix_i64(sweep_due)).await;
+        empty_marked(state, &channel.documents, sweep_due).await;
         let Some(meta) = channel.meta else { continue };
         for member in &channel.members {
             crate::routes::notify_removed(state, &meta, member).await;
@@ -39,21 +39,19 @@ pub async fn delete_document(
 }
 
 /// When the second sweep of a delete begun now is due (`SRV-057`).
-pub fn sweep_due(state: &AppState) -> u64 {
-    let window = crate::s3::late_write_window_secs(state.config.presigned_url_ttl_secs);
-    crate::s3::unix_now() + window
-}
-
-/// [`sweep_due`] as the register stores it.
-pub fn sweep_due_stored(state: &AppState) -> i64 {
-    unix_i64(sweep_due(state))
+pub fn sweep_due(state: &AppState) -> ambre_core::UnixSeconds {
+    let window = crate::s3::late_write_window(state.config.presigned_url_ttl_secs);
+    crate::s3::unix_now().plus(window)
 }
 
 /// Empties documents whose delete a transaction already marked, as a deleted
 /// channel marks each of its documents (`SRV-142`). A document that fails
 /// keeps its mark, and the pass finishes it (`SRV-165`).
-pub async fn empty_marked(state: &AppState, documents: &[ambre_core::DocumentId], sweep_due: i64) {
-    let sweep_due = u64::try_from(sweep_due).unwrap_or(0);
+pub async fn empty_marked(
+    state: &AppState,
+    documents: &[ambre_core::DocumentId],
+    sweep_due: ambre_core::UnixSeconds,
+) {
     for doc in documents {
         if let Err(e) = empty_document(state, doc, sweep_due).await {
             tracing::warn!(document_id = %doc, error = %e, "a marked delete is left to the pass");
@@ -69,7 +67,7 @@ pub async fn empty_marked(state: &AppState, documents: &[ambre_core::DocumentId]
 async fn empty_document(
     state: &AppState,
     document_id: &ambre_core::DocumentId,
-    sweep_due: u64,
+    sweep_due: ambre_core::UnixSeconds,
 ) -> Result<(), AppError> {
     let ttl = fence_ttl(sweep_due, crate::s3::unix_now());
     crate::redis_ops::mark_document_gone(&state.redis, document_id, ttl).await?;
@@ -94,8 +92,7 @@ pub async fn finish_deletions(state: &AppState) {
     };
     for d in pending {
         let doc = d.document_id;
-        let sweep_due = u64::try_from(d.sweep_due).unwrap_or(0);
-        if let Err(e) = finish_one(state, &doc, sweep_due, d.rows_left).await {
+        if let Err(e) = finish_one(state, &doc, d.sweep_due, d.rows_left).await {
             tracing::error!(document_id = %doc, error = %e, "unfinished delete failed again");
         }
     }
@@ -105,7 +102,7 @@ pub async fn finish_deletions(state: &AppState) {
 async fn finish_one(
     state: &AppState,
     document_id: &ambre_core::DocumentId,
-    sweep_due: u64,
+    sweep_due: ambre_core::UnixSeconds,
     rows_left: bool,
 ) -> Result<(), AppError> {
     let now = crate::s3::unix_now();
@@ -122,18 +119,13 @@ async fn finish_one(
     if count > 0 {
         tracing::info!(document_id = %document_id, count, "second sweep removed late objects");
     }
-    crate::db::end_deletion(&state.db, document_id, unix_i64(now)).await
+    crate::db::end_deletion(&state.db, document_id, now).await
 }
 
 /// How long the tombstone must still live: until the sweep is due, and never
 /// less than a second, which Redis refuses.
-fn fence_ttl(sweep_due: u64, now: u64) -> u64 {
-    sweep_due.saturating_sub(now).max(1)
-}
-
-/// A Unix second as the register stores it.
-fn unix_i64(secs: u64) -> i64 {
-    i64::try_from(secs).unwrap_or(i64::MAX)
+fn fence_ttl(sweep_due: ambre_core::UnixSeconds, now: ambre_core::UnixSeconds) -> u64 {
+    sweep_due.since(now).0.max(1)
 }
 
 #[cfg(test)]
@@ -142,8 +134,9 @@ mod tests {
 
     #[test]
     fn a_fence_lives_until_the_sweep_and_never_less_than_a_second() {
-        assert_eq!(fence_ttl(100, 40), 60);
-        assert_eq!(fence_ttl(100, 100), 1);
-        assert_eq!(fence_ttl(100, 500), 1);
+        use ambre_core::UnixSeconds as At;
+        assert_eq!(fence_ttl(At(100), At(40)), 60);
+        assert_eq!(fence_ttl(At(100), At(100)), 1);
+        assert_eq!(fence_ttl(At(100), At(500)), 1);
     }
 }

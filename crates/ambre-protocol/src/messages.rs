@@ -34,6 +34,28 @@ pub use ambre_core::Seq;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Clock(pub u64);
 
+impl Clock {
+    /// The clock as a Postgres `BIGINT` stores it, saturating at `i64::MAX`.
+    pub fn to_i64_saturating(self) -> i64 {
+        i64::try_from(self.0).unwrap_or(i64::MAX)
+    }
+}
+
+/// A stored clock: a negative one is refused, never clamped.
+impl TryFrom<i64> for Clock {
+    type Error = std::num::TryFromIntError;
+
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        u64::try_from(value).map(Self)
+    }
+}
+
+impl std::fmt::Display for Clock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// Ephemeral counter (client-side).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Counter(pub u64);

@@ -315,15 +315,12 @@ mod tests {
     /// A bearer header for a fresh caller, under `jwt`.
     fn bearer_for(jwt: &crate::jwt::JwtKeys) -> (ambre_core::UserId, String) {
         let user = ambre_core::UserId::new();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = crate::s3::unix_now();
         let claims = crate::jwt::Claims {
             sub: user.to_string(),
             spk: None,
             iat: now,
-            exp: now + 900,
+            exp: now.plus(ambre_core::Seconds(900)),
         };
         (user, format!("Bearer {}", jwt.mint(&claims).unwrap()))
     }

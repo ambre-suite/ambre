@@ -150,8 +150,8 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
         },
         AppError::ClockMismatch { expected, got } => WsServerMsg::ClockRefused {
             document_id: *doc_id,
-            clock: ambre_protocol::messages::Clock(*got),
-            expected: ambre_protocol::messages::Clock(*expected),
+            clock: *got,
+            expected: *expected,
             signature: update.signature,
         },
         // The document is being deleted (`SRV-017`).
@@ -202,7 +202,7 @@ pub(crate) async fn handle_subscribe(
     match redis_ops::clock_state_is_cold(&state.redis, &document_id).await {
         Ok(true) => match db::get_clock_state(&state.db, &document_id).await {
             Ok(clock_state) => {
-                let author_clocks: Vec<(String, i64)> = clock_state
+                let author_clocks: Vec<(String, ambre_protocol::messages::Clock)> = clock_state
                     .author_clocks
                     .iter()
                     .map(|(pk, clock)| (hex::encode(pk), *clock))
@@ -406,7 +406,7 @@ pub(crate) async fn handle_update(
     }
 
     let pub_key_hex = author_pubkey.to_hex();
-    let clock = update.public_data.clock.0;
+    let clock = update.public_data.clock;
 
     // A delta sent behind a refused one waits for the author's answer: it
     // takes no clock and no sequence number (`SRV-169`). The author sends it
@@ -434,8 +434,7 @@ pub(crate) async fn handle_update(
             }
         };
 
-    let s3_key =
-        crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, ambre_core::Seq(seq));
+    let s3_key = crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, seq);
 
     // Serialize the full sealed Update up front: it is both what we dead-letter on
     // an index-write failure and what we persist for verbatim replay below.
@@ -508,7 +507,7 @@ pub(crate) async fn handle_update(
             // finds it (`SRV-034`). Log loudly and dead-letter the full wire as well,
             // so an operator sees the failure and can replay it (H1).
             tracing::error!("append_pending_delta failed doc={doc_id} seq={seq}: {e}");
-            match db::attach_wire(&state.db, &doc_id, seq as i64, &update_wire).await {
+            match db::attach_wire(&state.db, &doc_id, seq, &update_wire).await {
                 Ok(true) => {}
                 Ok(false) => tracing::error!("no index row took the frame doc={doc_id} seq={seq}"),
                 Err(e) => tracing::error!("attach_wire failed doc={doc_id} seq={seq}: {e}"),
@@ -521,10 +520,7 @@ pub(crate) async fn handle_update(
         }
     }
 
-    let broadcast = Payload::server_msg(&WsServerMsg::Update {
-        seq: ambre_protocol::messages::Seq(seq),
-        update,
-    });
+    let broadcast = Payload::server_msg(&WsServerMsg::Update { seq, update });
     tracing::debug!("[Server->RedisPubSub] broadcast Update doc={doc_id} seq={seq}");
     if let Err(e) = redis_ops::doc_broadcast(&state.redis, &doc_id, &broadcast).await {
         // A dropped broadcast only delays live delivery: subscribers replay the
@@ -562,13 +558,13 @@ async fn store_index_row(
     state: &Arc<AppState>,
     doc_id: DocumentId,
     update: &ambre_protocol::Update,
-    seq: u64,
+    seq: ambre_core::Seq,
     s3_key: &ambre_core::ObjectKey,
     wire: &Payload,
 ) -> Result<bool, AppError> {
     let author = update.public_data.pub_key.as_array();
     let snapshot_id = &update.public_data.snapshot_id;
-    let clock = update.public_data.clock.0 as i64;
+    let clock = update.public_data.clock;
     if wire.len() < crate::hot_tail::INLINE_DELTA_MAX_BYTES {
         let inline = db::insert_inline_update(
             &state.db,
@@ -576,7 +572,7 @@ async fn store_index_row(
             author,
             snapshot_id,
             clock,
-            seq as i64,
+            seq,
             wire,
             crate::hot_tail::INLINE_CAP,
         )
@@ -591,16 +587,7 @@ async fn store_index_row(
             db::InlineInsert::Full => crate::hot_tail::spawn_move(state, doc_id),
         }
     }
-    db::insert_update(
-        &state.db,
-        &doc_id,
-        author,
-        snapshot_id,
-        clock,
-        seq as i64,
-        s3_key,
-    )
-    .await?;
+    db::insert_update(&state.db, &doc_id, author, snapshot_id, clock, seq, s3_key).await?;
     Ok(false)
 }
 
@@ -1828,7 +1815,7 @@ mod access_tests {
         let state = state_on(pool.clone()).await;
         let (doc_id, editor) = shared_document(&pool).await;
         let key = PublicKey::from_array([32u8; 32]);
-        db::remove_document_member(&pool, &doc_id, &editor, None, 0)
+        db::remove_document_member(&pool, &doc_id, &editor, None, ambre_core::UnixSeconds(0))
             .await
             .unwrap();
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
@@ -1889,7 +1876,7 @@ mod access_tests {
             "a member is answered"
         );
 
-        db::remove_document_member(&pool, &doc_id, &editor, None, 0)
+        db::remove_document_member(&pool, &doc_id, &editor, None, ambre_core::UnixSeconds(0))
             .await
             .unwrap();
         let mut removed = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);
@@ -2224,8 +2211,8 @@ mod refusal_tests {
         let refusal = update_refusal(
             &update,
             &AppError::ClockMismatch {
-                expected: 5,
-                got: 9,
+                expected: ambre_protocol::messages::Clock(5),
+                got: ambre_protocol::messages::Clock(9),
             },
         );
         let WsServerMsg::ClockRefused {

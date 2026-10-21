@@ -867,7 +867,7 @@ pub async fn delete_channel(
     if !space_owner && meta_role != Some(Role::Owner) {
         return Err(AppError::Forbidden);
     }
-    let sweep_due = crate::deletion::sweep_due_stored(&state);
+    let sweep_due = crate::deletion::sweep_due(&state);
     let deleted = db::delete_channel(&state.db, &channel_id, sweep_due).await?;
     tracing::info!(channel_id = %channel_id, by = %auth.user_id, documents = deleted.documents.len(), "channel deleted");
     crate::deletion::empty_marked(&state, &deleted.documents, sweep_due).await;
@@ -2033,7 +2033,7 @@ mod tests {
             &channel.meta.document_id(),
             &who,
             None,
-            crate::deletion::sweep_due_stored(state),
+            crate::deletion::sweep_due(state),
         )
         .await
     }
@@ -3685,8 +3685,8 @@ mod tests {
             &document,
             &[1; 32],
             &snapshot,
-            seq,
-            seq,
+            ambre_protocol::messages::Clock(seq.unsigned_abs()),
+            ambre_core::Seq(seq.unsigned_abs()),
             &ambre_core::ObjectKey::from("k"),
         )
         .await

@@ -1101,7 +1101,7 @@ pub async fn channel_place(
 pub async fn delete_channel(
     pool: &PgPool,
     channel_id: &ambre_core::ChannelId,
-    sweep_due: i64,
+    sweep_due: ambre_core::UnixSeconds,
 ) -> Result<DeletedChannel, AppError> {
     let channel = id_to_uuid(*channel_id);
     let mut tx = pool.begin().await?;
@@ -1137,7 +1137,7 @@ pub async fn delete_channel(
 pub(super) async fn delete_space_channels_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     space: ambre_core::SpaceId,
-    sweep_due: i64,
+    sweep_due: ambre_core::UnixSeconds,
 ) -> Result<Vec<DeletedChannel>, AppError> {
     let space = id_to_uuid(space);
     let channels: Vec<(uuid::Uuid, Option<uuid::Uuid>)> = sqlx::query_as(
@@ -1192,7 +1192,7 @@ pub struct DeletedChannel {
 pub(super) async fn delete_channel_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     channel: ambre_core::ChannelId,
-    sweep_due: i64,
+    sweep_due: ambre_core::UnixSeconds,
 ) -> Result<Vec<ambre_core::DocumentId>, AppError> {
     let channel = id_to_uuid(channel);
     let held: Option<uuid::Uuid> =
@@ -1250,7 +1250,7 @@ pub(super) async fn leave_space_channels_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     space: ambre_core::SpaceId,
     user: ambre_core::UserId,
-    sweep_due: i64,
+    sweep_due: ambre_core::UnixSeconds,
 ) -> Result<Option<super::SpaceLeave>, AppError> {
     let space = id_to_uuid(space);
     let user_typed = user;

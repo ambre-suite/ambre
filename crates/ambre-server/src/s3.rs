@@ -344,15 +344,17 @@ const FLUSH_LOCK_TTL_SECS: u64 = 60;
 /// holds its lock at most `FLUSH_LOCK_TTL_SECS`, and a minute of margin covers
 /// the requests in flight. The tombstone lives this long, and the
 /// second sweep of the objects runs once it has passed.
-pub fn late_write_window_secs(presigned_url_ttl: ambre_core::Seconds) -> u64 {
-    presign_lifetime(presigned_url_ttl).as_secs() + FLUSH_LOCK_TTL_SECS + 60
+pub fn late_write_window(presigned_url_ttl: ambre_core::Seconds) -> ambre_core::Seconds {
+    ambre_core::Seconds(presign_lifetime(presigned_url_ttl).as_secs() + FLUSH_LOCK_TTL_SECS + 60)
 }
 
-/// Seconds since the Unix epoch, the clock a delete's sweep is scheduled in.
-pub fn unix_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
+/// The current instant: the clock of a token's `iat` and of a delete's sweep.
+pub fn unix_now() -> ambre_core::UnixSeconds {
+    ambre_core::UnixSeconds(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs()),
+    )
 }
 
 /// Re-marks every existing `doc:*:pending` key in the dirty set via a single

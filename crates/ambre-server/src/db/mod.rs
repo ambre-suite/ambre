@@ -49,6 +49,11 @@ fn decode_seq(value: i64) -> Result<ambre_core::Seq, sqlx::Error> {
     ambre_core::Seq::try_from(value).map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
+/// A stored clock. A negative one is a decode error, as for [`decode_seq`].
+fn decode_clock(value: i64) -> Result<ambre_protocol::messages::Clock, sqlx::Error> {
+    ambre_protocol::messages::Clock::try_from(value).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+}
+
 fn uuid_to_core(u: uuid::Uuid) -> ambre_core::Uuid {
     ambre_core::Uuid::from_bytes(*u.as_bytes())
 }
@@ -203,8 +208,8 @@ mod tests {
                 &document_id,
                 &author,
                 &snap,
-                seq,
-                seq,
+                ambre_protocol::messages::Clock(seq.unsigned_abs()),
+                ambre_core::Seq(seq.unsigned_abs()),
                 &ambre_core::ObjectKey(format!("k{seq}")),
             )
             .await
@@ -275,8 +280,8 @@ mod tests {
                 &document_id,
                 &author,
                 &snap,
-                seq,
-                seq,
+                ambre_protocol::messages::Clock(seq.unsigned_abs()),
+                ambre_core::Seq(seq.unsigned_abs()),
                 &ambre_core::ObjectKey(format!("k{seq}")),
             )
             .await

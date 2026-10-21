@@ -59,8 +59,8 @@ pub fn authenticate_account(state: &AppState, token: &str) -> Result<AccountSess
         .map_err(|_| AppError::Unauthorized)?;
     let signing_pubkey = claims
         .spk
-        .as_deref()
-        .map(ambre_core::PublicKey::from_hex)
+        .as_ref()
+        .map(|spk| ambre_core::PublicKey::from_hex(spk.as_str()))
         .transpose()
         .map_err(|_| AppError::Unauthorized)?;
     Ok(AccountSession {
@@ -135,13 +135,15 @@ pub async fn issue_session(
     user_id: ambre_core::UserId,
     signing_pubkey: Option<ambre_core::PublicKey>,
 ) -> Result<TokenPair, AppError> {
-    let now = unix_now();
+    let now = crate::s3::unix_now();
     let access_ttl = access_lifetime(state.config.access_ttl_secs);
     let claims = Claims {
         sub: user_id.to_string(),
-        spk: signing_pubkey.as_ref().map(ambre_core::PublicKey::to_hex),
+        spk: signing_pubkey
+            .as_ref()
+            .map(|key| ambre_core::SigningKeyHex(key.to_hex())),
         iat: now,
-        exp: now + access_ttl.0,
+        exp: now.plus(access_ttl),
     };
     let access_token = state
         .jwt
@@ -175,14 +177,6 @@ pub const ACCESS_TOKEN_MAX_TTL_SECS: u64 = 15 * 60;
 /// The lifetime a minted token carries: the configured one, capped.
 fn access_lifetime(configured: ambre_core::Seconds) -> ambre_core::Seconds {
     ambre_core::Seconds(configured.0.min(ACCESS_TOKEN_MAX_TTL_SECS))
-}
-
-/// Current Unix time in seconds.
-pub fn unix_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
 }
 
 #[cfg(test)]
