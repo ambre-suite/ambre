@@ -689,7 +689,7 @@ pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
 #[allow(dead_code)]
 pub(crate) struct SetupAccountRequest {
     pub email: ambre_core::Email,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub master_key_enc: ambre_core::WrappedMasterKey,
     pub master_key_salt: ambre_core::MasterKeySalt,
     pub signing_pubkey: ambre_core::SigningKeyHex,

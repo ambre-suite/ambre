@@ -268,7 +268,7 @@ pub enum RestCommand {
     SetupAccount {
         passphrase: SecretBytes,
         email: ambre_core::Email,
-        display_name: String,
+        display_name: ambre_core::DisplayName,
     },
     /// Dev-only: authenticate as `username` (created on the fly server-side),
     /// deriving keys deterministically from the username. Triggered by the
@@ -296,14 +296,14 @@ pub enum RestCommand {
     CreateDocument {
         doc_type: DocType,
         /// Plaintext name (encrypted by the Sync thread before upload).
-        name: String,
+        name: ambre_core::Name,
     },
     /// Delete a document. The Logic thread drops its in-memory state (hook). -> `DocumentDeleted`.
     DeleteDocument { document_id: DocumentId },
     /// Rename a document. -> `DocumentRenamed`.
     RenameDocument {
         document_id: DocumentId,
-        name: String,
+        name: ambre_core::Name,
     },
 
     // -- Sharing -----------------------------------------------------------------

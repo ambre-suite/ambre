@@ -14,6 +14,7 @@ use ambre_bus::{
     MemberInfo, Mention, MentionCount, MentionTarget, MessageId, OpenFailure, SegmentId, Seq,
     SignedDelta, UnreadCount, Unreadable,
 };
+use ambre_core::Name;
 use ambre_murmure::{
     ChangeTarget, ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample,
     Screened, SeekStep, Sent, Signer, ThreadTarget, members_only, screen,
@@ -1408,11 +1409,12 @@ impl LogicState {
                     .map(str::trim)
                     .filter(|n| !n.is_empty())
                     .map(str::to_owned);
-                if let Some(long) = name.as_deref().filter(|n| !ambre_core::name_fits(n)) {
-                    self.refuse_long_name(long, "NameChannel");
-                    return;
-                }
-                match channel.name_direct(name.as_deref()) {
+                let name = match name.map(|text| Name::new(text.as_str()).map_err(|_| text)) {
+                    Some(Ok(name)) => Some(name),
+                    Some(Err(long)) => return self.refuse_long_name(&long, "NameChannel"),
+                    None => None,
+                };
+                match channel.name_direct(name.as_ref().map(Name::as_str)) {
                     Ok(named) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
                             document_id: named.meta.document_id(),

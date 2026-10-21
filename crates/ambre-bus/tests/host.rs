@@ -174,7 +174,7 @@ fn sync_command_roundtrips_through_postcard() {
         id: RequestId(42),
         cmd: RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: "Budget".to_string(),
+            name: ambre_core::Name::new("Budget").unwrap(),
         },
     });
     roundtrip_sync(&SyncCommand::OpenDocument {
@@ -398,7 +398,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             id: RequestId(5),
             cmd: RestCommand::CreateDocument {
                 doc_type: DocType::Toile,
-                name: "Plan".to_owned(),
+                name: ambre_core::Name::new("Plan").unwrap(),
             },
         },
         SyncCommand::OpenDocument {
@@ -457,7 +457,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             meta,
             segment,
             public: false,
-            name: Some("board".into()),
+            name: Some(ambre_core::Name::new("board").unwrap()),
         },
         SyncCommand::NameChannel { meta, name: None },
         SyncCommand::JoinChannel {

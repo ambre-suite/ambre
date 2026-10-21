@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3696 rows: 3152 shipped, of which 2 loose. 544 unbuilt.**
+**3697 rows: 3153 shipped, of which 2 loose. 544 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 890 | 418 | 816 | 609 | 417 | 3150 |
+| `verified` | 891 | 418 | 816 | 609 | 417 | 3151 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
@@ -62,7 +62,7 @@
 | `ambre-spec-message-bus.md` | 30 | 30 | 30 |  |  |
 | `ambre-spec-object-store.md` | 18 | 17 | 17 |  | 1 |
 | `ambre-spec-op-authorship.md` | 29 | 29 | 29 |  |  |
-| `ambre-spec-organizations.md` | 13 | 11 | 11 |  | 2 |
+| `ambre-spec-organizations.md` | 14 | 12 | 12 |  | 2 |
 | `ambre-spec-pdf-export.md` | 17 | 6 | 6 |  | 11 |
 | `ambre-spec-presence.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-profile.md` | 9 | 1 | 1 |  | 8 |
@@ -245,7 +245,7 @@
 | `ambre-spec-murmure-unread.md` | MURMURE-113..120,154..156,460,470..471,477,495,499 |
 | `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079,121,138..141,158 |
 | `ambre-spec-op-authorship.md` | AUTHOR-001..029 |
-| `ambre-spec-organizations.md` | SRV-060..067,071,076..077,229,231 |
+| `ambre-spec-organizations.md` | SRV-060..067,071,076..077,229,231,233 |
 | `ambre-spec-pdf-export.md` | PDF-001..017 |
 | `ambre-spec-presence.md` | PRESENCE-001..015 |
 | `ambre-spec-profile.md` | PROFILE-001..009 |

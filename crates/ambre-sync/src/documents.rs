@@ -78,19 +78,16 @@ impl SyncState {
     }
 
     /// Seals a document name with the full envelope, bound to its document
-    /// (`SYNC-018`, `SYNC-068`). A name past its budget is refused before it
-    /// is sealed, so the relay never holds one it would refuse (`SYNC-178`).
+    /// (`SYNC-018`, `SYNC-068`). A [`ambre_core::Name`] never runs past its
+    /// budget, so the relay never holds one it would refuse (`SYNC-178`).
     pub(crate) fn seal_document_name(
         document_id: DocumentId,
         doc_key: &DocumentKey,
         signing_key: &SigningKey,
-        name: &str,
+        name: &ambre_core::Name,
     ) -> Result<ambre_core::SealedName, pipeline::PipelineError> {
-        if !ambre_core::name_fits(name) {
-            return Err(pipeline::PipelineError::NameTooLong);
-        }
         let sealed = pipeline::seal_object(
-            name.as_bytes(),
+            name.as_str().as_bytes(),
             &pipeline::name_aad(document_id),
             doc_key,
             signing_key,
@@ -116,7 +113,7 @@ impl SyncState {
         &mut self,
         id: RequestId,
         doc_type: DocType,
-        name: String,
+        name: ambre_core::Name,
     ) {
         let event_tx = self.event_tx.clone();
 
@@ -198,7 +195,8 @@ impl SyncState {
         } else {
             tracing::info!("Sync: CreateDocument {doc_type:?} '{name}'");
             let document_id = DocumentId::new();
-            self.doc_metadata.insert(document_id, (doc_type, name));
+            self.doc_metadata
+                .insert(document_id, (doc_type, name.into_string()));
             self.reply(
                 id,
                 RestEvent::DocumentCreated {
@@ -242,7 +240,7 @@ impl SyncState {
         &mut self,
         id: RequestId,
         document_id: DocumentId,
-        name: String,
+        name: ambre_core::Name,
     ) {
         let event_tx = self.event_tx.clone();
 
@@ -334,7 +332,7 @@ impl SyncState {
         } else {
             tracing::info!("Sync: RenameDocument {document_id:?} '{name}'");
             if let Some((_doc_type, old_name)) = self.doc_metadata.get_mut(&document_id) {
-                *old_name = name;
+                *old_name = name.into_string();
             }
             self.reply(id, RestEvent::DocumentRenamed { document_id });
         }
@@ -443,8 +441,13 @@ mod tests {
         let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
         let doc_key = DocumentKey::generate();
         let name = "Quarterly budget";
-        let sent =
-            SyncState::seal_document_name(document_id, &doc_key, &signing_key, name).unwrap();
+        let sent = SyncState::seal_document_name(
+            document_id,
+            &doc_key,
+            &signing_key,
+            &ambre_core::Name::new(name).unwrap(),
+        )
+        .unwrap();
         let bytes = sent.as_bytes().to_vec();
         assert!(!bytes.windows(name.len()).any(|w| w == name.as_bytes()));
         assert_eq!(pipeline::object_key(&bytes).unwrap(), doc_key.id());
@@ -456,16 +459,19 @@ mod tests {
         assert_eq!(open_name(document_id, &other, &bytes, Vec::new()), None);
     }
 
-    /// `SYNC-178`: a name past its budget is refused before it is sealed. The
-    /// longest name, in four-byte characters, seals within what the relay
-    /// reads, and an empty one is the overhead alone.
+    /// `SYNC-178`: a name past its budget is refused before it is sealed: no
+    /// [`ambre_core::Name`] holds it. The longest name, in four-byte
+    /// characters, seals within what the relay reads, and an empty one is the
+    /// overhead alone.
     #[test]
     fn a_name_past_its_budget_is_not_sealed() {
         let document_id = DocumentId::new();
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
-        let seal =
-            |name: &str| SyncState::seal_document_name(document_id, &doc_key, &signing_key, name);
+        let seal = |name: &str| {
+            let name = ambre_core::Name::new(name).unwrap();
+            SyncState::seal_document_name(document_id, &doc_key, &signing_key, &name)
+        };
         let longest = "\u{1F600}".repeat(ambre_core::SealedName::MAX_CHARS);
         assert_eq!(
             seal(&longest).unwrap().as_bytes().len(),
@@ -476,10 +482,7 @@ mod tests {
             ambre_core::SealedName::OVERHEAD
         );
         let past = "a".repeat(ambre_core::SealedName::MAX_CHARS + 1);
-        assert!(matches!(
-            seal(&past),
-            Err(pipeline::PipelineError::NameTooLong)
-        ));
+        assert_eq!(ambre_core::Name::new(past), Err(ambre_core::NameTooLong));
     }
 
     /// A name sealed three rotations ago opens with the current key and the
@@ -494,8 +497,13 @@ mod tests {
             .map(|pair| pipeline::seal_link(document_id, &pair[0], &pair[1], &signing_key))
             .collect::<Result<_, _>>()
             .unwrap();
-        let name =
-            SyncState::seal_document_name(document_id, &keys[0], &signing_key, "Budget").unwrap();
+        let name = SyncState::seal_document_name(
+            document_id,
+            &keys[0],
+            &signing_key,
+            &ambre_core::Name::new("Budget").unwrap(),
+        )
+        .unwrap();
         let bytes = name.as_bytes().to_vec();
         let current = &keys[3];
         assert_eq!(

@@ -609,7 +609,8 @@ mod tests {
                 [
                     SyncCommand::SendUpdate { document_id, summary: None, .. },
                     SyncCommand::NameChannel { meta: sealed, name: sealed_name },
-                ] if *document_id == meta.document_id() && *sealed == meta && *sealed_name == shown
+                ] if *document_id == meta.document_id() && *sealed == meta
+                    && sealed_name.as_ref().map(ambre_core::Name::as_str) == shown.as_deref()
             ));
             assert!(matches!(
                 drain(&ui_rx).as_slice(),

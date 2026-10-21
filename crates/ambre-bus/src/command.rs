@@ -160,14 +160,14 @@ pub enum SyncCommand {
         meta: MetaId,
         segment: SegmentId,
         public: bool,
-        name: Option<String>,
+        name: Option<ambre_core::Name>,
     },
     /// Seal the name just written into the `meta` of an open channel beside
     /// it on the relay, under the channel key. `None` seals an empty name: the
     /// channel is unnamed. A failure is logged, and the next name replaces it.
     NameChannel {
         meta: MetaId,
-        name: Option<String>,
+        name: Option<ambre_core::Name>,
     },
     /// Close the active segment `closing` of an open channel into
     /// `successor` (the Murmure segments spec). The Sync worker creates the

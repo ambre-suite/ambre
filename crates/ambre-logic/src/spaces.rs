@@ -12,6 +12,7 @@ use ambre_bus::{
     ChannelId, MemberInfo, PrivateChannelDraft, PublicChannelDraft, SealedChannelKey, SpaceCommand,
     SpaceEvent, SpaceId, Timestamp,
 };
+use ambre_core::Name;
 use ambre_murmure::{
     ChannelState, ChannelType, Listing, Roster, SpaceState, is_presence_sample, presence_sample,
 };
@@ -44,7 +45,7 @@ pub(crate) struct Opening {
 /// private one its name.
 enum NewChannel {
     Public(PublicChannelDraft),
-    Private(String),
+    Private(Name),
 }
 
 /// A channel the relay is creating, until it answers.
@@ -65,8 +66,8 @@ impl LogicState {
         if self.spaces.contains_key(&space_id) || self.space_opening.contains_key(&space_id) {
             return;
         }
-        if self.refuse_long_name(name, "CreateSpace") {
-            return;
+        if Name::new(name).is_err() {
+            return self.refuse_long_name(name, "CreateSpace");
         }
         let state = match SpaceState::create(space_id, name, now) {
             Ok(state) => state,
@@ -303,12 +304,9 @@ impl LogicState {
         }
     }
 
-    /// Refuse a name past its cap before anything is written, and tell the
-    /// user why (the Murmure channels spec). `true` when the name was refused.
-    pub(crate) fn refuse_long_name(&self, name: &str, request: &str) -> bool {
-        if ambre_core::name_fits(name) {
-            return false;
-        }
+    /// Tell the user why a name no [`Name`] holds was refused, before
+    /// anything is written (the Murmure channels spec).
+    pub(crate) fn refuse_long_name(&self, name: &str, request: &str) {
         tracing::warn!(
             "Logic: {request} refused a name of {} characters",
             name.chars().count()
@@ -319,7 +317,6 @@ impl LogicState {
             code: 409,
             message: ambre_core::NAME_TOO_LONG.to_owned(),
         });
-        true
     }
 
     fn channel_failed(&self, space_id: SpaceId, channel_id: ChannelId, message: String) {
@@ -377,9 +374,8 @@ impl LogicState {
                     tracing::warn!("Logic: a viewer adds no category to space {space_id}");
                     return;
                 }
-                if !ambre_core::name_fits(&name) {
-                    self.refuse_long_name(&name, "AddCategory");
-                    return;
+                if Name::new(name.as_str()).is_err() {
+                    return self.refuse_long_name(&name, "AddCategory");
                 }
                 match space.state.put_category(category_id, &name, position) {
                     Ok(delta) => {
@@ -402,8 +398,8 @@ impl LogicState {
                         "a viewer of the space creates no channel".into(),
                     );
                 }
-                if self.refuse_long_name(&draft.name, "CreatePublicChannel") {
-                    return;
+                if Name::new(draft.name.as_str()).is_err() {
+                    return self.refuse_long_name(&draft.name, "CreatePublicChannel");
                 }
                 let channel = match ChannelState::create(
                     channel_id,
@@ -421,10 +417,15 @@ impl LogicState {
             SpaceCommand::CreatePrivateChannel { draft, now } => {
                 // Any member of the space may: the channel is listed nowhere.
                 let PrivateChannelDraft { channel_id, name } = draft;
-                if self.refuse_long_name(&name, "CreatePrivateChannel") {
-                    return;
-                }
-                match ChannelState::create(channel_id, ChannelType::Private, Some(&name), now) {
+                let Ok(name) = Name::new(name.as_str()) else {
+                    return self.refuse_long_name(&name, "CreatePrivateChannel");
+                };
+                match ChannelState::create(
+                    channel_id,
+                    ChannelType::Private,
+                    Some(name.as_str()),
+                    now,
+                ) {
                     Ok(channel) => {
                         self.create_channel(space_id, channel, NewChannel::Private(name));
                     }
@@ -1362,7 +1363,11 @@ mod tests {
             panic!("one private creation, got {sent:?}");
         };
         assert_eq!((*asked, *of), (channel_id, space_id));
-        assert_eq!(name.as_deref(), Some("board"), "sealed beside meta");
+        assert_eq!(
+            name.as_ref().map(Name::as_str),
+            Some("board"),
+            "sealed beside meta"
+        );
         let (meta, segment) = (meta.document_id(), segment.document_id());
 
         state.handle_logic_event(LogicEvent::ChannelCreated {

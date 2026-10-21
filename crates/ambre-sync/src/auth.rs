@@ -351,7 +351,7 @@ impl SyncState {
         id: RequestId,
         passphrase: SecretBytes,
         email: ambre_core::Email,
-        display_name: String,
+        display_name: ambre_core::DisplayName,
     ) {
         tracing::info!("Sync: SetupAccount");
 

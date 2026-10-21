@@ -34,11 +34,14 @@ pub struct SetupAccountRequest {
 }
 
 /// Bounds the client-supplied identity: a syntactically plausible, length-bounded
-/// email and a non-empty, length-bounded display name. Full email verification is
-/// out of scope; this only rejects obvious garbage and unbounded input.
-fn validate_identity(email: &ambre_core::Email, display_name: &str) -> Result<(), AppError> {
+/// email and a [`ambre_core::DisplayName`], the trimmed name it answers. Full
+/// email verification is out of scope; this only rejects obvious garbage and
+/// unbounded input.
+fn validate_identity(
+    email: &ambre_core::Email,
+    display_name: &str,
+) -> Result<ambre_core::DisplayName, AppError> {
     let email = email.as_str().trim();
-    let name = display_name.trim();
     let email_ok = (3..=254).contains(&email.len())
         && email.contains('@')
         && !email.starts_with('@')
@@ -46,10 +49,8 @@ fn validate_identity(email: &ambre_core::Email, display_name: &str) -> Result<()
     if !email_ok {
         return Err(AppError::BadRequest("invalid email".into()));
     }
-    if name.is_empty() || name.chars().count() > 128 {
-        return Err(AppError::BadRequest("invalid display_name".into()));
-    }
-    Ok(())
+    ambre_core::DisplayName::new(display_name)
+        .map_err(|_| AppError::BadRequest("invalid display_name".into()))
 }
 /// Response after successful account setup. Carries the freshly minted token
 /// pair (kept in client memory) and the newly assigned user ID.
@@ -66,7 +67,7 @@ pub async fn setup_account(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SetupAccountRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    validate_identity(&req.email, &req.display_name)?;
+    let display_name = validate_identity(&req.email, &req.display_name)?;
     let mk_enc = req.master_key_enc;
     let mk_salt = req.master_key_salt;
     let (spk, epk) = super::keys::account_keys(&req.signing_pubkey, &req.exchange_pubkey)?;
@@ -74,7 +75,7 @@ pub async fn setup_account(
     let user = db::create_user(
         &state.db,
         &ambre_core::Email::from(req.email.as_str().trim()),
-        req.display_name.trim(),
+        display_name.as_str(),
         &mk_enc,
         &mk_salt,
         &spk,

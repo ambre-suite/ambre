@@ -83,11 +83,6 @@ pub enum PipelineError {
     UnknownSummary,
     #[error("an activity summary past its bounds: {0}")]
     Summary(#[from] SummaryError),
-    #[error(
-        "a name is longer than {} characters",
-        ambre_core::SealedName::MAX_CHARS
-    )]
-    NameTooLong,
 }
 
 // -- Update body ---------------------------------------------------------------

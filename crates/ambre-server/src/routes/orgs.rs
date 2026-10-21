@@ -166,6 +166,7 @@ pub async fn create_org(
     let session = auth;
     let owner_id = session.user_id;
 
+    let name = org_name(&req.name)?;
     validate_shamir_params(req.shamir_threshold, req.shamir_total)?;
     refuse_share(req.owner_shamir_share_enc.as_ref())?;
 
@@ -179,7 +180,7 @@ pub async fn create_org(
 
     let org = db::create_organization(
         &state.db,
-        &req.name,
+        &name,
         &org_pubkey,
         req.shamir_threshold,
         req.shamir_total,
@@ -241,8 +242,9 @@ pub async fn update_org(
     let uid = session.user_id;
 
     require_org_role(&state.db, &org_id, &uid, &[Role::Owner]).await?;
+    let name = org_name(&req.name)?;
 
-    let org = db::update_organization(&state.db, &org_id, &req.name)
+    let org = db::update_organization(&state.db, &org_id, &name)
         .await?
         .ok_or(AppError::NotFound {
             resource: "organization",
@@ -268,6 +270,17 @@ pub async fn delete_org(
         });
     }
     Ok(super::Done::json(ambre_core::WriteStatus::Deleted))
+}
+
+/// The name an organization takes, refused when blank or past the cap of a
+/// name (`SRV-233`).
+fn org_name(name: &str) -> Result<db::OrgName, AppError> {
+    db::OrgName::new(name).ok_or_else(|| {
+        AppError::BadRequest(format!(
+            "organization name: blank or past {} characters",
+            ambre_core::NAME_MAX_CHARS
+        ))
+    })
 }
 
 /// A share that arrives is refused rather than stored unread: no client
@@ -833,6 +846,62 @@ mod tests {
                 .unwrap();
             assert_eq!(organizations, 0);
             create_org(&app, &owner).await;
+        }
+
+        /// `SRV-233`: a blank name and one past the cap are refused on a
+        /// creation and on a rename, and neither writes. A name is stored
+        /// trimmed.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn a_blank_or_long_organization_name_is_refused(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+            let owner = setup_org_user(&app, "owner@ambre.app", 10).await;
+            let send = |method: &str, uri: String, body: serde_json::Value| {
+                let request = Request::builder()
+                    .method(method)
+                    .uri(uri)
+                    .header("content-type", "application/json")
+                    .header("authorization", &owner)
+                    .body(Body::from(body.to_string()))
+                    .unwrap();
+                app.clone().oneshot(request)
+            };
+            let names = ["   ".to_owned(), "a".repeat(ambre_core::NAME_MAX_CHARS + 1)];
+            for name in &names {
+                let create = serde_json::json!({
+                    "name": name,
+                    "org_pubkey": hex::encode([5u8; 32]),
+                    "shamir_threshold": 1,
+                    "shamir_total": 1,
+                });
+                let resp = send("POST", "/api/organizations".into(), create)
+                    .await
+                    .unwrap();
+                assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{name}");
+            }
+            let organizations: i64 = sqlx::query_scalar("SELECT count(*) FROM organizations")
+                .fetch_one(&state.db)
+                .await
+                .unwrap();
+            assert_eq!(organizations, 0);
+
+            let org_id = create_org(&app, &owner).await;
+            for name in &names {
+                let rename = serde_json::json!({ "name": name });
+                let uri = format!("/api/organizations/{org_id}");
+                let resp = send("PATCH", uri, rename).await.unwrap();
+                assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{name}");
+            }
+            let rename = serde_json::json!({ "name": "  Globex " });
+            let uri = format!("/api/organizations/{org_id}");
+            let resp = send("PATCH", uri, rename).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let stored: String = sqlx::query_scalar("SELECT name FROM organizations")
+                .fetch_one(&state.db)
+                .await
+                .unwrap();
+            assert_eq!(stored, "Globex");
         }
 
         /// `SRV-229`: no client computes a share, so an organization created with

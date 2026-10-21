@@ -92,7 +92,9 @@ pub use id::{
 pub use key_hex::{ExchangeKeyHex, SignatureHex, SigningKeyHex};
 pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
 pub use media::{ByteSize, ContentHash, MediaType};
-pub use name::{NAME_MAX_CHARS, NAME_TOO_LONG, name_fits};
+pub use name::{
+    DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong, name_fits,
+};
 pub use object_key::ObjectKey;
 pub use payload::{DeltaBytes, EphemeralBytes, SnapshotBytes};
 pub use public_key::{ExchangePublicKey, PublicKey};

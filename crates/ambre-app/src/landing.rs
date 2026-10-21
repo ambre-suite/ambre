@@ -366,13 +366,13 @@ fn doc_card(
     let commit_rename = {
         let to_logic = to_logic.clone();
         move || {
-            let name = edit_value.get().trim().to_owned();
-            // A name past its budget is refused here, with the field left open
-            // to shorten it, rather than cut or sent to fail (`SYNC-178`).
-            if !ambre_core::name_fits(&name) {
+            // A name past its budget makes no `Name`. It is refused here, with
+            // the field left open to shorten it, rather than cut or sent to
+            // fail (`SYNC-178`).
+            let Ok(name) = ambre_core::Name::new(edit_value.get().trim()) else {
                 toasts.warning(ambre_core::NAME_TOO_LONG);
                 return;
-            }
+            };
             editing.set(false);
             if !name.is_empty() {
                 let _ = to_logic.try_send(LogicCommand::Rest {
@@ -385,7 +385,7 @@ fn doc_card(
                 // Optimistic update -- the relay also re-lists on `DocumentRenamed`.
                 docs.update(|v| {
                     if let Some(item) = v.iter_mut().find(|x| x.document_id == id) {
-                        item.name = Some(name.clone());
+                        item.name = Some(name.to_string());
                     }
                 });
             }
@@ -1108,7 +1108,7 @@ mod tests {
         assert!(matches!(
             sent.as_slice(),
             [LogicCommand::Rest { cmd: RestCommand::RenameDocument { name, .. }, .. }]
-                if name == "Budget"
+                if name.as_str() == "Budget"
         ));
         container.remove();
     }

@@ -3,6 +3,24 @@
 
 use super::*;
 
+/// The name an organization is created or renamed with: trimmed, never blank,
+/// at most [`ambre_core::NAME_MAX_CHARS`] characters (`SRV-233`). A row read
+/// back keeps its name as text, so a name stored before the rule still lists.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrgName(String);
+
+impl OrgName {
+    /// The name `text` is once trimmed, or `None` when it breaks the rule.
+    pub fn new(text: &str) -> Option<Self> {
+        let text = text.trim();
+        (!text.is_empty() && ambre_core::name_fits(text)).then(|| Self(text.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Row from the `organizations` table.
 #[derive(Debug, sqlx::FromRow)]
 #[allow(dead_code)]
@@ -36,7 +54,7 @@ pub struct OrgMemberRow {
 /// Creates an organization and inserts its first member as owner.
 pub async fn create_organization(
     pool: &PgPool,
-    name: &str,
+    name: &OrgName,
     org_pubkey: &ambre_core::PublicKey,
     shamir_threshold: i16,
     shamir_total: i16,
@@ -53,7 +71,7 @@ pub async fn create_organization(
          RETURNING id, name, org_pubkey, shamir_threshold, shamir_total, created_at",
     )
     .bind(id_to_uuid(*org_id))
-    .bind(name)
+    .bind(name.as_str())
     .bind(org_pubkey.as_slice())
     .bind(shamir_threshold)
     .bind(shamir_total)
@@ -111,14 +129,14 @@ pub async fn list_user_organizations(
 pub async fn update_organization(
     pool: &PgPool,
     org_id: &ambre_core::OrgId,
-    name: &str,
+    name: &OrgName,
 ) -> Result<Option<OrganizationRow>, AppError> {
     sqlx::query_as::<_, OrganizationRow>(
         "UPDATE organizations SET name = $2 WHERE id = $1
          RETURNING id, name, org_pubkey, shamir_threshold, shamir_total, created_at",
     )
     .bind(id_to_uuid(*org_id))
-    .bind(name)
+    .bind(name.as_str())
     .fetch_optional(pool)
     .await
     .map_err(AppError::from)

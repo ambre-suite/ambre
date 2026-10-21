@@ -1258,7 +1258,7 @@ mod tests {
         let (mut state, _ui, sync_rx) = harness();
         state.handle_logic_command(rest(RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: "Budget".into(),
+            name: ambre_core::Name::new("Budget").unwrap(),
         }));
         match sync_rx.try_recv() {
             Ok(SyncCommand::Rest {
@@ -1266,7 +1266,7 @@ mod tests {
                 ..
             }) => {
                 assert_eq!(doc_type, DocType::Trame);
-                assert_eq!(name, "Budget");
+                assert_eq!(name.as_str(), "Budget");
             }
             other => panic!("unexpected SyncCommand: {other:?}"),
         }
@@ -1952,7 +1952,7 @@ mod tests {
             RestCommand::SetupAccount {
                 passphrase: secret(),
                 email: ambre_core::Email::from("a@b.c"),
-                display_name: "A".to_owned(),
+                display_name: ambre_core::DisplayName::new("A").unwrap(),
             },
             RestCommand::DevLogin {
                 username: "a".to_owned(),
@@ -1968,11 +1968,11 @@ mod tests {
             RestCommand::ListDocuments,
             RestCommand::CreateDocument {
                 doc_type: DocType::Trame,
-                name: "n".to_owned(),
+                name: ambre_core::Name::new("n").unwrap(),
             },
             RestCommand::RenameDocument {
                 document_id: doc,
-                name: "n".to_owned(),
+                name: ambre_core::Name::new("n").unwrap(),
             },
             RestCommand::FetchInviteeKey {
                 document_id: doc,

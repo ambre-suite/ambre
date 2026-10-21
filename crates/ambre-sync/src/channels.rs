@@ -152,7 +152,7 @@ impl SyncState {
         space_id: SpaceId,
         (meta, segment): (MetaId, SegmentId),
         public: bool,
-        name: Option<String>,
+        name: Option<ambre_core::Name>,
     ) {
         let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
             // A private channel is listed nowhere, so it needs no space key.
@@ -171,7 +171,7 @@ impl SyncState {
             // The name rides beside meta alone, so it shows before the
             // channel opens (`SYNC-171`).
             let name_enc = name
-                .as_deref()
+                .as_ref()
                 .map(|name| self.seal_channel_name(meta, &channel_key, name))
                 .transpose()?;
             let documents = [
@@ -246,12 +246,12 @@ impl SyncState {
     /// Seal the name just written into `meta` beside it on the relay, under
     /// the key meta holds now (`SYNC-171`). No name seals an empty one. A
     /// failure is logged: the hint stays stale until the next name.
-    pub(crate) fn handle_name_channel(&self, meta: MetaId, name: Option<String>) {
+    pub(crate) fn handle_name_channel(&self, meta: MetaId, name: Option<ambre_core::Name>) {
         let held = self.documents.get(&meta.document_id());
         let sealed = held
             .ok_or_else(|| "meta is not held".to_owned())
             .and_then(|held| {
-                self.seal_channel_name(meta, &held.doc_key, name.as_deref().unwrap_or_default())
+                self.seal_channel_name(meta, &held.doc_key, &name.unwrap_or_default())
             });
         let name_enc = match sealed {
             Ok(name_enc) => name_enc,
@@ -284,7 +284,7 @@ impl SyncState {
         &self,
         meta: MetaId,
         key: &DocumentKey,
-        name: &str,
+        name: &ambre_core::Name,
     ) -> Result<ambre_core::SealedName, String> {
         let signing_key = self.signing_key.as_ref().ok_or("session locked")?;
         Self::seal_document_name(meta.document_id(), key, signing_key, name)
@@ -1722,7 +1722,13 @@ pub(crate) mod tests {
             };
         let (named, elsewhere, cleared, bare) =
             (MetaId::new(), MetaId::new(), MetaId::new(), MetaId::new());
-        let seal = |meta, name| Some(state.seal_channel_name(meta, &key, name).unwrap());
+        let seal = |meta, name: &str| {
+            Some(
+                state
+                    .seal_channel_name(meta, &key, &ambre_core::Name::new(name).unwrap())
+                    .unwrap(),
+            )
+        };
         let answer = http::MemberChannelsResponse {
             channels: vec![
                 entry(named, seal(named, "Design")),
@@ -1772,13 +1778,14 @@ pub(crate) mod tests {
     fn a_channel_name_is_sealed_under_the_channel_key_for_its_meta() {
         let mut state = SyncState::new(LogicSink::channel().0, String::new());
         let (meta, key) = (MetaId::new(), DocumentKey::generate());
+        let design = ambre_core::Name::new("Design").unwrap();
         assert!(
-            state.seal_channel_name(meta, &key, "Design").is_err(),
+            state.seal_channel_name(meta, &key, &design).is_err(),
             "locked"
         );
         state.signing_key =
             Some(ambre_crypto::MasterSeed::from_array([5; 32]).derive_signing_key());
-        let sealed = state.seal_channel_name(meta, &key, "Design").unwrap();
+        let sealed = state.seal_channel_name(meta, &key, &design).unwrap();
         let bytes = sealed.as_bytes().to_vec();
         assert!(!bytes.windows(6).any(|w| w == b"Design"));
         let open = |document_id| crate::documents::open_name(document_id, &key, &bytes, Vec::new());

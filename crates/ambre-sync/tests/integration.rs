@@ -80,7 +80,7 @@ fn setup_account_returns_created_with_recovery_words() {
         RestCommand::SetupAccount {
             passphrase: b"secret".to_vec().into(),
             email: "alice@example.com".into(),
-            display_name: "Alice".into(),
+            display_name: ambre_core::DisplayName::new("Alice").unwrap(),
         },
     );
 
@@ -133,7 +133,7 @@ fn create_document_returns_created() {
         id,
         RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: "My Sheet".into(),
+            name: ambre_core::Name::new("My Sheet").unwrap(),
         },
     );
 
@@ -158,7 +158,7 @@ fn list_documents_includes_created() {
         create_id,
         RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: "My Sheet".into(),
+            name: ambre_core::Name::new("My Sheet").unwrap(),
         },
     );
     let created_doc_id = match drain_rest(&rx, create_id) {
@@ -189,7 +189,7 @@ fn delete_document_removes_from_list() {
         create_id,
         RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: "Temp".into(),
+            name: ambre_core::Name::new("Temp").unwrap(),
         },
     );
     let doc_id = match drain_rest(&rx, create_id) {
@@ -232,7 +232,7 @@ fn rename_document_updates_name() {
         create_id,
         RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: "Old".into(),
+            name: ambre_core::Name::new("Old").unwrap(),
         },
     );
     let doc_id = match drain_rest(&rx, create_id) {
@@ -246,7 +246,7 @@ fn rename_document_updates_name() {
         rename_id,
         RestCommand::RenameDocument {
             document_id: doc_id,
-            name: "New".into(),
+            name: ambre_core::Name::new("New").unwrap(),
         },
     );
 
@@ -419,7 +419,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
         id2,
         RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: "Budget".into(),
+            name: ambre_core::Name::new("Budget").unwrap(),
         },
     );
     let doc_id = match drain_rest(&rx, id2) {

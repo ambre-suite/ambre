@@ -36,6 +36,7 @@ The caller supplies a name, a public key and the quorum it wants its escrow to r
 | `SRV-062` | `FAIL` | A declared quorum MUST NOT exceed the quorum the relay enforces. | audit `N1`; this spec section 3 | `ambre_server::routes::orgs::tests::shamir_threshold_above_1_rejected_until_reconstruction_lands`; `::shamir_threshold_1_accepted`; `::shamir_out_of_range_rejected` -- the three read the refusal, the one value accepted and the range | none | verified |
 | `SRV-229` | `FAIL` | Given an organization created with a member's share, or a member added with one, the relay MUST refuse it and write no row, as no client computes a share. | this spec section 3; this spec section 5; `ZK-001` | `ambre_server::routes::orgs::tests::integration::a_shamir_share_is_refused` -- a creation and an addition each carrying a share answer `400` and write nothing, and the same addition without one lands, database tier | none | verified |
 | `SRV-231` | `FAIL` | Given an organization created with a public key that is not 32 bytes of hexadecimal, the relay MUST refuse it and write nothing. | this spec section 3; `SRV-179` | `ambre_server::routes::orgs::tests::integration::a_malformed_organization_key_is_refused` -- a short key and a key that is not hexadecimal each answer `409` and write no organization, database tier | none | verified |
+| `SRV-233` | `FAIL` | Given an organization created or renamed with a blank name, or one longer than the budget of a name, the relay MUST refuse it and write nothing. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_server::routes::orgs::tests::integration::a_blank_or_long_organization_name_is_refused` -- a blank name and one past the cap each answer `400` on a creation and on a rename and write nothing, and a name is stored trimmed, database tier | none | verified |
 
 ### 1.3 Change who is in the organization
 
@@ -66,7 +67,7 @@ over an opaque blob.
   narrows what a **person** can reach, never what the **relay** can. The escrowed key is sealed
   to the organization's own public key, stored opaque and handed to an owner who decrypts it
   elsewhere (`SRV-067`). `SRV-066` keeps the relay unable to combine anything.
-* **Verification.** 11 `verified`, 2 `unimplemented`. What holds is the membership: the last owner,
+* **Verification.** 12 `verified`, 2 `unimplemented`. What holds is the membership: the last owner,
   the grant and role clamps, the removal clamp, who may ask for a release, and its record. What is
   loose is the deposit, which no route performs.
 ---
