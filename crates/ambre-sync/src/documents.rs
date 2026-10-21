@@ -78,13 +78,17 @@ impl SyncState {
     }
 
     /// Seals a document name with the full envelope, bound to its document
-    /// (`SYNC-018`, `SYNC-068`), and encodes it as base64 for the relay.
+    /// (`SYNC-018`, `SYNC-068`). A name past its budget is refused before it
+    /// is sealed, so the relay never holds one it would refuse (`SYNC-178`).
     pub(crate) fn seal_document_name(
         document_id: DocumentId,
         doc_key: &DocumentKey,
         signing_key: &SigningKey,
         name: &str,
     ) -> Result<ambre_core::SealedName, pipeline::PipelineError> {
+        if !ambre_core::SealedName::fits(name) {
+            return Err(pipeline::PipelineError::NameTooLong);
+        }
         let sealed = pipeline::seal_object(
             name.as_bytes(),
             &pipeline::name_aad(document_id),
@@ -450,6 +454,32 @@ mod tests {
         );
         let other = DocumentKey::generate();
         assert_eq!(open_name(document_id, &other, &bytes, Vec::new()), None);
+    }
+
+    /// `SYNC-178`: a name past its budget is refused before it is sealed. The
+    /// longest name, in four-byte characters, seals within what the relay
+    /// reads, and an empty one is the overhead alone.
+    #[test]
+    fn a_name_past_its_budget_is_not_sealed() {
+        let document_id = DocumentId::new();
+        let doc_key = DocumentKey::generate();
+        let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
+        let seal =
+            |name: &str| SyncState::seal_document_name(document_id, &doc_key, &signing_key, name);
+        let longest = "\u{1F600}".repeat(ambre_core::SealedName::MAX_CHARS);
+        assert_eq!(
+            seal(&longest).unwrap().as_bytes().len(),
+            ambre_core::SealedName::MAX_LEN
+        );
+        assert_eq!(
+            seal("").unwrap().as_bytes().len(),
+            ambre_core::SealedName::OVERHEAD
+        );
+        let past = "a".repeat(ambre_core::SealedName::MAX_CHARS + 1);
+        assert!(matches!(
+            seal(&past),
+            Err(pipeline::PipelineError::NameTooLong)
+        ));
     }
 
     /// A name sealed three rotations ago opens with the current key and the

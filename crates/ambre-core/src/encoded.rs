@@ -10,8 +10,9 @@
 //! On the wire each is its URL-safe base64 text, decoded when the body is
 //! read. A value that is not base64 refuses the body there, as any field
 //! that does not decode does (`SRV-178`). A role whose layout fixes its
-//! length refuses any other length there too (`SRV-226`). `Debug` prints the
-//! length alone.
+//! length refuses any other length there too (`SRV-226`). A sealed name
+//! refuses a length past the longest name it holds (`SRV-230`). `Debug`
+//! prints the length alone.
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE;
@@ -25,9 +26,14 @@ const TAG_LEN: usize = 16;
 const KEY_LEN: usize = 32;
 /// The digest of a log's first entry, sealed beside a wrapped key.
 const ANCHOR_LEN: usize = 32;
+/// The header of a sealed object, as Sync writes it. The layout byte, the key
+/// id, the author's key, the signature, the commitment and the nonce.
+const OBJECT_HEADER_LEN: usize = 1 + 16 + 32 + 64 + 32 + NONCE_LEN;
+/// The most bytes one character takes in UTF-8.
+const UTF8_MAX_LEN: usize = 4;
 
 macro_rules! define_encoded {
-    ($(#[$meta:meta])* $name:ident $(, lengths: [$($len:expr),+])?) => {
+    ($(#[$meta:meta])* $name:ident $(, lengths: [$($len:expr),+])? $(, max: $max:expr)?) => {
         $(#[$meta])*
         #[derive(Clone, Default, PartialEq, Eq, Hash)]
         pub struct $name(Vec<u8>);
@@ -37,6 +43,11 @@ macro_rules! define_encoded {
                 /// The lengths the layout of this role allows; a read refuses
                 /// any other.
                 pub const LENGTHS: &'static [usize] = &[$($len),+];
+            )?
+            $(
+                /// The most bytes a value of this role holds; a read refuses
+                /// more.
+                pub const MAX_LEN: usize = $max;
             )?
 
             /// Wraps the bytes.
@@ -99,6 +110,15 @@ macro_rules! define_encoded {
                         )));
                     }
                 )?
+                $(
+                    if bytes.len() > $max {
+                        return Err(serde::de::Error::custom(format!(
+                            concat!(stringify!($name), " of {} bytes, past {}"),
+                            bytes.len(),
+                            $max,
+                        )));
+                    }
+                )?
                 Ok(Self(bytes))
             }
         }
@@ -113,8 +133,24 @@ define_encoded! {
 }
 
 define_encoded! {
-    /// A document or channel name sealed under its document key.
-    SealedName
+    /// A document or channel name sealed under its document key: the object
+    /// header, the name, the tag.
+    SealedName,
+    max: OBJECT_HEADER_LEN + UTF8_MAX_LEN * SealedName::MAX_CHARS + TAG_LEN
+}
+
+impl SealedName {
+    /// The longest name, in characters, a document or a channel takes
+    /// (`ambre-spec-budgets.md`, section 6).
+    pub const MAX_CHARS: usize = 128;
+
+    /// The bytes a sealed name adds to the name it holds.
+    pub const OVERHEAD: usize = OBJECT_HEADER_LEN + TAG_LEN;
+
+    /// Whether `name` is short enough to be sealed (`SYNC-178`).
+    pub fn fits(name: &str) -> bool {
+        name.chars().count() <= Self::MAX_CHARS
+    }
 }
 
 define_encoded! {
@@ -197,6 +233,17 @@ mod tests {
         assert_eq!(WrappedDocKey::LENGTHS, [72, 104]);
         assert_eq!(WrappedMasterKey::LENGTHS, [72]);
         assert_eq!(MasterKeySalt::LENGTHS, [32]);
-        assert!(reads::<SealedName>(0) && reads::<SealedName>(4000));
+        assert!(reads::<SealedName>(0) && reads::<SealedName>(SealedName::MAX_LEN));
+    }
+
+    /// `SRV-230`: a sealed name reads up to the longest name in four-byte
+    /// characters, and a byte past it is refused.
+    #[test]
+    fn a_sealed_name_past_the_longest_name_is_refused() {
+        assert_eq!(SealedName::MAX_LEN, 185 + 4 * 128);
+        assert!(reads::<SealedName>(SealedName::MAX_LEN));
+        assert!(!reads::<SealedName>(SealedName::MAX_LEN + 1));
+        assert!(SealedName::fits(&"\u{1F600}".repeat(SealedName::MAX_CHARS)));
+        assert!(!SealedName::fits(&"a".repeat(SealedName::MAX_CHARS + 1)));
     }
 }

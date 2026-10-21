@@ -203,7 +203,7 @@ pub fn landing_view(
                         children={
                             let to_logic = to_logic_cards.clone();
                             move |d: DocItem| {
-                                doc_card(d, docs, to_logic.clone(), pending_delete, booted)
+                                doc_card(d, docs, to_logic.clone(), pending_delete, booted, toasts)
                             }
                         }
                     />
@@ -333,6 +333,14 @@ pub fn NewDocPicker(
     }
 }
 
+/// What a refused rename tells the user.
+fn name_too_long() -> String {
+    format!(
+        "A name takes {} characters at most.",
+        ambre_core::SealedName::MAX_CHARS
+    )
+}
+
 /// One document card: type-icon tile + name (or "Untitled") + relative time +
 /// shared badge. It carries inline rename and a delete that routes through
 /// the confirmation dialog.
@@ -342,6 +350,7 @@ fn doc_card(
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     pending_delete: RwSignal<Option<(DocumentId, ComposedName)>>,
     booted: DocType,
+    toasts: Toasts,
 ) -> impl IntoView {
     let doc_type = d.doc_type;
     let id = d.document_id;
@@ -366,6 +375,12 @@ fn doc_card(
         let to_logic = to_logic.clone();
         move || {
             let name = edit_value.get().trim().to_owned();
+            // A name past its budget is refused here, with the field left open
+            // to shorten it, rather than cut or sent to fail (`SYNC-178`).
+            if !ambre_core::SealedName::fits(&name) {
+                toasts.warning(name_too_long());
+                return;
+            }
             editing.set(false);
             if !name.is_empty() {
                 let _ = to_logic.try_send(LogicCommand::Rest {
