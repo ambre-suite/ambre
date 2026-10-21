@@ -1435,7 +1435,7 @@ mod handler_tests {
             crate::db::insert_update(
                 &pool,
                 &doc,
-                &[1u8; 32],
+                &ambre_core::PublicKey::from_array([1u8; 32]),
                 &snapshot,
                 ambre_protocol::messages::Clock(seq),
                 ambre_core::Seq(seq),
@@ -3141,7 +3141,7 @@ mod handler_tests {
             crate::db::insert_update(
                 &state.db,
                 &document,
-                &[3u8; 32],
+                &ambre_core::PublicKey::from_array([3u8; 32]),
                 &ambre_core::SnapshotId::new(),
                 ambre_protocol::messages::Clock(seq.unsigned_abs()),
                 ambre_core::Seq(seq.unsigned_abs()),
@@ -3663,7 +3663,11 @@ mod handler_tests {
         let (tx, mut notices) = tokio::sync::mpsc::channel(8);
         state
             .pubsub
-            .subscribe(format!("doc:{doc_id}"), "watcher".into(), tx)
+            .subscribe(
+                crate::ws::Topic::document(&ambre_core::DocumentId::parse_str(&doc_id).unwrap()),
+                crate::ws::ConnectionId::named("watcher"),
+                tx,
+            )
             .await
             .unwrap();
         let new_key = base64_encode(&[0xE7; 32]);

@@ -86,7 +86,7 @@ pub async fn dev_login(
 
     let user_id = user.id;
     // The upsert above writes both keys, so a dev account always holds one.
-    let signing_pubkey = account_session_key(&user)?
+    let signing_pubkey = account_session_key(&user)
         .ok_or_else(|| AppError::Internal("dev account stored no signing key".into()))?;
 
     let tokens = auth::issue_session(&state, user_id, Some(signing_pubkey)).await?;
@@ -101,25 +101,16 @@ pub async fn dev_login(
     }))
 }
 
-/// The signing key a session is minted under, read from the stored row.
-///
-/// A stored key that does not parse is refused rather than replaced. A fallback
-/// key would mint a session every account in that state shares (`SRV-027`).
-fn session_signing_key(stored: &[u8]) -> Result<ambre_core::PublicKey, AppError> {
-    ambre_core::PublicKey::from_slice(stored)
-        .map_err(|e| AppError::Internal(format!("stored signing key does not parse: {e}")))
-}
-
 /// The signing key a sign-in mints its session under.
 ///
 /// A provider account is created before its keys exist, and its row holds no
 /// key until the one-shot key write. Until then the session carries no key,
 /// and only the setup routes accept it (`SRV-027`).
-fn account_session_key(user: &db::UserRow) -> Result<Option<ambre_core::PublicKey>, AppError> {
-    user.signing_pubkey
-        .as_deref()
-        .map(session_signing_key)
-        .transpose()
+///
+/// A stored key that does not parse never reaches here: the row read refuses
+/// it, rather than a fallback key every such account would share.
+fn account_session_key(user: &db::UserRow) -> Option<ambre_core::PublicKey> {
+    user.signing_pubkey.clone()
 }
 
 /// Request body for `POST /api/auth/refresh`: the opaque refresh token.
@@ -249,7 +240,7 @@ pub async fn oidc_callback(
             .await?;
 
     let user_id = user.id;
-    let signing_pubkey = account_session_key(&user)?;
+    let signing_pubkey = account_session_key(&user);
 
     let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
     tracing::debug!(user_id = %user_id, provider = %provider, "login");
@@ -272,17 +263,17 @@ mod tests {
     #[test]
     fn a_stored_key_that_does_not_parse_mints_no_session() {
         assert!(matches!(
-            session_signing_key(&[3u8; 31]),
-            Err(AppError::Internal(_))
+            crate::db::decode_key(vec![3u8; 31]),
+            Err(sqlx::Error::Decode(_))
         ));
-        assert!(session_signing_key(&[]).is_err());
+        assert!(crate::db::decode_key(Vec::new()).is_err());
         assert_eq!(
-            session_signing_key(&[3u8; 32]).unwrap(),
+            crate::db::decode_key(vec![3u8; 32]).unwrap(),
             ambre_core::PublicKey::from_array([3u8; 32])
         );
     }
 
-    fn provider_row(signing_pubkey: Option<Vec<u8>>) -> db::UserRow {
+    fn provider_row(signing_pubkey: Option<ambre_core::PublicKey>) -> db::UserRow {
         db::UserRow {
             id: ambre_core::UserId::new(),
             oidc_provider: Some("google".into()),
@@ -292,7 +283,9 @@ mod tests {
             display_name: "A".into(),
             master_key_enc: signing_pubkey.as_ref().map(|_| vec![1u8; 56]),
             master_key_salt: None,
-            exchange_pubkey: signing_pubkey.as_ref().map(|_| vec![4u8; 32]),
+            exchange_pubkey: signing_pubkey
+                .as_ref()
+                .map(|_| ambre_core::PublicKey::from_array([4u8; 32])),
             signing_pubkey,
         }
     }
@@ -302,11 +295,11 @@ mod tests {
     #[test]
     fn a_provider_account_without_keys_gets_no_signing_key() {
         let fresh = provider_row(None);
-        assert_eq!(account_session_key(&fresh).unwrap(), None);
+        assert_eq!(account_session_key(&fresh), None);
 
-        let set_up = provider_row(Some(vec![3u8; 32]));
+        let set_up = provider_row(Some(ambre_core::PublicKey::from_array([3u8; 32])));
         assert_eq!(
-            account_session_key(&set_up).unwrap(),
+            account_session_key(&set_up),
             Some(ambre_core::PublicKey::from_array([3u8; 32]))
         );
     }

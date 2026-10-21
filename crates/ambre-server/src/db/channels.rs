@@ -162,7 +162,7 @@ pub struct MemberChannelRow {
     /// The caller's copy of the channel key, and the exchange key of whoever
     /// wrapped it, `None` for a self-wrapped row.
     pub doc_key_enc: Vec<u8>,
-    pub wrapper_exchange_pubkey: Option<Vec<u8>>,
+    pub wrapper_exchange_pubkey: Option<ambre_core::PublicKey>,
     /// For a direct message, the display names of its other members, by
     /// name then id. Empty for a channel of a space (`SRV-220`).
     pub peers: Vec<String>,
@@ -213,7 +213,7 @@ pub async fn list_member_channels(
                 )),
                 name_enc: r.try_get("name_enc")?,
                 doc_key_enc: r.try_get("doc_key_enc")?,
-                wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
+                wrapper_exchange_pubkey: decode_opt_key(r.try_get("wrapper_exchange_pubkey")?)?,
                 peers: r.try_get("peers")?,
                 meta_durable_last: r.try_get("meta_durable_last")?,
             })

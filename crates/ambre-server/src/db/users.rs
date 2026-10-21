@@ -21,8 +21,8 @@ pub struct UserRow {
     pub master_key_salt: Option<Vec<u8>>,
     /// `None` until the account registers its keys: a provider login creates
     /// the account first (`SRV-027`). Both keys are set or neither is.
-    pub signing_pubkey: Option<Vec<u8>>,
-    pub exchange_pubkey: Option<Vec<u8>>,
+    pub signing_pubkey: Option<ambre_core::PublicKey>,
+    pub exchange_pubkey: Option<ambre_core::PublicKey>,
 }
 
 /// Projection of `users` for search results (no key material).
@@ -35,8 +35,8 @@ pub struct UserInfoRow {
     /// possibly-squatted recipient before wrapping the doc key to them (#3).
     pub email_verified: bool,
     pub display_name: String,
-    pub signing_pubkey: Vec<u8>,
-    pub exchange_pubkey: Vec<u8>,
+    pub signing_pubkey: ambre_core::PublicKey,
+    pub exchange_pubkey: ambre_core::PublicKey,
 }
 
 /// Fetches a user by their typed `UserId`.
@@ -62,8 +62,8 @@ pub async fn get_user(
             display_name: r.try_get("display_name")?,
             master_key_enc: r.try_get("master_key_enc")?,
             master_key_salt: r.try_get("master_key_salt")?,
-            signing_pubkey: r.try_get("signing_pubkey")?,
-            exchange_pubkey: r.try_get("exchange_pubkey")?,
+            signing_pubkey: decode_opt_key(r.try_get("signing_pubkey")?)?,
+            exchange_pubkey: decode_opt_key(r.try_get("exchange_pubkey")?)?,
         })),
         None => Ok(None),
     }
@@ -108,8 +108,8 @@ pub async fn get_user_by_email(
             display_name: r.try_get("display_name")?,
             master_key_enc: r.try_get("master_key_enc")?,
             master_key_salt: r.try_get("master_key_salt")?,
-            signing_pubkey: r.try_get("signing_pubkey")?,
-            exchange_pubkey: r.try_get("exchange_pubkey")?,
+            signing_pubkey: decode_opt_key(r.try_get("signing_pubkey")?)?,
+            exchange_pubkey: decode_opt_key(r.try_get("exchange_pubkey")?)?,
         })),
         None => Ok(None),
     }
@@ -152,8 +152,8 @@ pub async fn create_user(
         display_name: row.try_get("display_name")?,
         master_key_enc: row.try_get("master_key_enc")?,
         master_key_salt: row.try_get("master_key_salt")?,
-        signing_pubkey: row.try_get("signing_pubkey")?,
-        exchange_pubkey: row.try_get("exchange_pubkey")?,
+        signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
+        exchange_pubkey: decode_opt_key(row.try_get("exchange_pubkey")?)?,
     })
 }
 
@@ -223,8 +223,8 @@ pub async fn upsert_user_from_oidc(
         display_name: row.try_get("display_name")?,
         master_key_enc: row.try_get("master_key_enc")?,
         master_key_salt: row.try_get("master_key_salt")?,
-        signing_pubkey: row.try_get("signing_pubkey")?,
-        exchange_pubkey: row.try_get("exchange_pubkey")?,
+        signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
+        exchange_pubkey: decode_opt_key(row.try_get("exchange_pubkey")?)?,
     };
 
     tx.commit().await?;
@@ -278,8 +278,8 @@ pub async fn dev_upsert_user(
         display_name: row.try_get("display_name")?,
         master_key_enc: row.try_get("master_key_enc")?,
         master_key_salt: row.try_get("master_key_salt")?,
-        signing_pubkey: row.try_get("signing_pubkey")?,
-        exchange_pubkey: row.try_get("exchange_pubkey")?,
+        signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
+        exchange_pubkey: decode_opt_key(row.try_get("exchange_pubkey")?)?,
     })
 }
 
@@ -311,8 +311,8 @@ pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>
                 email: ambre_core::Email(r.try_get("email")?),
                 email_verified: r.try_get("email_verified")?,
                 display_name: r.try_get("display_name")?,
-                signing_pubkey: r.try_get("signing_pubkey")?,
-                exchange_pubkey: r.try_get("exchange_pubkey")?,
+                signing_pubkey: decode_key(r.try_get("signing_pubkey")?)?,
+                exchange_pubkey: decode_key(r.try_get("exchange_pubkey")?)?,
             })
         })
         .collect()

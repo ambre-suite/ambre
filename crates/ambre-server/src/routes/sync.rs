@@ -228,7 +228,6 @@ pub struct CreateSnapshotRequest {
     #[serde(with = "ambre_core::serde_id::snapshot_id")]
     pub snapshot_id: ambre_core::SnapshotId,
     pub author_pubkey: ambre_core::SigningKeyHex,
-    pub parent_hash: Option<String>,
     pub parent_snapshot_proof: Option<ambre_core::EncodedProof>,
     pub update_clocks: serde_json::Value,
     pub s3_key: ambre_core::ObjectKey,
@@ -276,14 +275,6 @@ pub async fn create_snapshot(
     if apk != s.signing_pubkey.as_slice() {
         return Err(AppError::Forbidden);
     }
-    let ph = req
-        .parent_hash
-        .map(|h| {
-            hex::decode(&h).map_err(|e| AppError::Conflict {
-                detail: e.to_string(),
-            })
-        })
-        .transpose()?;
     let pp = req
         .parent_snapshot_proof
         .map(|p| {
@@ -309,8 +300,7 @@ pub async fn create_snapshot(
     let sid = db::create_snapshot(
         &state.db,
         &doc_id,
-        &apk,
-        ph.as_deref(),
+        &s.signing_pubkey,
         pp.as_deref(),
         &req.update_clocks,
         &req.s3_key,

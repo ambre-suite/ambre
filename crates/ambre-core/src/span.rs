@@ -135,6 +135,28 @@ pub mod timestamp_as_i64 {
     }
 }
 
+/// An instant in whole milliseconds since the Unix epoch, read off the
+/// relay's own clock: the sliding window of its rate limiter. Apart from a
+/// [`Timestamp`], which an author's untrusted clock writes.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct UnixMillis(pub u64);
+
+impl UnixMillis {
+    /// The instant `span` after this one, saturating at `u64::MAX`.
+    #[must_use]
+    pub const fn plus(self, span: Millis) -> Self {
+        Self(self.0.saturating_add(span.0))
+    }
+
+    /// The whole second the instant falls in.
+    pub const fn to_unix_seconds(self) -> UnixSeconds {
+        UnixSeconds(self.0 / 1000)
+    }
+}
+
 /// An instant in whole seconds since the Unix epoch: the clock of a token's
 /// `iat` and `exp`, and of a delete's second sweep.
 #[derive(
@@ -206,6 +228,13 @@ mod tests {
             postcard::from_bytes::<Stored>(&bytes).unwrap(),
             Stored(Timestamp(3))
         );
+    }
+
+    #[test]
+    fn a_millisecond_instant_falls_in_its_second() {
+        let at = super::UnixMillis(1_999).plus(Millis(1));
+        assert_eq!(at, super::UnixMillis(2_000));
+        assert_eq!(at.to_unix_seconds(), UnixSeconds(2));
     }
 
     #[test]

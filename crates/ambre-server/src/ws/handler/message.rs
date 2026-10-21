@@ -205,7 +205,7 @@ pub(crate) async fn handle_subscribe(
                 let author_clocks: Vec<(String, ambre_protocol::messages::Clock)> = clock_state
                     .author_clocks
                     .iter()
-                    .map(|(pk, clock)| (hex::encode(pk), *clock))
+                    .map(|(pk, clock)| (pk.to_hex(), *clock))
                     .collect();
                 if let Err(e) = redis_ops::seed_clock_state(
                     &state.redis,
@@ -562,7 +562,7 @@ async fn store_index_row(
     s3_key: &ambre_core::ObjectKey,
     wire: &Payload,
 ) -> Result<bool, AppError> {
-    let author = update.public_data.pub_key.as_array();
+    let author = &update.public_data.pub_key;
     let snapshot_id = &update.public_data.snapshot_id;
     let clock = update.public_data.clock;
     if wire.len() < crate::hot_tail::INLINE_DELTA_MAX_BYTES {
@@ -1369,7 +1369,11 @@ mod ephemeral_binding_tests {
         let (tx, mut rx) = mpsc::channel(8);
         state
             .pubsub
-            .subscribe(doc_pubsub_channel(&doc_id), "watcher".into(), tx)
+            .subscribe(
+                crate::ws::Topic::document(&doc_id),
+                crate::ws::ConnectionId::named("watcher"),
+                tx,
+            )
             .await
             .unwrap();
         for _ in 0..2 {

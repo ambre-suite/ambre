@@ -27,7 +27,7 @@ pub struct DocumentSummaryRow {
     /// Exchange public key of the member who wrapped the caller's `doc_key_enc`
     /// (the inviter, or the owner at creation). `None` for a self-wrapped owner
     /// row on older data; the client then falls back to its own key.
-    pub wrapper_exchange_pubkey: Option<Vec<u8>>,
+    pub wrapper_exchange_pubkey: Option<ambre_core::PublicKey>,
     /// Total number of members on the document (routing metadata, plaintext).
     /// `> 1` means the document is shared.
     pub member_count: i64,
@@ -91,7 +91,7 @@ pub async fn list_documents_for_user(
                 updated_at: r.try_get("updated_at")?,
                 role: decode_role(r.try_get("role")?)?,
                 doc_key_enc: r.try_get("doc_key_enc")?,
-                wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
+                wrapper_exchange_pubkey: decode_opt_key(r.try_get("wrapper_exchange_pubkey")?)?,
                 member_count: r.try_get("member_count")?,
             })
         })

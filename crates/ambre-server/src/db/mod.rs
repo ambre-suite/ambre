@@ -54,6 +54,17 @@ fn decode_clock(value: i64) -> Result<ambre_protocol::messages::Clock, sqlx::Err
     ambre_protocol::messages::Clock::try_from(value).map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
+/// A stored public key. Any length but 32 bytes is a decode error: the relay
+/// never hands a peer a key it could not have registered.
+pub(crate) fn decode_key(bytes: Vec<u8>) -> Result<ambre_core::PublicKey, sqlx::Error> {
+    ambre_core::PublicKey::from_slice(&bytes).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+}
+
+/// A stored public key that may be `NULL`, as [`decode_key`] reads one.
+fn decode_opt_key(bytes: Option<Vec<u8>>) -> Result<Option<ambre_core::PublicKey>, sqlx::Error> {
+    bytes.map(decode_key).transpose()
+}
+
 fn uuid_to_core(u: uuid::Uuid) -> ambre_core::Uuid {
     ambre_core::Uuid::from_bytes(*u.as_bytes())
 }
@@ -137,8 +148,7 @@ mod tests {
         let sid = create_snapshot(
             &pool,
             &document_id,
-            &author,
-            None,
+            &ambre_core::PublicKey::from_array(author),
             None,
             &clocks,
             &ambre_core::ObjectKey::from("s3/key/snap"),
@@ -206,7 +216,7 @@ mod tests {
             insert_update(
                 &pool,
                 &document_id,
-                &author,
+                &ambre_core::PublicKey::from_array(author),
                 &snap,
                 ambre_protocol::messages::Clock(seq.unsigned_abs()),
                 ambre_core::Seq(seq.unsigned_abs()),
@@ -220,8 +230,7 @@ mod tests {
         let sid = create_snapshot(
             &pool,
             &document_id,
-            &author,
-            None,
+            &ambre_core::PublicKey::from_array(author),
             None,
             &serde_json::json!({}),
             &ambre_core::ObjectKey::from("s3/snap"),
@@ -278,7 +287,7 @@ mod tests {
             insert_update(
                 &pool,
                 &document_id,
-                &author,
+                &ambre_core::PublicKey::from_array(author),
                 &snap,
                 ambre_protocol::messages::Clock(seq.unsigned_abs()),
                 ambre_core::Seq(seq.unsigned_abs()),
@@ -292,8 +301,7 @@ mod tests {
             let sid = create_snapshot(
                 &pool,
                 &document_id,
-                &author,
-                None,
+                &ambre_core::PublicKey::from_array(author),
                 None,
                 &serde_json::json!({}),
                 &ambre_core::ObjectKey(format!("s3/snap-{covered}")),

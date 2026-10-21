@@ -177,7 +177,7 @@ mod db_tests {
         db::insert_update(
             &state.db,
             doc,
-            author,
+            &ambre_core::PublicKey::from_array(*author),
             &tag,
             ambre_protocol::messages::Clock(seq.unsigned_abs()),
             ambre_core::Seq(seq.unsigned_abs()),
@@ -198,9 +198,17 @@ mod db_tests {
         let key = format!("s3/{covered}");
         let key = ambre_core::ObjectKey(key);
         let covered = ambre_core::Seq::try_from(covered).expect("a relay number");
-        db::create_snapshot(&state.db, doc, author, None, None, &json, &key, covered)
-            .await
-            .unwrap()
+        db::create_snapshot(
+            &state.db,
+            doc,
+            &ambre_core::PublicKey::from_array(*author),
+            None,
+            &json,
+            &key,
+            covered,
+        )
+        .await
+        .unwrap()
     }
 
     /// Each remaining delta's number and author tag.
@@ -209,12 +217,7 @@ mod db_tests {
             .await
             .unwrap()
             .into_iter()
-            .map(|r| {
-                (
-                    r.seq.to_i64_saturating(),
-                    r.author_pubkey.first().copied().unwrap_or(0),
-                )
-            })
+            .map(|r| (r.seq.to_i64_saturating(), r.author_pubkey.as_array()[0]))
             .collect()
     }
 

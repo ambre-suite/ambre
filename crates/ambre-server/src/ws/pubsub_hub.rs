@@ -28,11 +28,77 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::payload::Payload;
 
+/// A Redis PubSub topic: the name a broadcast is published on and a socket
+/// subscribes to. One constructor per kind, so the publisher and the
+/// subscriber cannot spell a topic two ways.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Topic(String);
+
+impl Topic {
+    /// A document's live broadcasts.
+    pub fn document(document_id: &ambre_core::DocumentId) -> Self {
+        Self(format!("doc:{document_id}"))
+    }
+
+    /// A user's personal events, such as a document shared with them. Every
+    /// connection subscribes to its own for the whole session.
+    pub fn user(user_id: &ambre_core::UserId) -> Self {
+        Self(format!("user:{user_id}"))
+    }
+
+    /// The activity of a channel's threads. Every socket watching a document
+    /// of the channel subscribes to it (`SRV-161`).
+    pub fn channel(channel_id: &ambre_core::ChannelId) -> Self {
+        Self(format!("channel:{channel_id}"))
+    }
+
+    /// A topic no kind names, for a test.
+    #[cfg(test)]
+    pub(crate) fn named(name: &str) -> Self {
+        Self(name.to_owned())
+    }
+
+    /// The name Redis knows.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// The routing table looks a topic up by the name a message carries.
+impl std::borrow::Borrow<str> for Topic {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for Topic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// One socket's key in the hub's routing table.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ConnectionId(String);
+
+impl ConnectionId {
+    /// A key no other socket holds.
+    pub fn new() -> Self {
+        Self(uuid::Uuid::new_v4().to_string())
+    }
+
+    /// A fixed key, for a test that registers by name.
+    #[cfg(test)]
+    pub(crate) fn named(name: &str) -> Self {
+        Self(name.to_owned())
+    }
+}
+
 /// A registration/forwarding request sent from a WS connection to the hub task.
 enum HubCmd {
     Subscribe {
-        channel: String,
-        conn_id: String,
+        channel: Topic,
+        conn_id: ConnectionId,
         /// Where to forward messages on `channel` for this connection (its WS
         /// outbound queue).
         sink: mpsc::Sender<Payload>,
@@ -41,8 +107,8 @@ enum HubCmd {
         routed: oneshot::Sender<()>,
     },
     Unsubscribe {
-        channel: String,
-        conn_id: String,
+        channel: Topic,
+        conn_id: ConnectionId,
     },
 }
 
@@ -81,8 +147,8 @@ impl PubSubHub {
     /// connection, which the client then reopens.
     pub async fn subscribe(
         &self,
-        channel: String,
-        conn_id: String,
+        channel: Topic,
+        conn_id: ConnectionId,
         sink: mpsc::Sender<Payload>,
     ) -> Result<(), NotRouted> {
         let (routed, answer) = oneshot::channel();
@@ -99,7 +165,7 @@ impl PubSubHub {
     }
 
     /// Stop forwarding `channel` to `conn_id`.
-    pub async fn unsubscribe(&self, channel: String, conn_id: String) {
+    pub async fn unsubscribe(&self, channel: Topic, conn_id: ConnectionId) {
         let _ = self
             .cmd_tx
             .send(HubCmd::Unsubscribe { channel, conn_id })
@@ -118,7 +184,7 @@ const HUB_RESTART_DELAY: Duration = Duration::from_secs(1);
 /// topic -> (conn_id -> sink). The presence of an entry for a topic means the
 /// current stream holds a live Redis SUBSCRIBE on it; emptying it triggers
 /// UNSUBSCRIBE.
-type Routes = HashMap<String, HashMap<String, mpsc::Sender<Payload>>>;
+type Routes = HashMap<Topic, HashMap<ConnectionId, mpsc::Sender<Payload>>>;
 
 /// Why one run of the hub ended.
 enum HubExit {
@@ -176,7 +242,7 @@ async fn hub_run(
             cmd = cmd_rx.recv() => match cmd {
                 Some(HubCmd::Subscribe { channel, conn_id, sink, routed }) => {
                     #[cfg(test)]
-                    if channel == tests::PANIC_TOPIC {
+                    if channel.as_str() == tests::PANIC_TOPIC {
                         panic!("forced by a test");
                     }
                     match routes.entry(channel.clone()) {
@@ -268,17 +334,17 @@ pub(crate) mod tests {
         let one = crate::test_helpers::test_app_state(pool).await;
         let other = crate::test_helpers::second_instance(&one).await;
         let document_id = ambre_core::DocumentId::new();
-        let topic = format!("doc:{document_id}");
+        let topic = Topic::document(&document_id);
 
         let (there_tx, mut there) = mpsc::channel(8);
         other
             .pubsub
-            .subscribe(topic.clone(), "there".into(), there_tx)
+            .subscribe(topic.clone(), ConnectionId::named("there"), there_tx)
             .await
             .expect("the other instance routes the topic");
         let (here_tx, mut here) = mpsc::channel(8);
         one.pubsub
-            .subscribe(topic, "here".into(), here_tx)
+            .subscribe(topic, ConnectionId::named("here"), here_tx)
             .await
             .expect("this instance routes the topic");
 
@@ -305,16 +371,20 @@ pub(crate) mod tests {
             .await
             .expect("a running redis");
         let hub = PubSubHub::spawn(redis.clone());
-        let topic = format!("test:hub-panic:{}", uuid::Uuid::new_v4());
+        let topic = Topic::named(&format!("test:hub-panic:{}", uuid::Uuid::new_v4()));
 
         let (watcher_tx, mut watcher_rx) = mpsc::channel(8);
-        hub.subscribe(topic.clone(), "watcher".into(), watcher_tx)
+        hub.subscribe(topic.clone(), ConnectionId::named("watcher"), watcher_tx)
             .await
             .expect("an ordinary topic is routed");
 
         let (victim_tx, _victim_rx) = mpsc::channel(8);
         let refused = hub
-            .subscribe(PANIC_TOPIC.into(), "victim".into(), victim_tx)
+            .subscribe(
+                Topic::named(PANIC_TOPIC),
+                ConnectionId::named("victim"),
+                victim_tx,
+            )
             .await;
         assert_eq!(refused, Err(NotRouted), "the request the hub panicked on");
 
@@ -339,7 +409,7 @@ pub(crate) mod tests {
 
         // A new connection is routed by the restarted hub, too.
         let (late_tx, mut late_rx) = mpsc::channel(8);
-        hub.subscribe(topic.clone(), "late".into(), late_tx)
+        hub.subscribe(topic.clone(), ConnectionId::named("late"), late_tx)
             .await
             .expect("the restarted hub routes a new connection");
         let _: usize = redis

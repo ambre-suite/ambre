@@ -295,7 +295,7 @@ mod db_tests {
         crate::db::insert_inline_update(
             &state.db,
             doc,
-            &[5u8; 32],
+            &ambre_core::PublicKey::from_array([5u8; 32]),
             &snap,
             ambre_protocol::messages::Clock(seq.unsigned_abs()),
             ambre_core::Seq(seq.unsigned_abs()),
@@ -473,8 +473,7 @@ mod db_tests {
         let snap = crate::db::create_snapshot(
             &state.db,
             &doc,
-            &[5u8; 32],
-            None,
+            &ambre_core::PublicKey::from_array([5u8; 32]),
             None,
             &clocks,
             &ambre_core::ObjectKey::from("snap"),

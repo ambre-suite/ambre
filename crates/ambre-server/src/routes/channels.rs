@@ -3683,7 +3683,7 @@ mod tests {
         db::insert_update(
             &state.db,
             &document,
-            &[1; 32],
+            &ambre_core::PublicKey::from_array([1; 32]),
             &snapshot,
             ambre_protocol::messages::Clock(seq.unsigned_abs()),
             ambre_core::Seq(seq.unsigned_abs()),
@@ -3713,8 +3713,7 @@ mod tests {
         db::create_snapshot(
             &state.db,
             &document,
-            &[1; 32],
-            None,
+            &ambre_core::PublicKey::from_array([1; 32]),
             None,
             &clocks,
             &ambre_core::ObjectKey::from("s"),

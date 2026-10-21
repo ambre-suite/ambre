@@ -11,9 +11,7 @@ pub struct SnapshotRow {
     #[allow(dead_code)]
     pub document_id: ambre_core::DocumentId,
     #[allow(dead_code)]
-    pub author_pubkey: Vec<u8>,
-    #[allow(dead_code)]
-    pub parent_hash: Option<Vec<u8>>,
+    pub author_pubkey: ambre_core::PublicKey,
     #[allow(dead_code)]
     pub parent_snapshot_proof: Option<Vec<u8>>,
     #[allow(dead_code)]
@@ -37,7 +35,7 @@ fn parse_status(text: &str) -> Result<SnapshotStatus, AppError> {
 }
 
 /// The columns [`snapshot_row`] reads, in one place for every query.
-const SNAPSHOT_COLUMNS: &str = "id, document_id, author_pubkey, parent_hash, \
+const SNAPSHOT_COLUMNS: &str = "id, document_id, author_pubkey, \
     parent_snapshot_proof, update_clocks, s3_key, covered_seq, status, created_at";
 
 /// One `snapshots` row, read from [`SNAPSHOT_COLUMNS`].
@@ -46,8 +44,7 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
     Ok(SnapshotRow {
         id: r.try_get::<PgId, _>("id")?.into(),
         document_id: r.try_get::<PgId, _>("document_id")?.into(),
-        author_pubkey: r.try_get("author_pubkey")?,
-        parent_hash: r.try_get("parent_hash")?,
+        author_pubkey: decode_key(r.try_get("author_pubkey")?)?,
         parent_snapshot_proof: r.try_get("parent_snapshot_proof")?,
         update_clocks: r.try_get("update_clocks")?,
         s3_key: ambre_core::ObjectKey(r.try_get("s3_key")?),
@@ -62,7 +59,7 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
 pub struct UpdateRow {
     #[allow(dead_code)]
     pub document_id: ambre_core::DocumentId,
-    pub author_pubkey: Vec<u8>,
+    pub author_pubkey: ambre_core::PublicKey,
     #[allow(dead_code)]
     pub snapshot_id: ambre_core::SnapshotId,
     pub clock: ambre_protocol::messages::Clock,
@@ -108,8 +105,7 @@ pub struct Trim {
 pub async fn create_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    author_pubkey: &[u8],
-    parent_hash: Option<&[u8]>,
+    author_pubkey: &ambre_core::PublicKey,
     parent_snapshot_proof: Option<&[u8]>,
     update_clocks: &serde_json::Value,
     s3_key: &ambre_core::ObjectKey,
@@ -118,12 +114,11 @@ pub async fn create_snapshot(
     let did = id_to_uuid(*document_id);
     let snapshot_id = uuid::Uuid::now_v7();
     sqlx::query(
-        "INSERT INTO snapshots (id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, covered_seq) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+        "INSERT INTO snapshots (id, document_id, author_pubkey, parent_snapshot_proof, update_clocks, s3_key, covered_seq) VALUES ($1, $2, $3, $4, $5, $6, $7)"
     )
     .bind(snapshot_id)
     .bind(did)
-    .bind(author_pubkey)
-    .bind(parent_hash)
+    .bind(author_pubkey.as_slice())
     .bind(parent_snapshot_proof)
     .bind(update_clocks)
     .bind(s3_key.as_str())
@@ -311,7 +306,7 @@ pub async fn get_snapshot(
 pub async fn insert_update(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    author_pubkey: &[u8],
+    author_pubkey: &ambre_core::PublicKey,
     snapshot_id: &ambre_core::SnapshotId,
     clock: ambre_protocol::messages::Clock,
     seq: ambre_core::Seq,
@@ -323,7 +318,7 @@ pub async fn insert_update(
         "INSERT INTO updates (document_id, author_pubkey, snapshot_id, clock, seq, s3_key) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (document_id, author_pubkey, clock) DO NOTHING"
     )
     .bind(did)
-    .bind(author_pubkey)
+    .bind(author_pubkey.as_slice())
     .bind(sid)
     .bind(clock.to_i64_saturating())
     .bind(seq.to_i64_saturating())
@@ -341,7 +336,7 @@ pub async fn insert_update(
 pub async fn insert_inline_update(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    author_pubkey: &[u8],
+    author_pubkey: &ambre_core::PublicKey,
     snapshot_id: &ambre_core::SnapshotId,
     clock: ambre_protocol::messages::Clock,
     seq: ambre_core::Seq,
@@ -362,7 +357,7 @@ pub async fn insert_inline_update(
          SELECT n, bytes, n < $7 AND bytes + octet_length($6) <= $8 FROM tail",
     )
     .bind(id_to_uuid(*document_id))
-    .bind(author_pubkey)
+    .bind(author_pubkey.as_slice())
     .bind(id_to_uuid(*snapshot_id))
     .bind(clock.to_i64_saturating())
     .bind(seq.to_i64_saturating())
@@ -495,7 +490,7 @@ pub async fn get_updates_after(
         .map(|r| {
             Ok(UpdateRow {
                 document_id: r.try_get::<PgId, _>("document_id")?.into(),
-                author_pubkey: r.try_get("author_pubkey")?,
+                author_pubkey: decode_key(r.try_get("author_pubkey")?)?,
                 snapshot_id: r.try_get::<PgId, _>("snapshot_id")?.into(),
                 clock: decode_clock(r.try_get("clock")?)?,
                 seq: decode_seq(r.try_get("seq")?)?,
@@ -522,7 +517,7 @@ pub struct ClockState {
     /// Highest `seq` ever assigned for the document (0 when it has no updates).
     pub max_seq: ambre_core::Seq,
     /// Per-author `(author_pubkey, max_clock)` high-water marks.
-    pub author_clocks: Vec<(Vec<u8>, ambre_protocol::messages::Clock)>,
+    pub author_clocks: Vec<(ambre_core::PublicKey, ambre_protocol::messages::Clock)>,
 }
 
 /// Reads the durable clock/seq high-water marks for a document from the `updates`
@@ -543,7 +538,7 @@ pub async fn get_clock_state(
 
     let mut state = ClockState::default();
     for r in &rows {
-        let author: Vec<u8> = r.try_get("author_pubkey")?;
+        let author = decode_key(r.try_get("author_pubkey")?)?;
         let max_clock = decode_clock(r.try_get("max_clock")?)?;
         let max_seq = decode_seq(r.try_get("max_seq")?)?;
         state.max_seq = state.max_seq.max(max_seq);

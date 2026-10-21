@@ -58,8 +58,8 @@ pub struct MemberWithUserRow {
     pub email_verified: bool,
     pub display_name: String,
     pub role: ambre_core::Role,
-    pub signing_pubkey: Vec<u8>,
-    pub exchange_pubkey: Vec<u8>,
+    pub signing_pubkey: ambre_core::PublicKey,
+    pub exchange_pubkey: ambre_core::PublicKey,
     pub doc_key_enc: Vec<u8>,
     #[allow(dead_code)]
     pub invited_by: Option<ambre_core::UserId>,
@@ -67,7 +67,7 @@ pub struct MemberWithUserRow {
     /// or the member themselves for a self-wrap at creation). The recipient needs
     /// this peer key to perform the ECDH unwrap -- their own key is the wrong DH
     /// partner. `None` only for legacy rows with no `invited_by`.
-    pub wrapper_exchange_pubkey: Option<Vec<u8>>,
+    pub wrapper_exchange_pubkey: Option<ambre_core::PublicKey>,
 }
 
 /// One signed membership entry a request carries, checked by the route that
@@ -358,11 +358,11 @@ pub async fn list_document_members(
                 email_verified: r.try_get("email_verified")?,
                 display_name: r.try_get("display_name")?,
                 role: decode_role(r.try_get("role")?)?,
-                signing_pubkey: r.try_get("signing_pubkey")?,
-                exchange_pubkey: r.try_get("exchange_pubkey")?,
+                signing_pubkey: decode_key(r.try_get("signing_pubkey")?)?,
+                exchange_pubkey: decode_key(r.try_get("exchange_pubkey")?)?,
                 doc_key_enc: r.try_get("doc_key_enc")?,
                 invited_by: r.try_get::<PgOptId, _>("invited_by")?.into(),
-                wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
+                wrapper_exchange_pubkey: decode_opt_key(r.try_get("wrapper_exchange_pubkey")?)?,
             })
         })
         .collect()

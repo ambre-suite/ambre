@@ -30,24 +30,7 @@ use crate::db;
 use crate::error::AppError;
 use crate::redis_ops;
 use crate::state::AppState;
-
-/// Redis PubSub topic name for a document's live broadcasts.
-fn doc_pubsub_channel(document_id: &DocumentId) -> String {
-    format!("doc:{document_id}")
-}
-
-/// Redis PubSub topic name for a user's personal events (for example a document was
-/// shared with them). Every connection subscribes to its own user topic for
-/// the whole session so server-initiated, non-document-scoped pushes reach it.
-pub(crate) fn user_pubsub_channel(user_id: &UserId) -> String {
-    format!("user:{user_id}")
-}
-
-/// Redis PubSub topic name for the activity of a channel's threads. Every
-/// socket watching a document of the channel subscribes to it (`SRV-161`).
-pub(crate) fn channel_pubsub_channel(channel_id: &ChannelId) -> String {
-    format!("channel:{channel_id}")
-}
+use crate::ws::pubsub_hub::{ConnectionId, Topic};
 
 /// HTTP upgrade handler. The socket address carries no credential. The access
 /// token arrives as the socket's first frame, so no proxy record, log line or
@@ -207,7 +190,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
     let (outbound_tx, mut outbound_rx) = mpsc::channel::<Payload>(256);
 
     let user_id = session.user_id;
-    let connection_id = uuid::Uuid::new_v4().to_string();
+    let connection_id = ConnectionId::new();
 
     let mut conn = WsConnectionState {
         user_id,
@@ -247,7 +230,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
     // left open, it would miss every broadcast on that topic (`SRV-101`).
     let routed = pubsub
         .subscribe(
-            user_pubsub_channel(&user_id),
+            Topic::user(&user_id),
             connection_id.clone(),
             outbound_tx.clone(),
         )
@@ -298,7 +281,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
                     if conn.doc_subscriptions.contains(&document_id)
                         && pubsub
                             .subscribe(
-                                doc_pubsub_channel(&document_id),
+                                Topic::document(&document_id),
                                 connection_id.clone(),
                                 outbound_tx.clone(),
                             )
@@ -313,7 +296,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
                     if let Some(channel) = conn.channel_of(&document_id)
                         && pubsub
                             .subscribe(
-                                channel_pubsub_channel(&channel),
+                                Topic::channel(&channel),
                                 connection_id.clone(),
                                 outbound_tx.clone(),
                             )
@@ -333,13 +316,13 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
                     let channel = conn.channel_of(&document_id);
                     handle_unsubscribe(&mut conn, document_id);
                     pubsub
-                        .unsubscribe(doc_pubsub_channel(&document_id), connection_id.clone())
+                        .unsubscribe(Topic::document(&document_id), connection_id.clone())
                         .await;
                     if let Some(channel) = channel
                         && !conn.watches_channel(&channel)
                     {
                         pubsub
-                            .unsubscribe(channel_pubsub_channel(&channel), connection_id.clone())
+                            .unsubscribe(Topic::channel(&channel), connection_id.clone())
                             .await;
                     }
                 }
@@ -382,17 +365,17 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         // waiting out the presence field's TTL.
         announce_departure(&state, doc_id, &conn.signing_pubkey).await;
         pubsub
-            .unsubscribe(doc_pubsub_channel(doc_id), connection_id.clone())
+            .unsubscribe(Topic::document(doc_id), connection_id.clone())
             .await;
     }
     let channels: HashSet<ChannelId> = conn.doc_channels.values().map(|(c, _)| *c).collect();
     for channel in &channels {
         pubsub
-            .unsubscribe(channel_pubsub_channel(channel), connection_id.clone())
+            .unsubscribe(Topic::channel(channel), connection_id.clone())
             .await;
     }
     pubsub
-        .unsubscribe(user_pubsub_channel(&user_id), connection_id.clone())
+        .unsubscribe(Topic::user(&user_id), connection_id.clone())
         .await;
     outbound_handle.abort();
 }

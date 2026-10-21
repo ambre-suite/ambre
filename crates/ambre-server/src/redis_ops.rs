@@ -627,12 +627,12 @@ pub async fn doc_broadcast(
     document_id: &ambre_core::DocumentId,
     payload: &Payload,
 ) -> Result<(), AppError> {
-    let channel = format!("doc:{document_id}");
+    let channel = crate::ws::Topic::document(document_id);
     // The payload is binary (encrypted ciphertext). rustis serializes a raw
     // `&[u8]` as a sequence of integers (a serde limitation) and panics. Wrap it
     // in `RefBulkString` so it is sent as a single RESP bulk string.
     redis
-        .publish(&channel, RefBulkString::new(payload.expose_bytes()))
+        .publish(channel.as_str(), RefBulkString::new(payload.expose_bytes()))
         .await
         .map_err(|e| AppError::Redis(format!("doc broadcast: {e}")))?;
     Ok(())
@@ -648,9 +648,9 @@ pub async fn user_broadcast(
     user_id: &ambre_core::UserId,
     payload: &Payload,
 ) -> Result<(), AppError> {
-    let channel = format!("user:{user_id}");
+    let channel = crate::ws::Topic::user(user_id);
     redis
-        .publish(&channel, RefBulkString::new(payload.expose_bytes()))
+        .publish(channel.as_str(), RefBulkString::new(payload.expose_bytes()))
         .await
         .map_err(|e| AppError::Redis(format!("user broadcast: {e}")))?;
     Ok(())
@@ -680,9 +680,9 @@ pub async fn thread_activity(
     let msg = Payload::server_msg(&ambre_protocol::ws::WsServerMsg::ThreadActivity {
         document_id: *thread,
     });
-    let topic = format!("channel:{channel_id}");
+    let topic = crate::ws::Topic::channel(channel_id);
     redis
-        .publish(&topic, RefBulkString::new(msg.expose_bytes()))
+        .publish(topic.as_str(), RefBulkString::new(msg.expose_bytes()))
         .await
         .map_err(|e| AppError::Redis(format!("thread activity: {e}")))?;
     Ok(())

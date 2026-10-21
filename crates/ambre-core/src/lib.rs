@@ -98,7 +98,7 @@ pub use schema::{
     SchemaVerdict, migrate_schema, migration_peer, scaffold_peer, verdict,
 };
 pub use seq::Seq;
-pub use span::{Millis, PageTime, Seconds, Timestamp, UnixSeconds};
+pub use span::{Millis, PageTime, Seconds, Timestamp, UnixMillis, UnixSeconds};
 pub use status::{RefusalCode, RotationStatus, SnapshotStatus, StatusError, WriteStatus};
 pub use uuid::Uuid;
 pub use version::Version;
