@@ -530,7 +530,7 @@ impl LogicState {
     pub(crate) fn channel_copy_landed(
         &mut self,
         document_id: DocumentId,
-        snapshot: Option<Vec<u8>>,
+        snapshot: Option<ambre_core::SnapshotBytes>,
         deltas: &[Vec<u8>],
     ) {
         let Some((&channel_id, closed)) = self
@@ -551,7 +551,7 @@ impl LogicState {
             return;
         };
         if let Some(copy) = snapshot {
-            opening.receive_at(document_id, Some(Order::Snapshot(horizon)), &copy);
+            opening.receive_at(document_id, Some(Order::Snapshot(horizon)), copy.as_bytes());
             for delta in deltas {
                 opening.receive(document_id, delta);
             }
@@ -1641,7 +1641,7 @@ impl LogicState {
     fn send_sample(&self, meta: DocumentId, sample: Sample) {
         self.send_to_sync(SyncCommand::SendEphemeral {
             document_id: meta,
-            payload: sample.bytes(),
+            payload: sample.bytes().into(),
         });
     }
 
@@ -2694,7 +2694,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id: meta,
             doc_type: DocType::Murmure,
-            snapshot: Some(copies[&meta].clone()),
+            snapshot: Some(copies[&meta].clone().into()),
             deltas: Vec::new(),
             sessions: Vec::new(),
         });
@@ -2785,7 +2785,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id,
             covered_seq: ambre_core::Seq(1),
-            payload: stored.snapshot(document_id).expect("snapshot"),
+            payload: (stored.snapshot(document_id).expect("snapshot")).into(),
         });
         state.handle_logic_event(LogicEvent::DocumentReady {
             document_id,
@@ -3990,7 +3990,7 @@ mod tests {
                 SyncCommand::SendEphemeral {
                     document_id,
                     payload,
-                } => (document_id, payload),
+                } => (document_id, payload.into_bytes()),
                 other => panic!("only an ephemeral leaves, got {other:?}"),
             })
             .collect()
@@ -4016,7 +4016,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteEphemeral {
             document_id,
             from_user_id: from,
-            payload: sample.bytes(),
+            payload: sample.bytes().into(),
         });
     }
 
@@ -4799,7 +4799,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: segment.document_id(),
             covered_seq: ambre_core::Seq(1),
-            payload: vec![0xff; 8],
+            payload: (vec![0xff; 8]).into(),
         });
         state.handle_logic_event(LogicEvent::DocumentReady {
             document_id: segment.document_id(),
@@ -5371,7 +5371,7 @@ mod tests {
             document_id,
             snapshot_id: ambre_bus::SnapshotId::genesis(document_id),
             covered_seq: covered,
-            payload,
+            payload: payload.into(),
             purpose: ambre_bus::SnapshotPurpose::Confirm,
         });
         drain(sync)
@@ -5986,7 +5986,7 @@ mod tests {
             state.handle_logic_event(LogicEvent::RemoteSnapshot {
                 document_id,
                 covered_seq: ambre_core::Seq(1),
-                payload: payload.to_vec(),
+                payload: (payload.to_vec()).into(),
             });
             state.handle_logic_event(LogicEvent::DocumentReady {
                 document_id,

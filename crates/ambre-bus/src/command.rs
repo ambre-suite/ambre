@@ -89,7 +89,7 @@ pub enum SyncCommand {
     /// Full CRDT state for compaction (presigned URL -> S3).
     SendSnapshot {
         document_id: DocumentId,
-        payload: Vec<u8>,
+        payload: ambre_core::SnapshotBytes,
         /// The last delta `seq` the Logic thread holds with no gap below it.
         /// The snapshot claims to fold in every delta up to it (`SRV-083`).
         covered_seq: Seq,
@@ -109,7 +109,7 @@ pub enum SyncCommand {
     /// Cursor / presence data (encrypted by the Sync thread before sending).
     SendEphemeral {
         document_id: DocumentId,
-        payload: Vec<u8>,
+        payload: ambre_core::EphemeralBytes,
     },
 
     /// Reconnect the WebSocket after a disconnect.
@@ -218,7 +218,7 @@ pub enum SyncCommand {
         segment: SegmentId,
         lease: LeaseId,
         horizon: Seq,
-        payload: Vec<u8>,
+        payload: ambre_core::SnapshotBytes,
     },
     /// Ask the relay for the lease that folds the amendments of the final
     /// segment `segment` into it (`SRV-204`). Answered by
@@ -239,7 +239,7 @@ pub enum SyncCommand {
         lease: LeaseId,
         horizon: Seq,
         amendments_seq: Seq,
-        payload: Vec<u8>,
+        payload: ambre_core::SnapshotBytes,
     },
     /// Count a segment of a closed channel as a light subscription, from its
     /// first number. It opens under the key of the light subscription of

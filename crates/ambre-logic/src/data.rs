@@ -404,7 +404,7 @@ impl LogicState {
         if let Some(payload) = ephemeral {
             self.send_to_sync(SyncCommand::SendEphemeral {
                 document_id,
-                payload,
+                payload: payload.into(),
             });
         }
         // Lower each Toile-level service request to a `RestCommand`, supplying the
@@ -512,7 +512,7 @@ impl LogicState {
     pub(crate) fn restore_local(
         &mut self,
         document_id: DocumentId,
-        snapshot: Option<Vec<u8>>,
+        snapshot: Option<ambre_core::SnapshotBytes>,
         deltas: Vec<Vec<u8>>,
         restore: Restore,
     ) -> bool {
@@ -527,7 +527,7 @@ impl LogicState {
         // (`SCHEMA-012`) and reaches the user as the owning app's own refusal
         // event. A restore that silently does nothing is indistinguishable from
         // a document that never existed.
-        let mut events: Vec<AppEvent> = match snapshot.map(|s| doc.import_snapshot(&s)) {
+        let mut events: Vec<AppEvent> = match snapshot.map(|s| doc.import_snapshot(s.as_bytes())) {
             Some(Ok(events)) => events,
             Some(Err(e)) => {
                 tracing::warn!("Logic: doc {document_id} refused its snapshot: {e}");
@@ -948,7 +948,7 @@ impl LogicState {
         if let Some(payload) = greeting {
             self.send_to_sync(SyncCommand::SendEphemeral {
                 document_id,
-                payload,
+                payload: payload.into(),
             });
         }
     }
@@ -963,7 +963,7 @@ impl LogicState {
         if let Some(payload) = frame {
             self.send_to_sync(SyncCommand::SendEphemeral {
                 document_id,
-                payload,
+                payload: payload.into(),
             });
         }
     }
@@ -1025,12 +1025,17 @@ impl LogicState {
 
     /// Import a snapshot whose contents are trusted, and count the deltas a
     /// later snapshot must hold from its horizon on (`AUTHOR-015`).
-    pub(crate) fn adopt_snapshot(&mut self, document_id: DocumentId, payload: &[u8], covered: Seq) {
-        self.apply_remote(document_id, Order::Snapshot(covered), payload);
+    pub(crate) fn adopt_snapshot(
+        &mut self,
+        document_id: DocumentId,
+        payload: &ambre_core::SnapshotBytes,
+        covered: Seq,
+    ) {
+        self.apply_remote(document_id, Order::Snapshot(covered), payload.as_bytes());
         if let Some(doc) = self.docs.get_mut(&document_id) {
             let base = doc.state.crdt().oplog_vv();
             doc.ledger.reset(covered, base);
-            doc.relay_saw(payload);
+            doc.relay_saw(payload.as_bytes());
         } else {
             self.note_murmure_snapshot(document_id, covered);
         }

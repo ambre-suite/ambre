@@ -262,7 +262,7 @@ impl SyncState {
                     document_id,
                     snapshot_id,
                     covered_seq,
-                    payload,
+                    payload: payload.into(),
                     purpose: SnapshotPurpose::Confirm,
                 });
                 self.snapshot_known(document_id, snapshot_id);
@@ -312,7 +312,7 @@ impl SyncState {
                     doc_state.current_snapshot_id = snapshot_id;
                     self.send_to_logic(LogicEvent::RemoteSnapshot {
                         document_id,
-                        payload,
+                        payload: payload.into(),
                         covered_seq: check.covered_seq,
                     });
                 }
@@ -408,7 +408,7 @@ impl SyncState {
                     document_id,
                     snapshot_id: held.snapshot_id,
                     covered_seq: held.covered_seq,
-                    payload,
+                    payload: payload.into(),
                     purpose: SnapshotPurpose::Open,
                 });
                 true
@@ -1481,7 +1481,11 @@ impl SyncState {
         })
     }
 
-    pub(crate) fn handle_send_ephemeral(&mut self, document_id: DocumentId, payload: Vec<u8>) {
+    pub(crate) fn handle_send_ephemeral(
+        &mut self,
+        document_id: DocumentId,
+        payload: ambre_core::EphemeralBytes,
+    ) {
         let Some(signing_key) = self.signing_key.clone() else {
             tracing::warn!("Sync: SendEphemeral before session keys ready, dropping");
             return;
@@ -1493,14 +1497,19 @@ impl SyncState {
             tracing::warn!("Sync: SendEphemeral for unknown doc {document_id:?}");
             return;
         };
-        doc_state.ephemeral_counter += 1;
+        doc_state.ephemeral_counter.0 += 1;
         let public_data = EphemeralPublicData {
             document_id,
             pub_key,
             key_id: doc_state.doc_key.id(),
-            counter: Counter(doc_state.ephemeral_counter),
+            counter: doc_state.ephemeral_counter,
         };
-        match pipeline::ephemeral_frame(&payload, public_data, &doc_state.doc_key, &signing_key) {
+        match pipeline::ephemeral_frame(
+            payload.as_bytes(),
+            public_data,
+            &doc_state.doc_key,
+            &signing_key,
+        ) {
             Ok(frame) => self.ws_send_sealed(&frame),
             Err(e) => tracing::error!("Sync: SendEphemeral seal failed for {document_id:?}: {e}"),
         }

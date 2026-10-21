@@ -43,6 +43,7 @@ pub mod key_id;
 pub mod media;
 pub mod name;
 pub mod object_key;
+pub mod payload;
 pub mod public_key;
 /// Which documents a client holds, and which leave first
 /// (`ambre-spec-residency.md`).
@@ -93,6 +94,7 @@ pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
 pub use media::{ByteSize, ContentHash, MediaType};
 pub use name::{NAME_MAX_CHARS, NAME_TOO_LONG, name_fits};
 pub use object_key::ObjectKey;
+pub use payload::{DeltaBytes, EphemeralBytes, SnapshotBytes};
 pub use public_key::{ExchangePublicKey, PublicKey};
 pub use role::Role;
 pub use schema::{

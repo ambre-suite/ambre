@@ -70,7 +70,7 @@ pub enum LogicEvent {
     /// Decrypted and decompressed CRDT snapshot.
     RemoteSnapshot {
         document_id: DocumentId,
-        payload: Vec<u8>,
+        payload: ambre_core::SnapshotBytes,
         /// The last delta `seq` it folds in, 0 when unknown. The Logic thread
         /// counts the deltas a later snapshot must hold from it (`AUTHOR-016`).
         covered_seq: Seq,
@@ -86,7 +86,7 @@ pub enum LogicEvent {
         /// The last delta `seq` it claims to fold in.
         covered_seq: Seq,
         /// Decrypted and decompressed, as in `RemoteSnapshot`.
-        payload: Vec<u8>,
+        payload: ambre_core::SnapshotBytes,
         purpose: SnapshotPurpose,
     },
 
@@ -113,7 +113,7 @@ pub enum LogicEvent {
     RemoteEphemeral {
         document_id: DocumentId,
         from_user_id: UserId,
-        payload: Vec<u8>,
+        payload: ambre_core::EphemeralBytes,
     },
 
     /// A peer stopped watching a document (`PRESENCE-014`): they unsubscribed, or their

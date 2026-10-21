@@ -210,7 +210,7 @@ impl LocalStore {
                     .try_send(LogicCommand::RestoreLocalSnapshot {
                         document_id,
                         doc_type,
-                        snapshot,
+                        snapshot: snapshot.map(Into::into),
                         deltas,
                         sessions,
                     });
@@ -349,7 +349,7 @@ mod tests {
         match next(rx).await {
             LogicCommand::RestoreLocalSnapshot {
                 snapshot, deltas, ..
-            } => (snapshot, deltas),
+            } => (snapshot.map(ambre_core::SnapshotBytes::into_bytes), deltas),
             other => panic!("expected a restore, got {other:?}"),
         }
     }

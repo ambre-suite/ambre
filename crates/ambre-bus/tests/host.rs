@@ -427,7 +427,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         SyncCommand::SendSnapshot {
             document_id: doc,
-            payload: vec![1; 4],
+            payload: ambre_core::SnapshotBytes::new(vec![1; 4]),
             covered_seq: ambre_bus::Seq(40),
         },
         SyncCommand::SnapshotVerdict {
@@ -440,7 +440,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         SyncCommand::SendEphemeral {
             document_id: doc,
-            payload: vec![5],
+            payload: ambre_core::EphemeralBytes::new(vec![5]),
         },
         SyncCommand::Reconnect { document_id: doc },
         SyncCommand::OpenChannel {
@@ -493,7 +493,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             lease: LeaseId::new(),
             horizon: ambre_bus::Seq(42),
-            payload: vec![4; 3],
+            payload: ambre_core::SnapshotBytes::new(vec![4; 3]),
         },
         SyncCommand::TakeFoldLease {
             channel_id: chan,
@@ -505,7 +505,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             lease: LeaseId::new(),
             horizon: ambre_bus::Seq(42),
             amendments_seq: ambre_bus::Seq(7),
-            payload: vec![5; 3],
+            payload: ambre_core::SnapshotBytes::new(vec![5; 3]),
         },
         SyncCommand::WatchSegment { segment, meta },
         SyncCommand::WatchThread {
@@ -571,14 +571,14 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::RemoteSnapshot {
             document_id: doc,
-            payload: vec![9; 3],
+            payload: ambre_core::SnapshotBytes::new(vec![9; 3]),
             covered_seq: ambre_bus::Seq(30),
         },
         LogicEvent::PendingSnapshot {
             document_id: doc,
             snapshot_id: snapshot,
             covered_seq: ambre_bus::Seq(31),
-            payload: vec![4],
+            payload: ambre_core::SnapshotBytes::new(vec![4]),
             purpose: SnapshotPurpose::Open,
         },
         LogicEvent::SnapshotDropped {
@@ -591,7 +591,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::RemoteEphemeral {
             document_id: doc,
             from_user_id: user,
-            payload: vec![2],
+            payload: ambre_core::EphemeralBytes::new(vec![2]),
         },
         LogicEvent::PeerLeft {
             document_id: doc,

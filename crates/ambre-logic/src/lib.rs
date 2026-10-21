@@ -525,7 +525,7 @@ enum Restore {
 
 /// A local restore held until the document has its session identity.
 struct HeldRestore {
-    snapshot: Option<Vec<u8>>,
+    snapshot: Option<ambre_core::SnapshotBytes>,
     deltas: Vec<Vec<u8>>,
 }
 
@@ -1306,7 +1306,7 @@ mod pass_tests {
         state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id,
             doc_type: DocType::Prose,
-            snapshot,
+            snapshot: snapshot.map(Into::into),
             deltas,
             sessions: Vec::new(),
         });
@@ -1884,7 +1884,7 @@ mod authorship_tests {
             document_id: rig.document_id,
             snapshot_id: SnapshotId::genesis(rig.document_id),
             covered_seq: ambre_core::Seq(covered),
-            payload,
+            payload: payload.into(),
             purpose: SnapshotPurpose::Confirm,
         });
         rig.sync
@@ -1996,7 +1996,7 @@ mod authorship_tests {
         let hers = written_by(ALICE, "hers");
         rig.state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: rig.document_id,
-            payload: snapshot_of(std::slice::from_ref(&hers)),
+            payload: (snapshot_of(std::slice::from_ref(&hers))).into(),
             covered_seq: ambre_core::Seq(5),
         });
         assert_eq!(
@@ -2124,7 +2124,7 @@ mod authorship_tests {
                 .handle_logic_command(LogicCommand::RestoreLocalSnapshot {
                     document_id: rig.document_id,
                     doc_type,
-                    snapshot: Some(cached),
+                    snapshot: Some(cached.into()),
                     deltas,
                     sessions: Vec::new(),
                 });
@@ -2193,7 +2193,7 @@ mod authorship_tests {
             .handle_logic_command(LogicCommand::RestoreLocalSnapshot {
                 document_id: rig.document_id,
                 doc_type: DocType::Trame,
-                snapshot: Some(snapshot_of(&hers)),
+                snapshot: Some(snapshot_of(&hers).into()),
                 deltas: Vec::new(),
                 sessions: vec![(ALICE, SessionNonce([7; 16]))],
             });

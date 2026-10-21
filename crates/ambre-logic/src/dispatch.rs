@@ -335,7 +335,7 @@ impl LogicState {
                     document_id,
                     snapshot_id,
                     covered_seq,
-                    &payload,
+                    payload.as_bytes(),
                     purpose,
                 );
             }
@@ -378,10 +378,10 @@ impl LogicState {
                 from_user_id,
                 payload,
             } => {
-                if !self.space_presence_heard(document_id, from_user_id, &payload)
-                    && !self.channel_sample_heard(document_id, from_user_id, &payload)
+                if !self.space_presence_heard(document_id, from_user_id, payload.as_bytes())
+                    && !self.channel_sample_heard(document_id, from_user_id, payload.as_bytes())
                 {
-                    self.apply_ephemeral(document_id, from_user_id, &payload);
+                    self.apply_ephemeral(document_id, from_user_id, payload.as_bytes());
                 }
             }
 
@@ -415,7 +415,7 @@ impl LogicState {
                 if let Some((payload, covered_seq)) = covered {
                     self.send_to_sync(SyncCommand::SendSnapshot {
                         document_id,
-                        payload,
+                        payload: payload.into(),
                         covered_seq,
                     });
                 }
@@ -1049,7 +1049,7 @@ mod tests {
         reopened.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id: header.document_id,
             doc_type: header.doc_type,
-            snapshot: Some(header.payload),
+            snapshot: Some(header.payload.into()),
             deltas: Vec::new(),
             sessions: Vec::new(),
         });
@@ -1363,7 +1363,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id: doc_id,
             doc_type: DocType::Trame,
-            snapshot: Some(snapshot),
+            snapshot: Some(snapshot.into()),
             deltas: Vec::new(),
             sessions: Vec::new(),
         });
@@ -1720,7 +1720,7 @@ mod tests {
             panic!("a snapshot is sent");
         };
         assert!(
-            !payload.starts_with(&ambre_core::AMBRE_MAGIC),
+            !payload.as_bytes().starts_with(&ambre_core::AMBRE_MAGIC),
             "the wire payload must be a bare snapshot, not a container"
         );
     }
@@ -1747,7 +1747,7 @@ mod tests {
         };
         assert_eq!(document_id, doc_id);
         let mut reopened = ToileState::new();
-        let _ = reopened.import_snapshot(&payload);
+        let _ = reopened.import_snapshot(payload.as_bytes());
         assert_eq!(reopened.element_count(), 1);
     }
 

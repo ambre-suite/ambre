@@ -686,7 +686,7 @@ impl SyncState {
                         doc_state.last_seq = covered_seq;
                         self.send_to_logic(LogicEvent::RemoteSnapshot {
                             document_id,
-                            payload,
+                            payload: payload.into(),
                             covered_seq,
                         });
                     }
@@ -1320,7 +1320,7 @@ impl SyncState {
                     LogicEvent::RemoteEphemeral {
                         document_id: doc_id,
                         from_user_id,
-                        payload,
+                        payload: ambre_core::EphemeralBytes::new(payload),
                     }
                 });
             }

@@ -94,7 +94,7 @@ pub enum LogicCommand {
         doc_type: DocType,
         /// Full Loro snapshot (`ExportMode::Snapshot`) read back from local
         /// storage, when one was saved.
-        snapshot: Option<Vec<u8>>,
+        snapshot: Option<ambre_core::SnapshotBytes>,
         /// The deltas logged since that snapshot, in no set order. A Loro
         /// import does not depend on it.
         deltas: Vec<Vec<u8>>,

@@ -644,7 +644,7 @@ struct SyncDocumentState {
     current_snapshot_id: SnapshotId,
     local_clock: Clock,
     /// Monotonic counter for outbound ephemerals (anti-replay at the receiver).
-    ephemeral_counter: u64,
+    ephemeral_counter: Counter,
     /// Highest server-assigned `seq` seen for this document. Used as
     /// `after_seq` when requesting the missing history.
     last_seq: Seq,
@@ -770,7 +770,7 @@ impl SyncDocumentState {
             pending_uploads: Vec::new(),
             current_snapshot_id,
             local_clock: Clock(0),
-            ephemeral_counter: 0,
+            ephemeral_counter: Counter(0),
             last_seq: Seq(0),
             ingested: BTreeSet::new(),
             known_snapshots: HashSet::from([current_snapshot_id]),
@@ -1375,7 +1375,7 @@ impl SyncState {
                 payload,
                 covered_seq,
             } => {
-                self.handle_send_snapshot(document_id, payload, covered_seq);
+                self.handle_send_snapshot(document_id, payload.into_bytes(), covered_seq);
             }
             SyncCommand::SnapshotVerdict {
                 document_id,
@@ -1453,7 +1453,13 @@ impl SyncState {
                 lease,
                 horizon,
                 payload,
-            } => self.handle_finalize_segment(channel_id, segment, lease, horizon, &payload),
+            } => self.handle_finalize_segment(
+                channel_id,
+                segment,
+                lease,
+                horizon,
+                payload.as_bytes(),
+            ),
             SyncCommand::TakeFoldLease {
                 channel_id,
                 segment,
@@ -1470,7 +1476,7 @@ impl SyncState {
                     lease,
                     amendments_seq,
                 };
-                self.handle_fold_segment(channel_id, segment, reach, horizon, &payload);
+                self.handle_fold_segment(channel_id, segment, reach, horizon, payload.as_bytes());
             }
             SyncCommand::WatchSegment { segment, meta } => self.handle_watch_segment(segment, meta),
             SyncCommand::WatchThread {
@@ -1995,7 +2001,7 @@ mod seal_tests {
         });
         state.handle_command(SyncCommand::SendEphemeral {
             document_id: id,
-            payload: typed.clone(),
+            payload: typed.clone().into(),
         });
         let frames = sent(&wire);
         assert_eq!(frames.len(), 2);

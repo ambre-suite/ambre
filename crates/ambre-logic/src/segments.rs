@@ -136,7 +136,7 @@ impl LogicState {
                 segment: snapshot.segment,
                 lease: snapshot.lease,
                 horizon: snapshot.horizon,
-                payload: snapshot.payload,
+                payload: snapshot.payload.into(),
             }),
             Ok(None) => {}
             Err(error) => {
@@ -230,7 +230,7 @@ impl LogicState {
                 lease: fold.lease,
                 horizon: fold.horizon,
                 amendments_seq: fold.amendments_seq,
-                payload: fold.payload,
+                payload: fold.payload.into(),
             }),
             Ok(None) => {}
             Err(error) => tracing::warn!("Logic: fold snapshot on {channel_id} refused: {error}"),

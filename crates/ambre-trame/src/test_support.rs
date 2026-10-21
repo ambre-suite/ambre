@@ -61,7 +61,7 @@ impl MockSyncHandle {
         if let Some(payload) = &outcome.ephemeral {
             self.send(SyncCommand::SendEphemeral {
                 document_id,
-                payload: payload.clone(),
+                payload: payload.clone().into(),
             });
         }
     }
