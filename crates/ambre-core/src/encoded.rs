@@ -140,17 +140,11 @@ define_encoded! {
 }
 
 impl SealedName {
-    /// The longest name, in characters, a document or a channel takes
-    /// (`ambre-spec-budgets.md`, section 6).
-    pub const MAX_CHARS: usize = 128;
+    /// The longest name a sealed name holds, in characters.
+    pub const MAX_CHARS: usize = crate::NAME_MAX_CHARS;
 
     /// The bytes a sealed name adds to the name it holds.
     pub const OVERHEAD: usize = OBJECT_HEADER_LEN + TAG_LEN;
-
-    /// Whether `name` is short enough to be sealed (`SYNC-178`).
-    pub fn fits(name: &str) -> bool {
-        name.chars().count() <= Self::MAX_CHARS
-    }
 }
 
 define_encoded! {
@@ -243,7 +237,5 @@ mod tests {
         assert_eq!(SealedName::MAX_LEN, 185 + 4 * 128);
         assert!(reads::<SealedName>(SealedName::MAX_LEN));
         assert!(!reads::<SealedName>(SealedName::MAX_LEN + 1));
-        assert!(SealedName::fits(&"\u{1F600}".repeat(SealedName::MAX_CHARS)));
-        assert!(!SealedName::fits(&"a".repeat(SealedName::MAX_CHARS + 1)));
     }
 }

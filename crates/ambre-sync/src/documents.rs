@@ -86,7 +86,7 @@ impl SyncState {
         signing_key: &SigningKey,
         name: &str,
     ) -> Result<ambre_core::SealedName, pipeline::PipelineError> {
-        if !ambre_core::SealedName::fits(name) {
+        if !ambre_core::name_fits(name) {
             return Err(pipeline::PipelineError::NameTooLong);
         }
         let sealed = pipeline::seal_object(

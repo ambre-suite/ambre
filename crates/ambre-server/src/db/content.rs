@@ -172,7 +172,7 @@ pub async fn confirm_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     snapshot_id: &ambre_core::SnapshotId,
-    confirmer: &[u8],
+    confirmer: &ambre_core::PublicKey,
 ) -> Result<Option<SnapshotStatus>, AppError> {
     let did = id_to_uuid(*document_id);
     let sid = id_to_uuid(*snapshot_id);
@@ -195,7 +195,7 @@ pub async fn confirm_snapshot(
     )
     .bind(sid)
     .bind(did)
-    .bind(confirmer)
+    .bind(confirmer.as_slice())
     .execute(pool)
     .await?;
     let status: Option<String> =

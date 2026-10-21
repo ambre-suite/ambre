@@ -46,14 +46,20 @@ pub const ROOT_LOST: &str = "This thread cannot open: its first message could no
 /// log, where Logic wrote it (`MURMURE-549`).
 pub const CHANNEL_NOT_OPENED: &str = "This channel could not open. Select it again to retry.";
 
+/// What the user reads when a channel could not be created, joined, deleted
+/// or left. Nothing changed on the relay, and the cause stays in the log
+/// (`MURMURE-580`).
+pub const CHANNEL_NOT_CHANGED: &str = "The channel could not be changed. Try again.";
+
 /// What the user reads when a space could not open (`MURMURE-550`).
 pub const SPACE_NOT_OPENED: &str =
     "A space could not open, so its channels to join are missing for now.";
 
 /// Surface a root the seek could not reach as a toast (the Murmure threads
 /// spec). A channel or a space that could not open is told the same way
-/// (`MURMURE-549`, `MURMURE-550`). The launcher names no Murmure variant. A
-/// no-op for every other event.
+/// (`MURMURE-549`, `MURMURE-550`), and so is a channel change that failed
+/// (`MURMURE-580`). The launcher names no Murmure variant. A no-op for every
+/// other event.
 pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
     match ev {
         UiEvent::Channel {
@@ -68,6 +74,10 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
             event: SpaceEvent::OpenFailed { .. },
             ..
         } => toasts.warning(SPACE_NOT_OPENED),
+        UiEvent::Space {
+            event: SpaceEvent::ChannelFailed { .. },
+            ..
+        } => toasts.warning(CHANNEL_NOT_CHANGED),
         _ => {}
     }
 }

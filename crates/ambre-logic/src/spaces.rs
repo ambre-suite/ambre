@@ -65,6 +65,9 @@ impl LogicState {
         if self.spaces.contains_key(&space_id) || self.space_opening.contains_key(&space_id) {
             return;
         }
+        if self.refuse_long_name(name, "CreateSpace") {
+            return;
+        }
         let state = match SpaceState::create(space_id, name, now) {
             Ok(state) => state,
             Err(error) => return self.space_open_failed(space_id, error.to_string()),
@@ -300,6 +303,25 @@ impl LogicState {
         }
     }
 
+    /// Refuse a name past its cap before anything is written, and tell the
+    /// user why (the Murmure channels spec). `true` when the name was refused.
+    pub(crate) fn refuse_long_name(&self, name: &str, request: &str) -> bool {
+        if ambre_core::name_fits(name) {
+            return false;
+        }
+        tracing::warn!(
+            "Logic: {request} refused a name of {} characters",
+            name.chars().count()
+        );
+        self.send_to_ui(UiEvent::ApiError {
+            id: None,
+            request: request.to_owned(),
+            code: 409,
+            message: ambre_core::NAME_TOO_LONG.to_owned(),
+        });
+        true
+    }
+
     fn channel_failed(&self, space_id: SpaceId, channel_id: ChannelId, message: String) {
         tracing::warn!("Logic: channel {channel_id} of space {space_id}: {message}");
         self.send_to_ui(UiEvent::Space {
@@ -355,6 +377,10 @@ impl LogicState {
                     tracing::warn!("Logic: a viewer adds no category to space {space_id}");
                     return;
                 }
+                if !ambre_core::name_fits(&name) {
+                    self.refuse_long_name(&name, "AddCategory");
+                    return;
+                }
                 match space.state.put_category(category_id, &name, position) {
                     Ok(delta) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
@@ -376,6 +402,9 @@ impl LogicState {
                         "a viewer of the space creates no channel".into(),
                     );
                 }
+                if self.refuse_long_name(&draft.name, "CreatePublicChannel") {
+                    return;
+                }
                 let channel = match ChannelState::create(
                     channel_id,
                     ChannelType::Public,
@@ -392,6 +421,9 @@ impl LogicState {
             SpaceCommand::CreatePrivateChannel { draft, now } => {
                 // Any member of the space may: the channel is listed nowhere.
                 let PrivateChannelDraft { channel_id, name } = draft;
+                if self.refuse_long_name(&name, "CreatePrivateChannel") {
+                    return;
+                }
                 match ChannelState::create(channel_id, ChannelType::Private, Some(&name), now) {
                     Ok(channel) => {
                         self.create_channel(space_id, channel, NewChannel::Private(name));
@@ -1012,6 +1044,29 @@ mod tests {
     }
 
     // --- The client side of a new space ---
+
+    /// A space named past the cap writes nothing, and the user reads why (the
+    /// Murmure channels spec).
+    #[test]
+    fn a_name_past_its_cap_writes_nothing() {
+        let (mut state, ui, sync) = harness();
+        let long = "a".repeat(ambre_core::NAME_MAX_CHARS + 1);
+        let refused = |ui: &_| {
+            matches!(
+                drain(ui).as_slice(),
+                [UiEvent::ApiError { message, .. }] if message == ambre_core::NAME_TOO_LONG
+            )
+        };
+        let space_id = SpaceId::new();
+        state.handle_logic_command(LogicCommand::CreateSpace {
+            space_id,
+            name: long.clone(),
+            now: NOW,
+        });
+        assert!(drain(&sync).is_empty());
+        assert!(refused(&ui));
+        assert!(!state.spaces.contains_key(&space_id));
+    }
 
     /// A new space shows at once. Its whole document is its first update,
     /// sent once the Sync worker holds the session. That upload makes its

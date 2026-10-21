@@ -232,9 +232,14 @@ mod db_tests {
         let sid = snapshot(&state, &doc, &ALICE, 3).await;
         let trim = db::purge_superseded_updates(&state.db).await.unwrap();
         assert_eq!(trim.rows, 0);
-        let got = db::confirm_snapshot(&state.db, &doc, &sid, &BOB)
-            .await
-            .unwrap();
+        let got = db::confirm_snapshot(
+            &state.db,
+            &doc,
+            &sid,
+            &ambre_core::PublicKey::from_array(BOB),
+        )
+        .await
+        .unwrap();
         assert_eq!(got, Some(SnapshotStatus::Confirmed));
         let trim = db::purge_superseded_updates(&state.db).await.unwrap();
         assert_eq!(trim.rows, 3);
@@ -253,13 +258,23 @@ mod db_tests {
             delta(&state, &doc, author, seq).await;
         }
         let reference = snapshot(&state, &doc, &BOB, 2).await;
-        db::confirm_snapshot(&state.db, &doc, &reference, &ALICE)
-            .await
-            .unwrap();
+        db::confirm_snapshot(
+            &state.db,
+            &doc,
+            &reference,
+            &ambre_core::PublicKey::from_array(ALICE),
+        )
+        .await
+        .unwrap();
         let own = snapshot(&state, &doc, &ALICE, 6).await;
-        let got = db::confirm_snapshot(&state.db, &doc, &own, &ALICE)
-            .await
-            .unwrap();
+        let got = db::confirm_snapshot(
+            &state.db,
+            &doc,
+            &own,
+            &ambre_core::PublicKey::from_array(ALICE),
+        )
+        .await
+        .unwrap();
         assert_eq!(got, Some(SnapshotStatus::SelfConfirmed));
         db::purge_superseded_updates(&state.db).await.unwrap();
         // 1..=2 under the reference; Alice's 3 and 5 under her own snapshot.
@@ -276,18 +291,33 @@ mod db_tests {
     async fn one_author_alone_stands_past_the_reference(pool: sqlx::PgPool) {
         let (state, doc) = setup(pool).await;
         let first = snapshot(&state, &doc, &ALICE, 4).await;
-        db::confirm_snapshot(&state.db, &doc, &first, &ALICE)
-            .await
-            .unwrap();
+        db::confirm_snapshot(
+            &state.db,
+            &doc,
+            &first,
+            &ambre_core::PublicKey::from_array(ALICE),
+        )
+        .await
+        .unwrap();
         let second = snapshot(&state, &doc, &BOB, 6).await;
-        let got = db::confirm_snapshot(&state.db, &doc, &second, &BOB)
-            .await
-            .unwrap();
+        let got = db::confirm_snapshot(
+            &state.db,
+            &doc,
+            &second,
+            &ambre_core::PublicKey::from_array(BOB),
+        )
+        .await
+        .unwrap();
         assert_eq!(got, Some(SnapshotStatus::Pending));
         // Another member's word still confirms it.
-        let got = db::confirm_snapshot(&state.db, &doc, &second, &CAROL)
-            .await
-            .unwrap();
+        let got = db::confirm_snapshot(
+            &state.db,
+            &doc,
+            &second,
+            &ambre_core::PublicKey::from_array(CAROL),
+        )
+        .await
+        .unwrap();
         assert_eq!(got, Some(SnapshotStatus::Confirmed));
     }
 
@@ -298,13 +328,23 @@ mod db_tests {
     async fn the_keep_pass_holds_the_reference_and_the_latest_self(pool: sqlx::PgPool) {
         let (state, doc) = setup(pool).await;
         let reference = snapshot(&state, &doc, &ALICE, 1).await;
-        db::confirm_snapshot(&state.db, &doc, &reference, &BOB)
-            .await
-            .unwrap();
+        db::confirm_snapshot(
+            &state.db,
+            &doc,
+            &reference,
+            &ambre_core::PublicKey::from_array(BOB),
+        )
+        .await
+        .unwrap();
         let own = snapshot(&state, &doc, &ALICE, 2).await;
-        db::confirm_snapshot(&state.db, &doc, &own, &ALICE)
-            .await
-            .unwrap();
+        db::confirm_snapshot(
+            &state.db,
+            &doc,
+            &own,
+            &ambre_core::PublicKey::from_array(ALICE),
+        )
+        .await
+        .unwrap();
         let newer = snapshot(&state, &doc, &CAROL, 3).await;
         let dropped = db::find_compactable_snapshots(&state.db, 1).await.unwrap();
         let ids: Vec<ambre_core::SnapshotId> = dropped.into_iter().map(|s| s.id).collect();
@@ -331,9 +371,14 @@ mod db_tests {
             db::served_horizon(&state.db, &doc).await.unwrap(),
             ambre_core::Seq(0)
         );
-        db::confirm_snapshot(&state.db, &doc, &sid, &ALICE)
-            .await
-            .unwrap();
+        db::confirm_snapshot(
+            &state.db,
+            &doc,
+            &sid,
+            &ambre_core::PublicKey::from_array(ALICE),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             db::served_horizon(&state.db, &doc).await.unwrap(),
             ambre_core::Seq(due)

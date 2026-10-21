@@ -314,6 +314,25 @@ fn a_space_that_cannot_open_is_told_and_opens_anew() {
     assert!(!texts[0].contains("refused"), "the cause stays out of it");
 }
 
+/// A channel change that failed is told, without its cause (`MURMURE-580`).
+#[wasm_bindgen_test]
+fn a_channel_change_that_failed_is_told() {
+    let failed = UiEvent::Space {
+        space_id: SpaceId::new(),
+        event: SpaceEvent::ChannelFailed {
+            channel_id: ChannelId::new(),
+            message: "the relay refused it".to_owned(),
+        },
+    };
+    let texts = toasts_for(&[failed]);
+    assert_eq!(texts.len(), 1, "{texts:?}");
+    assert!(
+        texts[0].contains(ambre_murmure::chrome::CHANNEL_NOT_CHANGED),
+        "{texts:?}"
+    );
+    assert!(!texts[0].contains("refused"), "the cause stays out of it");
+}
+
 /// The name an open channel learns is the one its header reads
 /// (`MURMURE-428`).
 #[wasm_bindgen_test]

@@ -244,6 +244,10 @@ fn counts_of(
     (!unknown_final).then_some(count)
 }
 
+/// What the user reads when a direct message keeps its name: the cause stays
+/// in the log.
+const NAME_NOT_CHANGED: &str = "The name could not be changed.";
+
 impl LogicState {
     /// The mark of an open channel, counted, or `None` when its count is
     /// not known yet.
@@ -1397,28 +1401,46 @@ impl LogicState {
                 });
                 self.emit_first_unread(channel_id);
             }
-            MurmureCommand::Name { name } => match channel.name_direct(name.as_deref()) {
-                Ok(named) => {
-                    self.send_to_sync(SyncCommand::SendUpdate {
-                        document_id: named.meta.document_id(),
-                        payload: named.delta,
-                        summary: None,
-                    });
-                    // Sealed beside meta too, so the name shows before the
-                    // channel opens (the Murmure layout spec).
-                    self.send_to_sync(SyncCommand::NameChannel {
-                        meta: named.meta,
-                        name,
-                    });
-                    self.send_to_ui(UiEvent::Channel {
-                        channel_id,
-                        event: named.event,
-                    });
+            MurmureCommand::Name { name } => {
+                // Trimmed once, so the sealed name is the name `meta` holds.
+                let name = name
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|n| !n.is_empty())
+                    .map(str::to_owned);
+                if let Some(long) = name.as_deref().filter(|n| !ambre_core::name_fits(n)) {
+                    self.refuse_long_name(long, "NameChannel");
+                    return;
                 }
-                Err(error) => {
-                    tracing::warn!("Logic: name of channel {channel_id} refused: {error}");
+                match channel.name_direct(name.as_deref()) {
+                    Ok(named) => {
+                        self.send_to_sync(SyncCommand::SendUpdate {
+                            document_id: named.meta.document_id(),
+                            payload: named.delta,
+                            summary: None,
+                        });
+                        // Sealed beside meta too, so the name shows before the
+                        // channel opens (the Murmure layout spec).
+                        self.send_to_sync(SyncCommand::NameChannel {
+                            meta: named.meta,
+                            name,
+                        });
+                        self.send_to_ui(UiEvent::Channel {
+                            channel_id,
+                            event: named.event,
+                        });
+                    }
+                    Err(error) => {
+                        tracing::warn!("Logic: name of channel {channel_id} refused: {error}");
+                        self.send_to_ui(UiEvent::ApiError {
+                            id: None,
+                            request: "NameChannel".to_owned(),
+                            code: 409,
+                            message: NAME_NOT_CHANGED.to_owned(),
+                        });
+                    }
                 }
-            },
+            }
             MurmureCommand::MarkUnread { segment, message } => {
                 self.mark_unread(channel_id, segment, message);
             }

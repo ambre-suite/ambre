@@ -46,6 +46,15 @@ pub use finalizing::{FINALIZE_RETRY_MS, FinalSnapshot};
 pub use folding::{FOLD_DELAY_MS, FoldSnapshot, Settled};
 pub use relocating::{Relocated, Replay};
 pub use threading::{Replied, SeekStep, ThreadLinked, ThreadTarget};
+
+/// Refuse a name past its cap before anything is written (`MURMURE-579`).
+pub(crate) fn fitting(name: Option<&str>) -> Result<(), MurmureError> {
+    match name {
+        Some(name) if !ambre_core::name_fits(name) => Err(MurmureError::NameTooLong),
+        _ => Ok(()),
+    }
+}
+
 #[cfg(test)]
 pub(crate) use {amending::folded_amendments, folding::header_fold};
 
@@ -279,6 +288,7 @@ impl ChannelState {
     /// ([`ChannelState::adopt_session`]).
     ///
     /// # Errors
+    /// [`MurmureError::NameTooLong`] for a name past its cap.
     /// [`MurmureError::Crdt`] when Loro refuses a write.
     pub fn create(
         channel_id: ChannelId,
@@ -286,6 +296,7 @@ impl ChannelState {
         name: Option<&str>,
         now: Timestamp,
     ) -> Result<Self, MurmureError> {
+        fitting(name)?;
         let active_id = DocumentId::new();
         let created = |id: DocumentId, created: Created| -> Result<Held, MurmureError> {
             let doc = LoroDoc::new();
@@ -554,7 +565,8 @@ impl ChannelState {
     ///
     /// # Errors
     /// [`MurmureError::NotDirect`] for any other channel: a public channel's
-    /// name lives in its catalogue too. [`MurmureError::Crdt`] when Loro
+    /// name lives in its catalogue too. [`MurmureError::NameTooLong`] for a
+    /// name past its cap. [`MurmureError::Crdt`] when Loro
     /// refuses a write or the export. [`MurmureError::NoSession`] before the
     /// PeerID of `meta` landed.
     pub fn name_direct(&mut self, name: Option<&str>) -> Result<Named, MurmureError> {
@@ -563,6 +575,7 @@ impl ChannelState {
         }
         let meta = self.meta_id();
         let name = name.map(str::trim).filter(|n| !n.is_empty());
+        fitting(name)?;
         let (doc, session) = self.meta.session()?;
         let channel = doc.get_map(CHANNEL);
         match name {

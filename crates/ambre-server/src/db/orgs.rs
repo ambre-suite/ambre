@@ -10,7 +10,8 @@ pub struct OrganizationRow {
     #[sqlx(try_from = "PgId")]
     pub id: ambre_core::OrgId,
     pub name: String,
-    pub org_pubkey: Vec<u8>,
+    #[sqlx(try_from = "PgKey")]
+    pub org_pubkey: ambre_core::PublicKey,
     pub shamir_threshold: i16,
     pub shamir_total: i16,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -36,7 +37,7 @@ pub struct OrgMemberRow {
 pub async fn create_organization(
     pool: &PgPool,
     name: &str,
-    org_pubkey: &[u8],
+    org_pubkey: &ambre_core::PublicKey,
     shamir_threshold: i16,
     shamir_total: i16,
     owner_id: &ambre_core::UserId,
@@ -53,7 +54,7 @@ pub async fn create_organization(
     )
     .bind(id_to_uuid(*org_id))
     .bind(name)
-    .bind(org_pubkey)
+    .bind(org_pubkey.as_slice())
     .bind(shamir_threshold)
     .bind(shamir_total)
     .fetch_one(&mut *tx)

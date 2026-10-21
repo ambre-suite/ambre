@@ -1336,3 +1336,18 @@ fn an_older_segment_nobody_asked_for_is_not_ready() {
         Some(MurmureError::NotHeld(stored.final_id.document_id()))
     );
 }
+
+/// `MURMURE-579`: a channel named past the cap is not created, a name of the
+/// longest length is.
+#[test]
+fn a_channel_named_past_the_cap_is_not_created() {
+    let longest = "\u{1F600}".repeat(ambre_core::NAME_MAX_CHARS);
+    let past = "a".repeat(ambre_core::NAME_MAX_CHARS + 1);
+    for kind in [ChannelType::Public, ChannelType::Private] {
+        assert!(ChannelState::create(ChannelId::new(), kind, Some(&longest), NOW).is_ok());
+        assert!(matches!(
+            ChannelState::create(ChannelId::new(), kind, Some(&past), NOW),
+            Err(MurmureError::NameTooLong)
+        ));
+    }
+}

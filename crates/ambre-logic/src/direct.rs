@@ -591,7 +591,12 @@ mod tests {
         drain(&sync_rx);
         drain(&ui_rx);
 
-        for (name, shown) in [(Some("trip"), Some("trip")), (None, None)] {
+        // The name is trimmed once: the sealed one is the one `meta` holds.
+        for (name, shown) in [
+            (Some("trip"), Some("trip")),
+            (Some("  trip "), Some("trip")),
+            (None, None),
+        ] {
             state.handle_logic_command(LogicCommand::Channel {
                 channel_id,
                 command: MurmureCommand::Name {
@@ -614,5 +619,19 @@ mod tests {
                 }] if *id == channel_id && *name == shown
             ));
         }
+
+        // A name past its cap writes nothing and says why (the Murmure
+        // channels spec).
+        state.handle_logic_command(LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::Name {
+                name: Some("a".repeat(ambre_core::NAME_MAX_CHARS + 1)),
+            },
+        });
+        assert!(drain(&sync_rx).is_empty());
+        assert!(matches!(
+            drain(&ui_rx).as_slice(),
+            [UiEvent::ApiError { message, .. }] if message == ambre_core::NAME_TOO_LONG
+        ));
     }
 }

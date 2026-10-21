@@ -341,3 +341,18 @@ fn unlisting_a_channel_removes_its_entry_and_leaves_the_others() {
     assert_eq!(space.unlist_channel(gone.channel_id()), Ok(None));
     assert_eq!(space.version(), before, "an absent entry writes nothing");
 }
+
+/// `MURMURE-579`: a space or a category named past the cap writes nothing.
+#[test]
+fn a_space_or_a_category_named_past_the_cap_writes_nothing() {
+    let past = "a".repeat(ambre_core::NAME_MAX_CHARS + 1);
+    assert!(matches!(
+        SpaceState::create(SpaceId::new(), &past, NOW),
+        Err(MurmureError::NameTooLong)
+    ));
+    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW).expect("create");
+    assert!(matches!(
+        space.put_category(CategoryId::new(), &past, 0),
+        Err(MurmureError::NameTooLong)
+    ));
+}

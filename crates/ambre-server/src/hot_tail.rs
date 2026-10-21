@@ -480,9 +480,14 @@ mod db_tests {
         )
         .await
         .unwrap();
-        crate::db::confirm_snapshot(&state.db, &doc, &snap, &[9u8; 32])
-            .await
-            .unwrap();
+        crate::db::confirm_snapshot(
+            &state.db,
+            &doc,
+            &snap,
+            &ambre_core::PublicKey::from_array([9u8; 32]),
+        )
+        .await
+        .unwrap();
         assert_eq!(trim(&state).await.unwrap(), 7);
         assert_eq!(
             stub.keys(),

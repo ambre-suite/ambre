@@ -58,8 +58,10 @@ impl SpaceState {
     /// ([`SpaceState::adopt_session`]).
     ///
     /// # Errors
+    /// [`MurmureError::NameTooLong`] for a name past its cap.
     /// [`MurmureError::Crdt`] when Loro refuses a write.
     pub fn create(space_id: SpaceId, name: &str, now: Timestamp) -> Result<Self, MurmureError> {
+        crate::channel::fitting(Some(name))?;
         let doc = LoroDoc::new();
         write_created(&doc, space_id, name, now)?;
         Ok(Self {
@@ -182,6 +184,7 @@ impl SpaceState {
     /// Add a category, or rename and move one, and return the delta.
     ///
     /// # Errors
+    /// [`MurmureError::NameTooLong`] for a name past its cap.
     /// [`MurmureError::Crdt`] when Loro refuses a write or the export.
     pub fn put_category(
         &mut self,
@@ -189,6 +192,7 @@ impl SpaceState {
         name: &str,
         position: u32,
     ) -> Result<Vec<u8>, MurmureError> {
+        crate::channel::fitting(Some(name))?;
         self.writable()?;
         let entry = self
             .doc

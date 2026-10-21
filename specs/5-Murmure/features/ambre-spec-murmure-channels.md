@@ -49,6 +49,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-054` | `POST` | A name a member sets MUST be stored in the `meta` document, and read by every member. | this spec section 3 | `ambre_murmure::channel_tests::a_name_one_member_sets_reaches_every_member` -- another member reads it; `ambre_logic::direct::tests::a_name_leaves_on_meta_and_reaches_the_view` -- the name leaves as a delta on `meta` | none | verified |
+| `MURMURE-579` | `FAIL` | Given a channel, a direct message, a space or a category named past the budget of a name, the client MUST write nothing and tell the user why. | `ambre-spec-budgets.md section 6`; `SYNC-178` | `ambre_murmure::channel_tests::a_channel_named_past_the_cap_is_not_created` -- a public and a private channel, the longest name taken; `ambre_murmure::space_tests::a_space_or_a_category_named_past_the_cap_writes_nothing`; `ambre_logic::spaces::tests::a_name_past_its_cap_writes_nothing` -- no space is held, nothing leaves, and the user reads why; `ambre_logic::direct::tests::a_name_leaves_on_meta_and_reaches_the_view` -- a direct message too, and the name sealed is the trimmed one `meta` holds | none | verified |
 | `MURMURE-055` | `FRAME` | Clearing a name MUST remove its key, and MUST NOT store an empty or a composed name. | this spec section 3; `MURMURE-016` | `ambre_murmure::channel_tests::clearing_a_name_removes_its_key` -- a cleared or blank name leaves no `name` key | none | verified |
 | `MURMURE-491` | `POST` | Every name written into a channel's `meta` MUST also be sealed beside it on the relay, under the channel key. | this spec section 3; `features/ambre-spec-murmure-layout.md`, `MURMURE-490`; `ambre-spec-sync.md`, `SYNC-171` | `ambre_logic::direct::tests::a_name_leaves_on_meta_and_reaches_the_view` -- each name, and its clearing, also leaves to be sealed beside meta; `ambre_logic::spaces::tests::a_private_channel_writes_no_catalogue` -- a private channel's creation carries its name; `ambre_sync::channels::tests::a_channel_name_is_sealed_under_the_channel_key_for_its_meta` -- the seal opens under that key for meta alone | none | verified |
 
@@ -129,7 +130,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 39 `verified`, 14 `unimplemented`. The relay holds a private channel, its leave,
+* **Verification.** 40 `verified`, 14 `unimplemented`. The relay holds a private channel, its leave,
   its delete and its key links. A client creates, deletes and leaves one, and learns its user's
   channels. A direct message opens, is reused and takes a name; an invite opens a channel, and
   announces a third member. A rotation closes the active segment and locks the ones it leaves;

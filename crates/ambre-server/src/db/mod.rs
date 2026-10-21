@@ -80,6 +80,20 @@ impl<T: From<Vec<u8>>> From<PgOptBytes> for Option<T> {
     }
 }
 
+/// A stored public key, read with `#[sqlx(try_from = "PgKey")]` into the key
+/// itself, refused as [`decode_key`] refuses one.
+#[derive(sqlx::Type)]
+#[sqlx(transparent)]
+pub(crate) struct PgKey(Vec<u8>);
+
+impl TryFrom<PgKey> for ambre_core::PublicKey {
+    type Error = ambre_core::PublicKeyError;
+
+    fn try_from(PgKey(bytes): PgKey) -> Result<Self, Self::Error> {
+        ambre_core::PublicKey::from_slice(&bytes)
+    }
+}
+
 /// A stored public key that may be `NULL`, as [`decode_key`] reads one.
 fn decode_opt_key(bytes: Option<Vec<u8>>) -> Result<Option<ambre_core::PublicKey>, sqlx::Error> {
     bytes.map(decode_key).transpose()
@@ -224,9 +238,14 @@ mod tests {
         )
         .await
         .expect("create snapshot");
-        confirm_snapshot(&pool, &document_id, &sid, &[9u8; 32])
-            .await
-            .expect("confirm snapshot");
+        confirm_snapshot(
+            &pool,
+            &document_id,
+            &sid,
+            &ambre_core::PublicKey::from_array([9u8; 32]),
+        )
+        .await
+        .expect("confirm snapshot");
 
         // get_latest_snapshot (the open path's GET /snapshot) carries it.
         let latest = get_latest_snapshot(&pool, &document_id)
@@ -305,9 +324,14 @@ mod tests {
         )
         .await
         .expect("create snapshot");
-        confirm_snapshot(&pool, &document_id, &sid, &[9u8; 32])
-            .await
-            .expect("confirm snapshot");
+        confirm_snapshot(
+            &pool,
+            &document_id,
+            &sid,
+            &ambre_core::PublicKey::from_array([9u8; 32]),
+        )
+        .await
+        .expect("confirm snapshot");
 
         let deleted = purge_superseded_updates(&pool).await.expect("purge");
         assert_eq!(
@@ -375,9 +399,14 @@ mod tests {
             )
             .await
             .expect("create snapshot");
-            confirm_snapshot(&pool, &document_id, &sid, &[9u8; 32])
-                .await
-                .expect("confirm snapshot");
+            confirm_snapshot(
+                &pool,
+                &document_id,
+                &sid,
+                &ambre_core::PublicKey::from_array([9u8; 32]),
+            )
+            .await
+            .expect("confirm snapshot");
         }
 
         let deleted = purge_superseded_updates(&pool).await.expect("purge");

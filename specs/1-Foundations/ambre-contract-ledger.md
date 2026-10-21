@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3692 rows: 3148 shipped, of which 2 loose. 544 unbuilt.**
+**3695 rows: 3151 shipped, of which 2 loose. 544 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 888 | 418 | 816 | 609 | 415 | 3146 |
+| `verified` | 889 | 418 | 816 | 609 | 417 | 3149 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
@@ -62,7 +62,7 @@
 | `ambre-spec-message-bus.md` | 30 | 30 | 30 |  |  |
 | `ambre-spec-object-store.md` | 18 | 17 | 17 |  | 1 |
 | `ambre-spec-op-authorship.md` | 29 | 29 | 29 |  |  |
-| `ambre-spec-organizations.md` | 12 | 10 | 10 |  | 2 |
+| `ambre-spec-organizations.md` | 13 | 11 | 11 |  | 2 |
 | `ambre-spec-pdf-export.md` | 17 | 6 | 6 |  | 11 |
 | `ambre-spec-presence.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-profile.md` | 9 | 1 | 1 |  | 8 |
@@ -162,12 +162,12 @@
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-murmure-attachments.md` | 14 | 13 | 13 |  | 1 |
-| `ambre-spec-murmure-channels.md` | 53 | 39 | 39 |  | 14 |
+| `ambre-spec-murmure-channels.md` | 54 | 40 | 40 |  | 14 |
 | `ambre-spec-murmure-composer.md` | 45 | 45 | 45 |  |  |
 | `ambre-spec-murmure-emoji.md` | 14 | 5 | 5 |  | 9 |
 | `ambre-spec-murmure-engine.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-keyboard.md` | 21 | 21 | 21 |  |  |
-| `ambre-spec-murmure-layout.md` | 26 | 21 | 21 |  | 5 |
+| `ambre-spec-murmure-layout.md` | 27 | 22 | 22 |  | 5 |
 | `ambre-spec-murmure-members.md` | 23 | 18 | 18 |  | 5 |
 | `ambre-spec-murmure-mentions.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-murmure-message-list.md` | 39 | 38 | 38 |  | 1 |
@@ -217,14 +217,14 @@
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242,577..578 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |
 | `ambre-spec-murmure-calls.md` | MURMURE-407..413 |
-| `ambre-spec-murmure-channels.md` | MURMURE-046..061,243..246,251..252,257,262,264,323..335,461..465,467..469,473..475,491,498,500..501 |
+| `ambre-spec-murmure-channels.md` | MURMURE-046..061,243..246,251..252,257,262,264,323..335,461..465,467..469,473..475,491,498,500..501,579 |
 | `ambre-spec-murmure-composer.md` | MURMURE-193..204,210..212,214..217,259,430..434,523..526,530..531,534..535,544,561..564,570..576 |
 | `ambre-spec-murmure-emoji.md` | MURMURE-137..141,374..381,569 |
 | `ambre-spec-murmure-engine.md` | MURMURE-021..030,476,502..503,514 |
 | `ambre-spec-murmure-forums.md` | MURMURE-355..364,416 |
 | `ambre-spec-murmure-import.md` | MURMURE-365..373,438..439 |
 | `ambre-spec-murmure-keyboard.md` | MURMURE-170..181,213,522,527..529,540..543 |
-| `ambre-spec-murmure-layout.md` | MURMURE-158..169,382..386,428..429,486,488..490,492,549..550 |
+| `ambre-spec-murmure-layout.md` | MURMURE-158..169,382..386,428..429,486,488..490,492,549..550,580 |
 | `ambre-spec-murmure-link-previews.md` | MURMURE-399..406 |
 | `ambre-spec-murmure-members.md` | MURMURE-440..459,472,519..520 |
 | `ambre-spec-murmure-mentions.md` | MURMURE-098..104,152,229..233,551..560 |
@@ -245,7 +245,7 @@
 | `ambre-spec-murmure-unread.md` | MURMURE-113..120,154..156,460,470..471,477,495,499 |
 | `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079,121,138..141,158 |
 | `ambre-spec-op-authorship.md` | AUTHOR-001..029 |
-| `ambre-spec-organizations.md` | SRV-060..067,071,076..077,229 |
+| `ambre-spec-organizations.md` | SRV-060..067,071,076..077,229,231 |
 | `ambre-spec-pdf-export.md` | PDF-001..017 |
 | `ambre-spec-presence.md` | PRESENCE-001..015 |
 | `ambre-spec-profile.md` | PROFILE-001..009 |

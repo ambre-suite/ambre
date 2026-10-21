@@ -112,7 +112,7 @@ pub async fn confirm_snapshot(
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    let confirmer = auth.signing_pubkey.as_array();
+    let confirmer = &auth.signing_pubkey;
     let status = db::confirm_snapshot(&state.db, &doc_id, &snap_id, confirmer)
         .await?
         .ok_or(AppError::NotFound {

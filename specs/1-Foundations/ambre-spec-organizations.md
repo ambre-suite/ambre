@@ -35,6 +35,7 @@ The caller supplies a name, a public key and the quorum it wants its escrow to r
 |---|---|---|---|---|---|---|
 | `SRV-062` | `FAIL` | A declared quorum MUST NOT exceed the quorum the relay enforces. | audit `N1`; this spec section 3 | `ambre_server::routes::orgs::tests::shamir_threshold_above_1_rejected_until_reconstruction_lands`; `::shamir_threshold_1_accepted`; `::shamir_out_of_range_rejected` -- the three read the refusal, the one value accepted and the range | none | verified |
 | `SRV-229` | `FAIL` | Given an organization created with a member's share, or a member added with one, the relay MUST refuse it and write no row, as no client computes a share. | this spec section 3; this spec section 5; `ZK-001` | `ambre_server::routes::orgs::tests::integration::a_shamir_share_is_refused` -- a creation and an addition each carrying a share answer `400` and write nothing, and the same addition without one lands, database tier | none | verified |
+| `SRV-231` | `FAIL` | Given an organization created with a public key that is not 32 bytes of hexadecimal, the relay MUST refuse it and write nothing. | this spec section 3; `SRV-179` | `ambre_server::routes::orgs::tests::integration::a_malformed_organization_key_is_refused` -- a short key and a key that is not hexadecimal each answer `409` and write no organization, database tier | none | verified |
 
 ### 1.3 Change who is in the organization
 
@@ -65,7 +66,7 @@ over an opaque blob.
   narrows what a **person** can reach, never what the **relay** can. The escrowed key is sealed
   to the organization's own public key, stored opaque and handed to an owner who decrypts it
   elsewhere (`SRV-067`). `SRV-066` keeps the relay unable to combine anything.
-* **Verification.** 10 `verified`, 2 `unimplemented`. What holds is the membership: the last owner,
+* **Verification.** 11 `verified`, 2 `unimplemented`. What holds is the membership: the last owner,
   the grant and role clamps, the removal clamp, who may ask for a release, and its record. What is
   loose is the deposit, which no route performs.
 ---
@@ -165,9 +166,9 @@ enforced the gate stops being a role and becomes the count of shares presented.
 * **A single owner is the whole quorum.** Recovery is single-authority today, which the clamp makes
   honest rather than safe. An owner alone can obtain any member's escrowed key, once a deposit
   exists (`SRV-063`, `SRV-065`).
-* **The organization's public key is accepted unchecked.** The caller supplies it, and the relay
-  decodes it without asking whether it is a key of the right kind or the right length. A malformed
-  value is stored and only fails much later, in a client.
+* **The organization's public key is checked for its length alone.** The relay refuses a key that
+  is not 32 bytes (`SRV-231`), but cannot tell an X25519 key from any other 32 bytes. A key of the
+  wrong kind is stored and only fails much later, in a client.
 * **An organization is not bound to its members' documents.** The register carries a member's
   organization on the account row and no route sets it. Nothing links a document to an organization,
   and no rule states what an organization may see of one.

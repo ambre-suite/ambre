@@ -333,14 +333,6 @@ pub fn NewDocPicker(
     }
 }
 
-/// What a refused rename tells the user.
-fn name_too_long() -> String {
-    format!(
-        "A name takes {} characters at most.",
-        ambre_core::SealedName::MAX_CHARS
-    )
-}
-
 /// One document card: type-icon tile + name (or "Untitled") + relative time +
 /// shared badge. It carries inline rename and a delete that routes through
 /// the confirmation dialog.
@@ -377,8 +369,8 @@ fn doc_card(
             let name = edit_value.get().trim().to_owned();
             // A name past its budget is refused here, with the field left open
             // to shorten it, rather than cut or sent to fail (`SYNC-178`).
-            if !ambre_core::SealedName::fits(&name) {
-                toasts.warning(name_too_long());
+            if !ambre_core::name_fits(&name) {
+                toasts.warning(ambre_core::NAME_TOO_LONG);
                 return;
             }
             editing.set(false);

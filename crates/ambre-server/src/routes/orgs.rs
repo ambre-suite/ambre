@@ -179,8 +179,12 @@ pub async fn create_org(
     validate_shamir_params(req.shamir_threshold, req.shamir_total)?;
     refuse_share(req.owner_shamir_share_enc.as_ref())?;
 
-    let org_pubkey = hex::decode(req.org_pubkey.as_str()).map_err(|e| AppError::Conflict {
-        detail: format!("invalid org_pubkey hex: {e}"),
+    // A key that is not 32 bytes of hex is refused here, not stored to fail
+    // later in a client.
+    let org_pubkey = ambre_core::PublicKey::from_hex(req.org_pubkey.as_str()).map_err(|e| {
+        AppError::Conflict {
+            detail: format!("invalid org_pubkey: {e}"),
+        }
     })?;
 
     let org = db::create_organization(
@@ -552,7 +556,7 @@ mod tests {
         let org = db::OrganizationRow {
             id: ambre_core::OrgId::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             name: "Test Org".into(),
-            org_pubkey: vec![0u8; 32],
+            org_pubkey: ambre_core::PublicKey::from_array([0u8; 32]),
             shamir_threshold: 3,
             shamir_total: 5,
             created_at: chrono::Utc::now(),
@@ -836,6 +840,42 @@ mod tests {
                 .unwrap()
                 .id
                 .to_string()
+        }
+
+        /// `SRV-231`: an organization key that is not 32 bytes of hex is refused,
+        /// and no organization is written.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn a_malformed_organization_key_is_refused(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+            let owner = setup_org_user(&app, "owner@ambre.app", 10).await;
+            for key in [hex::encode([5u8; 31]), "zz".repeat(32)] {
+                let create = serde_json::json!({
+                    "name": "Acme",
+                    "org_pubkey": key,
+                    "shamir_threshold": 1,
+                    "shamir_total": 1,
+                });
+                let resp = app
+                    .clone()
+                    .oneshot(
+                        Request::post("/api/organizations")
+                            .header("content-type", "application/json")
+                            .header("authorization", &owner)
+                            .body(Body::from(create.to_string()))
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(resp.status(), StatusCode::CONFLICT, "{key}");
+            }
+            let organizations: i64 = sqlx::query_scalar("SELECT count(*) FROM organizations")
+                .fetch_one(&state.db)
+                .await
+                .unwrap();
+            assert_eq!(organizations, 0);
+            create_org(&app, &owner).await;
         }
 
         /// `SRV-229`: no client computes a share, so an organization created with

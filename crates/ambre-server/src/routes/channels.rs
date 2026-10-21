@@ -4066,7 +4066,7 @@ mod tests {
         let held = lease(&state, alice, &channel).await.expect("lease");
         let held = held.lease.expect("granted");
         let exact = snapshot(&state, segment, 2).await;
-        let author = [1; 32];
+        let author = ambre_core::PublicKey::from_array([1; 32]);
         assert_eq!(
             db::confirm_snapshot(&state.db, &segment, &exact, &author)
                 .await
@@ -4094,9 +4094,14 @@ mod tests {
             "an unconfirmed final snapshot purges nothing"
         );
         assert_eq!(
-            db::confirm_snapshot(&state.db, &segment, &exact, &[2; 32])
-                .await
-                .expect("confirm"),
+            db::confirm_snapshot(
+                &state.db,
+                &segment,
+                &exact,
+                &ambre_core::PublicKey::from_array([2; 32])
+            )
+            .await
+            .expect("confirm"),
             Some(db::SnapshotStatus::Confirmed)
         );
         db::purge_superseded_updates(&state.db)
