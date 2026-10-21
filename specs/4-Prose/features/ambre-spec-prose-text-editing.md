@@ -137,10 +137,10 @@ pub struct DraftBuffer { /* private: the entries in the order sent, and a genera
 impl DraftBuffer {
     pub fn is_empty(&self) -> bool;
     /// One entry per keystroke sent (`PROSE-UI-138`).
-    pub fn push_str(&mut self, seq: u64, text: &str, block_id: &BlockId, pos: u32);
-    pub fn push_delete(&mut self, seq: u64, block_id: &BlockId, start: u32, end: u32);
+    pub fn push_str(&mut self, seq: TextAck, text: &str, block_id: &BlockId, pos: u32);
+    pub fn push_delete(&mut self, seq: TextAck, block_id: &BlockId, start: u32, end: u32);
     /// The command numbered `seq` was taken as drawn (`PROSE-UI-005`).
-    pub fn confirm(&mut self, seq: u64);
+    pub fn confirm(&mut self, seq: TextAck);
     /// A layout was taken: the confirmed entries leave.
     pub fn laid(&mut self);
     /// Carry every entry over a collaborator's change (`PROSE-UI-028`).

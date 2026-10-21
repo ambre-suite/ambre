@@ -903,7 +903,7 @@ fn read_only_and_local_commands_are_not_mutating() {
     let cases: Vec<AppCommand> = vec![
         // Trame: local view state.
         AppCommand::Trame(TrameCommand::ScrollViewport {
-            version: 1,
+            version: ambre_bus::ViewportVersion(1),
             row_start: 0,
             row_end: 4,
             col_start: 0,

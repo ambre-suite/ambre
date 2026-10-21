@@ -22,7 +22,7 @@ pub enum TrameEvent {
     /// [`TrameCommand::ScrollViewport`](super::TrameCommand::ScrollViewport)
     /// so stale responses can be dropped.
     ViewportData {
-        version: u64,
+        version: crate::ViewportVersion,
         row_start: u32,
         col_start: u32,
         cells: Vec<DisplayCell>,
@@ -242,7 +242,7 @@ pub enum TrameEvent {
     /// `trame-cell-styles`).
     /// The accompanying [`DataReset`](Self::DataReset) prompts a viewport
     /// re-fetch with the new style overrides applied.
-    CondFormatsUpdated { version: u64 },
+    CondFormatsUpdated { version: crate::ViewportVersion },
 
     /// A local edit was rejected by a [`ValidationOnInvalid::Reject`] rule
     /// (`trame-cell-editing`). No CRDT delta was produced; the
@@ -250,7 +250,7 @@ pub enum TrameEvent {
     ///
     /// [`ValidationOnInvalid::Reject`]: super::ValidationOnInvalid::Reject
     ValidationError {
-        version: u64,
+        version: crate::ViewportVersion,
         row: u32,
         col: u32,
         message: String,
@@ -262,7 +262,7 @@ pub enum TrameEvent {
     ///
     /// [`ValidationOnInvalid::Warn`]: super::ValidationOnInvalid::Warn
     ValidationWarning {
-        version: u64,
+        version: crate::ViewportVersion,
         row: u32,
         col: u32,
         message: String,
@@ -272,7 +272,7 @@ pub enum TrameEvent {
     /// edit (`trame-cell-editing`, Post-MVP). No CRDT delta was
     /// produced; the chrome surfaces `description`.
     ProtectionDenied {
-        version: u64,
+        version: crate::ViewportVersion,
         row: u32,
         col: u32,
         description: String,

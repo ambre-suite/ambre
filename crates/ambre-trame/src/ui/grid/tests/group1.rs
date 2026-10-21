@@ -328,7 +328,7 @@ fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
         ..Default::default()
     };
     state.on_viewport_data(TrameEvent::ViewportData {
-        version: 0,
+        version: ambre_bus::ViewportVersion(0),
         row_start: 0,
         col_start: 0,
         col_widths: vec![],
@@ -435,7 +435,7 @@ fn select_rect_keeps_unmerged_cells_selected() {
     };
     // A1:A2 (master (0,0), 1 col x 2 rows) and B1:B2 (master (0,1)).
     state.on_viewport_data(TrameEvent::ViewportData {
-        version: 0,
+        version: ambre_bus::ViewportVersion(0),
         row_start: 0,
         col_start: 0,
         col_widths: vec![],
@@ -461,7 +461,7 @@ fn select_rect_keeps_unmerged_cells_selected() {
     state.select_rect(0, 0, 1, 1);
     // The re-fetch clears the merge spans (now plain cells).
     state.on_viewport_data(TrameEvent::ViewportData {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         row_start: 0,
         col_start: 0,
         col_widths: vec![],

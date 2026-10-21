@@ -171,7 +171,7 @@ pub(crate) fn async_write_clipboard(
     tsv: String,
     html: Option<String>,
     payload_b64: Option<String>,
-    token: String,
+    token: ambre_bus::ClipToken,
     published: Rc<std::cell::Cell<bool>>,
 ) {
     let Some(clipboard) = web_sys::window().map(|w| w.navigator().clipboard()) else {
@@ -208,7 +208,7 @@ fn publish_item<T>(
     tsv: &str,
     html: Option<&str>,
     payload_b64: Option<&str>,
-    token: &str,
+    token: &ambre_bus::ClipToken,
     build: impl Fn(&[(&str, Option<&str>)]) -> Option<T>,
 ) -> Option<(T, bool)> {
     let text = ("text/plain", Some(tsv));
@@ -216,7 +216,7 @@ fn publish_item<T>(
         text,
         ("text/html", html),
         (AMBRE_CLIPBOARD_WEB_TYPE, payload_b64),
-        (AMBRE_CLIPBOARD_WEB_TOKEN_TYPE, Some(token)),
+        (AMBRE_CLIPBOARD_WEB_TOKEN_TYPE, Some(token.as_str())),
     ];
     if let Some(item) = build(&full) {
         return Some((item, true));
@@ -761,7 +761,7 @@ mod tests {
             "a\tb",
             Some("<p>a</p>"),
             Some(&base64_encode(&bytes)),
-            "ambre-1",
+            &ambre_bus::ClipToken::new("ambre-1".to_owned()),
             clipboard_item,
         )
         .expect("an item");
@@ -792,8 +792,14 @@ mod tests {
                 .any(|(kind, value)| value.is_some() && kind.starts_with("web "));
             if web { None } else { clipboard_item(entries) }
         };
-        let (item, web) = publish_item("a", Some("<p>a</p>"), Some("AQID"), "ambre-2", refusing)
-            .expect("the second attempt");
+        let (item, web) = publish_item(
+            "a",
+            Some("<p>a</p>"),
+            Some("AQID"),
+            &ambre_bus::ClipToken::new("ambre-2".to_owned()),
+            refusing,
+        )
+        .expect("the second attempt");
         assert!(!web);
         assert_eq!(types(&item), vec!["text/html", "text/plain"]);
         let (blob, token) = read_back(&item).await;

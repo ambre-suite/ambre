@@ -192,7 +192,7 @@ mod tests {
         reactions: BTreeMap<ElementId, ReactionTally>,
     ) -> DisplayViewport {
         DisplayViewport {
-            version: 0,
+            version: ambre_bus::ViewportVersion(0),
             grid_unit: 20.0,
             pins: Vec::new(),
             reactions,

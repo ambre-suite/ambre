@@ -3769,22 +3769,25 @@ fn a_transition_lasts_what_the_deck_configures() {
     deck_of_three(&mut st);
     let out = st.handle_command(ToileCommand::NextSlide);
     assert_eq!(
-        slide_change(&out).transition_ms,
-        crate::logic::state::presentation::DEFAULT_TRANSITION_MS,
+        slide_change(&out).transition,
+        std::time::Duration::from_millis(300),
         "a board nobody configured carries the default"
     );
 
     st.set_transition_ms_for_test(900.0);
     let out = st.handle_command(ToileCommand::PrevSlide);
-    assert_eq!(slide_change(&out).transition_ms, 900.0);
+    assert_eq!(
+        slide_change(&out).transition,
+        std::time::Duration::from_millis(900)
+    );
 
     // A register holding something else, or a length nothing could play, reads
     // as the default rather than freezing or skipping every slide change.
     st.set_transition_ms_for_test(-1.0);
     let out = st.handle_command(ToileCommand::NextSlide);
     assert_eq!(
-        slide_change(&out).transition_ms,
-        crate::logic::state::presentation::DEFAULT_TRANSITION_MS
+        slide_change(&out).transition,
+        std::time::Duration::from_millis(300)
     );
 }
 

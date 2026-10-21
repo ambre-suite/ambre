@@ -113,7 +113,8 @@ impl ClipboardBlob {
     /// `web ` types and so keeps no token of its own (`UI-THREAD-057`). A
     /// comment, so another editor renders nothing of it.
     #[must_use]
-    pub fn mark_html(html: &str, token: &str) -> String {
+    pub fn mark_html(html: &str, token: &ClipToken) -> String {
+        let token = token.as_str();
         format!("{HTML_TOKEN_OPEN}{token}{HTML_TOKEN_CLOSE}{html}")
     }
 
@@ -124,6 +125,57 @@ impl ClipboardBlob {
         let start = html.find(HTML_TOKEN_OPEN)? + HTML_TOKEN_OPEN.len();
         let rest = html.get(start..)?;
         rest.get(..rest.find(HTML_TOKEN_CLOSE)?)
+    }
+}
+
+/// The version of a view's request, echoed by the Logic thread's answer: the
+/// view drops an answer older than the last it accepted (`BUS-017`). A
+/// distinct type, so a sequence number or a count never takes its place.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[serde(transparent)]
+pub struct ViewportVersion(pub u64);
+
+impl ViewportVersion {
+    /// The version after this one.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        Self(self.0.wrapping_add(1))
+    }
+}
+
+/// This tab's clipboard ownership token (`UI-THREAD-007`): written beside a
+/// copy, and read back to know a paste is of this tab's own copy. A distinct
+/// type, so a text the clipboard carries never stands for it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ClipToken(String);
+
+impl ClipToken {
+    /// The token the tab drew when its page loaded.
+    pub fn new(text: String) -> Self {
+        Self(text)
+    }
+
+    /// The token, as the clipboard carries it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Whether `read`, a token a paste carried, is this one.
+    #[must_use]
+    pub fn is(&self, read: Option<&str>) -> bool {
+        read == Some(self.0.as_str())
     }
 }
 
@@ -150,8 +202,8 @@ pub enum CopyOutcome {
 // Re-export core types so that users don't need to depend on ambre-core directly.
 pub use ambre_core::{
     CategoryId, ChannelDocumentKind, ChannelId, CommentId, DocType, DocumentId, Email, FootnoteId,
-    KeyFingerprint, LeaseId, MeetingId, MessageId, MetaId, PageTime, PublicKey, ReplyId, Role,
-    SegmentId, Seq, SnapshotId, SpaceId, SuggestionId, UserId, Uuid,
+    KeyFingerprint, LeaseId, MeetingId, MessageId, MetaId, Millis, PageTime, PublicKey, ReplyId,
+    Role, SegmentId, Seq, SnapshotId, SpaceId, SuggestionId, UserId, Uuid,
 };
 
 #[cfg(test)]
@@ -170,7 +222,7 @@ mod clipboard_tests {
     /// back, the comment moved before the `<html>` wrapper it adds.
     #[test]
     fn the_token_reads_back_from_the_marked_html() {
-        let marked = ClipboardBlob::mark_html("<b>x</b>", "TOK");
+        let marked = ClipboardBlob::mark_html("<b>x</b>", &super::ClipToken::new("TOK".to_owned()));
         assert_eq!(ClipboardBlob::html_token(&marked), Some("TOK"));
         let moved = "<!--ambre-token:TOK-->\n<html><head></head><body><b>x</b></body></html>";
         assert_eq!(ClipboardBlob::html_token(moved), Some("TOK"));

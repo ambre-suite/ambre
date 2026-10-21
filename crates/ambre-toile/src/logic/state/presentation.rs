@@ -291,7 +291,7 @@ impl ToileState {
             to_rect: order.get(to_idx).and_then(|f| self.element_rect(f)),
             notes: frame.as_ref().map(|f| self.notes(f)).unwrap_or_default(),
             frame,
-            transition_ms: self.transition_ms(),
+            transition: self.transition(),
         }
     }
 
@@ -312,6 +312,13 @@ impl ToileState {
     /// A config the board does not carry reads as the default. So does a value
     /// that is not a plain length. A negative or absurd one would make every
     /// slide change instant or unending, on a register any peer can write.
+    pub(super) fn transition(&self) -> std::time::Duration {
+        // The read keeps the value within `0..=10_000` ms, finite.
+        std::time::Duration::from_secs_f64(self.transition_ms() / 1000.0)
+    }
+
+    /// The `transition_ms` register as the document holds it, in milliseconds,
+    /// or the default (see [`Self::transition`]).
     pub(super) fn transition_ms(&self) -> f64 {
         const MAX_TRANSITION_MS: f64 = 10_000.0;
         self.doc

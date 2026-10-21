@@ -204,7 +204,7 @@ mod tests {
                 pins: Vec::new(),
                 viewport: Default::default(),
                 nodes: vec![rect_node("a", Rect::new(10.0, 10.0, 90.0, 90.0))],
-                version: 0,
+                version: ambre_bus::ViewportVersion(0),
                 grid_unit: 20.0,
             },
             camera,

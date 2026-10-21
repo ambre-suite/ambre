@@ -20,9 +20,9 @@ impl TrameUiState {
             cell_cache: HashMap::new(),
             dirty_cells: HashSet::new(),
             formula_errors: HashMap::new(),
-            accepted_version: 0,
+            accepted_version: ambre_bus::ViewportVersion(0),
             active_sheet: ambre_bus::SheetId::default(),
-            next_version: 1,
+            next_version: ambre_bus::ViewportVersion(1),
             filtered_col: None,
             hidden_rows: Vec::new(),
             col_widths: HashMap::new(),
@@ -411,7 +411,7 @@ impl TrameUiState {
         self.rebuild_hidden_rows();
 
         let version = self.next_version;
-        self.next_version += 1;
+        self.next_version = self.next_version.next();
 
         TrameCommand::ScrollViewport {
             version,

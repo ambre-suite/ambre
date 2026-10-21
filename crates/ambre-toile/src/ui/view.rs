@@ -386,7 +386,7 @@ pub struct ToileView {
     pending_viewport: Option<Viewport>,
     /// The version of the last frame the view accepted. An older one is a
     /// stale answer, and the view drops it (`BUS-017`).
-    accepted_version: u64,
+    accepted_version: ambre_bus::ViewportVersion,
     initial_viewport_sent: bool,
     fatal: bool,
 
@@ -695,7 +695,7 @@ impl ToileView {
             from_logic,
             cam: ViewportTransform::new(canvas_width, canvas_height),
             display: DisplayViewport {
-                version: 0,
+                version: ambre_bus::ViewportVersion(0),
                 grid_unit: super::grid::BASE_GRID,
                 reactions: Default::default(),
                 pins: Vec::new(),
@@ -744,7 +744,7 @@ impl ToileView {
             viewport_changed: false,
             data_dirty: false,
             pending_viewport: None,
-            accepted_version: 0,
+            accepted_version: ambre_bus::ViewportVersion(0),
             initial_viewport_sent: false,
             fatal: false,
             pending_clipboard: None,
@@ -1162,7 +1162,7 @@ impl ToileView {
                 let cam_from = self.cam;
                 // The length rides the event: the deck's own `transition_ms`,
                 // read off the document by the Logic thread (`TOILE-FEAT-028`).
-                let dur_ms = change.transition_ms;
+                let dur = change.transition;
                 let (to_center, to_zoom) = change
                     .to_rect
                     .and_then(|r| self.cam.fit_target(r, super::viewport::FIT_PAD))
@@ -1173,7 +1173,7 @@ impl ToileView {
                     to_zoom,
                     change.from,
                     change.to,
-                    dur_ms,
+                    dur,
                 ));
                 self.needs_full = true;
             }
@@ -4314,7 +4314,7 @@ impl ToileView {
         self.close_all_embeds();
         self.document_id = document_id;
         self.display = DisplayViewport {
-            version: 0,
+            version: ambre_bus::ViewportVersion(0),
             grid_unit: super::grid::BASE_GRID,
             reactions: Default::default(),
             pins: Vec::new(),
@@ -4346,7 +4346,7 @@ impl ToileView {
         self.gesture_commit_pending = false;
         self.initial_viewport_sent = false;
         self.pending_viewport = None;
-        self.accepted_version = 0;
+        self.accepted_version = ambre_bus::ViewportVersion(0);
         self.needs_full = true;
         // Keep the transparent text pipe focused so the keyboard works on the
         // freshly-routed board without a click.

@@ -45,7 +45,7 @@ fn bold_stays_on_the_cell_not_the_selection() {
 
     // A viewport covering both cells: only A1 carries the bold run.
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         row_start: 0,
         row_end: 1,
         col_start: 0,
@@ -89,7 +89,7 @@ fn formatting_survives_snapshot_roundtrip() {
         .expect("a snapshot this build wrote reads back at the current schema");
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         row_start: 0,
         row_end: 0,
         col_start: 0,
@@ -157,7 +157,7 @@ fn set_cell_style_round_trips_and_formats_numbers() {
         .import_snapshot(&snapshot)
         .expect("a snapshot this build wrote reads back at the current schema");
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         row_start: 0,
         row_end: 0,
         col_start: 0,
@@ -181,7 +181,7 @@ fn edited_text_overrides_generated_label() {
 
     // A1 starts blank (virtual cell).
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         row_start: 0,
         row_end: 0,
         col_start: 0,
@@ -199,7 +199,7 @@ fn edited_text_overrides_generated_label() {
         text: "hello".to_owned(),
     });
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: 2,
+        version: ambre_bus::ViewportVersion(2),
         row_start: 0,
         row_end: 0,
         col_start: 0,
@@ -217,7 +217,7 @@ fn edited_text_overrides_generated_label() {
         text: String::new(),
     });
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: 3,
+        version: ambre_bus::ViewportVersion(3),
         row_start: 0,
         row_end: 0,
         col_start: 0,
@@ -249,7 +249,7 @@ fn far_cell_survives_snapshot_roundtrip() {
         .expect("a snapshot this build wrote reads back at the current schema");
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         row_start: 1000,
         row_end: 1000,
         col_start: 3,
@@ -261,7 +261,7 @@ fn far_cell_survives_snapshot_roundtrip() {
     assert_eq!(cells[0].text, "deep");
     // An untouched far cell is blank (virtual space).
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
-        version: 2,
+        version: ambre_bus::ViewportVersion(2),
         row_start: 2000,
         row_end: 2000,
         col_start: 0,
@@ -296,7 +296,7 @@ fn formula_evaluates_through_stable_keys() {
         .expect("a snapshot this build wrote reads back at the current schema");
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         row_start: 0,
         row_end: 0,
         col_start: 0,
@@ -335,7 +335,7 @@ fn named_range_defines_resolves_and_deletes() {
 
     let read_c1 = |state: &mut TrameState, version: u64| {
         let evts = state.handle_command(TrameCommand::ScrollViewport {
-            version,
+            version: ambre_bus::ViewportVersion(version),
             row_start: 0,
             row_end: 0,
             col_start: 2,
@@ -392,7 +392,7 @@ fn read_a1(state: &mut TrameState, version: u64) -> String {
 /// The display text of `(row, col)` on the active sheet.
 fn read_cell_v(state: &mut TrameState, row: u32, col: u32, version: u64) -> String {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version,
+        version: ambre_bus::ViewportVersion(version),
         row_start: row,
         row_end: row,
         col_start: col,
@@ -557,7 +557,7 @@ fn sum_over_plain_literals_and_formula_raw_in_viewport() {
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         row_start: 0,
         row_end: 0,
         col_start: 0,
@@ -605,7 +605,7 @@ fn sum_over_plain_literals_survives_reseed() {
         .expect("a snapshot this build wrote reads back at the current schema");
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         row_start: 0,
         row_end: 0,
         col_start: 0,
@@ -807,7 +807,7 @@ fn selection_style_is_a_single_undo() {
     // One undo.
     state.handle_command(TrameCommand::Undo);
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         row_start: 0,
         row_end: 0,
         col_start: 0,

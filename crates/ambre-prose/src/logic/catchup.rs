@@ -47,14 +47,14 @@ impl Prediction {
 #[derive(Debug, Default)]
 pub(super) struct CatchUp {
     /// How many changes the view did not draw so far.
-    seq: u64,
+    seq: ambre_bus::app::prose::TextChangeSeq,
     /// The last of them the view said it applied.
-    seen: u64,
+    seen: ambre_bus::app::prose::TextChangeSeq,
     /// How many text commands the view sent so far.
-    acked: u64,
+    acked: ambre_bus::app::prose::TextAck,
     /// The runs of the changes the view has not said it applied, each with
     /// its number. Each counts positions after every text command taken.
-    queue: VecDeque<(u64, TextEdit)>,
+    queue: VecDeque<(ambre_bus::app::prose::TextChangeSeq, TextEdit)>,
     /// What the view drew for the command in dispatch.
     pub(super) predicting: Prediction,
 }
@@ -111,7 +111,12 @@ impl CatchUp {
         &mut self,
         from_command: bool,
         edits: Vec<TextEdit>,
-    ) -> (bool, u64, u64, Vec<TextEdit>) {
+    ) -> (
+        bool,
+        ambre_bus::app::prose::TextChangeSeq,
+        ambre_bus::app::prose::TextAck,
+        Vec<TextEdit>,
+    ) {
         let prediction = if from_command {
             std::mem::take(&mut self.predicting)
         } else {
@@ -130,7 +135,7 @@ impl CatchUp {
             }
         };
         if !local && !edits.is_empty() {
-            self.seq += 1;
+            self.seq = self.seq.next();
             let seq = self.seq;
             self.queue.extend(edits.iter().map(|edit| (seq, *edit)));
         }
@@ -160,7 +165,7 @@ impl ProseState {
                 pos,
                 text,
             } => {
-                sync.acked += 1;
+                sync.acked = sync.acked.next();
                 let n = crate::ui::chars(&text);
                 let drawn = TextEdit {
                     block_id,
@@ -178,7 +183,7 @@ impl ProseState {
                 }
             }
             ProseCommand::DeleteText { block_id, range } => {
-                sync.acked += 1;
+                sync.acked = sync.acked.next();
                 let (start, end) = (range.0.min(range.1), range.0.max(range.1));
                 if start == end {
                     sync.predicting = Prediction::Text(Vec::new());
@@ -340,7 +345,7 @@ mod tests {
         let mut sync = CatchUp::default();
         let (local, seq, _, _) = sync.stamp(false, vec![run(0, 3)]);
         assert!(!local);
-        assert_eq!(seq, 1);
+        assert_eq!(seq, ambre_bus::app::prose::TextChangeSeq(1));
         assert_eq!(sync.rebase(run(2, 1)), Some(run(5, 1)));
     }
 
@@ -348,7 +353,7 @@ mod tests {
     fn a_change_the_view_has_seen_moves_nothing() {
         let mut sync = CatchUp::default();
         sync.stamp(false, vec![run(0, 3)]);
-        sync.seen = 1;
+        sync.seen = ambre_bus::app::prose::TextChangeSeq(1);
         assert_eq!(sync.rebase(run(2, 1)), Some(run(2, 1)));
     }
 
@@ -360,7 +365,7 @@ mod tests {
         };
         let (local, seq, _, edits) = sync.stamp(true, Vec::new());
         assert!(!local);
-        assert_eq!(seq, 1);
+        assert_eq!(seq, ambre_bus::app::prose::TextChangeSeq(1));
         assert_eq!(edits, vec![run(4, -2)]);
     }
 }

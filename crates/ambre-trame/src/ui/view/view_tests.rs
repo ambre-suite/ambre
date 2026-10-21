@@ -1015,7 +1015,7 @@ fn a_merged_fill_previews_whole_blocks() {
     };
     // A1:A2 is one merge of one column and two rows.
     rig.answer(TrameEvent::ViewportData {
-        version: 0,
+        version: ambre_bus::ViewportVersion(0),
         row_start: 0,
         col_start: 0,
         col_widths: vec![],

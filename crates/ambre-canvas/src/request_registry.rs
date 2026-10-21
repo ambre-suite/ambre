@@ -27,7 +27,7 @@ pub trait RequestTag {
     /// The `RestEvent` variant expected in response, for documentation only.
     type Event;
     /// Default timeout in milliseconds before the request is considered stale.
-    const DEFAULT_TIMEOUT_MS: u64;
+    const DEFAULT_TIMEOUT: ambre_bus::Millis;
 }
 
 /// A pending P3 request waiting for its `RestEvent` response.
@@ -78,7 +78,7 @@ impl<T: RequestTag> RequestRegistry<T> {
     ///
     /// `now_ms` is a `performance.now()` timestamp in milliseconds.
     pub fn prepare(&mut self, cmd: RestCommand, now_ms: ambre_bus::PageTime) -> LogicCommand {
-        self.prepare_with_timeout(cmd, now_ms, T::DEFAULT_TIMEOUT_MS)
+        self.prepare_with_timeout(cmd, now_ms, T::DEFAULT_TIMEOUT)
     }
 
     /// Like [`prepare`](Self::prepare) but with an explicit timeout override.
@@ -86,13 +86,13 @@ impl<T: RequestTag> RequestRegistry<T> {
         &mut self,
         cmd: RestCommand,
         now_ms: ambre_bus::PageTime,
-        timeout_ms: u64,
+        timeout: ambre_bus::Millis,
     ) -> LogicCommand {
         let id = RequestId::next();
         self.pending.insert(
             id,
             PendingEntry {
-                deadline_ms: now_ms.after(timeout_ms as f64),
+                deadline_ms: now_ms.after(timeout.0 as f64),
             },
         );
         LogicCommand::Rest { id, cmd }
@@ -129,7 +129,7 @@ mod tests {
     enum TestTag {}
     impl RequestTag for TestTag {
         type Event = ();
-        const DEFAULT_TIMEOUT_MS: u64 = 5000;
+        const DEFAULT_TIMEOUT: ambre_bus::Millis = ambre_bus::Millis(5000);
     }
 
     type TestRegistry = RequestRegistry<TestTag>;
@@ -172,8 +172,11 @@ mod tests {
     fn expire_drops_overdue_entries() {
         let mut reg = TestRegistry::new();
         // Prepare with explicit 1000 ms timeout at t=0.
-        let cmd =
-            reg.prepare_with_timeout(RestCommand::ListDocuments, ambre_bus::PageTime(0.0), 1000);
+        let cmd = reg.prepare_with_timeout(
+            RestCommand::ListDocuments,
+            ambre_bus::PageTime(0.0),
+            ambre_bus::Millis(1000),
+        );
         let LogicCommand::Rest { id, .. } = cmd else {
             panic!()
         };

@@ -96,7 +96,10 @@ where
     // the OS clipboard still holds this tab's own copy. The async publish
     // re-writes it (`UI-THREAD-023`), and the Paste-button path compares it in
     // `FrameHost` (`UI-THREAD-007`).
-    let clip_token = format!("ambre-{:x}", (js_sys::Math::random() * 1e18) as u64);
+    let clip_token = ambre_bus::ClipToken::new(format!(
+        "ambre-{:x}",
+        (js_sys::Math::random() * 1e18) as u64
+    ));
     let host = Rc::new(RefCell::new(FrameHost::new(
         view,
         perf,

@@ -73,7 +73,7 @@ fn container(state: &TrameState, name: String) -> LoroValue {
 /// The widths and heights of the first `n` columns and rows.
 fn metrics(state: &mut TrameState, n: u32) -> (Vec<f32>, Vec<f32>) {
     let out = state.handle_command(TrameCommand::ScrollViewport {
-        version: 3,
+        version: ambre_bus::ViewportVersion(3),
         row_start: 0,
         row_end: n - 1,
         col_start: 0,
@@ -341,13 +341,13 @@ fn a_line_keeps_its_size_and_its_hidden_mark_when_it_moves() {
     }
     let sheet_id = SheetId(state.active_sheet.clone());
     state.handle_command(TrameCommand::ResizeRow {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         sheet_id: sheet_id.clone(),
         row: 1,
         height_px: 40.0,
     });
     state.handle_command(TrameCommand::ResizeCol {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         sheet_id: sheet_id.clone(),
         col: 2,
         width_px: 150.0,
@@ -390,7 +390,7 @@ fn a_column_is_never_narrower_than_its_minimum() {
     let sheet_id = SheetId(state.active_sheet.clone());
     for (col, width) in [(0, 3.0), (1, 0.0), (2, -40.0)] {
         state.handle_command(TrameCommand::ResizeCol {
-            version: 1,
+            version: ambre_bus::ViewportVersion(1),
             sheet_id: sheet_id.clone(),
             col,
             width_px: width,

@@ -76,7 +76,7 @@ mod tests {
         LogicCommand::App {
             document_id: DocumentId::from_bytes([1; 16]),
             command: AppCommand::Trame(TrameCommand::ScrollViewport {
-                version: 1,
+                version: crate::ViewportVersion(1),
                 row_start: 0,
                 row_end: 10,
                 col_start: 0,
@@ -92,7 +92,7 @@ mod tests {
             TrameCommand::InsertRowAbove,
             TrameCommand::MoveColumn { from: 0, to: 3 },
             TrameCommand::ResizeCol {
-                version: 1,
+                version: crate::ViewportVersion(1),
                 sheet_id: crate::SheetId("s1".to_string()),
                 col: 0,
                 width_px: 120.0,

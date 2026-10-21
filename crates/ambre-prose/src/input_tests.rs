@@ -619,7 +619,12 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
         SendResult::Sent
     }));
     // The structural command is followed by the sync that holds the input.
-    assert!(matches!(sent.pop(), Some(ProseCommand::Sync { seen: 0 })));
+    assert!(matches!(
+        sent.pop(),
+        Some(ProseCommand::Sync {
+            seen: ambre_bus::app::prose::TextChangeSeq(0)
+        })
+    ));
     assert!(matches!(
         sent.as_slice(),
         [ProseCommand::InsertBlock {

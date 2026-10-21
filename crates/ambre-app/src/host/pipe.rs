@@ -20,7 +20,7 @@ pub(crate) trait PipeHost {
     /// Hand a decoded paste to the active view (`UI-THREAD-024`).
     fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool);
     /// The per-page-load ownership token (`UI-THREAD-007`).
-    fn clip_token(&self) -> &str;
+    fn clip_token(&self) -> &ambre_bus::ClipToken;
     /// Whether the last copy's asynchronous write landed (`UI-THREAD-054`).
     fn clip_published(&self) -> Rc<std::cell::Cell<bool>>;
 }
@@ -38,7 +38,7 @@ impl PipeHost for FrameHost {
         FrameHost::paste_clipboard(self, blob, own_copy);
     }
 
-    fn clip_token(&self) -> &str {
+    fn clip_token(&self) -> &ambre_bus::ClipToken {
         FrameHost::clip_token(self)
     }
 
@@ -51,7 +51,7 @@ impl PipeHost for FrameHost {
 /// the `paste` event, and the blob reaches the view by the same call
 /// (`UI-THREAD-024`).
 pub(crate) fn button_paste<H: PipeHost>(host: &mut H, paste: ClipboardPaste) {
-    let own_copy = paste.token.as_deref() == Some(host.clip_token());
+    let own_copy = host.clip_token().is(paste.token.as_deref());
     host.paste_clipboard(paste.blob, own_copy);
 }
 
@@ -204,9 +204,9 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                         // default so the browser does not clobber the clipboard
                         // with the empty textarea (`UI-THREAD-008`).
                         ambre_bus::CopyOutcome::Deferred => {
-                            let token = host_e.borrow().clip_token().to_owned();
+                            let token = host_e.borrow().clip_token().clone();
                             if let Some(data) = event.clipboard_data() {
-                                let _ = data.set_data(AMBRE_CLIPBOARD_TOKEN_TYPE, &token);
+                                let _ = data.set_data(AMBRE_CLIPBOARD_TOKEN_TYPE, token.as_str());
                             }
                             event.prevent_default();
                         }
@@ -252,9 +252,9 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                 // refusing the `web ` types received (`UI-THREAD-057`). A match
                 // means paste our own in-memory copy at full fidelity.
                 let own_copy = !plain && {
-                    let token = host_c.borrow().clip_token().to_owned();
+                    let token = host_c.borrow().clip_token().clone();
                     data.get_data(AMBRE_CLIPBOARD_TOKEN_TYPE)
-                        .is_ok_and(|t| !t.is_empty() && t == token)
+                        .is_ok_and(|t| !t.is_empty() && token.is(Some(t.as_str())))
                         || html
                             .as_deref()
                             .and_then(ambre_bus::ClipboardBlob::html_token)
@@ -280,15 +280,14 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                     let read = clipboard.read();
                     let host_a = Rc::clone(&host_c);
                     wasm_bindgen_futures::spawn_local(async move {
-                        let (blob, own_copy) = match crate::platform::read_clipboard_blob(read)
-                            .await
-                        {
-                            Some((blob, token)) => {
-                                let own = token.as_deref() == Some(host_a.borrow().clip_token());
-                                (blob, own)
-                            }
-                            None => (fallback, false),
-                        };
+                        let (blob, own_copy) =
+                            match crate::platform::read_clipboard_blob(read).await {
+                                Some((blob, token)) => {
+                                    let own = host_a.borrow().clip_token().is(token.as_deref());
+                                    (blob, own)
+                                }
+                                None => (fallback, false),
+                            };
                         host_a.borrow_mut().paste_clipboard(blob, own_copy);
                     });
                     return;
@@ -393,7 +392,7 @@ mod tests {
         outcome: Option<ambre_bus::CopyOutcome>,
         /// Whether the view consumes every key.
         consume: bool,
-        token: String,
+        token: ambre_bus::ClipToken,
         published: Rc<Cell<bool>>,
     }
 
@@ -421,7 +420,7 @@ mod tests {
             self.pastes.push((blob, own_copy));
         }
 
-        fn clip_token(&self) -> &str {
+        fn clip_token(&self) -> &ambre_bus::ClipToken {
             &self.token
         }
 
@@ -459,7 +458,7 @@ mod tests {
                 .expect("attached");
             let pipe = TextInput::create(&document, &cell);
             let host = Rc::new(RefCell::new(Recorder {
-                token: "ambre-test-token".to_owned(),
+                token: ambre_bus::ClipToken::new("ambre-test-token".to_owned()),
                 ..Recorder::default()
             }));
             wire_pipe(&document, &pipe, &host);
@@ -725,8 +724,14 @@ mod tests {
     #[wasm_bindgen_test]
     async fn a_paste_after_a_landed_write_reads_the_clipboard_back() {
         let rig = Rig::new();
-        let (item, _) = publish_item("x", None, Some("AQID"), "ambre-test-token", clipboard_item)
-            .expect("an item");
+        let (item, _) = publish_item(
+            "x",
+            None,
+            Some("AQID"),
+            &ambre_bus::ClipToken::new("ambre-test-token".to_owned()),
+            clipboard_item,
+        )
+        .expect("an item");
         let clipboard = crate::platform::async_clipboard().expect("the clipboard API");
         let items: JsValue = js_sys::Array::of1(&item).into();
         let read = Closure::<dyn FnMut() -> js_sys::Promise>::new(move || {

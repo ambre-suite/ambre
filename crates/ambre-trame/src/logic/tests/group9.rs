@@ -10,7 +10,7 @@ use super::*;
 /// `(row, col, raw)`.
 fn cells(state: &mut TrameState) -> Vec<(u32, u32, String)> {
     let out = state.handle_command(TrameCommand::ScrollViewport {
-        version: 9,
+        version: ambre_bus::ViewportVersion(9),
         row_start: 0,
         row_end: 7,
         col_start: 0,

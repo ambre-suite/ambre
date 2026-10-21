@@ -35,7 +35,7 @@ pub enum TrameCommand {
     /// `version` is a monotonic counter: the UI Thread drops any response
     /// whose version is older than the last accepted one.
     ScrollViewport {
-        version: u64,
+        version: crate::ViewportVersion,
         row_start: u32,
         row_end: u32,
         col_start: u32,
@@ -200,7 +200,7 @@ pub enum TrameCommand {
     /// [`DataReset`]: super::TrameEvent::DataReset [`ViewportData`]:
     /// super::TrameEvent::ViewportData
     ResizeCol {
-        version: u64,
+        version: crate::ViewportVersion,
         sheet_id: SheetId,
         col: u32,
         width_px: f32,
@@ -208,7 +208,7 @@ pub enum TrameCommand {
     /// Set the height (physical px) of row `row` on `sheet_id`. Row analogue of
     /// [`ResizeCol`](TrameCommand::ResizeCol): writes `row_heights_{sheet}`.
     ResizeRow {
-        version: u64,
+        version: crate::ViewportVersion,
         sheet_id: SheetId,
         row: u32,
         height_px: f32,

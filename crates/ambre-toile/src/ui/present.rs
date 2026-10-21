@@ -26,7 +26,7 @@ use super::viewport::ViewportTransform;
 /// first frame it is actually shown, not from event dispatch.
 pub struct Transition {
     start_ms: Option<ambre_core::PageTime>,
-    dur_ms: f64,
+    dur: std::time::Duration,
     cam_from: ViewportTransform,
     cam_to_center: Point,
     cam_to_zoom: f64,
@@ -46,7 +46,7 @@ pub struct TransitionFrame {
 impl Transition {
     /// Build a transition. `cam_to_center` / `cam_to_zoom` are the fit target for
     /// the new slide. The view resolves them from the frame rect, falling back to
-    /// the current camera when the slide has no resolvable frame. `dur_ms <= 0`
+    /// the current camera when the slide has no resolvable frame. A zero `dur`
     /// makes the transition resolve in a single `advance` (an instant snap).
     pub fn new(
         cam_from: ViewportTransform,
@@ -54,11 +54,11 @@ impl Transition {
         cam_to_zoom: f64,
         from: FrameSnapshot,
         to: FrameSnapshot,
-        dur_ms: f64,
+        dur: std::time::Duration,
     ) -> Self {
         Self {
             start_ms: None,
-            dur_ms,
+            dur,
             cam_from,
             cam_to_center,
             cam_to_zoom,
@@ -78,17 +78,17 @@ impl Transition {
         from.covering_viewport(self.cam_to_center, self.cam_to_zoom)
     }
 
-    /// Advance to wall-clock `now_ms`, stamping the start on the first call. The
+    /// Advance to the page clock's `now_ms`, stamping the start on the first call. The
     /// raw phase `t` is `(now - start) / dur` clamped to `0..=1`. It is eased
     /// before both the camera glide and the content solve, so the whole
     /// transition shares one easing curve. `done` uses the raw (un-eased) phase
     /// so the end is reached exactly at `dur`.
     pub fn advance(&mut self, now_ms: ambre_core::PageTime) -> TransitionFrame {
         let start = *self.start_ms.get_or_insert(now_ms);
-        let raw = if self.dur_ms <= 0.0 {
+        let raw = if self.dur.is_zero() {
             1.0
         } else {
-            ((now_ms - start) / self.dur_ms).clamp(0.0, 1.0)
+            ((now_ms - start) / (self.dur.as_secs_f64() * 1000.0)).clamp(0.0, 1.0)
         };
         let eased = ease_in_out_cubic(raw);
         TransitionFrame {
@@ -144,7 +144,7 @@ mod tests {
             2.0,
             from,
             to,
-            300.0,
+            std::time::Duration::from_millis(300),
         )
     }
 
@@ -227,7 +227,7 @@ mod tests {
             3.0,
             from,
             to,
-            0.0,
+            std::time::Duration::ZERO,
         );
         let f = t.advance(ambre_bus::PageTime(42.0));
         assert!(
@@ -250,7 +250,7 @@ mod tests {
             1.0,
             FrameSnapshot::default(),
             FrameSnapshot::default(),
-            300.0,
+            std::time::Duration::from_millis(300),
         );
         let covering = t.covering_viewport(&from);
         let half_w = covering.size.width / (2.0 * covering.zoom);

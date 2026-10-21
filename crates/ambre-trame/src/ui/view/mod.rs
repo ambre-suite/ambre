@@ -507,12 +507,15 @@ mod tests {
             col_end: 5,
         };
         let mut queue = ViewportQueue::default();
-        queue.coalesce(scroll(1));
-        queue.coalesce(scroll(2));
+        queue.coalesce(scroll(ambre_bus::ViewportVersion(1)));
+        queue.coalesce(scroll(ambre_bus::ViewportVersion(2)));
         assert!(
             matches!(
                 queue.take(),
-                Some(TrameCommand::ScrollViewport { version: 2, .. })
+                Some(TrameCommand::ScrollViewport {
+                    version: ambre_bus::ViewportVersion(2),
+                    ..
+                })
             ),
             "the newer request wins"
         );
@@ -552,7 +555,7 @@ mod tests {
 
     fn scroll_cmd(version: u64) -> TrameCommand {
         TrameCommand::ScrollViewport {
-            version,
+            version: ambre_bus::ViewportVersion(version),
             row_start: 0,
             row_end: 0,
             col_start: 0,
@@ -570,7 +573,13 @@ mod tests {
         q.coalesce(scroll_cmd(2));
         let sent = q.take().expect("one pending request");
         assert!(
-            matches!(sent, TrameCommand::ScrollViewport { version: 2, .. }),
+            matches!(
+                sent,
+                TrameCommand::ScrollViewport {
+                    version: ambre_bus::ViewportVersion(2),
+                    ..
+                }
+            ),
             "the newest request wins"
         );
         assert!(q.take().is_none(), "one drain sends exactly one request");
@@ -586,7 +595,10 @@ mod tests {
         let again = q.take().expect("re-offered");
         assert!(matches!(
             again,
-            TrameCommand::ScrollViewport { version: 3, .. }
+            TrameCommand::ScrollViewport {
+                version: ambre_bus::ViewportVersion(3),
+                ..
+            }
         ));
         assert!(q.take().is_none());
     }

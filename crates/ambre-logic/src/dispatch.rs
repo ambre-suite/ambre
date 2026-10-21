@@ -1061,7 +1061,7 @@ mod tests {
                 col_start: 0,
                 row_end: 16,
                 col_end: 8,
-                version: 1,
+                version: ambre_bus::ViewportVersion(1),
             }),
         });
         let kept = std::iter::from_fn(|| ui.try_recv().ok()).any(|evt| match evt {
@@ -1225,7 +1225,7 @@ mod tests {
 
     fn scroll(version: u64) -> AppCommand {
         AppCommand::Trame(TrameCommand::ScrollViewport {
-            version,
+            version: ambre_bus::ViewportVersion(version),
             row_start: 0,
             row_end: 4,
             col_start: 0,

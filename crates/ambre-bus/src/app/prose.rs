@@ -32,6 +32,46 @@ use serde::{Deserialize, Serialize};
 
 use ambre_core::{CommentId, FootnoteId, ReplyId, SuggestionId, UserId};
 
+/// The number of a text change the view did not draw: a remote one, or a
+/// local one the Logic thread rewrote. The view hands back the last it
+/// applied in [`ProseCommand::Sync`].
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct TextChangeSeq(pub u64);
+
+impl TextChangeSeq {
+    /// The number of the change after this one.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+/// How many text commands of the view the Logic thread has taken: the number
+/// a draft entry waits on. Apart from [`TextChangeSeq`], which counts the
+/// other direction.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct TextAck(pub u64);
+
+impl TextAck {
+    /// The count after one more command is taken.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+
+    /// The count `n` commands later.
+    #[must_use]
+    pub const fn plus(self, n: u64) -> Self {
+        Self(self.0.saturating_add(n))
+    }
+}
+
 // =============================================================================
 // Block identity (`ambre-spec-prose-schema.md section 2`)
 // =============================================================================
@@ -673,7 +713,7 @@ pub enum ProseCommand {
     /// last one it applied carried. The Logic thread answers with
     /// [`ProseEvent::Synced`] once everything sent before has landed.
     Sync {
-        seen: u64,
+        seen: TextChangeSeq,
     },
 
     // -- Text editing (`features/ambre-spec-prose-text-editing.md`) --
@@ -1326,10 +1366,10 @@ pub enum ProseEvent {
         /// The count of changes the view did not draw, this one included when
         /// `local` is `false`. The view hands it back in
         /// [`ProseCommand::Sync`].
-        seq: u64,
+        seq: TextChangeSeq,
         /// How many insertions and deletions of text the Logic thread has
         /// taken from the view so far.
-        acked: u64,
+        acked: TextAck,
         /// One run after another, each in the text the previous one left.
         edits: Vec<TextEdit>,
         /// The blocks the change deleted.
@@ -1341,7 +1381,7 @@ pub enum ProseEvent {
     BlockSplit { source: BlockId, new_block: BlockId },
     /// Every command sent before the [`ProseCommand::Sync`] it answers has
     /// landed, and `acked` counts the text commands among them.
-    Synced { acked: u64 },
+    Synced { acked: TextAck },
     /// The whole live peer set, replaced rather than merged (`PRESENCE-009`).
     RemoteCursors { cursors: Vec<RemoteCursor> },
     /// A picture finished decrypting, and the blocks that show it are stale

@@ -67,7 +67,7 @@ pub struct DraftBuffer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DraftEdit {
     /// The number the Logic thread acknowledges this command by.
-    seq: u64,
+    seq: ambre_bus::app::prose::TextAck,
     block: BlockId,
     at: u32,
     change: Change,
@@ -89,7 +89,7 @@ impl DraftBuffer {
 
     /// Each entry's acknowledgement number, and whether the Logic thread
     /// confirmed it. The keystroke probes read it (`ambre-spec-budgets.md`).
-    pub fn entries(&self) -> impl Iterator<Item = (u64, bool)> + '_ {
+    pub fn entries(&self) -> impl Iterator<Item = (ambre_bus::app::prose::TextAck, bool)> + '_ {
         self.edits.iter().map(|edit| (edit.seq, edit.confirmed))
     }
 
@@ -102,20 +102,38 @@ impl DraftBuffer {
     /// Text sent to `pos` in `block_id`, acknowledged as `seq`
     /// (`PROSE-UI-136`). Each keystroke is its own entry, so each confirms on
     /// its own (`PROSE-UI-138`).
-    pub fn push_str(&mut self, seq: u64, text: &str, block_id: &BlockId, pos: u32) {
+    pub fn push_str(
+        &mut self,
+        seq: ambre_bus::app::prose::TextAck,
+        text: &str,
+        block_id: &BlockId,
+        pos: u32,
+    ) {
         self.push(seq, *block_id, pos, Change::Insert(text.to_owned()));
     }
 
     /// A deletion sent over `start..end` in `block_id`, acknowledged as
     /// `seq`. The text typed before it stays drawn (`PROSE-UI-206`).
-    pub fn push_delete(&mut self, seq: u64, block_id: &BlockId, start: u32, end: u32) {
+    pub fn push_delete(
+        &mut self,
+        seq: ambre_bus::app::prose::TextAck,
+        block_id: &BlockId,
+        start: u32,
+        end: u32,
+    ) {
         let (start, end) = (start.min(end), start.max(end));
         if end > start {
             self.push(seq, *block_id, start, Change::Delete(end - start));
         }
     }
 
-    fn push(&mut self, seq: u64, block: BlockId, at: u32, change: Change) {
+    fn push(
+        &mut self,
+        seq: ambre_bus::app::prose::TextAck,
+        block: BlockId,
+        at: u32,
+        change: Change,
+    ) {
         self.edits.push(DraftEdit {
             seq,
             block,
@@ -132,7 +150,7 @@ impl DraftBuffer {
 
     /// The command acknowledged as `seq` was taken as drawn
     /// (`PROSE-UI-005`). The entries confirm in the order they were sent.
-    pub fn confirm(&mut self, seq: u64) {
+    pub fn confirm(&mut self, seq: ambre_bus::app::prose::TextAck) {
         if let Some(edit) = self.edits.iter_mut().find(|edit| edit.seq == seq) {
             edit.confirmed = true;
         }
@@ -445,13 +463,13 @@ pub struct ProseUiState {
     /// When the text was last seen changing, while a recount is owed.
     quiet_since_ms: Option<ambre_core::PageTime>,
     /// The number of the last change this view did not draw and applied.
-    pub(crate) seen: u64,
+    pub(crate) seen: ambre_bus::app::prose::TextChangeSeq,
     /// The number last handed back in a [`ProseCommand::Sync`].
-    pub(crate) sent_seen: u64,
+    pub(crate) sent_seen: ambre_bus::app::prose::TextChangeSeq,
     /// The text commands sent and not yet taken, in the text this view shows.
     pub(crate) inflight: VecDeque<TextEdit>,
     /// How many text commands the Logic thread said it took.
-    pub(crate) popped: u64,
+    pub(crate) popped: ambre_bus::app::prose::TextAck,
     /// The syncs sent and not yet answered, oldest first. One sent after a
     /// structural command holds the input until it is answered.
     pub(crate) syncs: VecDeque<bool>,
@@ -701,10 +719,10 @@ impl ProseUiState {
     /// Drop the text commands the Logic thread took. A command it took
     /// as drawn confirms the draft; one it did not ends the draft, whose
     /// text the change takes back.
-    fn take_acked(&mut self, acked: u64, as_drawn: bool) {
+    fn take_acked(&mut self, acked: ambre_bus::app::prose::TextAck, as_drawn: bool) {
         let mut ends_draft = false;
         while self.popped < acked {
-            self.popped += 1;
+            self.popped = self.popped.next();
             let Some(edit) = self.inflight.pop_front() else {
                 continue;
             };
@@ -978,7 +996,9 @@ mod tests {
         let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(4);
         let block = BlockId::new(ambre_core::PeerId(1), 0);
         let mut state = ProseUiState::default();
-        state.draft.push_str(1, "hel", &block, 0);
+        state
+            .draft
+            .push_str(ambre_bus::app::prose::TextAck(1), "hel", &block, 0);
         send_command(
             &tx,
             a_document(),
@@ -1005,7 +1025,9 @@ mod tests {
     fn a_confirming_change_clears_the_draft_it_covers() {
         let block = BlockId::new(ambre_core::PeerId(1), 0);
         let mut state = ProseUiState::default();
-        state.draft.push_str(1, "hel", &block, 0);
+        state
+            .draft
+            .push_str(ambre_bus::app::prose::TextAck(1), "hel", &block, 0);
         // A change alone keeps the draft: the text is not laid out yet.
         state.apply_event(&ProseEvent::DocUpdated { delta: vec![1] });
         assert_eq!(state.draft.text_of(block, ""), "hel");
@@ -1017,8 +1039,8 @@ mod tests {
         state.inflight.push_back(typed);
         state.apply_event(&ProseEvent::TextChanged {
             local: true,
-            seq: 0,
-            acked: 1,
+            seq: ambre_bus::app::prose::TextChangeSeq(0),
+            acked: ambre_bus::app::prose::TextAck(1),
             edits: vec![typed],
             removed: Vec::new(),
         });
@@ -1032,7 +1054,9 @@ mod tests {
     fn an_event_carrying_no_change_leaves_the_draft_alone() {
         let block = BlockId::new(ambre_core::PeerId(1), 0);
         let mut state = ProseUiState::default();
-        state.draft.push_str(1, "hel", &block, 0);
+        state
+            .draft
+            .push_str(ambre_bus::app::prose::TextAck(1), "hel", &block, 0);
         state.apply_event(&ProseEvent::MediaArrived {
             content_hash: ambre_core::ContentHash("abc".to_owned()),
             blocks: Vec::new(),
@@ -1056,9 +1080,9 @@ mod tests {
         let block = BlockId::new(ambre_core::PeerId(1), 0);
         let other = BlockId::new(ambre_core::PeerId(1), 1);
         let mut draft = DraftBuffer::default();
-        draft.push_str(1, "he", &block, 0);
-        draft.push_str(2, "llo", &block, 2);
-        draft.push_delete(3, &block, 1, 3);
+        draft.push_str(ambre_bus::app::prose::TextAck(1), "he", &block, 0);
+        draft.push_str(ambre_bus::app::prose::TextAck(2), "llo", &block, 2);
+        draft.push_delete(ambre_bus::app::prose::TextAck(3), &block, 1, 3);
         assert_eq!(draft.text_of(block, "!"), "hlo!");
         assert_eq!(draft.delta(block), 3);
         assert_eq!(draft.text_of(other, "ab"), "ab");

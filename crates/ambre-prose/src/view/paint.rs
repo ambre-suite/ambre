@@ -1254,7 +1254,8 @@ mod tests {
         ui.resize(1200.0, 900.0);
         ui.apply_layout(shaped);
         let id = first_block(&ui);
-        ui.draft.push_str(1, "abc", &id, 14);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(1), "abc", &id, 14);
         ui.cursor = Some(CursorPosition {
             block_id: id,
             offset: 0,
@@ -1280,7 +1281,8 @@ mod tests {
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         assert!(drawn_glyphs(&paint(&mut ui), 14));
-        ui.draft.push_str(1, "abc", &id, 4);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(1), "abc", &id, 4);
         shape(&mut ui);
         assert_eq!(provisional(&ui, id), "wordabc word word");
         assert!(drawn_glyphs(&paint(&mut ui), 17));
@@ -1296,7 +1298,8 @@ mod tests {
         state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
         let header = state.bands().header.expect("the header block");
         let mut ui = view_of(&mut state);
-        ui.draft.push_str(1, "Head", &header, 0);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(1), "Head", &header, 0);
         shape(&mut ui);
         assert_eq!(provisional(&ui, header), "Head");
         assert!(drawn_glyphs(&paint(&mut ui), 4));
@@ -1316,7 +1319,8 @@ mod tests {
         let laid = ui.shaped.tables[&table].clone();
         let row = laid.row_tops[1] - laid.row_tops[0];
 
-        ui.draft.push_str(1, "Cell", &block, 0);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(1), "Cell", &block, 0);
         shape(&mut ui);
         assert_eq!(provisional(&ui, block), "Cell");
         assert!(drawn_glyphs(&paint(&mut ui), 4));
@@ -1324,7 +1328,8 @@ mod tests {
         // A column is half the text wide: this wraps over many lines.
         let long = "word ".repeat(60);
         ui.draft.clear();
-        ui.draft.push_str(1, &long, &block, 0);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(1), &long, &block, 0);
         shape(&mut ui);
         let run = ui.provisional_run(block).expect("the cell is shaped again");
         let text_px = laid.cells[0].width_px - 2.0 * laid.cells[0].style.padding_px;
@@ -1358,7 +1363,8 @@ mod tests {
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         let after = x_of(&ui, id, 4);
-        ui.draft.push_str(1, "abc", &id, 4);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(1), "abc", &id, 4);
         shape(&mut ui);
         let width = x_of(&ui, id, 7) - x_of(&ui, id, 4);
         assert!(width > 0.0, "the draft takes room");
@@ -1368,7 +1374,8 @@ mod tests {
     /// The width of `text` typed at the start of `block`, as drawn.
     fn draft_width(ui: &mut ProseUiState, block: BlockId, text: &str) -> f64 {
         ui.draft.clear();
-        ui.draft.push_str(1, text, &block, 0);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(1), text, &block, 0);
         shape(ui);
         x_of(ui, block, crate::ui::chars(text))
     }
@@ -1415,7 +1422,8 @@ mod tests {
         let id = block;
         let bold_at = |ui: &mut ProseUiState, at: u32| {
             ui.draft.clear();
-            ui.draft.push_str(1, "abc", &id, at);
+            ui.draft
+                .push_str(ambre_bus::app::prose::TextAck(1), "abc", &id, at);
             shape(ui);
             let run = ui
                 .provisional_run(id)
@@ -1495,7 +1503,8 @@ mod tests {
                 .collect()
         };
         let word = lines(&mut ui);
-        ui.draft.push_str(1, "abc", &id, 4);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(1), "abc", &id, 4);
         shape(&mut ui);
         let drawn = lines(&mut ui);
         let (Some(word), Some(line)) = (word.first(), drawn.first()) else {
@@ -1517,7 +1526,8 @@ mod tests {
         ui.apply_layout(state.shaped_layout());
         let id = block;
         let typed = " more".repeat(40);
-        ui.draft.push_str(1, &typed, &id, 14);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(1), &typed, &id, 14);
         shape(&mut ui);
         let drawn = ui
             .provisional_run(id)
@@ -1549,7 +1559,8 @@ mod tests {
         ui.resize(1200.0, 900.0);
         ui.apply_layout(shaped);
         let id = first_block(&ui);
-        ui.draft.push_delete(1, &id, 0, 5);
+        ui.draft
+            .push_delete(ambre_bus::app::prose::TextAck(1), &id, 0, 5);
         shape(&mut ui);
         assert_eq!(provisional(&ui, id), "word word");
         let surface = paint(&mut ui);
@@ -1605,7 +1616,8 @@ mod tests {
             new_block: minted,
         });
         ui.queued.clear();
-        ui.draft.push_str(1, "xy", &minted, 0);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(1), "xy", &minted, 0);
         shape(&mut ui);
         assert_eq!(provisional(&ui, minted), "xyword");
         assert_eq!(ui.block_len(minted), 6);
@@ -1631,7 +1643,8 @@ mod tests {
             source: first,
             new_block: minted,
         });
-        ui.draft.push_str(1, "xy", &minted, 0);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(1), "xy", &minted, 0);
         shape(&mut ui);
         let at = ui.pieces(0).1.expect("the new paragraph is drawn");
         let run = ui.ghost().expect("shaped").run.clone();
@@ -1649,7 +1662,8 @@ mod tests {
         );
         assert_eq!(ui.place_at(point.0, point.1), Some((minted, 3)));
         // A keystroke replayed before the next frame shapes again.
-        ui.draft.push_str(2, "z", &minted, 2);
+        ui.draft
+            .push_str(ambre_bus::app::prose::TextAck(2), "z", &minted, 2);
         assert_eq!(ui.place_at(point.0, point.1), Some((minted, 3)));
     }
 
@@ -1712,7 +1726,12 @@ mod tests {
         let point = cell_point(&ui, right, 3);
         assert_eq!(ui.place_at(point.0, point.1), Some((right, 3)));
 
-        ui.draft.push_str(1, &"word ".repeat(60), &left, 0);
+        ui.draft.push_str(
+            ambre_bus::app::prose::TextAck(1),
+            &"word ".repeat(60),
+            &left,
+            0,
+        );
         shape(&mut ui);
         let point = cell_point(&ui, left, 200);
         assert_eq!(ui.place_at(point.0, point.1), Some((left, 200)));

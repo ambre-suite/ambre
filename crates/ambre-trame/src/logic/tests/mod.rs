@@ -35,7 +35,7 @@ fn bold_patch(on: bool) -> crate::StylePatch {
 /// Read the text at a single grid cell through a viewport request.
 fn read_cell(state: &mut TrameState, row: u32, col: u32) -> String {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: 999,
+        version: ambre_bus::ViewportVersion(999),
         row_start: row,
         row_end: row,
         col_start: col,
@@ -51,7 +51,7 @@ fn read_cell(state: &mut TrameState, row: u32, col: u32) -> String {
 /// request (the reconstructed display form, not the stored canonical form).
 fn read_raw(state: &mut TrameState, row: u32, col: u32) -> String {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: 999,
+        version: ambre_bus::ViewportVersion(999),
         row_start: row,
         row_end: row,
         col_start: col,
@@ -66,7 +66,7 @@ fn read_raw(state: &mut TrameState, row: u32, col: u32) -> String {
 /// Read the full DisplayCell at a single grid position.
 fn read_display(state: &mut TrameState, row: u32, col: u32) -> crate::DisplayCell {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: 5000,
+        version: ambre_bus::ViewportVersion(5000),
         row_start: row,
         row_end: row,
         col_start: col,
@@ -90,7 +90,7 @@ fn second_sheet_id(state: &TrameState) -> String {
 /// Read column `col` over rows `[0..=row_end]` as display strings.
 fn read_col(state: &mut TrameState, col: u32, row_end: u32, version: u64) -> Vec<String> {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version,
+        version: ambre_bus::ViewportVersion(version),
         row_start: 0,
         row_end,
         col_start: 0,
@@ -205,7 +205,7 @@ fn viewport_metrics(
     c1: u32,
 ) -> (Vec<f32>, Vec<f32>) {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: 99,
+        version: ambre_bus::ViewportVersion(99),
         row_start: r0,
         row_end: r1,
         col_start: c0,

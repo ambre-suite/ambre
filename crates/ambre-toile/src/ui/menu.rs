@@ -574,7 +574,7 @@ mod tests {
 
     fn viewport(nodes: Vec<DisplayElement>) -> DisplayViewport {
         DisplayViewport {
-            version: 0,
+            version: ambre_bus::ViewportVersion(0),
             grid_unit: 20.0,
             pins: Vec::new(),
             reactions: Default::default(),

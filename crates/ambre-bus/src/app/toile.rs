@@ -1006,11 +1006,10 @@ pub struct SlideChange {
     /// panel's editor (`toile-presentation`). Empty when the frame has no
     /// notes yet or is absent.
     pub notes: String,
-    /// How long this transition lasts, in milliseconds: the deck's own
-    /// `transition_ms`, read off the document (`TOILE-FEAT-028`). The render
-    /// thread holds no board data, so the length rides the event like the
-    /// snapshots beside it.
-    pub transition_ms: f64,
+    /// How long this transition lasts: the deck's own `transition_ms`, read
+    /// off the document (`TOILE-FEAT-028`). The render thread holds no board
+    /// data, so the length rides the event like the snapshots beside it.
+    pub transition: std::time::Duration,
 }
 
 /// Command from the UI / Logic thread to `ToileState` (in `ambre-toile`).
@@ -1810,7 +1809,7 @@ pub struct DisplayViewport {
     /// How many viewport requests the Logic thread had applied when it built
     /// this frame. The view drops a frame older than the one it last accepted
     /// (`BUS-017`).
-    pub version: u64,
+    pub version: crate::ViewportVersion,
     pub viewport: Viewport,
     /// The board's grid unit in world units, as its `board` register holds it.
     /// The grid step is a power-of-two multiple of it (`TOILE-UI-279`). The

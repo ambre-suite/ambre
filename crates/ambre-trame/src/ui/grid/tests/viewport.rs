@@ -19,7 +19,7 @@ fn cell(row: u32, col: u32, filtered: bool) -> DisplayCell {
 /// An answer carrying these cells, with no size of its own.
 fn answer(version: u64, cells: Vec<DisplayCell>) -> TrameEvent {
     TrameEvent::ViewportData {
-        version,
+        version: ambre_bus::ViewportVersion(version),
         row_start: 0,
         col_start: 0,
         col_widths: vec![],
@@ -118,10 +118,10 @@ fn a_default_size_in_an_answer_clears_the_stored_one() {
         row_heights: vec![height as f32],
         cells: vec![],
     };
-    state.on_viewport_data(sized(0, 200.0, 45.0));
+    state.on_viewport_data(sized(ambre_bus::ViewportVersion(0), 200.0, 45.0));
     assert_eq!(state.col_width_of(2), 200.0);
     assert_eq!(state.row_height_of(3), 45.0);
-    state.on_viewport_data(sized(1, COL_WIDTH, ROW_HEIGHT));
+    state.on_viewport_data(sized(ambre_bus::ViewportVersion(1), COL_WIDTH, ROW_HEIGHT));
     assert_eq!(state.col_width_of(2), COL_WIDTH);
     assert_eq!(state.row_height_of(3), ROW_HEIGHT);
     assert!(!state.col_widths.contains_key(&2) && !state.row_heights.contains_key(&3));

@@ -357,13 +357,13 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         },
     });
     state.handle_command(TrameCommand::ResizeCol {
-        version: 0,
+        version: ambre_bus::ViewportVersion(0),
         sheet_id: ambre_bus::SheetId(DEFAULT_SHEET.to_owned()),
         col: 0,
         width_px: 120.0,
     });
     state.handle_command(TrameCommand::ResizeRow {
-        version: 0,
+        version: ambre_bus::ViewportVersion(0),
         sheet_id: ambre_bus::SheetId(DEFAULT_SHEET.to_owned()),
         row: 0,
         height_px: 33.0,

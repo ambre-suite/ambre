@@ -719,13 +719,13 @@ fn deleted_line_leaves_no_formatting() {
         });
     }
     state.handle_command(TrameCommand::ResizeRow {
-        version: 1,
+        version: ambre_bus::ViewportVersion(1),
         sheet_id: SheetId(TEST_SHEET.to_owned()),
         row: 1,
         height_px: 40.0,
     });
     state.handle_command(TrameCommand::ResizeCol {
-        version: 2,
+        version: ambre_bus::ViewportVersion(2),
         sheet_id: SheetId(TEST_SHEET.to_owned()),
         col: 0,
         width_px: 150.0,

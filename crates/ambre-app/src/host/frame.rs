@@ -175,7 +175,7 @@ pub struct FrameHost {
     /// The per-page-load clipboard ownership token (`UI-THREAD-007`). Written on
     /// `copy`/`cut`, re-published by the async write (`UI-THREAD-023`), and read
     /// back to answer rung 2 of the Paste-button path.
-    clip_token: String,
+    clip_token: ambre_bus::ClipToken,
     /// Whether the asynchronous write of the last copy reached the clipboard.
     /// It replaces the synchronous formats, token included, with `web `
     /// variants a `paste` event cannot see (`UI-THREAD-054`).
@@ -243,7 +243,7 @@ impl FrameHost {
         view: AppView,
         perf: web_sys::Performance,
         make_child: Option<MakeChild>,
-        clip_token: String,
+        clip_token: ambre_bus::ClipToken,
         paste_rx: ambre_bus::conduit::Receiver<ClipboardPaste>,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     ) -> Self {
@@ -279,7 +279,7 @@ impl FrameHost {
 
     /// The per-page-load clipboard ownership token (`UI-THREAD-007`). The
     /// clipboard event listeners in `run` read it back to decide a same-tab copy.
-    pub(crate) fn clip_token(&self) -> &str {
+    pub(crate) fn clip_token(&self) -> &ambre_bus::ClipToken {
         &self.clip_token
     }
 
