@@ -33,7 +33,7 @@ impl GridScroll {
         dx: f64,
         dy: f64,
         delta_mode: u32,
-        now_ms: f64,
+        now_ms: ambre_core::PageTime,
     ) -> ScrollOutcome {
         // A line step is one zoomed cell, so it scales with the grid zoom.
         let z = grid.zoom;
@@ -84,7 +84,11 @@ impl GridScroll {
 
     /// Advance the kinetic motion by one frame. It stops once it dies down or
     /// the grid meets an edge.
-    pub(crate) fn tick(&mut self, grid: &mut TrameUiState, now_ms: f64) -> ScrollOutcome {
+    pub(crate) fn tick(
+        &mut self,
+        grid: &mut TrameUiState,
+        now_ms: ambre_core::PageTime,
+    ) -> ScrollOutcome {
         let Some(step) = self.kinetic.tick(now_ms) else {
             return ScrollOutcome::Idle;
         };
@@ -102,7 +106,7 @@ impl GridScroll {
         &mut self,
         grid: &mut TrameUiState,
         speed: Option<(EdgeSpeed, EdgeSpeed)>,
-        now_ms: f64,
+        now_ms: ambre_core::PageTime,
     ) -> ScrollOutcome {
         let Some(step) = self.edge.tick(speed, now_ms) else {
             return ScrollOutcome::Idle;
@@ -112,7 +116,7 @@ impl GridScroll {
     }
 
     /// A finger went down: it stops any motion left (`KINETIC-006`).
-    pub(crate) fn press(&mut self, x: f32, y: f32, now_ms: f64) {
+    pub(crate) fn press(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
         self.stop();
         self.kinetic.press(x, y, now_ms);
     }
@@ -123,7 +127,7 @@ impl GridScroll {
         grid: &mut TrameUiState,
         x: f32,
         y: f32,
-        now_ms: f64,
+        now_ms: ambre_core::PageTime,
     ) -> ScrollOutcome {
         let Some(step) = self.kinetic.sample(x, y, now_ms) else {
             return ScrollOutcome::Idle;
@@ -133,7 +137,7 @@ impl GridScroll {
     }
 
     /// A finger lifted: a pan released with speed keeps moving.
-    pub(crate) fn release(&mut self, now_ms: f64) -> Release {
+    pub(crate) fn release(&mut self, now_ms: ambre_core::PageTime) -> Release {
         self.kinetic.release(now_ms)
     }
 
@@ -171,29 +175,44 @@ mod tests {
     fn a_paused_glide_keeps_the_grid_moving_and_a_notch_never_does() {
         let (mut g, mut s) = (grid(), GridScroll::default());
         for step in 0..5 {
-            s.wheel(&mut g, 0.0, 16.0, 0, 16.0 * f64::from(step));
+            s.wheel(
+                &mut g,
+                0.0,
+                16.0,
+                0,
+                ambre_bus::PageTime(16.0 * f64::from(step)),
+            );
         }
         let glided = g.top_row;
-        s.tick(&mut g, 64.0);
+        s.tick(&mut g, ambre_bus::PageTime(64.0));
         assert_eq!(s.speed(), None, "no motion while the glide lasts");
         // The frame past the pause launches the motion, and later ones move.
-        s.tick(&mut g, 64.0 + 70.0);
+        s.tick(&mut g, ambre_bus::PageTime(64.0 + 70.0));
         let (_, vy) = s.speed().expect("the paused glide carries on");
         assert!((vy - 1.0).abs() < 0.05, "the glide's speed, {vy}");
         let mut now = 64.0 + 70.0;
         while g.top_row == glided {
             now += 16.0;
-            s.tick(&mut g, now);
+            s.tick(&mut g, ambre_bus::PageTime(now));
             assert!(now < 2_000.0, "the coast reaches a whole row");
         }
 
         let (mut g, mut s) = (grid(), GridScroll::default());
         for step in 0..5 {
-            s.wheel(&mut g, 0.0, 16.0, 1, 16.0 * f64::from(step));
+            s.wheel(
+                &mut g,
+                0.0,
+                16.0,
+                1,
+                ambre_bus::PageTime(16.0 * f64::from(step)),
+            );
         }
         let stepped = g.top_row;
         assert!(
-            matches!(s.tick(&mut g, 64.0 + 70.0), ScrollOutcome::Idle),
+            matches!(
+                s.tick(&mut g, ambre_bus::PageTime(64.0 + 70.0)),
+                ScrollOutcome::Idle
+            ),
             "a notch never coasts"
         );
         assert_eq!(g.top_row, stepped);

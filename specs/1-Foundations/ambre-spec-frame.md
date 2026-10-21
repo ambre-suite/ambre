@@ -112,6 +112,8 @@ fn handle_input(&mut self, ev: &InputEvent) -> bool;   // true => host calls pre
 **The frame, in steps.** One `requestAnimationFrame` callback, no Winit and no retained scene
 graph. The figures are the phase budgets of `ambre-spec-budgets.md section 2`.
 
+* The page clock is `performance.now()`, a `PageTime`. It dates no write: a write takes a `Timestamp`.
+
 1. `view.update()` -- drain `Receiver<UiEvent>` with `try_recv` until `Empty`, apply, raise the
    dirty flags. A `Disconnected` latches fatal (`CANVAS-013`).
 2. the HUD gate -- the overlay is refreshed at most every 500 ms, so an idle frame rebuilds nothing.

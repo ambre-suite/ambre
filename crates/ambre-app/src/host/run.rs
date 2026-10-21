@@ -137,7 +137,7 @@ where
                     drive_frame(
                         &raf_c,
                         || (pre_frame.borrow_mut())(),
-                        || host_c.borrow_mut().render(ts),
+                        || host_c.borrow_mut().render(ambre_bus::PageTime(ts)),
                     )
                 },
                 settled,
@@ -237,7 +237,12 @@ where
                         _ => return,
                     };
                     let now = event.time_stamp();
-                    if host_c.borrow_mut().touch(phase, x as f32, y as f32, now) {
+                    if host_c.borrow_mut().touch(
+                        phase,
+                        x as f32,
+                        y as f32,
+                        ambre_bus::PageTime(now),
+                    ) {
                         event.prevent_default();
                     }
                     return;

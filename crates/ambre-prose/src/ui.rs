@@ -443,7 +443,7 @@ pub struct ProseUiState {
     /// A change arrived since the last tick.
     changed: bool,
     /// When the text was last seen changing, while a recount is owed.
-    quiet_since_ms: Option<f64>,
+    quiet_since_ms: Option<ambre_core::PageTime>,
     /// The number of the last change this view did not draw and applied.
     pub(crate) seen: u64,
     /// The number last handed back in a [`ProseCommand::Sync`].
@@ -819,7 +819,7 @@ impl ProseUiState {
     /// A frame that saw a change restarts the wait, so a run of changes costs
     /// one recount, [`RECOUNT_DELAY_MS`] after the last of them. The caller
     /// sends the command it gets back.
-    pub fn tick(&mut self, now_ms: f64) -> Option<ProseCommand> {
+    pub fn tick(&mut self, now_ms: ambre_core::PageTime) -> Option<ProseCommand> {
         if std::mem::take(&mut self.changed) {
             self.quiet_since_ms = Some(now_ms);
             return None;
@@ -1076,7 +1076,7 @@ mod tests {
         let mut now = 0.0;
         while now < 1000.0 {
             state.apply_event(&ProseEvent::DocUpdated { delta: vec![1] });
-            recounts += usize::from(state.tick(now).is_some());
+            recounts += usize::from(state.tick(ambre_core::PageTime(now)).is_some());
             now += 16.0;
         }
         assert_eq!(recounts, 0);
@@ -1084,7 +1084,7 @@ mod tests {
         // delay has run out, and no second one.
         let stopped = now;
         while now < stopped + 2000.0 {
-            if let Some(command) = state.tick(now) {
+            if let Some(command) = state.tick(ambre_core::PageTime(now)) {
                 assert_eq!(command, ProseCommand::CountWords);
                 assert!(now - stopped >= RECOUNT_DELAY_MS - 16.0);
                 recounts += 1;

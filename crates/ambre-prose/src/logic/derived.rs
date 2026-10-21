@@ -470,9 +470,11 @@ mod tests {
                 text: (*word).to_owned(),
             });
             show(&mut view, &outcome.display);
-            assert_eq!(view.tick(0.0), None);
+            assert_eq!(view.tick(ambre_core::PageTime(0.0)), None);
         }
-        let command = view.tick(RECOUNT_DELAY_MS).expect("the recount is due");
+        let command = view
+            .tick(ambre_core::PageTime(RECOUNT_DELAY_MS))
+            .expect("the recount is due");
         let outcome = state.handle_command(command);
         show(&mut view, &outcome.display);
         let text = compute_word_count(state.document());

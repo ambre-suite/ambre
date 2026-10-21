@@ -935,7 +935,7 @@ fn read_only_and_local_commands_are_not_mutating() {
         // Toile: ephemeral only -- a viewer still shows a cursor (`toile-presence`).
         AppCommand::Toile(ToileCommand::Presence {
             payload: PresencePayload::default(),
-            now_ms: 0,
+            now_ms: ambre_core::PageTime(0.0),
         }),
     ];
     for cmd in cases {

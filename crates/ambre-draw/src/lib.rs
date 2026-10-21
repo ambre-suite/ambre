@@ -95,9 +95,9 @@ impl ImageKey {
 /// renderers callable off the browser main thread, which is what makes the
 /// mock-surface tests possible.
 pub trait Clock {
-    /// Wall-clock milliseconds, monotonic within a frame. Sub-millisecond
-    /// precision is expected on screen but never relied upon for correctness.
-    fn now_ms(&self) -> f64;
+    /// The page's monotonic clock. Sub-millisecond precision is expected on
+    /// screen but never relied upon for correctness.
+    fn now_ms(&self) -> ambre_core::PageTime;
 }
 
 /// GPU- and PDF-agnostic drawing interface.

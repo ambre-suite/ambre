@@ -1369,7 +1369,11 @@ fn sample_at(x: f64, y: f64) -> PresencePayload {
 }
 
 /// Broadcast `payload` from `st` at `now_ms` and return the ephemeral.
-fn presence_frame(st: &mut ToileState, payload: PresencePayload, now_ms: i64) -> Vec<u8> {
+fn presence_frame(
+    st: &mut ToileState,
+    payload: PresencePayload,
+    now_ms: ambre_core::PageTime,
+) -> Vec<u8> {
     st.handle_command(ToileCommand::Presence { payload, now_ms })
         .ephemeral
         .expect("presence broadcasts an ephemeral")
@@ -1413,7 +1417,7 @@ fn a_stroke_in_flight_reaches_the_other_users() {
             laser: None,
             present_slide: None,
         },
-        now_ms: 1_000,
+        now_ms: ambre_core::PageTime(1_000.0),
     });
     assert!(out.update.is_none(), "a stroke in flight writes nothing");
     let frame = out.ephemeral.expect("the sample broadcasts");
@@ -1448,7 +1452,7 @@ fn presence_command_broadcasts_ephemeral_only() {
     };
     let out = st.handle_command(ToileCommand::Presence {
         payload,
-        now_ms: 1_000,
+        now_ms: ambre_core::PageTime(1_000.0),
     });
     assert!(out.display.is_empty(), "presence emits no display event");
     assert!(out.update.is_none(), "presence is never a CRDT delta");
@@ -1469,7 +1473,7 @@ fn the_outbound_sample_carries_the_session_display_name() {
     // (`PRESENCE-004`): it travels beside the sample and decides nothing.
     let mut sender = ToileState::new();
     sender.set_display_name("Ada".to_owned());
-    let frame = presence_frame(&mut sender, sample_at(1.0, 2.0), 0);
+    let frame = presence_frame(&mut sender, sample_at(1.0, 2.0), ambre_core::PageTime(0.0));
 
     let mut rx = ToileState::new();
     let peers = live_set(rx.apply_ephemeral(UserId::new(), &frame));
@@ -1479,7 +1483,11 @@ fn the_outbound_sample_carries_the_session_display_name() {
     // A session with no name yet sends none, and the receiver falls back to the
     // short handle rather than paint an empty chip.
     let mut anonymous = ToileState::new();
-    let frame = presence_frame(&mut anonymous, sample_at(3.0, 4.0), 0);
+    let frame = presence_frame(
+        &mut anonymous,
+        sample_at(3.0, 4.0),
+        ambre_core::PageTime(0.0),
+    );
     let peers = live_set(rx.apply_ephemeral(UserId::new(), &frame));
     assert!(peers.iter().any(|p| p.presence.name.is_none()));
 }
@@ -1491,13 +1499,13 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // clock the local samples carry, and the event that says so is the whole
     // set.
     let mut sender = ToileState::new();
-    let frame = presence_frame(&mut sender, sample_at(5.0, 5.0), 0);
+    let frame = presence_frame(&mut sender, sample_at(5.0, 5.0), ambre_core::PageTime(0.0));
 
     let mut rx = ToileState::new();
     // The receiver's clock starts at the first local sample.
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: 1_000,
+        now_ms: ambre_core::PageTime(1_000.0),
     });
     let alice = UserId::new();
     assert_eq!(live_set(rx.apply_ephemeral(alice, &frame)).len(), 1);
@@ -1505,7 +1513,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // Still inside the TTL: Alice is live, and the local sample says nothing new.
     let out = rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: 1_000 + PRESENCE_TTL_MS - 1,
+        now_ms: ambre_core::PageTime(1_000.0 + PRESENCE_TTL_MS - 1.0),
     });
     assert!(out.display.is_empty(), "nothing left the set yet");
     assert!(rx.peer_presence(&alice).is_some());
@@ -1513,7 +1521,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // Past it: the set changes, and the event that announces it is empty.
     let out = rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: 1_000 + PRESENCE_TTL_MS + 1,
+        now_ms: ambre_core::PageTime(1_000.0 + PRESENCE_TTL_MS + 1.0),
     });
     assert!(
         live_set(out.display).is_empty(),
@@ -1528,7 +1536,7 @@ fn a_departure_message_drops_the_peer_at_once() {
     // loses them now rather than at the end of the TTL. The timeout stays the
     // fallback for a message that never arrives.
     let mut sender = ToileState::new();
-    let frame = presence_frame(&mut sender, sample_at(3.0, 3.0), 0);
+    let frame = presence_frame(&mut sender, sample_at(3.0, 3.0), ambre_core::PageTime(0.0));
 
     let mut rx = ToileState::new();
     let alice = UserId::new();
@@ -1553,19 +1561,19 @@ fn a_clock_that_steps_backwards_ages_nobody() {
     // The local clock is monotonic: an NTP correction or a suspended tab must
     // not empty the board of every peer at once.
     let mut sender = ToileState::new();
-    let frame = presence_frame(&mut sender, sample_at(1.0, 1.0), 0);
+    let frame = presence_frame(&mut sender, sample_at(1.0, 1.0), ambre_core::PageTime(0.0));
 
     let mut rx = ToileState::new();
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: 100_000,
+        now_ms: ambre_core::PageTime(100_000.0),
     });
     let alice = UserId::new();
     rx.apply_ephemeral(alice, &frame);
 
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: 0,
+        now_ms: ambre_core::PageTime(0.0),
     });
     assert!(
         rx.peer_presence(&alice).is_some(),
@@ -1585,8 +1593,8 @@ fn a_sample_replaces_the_peers_presence_whole() {
         laser: Some(Point::new(2.0, 2.0)),
         ..PresencePayload::default()
     };
-    let first = presence_frame(&mut sender, with_selection, 0);
-    let second = presence_frame(&mut sender, sample_at(9.0, 9.0), 0);
+    let first = presence_frame(&mut sender, with_selection, ambre_core::PageTime(0.0));
+    let second = presence_frame(&mut sender, sample_at(9.0, 9.0), ambre_core::PageTime(0.0));
 
     let mut rx = ToileState::new();
     let alice = UserId::new();
@@ -1616,7 +1624,7 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
         laser: None,
         present_slide: None,
     };
-    let frame = presence_frame(&mut sender, payload.clone(), 0);
+    let frame = presence_frame(&mut sender, payload.clone(), ambre_core::PageTime(0.0));
 
     let mut rx = ToileState::new();
     let before = rx.export_snapshot();
@@ -1636,7 +1644,11 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
     // The board tracks a second peer independently, keyed by its own UserId,
     // and the set carries both.
     let bob = UserId::new();
-    let bob_frame = presence_frame(&mut sender, PresencePayload::default(), 0);
+    let bob_frame = presence_frame(
+        &mut sender,
+        PresencePayload::default(),
+        ambre_core::PageTime(0.0),
+    );
     let peers = live_set(rx.apply_ephemeral(bob, &bob_frame));
     assert_eq!(peers.len(), 2, "the event carries the whole live set");
     assert!(rx.peer_presence(&alice).is_some());

@@ -546,7 +546,7 @@ impl EmbedFocus {
 pub struct EmbedSessions {
     /// Open children. `Some(deadline)` = out of the cull set, closing at that
     /// frame-clock reading; `None` = visible, nothing pending.
-    open: HashMap<DocumentId, Option<f64>>,
+    open: HashMap<DocumentId, Option<ambre_core::PageTime>>,
 }
 
 impl EmbedSessions {
@@ -570,7 +570,7 @@ impl EmbedSessions {
     /// `send` returns whether the command left. A caller that cannot send (a
     /// full queue, a disconnected one) returns `false` and the state stays as
     /// it was.
-    pub fn sync<F>(&mut self, display: &DisplayViewport, now_ms: f64, mut send: F)
+    pub fn sync<F>(&mut self, display: &DisplayViewport, now_ms: ambre_core::PageTime, mut send: F)
     where
         F: FnMut(LogicCommand) -> bool,
     {
@@ -612,7 +612,7 @@ impl EmbedSessions {
                 // Just left the cull set: start the countdown.
                 None => {
                     self.open
-                        .insert(document_id, Some(now_ms + EMBED_CLOSE_DEBOUNCE_MS));
+                        .insert(document_id, Some(now_ms.after(EMBED_CLOSE_DEBOUNCE_MS)));
                 }
             }
         }
@@ -1025,7 +1025,11 @@ mod tests {
     // -- Session lifecycle + debounce -----------------------------------------
 
     /// Reconcile with a queue that takes everything, returning what left.
-    fn sync(s: &mut EmbedSessions, dv: &DisplayViewport, now_ms: f64) -> Vec<LogicCommand> {
+    fn sync(
+        s: &mut EmbedSessions,
+        dv: &DisplayViewport,
+        now_ms: ambre_core::PageTime,
+    ) -> Vec<LogicCommand> {
         let mut sent = Vec::new();
         s.sync(dv, now_ms, |cmd| {
             sent.push(cmd);
@@ -1036,7 +1040,11 @@ mod tests {
 
     /// Reconcile with a queue that refuses everything, returning what the
     /// registry offered it. The registry MUST record nothing from it.
-    fn sync_refused(s: &mut EmbedSessions, dv: &DisplayViewport, now_ms: f64) -> Vec<LogicCommand> {
+    fn sync_refused(
+        s: &mut EmbedSessions,
+        dv: &DisplayViewport,
+        now_ms: ambre_core::PageTime,
+    ) -> Vec<LogicCommand> {
         let mut offered = Vec::new();
         s.sync(dv, now_ms, |cmd| {
             offered.push(cmd);
@@ -1088,12 +1096,15 @@ mod tests {
         let child = DocumentId::new();
         let dv = board_with(child);
 
-        assert_eq!(opened(&sync(&mut s, &dv, 0.0)), vec![child]);
+        assert_eq!(
+            opened(&sync(&mut s, &dv, ambre_bus::PageTime(0.0))),
+            vec![child]
+        );
         assert!(s.is_open(&child));
         // Still visible on later frames: no second open. A re-open costs a
         // members fetch, a key unwrap and a snapshot hydration.
-        assert!(sync(&mut s, &dv, 16.0).is_empty());
-        assert!(sync(&mut s, &dv, 32.0).is_empty());
+        assert!(sync(&mut s, &dv, ambre_bus::PageTime(16.0)).is_empty());
+        assert!(sync(&mut s, &dv, ambre_bus::PageTime(32.0)).is_empty());
     }
 
     #[test]
@@ -1101,17 +1112,21 @@ mod tests {
         let mut s = EmbedSessions::default();
         let child = DocumentId::new();
         let empty = viewport(Vec::new());
-        sync(&mut s, &board_with(child), 0.0);
+        sync(&mut s, &board_with(child), ambre_bus::PageTime(0.0));
 
         // Leaves the cull set: the countdown starts, and nothing leaves yet.
-        assert!(sync(&mut s, &empty, 1_000.0).is_empty());
+        assert!(sync(&mut s, &empty, ambre_bus::PageTime(1_000.0)).is_empty());
         // One millisecond short of the deadline: still nothing.
         let almost = 1_000.0 + EMBED_CLOSE_DEBOUNCE_MS - 1.0;
-        assert!(sync(&mut s, &empty, almost).is_empty());
+        assert!(sync(&mut s, &empty, ambre_bus::PageTime(almost)).is_empty());
         assert!(s.is_open(&child), "closed before the debounce elapsed");
         // Deadline reached.
         assert_eq!(
-            closed(&sync(&mut s, &empty, 1_000.0 + EMBED_CLOSE_DEBOUNCE_MS)),
+            closed(&sync(
+                &mut s,
+                &empty,
+                ambre_bus::PageTime(1_000.0 + EMBED_CLOSE_DEBOUNCE_MS)
+            )),
             vec![child]
         );
         assert!(!s.is_open(&child));
@@ -1123,15 +1138,24 @@ mod tests {
         let child = DocumentId::new();
         let dv = board_with(child);
         let empty = viewport(Vec::new());
-        assert_eq!(opened(&sync(&mut s, &dv, 0.0)), vec![child]);
+        assert_eq!(
+            opened(&sync(&mut s, &dv, ambre_bus::PageTime(0.0))),
+            vec![child]
+        );
 
         // Pan the embed in and out well within the debounce, many times over --
         // the failure mode this exists for. Binding the session straight to the
         // cull set would storm the WebSocket here.
         for i in 1..50 {
             let t = i as f64 * 100.0;
-            assert!(sync(&mut s, &empty, t).is_empty(), "close storm at {t}");
-            assert!(sync(&mut s, &dv, t + 50.0).is_empty(), "open storm at {t}");
+            assert!(
+                sync(&mut s, &empty, ambre_bus::PageTime(t)).is_empty(),
+                "close storm at {t}"
+            );
+            assert!(
+                sync(&mut s, &dv, ambre_bus::PageTime(t + 50.0)).is_empty(),
+                "open storm at {t}"
+            );
         }
         assert!(s.is_open(&child));
     }
@@ -1142,18 +1166,22 @@ mod tests {
         let child = DocumentId::new();
         let dv = board_with(child);
         let empty = viewport(Vec::new());
-        sync(&mut s, &dv, 0.0);
+        sync(&mut s, &dv, ambre_bus::PageTime(0.0));
 
-        sync(&mut s, &empty, 0.0); // countdown armed for t = 5000
-        sync(&mut s, &dv, 4_000.0); // back in view: cancelled
+        sync(&mut s, &empty, ambre_bus::PageTime(0.0)); // countdown armed for t = 5000
+        sync(&mut s, &dv, ambre_bus::PageTime(4_000.0)); // back in view: cancelled
         // Past the ORIGINAL deadline with the embed visible: nothing closes.
-        assert!(sync(&mut s, &dv, 6_000.0).is_empty());
+        assert!(sync(&mut s, &dv, ambre_bus::PageTime(6_000.0)).is_empty());
         assert!(s.is_open(&child));
         // And the next departure gets a fresh full window, not the old deadline.
-        assert!(sync(&mut s, &empty, 6_000.0).is_empty());
-        assert!(sync(&mut s, &empty, 10_000.0).is_empty());
+        assert!(sync(&mut s, &empty, ambre_bus::PageTime(6_000.0)).is_empty());
+        assert!(sync(&mut s, &empty, ambre_bus::PageTime(10_000.0)).is_empty());
         assert_eq!(
-            closed(&sync(&mut s, &empty, 6_000.0 + EMBED_CLOSE_DEBOUNCE_MS)),
+            closed(&sync(
+                &mut s,
+                &empty,
+                ambre_bus::PageTime(6_000.0 + EMBED_CLOSE_DEBOUNCE_MS)
+            )),
             vec![child]
         );
     }
@@ -1166,7 +1194,7 @@ mod tests {
             DisplayNode::Element(doc_embed("e1", a, Rect::new(0.0, 0.0, 10.0, 10.0), 0.0)),
             DisplayNode::Element(doc_embed("e2", b, Rect::new(20.0, 0.0, 30.0, 10.0), 0.0)),
         ]);
-        sync(&mut s, &dv, 0.0);
+        sync(&mut s, &dv, ambre_bus::PageTime(0.0));
 
         // The board is going away: no debounce, and the sweep empties the
         // registry so a later frame cannot close them twice.
@@ -1187,13 +1215,19 @@ mod tests {
         let child = DocumentId::new();
         let dv = board_with(child);
 
-        assert_eq!(opened(&sync_refused(&mut s, &dv, 0.0)), vec![child]);
+        assert_eq!(
+            opened(&sync_refused(&mut s, &dv, ambre_bus::PageTime(0.0))),
+            vec![child]
+        );
         assert!(!s.is_open(&child), "a refused open records nothing");
         // The embed is still in the cull set, so the next frame offers it again.
-        assert_eq!(opened(&sync(&mut s, &dv, 16.0)), vec![child]);
+        assert_eq!(
+            opened(&sync(&mut s, &dv, ambre_bus::PageTime(16.0))),
+            vec![child]
+        );
         assert!(s.is_open(&child));
         // And once it is through, it is not offered a third time.
-        assert!(sync(&mut s, &dv, 32.0).is_empty());
+        assert!(sync(&mut s, &dv, ambre_bus::PageTime(32.0)).is_empty());
     }
 
     /// `TOILE-UI-339`: when the queue refuses a close, the next frame offers
@@ -1207,14 +1241,20 @@ mod tests {
         let child = DocumentId::new();
         let dv = board_with(child);
         let empty = viewport(Vec::new());
-        sync(&mut s, &dv, 0.0);
+        sync(&mut s, &dv, ambre_bus::PageTime(0.0));
 
-        sync(&mut s, &empty, 0.0); // countdown armed
+        sync(&mut s, &empty, ambre_bus::PageTime(0.0)); // countdown armed
         let past = EMBED_CLOSE_DEBOUNCE_MS + 1.0;
-        assert_eq!(closed(&sync_refused(&mut s, &empty, past)), vec![child]);
+        assert_eq!(
+            closed(&sync_refused(&mut s, &empty, ambre_bus::PageTime(past))),
+            vec![child]
+        );
         assert!(s.is_open(&child), "a refused close forgets nothing");
         // Still past the deadline: offered again, and taken this time.
-        assert_eq!(closed(&sync(&mut s, &empty, past + 16.0)), vec![child]);
+        assert_eq!(
+            closed(&sync(&mut s, &empty, ambre_bus::PageTime(past + 16.0))),
+            vec![child]
+        );
         assert!(!s.is_open(&child));
     }
 
@@ -1228,7 +1268,7 @@ mod tests {
             DisplayNode::Element(doc_embed("e1", a, Rect::new(0.0, 0.0, 10.0, 10.0), 0.0)),
             DisplayNode::Element(doc_embed("e2", b, Rect::new(20.0, 0.0, 30.0, 10.0), 0.0)),
         ]);
-        sync(&mut s, &dv, 0.0);
+        sync(&mut s, &dv, ambre_bus::PageTime(0.0));
 
         // Only `a` gets through; the queue refuses `b`, which must survive
         // the sweep.
@@ -1255,8 +1295,11 @@ mod tests {
                 0.0,
             )),
         ]);
-        assert_eq!(opened(&sync(&mut s, &dv, 0.0)), vec![child]);
-        assert!(sync(&mut s, &dv, 16.0).is_empty());
+        assert_eq!(
+            opened(&sync(&mut s, &dv, ambre_bus::PageTime(0.0))),
+            vec![child]
+        );
+        assert!(sync(&mut s, &dv, ambre_bus::PageTime(16.0)).is_empty());
     }
 }
 

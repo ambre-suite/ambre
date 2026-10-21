@@ -128,7 +128,7 @@ pub struct ProseView {
     /// The layout context the draft is shaped with.
     layout_cx: LayoutContext<ParleyBrush>,
     /// The clock of the last frame, to count presses in place.
-    now_ms: f64,
+    now_ms: ambre_core::PageTime,
     /// The keystrokes in flight, from their input to their frame.
     probe: KeyProbe,
     timeline: super::probe::Timeline,
@@ -174,7 +174,7 @@ impl ProseView {
             shown: None,
             annotations,
             layout_cx: LayoutContext::new(),
-            now_ms: 0.0,
+            now_ms: ambre_bus::PageTime(0.0),
             probe: KeyProbe::default(),
             timeline: super::probe::Timeline::new(),
         }
@@ -435,7 +435,7 @@ impl ProseView {
         }
     }
 
-    pub fn plan_repaint(&mut self, now_ms: f64, _hud_tick: bool) -> RepaintPlan {
+    pub fn plan_repaint(&mut self, now_ms: ambre_core::PageTime, _hud_tick: bool) -> RepaintPlan {
         self.now_ms = now_ms;
         self.timeline.summarize(now_ms);
         self.flush_outbox();
@@ -553,7 +553,7 @@ impl ProseView {
                 };
                 let now = web_sys::window()
                     .and_then(|w| w.performance())
-                    .map_or(self.now_ms, |p| p.now());
+                    .map_or(self.now_ms, |p| ambre_bus::PageTime(p.now()));
                 self.state.wheel(px as f32, *delta_mode != 0, now);
                 // The text moved from under the pointer, and the bar with it
                 // (`PROSE-UI-055`).
@@ -698,7 +698,13 @@ impl ProseView {
 
     /// A finger on the canvas: a pan scrolls the column and a flick keeps it
     /// moving (`PROSE-UI-217`). A tap presses where it landed.
-    pub fn touch(&mut self, phase: super::TouchPhase, x: f32, y: f32, now_ms: f64) -> bool {
+    pub fn touch(
+        &mut self,
+        phase: super::TouchPhase,
+        x: f32,
+        y: f32,
+        now_ms: ambre_core::PageTime,
+    ) -> bool {
         if self.fatal {
             return false;
         }

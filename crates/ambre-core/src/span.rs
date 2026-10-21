@@ -75,6 +75,41 @@ impl Timestamp {
     }
 }
 
+/// An instant on the page's monotonic clock, in milliseconds since the page
+/// loaded, as `performance.now()` and a frame callback read it.
+///
+/// Never a wall clock: it starts again on every load, so no document stores
+/// it. The distance between two instants is their difference, in
+/// milliseconds, which a fling or a blink then measures against its own
+/// constants.
+#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PageTime(pub f64);
+
+impl PageTime {
+    /// The instant `ms` milliseconds after this one.
+    #[must_use]
+    pub fn after(self, ms: f64) -> Self {
+        Self(self.0 + ms)
+    }
+
+    /// The later of the two instants.
+    #[must_use]
+    pub fn max(self, other: Self) -> Self {
+        Self(self.0.max(other.0))
+    }
+}
+
+/// The milliseconds from `earlier` to this instant, negative when `earlier`
+/// is later.
+impl std::ops::Sub for PageTime {
+    type Output = f64;
+
+    fn sub(self, earlier: Self) -> f64 {
+        self.0 - earlier.0
+    }
+}
+
 /// [`Timestamp`] as a signed 64-bit integer, for a value a document already
 /// stores that way: `#[serde(with = "ambre_core::span::timestamp_as_i64")]`.
 /// A varint codec spells a signed and an unsigned integer apart, so the
@@ -142,6 +177,13 @@ mod tests {
         assert_eq!(Millis(1500).to_duration(), Duration::from_millis(1500));
         assert_eq!(Seconds(2).to_duration(), Duration::from_secs(2));
         assert_eq!(Millis::from_duration(Duration::from_secs(3)), Millis(3000));
+    }
+
+    #[test]
+    fn two_page_instants_are_their_distance_in_milliseconds_apart() {
+        let start = super::PageTime(100.0);
+        assert_eq!(start.after(16.5) - start, 16.5);
+        assert_eq!(start.max(super::PageTime(40.0)), start);
     }
 
     #[test]

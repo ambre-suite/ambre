@@ -399,7 +399,7 @@ pub fn draw_overlay<S: DrawSurface>(
     if let Some((r1, c1, r2, c2)) = state.clipboard_anchor
         && let Some((x, y, w, ht)) = state.range_pixel_rect(r1, c1, r2, c2)
     {
-        let phase = (clock.now_ms() / 40.0) % MARCHING_PERIOD;
+        let phase = (clock.now_ms().0 / 40.0) % MARCHING_PERIOD;
         let c = palette.selection;
         dashed_h(surface, x, x + w, y, c, phase);
         dashed_h(surface, x, x + w, y + ht, c, phase);

@@ -155,7 +155,7 @@ impl Rig {
 
     /// Plan one frame, where the view sends what a changed selection asks for.
     fn frame(&mut self) {
-        self.view.plan_repaint(0.0, false);
+        self.view.plan_repaint(ambre_bus::PageTime(0.0), false);
     }
 
     /// Run one frame's paint into a recording surface. A deferred editor
@@ -278,15 +278,15 @@ fn an_untouched_editor_closes_without_a_write() {
 #[test]
 fn the_pipe_is_typed_text_only_while_an_editor_is_open() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
-    rig.view.plan_repaint(0.0, false);
+    rig.view.plan_repaint(ambre_bus::PageTime(0.0), false);
     assert!(!rig.view.pipe_typing(), "a board with no editor");
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
-    rig.view.plan_repaint(16.0, false);
+    rig.view.plan_repaint(ambre_bus::PageTime(16.0), false);
     assert!(rig.view.pipe_typing(), "an open editor takes the keys");
     rig.key("Escape", false, false);
     rig.paint();
-    rig.view.plan_repaint(32.0, false);
+    rig.view.plan_repaint(ambre_bus::PageTime(32.0), false);
     assert!(!rig.view.pipe_typing(), "a closed editor gives them back");
 }
 
@@ -1310,7 +1310,7 @@ fn each_frame_offers_the_stroke_being_drawn_to_the_others() {
     for i in 1..4 {
         let (x, y) = rig.screen(i as f64 * 10.0, 0.0);
         rig.input(InputEvent::PointerMove { x, y });
-        rig.view.plan_repaint(t, false);
+        rig.view.plan_repaint(ambre_bus::PageTime(t), false);
         t += 16.0;
         seen.extend(live_strokes(&rig.sent()));
     }
@@ -1321,7 +1321,7 @@ fn each_frame_offers_the_stroke_being_drawn_to_the_others() {
     );
     let end = rig.screen(40.0, 0.0);
     rig.release(end);
-    rig.view.plan_repaint(t, false);
+    rig.view.plan_repaint(ambre_bus::PageTime(t), false);
     assert_eq!(live_strokes(&rig.sent()), [None], "the trail ends");
 }
 
@@ -1575,7 +1575,7 @@ fn the_caret_blinks() {
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
     let ops_at = |rig: &mut Rig, t: f64| {
-        rig.view.plan_repaint(t, false);
+        rig.view.plan_repaint(ambre_bus::PageTime(t), false);
         rig.paint().ops().len()
     };
     let on = ops_at(&mut rig, 0.0);
@@ -1749,29 +1749,38 @@ fn a_picked_mode_ignores_a_contrary_wheel() {
 fn a_finger_pans_only_the_empty_board() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     let empty = rig.screen(900.0, 600.0);
-    assert!(rig.view.touch_down(empty.0, empty.1, 0.0));
+    assert!(
+        rig.view
+            .touch_down(empty.0, empty.1, ambre_bus::PageTime(0.0))
+    );
     assert_eq!(rig.view.finger_pans, Some(true));
     let centre = rig.view.cam.center;
-    rig.view.touch_move(empty.0 - 60.0, empty.1, 16.0);
-    rig.view.touch_move(empty.0 - 120.0, empty.1, 32.0);
+    rig.view
+        .touch_move(empty.0 - 60.0, empty.1, ambre_bus::PageTime(16.0));
+    rig.view
+        .touch_move(empty.0 - 120.0, empty.1, ambre_bus::PageTime(32.0));
     assert!(rig.view.cam.center.x > centre.x, "the finger pans");
     rig.view.touch_cancel();
 
     let on_a = rig.screen(50.0, 50.0);
-    rig.view.touch_down(on_a.0, on_a.1, 100.0);
+    rig.view
+        .touch_down(on_a.0, on_a.1, ambre_bus::PageTime(100.0));
     assert_eq!(rig.view.finger_pans, Some(false), "an element is grabbed");
-    rig.view.touch_up(on_a.0, on_a.1, 110.0);
+    rig.view
+        .touch_up(on_a.0, on_a.1, ambre_bus::PageTime(110.0));
     assert_eq!(rig.view.selection, [eid("a")]);
 
     let (x0, y0) = rig.screen(A.x0, A.y0);
     let (x1, y1) = rig.screen(A.x1, A.y1);
     let knob = crate::ui::tool::rotate_handle_point(Rect::new(x0, y0, x1, y1));
-    rig.view.touch_down(knob.x, knob.y, 200.0);
+    rig.view
+        .touch_down(knob.x, knob.y, ambre_bus::PageTime(200.0));
     assert_eq!(rig.view.finger_pans, Some(false), "a handle is grabbed");
     rig.view.touch_cancel();
 
     rig.view.set_tool(Tool::Pen);
-    rig.view.touch_down(empty.0, empty.1, 300.0);
+    rig.view
+        .touch_down(empty.0, empty.1, ambre_bus::PageTime(300.0));
     assert_eq!(rig.view.finger_pans, Some(false), "a drawing tool draws");
 }
 
@@ -1788,9 +1797,9 @@ fn a_drag_held_at_an_edge_pans_the_board_each_frame() {
             x: 1195.0,
             y: 400.0,
         });
-        rig.view.plan_repaint(1000.0, false);
+        rig.view.plan_repaint(ambre_bus::PageTime(1000.0), false);
         let x = rig.view.cam.center.x;
-        rig.view.plan_repaint(1016.0, false);
+        rig.view.plan_repaint(ambre_bus::PageTime(1016.0), false);
         let moved = rig.view.cam.center.x - x;
         rig.view.update();
         assert!(!viewport_requests(rig.sent()).is_empty(), "zoom {zoom}");
@@ -1867,7 +1876,7 @@ fn the_band_asks_once_per_selection_change() {
 }
 
 fn plan(rig: &mut Rig) -> (bool, bool) {
-    let p = rig.view.plan_repaint(0.0, false);
+    let p = rig.view.plan_repaint(ambre_bus::PageTime(0.0), false);
     (
         matches!(p.content, ContentRepaint::Full),
         matches!(p.overlay, OverlayRepaint::Redraw),

@@ -87,7 +87,7 @@ pub enum ProseInput {
         /// The platform's modifier is held: `Ctrl`, or `Cmd` on a Mac. A press
         /// with it on a link follows the link (`PROSE-UI-071`).
         follow: bool,
-        now_ms: f64,
+        now_ms: ambre_core::PageTime,
     },
     Drag {
         x: f32,
@@ -175,7 +175,7 @@ impl Sent {
 pub(crate) struct Press {
     x: f32,
     y: f32,
-    at_ms: f64,
+    at_ms: ambre_core::PageTime,
     count: u8,
 }
 
@@ -800,7 +800,7 @@ impl ProseUiState {
         x: f32,
         y: f32,
         shift: bool,
-        now_ms: f64,
+        now_ms: ambre_core::PageTime,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
         let layout = &self.shaped.layout;

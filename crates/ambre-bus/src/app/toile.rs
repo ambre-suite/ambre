@@ -1472,7 +1472,7 @@ pub enum ToileCommand {
     /// always advances.
     Presence {
         payload: PresencePayload,
-        now_ms: i64,
+        now_ms: ambre_core::PageTime,
     },
 }
 

@@ -56,9 +56,12 @@ pub struct PageReads {
     pub name_of: Rc<dyn Fn(UserId) -> Option<String>>,
     /// A time, in the reader's language and zone (`MURMURE-418`).
     pub time_of: Rc<dyn Fn(Timestamp) -> String>,
-    /// The page's clock, in milliseconds: the wheel and the pictures read
-    /// it.
-    pub now_ms: Rc<dyn Fn() -> f64>,
+    /// The page's monotonic clock: the wheel and the pictures read it.
+    pub now_ms: Rc<dyn Fn() -> ambre_core::PageTime>,
+    /// The user's wall clock: it dates a message, an edit, a reaction and a
+    /// typing sample. The page's clock restarts at every load, so it never
+    /// dates anything a peer reads.
+    pub wall_clock: Rc<dyn Fn() -> Timestamp>,
     /// The user asks for reduced motion: an animated picture holds its
     /// first frame (`MURMURE-130`).
     pub still: Rc<dyn Fn() -> bool>,
@@ -246,9 +249,9 @@ pub struct MurmureView {
     pictures: Rc<RefCell<Pictures>>,
     /// When the next frame of a picture this region shows is due, `None`
     /// when none plays (`MURMURE-136`).
-    next_frame: Option<f64>,
+    next_frame: Option<ambre_core::PageTime>,
     /// The channel on screen this region last ticked, and when.
-    ticked: Option<(ChannelId, f64)>,
+    ticked: Option<(ChannelId, ambre_core::PageTime)>,
     /// The `@` list this region last handed the page.
     listed: Option<MentionList>,
     /// The format bar this region last handed the page.
@@ -907,13 +910,13 @@ impl MurmureView {
     }
 
     /// A finger went down: it stops any motion left.
-    pub fn touch_down(&mut self, x: f32, y: f32, now_ms: f64) {
+    pub fn touch_down(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
         self.kinetic.press(x, y, now_ms);
     }
 
     /// A finger moved: past the tap slop the list follows it. Answers
     /// whether the list moved.
-    pub fn touch_move(&mut self, x: f32, y: f32, now_ms: f64) -> bool {
+    pub fn touch_move(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) -> bool {
         let Some(step) = self.kinetic.sample(x, y, now_ms) else {
             return false;
         };
@@ -926,7 +929,7 @@ impl MurmureView {
     /// to the latest message presses it, and one on a band asks for its
     /// segment again (`MURMURE-513`). A tap in the composer puts its caret
     /// there and gives it the keys.
-    pub fn touch_up(&mut self, now_ms: f64) -> Option<(f32, f32)> {
+    pub fn touch_up(&mut self, now_ms: ambre_core::PageTime) -> Option<(f32, f32)> {
         match self.kinetic.release(now_ms) {
             Release::Tap { x, y } if self.on_jump(Point::new(x.into(), y.into())) => {
                 self.rest_at_latest();
@@ -1020,7 +1023,7 @@ impl MurmureView {
         }
     }
 
-    pub fn plan_repaint(&mut self, now_ms: f64, _hud_tick: bool) -> RepaintPlan {
+    pub fn plan_repaint(&mut self, now_ms: ambre_core::PageTime, _hud_tick: bool) -> RepaintPlan {
         let theme = self.theme_ctl.get();
         if theme != self.theme {
             self.theme = theme;
@@ -1365,9 +1368,9 @@ impl MurmureView {
         }
     }
 
-    /// The page's clock, as the engine dates a sample or a message.
+    /// The wall clock, as the engine dates a sample or a message.
     fn now(&self) -> Timestamp {
-        Timestamp((self.reads.now_ms)().max(0.0) as u64)
+        (self.reads.wall_clock)()
     }
 
     /// Tick the channel on screen once per tick period: the engine sends
@@ -1767,7 +1770,9 @@ mod tests {
     struct Page {
         view: MurmureView,
         pane: Rc<Cell<MurmurePane>>,
-        clock: Rc<Cell<f64>>,
+        clock: Rc<Cell<ambre_core::PageTime>>,
+        /// The wall clock, when a test sets it apart from the page's clock.
+        wall: Rc<Cell<Option<Timestamp>>>,
         /// The user asks for reduced motion.
         still: Rc<Cell<bool>>,
         events: Sender<UiEvent>,
@@ -1823,8 +1828,11 @@ mod tests {
         let pane = Rc::new(Cell::new(MurmurePane::default()));
         let shown = Rc::clone(&pane);
         let back = Rc::clone(&pane);
-        let clock = Rc::new(Cell::new(0.0));
+        let clock = Rc::new(Cell::new(ambre_core::PageTime(0.0)));
         let now = Rc::clone(&clock);
+        let follows = Rc::clone(&clock);
+        let wall_set = Rc::new(Cell::new(None::<Timestamp>));
+        let wall = Rc::clone(&wall_set);
         let still = Rc::new(Cell::new(false));
         let reduced = Rc::clone(&still);
         let said_log = Rc::new(RefCell::new(Vec::new()));
@@ -1864,6 +1872,10 @@ mod tests {
             name_of: Rc::new(|_| Some("Ada".to_owned())),
             time_of: Rc::new(|_| "t".to_owned()),
             now_ms: Rc::new(move || now.get()),
+            // The wall clock follows the page's unless a test sets it, so a
+            // step dates what it sends.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            wall_clock: Rc::new(move || wall.get().unwrap_or(Timestamp(follows.get().0 as u64))),
             still: Rc::new(move || reduced.get()),
             announce: Rc::new(move |text: &str| said.borrow_mut().push(text.to_owned())),
             act_on: Rc::new(move |target| acted.borrow_mut().push(target)),
@@ -1933,6 +1945,7 @@ mod tests {
             ThemeControl::default(),
         );
         Page {
+            wall: wall_set,
             view,
             pane,
             clock,
@@ -1960,10 +1973,10 @@ mod tests {
 
     /// Plan a frame and paint it when the plan asks, as the frame loop does.
     fn frame(view: &mut MurmureView) -> bool {
-        frame_at(view, 0.0)
+        frame_at(view, ambre_bus::PageTime(0.0))
     }
 
-    fn frame_at(view: &mut MurmureView, now_ms: f64) -> bool {
+    fn frame_at(view: &mut MurmureView, now_ms: ambre_core::PageTime) -> bool {
         view.update();
         let plan = view.plan_repaint(now_ms, false);
         let full = matches!(plan.content, ContentRepaint::Full);
@@ -2133,7 +2146,7 @@ mod tests {
     /// falls on the bytes a reader sees there.
     fn frame_with_fonts(view: &mut MurmureView) {
         view.update();
-        view.plan_repaint(0.0, false);
+        view.plan_repaint(ambre_bus::PageTime(0.0), false);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         view.paint_content(&mut surface, &mut font_cx, &mut cache, None);
@@ -2247,8 +2260,8 @@ mod tests {
         mouse(&mut page.view, on_link, on_link);
         frame_with_fonts(&mut page.view);
         page.view
-            .touch_down(on_link.0 as f32, on_link.1 as f32, 0.0);
-        assert!(page.view.touch_up(50.0).is_some());
+            .touch_down(on_link.0 as f32, on_link.1 as f32, ambre_bus::PageTime(0.0));
+        assert!(page.view.touch_up(ambre_bus::PageTime(50.0)).is_some());
         frame_with_fonts(&mut page.view);
         let opened = page.opened.borrow().clone();
         assert_eq!(opened, ["https://ambre.dev", "https://ambre.dev"]);
@@ -2339,8 +2352,8 @@ mod tests {
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "ab");
-        key(&mut page, "ArrowLeft", false, 0.0);
-        assert!(key(&mut page, ";", true, 0.0));
+        key(&mut page, "ArrowLeft", false, ambre_bus::PageTime(0.0));
+        assert!(key(&mut page, ";", true, ambre_bus::PageTime(0.0)));
         assert_eq!(*page.asked_emoji.borrow(), [false]);
         *page.emoji.borrow_mut() = Some((true, "\u{1F680}".to_owned()));
         frame_with_fonts(&mut page.view);
@@ -2372,7 +2385,7 @@ mod tests {
     }
 
     /// A wheel event at `now_ms`, `delta_mode` as the browser names it.
-    fn wheel(page: &mut Page, dy: f64, delta_mode: u32, now_ms: f64) -> bool {
+    fn wheel(page: &mut Page, dy: f64, delta_mode: u32, now_ms: ambre_core::PageTime) -> bool {
         page.clock.set(now_ms);
         let ev = InputEvent::Wheel {
             dx: 0.0,
@@ -2448,7 +2461,10 @@ mod tests {
         let (mut page, channel, _) = long_channel(200);
         frame(&mut page.view);
         reads(&page);
-        assert!(wheel(&mut page, -3.0, 1, 10.0), "the wheel is taken");
+        assert!(
+            wheel(&mut page, -3.0, 1, ambre_bus::PageTime(10.0)),
+            "the wheel is taken"
+        );
         assert!(frame(&mut page.view));
         let rested = page.view.resting_on().expect("resting higher up");
         assert!(!shown(&page.view).latest_shown);
@@ -2466,7 +2482,7 @@ mod tests {
         let (mut page, channel, _) = long_channel(200);
         frame(&mut page.view);
         assert_eq!(older(&page), [], "the oldest row is far above");
-        wheel(&mut page, -100_000.0, 0, 10.0);
+        wheel(&mut page, -100_000.0, 0, ambre_bus::PageTime(10.0));
         assert!(frame(&mut page.view));
         assert!(shown(&page.view).oldest_shown);
         let oldest = page
@@ -2477,7 +2493,7 @@ mod tests {
             .channel(channel)
             .and_then(|l| l.oldest_segment());
         assert_eq!(older(&page), oldest.into_iter().collect::<Vec<_>>());
-        wheel(&mut page, -50.0, 0, 20.0);
+        wheel(&mut page, -50.0, 0, ambre_bus::PageTime(20.0));
         assert!(frame(&mut page.view));
         assert_eq!(older(&page), [], "asked once for this segment");
         let rested = page.view.resting_on().expect("resting at the top");
@@ -2490,7 +2506,7 @@ mod tests {
             "the rows above move nothing"
         );
         assert!(!shown(&page.view).oldest_shown);
-        wheel(&mut page, -100_000.0, 0, 30.0);
+        wheel(&mut page, -100_000.0, 0, ambre_bus::PageTime(30.0));
         assert!(frame(&mut page.view));
         assert_eq!(older(&page).len(), 1, "the new oldest segment asks again");
     }
@@ -2501,25 +2517,25 @@ mod tests {
     fn a_paused_glide_coasts_and_a_notch_never_does() {
         let (mut page, _, _) = long_channel(400);
         frame(&mut page.view);
-        wheel(&mut page, -2_000.0, 0, 10.0);
-        frame_at(&mut page.view, 10.0);
+        wheel(&mut page, -2_000.0, 0, ambre_bus::PageTime(10.0));
+        frame_at(&mut page.view, ambre_bus::PageTime(10.0));
         for (i, now) in [1_000.0, 1_010.0, 1_020.0].into_iter().enumerate() {
-            wheel(&mut page, -10.0, 0, now);
-            frame_at(&mut page.view, now + i as f64);
+            wheel(&mut page, -10.0, 0, ambre_bus::PageTime(now));
+            frame_at(&mut page.view, ambre_bus::PageTime(now + i as f64));
         }
         let paused = page.view.resting_on();
-        frame_at(&mut page.view, 1_100.0);
+        frame_at(&mut page.view, ambre_bus::PageTime(1_100.0));
         assert!(page.view.scrolling());
-        frame_at(&mut page.view, 1_116.0);
-        frame_at(&mut page.view, 1_132.0);
+        frame_at(&mut page.view, ambre_bus::PageTime(1_116.0));
+        frame_at(&mut page.view, ambre_bus::PageTime(1_132.0));
         assert_ne!(page.view.resting_on(), paused, "the glide coasts on");
 
         page.view.kinetic.stop();
-        wheel(&mut page, -1.0, 1, 2_000.0);
-        frame_at(&mut page.view, 2_000.0);
+        wheel(&mut page, -1.0, 1, ambre_bus::PageTime(2_000.0));
+        frame_at(&mut page.view, ambre_bus::PageTime(2_000.0));
         let notched = page.view.resting_on();
         assert!(!page.view.scrolling());
-        frame_at(&mut page.view, 2_200.0);
+        frame_at(&mut page.view, ambre_bus::PageTime(2_200.0));
         assert_eq!(page.view.resting_on(), notched, "a notch leaves no motion");
     }
 
@@ -2528,14 +2544,14 @@ mod tests {
     fn a_motion_stops_at_the_latest_row() {
         let (mut page, _, _) = long_channel(400);
         frame(&mut page.view);
-        wheel(&mut page, -60.0, 0, 10.0);
-        frame_at(&mut page.view, 10.0);
+        wheel(&mut page, -60.0, 0, ambre_bus::PageTime(10.0));
+        frame_at(&mut page.view, ambre_bus::PageTime(10.0));
         for now in [1_000.0, 1_010.0, 1_020.0] {
-            wheel(&mut page, 10.0, 0, now);
+            wheel(&mut page, 10.0, 0, ambre_bus::PageTime(now));
         }
         let mut now = 1_100.0;
         while now < 1_300.0 {
-            frame_at(&mut page.view, now);
+            frame_at(&mut page.view, ambre_bus::PageTime(now));
             now += 16.0;
         }
         assert_eq!(page.view.resting_on(), None);
@@ -2543,7 +2559,7 @@ mod tests {
     }
 
     /// A key pressed at `now_ms`, with `ctrl` held or not.
-    fn key(page: &mut Page, key: &str, ctrl: bool, now_ms: f64) -> bool {
+    fn key(page: &mut Page, key: &str, ctrl: bool, now_ms: ambre_core::PageTime) -> bool {
         page.clock.set(now_ms);
         let ev = InputEvent::Key {
             key: key.to_owned(),
@@ -2564,10 +2580,10 @@ mod tests {
         let (mut wheeled, _, wheeled_rows) = long_channel(400);
         frame(&mut paged.view);
         frame(&mut wheeled.view);
-        assert!(key(&mut paged, "PageUp", false, 10.0));
-        assert!(wheel(&mut wheeled, -1.0, 2, 10.0));
-        frame_at(&mut paged.view, 10.0);
-        frame_at(&mut wheeled.view, 10.0);
+        assert!(key(&mut paged, "PageUp", false, ambre_bus::PageTime(10.0)));
+        assert!(wheel(&mut wheeled, -1.0, 2, ambre_bus::PageTime(10.0)));
+        frame_at(&mut paged.view, ambre_bus::PageTime(10.0));
+        frame_at(&mut wheeled.view, ambre_bus::PageTime(10.0));
         // The two lists hold the same rows under other ids: compare places.
         let place = |view: &MurmureView, rows: &[MessageView]| {
             let (key, y) = view.resting_on().expect("a page up leaves the latest row");
@@ -2580,14 +2596,19 @@ mod tests {
         );
         assert!(!paged.view.scrolling(), "a page leaves no motion");
 
-        assert!(key(&mut paged, "PageDown", false, 20.0));
-        frame_at(&mut paged.view, 20.0);
+        assert!(key(
+            &mut paged,
+            "PageDown",
+            false,
+            ambre_bus::PageTime(20.0)
+        ));
+        frame_at(&mut paged.view, ambre_bus::PageTime(20.0));
         assert!(shown(&paged.view).latest_shown);
         assert!(
-            !key(&mut paged, "PageUp", true, 30.0),
+            !key(&mut paged, "PageUp", true, ambre_bus::PageTime(30.0)),
             "the browser's chord"
         );
-        assert!(!key(&mut paged, "a", false, 30.0));
+        assert!(!key(&mut paged, "a", false, ambre_bus::PageTime(30.0)));
     }
 
     /// End, a click on the control or a tap on it brings back the latest
@@ -2600,13 +2621,13 @@ mod tests {
         assert_eq!(page.view.jump, None, "no control at the latest message");
         let centre = |view: &MurmureView| view.jump.expect("a control").center();
         let up = |page: &mut Page| {
-            key(page, "PageUp", false, 10.0);
+            key(page, "PageUp", false, ambre_bus::PageTime(10.0));
             frame(&mut page.view);
             assert!(!shown(&page.view).latest_shown);
         };
 
         up(&mut page);
-        assert!(key(&mut page, "End", false, 20.0));
+        assert!(key(&mut page, "End", false, ambre_bus::PageTime(20.0)));
         frame(&mut page.view);
         assert!(shown(&page.view).latest_shown);
         assert_eq!(page.view.resting_on(), None);
@@ -2626,8 +2647,13 @@ mod tests {
 
         up(&mut page);
         let at = centre(&page.view);
-        page.view.touch_down(at.x as f32, at.y as f32, 100.0);
-        assert_eq!(page.view.touch_up(150.0), None, "the tap is taken");
+        page.view
+            .touch_down(at.x as f32, at.y as f32, ambre_bus::PageTime(100.0));
+        assert_eq!(
+            page.view.touch_up(ambre_bus::PageTime(150.0)),
+            None,
+            "the tap is taken"
+        );
         frame(&mut page.view);
         assert!(shown(&page.view).latest_shown);
     }
@@ -2641,21 +2667,21 @@ mod tests {
         frame(&mut page.view);
         assert_eq!(reads(&page).0, 1);
         for now in [10.0, 20.0, 30.0] {
-            key(&mut page, "PageUp", false, now);
-            frame_at(&mut page.view, now);
+            key(&mut page, "PageUp", false, ambre_bus::PageTime(now));
+            frame_at(&mut page.view, ambre_bus::PageTime(now));
         }
         segment(&page, channel, 5_000, 1);
-        key(&mut page, "PageDown", false, 40.0);
-        frame_at(&mut page.view, 40.0);
+        key(&mut page, "PageDown", false, ambre_bus::PageTime(40.0));
+        frame_at(&mut page.view, ambre_bus::PageTime(40.0));
         assert!(!shown(&page.view).latest_shown);
         assert_eq!(
             reads(&page).0,
             0,
             "the page stopped short of the new message"
         );
-        key(&mut page, "End", false, 50.0);
+        key(&mut page, "End", false, ambre_bus::PageTime(50.0));
         assert_eq!(reads(&page).0, 0, "nothing is read before it paints");
-        frame_at(&mut page.view, 50.0);
+        frame_at(&mut page.view, ambre_bus::PageTime(50.0));
         assert_eq!(reads(&page).0, 1, "the new message showed, and is read");
     }
 
@@ -2673,7 +2699,10 @@ mod tests {
         let (mut page, _, rows) = long_channel(400);
         frame(&mut page.view);
         assert_eq!(page.view.focused(), None);
-        assert!(key(&mut page, "ArrowUp", false, 10.0), "the key is taken");
+        assert!(
+            key(&mut page, "ArrowUp", false, ambre_bus::PageTime(10.0)),
+            "the key is taken"
+        );
         assert_eq!(
             page.view.focused(),
             row(&rows, 399),
@@ -2683,10 +2712,10 @@ mod tests {
             page.said.borrow().last().map(String::as_str),
             Some("Ada, t: hello")
         );
-        key(&mut page, "ArrowUp", false, 20.0);
+        key(&mut page, "ArrowUp", false, ambre_bus::PageTime(20.0));
         assert_eq!(page.view.focused(), row(&rows, 398));
-        key(&mut page, "ArrowDown", false, 30.0);
-        key(&mut page, "ArrowDown", false, 40.0);
+        key(&mut page, "ArrowDown", false, ambre_bus::PageTime(30.0));
+        key(&mut page, "ArrowDown", false, ambre_bus::PageTime(40.0));
         assert_eq!(
             page.view.focused(),
             row(&rows, 399),
@@ -2694,7 +2723,12 @@ mod tests {
         );
         assert_eq!(page.said.borrow().len(), 4, "each move is said");
         for step in 0..60 {
-            key(&mut page, "ArrowUp", false, 50.0 + f64::from(step));
+            key(
+                &mut page,
+                "ArrowUp",
+                false,
+                ambre_bus::PageTime(50.0 + f64::from(step)),
+            );
             frame(&mut page.view);
             frame(&mut page.view);
             let (top, bottom) = shown(&page.view).focus.expect("the focus on screen");
@@ -2715,15 +2749,20 @@ mod tests {
         frame(&mut page.view);
         assert_eq!(reads(&page).0, 1);
         for now in [10.0, 20.0] {
-            key(&mut page, "PageUp", false, now);
-            frame_at(&mut page.view, now);
+            key(&mut page, "PageUp", false, ambre_bus::PageTime(now));
+            frame_at(&mut page.view, ambre_bus::PageTime(now));
         }
         segment(&page, channel, 5_000, 1);
         for (step, arrow) in ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowDown"]
             .into_iter()
             .enumerate()
         {
-            key(&mut page, arrow, false, 30.0 + step as f64);
+            key(
+                &mut page,
+                arrow,
+                false,
+                ambre_bus::PageTime(30.0 + step as f64),
+            );
             frame(&mut page.view);
         }
         assert!(page.view.focused().is_some());
@@ -2739,7 +2778,7 @@ mod tests {
         let (mut page, channel, _) = long_channel(50);
         frame(&mut page.view);
         assert!(page.said.borrow().is_empty(), "the first list is not news");
-        key(&mut page, "ArrowUp", false, 10.0);
+        key(&mut page, "ArrowUp", false, ambre_bus::PageTime(10.0));
         frame(&mut page.view);
         let focus = page.view.focused();
         page.said.borrow_mut().clear();
@@ -2749,8 +2788,8 @@ mod tests {
         assert_eq!(page.view.focused(), focus, "the focus did not move");
         assert_eq!(page.view.resting_on(), None);
 
-        key(&mut page, "PageUp", false, 20.0);
-        frame_at(&mut page.view, 20.0);
+        key(&mut page, "PageUp", false, ambre_bus::PageTime(20.0));
+        frame_at(&mut page.view, ambre_bus::PageTime(20.0));
         page.said.borrow_mut().clear();
         segment(&page, channel, 6_000, 1);
         frame(&mut page.view);
@@ -2767,16 +2806,16 @@ mod tests {
         let (mut page, _, _) = long_channel(400);
         frame(&mut page.view);
         assert!(page.said.borrow().is_empty());
-        key(&mut page, "PageUp", false, 10.0);
-        frame_at(&mut page.view, 10.0);
-        key(&mut page, "PageUp", false, 20.0);
-        frame_at(&mut page.view, 20.0);
+        key(&mut page, "PageUp", false, ambre_bus::PageTime(10.0));
+        frame_at(&mut page.view, ambre_bus::PageTime(10.0));
+        key(&mut page, "PageUp", false, ambre_bus::PageTime(20.0));
+        frame_at(&mut page.view, ambre_bus::PageTime(20.0));
         assert_eq!(*page.said.borrow(), [JUMP_HINT]);
         assert!(JUMP_HINT.contains("End"));
-        assert!(key(&mut page, "End", false, 30.0));
-        frame_at(&mut page.view, 30.0);
-        key(&mut page, "PageUp", false, 40.0);
-        frame_at(&mut page.view, 40.0);
+        assert!(key(&mut page, "End", false, ambre_bus::PageTime(30.0)));
+        frame_at(&mut page.view, ambre_bus::PageTime(30.0));
+        key(&mut page, "PageUp", false, ambre_bus::PageTime(40.0));
+        frame_at(&mut page.view, ambre_bus::PageTime(40.0));
         assert_eq!(*page.said.borrow(), [JUMP_HINT, JUMP_HINT]);
     }
 
@@ -2813,7 +2852,7 @@ mod tests {
         assert!(page.said.borrow().is_empty(), "the first list is not news");
 
         let clock = Rc::clone(&page.clock);
-        let press = |view: &mut MurmureView, key: &str, now_ms: f64| {
+        let press = |view: &mut MurmureView, key: &str, now_ms: ambre_core::PageTime| {
             clock.set(now_ms);
             let taken = view.handle_input(&InputEvent::Key {
                 key: key.to_owned(),
@@ -2825,17 +2864,17 @@ mod tests {
             frame_at(view, now_ms);
             taken
         };
-        assert!(press(&mut view, "ArrowUp", 10.0));
+        assert!(press(&mut view, "ArrowUp", ambre_bus::PageTime(10.0)));
         assert_eq!(view.focused(), row(&replies, 199), "the last reply");
         assert_eq!(*page.said.borrow(), ["Ada, t: hello"]);
-        assert!(press(&mut view, "PageUp", 20.0));
-        press(&mut view, "PageUp", 30.0);
+        assert!(press(&mut view, "PageUp", ambre_bus::PageTime(20.0)));
+        press(&mut view, "PageUp", ambre_bus::PageTime(30.0));
         assert!(!shown(&view).latest_shown, "the pages moved the thread");
         assert_eq!(
             page.said.borrow().last().map(String::as_str),
             Some(JUMP_HINT)
         );
-        assert!(press(&mut view, "End", 40.0));
+        assert!(press(&mut view, "End", ambre_bus::PageTime(40.0)));
         assert!(shown(&view).latest_shown, "End is back at the latest reply");
         assert_eq!(page.view.focused(), None, "the channel kept its own focus");
 
@@ -2861,21 +2900,30 @@ mod tests {
     fn a_finger_drags_the_list_and_a_still_one_taps() {
         let (mut page, _, _) = long_channel(200);
         frame(&mut page.view);
-        page.view.touch_down(10.0, 100.0, 0.0);
-        assert!(!page.view.touch_move(10.0, 102.0, 10.0), "inside the slop");
-        assert!(page.view.touch_move(10.0, 300.0, 20.0));
-        frame_at(&mut page.view, 20.0);
+        page.view.touch_down(10.0, 100.0, ambre_bus::PageTime(0.0));
+        assert!(
+            !page.view.touch_move(10.0, 102.0, ambre_bus::PageTime(10.0)),
+            "inside the slop"
+        );
+        assert!(page.view.touch_move(10.0, 300.0, ambre_bus::PageTime(20.0)));
+        frame_at(&mut page.view, ambre_bus::PageTime(20.0));
         assert!(
             page.view.resting_on().is_some(),
             "the list followed the finger"
         );
         page.view.touch_cancel();
         assert!(!page.view.scrolling());
-        page.view.touch_down(10.0, 100.0, 100.0);
-        assert_eq!(page.view.touch_up(150.0), Some((10.0, 100.0)));
-        page.view.touch_down(10.0, 100.0, 200.0);
-        page.view.touch_move(10.0, 300.0, 300.0);
-        assert_eq!(page.view.touch_up(1_000.0), None);
+        page.view
+            .touch_down(10.0, 100.0, ambre_bus::PageTime(100.0));
+        assert_eq!(
+            page.view.touch_up(ambre_bus::PageTime(150.0)),
+            Some((10.0, 100.0))
+        );
+        page.view
+            .touch_down(10.0, 100.0, ambre_bus::PageTime(200.0));
+        page.view
+            .touch_move(10.0, 300.0, ambre_bus::PageTime(300.0));
+        assert_eq!(page.view.touch_up(ambre_bus::PageTime(1_000.0)), None);
     }
 
     /// The middle height of the row at `index`, as the last paint placed it.
@@ -2962,17 +3010,24 @@ mod tests {
         assert!(!page.view.handle_input(&release(message_y)));
         assert!(retried(&page).is_empty(), "a message is no band");
 
-        page.view.touch_down(10.0, band_y, 0.0);
-        assert_eq!(page.view.touch_up(50.0), None, "the tap is taken");
+        page.view.touch_down(10.0, band_y, ambre_bus::PageTime(0.0));
+        assert_eq!(
+            page.view.touch_up(ambre_bus::PageTime(50.0)),
+            None,
+            "the tap is taken"
+        );
         assert_eq!(retried(&page), [(channel, older)]);
 
-        assert!(!key(&mut page, "Enter", false, 0.0), "no focus yet");
+        assert!(
+            !key(&mut page, "Enter", false, ambre_bus::PageTime(0.0)),
+            "no focus yet"
+        );
         while page.view.focused() != Some(RowKey::Band(older)) {
-            assert!(key(&mut page, "ArrowUp", false, 0.0));
+            assert!(key(&mut page, "ArrowUp", false, ambre_bus::PageTime(0.0)));
             frame(&mut page.view);
         }
         let _ = reads(&page);
-        assert!(key(&mut page, "Enter", false, 0.0));
+        assert!(key(&mut page, "Enter", false, ambre_bus::PageTime(0.0)));
         assert_eq!(retried(&page), [(channel, older)]);
     }
 
@@ -2982,8 +3037,11 @@ mod tests {
     fn a_band_before_the_history_boundary_asks_for_nothing() {
         let (mut page, _, _) = banded(Unreadable::BeforeHistoryBoundary);
         let band_y = middle_of(&page.view, 0);
-        page.view.touch_down(10.0, band_y, 0.0);
-        assert_eq!(page.view.touch_up(50.0), Some((10.0, band_y)));
+        page.view.touch_down(10.0, band_y, ambre_bus::PageTime(0.0));
+        assert_eq!(
+            page.view.touch_up(ambre_bus::PageTime(50.0)),
+            Some((10.0, band_y))
+        );
         assert!(retried(&page).is_empty());
     }
 
@@ -3065,10 +3123,10 @@ mod tests {
         let _ = reads(&page);
 
         let y = middle_of(&thread_view, 0);
-        thread_view.touch_down(10.0, y, 0.0);
-        frame_at(&mut thread_view, LONG_PRESS_MS - 1.0);
+        thread_view.touch_down(10.0, y, ambre_bus::PageTime(0.0));
+        frame_at(&mut thread_view, ambre_bus::PageTime(LONG_PRESS_MS - 1.0));
         assert!(page.acted.borrow().is_empty(), "not yet held");
-        frame_at(&mut thread_view, LONG_PRESS_MS);
+        frame_at(&mut thread_view, ambre_bus::PageTime(LONG_PRESS_MS));
         let target = MessageTarget {
             channel,
             at: MessageAt::Thread(root.id),
@@ -3084,8 +3142,12 @@ mod tests {
             from_thread: None,
         };
         assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
-        assert_eq!(thread_view.touch_up(LONG_PRESS_MS + 100.0), None, "no tap");
-        frame_at(&mut thread_view, LONG_PRESS_MS + 200.0);
+        assert_eq!(
+            thread_view.touch_up(ambre_bus::PageTime(LONG_PRESS_MS + 100.0)),
+            None,
+            "no tap"
+        );
+        frame_at(&mut thread_view, ambre_bus::PageTime(LONG_PRESS_MS + 200.0));
         assert_eq!(page.acted.borrow().len(), 1, "said once");
         assert!(page.commands.try_recv().is_err(), "nothing was sent");
     }
@@ -3097,15 +3159,25 @@ mod tests {
     fn the_menu_key_hands_the_page_the_focused_message_at_its_row() {
         let (mut page, channel, rows) = long_channel(400);
         frame(&mut page.view);
-        assert!(key(&mut page, "ContextMenu", false, 10.0));
+        assert!(key(
+            &mut page,
+            "ContextMenu",
+            false,
+            ambre_bus::PageTime(10.0)
+        ));
         assert_eq!(page.acted.borrow().as_slice(), [None], "no focus yet");
 
-        assert!(key(&mut page, "ArrowUp", false, 20.0));
+        assert!(key(&mut page, "ArrowUp", false, ambre_bus::PageTime(20.0)));
         frame(&mut page.view);
         let (_, bottom) = shown(&page.view).focus.expect("the focus on screen");
         // The paints at the bottom marked the latest message read.
         while page.commands.try_recv().is_ok() {}
-        assert!(key(&mut page, "ContextMenu", false, 30.0));
+        assert!(key(
+            &mut page,
+            "ContextMenu",
+            false,
+            ambre_bus::PageTime(30.0)
+        ));
         let shift_f10 = InputEvent::Key {
             key: "F10".to_owned(),
             ctrl: false,
@@ -3115,7 +3187,7 @@ mod tests {
         };
         assert!(page.view.handle_input(&shift_f10));
         assert!(
-            !key(&mut page, "F10", false, 40.0),
+            !key(&mut page, "F10", false, ambre_bus::PageTime(40.0)),
             "a plain F10 is the browser's"
         );
         let acted = page.acted.borrow();
@@ -3281,9 +3353,12 @@ mod tests {
         assert!(sent(&page).is_empty(), "Shift+Enter sends nothing");
         assert_eq!(page.view.composer().draft(channel).as_deref(), Some("a\nb"));
 
-        assert!(key(&mut page, "Enter", false, 1_234.0));
+        // The page's clock restarts at every load: the message is dated by the
+        // wall clock, never by it.
+        page.wall.set(Some(Timestamp(1_700_000_000_000)));
+        assert!(key(&mut page, "Enter", false, ambre_bus::PageTime(1_234.0)));
         frame_with_fonts(&mut page.view);
-        assert_eq!(sent(&page), vec![("a\nb".to_owned(), 1_234)]);
+        assert_eq!(sent(&page), vec![("a\nb".to_owned(), 1_700_000_000_000)]);
         assert_eq!(
             page.view.composer().draft(channel),
             None,
@@ -3340,7 +3415,7 @@ mod tests {
         let id = drop_file(&mut page, channel, "a.png");
         assert!(press_composer(&mut page));
         assert!(type_text(&mut page, "see"));
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert!(sent_files(&page).is_empty(), "the upload holds the send");
 
@@ -3352,7 +3427,7 @@ mod tests {
             .try_send(UiEvent::Rest { id, evt })
             .expect("room");
         frame_with_fonts(&mut page.view);
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         let sent = sent_files(&page);
         assert_eq!(sent.len(), 1);
@@ -3381,7 +3456,7 @@ mod tests {
         page.events.try_send(failed).expect("room");
         assert!(press_composer(&mut page));
         assert!(type_text(&mut page, "see"));
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(sent_files(&page), vec![Vec::new()]);
         assert_eq!(*page.warned.borrow(), ["a.png could not be attached"]);
@@ -3418,7 +3493,7 @@ mod tests {
         assert!(page.view.composer().file_at(hit.0, hit.1).is_none());
         assert!(press_composer(&mut page));
         assert!(type_text(&mut page, "see"));
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(sent_files(&page), vec![Vec::new()]);
     }
@@ -3522,11 +3597,17 @@ mod tests {
         frame_with_fonts(&mut page.view);
         assert_eq!(
             page.view.last_painted().and_then(|p| p.next_frame),
-            Some(100.0)
+            Some(ambre_core::PageTime(100.0))
         );
-        assert!(!frame_at(&mut page.view, 50.0), "no frame is due yet");
-        page.clock.set(100.0);
-        assert!(frame_at(&mut page.view, 100.0), "the next frame is due");
+        assert!(
+            !frame_at(&mut page.view, ambre_bus::PageTime(50.0)),
+            "no frame is due yet"
+        );
+        page.clock.set(ambre_bus::PageTime(100.0));
+        assert!(
+            frame_at(&mut page.view, ambre_bus::PageTime(100.0)),
+            "the next frame is due"
+        );
     }
 
     /// `MURMURE-130`: under reduced motion a picture holds its first frame,
@@ -3553,7 +3634,7 @@ mod tests {
         send(&page, channel, MurmureEvent::Picture { media_ref, picture });
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.last_painted().and_then(|p| p.next_frame), None);
-        assert!(!frame_at(&mut page.view, 1000.0));
+        assert!(!frame_at(&mut page.view, ambre_bus::PageTime(1000.0)));
     }
 
     /// `MURMURE-131`: a picture scrolled off screen is not painted, so it is
@@ -3581,12 +3662,12 @@ mod tests {
         let channel = ChannelId::new();
         let mut page = composing(channel);
         assert!(press_composer(&mut page));
-        assert!(key(&mut page, "Enter", false, 0.0));
+        assert!(key(&mut page, "Enter", false, ambre_bus::PageTime(0.0)));
         frame_with_fonts(&mut page.view);
         assert!(sent(&page).is_empty());
         type_text(&mut page, "  ");
         shift_key(&mut page, "Enter");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert!(sent(&page).is_empty(), "white space is not a message");
         assert_eq!(page.view.composer().draft(channel).as_deref(), Some("  \n"));
@@ -3608,7 +3689,7 @@ mod tests {
         frame_with_fonts(&mut page.view);
         press_composer(&mut page);
         type_text(&mut page, "for b");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(sent(&page), vec![("for b".to_owned(), 0)]);
         assert_eq!(page.view.composer().draft(b), None);
@@ -3632,7 +3713,7 @@ mod tests {
         assert!(band > 0.0, "a channel region shows the composer");
         assert_eq!(page.view.list_height(), 400.0 - band);
         page.view.update();
-        page.view.plan_repaint(0.0, false);
+        page.view.plan_repaint(ambre_bus::PageTime(0.0), false);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -3663,9 +3744,12 @@ mod tests {
         assert_eq!(page.view.reads.pipe.focus_requests(), 1);
         assert!(page.view.composer().focused());
         type_text(&mut page, "ab");
-        assert!(key(&mut page, "ArrowLeft", false, 0.0));
+        assert!(key(&mut page, "ArrowLeft", false, ambre_bus::PageTime(0.0)));
         assert!(shift_key(&mut page, "ArrowLeft"));
-        assert!(key(&mut page, "ArrowUp", false, 0.0), "the caret takes it");
+        assert!(
+            key(&mut page, "ArrowUp", false, ambre_bus::PageTime(0.0)),
+            "the caret takes it"
+        );
         frame_with_fonts(&mut page.view);
         assert_eq!(
             *page.said.borrow(),
@@ -3673,14 +3757,14 @@ mod tests {
             "the composer said its line, and the list announced nothing"
         );
         assert!(
-            !key(&mut page, "F5", false, 0.0),
+            !key(&mut page, "F5", false, ambre_bus::PageTime(0.0)),
             "a key it does not use stays the page's"
         );
 
-        assert!(key(&mut page, "Escape", false, 0.0));
+        assert!(key(&mut page, "Escape", false, ambre_bus::PageTime(0.0)));
         assert!(!page.view.composer().focused());
         assert!(
-            key(&mut page, "ArrowUp", false, 0.0),
+            key(&mut page, "ArrowUp", false, ambre_bus::PageTime(0.0)),
             "the list takes it again"
         );
         frame_with_fonts(&mut page.view);
@@ -3695,14 +3779,17 @@ mod tests {
         let mut page = composing(channel);
         press_composer(&mut page);
         page.view.paste("hello");
-        assert!(key(&mut page, "a", true, 0.0), "Ctrl+A selects the draft");
+        assert!(
+            key(&mut page, "a", true, ambre_bus::PageTime(0.0)),
+            "Ctrl+A selects the draft"
+        );
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.clipboard(false).as_deref(), Some("hello"));
         assert_eq!(page.view.clipboard(true).as_deref(), Some("hello"));
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().draft(channel).as_deref(), Some(""));
 
-        key(&mut page, "Escape", false, 0.0);
+        key(&mut page, "Escape", false, ambre_bus::PageTime(0.0));
         assert_eq!(page.view.clipboard(true), None, "the list's text stays");
     }
 
@@ -3757,7 +3844,7 @@ mod tests {
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi yo"));
 
         for _ in 0..2 {
-            key(&mut page, "Backspace", false, 0.0);
+            key(&mut page, "Backspace", false, ambre_bus::PageTime(0.0));
             frame_with_fonts(&mut page.view);
         }
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
@@ -3789,7 +3876,7 @@ mod tests {
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "hello");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(sent(&page).len(), 1);
         chord(&mut page, "z", false);
@@ -3858,10 +3945,10 @@ mod tests {
         );
         assert!(page.view.composer().editing(channel));
         for _ in 0.."there".len() {
-            key(&mut page, "Backspace", false, 0.0);
+            key(&mut page, "Backspace", false, ambre_bus::PageTime(0.0));
         }
         type_text(&mut page, "you");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
         let (sent_edits, messages) = edits(&page);
         assert_eq!(messages, 0, "an edit sends no new message");
@@ -3875,13 +3962,13 @@ mod tests {
 
         ask_edit(&page, channel, message, "hi");
         frame_with_fonts(&mut page.view);
-        key(&mut page, "a", true, 0.0);
-        key(&mut page, "Backspace", false, 0.0);
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "a", true, ambre_bus::PageTime(0.0));
+        key(&mut page, "Backspace", false, ambre_bus::PageTime(0.0));
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert!(page.view.composer().editing(channel), "a blank edit stays");
         type_text(&mut page, "hi");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
         assert_eq!(
             edits(&page),
@@ -3902,7 +3989,7 @@ mod tests {
         frame_with_fonts(&mut page.view);
         type_text(&mut page, " world");
         frame_with_fonts(&mut page.view);
-        assert!(key(&mut page, "Escape", false, 0.0));
+        assert!(key(&mut page, "Escape", false, ambre_bus::PageTime(0.0)));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
         assert!(!page.view.composer().editing(channel));
         assert!(
@@ -3910,7 +3997,7 @@ mod tests {
             "the composer keeps the keys"
         );
         assert_eq!(edits(&page), (Vec::new(), 0), "nothing sent");
-        key(&mut page, "Escape", false, 0.0);
+        key(&mut page, "Escape", false, ambre_bus::PageTime(0.0));
         assert!(!page.view.composer().focused());
     }
 
@@ -3949,17 +4036,22 @@ mod tests {
     fn escape_in_the_list_marks_the_channel_read() {
         let (mut page, _, _) = long_channel(400);
         frame(&mut page.view);
-        assert!(key(&mut page, "PageUp", false, 10.0));
-        frame_at(&mut page.view, 10.0);
+        assert!(key(&mut page, "PageUp", false, ambre_bus::PageTime(10.0)));
+        frame_at(&mut page.view, ambre_bus::PageTime(10.0));
         assert_eq!(reads(&page).0, 1, "the first paint read the latest");
-        assert!(key(&mut page, "Escape", false, 20.0));
+        assert!(key(&mut page, "Escape", false, ambre_bus::PageTime(20.0)));
         assert_eq!(reads(&page).0, 1, "Escape marks the channel read");
 
         let channel = ChannelId::new();
         let mut composing = composing(channel);
         reads(&composing);
         press_composer(&mut composing);
-        assert!(key(&mut composing, "Escape", false, 0.0));
+        assert!(key(
+            &mut composing,
+            "Escape",
+            false,
+            ambre_bus::PageTime(0.0)
+        ));
         assert!(!composing.view.composer().focused());
         assert_eq!(
             reads(&composing),
@@ -3973,7 +4065,7 @@ mod tests {
             ..composing
         };
         assert!(
-            !key(&mut thread, "Escape", false, 0.0),
+            !key(&mut thread, "Escape", false, ambre_bus::PageTime(0.0)),
             "the thread leaves it"
         );
     }
@@ -4011,18 +4103,18 @@ mod tests {
         let (mut page, segment, own) = mixed_channel(channel);
         press_composer(&mut page);
         type_text(&mut page, "x");
-        assert!(key(&mut page, "ArrowUp", false, 0.0));
+        assert!(key(&mut page, "ArrowUp", false, ambre_bus::PageTime(0.0)));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("x"));
         assert!(!page.view.composer().editing(channel), "a draft keeps Up");
         // Up on the only line puts the caret at its start, as a textarea does.
-        key(&mut page, "Delete", false, 0.0);
+        key(&mut page, "Delete", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
 
-        assert!(key(&mut page, "ArrowUp", false, 0.0));
+        assert!(key(&mut page, "ArrowUp", false, ambre_bus::PageTime(0.0)));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("mine"));
         assert!(page.view.composer().editing(channel));
         type_text(&mut page, " too");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         let (sent_edits, messages) = edits(&page);
         let [(at, message, draft)] = &sent_edits[..] else {
@@ -4041,14 +4133,17 @@ mod tests {
         let mut page = composing(channel);
         page.me.set(Some(UserId::new()));
         press_composer(&mut page);
-        assert!(key(&mut page, "ArrowUp", false, 0.0), "the caret takes it");
+        assert!(
+            key(&mut page, "ArrowUp", false, ambre_bus::PageTime(0.0)),
+            "the caret takes it"
+        );
         assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
         assert!(!page.view.composer().editing(channel));
 
         let (mut signed_out, _, _) = mixed_channel(channel);
         signed_out.me.set(None);
         press_composer(&mut signed_out);
-        key(&mut signed_out, "ArrowUp", false, 0.0);
+        key(&mut signed_out, "ArrowUp", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut signed_out.view);
         assert!(!signed_out.view.composer().editing(channel));
         assert_eq!(edits(&signed_out), (Vec::new(), 0));
@@ -4083,8 +4178,12 @@ mod tests {
     fn a_tap_in_the_band_focuses_the_composer() {
         let channel = ChannelId::new();
         let mut page = composing(channel);
-        page.view.touch_down(40.0, 395.0, 0.0);
-        assert_eq!(page.view.touch_up(50.0), None, "the tap is taken");
+        page.view.touch_down(40.0, 395.0, ambre_bus::PageTime(0.0));
+        assert_eq!(
+            page.view.touch_up(ambre_bus::PageTime(50.0)),
+            None,
+            "the tap is taken"
+        );
         assert_eq!(page.view.reads.pipe.focus_requests(), 1);
         assert!(page.view.composer().focused());
         let press = InputEvent::PointerDown {
@@ -4128,22 +4227,22 @@ mod tests {
         samples(&page);
         type_text(&mut page, "ab");
         assert_eq!(samples(&page).0, 1, "a typed key");
-        key(&mut page, "ArrowLeft", false, 0.0);
+        key(&mut page, "ArrowLeft", false, ambre_bus::PageTime(0.0));
         shift_key(&mut page, "ArrowLeft");
-        key(&mut page, "a", true, 0.0);
-        key(&mut page, "End", false, 0.0);
+        key(&mut page, "a", true, ambre_bus::PageTime(0.0));
+        key(&mut page, "End", false, ambre_bus::PageTime(0.0));
         assert_eq!(
             samples(&page).0,
             0,
             "the caret and the selection type nothing"
         );
-        key(&mut page, "Backspace", false, 0.0);
+        key(&mut page, "Backspace", false, ambre_bus::PageTime(0.0));
         assert_eq!(samples(&page).0, 1, "a deleted character");
         shift_key(&mut page, "Enter");
         assert_eq!(samples(&page).0, 1, "a line break");
         page.view.paste("pasted");
         assert_eq!(samples(&page).0, 1, "a paste");
-        key(&mut page, "a", true, 0.0);
+        key(&mut page, "a", true, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         samples(&page);
         assert!(page.view.clipboard(false).is_some());
@@ -4160,10 +4259,10 @@ mod tests {
         let channel = ChannelId::new();
         let mut page = composing(channel);
         assert_eq!(samples(&page).1, 1, "the first paint ticks");
-        page.clock.set(TICK_MS as f64 - 1.0);
+        page.clock.set(ambre_bus::PageTime(TICK_MS as f64 - 1.0));
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 0, "inside the period");
-        page.clock.set(TICK_MS as f64);
+        page.clock.set(ambre_bus::PageTime(TICK_MS as f64));
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 1, "one period later");
 
@@ -4175,7 +4274,7 @@ mod tests {
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 1, "a channel new on screen ticks at once");
         let mut thread_view = page.view.region(300.0, 400.0);
-        page.clock.set(10.0 * TICK_MS as f64);
+        page.clock.set(ambre_bus::PageTime(10.0 * TICK_MS as f64));
         frame(&mut thread_view);
         assert_eq!(samples(&page).1, 0, "the thread's region ticks nothing");
         page.pane.set(MurmurePane::ChannelList);
@@ -4186,7 +4285,7 @@ mod tests {
     /// The glyph runs painted in the strip above the field.
     fn strip_runs(page: &mut Page) -> Vec<usize> {
         page.view.update();
-        page.view.plan_repaint(0.0, false);
+        page.view.plan_repaint(ambre_bus::PageTime(0.0), false);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -4357,7 +4456,7 @@ mod tests {
         );
         assert!(press_composer(&mut page));
         type_slowly(&mut page, "ok");
-        assert!(key(&mut page, "Enter", false, 1_234.0));
+        assert!(key(&mut page, "Enter", false, ambre_bus::PageTime(1_234.0)));
         frame_with_fonts(&mut page.view);
         assert_eq!(replies(&page), [(root, "ok".to_owned(), 1_234)]);
         let of = DraftOf::Thread(channel, root);
@@ -4401,7 +4500,7 @@ mod tests {
         page.pane.set(pane);
         assert_eq!(painted(&mut page, of).as_deref(), Some("in thread"));
 
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(replies(&page).len(), 1);
         let kept = page.view.composer().draft(elsewhere);
@@ -4438,7 +4537,7 @@ mod tests {
         assert!(page.view.composer().focused(), "the thread takes the keys");
 
         type_text(&mut page, "!");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         let (sent_edits, messages) = edits(&page);
         let [(at, message, draft)] = &sent_edits[..] else {
@@ -4457,7 +4556,7 @@ mod tests {
         let (mut page, channel_view, root, _) = threaded(channel);
         press_composer(&mut page);
         frame_with_fonts(&mut page.view);
-        assert!(key(&mut page, "ArrowUp", false, 0.0));
+        assert!(key(&mut page, "ArrowUp", false, ambre_bus::PageTime(0.0)));
         let of = DraftOf::Thread(channel, root);
         assert_eq!(painted(&mut page, of).as_deref(), Some("mine"));
         assert!(page.view.composer().editing(of));
@@ -4472,10 +4571,10 @@ mod tests {
         let channel = ChannelId::new();
         let (mut page, _channel_view, root, _) = threaded(channel);
         press_composer(&mut page);
-        assert!(key(&mut page, "Escape", false, 0.0));
+        assert!(key(&mut page, "Escape", false, ambre_bus::PageTime(0.0)));
         assert!(!page.view.composer().focused());
         assert!(matches!(page.pane.get(), MurmurePane::Thread { .. }));
-        assert!(key(&mut page, "Escape", false, 0.0));
+        assert!(key(&mut page, "Escape", false, ambre_bus::PageTime(0.0)));
         let MurmurePane::Channel { channel: shown, at } = page.pane.get() else {
             panic!("the channel shows, got {:?}", page.pane.get());
         };
@@ -4483,7 +4582,7 @@ mod tests {
         assert_eq!(at.map(|at| at.message), Some(root), "at the root");
         frame_with_fonts(&mut page.view);
         assert!(
-            !key(&mut page, "Escape", false, 0.0),
+            !key(&mut page, "Escape", false, ambre_bus::PageTime(0.0)),
             "no thread left to close"
         );
     }
@@ -4495,7 +4594,7 @@ mod tests {
         let channel = ChannelId::new();
         let (mut page, _channel_view, _, _) = threaded(channel);
         reads(&page);
-        assert!(key(&mut page, "Escape", false, 0.0));
+        assert!(key(&mut page, "Escape", false, ambre_bus::PageTime(0.0)));
         frame_with_fonts(&mut page.view);
         assert_eq!(reads(&page), (0, 0), "the Escape reads nothing");
     }
@@ -4509,8 +4608,8 @@ mod tests {
         press_composer(&mut page);
         type_slowly(&mut page, "later");
         let pane = page.pane.get();
-        key(&mut page, "Escape", false, 0.0);
-        key(&mut page, "Escape", false, 0.0);
+        key(&mut page, "Escape", false, ambre_bus::PageTime(0.0));
+        key(&mut page, "Escape", false, ambre_bus::PageTime(0.0));
         drop(std::mem::replace(&mut page.view, channel_view));
         page.view = page.view.region(300.0, 400.0);
         page.pane.set(pane);
@@ -4552,12 +4651,12 @@ mod tests {
         assert!(page.view.composer().also_in_channel(of));
         assert!(page.view.composer().focused(), "the field keeps the keys");
         type_slowly(&mut page, "ok");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(copies(&page), [true]);
         assert!(!page.view.composer().also_in_channel(of), "unchecked");
         type_slowly(&mut page, "again");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(copies(&page), [false], "the next reply stays");
         assert!(!channel_view.composer().on_also(bottom), "no box there");
@@ -4572,8 +4671,12 @@ mod tests {
         let of = DraftOf::Thread(channel, root);
         let bottom = page.view.size().1 - ALSO_PX / 2.0;
         for checked in [true, false] {
-            page.view.touch_down(10.0, bottom, 0.0);
-            assert_eq!(page.view.touch_up(20.0), None, "the tap is taken");
+            page.view.touch_down(10.0, bottom, ambre_bus::PageTime(0.0));
+            assert_eq!(
+                page.view.touch_up(ambre_bus::PageTime(20.0)),
+                None,
+                "the tap is taken"
+            );
             assert_eq!(page.view.composer().also_in_channel(of), checked);
         }
     }
@@ -4602,7 +4705,7 @@ mod tests {
         frame_with_fonts(&mut page.view);
         assert!(page.view.composer().also_in_channel(of));
         assert!(copies(&page).is_empty(), "nothing sent");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(copies(&page), [true]);
         assert!(alt_enter(&mut page));
@@ -4613,7 +4716,7 @@ mod tests {
     /// Every run of glyphs the view paints, as glyph counts.
     fn glyph_runs(page: &mut Page) -> Vec<usize> {
         page.view.update();
-        page.view.plan_repaint(0.0, false);
+        page.view.plan_repaint(ambre_bus::PageTime(0.0), false);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -4797,7 +4900,7 @@ mod tests {
         let (mut page, bob, carol) = mentioning(channel);
         type_text(&mut page, "@b");
         frame_with_fonts(&mut page.view);
-        assert!(key(&mut page, "Enter", false, 0.0));
+        assert!(key(&mut page, "Enter", false, ambre_bus::PageTime(0.0)));
         frame_with_fonts(&mut page.view);
         assert!(drafts_sent(&page).is_empty(), "the pick sent nothing");
         assert_eq!(
@@ -4806,10 +4909,10 @@ mod tests {
         );
         type_text(&mut page, "and @car");
         frame_with_fonts(&mut page.view);
-        assert!(key(&mut page, "Tab", false, 0.0));
+        assert!(key(&mut page, "Tab", false, ambre_bus::PageTime(0.0)));
         frame_with_fonts(&mut page.view);
         type_text(&mut page, "hi");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
         assert_eq!(sent.len(), 1);
@@ -4832,24 +4935,24 @@ mod tests {
         let (mut page, bob, _) = mentioning(channel);
         type_text(&mut page, "@bo");
         frame_with_fonts(&mut page.view);
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
-        key(&mut page, "Home", false, 0.0);
+        key(&mut page, "Home", false, ambre_bus::PageTime(0.0));
         type_text(&mut page, "é ");
         frame_with_fonts(&mut page.view);
-        key(&mut page, "End", false, 0.0);
+        key(&mut page, "End", false, ambre_bus::PageTime(0.0));
         type_text(&mut page, "@channel");
         frame_with_fonts(&mut page.view);
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(
             page.view.composer().draft(channel).as_deref(),
             Some("é @Bob @channel ")
         );
         // Two keys back cut the space and a char of `@channel`.
-        key(&mut page, "Backspace", false, 0.0);
-        key(&mut page, "Backspace", false, 0.0);
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Backspace", false, ambre_bus::PageTime(0.0));
+        key(&mut page, "Backspace", false, ambre_bus::PageTime(0.0));
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
         assert_eq!(sent.len(), 1, "a broken query opened no list");
@@ -4882,7 +4985,7 @@ mod tests {
         chord(&mut page, "z", false);
         assert_eq!(painted(&mut page, channel).as_deref(), Some("say **done**"));
         assert_eq!(page.view.composer().styles(channel), []);
-        key(&mut page, "End", false, 0.0);
+        key(&mut page, "End", false, ambre_bus::PageTime(0.0));
         type_slowly(&mut page, " _now_");
         assert_eq!(
             painted(&mut page, channel).as_deref(),
@@ -4890,7 +4993,7 @@ mod tests {
             "the next marker closes alone, and the undone one stays text"
         );
         type_slowly(&mut page, "!");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
         assert_eq!(sent.len(), 1);
@@ -4904,7 +5007,7 @@ mod tests {
         // A marker closed in the frame of Enter becomes its mark first.
         type_text(&mut page, "**go*");
         type_text(&mut page, "*");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
         assert_eq!(sent.len(), 1);
@@ -4960,7 +5063,7 @@ mod tests {
         assert!(spans[3].italic && spans[3].range == (9..10));
         // A draft with no mark draws none.
         for _ in 0.."é b c d e".chars().count() {
-            key(&mut page, "Backspace", false, 0.0);
+            key(&mut page, "Backspace", false, ambre_bus::PageTime(0.0));
         }
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().spans(channel), []);
@@ -4976,7 +5079,7 @@ mod tests {
         type_slowly(&mut page, "`a b`");
         assert_eq!(painted(&mut page, channel).as_deref(), Some("a b"));
         assert_eq!(page.view.composer().styles(channel), [styled(Code, 0..3)]);
-        key(&mut page, "ArrowLeft", false, 0.0);
+        key(&mut page, "ArrowLeft", false, ambre_bus::PageTime(0.0));
         type_slowly(&mut page, "**x**");
         assert_eq!(painted(&mut page, channel).as_deref(), Some("a **x**b"));
         assert_eq!(
@@ -4990,7 +5093,7 @@ mod tests {
     /// a quote's rule and a list's dots.
     fn margin_marks(page: &mut Page) -> usize {
         page.view.update();
-        page.view.plan_repaint(0.0, false);
+        page.view.plan_repaint(ambre_bus::PageTime(0.0), false);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -5030,7 +5133,7 @@ mod tests {
             [styled(Quote, 0..5), styled(List, 5..9)]
         );
         assert_eq!(margin_marks(&mut page), 2, "a rule and one dot");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
         assert_eq!(sent.len(), 1);
@@ -5077,7 +5180,7 @@ mod tests {
         shift_key(&mut page, "Enter");
         type_slowly(&mut page, "plain");
         page.view.update();
-        page.view.plan_repaint(0.0, false);
+        page.view.plan_repaint(ambre_bus::PageTime(0.0), false);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -5144,7 +5247,7 @@ mod tests {
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().styles(channel), [styled(Italic, 4..7)]);
         assert!(!chord(&mut page, "q", false), "no style takes `q`");
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
         assert_eq!(sent.len(), 1);
@@ -5195,7 +5298,7 @@ mod tests {
             (Code, Cover::None),
         ];
         assert_eq!(bar.map(|b| b.controls), Some(whole.to_vec()));
-        key(&mut page, "ArrowRight", false, 0.0);
+        key(&mut page, "ArrowRight", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(
             last(&page),
@@ -5223,13 +5326,13 @@ mod tests {
         assert_eq!(last(&page).as_deref(), Some("blank"), "the focus says it");
         type_slowly(&mut page, "one two");
         assert_eq!(last(&page).as_deref(), Some("blank"), "a typed key is not");
-        key(&mut page, "ArrowLeft", false, 0.0);
+        key(&mut page, "ArrowLeft", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(last(&page).as_deref(), Some("o"));
         chord(&mut page, "ArrowLeft", false);
         frame_with_fonts(&mut page.view);
         assert_eq!(last(&page).as_deref(), Some("two"));
-        key(&mut page, "Backspace", false, 0.0);
+        key(&mut page, "Backspace", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(last(&page).as_deref(), Some("space"));
         shift_key(&mut page, "ArrowLeft");
@@ -5254,7 +5357,7 @@ mod tests {
         let draft = ["word"; 30].join(" ");
         page.view.paste(&draft);
         frame_with_fonts(&mut page.view);
-        key(&mut page, "Home", false, 0.0);
+        key(&mut page, "Home", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         let line = last(&page).expect("the line said");
         assert!(line.starts_with("word"), "a line of the draft: {line}");
@@ -5340,7 +5443,7 @@ mod tests {
         page.view.paste("hello");
         frame_with_fonts(&mut page.view);
         assert_eq!(rows.borrow().len(), 1);
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(drafts_sent(&page).len(), 1, "the message left");
         assert!(rows.borrow().is_empty(), "its draft went with it");
@@ -5399,7 +5502,7 @@ mod tests {
         edit(&page);
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().styles(channel), [styled(Bold, 0..2)]);
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(edits(&page), (Vec::new(), 0), "nothing changed");
 
@@ -5407,7 +5510,7 @@ mod tests {
         frame_with_fonts(&mut page.view);
         chord(&mut page, "a", false);
         chord(&mut page, "b", false);
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         let (sent, messages) = edits(&page);
         assert_eq!(messages, 0);
@@ -5430,15 +5533,15 @@ mod tests {
         type_text(&mut page, "@");
         frame_with_fonts(&mut page.view);
         assert_eq!(chosen(&page), Some(0));
-        assert!(key(&mut page, "ArrowDown", false, 0.0));
+        assert!(key(&mut page, "ArrowDown", false, ambre_bus::PageTime(0.0)));
         frame_with_fonts(&mut page.view);
         assert_eq!(chosen(&page), Some(1));
         assert_eq!(page.said.borrow().last().map(String::as_str), Some("@Bob"));
-        key(&mut page, "ArrowUp", false, 0.0);
-        key(&mut page, "ArrowUp", false, 0.0);
+        key(&mut page, "ArrowUp", false, ambre_bus::PageTime(0.0));
+        key(&mut page, "ArrowUp", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(chosen(&page), Some(2), "Up from the first wraps");
-        assert!(key(&mut page, "Escape", false, 0.0));
+        assert!(key(&mut page, "Escape", false, ambre_bus::PageTime(0.0)));
         frame_with_fonts(&mut page.view);
         assert_eq!(listed(&page), None);
         assert!(page.view.composer().focused(), "Escape kept the keys");
@@ -5516,7 +5619,7 @@ mod tests {
         );
         // An empty composer takes it back.
         for _ in 0.."later".len() {
-            key(&mut page, "Backspace", false, 0.0);
+            key(&mut page, "Backspace", false, ambre_bus::PageTime(0.0));
         }
         frame_with_fonts(&mut page.view);
         // A reply's return waits for the thread's region.
@@ -5543,7 +5646,7 @@ mod tests {
             Some(draft.text.as_str())
         );
         assert!(page.view.composer().focused());
-        key(&mut page, "Enter", false, 0.0);
+        key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(drafts_sent(&page), vec![draft]);
     }

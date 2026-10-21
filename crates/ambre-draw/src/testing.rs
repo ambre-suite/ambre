@@ -256,7 +256,7 @@ impl FixedClock {
 }
 
 impl Clock for FixedClock {
-    fn now_ms(&self) -> f64 {
-        self.ms
+    fn now_ms(&self) -> ambre_core::PageTime {
+        ambre_core::PageTime(self.ms)
     }
 }

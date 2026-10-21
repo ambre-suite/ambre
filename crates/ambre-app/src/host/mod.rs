@@ -285,7 +285,7 @@ impl AppView {
     }
 
     /// Decide what to repaint this frame and clear the dirty flags.
-    fn plan_repaint(&mut self, now_ms: f64, hud_tick: bool) -> RepaintPlan {
+    fn plan_repaint(&mut self, now_ms: ambre_core::PageTime, hud_tick: bool) -> RepaintPlan {
         match self {
             AppView::Trame(v) => v.plan_repaint(now_ms, hud_tick),
             AppView::Toile(v) => v.plan_repaint(now_ms, hud_tick),
@@ -406,7 +406,7 @@ impl AppView {
 
     /// A finger on the canvas. Every application takes it apart from the
     /// mouse.
-    fn touch(&mut self, phase: TouchPhase, x: f32, y: f32, now_ms: f64) -> bool {
+    fn touch(&mut self, phase: TouchPhase, x: f32, y: f32, now_ms: ambre_core::PageTime) -> bool {
         match self {
             AppView::Toile(v) => {
                 let (x, y) = (f64::from(x), f64::from(y));
@@ -687,7 +687,7 @@ mod tests {
     fn tick_fps_needs_two_samples() {
         let mut times = VecDeque::new();
         let mut fps = -1.0f32;
-        FrameHost::tick_fps(&mut times, &mut fps, 0.0);
+        FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime(0.0));
         // A single sample cannot establish a rate.
         assert_eq!(fps, 0.0);
     }
@@ -698,7 +698,11 @@ mod tests {
         let mut fps = 0.0f32;
         // 60 frames spaced 1/60 s over (just under) a second -> ~60 FPS.
         for i in 0..60 {
-            FrameHost::tick_fps(&mut times, &mut fps, i as f64 * 1000.0 / 60.0);
+            FrameHost::tick_fps(
+                &mut times,
+                &mut fps,
+                ambre_core::PageTime(i as f64 * 1000.0 / 60.0),
+            );
         }
         assert!((fps - 60.0).abs() < 1.0, "expected ~60 fps, got {fps}");
     }
@@ -806,8 +810,8 @@ mod tests {
     fn tick_fps_evicts_samples_older_than_one_second() {
         let mut times = VecDeque::new();
         let mut fps = 0.0f32;
-        FrameHost::tick_fps(&mut times, &mut fps, 0.0);
-        FrameHost::tick_fps(&mut times, &mut fps, 5000.0); // 5 s later
+        FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime(0.0));
+        FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime(5000.0)); // 5 s later
         // The 0.0 sample is > 1 s old and must be evicted, leaving one sample.
         assert_eq!(times.len(), 1);
         assert_eq!(fps, 0.0);

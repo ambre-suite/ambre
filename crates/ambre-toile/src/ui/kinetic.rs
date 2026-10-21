@@ -29,7 +29,7 @@ pub fn pan_by_wheel(
     kinetic: &mut Kinetic,
     delta: (f64, f64),
     stepped: bool,
-    now_ms: f64,
+    now_ms: ambre_core::PageTime,
 ) {
     let step = kinetic.wheel(delta.0 as f32, delta.1 as f32, stepped, now_ms);
     move_view(cam, step);
@@ -37,7 +37,11 @@ pub fn pan_by_wheel(
 
 /// Advance a flick or a glide by one frame (`KINETIC-004`). Answers whether
 /// the board moved, so the view knows to ask for what came into sight.
-pub fn coast(cam: &mut ViewportTransform, kinetic: &mut Kinetic, now_ms: f64) -> bool {
+pub fn coast(
+    cam: &mut ViewportTransform,
+    kinetic: &mut Kinetic,
+    now_ms: ambre_core::PageTime,
+) -> bool {
     let Some(step) = kinetic.tick(now_ms) else {
         return false;
     };
@@ -84,7 +88,13 @@ mod tests {
         let mut kinetic = Kinetic::default();
         let world = Point::new(10.0, 10.0);
         let before = cam.world_to_screen() * world;
-        pan_by_wheel(&mut cam, &mut kinetic, (6.0, 12.0), false, 0.0);
+        pan_by_wheel(
+            &mut cam,
+            &mut kinetic,
+            (6.0, 12.0),
+            false,
+            ambre_bus::PageTime(0.0),
+        );
         let after = cam.world_to_screen() * world;
         assert!(
             (after.x - before.x + 6.0).abs() < 1e-6,
@@ -110,17 +120,21 @@ mod tests {
                 &mut kinetic,
                 (0.0, 16.0),
                 false,
-                16.0 * f64::from(step),
+                ambre_bus::PageTime(16.0 * f64::from(step)),
             );
         }
         let glided = (cam.world_to_screen() * world).y;
-        coast(&mut cam, &mut kinetic, 64.0);
+        coast(&mut cam, &mut kinetic, ambre_bus::PageTime(64.0));
         assert_eq!(kinetic.speed(), None, "no motion while the glide lasts");
         // The frame past the pause launches the motion, and the next one moves.
-        coast(&mut cam, &mut kinetic, 64.0 + 70.0);
+        coast(&mut cam, &mut kinetic, ambre_bus::PageTime(64.0 + 70.0));
         let (_, vy) = kinetic.speed().expect("the paused glide carries on");
         assert!((vy - 1.0).abs() < 0.05, "the glide's speed, {vy}");
-        assert!(coast(&mut cam, &mut kinetic, 64.0 + 86.0));
+        assert!(coast(
+            &mut cam,
+            &mut kinetic,
+            ambre_bus::PageTime(64.0 + 86.0)
+        ));
         assert!(
             (cam.world_to_screen() * world).y < glided,
             "the content keeps going up"
@@ -134,12 +148,12 @@ mod tests {
                 &mut kinetic,
                 (0.0, 16.0),
                 true,
-                16.0 * f64::from(step),
+                ambre_bus::PageTime(16.0 * f64::from(step)),
             );
         }
         let stepped = (cam.world_to_screen() * world).y;
         assert!(
-            !coast(&mut cam, &mut kinetic, 64.0 + 70.0),
+            !coast(&mut cam, &mut kinetic, ambre_bus::PageTime(64.0 + 70.0)),
             "a notch never coasts"
         );
         assert_eq!((cam.world_to_screen() * world).y, stepped);
@@ -151,7 +165,7 @@ mod tests {
     #[test]
     fn a_step_moves_the_same_screen_distance_at_any_zoom() {
         // A notch is a step one for one: 30 px down.
-        let step = Kinetic::default().wheel(0.0, 30.0, true, 0.0);
+        let step = Kinetic::default().wheel(0.0, 30.0, true, ambre_bus::PageTime(0.0));
         for zoom in [0.25, 1.0, 4.0] {
             let mut cam = ViewportTransform::new(800.0, 600.0);
             cam.zoom = zoom;

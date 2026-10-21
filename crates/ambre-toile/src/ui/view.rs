@@ -625,7 +625,7 @@ pub struct ToileView {
     /// The latest frame timestamp (ms), captured in `plan_repaint`, used to blink
     /// the inline-edit caret (`toile-text-editing`). Paint has no clock of its own,
     /// so the per-frame hook stashes it here.
-    frame_now_ms: f64,
+    frame_now_ms: ambre_core::PageTime,
 }
 
 /// The topmost element under a canvas point, through the camera
@@ -805,7 +805,7 @@ impl ToileView {
             embed_focus: embed::EmbedFocus::default(),
             embed_sessions: embed::EmbedSessions::default(),
             child_route: None,
-            frame_now_ms: 0.0,
+            frame_now_ms: ambre_bus::PageTime(0.0),
         }
     }
 
@@ -1549,7 +1549,7 @@ impl ToileView {
     /// have stayed out past the debounce (`toile-embeds`, "Opening the
     /// child"). Driven from `plan_repaint`, the one per-frame hook carrying the
     /// frame clock.
-    fn drive_embed_lifecycle(&mut self, now_ms: f64) {
+    fn drive_embed_lifecycle(&mut self, now_ms: ambre_core::PageTime) {
         // The session set records only what the queue actually took, so the
         // next frame offers a refused command again rather than losing it
         // (`TOILE-UI-338`, `TOILE-UI-339`). `fatal` is the one case that
@@ -1587,10 +1587,10 @@ impl ToileView {
 
     /// The time on the frame clock's timeline, for an input that carries
     /// none.
-    fn clock_ms(&self) -> f64 {
+    fn clock_ms(&self) -> ambre_core::PageTime {
         #[cfg(target_arch = "wasm32")]
         if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
-            return perf.now();
+            return ambre_core::PageTime(perf.now());
         }
         self.frame_now_ms
     }
@@ -1608,7 +1608,7 @@ impl ToileView {
     /// A finger went down. It stops any motion left. On the empty board with
     /// the select tool, or with the hand, it pans (`TOILE-UI-378`);
     /// otherwise it acts as the mouse.
-    pub fn touch_down(&mut self, x: f64, y: f64, now_ms: f64) -> bool {
+    pub fn touch_down(&mut self, x: f64, y: f64, now_ms: ambre_core::PageTime) -> bool {
         self.kinetic.stop();
         let screen = Point::new(x, y);
         let world = self.cam.screen_to_world() * screen;
@@ -1635,7 +1635,7 @@ impl ToileView {
 
     /// A finger moved: a panning finger drags the board past the tap slop,
     /// any other acts as the mouse.
-    pub fn touch_move(&mut self, x: f64, y: f64, now_ms: f64) -> bool {
+    pub fn touch_move(&mut self, x: f64, y: f64, now_ms: ambre_core::PageTime) -> bool {
         match self.finger_pans {
             Some(true) => {
                 self.last_pointer = Point::new(x, y);
@@ -1652,7 +1652,7 @@ impl ToileView {
 
     /// A finger lifted. A pan released with speed keeps the board moving; a
     /// finger that never left the tap slop is a click where it went down.
-    pub fn touch_up(&mut self, x: f64, y: f64, now_ms: f64) -> bool {
+    pub fn touch_up(&mut self, x: f64, y: f64, now_ms: ambre_core::PageTime) -> bool {
         match self.finger_pans.take() {
             Some(true) => {
                 if let Release::Tap { x, y } = self.kinetic.release(now_ms) {
@@ -1708,7 +1708,7 @@ impl ToileView {
     /// Pan the board under a gesture held at an edge, once a frame, and let
     /// the gesture follow (`TOILE-UI-380`). The first tick only starts the
     /// clock.
-    fn step_edge_pan(&mut self, now_ms: f64) {
+    fn step_edge_pan(&mut self, now_ms: ambre_core::PageTime) {
         let held = self.machine.is_active() || self.arrow_drag.is_some();
         let speed = held.then(|| super::kinetic::edge_pan_speed(&self.cam, self.last_pointer));
         let Some(step) = self.edge.tick(speed, now_ms) else {
@@ -2228,14 +2228,11 @@ impl ToileView {
     /// Send this peer's sample if it changed or the heartbeat is due
     /// (`TOILE-UI-073`). Lossy: a dropped sample is corrected by the next one,
     /// and presence must never displace an edit on a full queue.
-    fn broadcast_presence(&mut self, now_ms: f64) {
+    fn broadcast_presence(&mut self, now_ms: ambre_core::PageTime) {
         if let Some(payload) = self.presence_out.due(self.presence_sample(), now_ms) {
             // A dropped sample is not re-offered: the next one carries a fresher
             // pointer, and a queue of stale samples is worse than a gap.
-            let _ = self.send_lossy(ToileCommand::Presence {
-                payload,
-                now_ms: now_ms as i64,
-            });
+            let _ = self.send_lossy(ToileCommand::Presence { payload, now_ms });
         }
     }
 
@@ -3576,7 +3573,7 @@ impl ToileView {
                 // Blink the caret on a ~1-second cycle so it visibly signals "you can
                 // type here" (`toile-text-editing`). `editor.is_some()` keeps the
                 // overlay redrawing every frame, so the toggle animates.
-                let caret_on = (self.frame_now_ms / CARET_BLINK_MS) as i64 % 2 == 0;
+                let caret_on = (self.frame_now_ms.0 / CARET_BLINK_MS) as i64 % 2 == 0;
                 // The guard above found an editor, and nothing since closed it.
                 let Some(ed) = self.editor.as_mut() else {
                     return;
@@ -3779,7 +3776,7 @@ impl ToileView {
     /// When the in-flight presentation transition vanishes between the guard
     /// that finds it and the step that advances it. Both run on this thread,
     /// with nothing in between.
-    pub fn plan_repaint(&mut self, now_ms: f64, hud_tick: bool) -> RepaintPlan {
+    pub fn plan_repaint(&mut self, now_ms: ambre_core::PageTime, hud_tick: bool) -> RepaintPlan {
         // Stash the frame clock for paint-time use (inline-edit caret blink,
         // `toile-text-editing`).
         self.frame_now_ms = now_ms;

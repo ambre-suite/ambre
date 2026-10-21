@@ -35,7 +35,7 @@ const PLACEHOLDER_ASPECT: f32 = 4.0 / 3.0;
 #[derive(Clone, Copy)]
 pub struct Pictured<'a> {
     pub shelf: &'a Pictures,
-    pub now_ms: f64,
+    pub now_ms: ambre_core::PageTime,
     /// The user asks for reduced motion: each picture shows its first frame
     /// (`MURMURE-130`).
     pub still: bool,
@@ -55,7 +55,7 @@ impl std::fmt::Debug for Pictured<'_> {
 #[derive(Debug, Default)]
 struct Played {
     files: Vec<MediaRef>,
-    next: Option<f64>,
+    next: Option<ambre_core::PageTime>,
 }
 
 /// What one paint of the list did.
@@ -97,7 +97,7 @@ pub struct Painted {
     pub pictures: Vec<MediaRef>,
     /// When the next frame of a picture on screen is due, `None` when none
     /// plays.
-    pub next_frame: Option<f64>,
+    pub next_frame: Option<ambre_core::PageTime>,
 }
 
 impl Painted {
@@ -754,7 +754,7 @@ fn draw_previews<S: DrawSurface>(
         };
         surface.draw_image(&image, at);
         played.next = match (played.next, next) {
-            (Some(a), Some(b)) => Some(a.min(b)),
+            (Some(a), Some(b)) => Some(if b < a { b } else { a }),
             (a, b) => a.or(b),
         };
     }
@@ -1294,7 +1294,7 @@ pub(crate) mod tests {
         };
         let tall = |painted: &Painted| painted.rows[0].2 - painted.rows[0].1;
         let (_, chip_only) = paint(&list, 600.0);
-        let (surface, waiting) = at(&shelf, 0.0, false);
+        let (surface, waiting) = at(&shelf, ambre_bus::PageTime(0.0), false);
         assert_eq!(waiting.pictures, vec![file.media_ref.clone()]);
         assert_eq!(images(&surface), 0, "not decoded yet");
         assert!(tall(&waiting) >= tall(&chip_only) + PREVIEW_TALL);
@@ -1314,11 +1314,11 @@ pub(crate) mod tests {
             ],
         };
         assert!(shelf.land(file.media_ref.clone(), Some(gif)));
-        let (surface, playing) = at(&shelf, 30.0, false);
+        let (surface, playing) = at(&shelf, ambre_bus::PageTime(30.0), false);
         assert_eq!(images(&surface), 1);
         assert_eq!(tall(&playing), tall(&waiting), "the row keeps its height");
-        assert_eq!(playing.next_frame, Some(100.0));
-        let (surface, still) = at(&shelf, 30.0, true);
+        assert_eq!(playing.next_frame, Some(ambre_core::PageTime(100.0)));
+        let (surface, still) = at(&shelf, ambre_bus::PageTime(30.0), true);
         assert_eq!((images(&surface), still.next_frame), (1, None));
     }
 

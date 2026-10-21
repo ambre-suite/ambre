@@ -502,19 +502,19 @@ impl TrameView {
 
     /// A finger went down on the grid. It stops any motion left
     /// (`KINETIC-006`).
-    pub fn touch_down(&mut self, x: f32, y: f32, now_ms: f64) {
+    pub fn touch_down(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
         self.scroll.press(x, y, now_ms);
     }
 
     /// A finger moved: past the tap slop the grid follows it, cell by cell.
-    pub fn touch_move(&mut self, x: f32, y: f32, now_ms: f64) {
+    pub fn touch_move(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
         let outcome = self.scroll.pan(&mut self.state, x, y, now_ms);
         self.note_scroll(outcome);
     }
 
     /// A finger lifted. A pan released with speed keeps moving; a tap is a
     /// click where it landed.
-    pub fn touch_up(&mut self, now_ms: f64) {
+    pub fn touch_up(&mut self, now_ms: ambre_core::PageTime) {
         if let Release::Tap { x, y } = self.scroll.release(now_ms) {
             let (x, y) = (f64::from(x), f64::from(y));
             for ev in [

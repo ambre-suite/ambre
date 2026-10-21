@@ -50,7 +50,7 @@ pub const EDGE_GAIN: f32 = 1.0 / 80.0;
 ///
 /// ```
 /// use ambre_draw::kinetic::Kinetic;
-/// let step = Kinetic::default().wheel(0.0, 30.0, true, 0.0);
+/// let step = Kinetic::default().wheel(0.0, 30.0, true, ambre_core::PageTime(0.0));
 /// assert_eq!(step.y(), 30.0);
 /// ```
 ///
@@ -123,7 +123,7 @@ impl EdgeSpeed {
 /// (`KINETIC-007`).
 #[derive(Clone, Debug, Default)]
 pub struct EdgeScroll {
-    last_ms: Option<f64>,
+    last_ms: Option<ambre_core::PageTime>,
 }
 
 impl EdgeScroll {
@@ -132,7 +132,7 @@ impl EdgeScroll {
     pub fn tick(
         &mut self,
         speed: Option<(EdgeSpeed, EdgeSpeed)>,
-        now_ms: f64,
+        now_ms: ambre_core::PageTime,
     ) -> Option<ScrollStep> {
         let still = (EdgeSpeed::NONE, EdgeSpeed::NONE);
         let Some((sx, sy)) = speed.filter(|&s| s != still) else {
@@ -177,7 +177,7 @@ pub struct Kinetic {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Glide {
     speed: (f32, f32),
-    last_ms: f64,
+    last_ms: ambre_core::PageTime,
 }
 
 #[derive(Clone, Debug)]
@@ -186,23 +186,23 @@ struct Pan {
     last: (f32, f32),
     panned: bool,
     /// When the pointer went down.
-    at_ms: f64,
+    at_ms: ambre_core::PageTime,
     /// The press became a long press: it pans nothing and taps nothing.
     held: bool,
     /// Recent positions and their times, for the release speed.
-    samples: Vec<(f64, f32, f32)>,
+    samples: Vec<(ambre_core::PageTime, f32, f32)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Motion {
     /// Screen pixels per millisecond, on each axis.
     speed: (f32, f32),
-    last_ms: Option<f64>,
+    last_ms: Option<ambre_core::PageTime>,
 }
 
 impl Kinetic {
     /// A pointer went down. It stops any motion left (`KINETIC-006`).
-    pub fn press(&mut self, x: f32, y: f32, now_ms: f64) {
+    pub fn press(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
         self.motion = None;
         self.glide = None;
         self.pressed = Some(Pan {
@@ -218,7 +218,7 @@ impl Kinetic {
     /// Whether the press became a long press by `now_ms`: held inside the
     /// slop past the delay. The answer is its press point, once. The press
     /// then pans nothing, and its release is no tap (`KINETIC-014`).
-    pub fn held(&mut self, now_ms: f64) -> Option<(f32, f32)> {
+    pub fn held(&mut self, now_ms: ambre_core::PageTime) -> Option<(f32, f32)> {
         let pan = self.pressed.as_mut()?;
         if pan.panned || pan.held || now_ms - pan.at_ms < LONG_PRESS_MS {
             return None;
@@ -231,7 +231,7 @@ impl Kinetic {
     /// Past it, the answer is how far the view follows, in screen pixels.
     /// The content moves with the pointer, so it is the pointer's step
     /// reversed.
-    pub fn sample(&mut self, x: f32, y: f32, now_ms: f64) -> Option<ScrollStep> {
+    pub fn sample(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) -> Option<ScrollStep> {
         let pan = self.pressed.as_mut()?;
         if pan.held {
             return None;
@@ -248,13 +248,13 @@ impl Kinetic {
         };
         pan.last = (x, y);
         pan.samples.push((now_ms, x, y));
-        pan.samples.retain(|(at, _, _)| now_ms - at <= SAMPLE_MS);
+        pan.samples.retain(|(at, _, _)| now_ms - *at <= SAMPLE_MS);
         Some(step)
     }
 
     /// The pointer lifted. A pan released with speed leaves a motion, read
     /// over the last window of samples (`KINETIC-004`).
-    pub fn release(&mut self, now_ms: f64) -> Release {
+    pub fn release(&mut self, now_ms: ambre_core::PageTime) -> Release {
         let Some(pan) = self.pressed.take() else {
             return Release::Rest;
         };
@@ -270,7 +270,7 @@ impl Kinetic {
         let mut recent = pan
             .samples
             .iter()
-            .filter(|(at, _, _)| now_ms - at <= SAMPLE_MS);
+            .filter(|(at, _, _)| now_ms - *at <= SAMPLE_MS);
         let (Some(first), Some(last)) = (recent.next(), recent.next_back()) else {
             return Release::Rest;
         };
@@ -301,7 +301,13 @@ impl Kinetic {
     /// view takes now, one for one. A notch stops any motion and never starts
     /// one; a glide feeds a speed the motion starts from once the glide
     /// pauses (`KINETIC-002`, `KINETIC-009`). `stepped` marks a line or page delta mode.
-    pub fn wheel(&mut self, dx: f32, dy: f32, stepped: bool, now_ms: f64) -> ScrollStep {
+    pub fn wheel(
+        &mut self,
+        dx: f32,
+        dy: f32,
+        stepped: bool,
+        now_ms: ambre_core::PageTime,
+    ) -> ScrollStep {
         self.motion = None;
         let step = ScrollStep { x: dx, y: dy };
         if stepped || dx.abs() >= WHEEL_NOTCH_PX || dy.abs() >= WHEEL_NOTCH_PX {
@@ -330,7 +336,7 @@ impl Kinetic {
     /// moves, each tick less than the one before; the first tick only starts
     /// the clock (`KINETIC-005`). The motion stops below the stop speed.
     /// A glide that paused past the gap launches its motion here.
-    pub fn tick(&mut self, now_ms: f64) -> Option<ScrollStep> {
+    pub fn tick(&mut self, now_ms: ambre_core::PageTime) -> Option<ScrollStep> {
         if self.motion.is_none() {
             let glide = self.glide?;
             if now_ms - glide.last_ms < WHEEL_GAP_MS {
@@ -412,12 +418,16 @@ mod tests {
     /// Pan up at 2 px/ms on y, 1 px/ms on x, and lift.
     fn flicked() -> Kinetic {
         let mut kinetic = Kinetic::default();
-        kinetic.press(100.0, 600.0, 0.0);
+        kinetic.press(100.0, 600.0, ambre_core::PageTime(0.0));
         for step in 1..=5 {
             let t = 16.0 * f64::from(step);
-            kinetic.sample(100.0 - 16.0 * step as f32, 600.0 - 32.0 * step as f32, t);
+            kinetic.sample(
+                100.0 - 16.0 * step as f32,
+                600.0 - 32.0 * step as f32,
+                ambre_core::PageTime(t),
+            );
         }
-        assert_eq!(kinetic.release(80.0), Release::Fling);
+        assert_eq!(kinetic.release(ambre_core::PageTime(80.0)), Release::Fling);
         kinetic
     }
 
@@ -426,11 +436,14 @@ mod tests {
     #[test]
     fn a_pointer_inside_the_slop_is_a_tap_and_moves_nothing() {
         let mut kinetic = Kinetic::default();
-        kinetic.press(10.0, 20.0, 0.0);
-        assert_eq!(kinetic.sample(13.0, 24.0, 10.0), None);
-        assert_eq!(kinetic.release(20.0), Release::Tap { x: 10.0, y: 20.0 });
+        kinetic.press(10.0, 20.0, ambre_core::PageTime(0.0));
+        assert_eq!(kinetic.sample(13.0, 24.0, ambre_core::PageTime(10.0)), None);
+        assert_eq!(
+            kinetic.release(ambre_core::PageTime(20.0)),
+            Release::Tap { x: 10.0, y: 20.0 }
+        );
         assert!(!kinetic.moving());
-        assert_eq!(kinetic.tick(36.0), None);
+        assert_eq!(kinetic.tick(ambre_core::PageTime(36.0)), None);
     }
 
     /// `KINETIC-014`: a press held inside the slop past the delay is a long
@@ -439,19 +452,44 @@ mod tests {
     #[test]
     fn a_press_held_inside_the_slop_is_a_long_press_and_no_tap() {
         let mut kinetic = Kinetic::default();
-        kinetic.press(10.0, 20.0, 0.0);
-        assert_eq!(kinetic.sample(13.0, 24.0, 100.0), None);
-        assert_eq!(kinetic.held(LONG_PRESS_MS - 1.0), None);
-        assert_eq!(kinetic.held(LONG_PRESS_MS), Some((10.0, 20.0)));
-        assert_eq!(kinetic.held(LONG_PRESS_MS + 100.0), None);
-        assert_eq!(kinetic.sample(60.0, 90.0, LONG_PRESS_MS + 120.0), None);
-        assert_eq!(kinetic.release(LONG_PRESS_MS + 200.0), Release::Rest);
+        kinetic.press(10.0, 20.0, ambre_core::PageTime(0.0));
+        assert_eq!(
+            kinetic.sample(13.0, 24.0, ambre_core::PageTime(100.0)),
+            None
+        );
+        assert_eq!(
+            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS - 1.0)),
+            None
+        );
+        assert_eq!(
+            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS)),
+            Some((10.0, 20.0))
+        );
+        assert_eq!(
+            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS + 100.0)),
+            None
+        );
+        assert_eq!(
+            kinetic.sample(60.0, 90.0, ambre_core::PageTime(LONG_PRESS_MS + 120.0)),
+            None
+        );
+        assert_eq!(
+            kinetic.release(ambre_core::PageTime(LONG_PRESS_MS + 200.0)),
+            Release::Rest
+        );
         assert!(!kinetic.moving());
 
-        kinetic.press(10.0, 20.0, 0.0);
-        assert!(kinetic.sample(10.0, 60.0, 16.0).is_some());
-        assert_eq!(kinetic.held(LONG_PRESS_MS), None);
-        assert_eq!(Kinetic::default().held(LONG_PRESS_MS), None);
+        kinetic.press(10.0, 20.0, ambre_core::PageTime(0.0));
+        assert!(
+            kinetic
+                .sample(10.0, 60.0, ambre_core::PageTime(16.0))
+                .is_some()
+        );
+        assert_eq!(kinetic.held(ambre_core::PageTime(LONG_PRESS_MS)), None);
+        assert_eq!(
+            Kinetic::default().held(ambre_core::PageTime(LONG_PRESS_MS)),
+            None
+        );
     }
 
     /// `KINETIC-001`: a drag moves the view as a pan past the slop does, the
@@ -459,8 +497,8 @@ mod tests {
     #[test]
     fn a_drag_moves_the_view_as_a_pan_past_the_slop_does() {
         let mut kinetic = Kinetic::default();
-        kinetic.press(0.0, 0.0, 0.0);
-        let panned = kinetic.sample(-12.0, 30.0, 16.0);
+        kinetic.press(0.0, 0.0, ambre_core::PageTime(0.0));
+        let panned = kinetic.sample(-12.0, 30.0, ambre_core::PageTime(16.0));
         let dragged = ScrollStep::dragged((0.0, 0.0), (-12.0, 30.0));
         assert_eq!(panned, Some(dragged));
         assert_eq!((dragged.x(), dragged.y()), (12.0, -30.0));
@@ -478,11 +516,14 @@ mod tests {
         );
         // The view follows the pointer while it pans.
         let mut kinetic = Kinetic::default();
-        kinetic.press(0.0, 0.0, 0.0);
+        kinetic.press(0.0, 0.0, ambre_core::PageTime(0.0));
         let step = ScrollStep { x: 0.0, y: 20.0 };
-        assert_eq!(kinetic.sample(0.0, -20.0, 16.0), Some(step));
+        assert_eq!(
+            kinetic.sample(0.0, -20.0, ambre_core::PageTime(16.0)),
+            Some(step)
+        );
         // Held still for longer than the window, then lifted: no motion.
-        assert_eq!(kinetic.release(400.0), Release::Rest);
+        assert_eq!(kinetic.release(ambre_core::PageTime(400.0)), Release::Rest);
         assert!(!kinetic.moving());
     }
 
@@ -491,9 +532,12 @@ mod tests {
     #[test]
     fn each_tick_moves_less_and_the_motion_stops() {
         let mut kinetic = flicked();
-        assert_eq!(kinetic.tick(80.0), Some(ScrollStep::ZERO));
+        assert_eq!(
+            kinetic.tick(ambre_core::PageTime(80.0)),
+            Some(ScrollStep::ZERO)
+        );
         let (mut now, mut last) = (80.0, f32::INFINITY);
-        while let Some(step) = kinetic.tick(now + 16.0) {
+        while let Some(step) = kinetic.tick(ambre_core::PageTime(now + 16.0)) {
             let dy = step.y();
             now += 16.0;
             assert!(dy > 0.0 && dy < last, "{dy} after {last}");
@@ -503,8 +547,11 @@ mod tests {
         assert!(!kinetic.moving());
         // A stalled frame takes one bounded step.
         let mut kinetic = flicked();
-        kinetic.tick(80.0);
-        let dy = kinetic.tick(5_080.0).expect("a step").y();
+        kinetic.tick(ambre_core::PageTime(80.0));
+        let dy = kinetic
+            .tick(ambre_core::PageTime(5_080.0))
+            .expect("a step")
+            .y();
         assert!(dy <= 2.0 * MAX_STEP_MS as f32 + 1e-3);
     }
 
@@ -513,13 +560,13 @@ mod tests {
     #[test]
     fn a_press_or_an_edge_stops_the_motion() {
         let mut kinetic = flicked();
-        kinetic.tick(80.0);
-        kinetic.press(0.0, 0.0, 90.0);
+        kinetic.tick(ambre_core::PageTime(80.0));
+        kinetic.press(0.0, 0.0, ambre_core::PageTime(90.0));
         assert!(!kinetic.moving());
-        assert_eq!(kinetic.tick(106.0), None);
+        assert_eq!(kinetic.tick(ambre_core::PageTime(106.0)), None);
         let mut kinetic = flicked();
         kinetic.stop();
-        assert_eq!(kinetic.tick(96.0), None);
+        assert_eq!(kinetic.tick(ambre_core::PageTime(96.0)), None);
     }
 
     /// `KINETIC-002`, `KINETIC-009`: a glide that pauses carries on; a notch never starts a
@@ -530,23 +577,38 @@ mod tests {
         for step in 0..6 {
             let t = 8.0 * f64::from(step);
             let step = ScrollStep { x: 0.0, y: 12.0 };
-            assert_eq!(kinetic.wheel(0.0, 12.0, false, t), step);
+            assert_eq!(
+                kinetic.wheel(0.0, 12.0, false, ambre_core::PageTime(t)),
+                step
+            );
         }
         // Inside the gap the glide waits; past it the motion starts.
-        assert_eq!(kinetic.tick(60.0), Some(ScrollStep::ZERO));
-        assert_eq!(kinetic.tick(110.0), Some(ScrollStep::ZERO));
-        let dy = kinetic.tick(126.0).expect("a motion").y();
+        assert_eq!(
+            kinetic.tick(ambre_core::PageTime(60.0)),
+            Some(ScrollStep::ZERO)
+        );
+        assert_eq!(
+            kinetic.tick(ambre_core::PageTime(110.0)),
+            Some(ScrollStep::ZERO)
+        );
+        let dy = kinetic
+            .tick(ambre_core::PageTime(126.0))
+            .expect("a motion")
+            .y();
         assert!(dy > 0.0, "{dy}");
         // A notch stops it, moves one for one, and leaves nothing behind.
         let notch = ScrollStep { x: 0.0, y: 100.0 };
-        assert_eq!(kinetic.wheel(0.0, 100.0, false, 130.0), notch);
+        assert_eq!(
+            kinetic.wheel(0.0, 100.0, false, ambre_core::PageTime(130.0)),
+            notch
+        );
         assert!(!kinetic.moving());
-        assert_eq!(kinetic.tick(300.0), None);
-        kinetic.wheel(0.0, 3.0, true, 400.0);
-        assert_eq!(kinetic.tick(600.0), None);
+        assert_eq!(kinetic.tick(ambre_core::PageTime(300.0)), None);
+        kinetic.wheel(0.0, 3.0, true, ambre_core::PageTime(400.0));
+        assert_eq!(kinetic.tick(ambre_core::PageTime(600.0)), None);
         // A glide that dies out slowly leaves no motion.
-        kinetic.wheel(0.0, 0.5, false, 700.0);
-        assert_eq!(kinetic.tick(800.0), None);
+        kinetic.wheel(0.0, 0.5, false, ambre_core::PageTime(700.0));
+        assert_eq!(kinetic.tick(ambre_core::PageTime(800.0)), None);
     }
 
     /// `KINETIC-010`: a cancelled pan leaves no tap and no motion, even one
@@ -554,19 +616,19 @@ mod tests {
     #[test]
     fn a_cancelled_pan_leaves_no_tap_and_no_motion() {
         let mut kinetic = Kinetic::default();
-        kinetic.press(100.0, 600.0, 0.0);
+        kinetic.press(100.0, 600.0, ambre_core::PageTime(0.0));
         for step in 1..=5 {
             let t = 16.0 * f64::from(step);
-            kinetic.sample(100.0, 600.0 - 32.0 * step as f32, t);
+            kinetic.sample(100.0, 600.0 - 32.0 * step as f32, ambre_core::PageTime(t));
         }
         kinetic.cancel();
         assert!(!kinetic.pressed() && !kinetic.moving());
-        assert_eq!(kinetic.release(90.0), Release::Rest);
-        assert_eq!(kinetic.tick(96.0), None);
+        assert_eq!(kinetic.release(ambre_core::PageTime(90.0)), Release::Rest);
+        assert_eq!(kinetic.tick(ambre_core::PageTime(96.0)), None);
         // A tap cancelled before it lifts is no tap either.
-        kinetic.press(10.0, 10.0, 200.0);
+        kinetic.press(10.0, 10.0, ambre_core::PageTime(200.0));
         kinetic.cancel();
-        assert_eq!(kinetic.release(210.0), Release::Rest);
+        assert_eq!(kinetic.release(ambre_core::PageTime(210.0)), Release::Rest);
     }
 
     /// `KINETIC-007`: the edge speed is zero away from the edges, grows with

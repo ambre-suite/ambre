@@ -11,13 +11,13 @@ use crate::ui::ProseUiState;
 
 impl ProseUiState {
     /// A finger went down. It stops any motion left (`PROSE-UI-218`).
-    pub fn touch_start(&mut self, x: f32, y: f32, now_ms: f64) {
+    pub fn touch_start(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
         self.kinetic.press(x, y, now_ms);
     }
 
     /// A finger moved: past the tap slop the column follows it. Answers
     /// whether the view moved.
-    pub fn touch_move(&mut self, x: f32, y: f32, now_ms: f64) -> bool {
+    pub fn touch_move(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) -> bool {
         let Some(step) = self.kinetic.sample(x, y, now_ms) else {
             return false;
         };
@@ -28,7 +28,7 @@ impl ProseUiState {
     /// A finger lifted. A pan released with speed leaves a flick
     /// (`PROSE-UI-217`). A finger that never left the slop is a tap: its
     /// point comes back for the host to press there.
-    pub fn touch_end(&mut self, now_ms: f64) -> Option<(f32, f32)> {
+    pub fn touch_end(&mut self, now_ms: ambre_core::PageTime) -> Option<(f32, f32)> {
         match self.kinetic.release(now_ms) {
             Release::Tap { x, y } => Some((x, y)),
             Release::Fling | Release::Rest => None,
@@ -43,7 +43,7 @@ impl ProseUiState {
     /// A wheel event, in screen pixels: the column takes its step now. A
     /// trackpad glide that pauses keeps its momentum; a notch never does
     /// (`KINETIC-002`). `stepped` marks a line or page delta mode.
-    pub fn wheel(&mut self, dy: f32, stepped: bool, now_ms: f64) {
+    pub fn wheel(&mut self, dy: f32, stepped: bool, now_ms: ambre_core::PageTime) {
         let step = self.kinetic.wheel(0.0, dy, stepped, now_ms);
         self.scroll_by(step);
     }
@@ -56,7 +56,7 @@ impl ProseUiState {
     /// One tick of a flick, once a frame (`PROSE-UI-217`). The speed falls
     /// each frame, and the motion stops once slow or at an end of the
     /// column. Nothing is sent. Answers whether the view moved.
-    pub fn tick_fling(&mut self, now_ms: f64) -> bool {
+    pub fn tick_fling(&mut self, now_ms: ambre_core::PageTime) -> bool {
         let Some(step) = self.kinetic.tick(now_ms) else {
             return false;
         };

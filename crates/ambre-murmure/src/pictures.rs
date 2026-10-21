@@ -165,19 +165,23 @@ impl Pictures {
 /// The frame of `picture` its clock reaches at `now_ms`, and when the next
 /// one is due. A still picture, or a paint under reduced motion, shows the
 /// first frame, and none is due (`MURMURE-130`).
-pub fn frame_at(picture: &Picture, now_ms: f64, still: bool) -> (usize, Option<f64>) {
+pub fn frame_at(
+    picture: &Picture,
+    now_ms: ambre_core::PageTime,
+    still: bool,
+) -> (usize, Option<ambre_core::PageTime>) {
     let total: u64 = picture.frames.iter().map(|f| f.delay_ms.0).sum();
     if still || picture.frames.len() < 2 || total == 0 {
         return (0, None);
     }
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let at = now_ms.max(0.0) as u64 % total;
+    let at = now_ms.0.max(0.0) as u64 % total;
     let mut until = 0;
     for (i, frame) in picture.frames.iter().enumerate() {
         until += frame.delay_ms.0;
         if at < until {
             #[allow(clippy::cast_precision_loss)]
-            return (i, Some(now_ms + (until - at) as f64));
+            return (i, Some(now_ms.after((until - at) as f64)));
         }
     }
     (0, None)
@@ -218,10 +222,23 @@ mod tests {
     #[test]
     fn the_clock_picks_the_frame_and_names_the_next() {
         let gif = picture(&[100, 50, 50], 4);
-        assert_eq!(frame_at(&gif, 0.0, false), (0, Some(100.0)));
-        assert_eq!(frame_at(&gif, 120.0, false), (1, Some(150.0)));
-        assert_eq!(frame_at(&gif, 199.0, false), (2, Some(200.0)));
-        assert_eq!(frame_at(&gif, 230.0, false), (0, Some(300.0)), "it loops");
+        assert_eq!(
+            frame_at(&gif, ambre_bus::PageTime(0.0), false),
+            (0, Some(ambre_bus::PageTime(100.0)))
+        );
+        assert_eq!(
+            frame_at(&gif, ambre_bus::PageTime(120.0), false),
+            (1, Some(ambre_bus::PageTime(150.0)))
+        );
+        assert_eq!(
+            frame_at(&gif, ambre_bus::PageTime(199.0), false),
+            (2, Some(ambre_bus::PageTime(200.0)))
+        );
+        assert_eq!(
+            frame_at(&gif, ambre_bus::PageTime(230.0), false),
+            (0, Some(ambre_bus::PageTime(300.0))),
+            "it loops"
+        );
     }
 
     /// `MURMURE-130`: under reduced motion an animation shows its first
@@ -229,8 +246,11 @@ mod tests {
     #[test]
     fn reduced_motion_holds_the_first_frame() {
         let gif = picture(&[100, 50], 4);
-        assert_eq!(frame_at(&gif, 120.0, true), (0, None));
-        assert_eq!(frame_at(&picture(&[0], 4), 120.0, false), (0, None));
+        assert_eq!(frame_at(&gif, ambre_bus::PageTime(120.0), true), (0, None));
+        assert_eq!(
+            frame_at(&picture(&[0], 4), ambre_bus::PageTime(120.0), false),
+            (0, None)
+        );
     }
 
     /// Each frame has its own key, and each file its own.

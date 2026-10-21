@@ -21,17 +21,19 @@ use ambre_prose::probe::{Measure, percentiles};
 const SUMMARY_EVERY_MS: f64 = 5_000.0;
 
 /// The page's clock, in milliseconds since the page opened.
-pub(crate) fn now_ms() -> f64 {
-    web_sys::window()
-        .and_then(|w| w.performance())
-        .map_or(0.0, |p| p.now())
+pub(crate) fn now_ms() -> ambre_core::PageTime {
+    ambre_core::PageTime(
+        web_sys::window()
+            .and_then(|w| w.performance())
+            .map_or(0.0, |p| p.now()),
+    )
 }
 
 /// The page's clock as a view takes it: the grid reads no clock of its own.
 pub(crate) struct PageClock;
 
 impl ambre_draw::Clock for PageClock {
-    fn now_ms(&self) -> f64 {
+    fn now_ms(&self) -> ambre_core::PageTime {
         now_ms()
     }
 }
@@ -42,7 +44,7 @@ pub(crate) struct Timeline {
     samples: Option<BTreeMap<&'static str, Vec<f64>>>,
     /// The samples per count, kept only under `?probes`.
     counts: Option<BTreeMap<&'static str, Vec<f64>>>,
-    last_summary: f64,
+    last_summary: ambre_core::PageTime,
     /// A sample landed since the last summary.
     fresh: bool,
 }
@@ -60,7 +62,7 @@ impl Timeline {
         Self {
             samples: wanted.then(BTreeMap::new),
             counts: wanted.then(BTreeMap::new),
-            last_summary: 0.0,
+            last_summary: ambre_core::PageTime(0.0),
             fresh: false,
         }
     }
@@ -92,7 +94,7 @@ impl Timeline {
     }
 
     /// Print the summary when one is due and something new was measured.
-    pub(crate) fn summarize(&mut self, now: f64) {
+    pub(crate) fn summarize(&mut self, now: ambre_core::PageTime) {
         let Some(samples) = self.samples.as_ref() else {
             return;
         };
@@ -156,8 +158,8 @@ fn stamp(measure: &Measure) {
     let set = |key: &str, value: f64| {
         let _ = js_sys::Reflect::set(&options, &key.into(), &value.into());
     };
-    set("start", measure.start);
-    set("end", measure.end);
+    set("start", measure.start.0);
+    set("end", measure.end.0);
     let Ok(function) = js_sys::Reflect::get(&performance, &"measure".into()) else {
         return;
     };

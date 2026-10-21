@@ -44,8 +44,8 @@ pub const SHAPE: &str = "ambre:shape-draft";
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Measure {
     pub name: &'static str,
-    pub start: f64,
-    pub end: f64,
+    pub start: ambre_core::PageTime,
+    pub end: ambre_core::PageTime,
 }
 
 impl Measure {
@@ -58,7 +58,7 @@ impl Measure {
 /// An input handled and not yet drawn.
 #[derive(Clone, Copy, Debug)]
 struct Undrawn {
-    start: f64,
+    start: ambre_core::PageTime,
     /// Its effect waits on a layout: a split, a paste, anything the draft
     /// cannot hold. It is drawn by the first frame after the layout.
     needs_layout: bool,
@@ -69,7 +69,7 @@ struct Undrawn {
 pub struct KeyProbe {
     /// Draft entries awaiting their confirmation, with their input time and
     /// the frame count at that input.
-    unconfirmed: Vec<(u64, f64, u64)>,
+    unconfirmed: Vec<(u64, ambre_core::PageTime, u64)>,
     /// The animation frames begun so far.
     frame: u64,
     /// The frame counts of the confirmations since the last take.
@@ -97,8 +97,8 @@ impl KeyProbe {
     /// not hold is drawn only once its layout arrives.
     pub fn handled(
         &mut self,
-        start: f64,
-        now: f64,
+        start: ambre_core::PageTime,
+        now: ambre_core::PageTime,
         draft: &DraftBuffer,
         sent: bool,
     ) -> Vec<Measure> {
@@ -130,7 +130,12 @@ impl KeyProbe {
 
     /// An event from the Logic thread was applied at `now`. An entry that
     /// is confirmed, or already gone from the draft, ends its measure.
-    pub fn answered(&mut self, now: f64, draft: &DraftBuffer, laid: bool) -> Vec<Measure> {
+    pub fn answered(
+        &mut self,
+        now: ambre_core::PageTime,
+        draft: &DraftBuffer,
+        laid: bool,
+    ) -> Vec<Measure> {
         let pending: Vec<u64> = draft
             .entries()
             .filter(|&(_, confirmed)| !confirmed)
@@ -161,7 +166,7 @@ impl KeyProbe {
 
     /// A frame finished painting at `now`: every input it shows ends its
     /// caret measure.
-    pub fn painted(&mut self, now: f64) -> Vec<Measure> {
+    pub fn painted(&mut self, now: ambre_core::PageTime) -> Vec<Measure> {
         let mut measures = Vec::new();
         self.undrawn.retain(|input| {
             if input.needs_layout {
@@ -212,21 +217,28 @@ mod tests {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
         draft.push_str(7, "a", &block(), 0);
-        let echo = probe.handled(10.0, 10.5, &draft, true);
+        let echo = probe.handled(
+            ambre_core::PageTime(10.0),
+            ambre_core::PageTime(10.5),
+            &draft,
+            true,
+        );
         assert_eq!(echo.len(), 1);
         assert_eq!(echo[0].name, ECHO);
         assert!((echo[0].duration() - 0.5).abs() < 1e-9);
 
-        let caret = probe.painted(14.0);
+        let caret = probe.painted(ambre_core::PageTime(14.0));
         assert_eq!(caret.len(), 1, "the draft shows the key on the next frame");
         assert_eq!(caret[0].name, CARET);
 
         assert!(
-            probe.answered(15.0, &draft, false).is_empty(),
+            probe
+                .answered(ambre_core::PageTime(15.0), &draft, false)
+                .is_empty(),
             "not yet confirmed"
         );
         draft.confirm(7);
-        let confirm = probe.answered(20.0, &draft, false);
+        let confirm = probe.answered(ambre_core::PageTime(20.0), &draft, false);
         assert_eq!(confirm.len(), 1);
         assert_eq!(confirm[0].name, CONFIRM);
         assert!((confirm[0].duration() - 10.0).abs() < 1e-9);
@@ -239,15 +251,22 @@ mod tests {
         let mut probe = KeyProbe::default();
         let draft = DraftBuffer::default();
         assert!(
-            probe.handled(0.0, 1.0, &draft, true).is_empty(),
+            probe
+                .handled(
+                    ambre_core::PageTime(0.0),
+                    ambre_core::PageTime(1.0),
+                    &draft,
+                    true
+                )
+                .is_empty(),
             "no echo without a draft"
         );
         assert!(
-            probe.painted(5.0).is_empty(),
+            probe.painted(ambre_core::PageTime(5.0)).is_empty(),
             "the frame before the layout shows nothing"
         );
-        probe.answered(30.0, &draft, true);
-        let caret = probe.painted(33.0);
+        probe.answered(ambre_core::PageTime(30.0), &draft, true);
+        let caret = probe.painted(ambre_core::PageTime(33.0));
         assert_eq!(caret.len(), 1);
         assert!((caret[0].duration() - 33.0).abs() < 1e-9);
     }
@@ -259,19 +278,41 @@ mod tests {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
         draft.push_str(1, "a", &block(), 0);
-        probe.handled(0.0, 0.1, &draft, true);
+        probe.handled(
+            ambre_core::PageTime(0.0),
+            ambre_core::PageTime(0.1),
+            &draft,
+            true,
+        );
         draft.confirm(1);
-        assert_eq!(probe.answered(0.5, &draft, false).len(), 1);
-        draft.push_str(2, "b", &block(), 1);
-        probe.handled(1.0, 1.1, &draft, true);
         assert_eq!(
-            probe.answered(1.5, &draft, false).len(),
+            probe
+                .answered(ambre_core::PageTime(0.5), &draft, false)
+                .len(),
+            1
+        );
+        draft.push_str(2, "b", &block(), 1);
+        probe.handled(
+            ambre_core::PageTime(1.0),
+            ambre_core::PageTime(1.1),
+            &draft,
+            true,
+        );
+        assert_eq!(
+            probe
+                .answered(ambre_core::PageTime(1.5), &draft, false)
+                .len(),
             0,
             "a confirmed entry is not new"
         );
         draft.confirm(2);
         draft.laid();
-        assert_eq!(probe.answered(9.0, &draft, true).len(), 1);
+        assert_eq!(
+            probe
+                .answered(ambre_core::PageTime(9.0), &draft, true)
+                .len(),
+            1
+        );
     }
 
     /// A burst laid in one pass ends every measure, even when the probe
@@ -281,13 +322,23 @@ mod tests {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
         draft.push_str(1, "a", &block(), 0);
-        probe.handled(0.0, 0.1, &draft, true);
+        probe.handled(
+            ambre_core::PageTime(0.0),
+            ambre_core::PageTime(0.1),
+            &draft,
+            true,
+        );
         draft.push_str(2, "b", &block(), 1);
-        probe.handled(1.0, 1.1, &draft, true);
+        probe.handled(
+            ambre_core::PageTime(1.0),
+            ambre_core::PageTime(1.1),
+            &draft,
+            true,
+        );
         draft.confirm(1);
         draft.confirm(2);
         draft.laid();
-        let confirm = probe.answered(9.0, &draft, true);
+        let confirm = probe.answered(ambre_core::PageTime(9.0), &draft, true);
         assert_eq!(confirm.len(), 2);
     }
 
@@ -296,8 +347,17 @@ mod tests {
     fn a_caret_move_is_drawn_by_the_next_frame() {
         let mut probe = KeyProbe::default();
         let draft = DraftBuffer::default();
-        assert!(probe.handled(0.0, 0.2, &draft, false).is_empty());
-        assert_eq!(probe.painted(4.0).len(), 1);
+        assert!(
+            probe
+                .handled(
+                    ambre_core::PageTime(0.0),
+                    ambre_core::PageTime(0.2),
+                    &draft,
+                    false
+                )
+                .is_empty()
+        );
+        assert_eq!(probe.painted(ambre_core::PageTime(4.0)).len(), 1);
     }
 
     /// The count is the frames begun between the key and its answer: the
@@ -308,16 +368,21 @@ mod tests {
         let mut draft = DraftBuffer::default();
         probe.frame();
         draft.push_str(1, "a", &block(), 0);
-        probe.handled(0.0, 0.1, &draft, true);
+        probe.handled(
+            ambre_core::PageTime(0.0),
+            ambre_core::PageTime(0.1),
+            &draft,
+            true,
+        );
         probe.frame();
-        probe.answered(16.0, &draft, false);
+        probe.answered(ambre_core::PageTime(16.0), &draft, false);
         assert!(
             probe.take_counts().is_empty(),
             "the echo frame has no answer"
         );
         probe.frame();
         draft.confirm(1);
-        probe.answered(33.0, &draft, false);
+        probe.answered(ambre_core::PageTime(33.0), &draft, false);
         assert_eq!(probe.take_counts(), [2]);
         assert!(probe.take_counts().is_empty(), "a count is taken once");
     }

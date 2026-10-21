@@ -220,7 +220,7 @@ pub struct FrameHost {
     /// canvas.
     cells: super::cell::Cells,
 
-    render_times: VecDeque<f64>,
+    render_times: VecDeque<ambre_core::PageTime>,
     render_fps: f32,
     last_frame_ms: f32,
     last_drain_ms: f32,
@@ -228,7 +228,7 @@ pub struct FrameHost {
     last_gpu_ms: f32,
     /// rAF timestamp of the last HUD rebuild. The overlay refreshes at most
     /// every 500 ms so idle frames never trigger a full vertex rebuild.
-    last_hud_update_ms: f64,
+    last_hud_update_ms: ambre_core::PageTime,
     /// Set once the fatal terminal screen has been painted, so the static
     /// message is encoded a single time rather than every subsequent frame.
     fatal_painted: bool,
@@ -267,7 +267,7 @@ impl FrameHost {
             last_drain_ms: 0.0,
             last_draw_ms: 0.0,
             last_gpu_ms: 0.0,
-            last_hud_update_ms: 0.0,
+            last_hud_update_ms: ambre_bus::PageTime(0.0),
             fatal_painted: false,
         }
     }
@@ -322,7 +322,7 @@ impl FrameHost {
     /// the route on its next send. Returns whether any child needs the board
     /// recomposited this frame (a fresh child, a resize, or a self-driven content
     /// change). A no-op when the launcher installed no child factory.
-    fn sync_children(&mut self, now_ms: f64) -> bool {
+    fn sync_children(&mut self, now_ms: ambre_core::PageTime) -> bool {
         let Some(make_child) = self.make_child.clone() else {
             return false;
         };
@@ -391,7 +391,13 @@ impl FrameHost {
 
     /// A finger on the canvas, in canvas pixels. Only Prose takes a touch
     /// pointer apart (`PROSE-UI-217`); answers whether it did.
-    pub fn touch(&mut self, phase: TouchPhase, x: f32, y: f32, now_ms: f64) -> bool {
+    pub fn touch(
+        &mut self,
+        phase: TouchPhase,
+        x: f32,
+        y: f32,
+        now_ms: ambre_core::PageTime,
+    ) -> bool {
         self.view.touch(phase, x, y, now_ms)
     }
 
@@ -445,7 +451,11 @@ impl FrameHost {
         self.view.resize(width, height);
     }
 
-    pub(crate) fn tick_fps(times: &mut VecDeque<f64>, fps: &mut f32, now: f64) {
+    pub(crate) fn tick_fps(
+        times: &mut VecDeque<ambre_core::PageTime>,
+        fps: &mut f32,
+        now: ambre_core::PageTime,
+    ) {
         times.push_back(now);
         while times.front().is_some_and(|&t| now - t > 1000.0) {
             times.pop_front();
@@ -459,7 +469,7 @@ impl FrameHost {
     }
 
     /// Render one frame. Wired into [`start_raf_loop`] by [`run_with`].
-    pub fn render(&mut self, raf_timestamp: f64) {
+    pub fn render(&mut self, raf_timestamp: ambre_core::PageTime) {
         // Fatal latch first: once set, the Logic thread feeding the view may be
         // aborted, so we must not keep draining it. Paint the terminal screen a
         // single time and then idle (the rAF loop keeps ticking harmlessly).

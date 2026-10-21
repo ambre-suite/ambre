@@ -152,7 +152,7 @@ impl Cells {
     }
 
     /// Render every bound cell, each under its own plan (`CANVAS-070`).
-    pub(super) fn render(&mut self, now_ms: f64) {
+    pub(super) fn render(&mut self, now_ms: ambre_core::PageTime) {
         for cell in self.bound.values_mut() {
             cell.render(now_ms);
         }
@@ -241,7 +241,12 @@ impl Bound {
                     let Some(view) = view.upgrade() else { return };
                     // A finger pans the cell's view rather than pointing.
                     if let Some((phase, x, y)) = touch_of(&event) {
-                        if view.borrow_mut().touch(phase, x, y, event.time_stamp()) {
+                        if view.borrow_mut().touch(
+                            phase,
+                            x,
+                            y,
+                            ambre_bus::PageTime(event.time_stamp()),
+                        ) {
                             event.prevent_default();
                         }
                         claim.note(&view.borrow());
@@ -336,7 +341,7 @@ impl Bound {
     /// Plan, paint and present this cell. Nothing runs before its GPU is up,
     /// so a plan is never spent on a canvas that cannot show it. Answers the
     /// plan it presented.
-    fn render(&mut self, now_ms: f64) -> Option<RepaintPlan> {
+    fn render(&mut self, now_ms: ambre_core::PageTime) -> Option<RepaintPlan> {
         let mut view = self.view.borrow_mut();
         view.update();
         let mut slot = self.gpu.borrow_mut();
@@ -417,7 +422,12 @@ fn measure(
 /// Plan the frame of a cell's `view` at `size`, the size its GPU is fitted
 /// to. A `relayout` lays the view out again first. The plan answers in the
 /// physical pixels of the canvas.
-fn plan_frame(view: &mut AppView, size: SurfaceSize, relayout: bool, now_ms: f64) -> RepaintPlan {
+fn plan_frame(
+    view: &mut AppView,
+    size: SurfaceSize,
+    relayout: bool,
+    now_ms: ambre_core::PageTime,
+) -> RepaintPlan {
     if relayout {
         let (width, height) = size.logical();
         view.resize(width, height);
@@ -740,7 +750,7 @@ mod tests {
         let mut cache = ambre_canvas::TextCache::new(1.0);
         let mut surface = ambre_draw::testing::RecordingSurface::new();
         view.update();
-        view.plan_repaint(0.0, false);
+        view.plan_repaint(ambre_bus::PageTime(0.0), false);
         view.paint_content(&mut surface, &mut font_cx, &mut cache, None);
     }
 
@@ -928,9 +938,12 @@ mod tests {
         let mut cells = Cells::default();
         cells.sync(&page);
         let bound = cells.bound.get_mut(THREAD_CANVAS).unwrap();
-        assert!(bound.render(0.0).is_none(), "no GPU yet");
+        assert!(
+            bound.render(ambre_bus::PageTime(0.0)).is_none(),
+            "no GPU yet"
+        );
 
-        let plan = |bound: &Bound, now_ms: f64| {
+        let plan = |bound: &Bound, now_ms: ambre_core::PageTime| {
             plan_frame(
                 &mut bound.view.borrow_mut(),
                 bound.size.get(),
@@ -939,19 +952,31 @@ mod tests {
             )
             .content
         };
-        assert!(matches!(plan(bound, 0.0), ContentRepaint::Full));
-        assert!(matches!(plan(bound, 16.0), ContentRepaint::Reuse));
+        assert!(matches!(
+            plan(bound, ambre_bus::PageTime(0.0)),
+            ContentRepaint::Full
+        ));
+        assert!(matches!(
+            plan(bound, ambre_bus::PageTime(16.0)),
+            ContentRepaint::Reuse
+        ));
         assert!(
-            matches!(page.plan_repaint(16.0, false).content, ContentRepaint::Full),
+            matches!(
+                page.plan_repaint(ambre_bus::PageTime(16.0), false).content,
+                ContentRepaint::Full
+            ),
             "the page keeps its own plan"
         );
 
         resize(&cell.0, 140, 80);
         sleep(50).await;
         let bound = &cells.bound[THREAD_CANVAS];
-        assert!(matches!(plan(bound, 32.0), ContentRepaint::Full));
         assert!(matches!(
-            page.plan_repaint(32.0, false).content,
+            plan(bound, ambre_bus::PageTime(32.0)),
+            ContentRepaint::Full
+        ));
+        assert!(matches!(
+            page.plan_repaint(ambre_bus::PageTime(32.0), false).content,
             ContentRepaint::Reuse
         ));
         assert_eq!(bound.size.get().logical(), (140, 80));

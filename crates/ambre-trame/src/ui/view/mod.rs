@@ -370,12 +370,12 @@ pub struct TrameView {
     /// pipe sits there while a cell is edited (`CHROME-007`).
     caret_drawn: Option<ambre_draw::Rect>,
     /// The clock's time of the last blink toggle (or blink reset).
-    last_blink_ms: f64,
+    last_blink_ms: ambre_core::PageTime,
     /// The clock's time of the input awaiting its caret paint, set by an edit
     /// interaction and consumed once the caret is next drawn. This is the
     /// keydown->caret latency probe, against the keystroke-to-draft budget of
     /// `ambre-spec-budgets.md`. `None` when idle.
-    pending_input_mark: Option<f64>,
+    pending_input_mark: Option<ambre_core::PageTime>,
 
     /// The one clock the view reads: the blink, the scroll, the latency probe
     /// and the renderer's sub-phase timings. The page's on screen, a test's

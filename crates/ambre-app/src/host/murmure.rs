@@ -28,6 +28,8 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
         name_of: Rc::new(move |user| relay.member_name(user)),
         time_of: Rc::new(move |ts| clock.format(ts)),
         now_ms: Rc::new(super::probe::now_ms),
+        // `Date.now()` is a whole, non-negative count of milliseconds.
+        wall_clock: Rc::new(|| ambre_bus::Timestamp(js_sys::Date::now() as u64)),
         still: Rc::new({
             // The query is asked once; its answer follows the user's setting.
             let query = web_sys::window()

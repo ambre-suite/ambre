@@ -21,8 +21,8 @@ impl TestClock {
 }
 
 impl Clock for TestClock {
-    fn now_ms(&self) -> f64 {
-        self.0.get()
+    fn now_ms(&self) -> ambre_core::PageTime {
+        ambre_core::PageTime(self.0.get())
     }
 }
 
