@@ -97,8 +97,7 @@ pub struct Trim {
     pub batch_keys: Vec<ambre_core::ObjectKey>,
 }
 
-/// Inserts snapshot metadata and returns the assigned `SnapshotId`. The parent
-/// proof column stays empty: no client builds one (`SRV-228`).
+/// Inserts snapshot metadata and returns the assigned `SnapshotId`.
 pub async fn create_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
