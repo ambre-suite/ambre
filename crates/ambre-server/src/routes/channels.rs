@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
-use crate::extract::{Json, OpaquePathId, PathId};
+use crate::extract::{Json, OpaquePathId};
 use crate::routes::share::{Expected, checked_entry};
 use crate::state::AppState;
 use ambre_protocol::MembershipAct;
@@ -983,6 +983,7 @@ fn joined_role(space_role: Role) -> Option<Role> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::extract::PathId;
     use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, SpaceId, UserId};
 
     /// The signing key every test user registers, so an entry one signs
