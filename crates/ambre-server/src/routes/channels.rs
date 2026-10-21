@@ -4,7 +4,7 @@
 // member of that space joins a public channel alone.
 
 use ambre_core::Role;
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
-use crate::extract::Json;
+use crate::extract::{Json, OpaquePathId, PathId};
 use crate::routes::share::{Expected, checked_entry};
 use crate::state::AppState;
 use ambre_protocol::MembershipAct;
@@ -34,11 +34,8 @@ pub struct ChannelDocumentJson {
 pub async fn list_channel_documents(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(channel_id): Path<String>,
+    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
 ) -> Result<impl IntoResponse, AppError> {
-    let channel_id = ambre_core::Uuid::parse_str(&channel_id)
-        .map(ambre_core::ChannelId::from_uuid)
-        .map_err(|_| AppError::Forbidden)?;
     let documents = db::list_channel_documents(&state.db, &channel_id).await?;
     let meta = documents
         .iter()
@@ -162,11 +159,8 @@ pub async fn list_member_channels(
 pub async fn list_space_channels(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(space_id): Path<String>,
+    OpaquePathId(space_id): OpaquePathId<ambre_core::SpaceId>,
 ) -> Result<axum::Json<SpaceChannelsJson>, AppError> {
-    let space_id = ambre_core::Uuid::parse_str(&space_id)
-        .map(ambre_core::SpaceId::from_uuid)
-        .map_err(|_| AppError::Forbidden)?;
     db::get_document_member(&state.db, &space_id.document_id(), &auth.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -275,14 +269,6 @@ pub struct ClosedSegmentJson {
     pub created: bool,
 }
 
-/// Parse an id of the path or the body. A malformed id answers the 403 of an
-/// id the caller may not use, so it tells nothing apart.
-fn parse<T: From<ambre_core::Uuid>>(s: &str) -> Result<T, AppError> {
-    ambre_core::Uuid::parse_str(s)
-        .map(T::from)
-        .map_err(|_| AppError::Forbidden)
-}
-
 /// A Murmure document outside every channel but `channel`, or a 403.
 async fn free_murmure_document(
     state: &AppState,
@@ -357,10 +343,9 @@ pub async fn create_channel(
 pub async fn close_segment(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(channel_id): Path<String>,
+    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
     Json(req): Json<CloseSegmentRequest>,
 ) -> Result<axum::Json<ClosedSegmentJson>, AppError> {
-    let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
     let meta = db::get_channel(&state.db, &channel_id)
         .await?
         .and_then(|channel| channel.meta_id)
@@ -447,11 +432,9 @@ pub struct FinalizeSegmentRequest {
 async fn finalize_target(
     state: &AppState,
     auth: &auth::AuthSession,
-    channel_id: &str,
-    segment: &str,
+    channel_id: ambre_core::ChannelId,
+    segment: ambre_core::SegmentId,
 ) -> Result<(ambre_core::ChannelId, ambre_core::SegmentId), AppError> {
-    let channel_id: ambre_core::ChannelId = parse(channel_id)?;
-    let segment: ambre_core::SegmentId = parse(segment)?;
     let meta = db::get_channel(&state.db, &channel_id)
         .await?
         .and_then(|channel| channel.meta_id)
@@ -472,9 +455,12 @@ async fn finalize_target(
 pub async fn take_finalize_lease(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((channel_id, segment)): Path<(String, String)>,
+    OpaquePathId((channel_id, segment)): OpaquePathId<(
+        ambre_core::ChannelId,
+        ambre_core::SegmentId,
+    )>,
 ) -> Result<axum::Json<FinalizeLeaseJson>, AppError> {
-    let (channel_id, segment) = finalize_target(&state, &auth, &channel_id, &segment).await?;
+    let (channel_id, segment) = finalize_target(&state, &auth, channel_id, segment).await?;
     let terms = db::LeaseTerms {
         grace: FINALIZE_GRACE,
         lease: FINALIZE_LEASE,
@@ -513,10 +499,13 @@ pub async fn take_finalize_lease(
 pub async fn finalize_segment(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((channel_id, segment)): Path<(String, String)>,
+    OpaquePathId((channel_id, segment)): OpaquePathId<(
+        ambre_core::ChannelId,
+        ambre_core::SegmentId,
+    )>,
     Json(req): Json<FinalizeSegmentRequest>,
 ) -> Result<StatusCode, AppError> {
-    let (channel_id, segment) = finalize_target(&state, &auth, &channel_id, &segment).await?;
+    let (channel_id, segment) = finalize_target(&state, &auth, channel_id, segment).await?;
     db::commit_finalization(
         &state.db,
         &channel_id,
@@ -578,9 +567,12 @@ pub struct FoldSegmentRequest {
 pub async fn take_fold_lease(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((channel_id, segment)): Path<(String, String)>,
+    OpaquePathId((channel_id, segment)): OpaquePathId<(
+        ambre_core::ChannelId,
+        ambre_core::SegmentId,
+    )>,
 ) -> Result<axum::Json<FoldLeaseJson>, AppError> {
-    let (channel_id, segment) = finalize_target(&state, &auth, &channel_id, &segment).await?;
+    let (channel_id, segment) = finalize_target(&state, &auth, channel_id, segment).await?;
     let terms = db::FoldTerms {
         delay: FOLD_DELAY,
         lease: FINALIZE_LEASE,
@@ -623,10 +615,13 @@ pub async fn take_fold_lease(
 pub async fn fold_segment(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((channel_id, segment)): Path<(String, String)>,
+    OpaquePathId((channel_id, segment)): OpaquePathId<(
+        ambre_core::ChannelId,
+        ambre_core::SegmentId,
+    )>,
     Json(req): Json<FoldSegmentRequest>,
 ) -> Result<StatusCode, AppError> {
-    let (channel_id, segment) = finalize_target(&state, &auth, &channel_id, &segment).await?;
+    let (channel_id, segment) = finalize_target(&state, &auth, channel_id, segment).await?;
     db::commit_fold(
         &state.db,
         &channel_id,
@@ -665,10 +660,13 @@ pub struct AmendmentsJson {
 pub async fn register_amendments(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((channel_id, segment)): Path<(String, String)>,
+    OpaquePathId((channel_id, segment)): OpaquePathId<(
+        ambre_core::ChannelId,
+        ambre_core::SegmentId,
+    )>,
     Json(req): Json<RegisterAmendmentsRequest>,
 ) -> Result<axum::Json<AmendmentsJson>, AppError> {
-    let (channel_id, segment) = finalize_target(&state, &auth, &channel_id, &segment).await?;
+    let (channel_id, segment) = finalize_target(&state, &auth, channel_id, segment).await?;
     let document = free_murmure_document(&state, &req.amendments, Some(channel_id)).await?;
     let own_role = db::member_role(&state.db, &req.amendments, &auth.user_id).await?;
     if document.owner_id != auth.user_id || own_role != Some(Role::Owner) {
@@ -711,10 +709,9 @@ pub struct ThreadJson {
 pub async fn register_thread(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(channel_id): Path<String>,
+    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
     Json(req): Json<RegisterThreadRequest>,
 ) -> Result<axum::Json<ThreadJson>, AppError> {
-    let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
     let meta = db::get_channel(&state.db, &channel_id)
         .await?
         .and_then(|channel| channel.meta_id)
@@ -839,9 +836,8 @@ pub async fn create_direct_message(
 pub async fn delete_channel(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(channel_id): Path<String>,
+    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
 ) -> Result<impl IntoResponse, AppError> {
-    let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
     let channel = db::get_channel(&state.db, &channel_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -881,10 +877,9 @@ pub async fn delete_channel(
 pub async fn join_channel(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(channel_id): Path<String>,
+    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
     Json(req): Json<JoinChannelRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
     let Joinable {
         space_id,
         meta_id,
@@ -928,9 +923,8 @@ pub async fn join_channel(
 pub async fn join_channel_head(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(channel_id): Path<String>,
+    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
 ) -> Result<axum::Json<JoinHeadJson>, AppError> {
-    let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
     let Joinable { meta_id, role, .. } = joinable(&state, &auth, &channel_id).await?;
     let log = db::membership_log(&state.db, &meta_id.document_id()).await?;
     Ok(axum::Json(JoinHeadJson {
@@ -1028,12 +1022,12 @@ mod tests {
             key: None,
             previous: (position > 0).then_some(ambre_protocol::EntryDigest([1; 32])),
             author: who,
-            signature: Vec::new(),
+            signature: ambre_protocol::Signature([0; 64]),
         };
-        entry.signature = key
-            .sign(&entry.signed_bytes().expect("signed bytes"))
-            .to_bytes()
-            .to_vec();
+        entry.signature = ambre_protocol::Signature(
+            key.sign(&entry.signed_bytes().expect("signed bytes"))
+                .to_bytes(),
+        );
         ambre_core::EncodedLogEntry::new(entry.encode().expect("encode"))
     }
 
@@ -1076,7 +1070,7 @@ mod tests {
     }
 
     async fn named_user(state: &AppState, email: &str, display_name: &str) -> UserId {
-        let signing = signing_key().verifying_key().to_bytes();
+        let signing = ambre_core::PublicKey::from_array(signing_key().verifying_key().to_bytes());
         let row = db::create_user(
             &state.db,
             &ambre_core::Email::from(email),
@@ -1084,7 +1078,7 @@ mod tests {
             &ambre_core::WrappedMasterKey::new([1; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2; 16].to_vec()),
             &signing,
-            &[4; 32],
+            &ambre_core::ExchangePublicKey::from_array([4; 32]),
         )
         .await
         .expect("user");
@@ -1207,7 +1201,7 @@ mod tests {
             join_channel(
                 State(state.clone()),
                 session(who),
-                Path(channel.to_string()),
+                OpaquePathId(channel),
                 Json(JoinChannelRequest {
                     doc_key_enc: ambre_core::WrappedDocKey::new([key; 48].to_vec()),
                     entry,
@@ -1596,7 +1590,7 @@ mod tests {
         let answer = join_channel(
             State(state.clone()),
             session(alice),
-            Path(channel.id.to_string()),
+            OpaquePathId(channel.id),
             Json(JoinChannelRequest {
                 doc_key_enc: ambre_core::WrappedDocKey::new([1; 48].to_vec()),
                 entry: entry.clone(),
@@ -1630,7 +1624,7 @@ mod tests {
         let answer = join_channel(
             State(state.clone()),
             session(alice),
-            Path(channel.id.to_string()),
+            OpaquePathId(channel.id),
             Json(JoinChannelRequest {
                 doc_key_enc: ambre_core::WrappedDocKey::new([1; 48].to_vec()),
                 entry: None,
@@ -1659,7 +1653,7 @@ mod tests {
         let answer = join_channel(
             State(state.clone()),
             session(alice),
-            Path(channel.id.to_string()),
+            OpaquePathId(channel.id),
             Json(JoinChannelRequest {
                 doc_key_enc: ambre_core::WrappedDocKey::new([1; 48].to_vec()),
                 entry: Some(entry),
@@ -1683,13 +1677,8 @@ mod tests {
         let channel = public_channel(&state, bob, space).await;
         open_log(&state, channel.meta.document_id(), bob).await;
 
-        let head = |who| {
-            join_channel_head(
-                State(state.clone()),
-                session(who),
-                Path(channel.id.to_string()),
-            )
-        };
+        let head =
+            |who| join_channel_head(State(state.clone()), session(who), OpaquePathId(channel.id));
         assert_eq!(status(head(eve).await), StatusCode::FORBIDDEN);
         // The head names the log and the role the entry must carry: the
         // space owner joins as an editor, after the channel's `Create`.
@@ -1834,7 +1823,7 @@ mod tests {
             crate::routes::share::invite_to_document(
                 State(state.clone()),
                 session(who),
-                Path(document.to_string()),
+                PathId(document),
                 Json(crate::routes::share::InviteRequest {
                     invitee_email: Some(invitee.into()),
                     invitee_id: None,
@@ -1975,30 +1964,16 @@ mod tests {
         let gone = public_channel(&state, alice, space).await;
         assert_eq!(delete(&state, alice, gone.id).await, StatusCode::NO_CONTENT);
 
-        let list = |who: UserId, id: String| {
-            list_space_channels(State(state.clone()), session(who), Path(id))
+        let list = |who: UserId, id: ambre_core::SpaceId| {
+            list_space_channels(State(state.clone()), session(who), OpaquePathId(id))
         };
-        let listed = list(bob, space.to_string()).await.expect("listed").0;
+        let listed = list(bob, space).await.expect("listed").0;
         assert_eq!(listed.channels, held);
-        assert_eq!(
-            status(list(mallory, space.to_string()).await),
-            StatusCode::FORBIDDEN
-        );
-        assert_eq!(
-            status(list(bob, "not-a-space".into()).await),
-            StatusCode::FORBIDDEN
-        );
+        assert_eq!(status(list(mallory, space).await), StatusCode::FORBIDDEN);
     }
 
     async fn delete(state: &Arc<AppState>, who: UserId, channel: ChannelId) -> StatusCode {
-        status(
-            delete_channel(
-                State(state.clone()),
-                session(who),
-                Path(channel.to_string()),
-            )
-            .await,
-        )
+        status(delete_channel(State(state.clone()), session(who), OpaquePathId(channel)).await)
     }
 
     /// `who` leaves the channel, posting no rotation.
@@ -2312,7 +2287,7 @@ mod tests {
         let answer = crate::routes::share::revoke_from_document(
             State(state.clone()),
             session(alice),
-            Path((meta.to_string(), alice.to_string())),
+            PathId((meta, alice)),
             None,
         )
         .await;
@@ -2540,12 +2515,13 @@ mod tests {
             key,
             previous: (position > 0).then_some(ambre_protocol::EntryDigest([1; 32])),
             author,
-            signature: Vec::new(),
+            signature: ambre_protocol::Signature([0; 64]),
         };
-        entry.signature = signing
-            .sign(&entry.signed_bytes().expect("signed bytes"))
-            .to_bytes()
-            .to_vec();
+        entry.signature = ambre_protocol::Signature(
+            signing
+                .sign(&entry.signed_bytes().expect("signed bytes"))
+                .to_bytes(),
+        );
         ambre_core::EncodedLogEntry::new(entry.encode().expect("encode"))
     }
 
@@ -2691,7 +2667,7 @@ mod tests {
         let renamed = crate::routes::rename_document(
             State(state.clone()),
             session(bob),
-            Path(meta.to_string()),
+            PathId(meta),
             Json(crate::routes::RenameDocumentRequest {
                 name_enc: ambre_core::SealedName::new(sealed.clone()),
             }),
@@ -2995,7 +2971,7 @@ mod tests {
             crate::routes::share::revoke_from_document(
                 State(state.clone()),
                 session(who),
-                Path((space.document_id().to_string(), who.to_string())),
+                PathId((space.document_id(), who)),
                 None,
             )
             .await,
@@ -3089,7 +3065,7 @@ mod tests {
         let revoked = crate::routes::share::revoke_and_rotate(
             State(state.clone()),
             session(alice),
-            Path(space.document_id().to_string()),
+            PathId(space.document_id()),
             Json(crate::routes::share::RevokeRequest {
                 user_id: bob,
                 keys: vec![crate::routes::share::RotateKeyEntry {
@@ -3145,7 +3121,7 @@ mod tests {
             crate::routes::delete_document(
                 State(state.clone()),
                 session(who),
-                Path(space.document_id().to_string()),
+                PathId(space.document_id()),
             )
             .await,
         )
@@ -3293,7 +3269,7 @@ mod tests {
             crate::routes::share::rotate_document_key(
                 State(state.clone()),
                 session(who),
-                Path(meta.to_string()),
+                PathId(meta),
                 Json(crate::routes::share::RotateKeyRequest {
                     keys,
                     members,
@@ -3310,18 +3286,12 @@ mod tests {
         who: UserId,
         meta: DocumentId,
     ) -> (StatusCode, StatusCode) {
-        let members = crate::routes::list_document_members(
-            State(state.clone()),
-            session(who),
-            Path(meta.to_string()),
-        )
-        .await;
-        let links = crate::routes::share::list_key_links(
-            State(state.clone()),
-            session(who),
-            Path(meta.to_string()),
-        )
-        .await;
+        let members =
+            crate::routes::list_document_members(State(state.clone()), session(who), PathId(meta))
+                .await;
+        let links =
+            crate::routes::share::list_key_links(State(state.clone()), session(who), PathId(meta))
+                .await;
         (status(members), status(links))
     }
 
@@ -3378,7 +3348,7 @@ mod tests {
         close_segment(
             State(state.clone()),
             session(who),
-            Path(channel.id.to_string()),
+            OpaquePathId(channel.id),
             Json(CloseSegmentRequest {
                 closing: channel.segment,
                 successor: SegmentId::from_document(successor),
@@ -3460,7 +3430,7 @@ mod tests {
         register_amendments(
             State(state.clone()),
             session(who),
-            Path((channel.id.to_string(), channel.segment.to_string())),
+            OpaquePathId((channel.id, channel.segment)),
             Json(RegisterAmendmentsRequest { amendments }),
         )
         .await
@@ -3532,7 +3502,7 @@ mod tests {
         register_thread(
             State(state.clone()),
             session(who),
-            Path(channel.id.to_string()),
+            OpaquePathId(channel.id),
             Json(RegisterThreadRequest { root, thread }),
         )
         .await
@@ -3606,7 +3576,7 @@ mod tests {
         take_finalize_lease(
             State(state.clone()),
             session(who),
-            Path((channel.id.to_string(), channel.segment.to_string())),
+            OpaquePathId((channel.id, channel.segment)),
         )
         .await
         .map(|axum::Json(answer)| answer)
@@ -3624,7 +3594,7 @@ mod tests {
             finalize_segment(
                 State(state.clone()),
                 session(who),
-                Path((channel.id.to_string(), channel.segment.to_string())),
+                OpaquePathId((channel.id, channel.segment)),
                 Json(FinalizeSegmentRequest {
                     lease_id,
                     snapshot_id,
@@ -4125,7 +4095,7 @@ mod tests {
         take_fold_lease(
             State(state.clone()),
             session(who),
-            Path((channel.id.to_string(), channel.segment.to_string())),
+            OpaquePathId((channel.id, channel.segment)),
         )
         .await
         .map(|axum::Json(answer)| answer)
@@ -4144,7 +4114,7 @@ mod tests {
             fold_segment(
                 State(state.clone()),
                 session(who),
-                Path((channel.id.to_string(), channel.segment.to_string())),
+                OpaquePathId((channel.id, channel.segment)),
                 Json(FoldSegmentRequest {
                     lease_id,
                     snapshot_id,
@@ -4167,7 +4137,7 @@ mod tests {
         let axum::Json(answer) = crate::routes::confirm_snapshot(
             State(state.clone()),
             session(who),
-            Path((document.to_string(), snapshot_id.to_string())),
+            PathId((document, snapshot_id)),
         )
         .await
         .expect("confirm");

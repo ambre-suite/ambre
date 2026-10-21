@@ -11,6 +11,7 @@ use ambre_core::{DocumentId, KeyId, PublicKey, Role, UserId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::SerializationError;
+use crate::messages::Signature;
 
 /// The domain the signed bytes open with, so an entry's signature serves no
 /// other use.
@@ -87,9 +88,10 @@ pub struct MembershipEntry {
     pub previous: Option<EntryDigest>,
     /// The member who made the change and signed it.
     pub author: UserId,
-    /// The author's signature over [`MembershipEntry::signed_bytes`].
-    #[serde(with = "serde_bytes")]
-    pub signature: Vec<u8>,
+    /// The author's signature over [`MembershipEntry::signed_bytes`]. It
+    /// encodes as a length-prefixed byte string, as the `Vec<u8>` it replaced
+    /// did, so a stored entry and its digest keep their bytes.
+    pub signature: Signature,
 }
 
 /// The fields a signature covers: every field but the signature.
@@ -131,11 +133,11 @@ impl MembershipEntry {
     }
 
     /// Whether the entry's shape is one a log can hold: the first entry alone
-    /// lacks a previous digest, and a signature has its full length.
+    /// lacks a previous digest. A signature of another length does not
+    /// decode.
     #[must_use]
     pub fn well_formed(&self) -> bool {
         (self.position == 0) == self.previous.is_none()
-            && self.signature.len() == ENTRY_SIGNATURE_LEN
     }
 
     /// The bytes a request carries and the relay stores.
@@ -181,7 +183,7 @@ mod tests {
             key: Some(KeyId::from_array([4; 16])),
             previous: Some(EntryDigest([5; 32])),
             author: UserId::from_bytes([6; 16]),
-            signature: vec![7; ENTRY_SIGNATURE_LEN],
+            signature: Signature([7; ENTRY_SIGNATURE_LEN]),
         }
     }
 
@@ -210,7 +212,7 @@ mod tests {
             assert_ne!(changed.signed_bytes().unwrap(), signed);
         }
         let mut resigned = base.clone();
-        resigned.signature = vec![8; ENTRY_SIGNATURE_LEN];
+        resigned.signature = Signature([8; ENTRY_SIGNATURE_LEN]);
         assert_eq!(resigned.signed_bytes().unwrap(), signed);
     }
 
@@ -224,13 +226,26 @@ mod tests {
         assert!(!first.well_formed());
         first.previous = None;
         assert!(first.well_formed());
-        first.signature.pop();
-        assert!(!first.well_formed());
         let sent = entry();
         assert_eq!(
             MembershipEntry::decode(&sent.encode().unwrap()).unwrap(),
             sent
         );
+    }
+
+    /// The signature closes the encoding as a length-prefixed byte string,
+    /// the form a `Vec<u8>` wrote, so a stored entry keeps its bytes. A
+    /// signature of another length does not decode.
+    #[test]
+    fn the_signature_keeps_its_length_prefixed_encoding() {
+        let sent = entry().encode().unwrap();
+        let tail = sent.len() - ENTRY_SIGNATURE_LEN - 1;
+        assert_eq!(sent[tail], ENTRY_SIGNATURE_LEN as u8);
+        assert_eq!(sent[tail + 1..], [7; ENTRY_SIGNATURE_LEN]);
+        let mut short = sent[..tail].to_vec();
+        short.push(ENTRY_SIGNATURE_LEN as u8 - 1);
+        short.extend([7; ENTRY_SIGNATURE_LEN - 1]);
+        assert!(MembershipEntry::decode(&short).is_err());
     }
 
     /// `SRV-227`: an entry reads from its own encoding alone. A byte past its

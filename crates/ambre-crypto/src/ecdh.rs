@@ -6,6 +6,7 @@
 //! document key is then sealed under the KEK with XChaCha20-Poly1305. This module
 //! provides the primitive only; the share/rotation flow lives in the Sync thread.
 
+use ambre_core::ExchangePublicKey;
 use blake2::Blake2b512;
 use hkdf::SimpleHkdf;
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -41,9 +42,9 @@ pub struct WrappedKey {
 /// the exchange is non-contributory.
 pub fn shared_secret(
     own_secret: &StaticSecret,
-    peer_public: &[u8; 32],
+    peer_public: &ExchangePublicKey,
 ) -> Result<[u8; 32], CryptoError> {
-    let peer = PublicKey::from(*peer_public);
+    let peer = PublicKey::from(*peer_public.as_array());
     let shared = own_secret.diffie_hellman(&peer);
     if !shared.was_contributory() {
         return Err(CryptoError::WeakPublicKey);
@@ -82,7 +83,7 @@ fn derive_kek(shared: &[u8; 32], sender_pk: &[u8; 32], recipient_pk: &[u8; 32]) 
 /// [`CryptoError::EncryptionFailed`] from the AEAD.
 pub fn wrap_document_key(
     own_secret: &StaticSecret,
-    peer_public: &[u8; 32],
+    peer_public: &ExchangePublicKey,
     doc_key: &DocumentKey,
 ) -> Result<WrappedKey, CryptoError> {
     wrap_anchored(own_secret, peer_public, doc_key, None)
@@ -98,13 +99,13 @@ pub fn wrap_document_key(
 /// Every error of [`wrap_document_key`].
 pub fn wrap_anchored(
     own_secret: &StaticSecret,
-    peer_public: &[u8; 32],
+    peer_public: &ExchangePublicKey,
     doc_key: &DocumentKey,
     anchor: Option<&[u8; 32]>,
 ) -> Result<WrappedKey, CryptoError> {
     let shared = shared_secret(own_secret, peer_public)?;
     let own_pub = PublicKey::from(own_secret).to_bytes();
-    let kek = derive_kek(&shared, &own_pub, peer_public);
+    let kek = derive_kek(&shared, &own_pub, peer_public.as_array());
     let mut plaintext = Zeroizing::new(doc_key.as_bytes().to_vec());
     if let Some(anchor) = anchor {
         plaintext.extend_from_slice(anchor);
@@ -126,7 +127,7 @@ pub fn wrap_anchored(
 ///   key nor a key and an anchor.
 pub fn unwrap_document_key(
     own_secret: &StaticSecret,
-    peer_public: &[u8; 32],
+    peer_public: &ExchangePublicKey,
     wrapped: &WrappedKey,
 ) -> Result<DocumentKey, CryptoError> {
     unwrap_anchored(own_secret, peer_public, wrapped).map(|(key, _)| key)
@@ -140,12 +141,12 @@ pub fn unwrap_document_key(
 /// Every error of [`unwrap_document_key`].
 pub fn unwrap_anchored(
     own_secret: &StaticSecret,
-    peer_public: &[u8; 32],
+    peer_public: &ExchangePublicKey,
     wrapped: &WrappedKey,
 ) -> Result<(DocumentKey, Option<[u8; 32]>), CryptoError> {
     let shared = shared_secret(own_secret, peer_public)?;
     let own_pub = PublicKey::from(own_secret).to_bytes();
-    let kek = derive_kek(&shared, peer_public, &own_pub);
+    let kek = derive_kek(&shared, peer_public.as_array(), &own_pub);
     let bytes = Zeroizing::new(aead::open(
         &wrapped.nonce,
         &wrapped.ciphertext,

@@ -1,21 +1,13 @@
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
-use crate::extract::Json;
+use crate::extract::{Json, PathId};
 use crate::s3;
 use crate::state::AppState;
-
-fn parse_doc_id(s: &str) -> Result<ambre_core::DocumentId, AppError> {
-    ambre_core::Uuid::parse_str(s)
-        .map(ambre_core::DocumentId::from_uuid)
-        .map_err(|_| AppError::NotFound {
-            resource: "document",
-        })
-}
 
 /// Request for a presigned S3 upload URL. The client uploads the encrypted
 /// blob directly; the server inserts the `media` row on confirmation.
@@ -38,11 +30,10 @@ pub struct UploadUrlResponse {
 pub async fn media_upload_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Json(req): Json<UploadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -89,11 +80,10 @@ pub struct DownloadUrlResponse {
 pub async fn media_download_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Json(req): Json<DownloadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -128,11 +118,10 @@ pub struct ConfirmUploadRequest {
 pub async fn media_confirm_upload(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Json(req): Json<ConfirmUploadRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -187,10 +176,9 @@ pub struct MediaConfirmed {
 pub async fn media_erase(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((document_id, content_hash)): Path<(String, ambre_core::ContentHash)>,
+    PathId((doc_id, content_hash)): PathId<(ambre_core::DocumentId, ambre_core::ContentHash)>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;

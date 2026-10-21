@@ -66,7 +66,7 @@ async fn authenticate_first_frame(
         .flatten()
         .ok_or(AppError::Unauthorized)?;
     match first.client_msg() {
-        Ok(WsClientMsg::Authenticate { token }) => auth::authenticate_token(state, token.expose()),
+        Ok(WsClientMsg::Authenticate { token }) => auth::authenticate_token(state, &token),
         _ => Err(AppError::Unauthorized),
     }
 }

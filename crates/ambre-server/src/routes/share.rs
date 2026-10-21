@@ -1,4 +1,4 @@
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
@@ -7,7 +7,7 @@ use ambre_core::Role;
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
-use crate::extract::Json;
+use crate::extract::{Json, PathId};
 use crate::state::AppState;
 
 /// Privilege rank of a document role. Higher binds more capability.
@@ -20,19 +20,6 @@ fn doc_role_rank(role: Role) -> Option<u8> {
         Role::Owner => Some(2),
         Role::Admin | Role::Member => None,
     }
-}
-
-fn parse_doc_id(s: &str) -> Result<ambre_core::DocumentId, AppError> {
-    ambre_core::Uuid::parse_str(s)
-        .map(ambre_core::DocumentId::from_uuid)
-        .map_err(|_| AppError::NotFound {
-            resource: "document",
-        })
-}
-fn parse_user_id(s: &str) -> Result<ambre_core::UserId, AppError> {
-    ambre_core::Uuid::parse_str(s)
-        .map(ambre_core::UserId::from_uuid)
-        .map_err(|_| AppError::NotFound { resource: "user" })
 }
 
 /// What a route expects of the membership entry its request carries.
@@ -88,8 +75,7 @@ pub(crate) async fn checked_entry(
     let signed = entry
         .signed_bytes()
         .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
-    let signature =
-        Signature::from_slice(&entry.signature).map_err(|_| AppError::InvalidSignature)?;
+    let signature = Signature::from_bytes(&entry.signature.0);
     VerifyingKey::from_bytes(auth.signing_pubkey.as_array())
         .and_then(|key| key.verify_strict(&signed, &signature))
         .map_err(|_| AppError::InvalidSignature)?;
@@ -139,11 +125,10 @@ pub struct InviteResponse {
 pub async fn invite_to_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Json(req): Json<InviteRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -272,12 +257,10 @@ pub struct RemovalRequest {
 pub async fn revoke_from_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((document_id, user_id)): Path<(String, String)>,
+    PathId((doc_id, target)): PathId<(ambre_core::DocumentId, ambre_core::UserId)>,
     body: Option<Json<RemovalRequest>>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
-    let target = parse_user_id(&user_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -378,11 +361,10 @@ pub struct RevokeRequest {
 pub async fn revoke_and_rotate(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Json(req): Json<RevokeRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     let target = req.user_id;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -583,9 +565,8 @@ fn decode_link(
 pub async fn list_key_links(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
 ) -> Result<impl IntoResponse, AppError> {
-    let doc_id = parse_doc_id(&document_id)?;
     // The admin who re-keys a public channel reads the chain it extends
     // (`SRV-146`).
     if db::get_document_member(&state.db, &doc_id, &auth.user_id)
@@ -627,11 +608,10 @@ pub struct RotateKeyEntry {
 pub async fn rotate_document_key(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Json(req): Json<RotateKeyRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?;
     // Owner-only outside a debt. Rotating the document key rewraps EVERY
     // member's `doc_key_enc`, and makes the caller the wrapper of record. An

@@ -18,6 +18,27 @@ pub struct StoreMasterKeysRequest {
     pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 
+/// Reads the two public keys an account registers. A key that is not 32
+/// bytes of hexadecimal answers a conflict, before any row is written
+/// (`SRV-232`).
+pub(crate) fn account_keys(
+    signing: &ambre_core::SigningKeyHex,
+    exchange: &ambre_core::ExchangeKeyHex,
+) -> Result<(ambre_core::PublicKey, ambre_core::ExchangePublicKey), AppError> {
+    let conflict = |detail: String| AppError::Conflict { detail };
+    let signing = hex::decode(signing.as_str())
+        .map_err(|e| conflict(e.to_string()))
+        .and_then(|bytes| {
+            ambre_core::PublicKey::from_slice(&bytes).map_err(|e| conflict(e.to_string()))
+        })?;
+    let exchange = hex::decode(exchange.as_str())
+        .map_err(|e| conflict(e.to_string()))
+        .and_then(|bytes| {
+            ambre_core::ExchangePublicKey::from_slice(&bytes).map_err(|e| conflict(e.to_string()))
+        })?;
+    Ok((signing, exchange))
+}
+
 pub async fn store_master_keys(
     State(state): State<Arc<AppState>>,
     auth: auth::AccountSession,
@@ -26,12 +47,7 @@ pub async fn store_master_keys(
     let s = auth;
     let mk_enc = req.master_key_enc;
     let mk_salt = req.master_key_salt;
-    let spk = hex::decode(req.signing_pubkey.as_str()).map_err(|e| AppError::Conflict {
-        detail: e.to_string(),
-    })?;
-    let epk = hex::decode(req.exchange_pubkey.as_str()).map_err(|e| AppError::Conflict {
-        detail: e.to_string(),
-    })?;
+    let (spk, epk) = account_keys(&req.signing_pubkey, &req.exchange_pubkey)?;
 
     // Write the master key material and the pubkeys in ONE statement. They
     // describe a single identity. A partial write (new master_key_enc but stale
@@ -54,8 +70,8 @@ pub async fn store_master_keys(
     .bind(uid)
     .bind(mk_enc.as_bytes())
     .bind(mk_salt.as_bytes())
-    .bind(&spk)
-    .bind(&epk)
+    .bind(spk.as_slice())
+    .bind(epk.as_slice())
     .execute(&state.db)
     .await?;
     if result.rows_affected() == 0 {
@@ -70,10 +86,7 @@ pub async fn store_master_keys(
     // The signing pubkey just changed, so the claims carried by the current
     // access token (and any refresh) are now stale. Issue a fresh pair bound to
     // the new key and return it; the client swaps its in-memory tokens.
-    let new_signing_pubkey =
-        ambre_core::PublicKey::from_slice(&spk).map_err(|e| AppError::Conflict {
-            detail: e.to_string(),
-        })?;
+    let new_signing_pubkey = spk;
     let tokens = auth::issue_session(&state, s.user_id, Some(new_signing_pubkey)).await?;
     tracing::info!(user_id = %s.user_id, "master key stored");
 

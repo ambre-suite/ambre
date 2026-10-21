@@ -1984,7 +1984,7 @@ mod tests {
                 invitee_email: Some(ambre_core::Email::from("a@b.c")),
                 invitee: user,
                 role: Role::Editor,
-                expect_exchange_pub_key: ambre_core::PublicKey::from_array([0; 32]),
+                expect_exchange_pub_key: ambre_core::ExchangePublicKey::from_array([0; 32]),
                 now: ambre_bus::Timestamp(0),
             },
             RestCommand::RevokeFromDocument {

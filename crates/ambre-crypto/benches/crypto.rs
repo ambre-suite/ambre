@@ -16,7 +16,7 @@ use std::hint::black_box;
 fn bench_envelope(c: &mut Criterion) {
     let doc_key = DocumentKey::from_array([0x11; 32]);
     let signing = MasterSeed::from_array([0x22; 32]).derive_signing_key();
-    let author = signing.verifying_key().to_bytes();
+    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
     let aad = b"public-data-metadata";
     let payload = vec![0x42u8; 1024];
 

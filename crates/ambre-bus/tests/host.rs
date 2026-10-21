@@ -530,7 +530,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             members: vec![DirectMember {
                 user_id: user,
-                exchange_pub_key: ambre_core::PublicKey::from_array([7; 32]),
+                exchange_pub_key: ambre_core::ExchangePublicKey::from_array([7; 32]),
             }],
         },
         SyncCommand::HoldInbound,
@@ -880,7 +880,7 @@ fn request_id_echo_is_preserved_across_the_hop() {
             invitee_email: Some(ambre_bus::Email::from("x@y.z")),
             invitee: UserId::new(),
             role: Role::Editor,
-            expect_exchange_pub_key: ambre_core::PublicKey::from_array([0u8; 32]),
+            expect_exchange_pub_key: ambre_core::ExchangePublicKey::from_array([0u8; 32]),
             now: Timestamp(0),
         },
     };

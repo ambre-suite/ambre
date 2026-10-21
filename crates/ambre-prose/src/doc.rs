@@ -149,8 +149,8 @@ pub const BUILT_IN_STYLES: [&str; 9] = [
 
 /// Whether `style_id` is one of the nine names every build compiles in.
 #[must_use]
-pub fn is_built_in_style(style_id: &str) -> bool {
-    BUILT_IN_STYLES.contains(&style_id)
+pub fn is_built_in_style(style_id: &ambre_bus::app::prose::StyleId) -> bool {
+    BUILT_IN_STYLES.contains(&style_id.0.as_str())
 }
 
 // -----------------------------------------------------------------------------
@@ -1396,9 +1396,10 @@ mod tests {
 
     #[test]
     fn the_nine_built_in_style_names_are_not_user_styles() {
-        assert!(is_built_in_style("quote"));
-        assert!(is_built_in_style("heading-6"));
-        assert!(!is_built_in_style("my-style"));
+        let style = |name: &str| ambre_bus::app::prose::StyleId(name.to_owned());
+        assert!(is_built_in_style(&style("quote")));
+        assert!(is_built_in_style(&style("heading-6")));
+        assert!(!is_built_in_style(&style("my-style")));
     }
 
     /// `write_page_format` used to mint a fresh page register, dropping the four

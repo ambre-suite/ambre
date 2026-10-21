@@ -45,7 +45,7 @@ pub(crate) struct TofuPrompt {
     pub(crate) display_name: String,
     /// Raw X25519 key the server just returned: pinned on confirmation and
     /// sent beside the request, so Sync wraps only if it still matches.
-    pub(crate) exchange_pub_key: ambre_core::PublicKey,
+    pub(crate) exchange_pub_key: ambre_core::ExchangePublicKey,
     /// Preformatted fingerprint (`ambre_crypto::fingerprint`); displayed verbatim.
     pub(crate) fingerprint: ambre_bus::KeyFingerprint,
     /// `false` = new (first contact), `true` = changed (diverged from the pin).
@@ -73,11 +73,13 @@ pub(crate) enum Next {
 
 /// Classify a fetched key against the pin (`CHROME-050`, `CHROME-051`).
 /// `role` is the one an invitation grants; a direct message ignores it.
-pub(crate) fn classify(prompt: TofuPrompt, pinned: Option<[u8; 32]>, role: Role) -> Next {
+pub(crate) fn classify(
+    prompt: TofuPrompt,
+    pinned: Option<ambre_core::ExchangePublicKey>,
+    role: Role,
+) -> Next {
     match pinned {
-        Some(key) if key == *prompt.exchange_pub_key.as_array() => {
-            Next::Proceed(request(&prompt, role))
-        }
+        Some(key) if key == prompt.exchange_pub_key => Next::Proceed(request(&prompt, role)),
         Some(_) => Next::Ask(TofuPrompt {
             changed: true,
             ..prompt
@@ -94,13 +96,10 @@ pub(crate) fn classify(prompt: TofuPrompt, pinned: Option<[u8; 32]>, role: Role)
 pub(crate) fn confirm(
     prompt: &TofuPrompt,
     role: Role,
-    pin: impl FnOnce([u8; 16], [u8; 32]),
+    pin: impl FnOnce(UserId, &ambre_core::ExchangePublicKey),
     dispatch: impl FnOnce(LogicCommand),
 ) {
-    pin(
-        *prompt.user_id.as_bytes(),
-        *prompt.exchange_pub_key.as_array(),
-    );
+    pin(prompt.user_id, &prompt.exchange_pub_key);
     dispatch(request(prompt, role));
 }
 
@@ -268,7 +267,7 @@ mod tests {
             },
             user_id: UserId::new(),
             display_name: "Bob".to_owned(),
-            exchange_pub_key: ambre_core::PublicKey::from_array([byte; 32]),
+            exchange_pub_key: ambre_core::ExchangePublicKey::from_array([byte; 32]),
             fingerprint: ambre_bus::KeyFingerprint("ABCD EFGH".to_owned()),
             changed: false,
         }
@@ -308,12 +307,20 @@ mod tests {
                 Next::Ask(p) => assert!(!p.changed, "a first contact is new"),
                 other => panic!("a new key went out: {other:?}"),
             }
-            match classify(prompt, Some([9; 32]), Role::Editor) {
+            match classify(
+                prompt,
+                Some(ambre_core::ExchangePublicKey::from_array([9; 32])),
+                Role::Editor,
+            ) {
                 Next::Ask(p) => assert!(p.changed, "a substituted key is a change"),
                 other => panic!("a substituted key went out: {other:?}"),
             }
         }
-        let trusted = classify(fetched(1), Some([1; 32]), Role::Editor);
+        let trusted = classify(
+            fetched(1),
+            Some(ambre_core::ExchangePublicKey::from_array([1; 32])),
+            Role::Editor,
+        );
         assert_eq!(invited_with(&trusted), Some([1; 32]));
     }
 
@@ -328,11 +335,13 @@ mod tests {
         };
         let expected = vec![DirectMember {
             user_id: prompt.user_id,
-            exchange_pub_key: ambre_core::PublicKey::from_array([6; 32]),
+            exchange_pub_key: ambre_core::ExchangePublicKey::from_array([6; 32]),
         }];
-        let Next::Proceed(LogicCommand::OpenDirectMessage { draft, .. }) =
-            classify(prompt.clone(), Some([6; 32]), Role::Viewer)
-        else {
+        let Next::Proceed(LogicCommand::OpenDirectMessage { draft, .. }) = classify(
+            prompt.clone(),
+            Some(ambre_core::ExchangePublicKey::from_array([6; 32])),
+            Role::Viewer,
+        ) else {
             panic!("a pinned key asks again");
         };
         assert_eq!(draft.channel_id, channel_id);
@@ -342,7 +351,7 @@ mod tests {
         confirm(
             &prompt,
             Role::Viewer,
-            |_, key| log.borrow_mut().push(format!("pin {}", key[0])),
+            |_, key| log.borrow_mut().push(format!("pin {}", key.as_array()[0])),
             |cmd| {
                 let LogicCommand::OpenDirectMessage { draft, .. } = cmd else {
                     panic!("not a direct message: {cmd:?}");
@@ -372,7 +381,11 @@ mod tests {
             channel_id: sent,
             invitee,
             ..
-        }) = classify(prompt.clone(), Some([7; 32]), Role::Editor)
+        }) = classify(
+            prompt.clone(),
+            Some(ambre_core::ExchangePublicKey::from_array([7; 32])),
+            Role::Editor,
+        )
         else {
             panic!("a pinned key did not invite into the channel");
         };
@@ -381,7 +394,7 @@ mod tests {
             invitee,
             DirectMember {
                 user_id: prompt.user_id,
-                exchange_pub_key: ambre_core::PublicKey::from_array([7; 32]),
+                exchange_pub_key: ambre_core::ExchangePublicKey::from_array([7; 32]),
             }
         );
     }
@@ -395,7 +408,10 @@ mod tests {
         confirm(
             &prompt,
             Role::Viewer,
-            |user, key| log.borrow_mut().push(format!("pin {:?} {}", user, key[0])),
+            |user, key| {
+                log.borrow_mut()
+                    .push(format!("pin {:?} {}", user.as_bytes(), key.as_array()[0]))
+            },
             |cmd| {
                 let LogicCommand::Rest {
                     cmd:

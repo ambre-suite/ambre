@@ -94,9 +94,33 @@ impl TryFrom<PgKey> for ambre_core::PublicKey {
     }
 }
 
+impl TryFrom<PgKey> for ambre_core::ExchangePublicKey {
+    type Error = ambre_core::PublicKeyError;
+
+    fn try_from(PgKey(bytes): PgKey) -> Result<Self, Self::Error> {
+        ambre_core::ExchangePublicKey::from_slice(&bytes)
+    }
+}
+
 /// A stored public key that may be `NULL`, as [`decode_key`] reads one.
 fn decode_opt_key(bytes: Option<Vec<u8>>) -> Result<Option<ambre_core::PublicKey>, sqlx::Error> {
     bytes.map(decode_key).transpose()
+}
+
+/// A stored X25519 exchange key. Any length but 32 bytes is a decode error,
+/// as for [`decode_key`].
+pub(crate) fn decode_exchange_key(
+    bytes: Vec<u8>,
+) -> Result<ambre_core::ExchangePublicKey, sqlx::Error> {
+    ambre_core::ExchangePublicKey::from_slice(&bytes).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+}
+
+/// A stored exchange key that may be `NULL`, as [`decode_exchange_key`]
+/// reads one.
+fn decode_opt_exchange_key(
+    bytes: Option<Vec<u8>>,
+) -> Result<Option<ambre_core::ExchangePublicKey>, sqlx::Error> {
+    bytes.map(decode_exchange_key).transpose()
 }
 
 fn uuid_to_core(u: uuid::Uuid) -> ambre_core::Uuid {
@@ -214,8 +238,8 @@ mod tests {
             "Snap",
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
-            &[3u8; 32],
-            &[4u8; 32],
+            &ambre_core::PublicKey::from_array([3u8; 32]),
+            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )
         .await
         .expect("create user");
@@ -285,8 +309,8 @@ mod tests {
             "Purge",
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
-            &[3u8; 32],
-            &[4u8; 32],
+            &ambre_core::PublicKey::from_array([3u8; 32]),
+            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )
         .await
         .expect("create user");
@@ -361,8 +385,8 @@ mod tests {
             "Horizon",
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
-            &[3u8; 32],
-            &[4u8; 32],
+            &ambre_core::PublicKey::from_array([3u8; 32]),
+            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )
         .await
         .expect("create user");

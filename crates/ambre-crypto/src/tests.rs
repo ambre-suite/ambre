@@ -19,7 +19,7 @@ fn fixed_seed() -> MasterSeed {
 fn roundtrip_envelope() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
-    let author = signing.verifying_key().to_bytes();
+    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
     let aad = b"public-data";
     let plaintext = b"hello, encrypted world";
 
@@ -45,7 +45,7 @@ fn an_envelope_debug_form_prints_no_byte_of_it() {
 fn tampered_ciphertext_fails() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
-    let author = signing.verifying_key().to_bytes();
+    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
     let aad = b"aad";
 
     let mut sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
@@ -61,7 +61,7 @@ fn tampered_ciphertext_fails() {
 fn commitment_tag_wrong_aad_rejected() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
-    let author = signing.verifying_key().to_bytes();
+    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
 
     let sealed = envelope::seal(b"payload", b"document-A", &doc_key, &signing).unwrap();
     // Re-sign over the altered aad so the signature passes but the HMAC commitment
@@ -110,7 +110,7 @@ fn the_signature_is_checked_before_the_tag_and_the_cipher() {
     let doc_key = fixed_doc_key();
     let other_key = DocumentKey::from_array([0x33; 32]);
     let signing = fixed_seed().derive_signing_key();
-    let author = signing.verifying_key().to_bytes();
+    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
     let aad = b"aad";
     let mut forged = envelope::seal(b"payload", aad, &other_key, &signing).unwrap();
     forged.ciphertext[0] ^= 0xFF;
@@ -149,10 +149,12 @@ fn invalid_signature_rejected() {
     let aad = b"aad";
 
     let sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
-    let wrong_author = MasterSeed::from_array([0x99; 32])
-        .derive_signing_key()
-        .verifying_key()
-        .to_bytes();
+    let wrong_author = ambre_core::PublicKey::from_array(
+        MasterSeed::from_array([0x99; 32])
+            .derive_signing_key()
+            .verifying_key()
+            .to_bytes(),
+    );
     assert_eq!(
         envelope::open(&sealed, aad, &doc_key, &wrong_author),
         Err(CryptoError::InvalidSignature)
@@ -163,7 +165,7 @@ fn invalid_signature_rejected() {
 fn wrong_document_key_rejected() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
-    let author = signing.verifying_key().to_bytes();
+    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
     let aad = b"aad";
 
     let sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
@@ -266,8 +268,10 @@ fn a_store_row_opens_only_where_it_was_sealed() {
 fn ecdh_symmetric() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
     let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
-    let alice_pub = x25519_dalek::PublicKey::from(&alice).to_bytes();
-    let bob_pub = x25519_dalek::PublicKey::from(&bob).to_bytes();
+    let alice_pub =
+        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&alice).to_bytes());
+    let bob_pub =
+        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
 
     assert_eq!(
         ecdh::shared_secret(&alice, &bob_pub).unwrap(),
@@ -279,8 +283,10 @@ fn ecdh_symmetric() {
 fn wrap_unwrap_roundtrip() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
     let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
-    let alice_pub = x25519_dalek::PublicKey::from(&alice).to_bytes();
-    let bob_pub = x25519_dalek::PublicKey::from(&bob).to_bytes();
+    let alice_pub =
+        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&alice).to_bytes());
+    let bob_pub =
+        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
 
     let doc_key = DocumentKey::from_array([0x55; 32]);
     let wrapped = ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap();
@@ -295,8 +301,10 @@ fn wrap_unwrap_roundtrip() {
 fn the_log_anchor_travels_sealed_with_the_key() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
     let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
-    let alice_pub = x25519_dalek::PublicKey::from(&alice).to_bytes();
-    let bob_pub = x25519_dalek::PublicKey::from(&bob).to_bytes();
+    let alice_pub =
+        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&alice).to_bytes());
+    let bob_pub =
+        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
     let doc_key = DocumentKey::from_array([0x55; 32]);
 
     let anchored = ecdh::wrap_anchored(&alice, &bob_pub, &doc_key, Some(&[0x66; 32])).unwrap();
@@ -324,9 +332,10 @@ fn the_log_anchor_travels_sealed_with_the_key() {
 #[test]
 fn a_wrap_has_a_length_the_wire_reads() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
-    let bob_pub =
+    let bob_pub = ambre_core::ExchangePublicKey::from_array(
         x25519_dalek::PublicKey::from(&MasterSeed::from_array([0x02; 32]).derive_exchange_key())
-            .to_bytes();
+            .to_bytes(),
+    );
     let doc_key = DocumentKey::from_array([0x55; 32]);
     let length = |wrapped: ecdh::WrappedKey| wrapped.nonce.len() + wrapped.ciphertext.len();
     let bare = length(ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap());
@@ -348,7 +357,7 @@ fn weak_peer_public_key_rejected() {
     // predictable all-zero secret. Both the raw exchange and the wrap must reject
     // it (M14: reject a non-contributory shared secret).
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
-    let weak_pub = [0u8; 32];
+    let weak_pub = ambre_core::ExchangePublicKey::from_array([0u8; 32]);
 
     assert_eq!(
         ecdh::shared_secret(&alice, &weak_pub),
@@ -371,8 +380,10 @@ fn kek_binds_peer_identity() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
     let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
     let carol = MasterSeed::from_array([0x03; 32]).derive_exchange_key();
-    let alice_pub = x25519_dalek::PublicKey::from(&alice).to_bytes();
-    let bob_pub = x25519_dalek::PublicKey::from(&bob).to_bytes();
+    let alice_pub =
+        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&alice).to_bytes());
+    let bob_pub =
+        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
 
     let doc_key = DocumentKey::from_array([0x55; 32]);
     let wrapped = ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap();
@@ -432,7 +443,7 @@ fn a_previous_key_opens_under_the_next_one_and_no_other() {
     let next = fixed_doc_key();
     let author = fixed_seed().derive_signing_key();
     let sealed = next.seal_previous(&previous, b"link", &author).unwrap();
-    let author_pub = author.verifying_key().to_bytes();
+    let author_pub = ambre_core::PublicKey::from_array(author.verifying_key().to_bytes());
 
     let opened = next.open_previous(&sealed, b"link", &author_pub).unwrap();
     assert_eq!(opened.id(), previous.id());
@@ -443,7 +454,7 @@ fn a_previous_key_opens_under_the_next_one_and_no_other() {
     );
     assert!(next.open_previous(&sealed, b"other", &author_pub).is_err());
     let stranger = MasterSeed::from_array([0x33; 32]).derive_signing_key();
-    let stranger_pub = stranger.verifying_key().to_bytes();
+    let stranger_pub = ambre_core::PublicKey::from_array(stranger.verifying_key().to_bytes());
     assert_eq!(
         next.open_previous(&sealed, b"link", &stranger_pub).err(),
         Some(CryptoError::InvalidSignature)
@@ -484,7 +495,7 @@ proptest! {
     fn prop_roundtrip_encrypt_decrypt(data in any::<Vec<u8>>(), key in any::<[u8; 32]>()) {
         let doc_key = DocumentKey::from_array(key);
         let signing = fixed_seed().derive_signing_key();
-        let author = signing.verifying_key().to_bytes();
+        let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
         let aad = b"aad";
         let sealed = envelope::seal(&data, aad, &doc_key, &signing).unwrap();
         let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
@@ -499,7 +510,7 @@ proptest! {
     ) {
         let doc_key = fixed_doc_key();
         let signing = fixed_seed().derive_signing_key();
-        let author = signing.verifying_key().to_bytes();
+        let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
         let aad = b"aad";
         let mut sealed = envelope::seal(&data, aad, &doc_key, &signing).unwrap();
         let mask = 1u8 << bit;
@@ -520,7 +531,7 @@ fn fingerprint_is_stable_grouped_base32() {
     // out-of-band verification, so it is frozen. Any change to the domain tag,
     // truncation length, alphabet or grouping must break this test on purpose.
     // It must not silently shift what two people compare over the phone.
-    let fingerprint = hash::fingerprint(&[0u8; 32]);
+    let fingerprint = hash::fingerprint(&ambre_core::ExchangePublicKey::from_array([0u8; 32]));
     let fp = fingerprint.as_str();
     assert_eq!(fp, "2HBA RR6Y FDOA EIJF ZZFT YWQZ MKRW N5FK");
 
@@ -535,17 +546,20 @@ fn fingerprint_is_stable_grouped_base32() {
         "unexpected characters: {fp}"
     );
     // Deterministic: recomputing yields the identical string.
-    assert_eq!(fp, hash::fingerprint(&[0u8; 32]).as_str());
+    assert_eq!(
+        fp,
+        hash::fingerprint(&ambre_core::ExchangePublicKey::from_array([0u8; 32])).as_str()
+    );
 }
 
 #[test]
 fn fingerprint_distinguishes_keys() {
     // A single-bit difference in the key must change the fingerprint (the whole
     // point of pinning it): near-identical substituted keys stay distinguishable.
-    let a = hash::fingerprint(&[0u8; 32]);
+    let a = hash::fingerprint(&ambre_core::ExchangePublicKey::from_array([0u8; 32]));
     let mut key_b = [0u8; 32];
     key_b[0] = 1;
-    let b = hash::fingerprint(&key_b);
+    let b = hash::fingerprint(&ambre_core::ExchangePublicKey::from_array(key_b));
     assert_ne!(a, b);
 }
 

@@ -95,7 +95,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let s3 = aws_sdk_s3::Client::from_conf(s3_config.build());
 
     let oidc_google_client_id = std::env::var("OIDC_GOOGLE_CLIENT_ID").unwrap_or_default();
-    let oidc_google_client_secret = std::env::var("OIDC_GOOGLE_CLIENT_SECRET").unwrap_or_default();
+    let oidc_google_client_secret =
+        oidc::OidcSecret::new(std::env::var("OIDC_GOOGLE_CLIENT_SECRET").unwrap_or_default());
     let oidc_google_redirect_uri = std::env::var("OIDC_GOOGLE_REDIRECT_URI").unwrap_or_default();
     let dev_mode = std::env::var("DEV_MODE")
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
@@ -151,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config {
         s3_env_prefix,
         oidc_google_client_id: oidc_google_client_id.clone(),
-        oidc_google_client_secret: oidc::OidcSecret::new(oidc_google_client_secret.clone()),
+        oidc_google_client_secret: oidc_google_client_secret.clone(),
         oidc_google_redirect_uri: oidc_google_redirect_uri.clone(),
         dev_mode,
         trust_proxy_headers,

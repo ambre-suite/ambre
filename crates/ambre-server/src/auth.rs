@@ -4,6 +4,8 @@ use axum::extract::FromRequestParts;
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
 
+use ambre_protocol::ws::AccessToken;
+
 use crate::error::AppError;
 use crate::jwt::Claims;
 use crate::redis_ops::{self, RefreshData};
@@ -24,14 +26,14 @@ pub struct AuthSession {
 }
 
 /// Extracts the bearer token from the `Authorization` header, if present.
-pub fn bearer_token(parts: &Parts) -> Option<String> {
+pub fn bearer_token(parts: &Parts) -> Option<AccessToken> {
     parts
         .headers
         .get(AUTHORIZATION)?
         .to_str()
         .ok()?
         .strip_prefix("Bearer ")
-        .map(|s| s.trim().to_string())
+        .map(|s| AccessToken::new(s.trim().to_string()))
 }
 
 /// A verified access token, whether or not its account has registered keys.
@@ -49,14 +51,15 @@ pub struct AccountSession {
 }
 
 /// Verify an access token and resolve the account it names.
-pub fn authenticate_account(state: &AppState, token: &str) -> Result<AccountSession, AppError> {
+pub fn authenticate_account(
+    state: &AppState,
+    token: &AccessToken,
+) -> Result<AccountSession, AppError> {
     let claims = state
         .jwt
         .verify(token)
         .map_err(|_| AppError::Unauthorized)?;
-    let user_id = ambre_core::Uuid::parse_str(&claims.sub)
-        .map(ambre_core::UserId::from_uuid)
-        .map_err(|_| AppError::Unauthorized)?;
+    let user_id = claims.sub;
     let signing_pubkey = claims
         .spk
         .as_ref()
@@ -71,7 +74,7 @@ pub fn authenticate_account(state: &AppState, token: &str) -> Result<AccountSess
 
 /// Verify an access token and resolve the identity it carries. A session
 /// without a signing key is refused with [`AppError::SetupRequired`].
-pub fn authenticate_token(state: &AppState, token: &str) -> Result<AuthSession, AppError> {
+pub fn authenticate_token(state: &AppState, token: &AccessToken) -> Result<AuthSession, AppError> {
     authenticate_account(state, token)?.try_into()
 }
 
@@ -138,7 +141,7 @@ pub async fn issue_session(
     let now = crate::s3::unix_now();
     let access_ttl = access_lifetime(state.config.access_ttl_secs);
     let claims = Claims {
-        sub: user_id.to_string(),
+        sub: user_id,
         spk: signing_pubkey
             .as_ref()
             .map(|key| ambre_core::SigningKeyHex(key.to_hex())),
@@ -150,7 +153,7 @@ pub async fn issue_session(
         .mint(&claims)
         .map_err(|e| AppError::Internal(format!("jwt mint: {e}")))?;
 
-    let refresh_token = uuid::Uuid::new_v4().to_string();
+    let refresh_token = ambre_protocol::ws::RefreshToken::new(uuid::Uuid::new_v4().to_string());
     redis_ops::refresh_create(
         &state.redis,
         &refresh_token,
@@ -163,8 +166,8 @@ pub async fn issue_session(
     .await?;
 
     Ok(TokenPair {
-        access_token: ambre_protocol::ws::AccessToken::new(access_token),
-        refresh_token: ambre_protocol::ws::RefreshToken::new(refresh_token),
+        access_token,
+        refresh_token,
         access_expires_in: access_ttl,
     })
 }

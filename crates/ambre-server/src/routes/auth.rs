@@ -76,9 +76,17 @@ pub async fn dev_login(
         return Err(AppError::BadRequest("username must not be empty".into()));
     }
 
+    // A key of the wrong length is refused before any row is written
+    // (`SRV-232`).
     let signing_pubkey = hex::decode(req.signing_pub_key.as_str())
+        .map_err(|e| e.to_string())
+        .and_then(|bytes| ambre_core::PublicKey::from_slice(&bytes).map_err(|e| e.to_string()))
         .map_err(|e| AppError::BadRequest(format!("invalid signing_pub_key: {e}")))?;
     let exchange_pubkey = hex::decode(req.exchange_pub_key.as_str())
+        .map_err(|e| e.to_string())
+        .and_then(|bytes| {
+            ambre_core::ExchangePublicKey::from_slice(&bytes).map_err(|e| e.to_string())
+        })
         .map_err(|e| AppError::BadRequest(format!("invalid exchange_pub_key: {e}")))?;
 
     let user =
@@ -140,7 +148,7 @@ pub async fn refresh(
     State(state): State<Arc<AppState>>,
     Json(req): Json<RefreshRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let data = redis_ops::refresh_consume(&state.redis, req.refresh_token.expose())
+    let data = redis_ops::refresh_consume(&state.redis, &req.refresh_token)
         .await?
         .ok_or(AppError::Unauthorized)?;
     let tokens = auth::issue_session(&state, data.user_id, data.signing_pubkey).await?;
@@ -173,13 +181,7 @@ pub async fn oidc_login(
     // dropped, the client authenticates at the provider and only then hits a
     // `SessionExpired` on callback. That is a confusing failure after
     // credentials were already handed over. Surface the failure now instead.
-    redis_ops::oidc_state_set(
-        &state.redis,
-        login_resp.state.expose(),
-        auth_state.pkce_verifier_secret.expose(),
-        &auth_state.nonce.secret().clone(),
-    )
-    .await?;
+    redis_ops::oidc_state_set(&state.redis, &login_resp.state, &auth_state).await?;
 
     Ok(axum::Json(login_resp))
 }
@@ -201,14 +203,7 @@ pub async fn oidc_callback(
         .get(&provider)
         .ok_or(AppError::UnknownProvider(provider.clone()))?;
 
-    let (pkce_verifier, nonce_str) =
-        redis_ops::oidc_state_take(&state.redis, req.state.expose()).await?;
-
-    use openidconnect::Nonce;
-    let stored_state = oidc::OidcAuthState {
-        pkce_verifier_secret: oidc::OidcSecret::new(pkce_verifier),
-        nonce: Nonce::new(nonce_str),
-    };
+    let stored_state = redis_ops::oidc_state_take(&state.redis, &req.state).await?;
 
     let claims =
         oidc::exchange_code(provider_state, req.code.expose().to_owned(), &stored_state).await?;
@@ -287,7 +282,7 @@ mod tests {
             master_key_salt: None,
             exchange_pubkey: signing_pubkey
                 .as_ref()
-                .map(|_| ambre_core::PublicKey::from_array([4u8; 32])),
+                .map(|_| ambre_core::ExchangePublicKey::from_array([4u8; 32])),
             signing_pubkey,
         }
     }

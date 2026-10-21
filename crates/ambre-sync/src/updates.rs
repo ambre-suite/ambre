@@ -1619,12 +1619,12 @@ pub(crate) async fn upload_snapshot(
 /// What an open reads out of one members answer (`SYNC-092`).
 pub(crate) struct OpenedMembers {
     pub doc_key: DocumentKey,
-    pub signing_keys: Vec<([u8; 32], UserId)>,
+    pub signing_keys: Vec<(ambre_core::PublicKey, UserId)>,
     pub role: Role,
     pub rotation_owed: bool,
     /// The keys the membership log lets sign a key link (`SYNC-121`).
     /// `None` for a document older than the log.
-    pub signers: Option<std::collections::HashSet<[u8; 32]>>,
+    pub signers: Option<std::collections::HashSet<ambre_core::PublicKey>>,
     /// The key the entry that added us names, when the log verifies our row
     /// (`SYNC-123`).
     pub named_key: Option<ambre_core::KeyId>,
@@ -1695,12 +1695,12 @@ mod tests {
         doc_key: &DocumentKey,
         role: ambre_core::Role,
     ) -> http::MemberEntry {
-        let holder_pub = x25519_dalek::PublicKey::from(holder).to_bytes();
-        let wrapper_pub = x25519_dalek::PublicKey::from(wrapper).to_bytes();
+        let holder_pub = crate::sharing::own_exchange_key(holder);
+        let wrapper_pub = crate::sharing::own_exchange_key(wrapper);
         http::MemberEntry {
             user_id: uid,
             signing_pub_key: ambre_core::SigningKeyHex::encode([uid.as_bytes()[0]; 32]),
-            exchange_pub_key: ambre_core::ExchangeKeyHex::encode(holder_pub),
+            exchange_pub_key: ambre_core::ExchangeKeyHex::encode(&holder_pub),
             doc_key_enc: crate::sharing::wrap_anchored_b64(wrapper, &holder_pub, doc_key, None)
                 .unwrap(),
             role,
@@ -1807,7 +1807,7 @@ mod tests {
         SnapshotId,
     ) {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         let document_id = DocumentId::new();
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::generate().derive_signing_key();
@@ -2013,12 +2013,12 @@ mod tests {
     fn an_opened_update_reaches_logic_with_its_nonce_its_peer_and_its_signer() {
         let (mut state, rx, doc, key, sk, snap) = setup();
         let alice = UserId::new();
-        let signer = sk.verifying_key().to_bytes();
+        let signer = PublicKey::from_array(sk.verifying_key().to_bytes());
         state
             .documents
             .get_mut(&doc)
             .unwrap()
-            .set_signing_keys([(signer, alice)]);
+            .set_signing_keys([(signer.clone(), alice)]);
         state.receive_update(
             Seq(1),
             make_update(doc, snap, Clock(1), b"hello", &key, &sk),
@@ -2049,7 +2049,10 @@ mod tests {
         assert_eq!(unknown.user, None);
         assert_eq!(
             unknown.peer,
-            ambre_crypto::peer::derive_peer_id(&stranger.verifying_key().to_bytes(), &TEST_NONCE)
+            ambre_crypto::peer::derive_peer_id(
+                &PublicKey::from_array(stranger.verifying_key().to_bytes()),
+                &TEST_NONCE
+            )
         );
     }
 
@@ -2331,7 +2334,7 @@ mod tests {
             .get_mut(&doc)
             .expect("document")
             .signing_keys
-            .insert(*pub_key.as_array(), alice);
+            .insert(pub_key.clone(), alice);
 
         state.handle_ws_message(WsServerMsg::PeerLeft {
             document_id: doc,
@@ -2374,8 +2377,8 @@ mod tests {
             .get_mut(&doc)
             .expect("document")
             .signing_keys;
-        keys.insert(*author.as_array(), alice);
-        keys.insert(*reporter.as_array(), bob);
+        keys.insert(author.clone(), alice);
+        keys.insert(reporter.clone(), bob);
         let dropped = |state: &mut SyncState| {
             state.handle_ws_message(WsServerMsg::SnapshotDropped {
                 document_id: doc,
@@ -2447,7 +2450,7 @@ mod tests {
             word: Default::default(),
             rotation_owed: false,
             members: vec![listed(carol)],
-            signing_keys: vec![([2u8; 32], carol)],
+            signing_keys: vec![(PublicKey::from_array([2u8; 32]), carol)],
         });
         let events = drain(&rx);
         assert_eq!(
@@ -2511,7 +2514,7 @@ mod tests {
             word: Default::default(),
             rotation_owed: false,
             members: Vec::new(),
-            signing_keys: vec![([2u8; 32], carol)],
+            signing_keys: vec![(PublicKey::from_array([2u8; 32]), carol)],
         });
         let bob = UserId::new();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
@@ -2521,13 +2524,17 @@ mod tests {
             word: Default::default(),
             rotation_owed: false,
             members: Vec::new(),
-            signing_keys: vec![([1u8; 32], bob)],
+            signing_keys: vec![(PublicKey::from_array([1u8; 32]), bob)],
         });
 
         let keys = &state.documents[&doc].signing_keys;
-        assert_eq!(keys.get(&[2u8; 32]), Some(&carol), "the newer answer holds");
+        assert_eq!(
+            keys.get(&PublicKey::from_array([2u8; 32])),
+            Some(&carol),
+            "the newer answer holds"
+        );
         assert!(
-            !keys.contains_key(&[1u8; 32]),
+            !keys.contains_key(&PublicKey::from_array([1u8; 32])),
             "the crossed answer changes nothing"
         );
         assert!(
@@ -2546,7 +2553,11 @@ mod tests {
     fn a_subscription_reads_the_members_a_change_during_the_open_left_out() {
         let (mut state, rx, doc, _key, _signing_key, _snap) = setup();
         let carol = UserId::new();
-        assert!(!state.documents[&doc].signing_keys.contains_key(&[3u8; 32]));
+        assert!(
+            !state.documents[&doc]
+                .signing_keys
+                .contains_key(&PublicKey::from_array([3u8; 32]))
+        );
 
         state.handle_ws_message(WsServerMsg::Subscribed { document_id: doc });
         assert_eq!(state.documents[&doc].directory_asked, 1, "one listing");
@@ -2558,10 +2569,14 @@ mod tests {
             word: Default::default(),
             rotation_owed: false,
             members: vec![listed(carol)],
-            signing_keys: vec![([3u8; 32], carol)],
+            signing_keys: vec![(PublicKey::from_array([3u8; 32]), carol)],
         });
         let keys = &state.documents[&doc].signing_keys;
-        assert_eq!(keys.get(&[3u8; 32]), Some(&carol), "the newcomer resolves");
+        assert_eq!(
+            keys.get(&PublicKey::from_array([3u8; 32])),
+            Some(&carol),
+            "the newcomer resolves"
+        );
         let handed = rows_handed(&drain(&rx));
         assert_eq!(handed, Some(vec![carol]), "an open view gets the rows too");
 
@@ -2987,7 +3002,7 @@ mod tests {
                 let transcript = ambre_protocol::snapshot_report::report_transcript(
                     doc,
                     pending,
-                    &author.verifying_key().to_bytes(),
+                    &PublicKey::from_array(author.verifying_key().to_bytes()),
                 );
                 let bytes: [u8; 64] = hex::decode(&signature).unwrap().try_into().unwrap();
                 let signature = ed25519_dalek::Signature::from_bytes(&bytes);

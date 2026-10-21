@@ -1,5 +1,6 @@
 // ambre-server/src/extract.rs
-// The JSON body every route reads, and the answer to one that does not decode.
+// The JSON body every route reads, the identifiers of its path, and the answer
+// to either one that does not decode.
 
 //! The framework's own JSON extractor answers `422` to a body that does not
 //! decode. This relay keeps `422` for a signature that does not verify, and
@@ -7,7 +8,8 @@
 //! therefore reads its body through [`Json`], never through `axum::Json`.
 
 use axum::extract::rejection::JsonRejection;
-use axum::extract::{FromRequest, OptionalFromRequest, Request};
+use axum::extract::{FromRequest, FromRequestParts, OptionalFromRequest, Path, Request};
+use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use serde::de::DeserializeOwned;
 
@@ -59,6 +61,98 @@ where
             .await
             .map(|body| body.map(|axum::Json(body)| Json(body)))
             .map_err(refused)
+    }
+}
+
+/// One segment of a route path, read into its own type.
+pub trait PathPart: Sized {
+    /// What the framework reads the segment into.
+    type Raw: DeserializeOwned + Send;
+
+    /// The segment's value, or the resource a 404 names when it does not
+    /// parse.
+    fn part(raw: Self::Raw) -> Result<Self, &'static str>;
+}
+
+macro_rules! path_id {
+    ($($id:ty => $resource:literal),* $(,)?) => {
+        $(impl PathPart for $id {
+            type Raw = String;
+
+            fn part(raw: String) -> Result<Self, &'static str> {
+                <$id>::parse_str(&raw).map_err(|_| $resource)
+            }
+        })*
+    };
+}
+
+path_id!(
+    ambre_core::DocumentId => "document",
+    ambre_core::SnapshotId => "snapshot",
+    ambre_core::UserId => "user",
+    ambre_core::OrgId => "organization",
+    ambre_core::ChannelId => "channel",
+    ambre_core::SpaceId => "space",
+    ambre_core::SegmentId => "segment",
+);
+
+/// A content address reads as the framework reads it: it checks nothing.
+impl PathPart for ambre_core::ContentHash {
+    type Raw = ambre_core::ContentHash;
+
+    fn part(raw: Self::Raw) -> Result<Self, &'static str> {
+        Ok(raw)
+    }
+}
+
+impl<A: PathPart, B: PathPart> PathPart for (A, B) {
+    type Raw = (A::Raw, B::Raw);
+
+    fn part((a, b): Self::Raw) -> Result<Self, &'static str> {
+        Ok((A::part(a)?, B::part(b)?))
+    }
+}
+
+/// The parts of a path, read in order. A path the framework refuses keeps its
+/// answer, and a part that does not parse names its resource.
+async fn read_path<T: PathPart, S: Send + Sync>(
+    parts: &mut Parts,
+    state: &S,
+) -> Result<Result<T, &'static str>, Response> {
+    let Path(raw) = Path::<T::Raw>::from_request_parts(parts, state)
+        .await
+        .map_err(IntoResponse::into_response)?;
+    Ok(T::part(raw))
+}
+
+/// The identifiers of a route path. One that does not parse answers the 404
+/// of its resource, as an identifier nobody holds does.
+pub struct PathId<T>(pub T);
+
+impl<T: PathPart, S: Send + Sync> FromRequestParts<S> for PathId<T> {
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        read_path(parts, state)
+            .await?
+            .map(PathId)
+            .map_err(|resource| AppError::NotFound { resource }.into_response())
+    }
+}
+
+/// The identifiers of a channel route path. One that does not parse answers
+/// the 403 of an identifier the caller may not use, so the route tells nothing
+/// apart.
+pub struct OpaquePathId<T>(pub T);
+
+impl<T: PathPart, S: Send + Sync> FromRequestParts<S> for OpaquePathId<T> {
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        read_path(parts, state)
+            .await?
+            .map(OpaquePathId)
+            .map_err(|_| AppError::Forbidden.into_response())
     }
 }
 
@@ -116,6 +210,63 @@ mod tests {
         );
         assert_eq!(answer(json, r#"{"word":"#).await, StatusCode::CONFLICT);
         assert_eq!(answer(json, r#"{}"#).await, StatusCode::CONFLICT);
+    }
+
+    /// The status and the body of `resp`.
+    async fn read(resp: Response) -> (StatusCode, Vec<u8>) {
+        let status = resp.status();
+        let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+        (status, body.to_vec())
+    }
+
+    /// What a route answers to `uri`, its path read as a document and a user,
+    /// or as a channel behind a 403.
+    async fn path_answer(uri: &str) -> (StatusCode, Vec<u8>) {
+        let app = axum::Router::new()
+            .route(
+                "/d/{doc}/u/{user}",
+                axum::routing::get(
+                    |PathId(_): PathId<(ambre_core::DocumentId, ambre_core::UserId)>| async {
+                        StatusCode::OK
+                    },
+                ),
+            )
+            .route(
+                "/c/{channel}",
+                axum::routing::get(
+                    |OpaquePathId(_): OpaquePathId<ambre_core::ChannelId>| async { StatusCode::OK },
+                ),
+            );
+        let resp = app
+            .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        read(resp).await
+    }
+
+    /// A path identifier that does not parse answers as one nobody holds: the
+    /// 404 of its own resource, or the 403 of a channel route.
+    #[tokio::test]
+    async fn a_path_identifier_that_does_not_parse_answers_its_refusal() {
+        let id = "00000000-0000-0000-0000-000000000001";
+        assert_eq!(
+            path_answer(&format!("/d/{id}/u/{id}")).await.0,
+            StatusCode::OK
+        );
+        let missing = |resource| read(AppError::NotFound { resource }.into_response());
+        assert_eq!(
+            path_answer(&format!("/d/nope/u/{id}")).await,
+            missing("document").await
+        );
+        assert_eq!(
+            path_answer(&format!("/d/{id}/u/nope")).await,
+            missing("user").await
+        );
+        assert_eq!(path_answer(&format!("/c/{id}")).await.0, StatusCode::OK);
+        assert_eq!(
+            path_answer("/c/nope").await,
+            read(AppError::Forbidden.into_response()).await
+        );
     }
 
     #[tokio::test]

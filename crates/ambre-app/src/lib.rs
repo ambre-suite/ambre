@@ -1268,7 +1268,7 @@ pub fn main() {
             let pin_rx = persist_store_frame
                 .borrow()
                 .as_ref()
-                .map(|s| s.store().load_trusted_key(*prompt.user_id.as_bytes()));
+                .map(|s| s.store().load_trusted_key(prompt.user_id));
             let relay = relay_tx.clone();
             let role_sig = invite_role;
             let prompt_sig = tofu_prompt;

@@ -21,7 +21,7 @@ use web_sys::{IdbDatabase, IdbOpenDbRequest, IdbTransactionMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ambre_core::{DocumentId, SessionNonce};
+use ambre_core::{DocumentId, SessionNonce, UserId};
 use futures_channel::oneshot;
 
 use crate::store_ledger::Meta;
@@ -627,9 +627,12 @@ impl PersistenceStore {
     /// has been confirmed before, or `None` (first invitation / read error). The
     /// Main thread awaits it and compares against the freshly fetched key to
     /// classify the trust state (`ambre-spec-key-verification.md`).
-    pub fn load_trusted_key(&self, user_id: [u8; 16]) -> oneshot::Receiver<Option<[u8; 32]>> {
+    pub fn load_trusted_key(
+        &self,
+        user_id: UserId,
+    ) -> oneshot::Receiver<Option<ambre_core::ExchangePublicKey>> {
         let (tx, rx) = answer();
-        let key = id_to_hex(&user_id);
+        let key = id_to_hex(user_id.as_bytes());
 
         let txn = match self.db.transaction_with_str(STORE_TRUSTED_KEYS) {
             Ok(t) => t,
@@ -667,7 +670,7 @@ impl PersistenceStore {
                     .filter(|v| !v.is_undefined() && !v.is_null())
                     .and_then(|v| v.dyn_into::<Uint8Array>().ok())
                     .map(|a| a.to_vec())
-                    .and_then(|v| <[u8; 32]>::try_from(v).ok());
+                    .and_then(|v| ambre_core::ExchangePublicKey::from_slice(&v).ok());
                 tx_ok.send(data);
             });
         request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
@@ -687,8 +690,8 @@ impl PersistenceStore {
     /// Called on the user's confirmation in the share dialog, and again when they
     /// deliberately re-pin after a "key changed" alert. The transaction
     /// auto-commits when the Main thread returns to its event loop.
-    pub fn save_trusted_key(&self, user_id: [u8; 16], key: [u8; 32]) {
-        let hex = id_to_hex(&user_id);
+    pub fn save_trusted_key(&self, user_id: UserId, key: &ambre_core::ExchangePublicKey) {
+        let hex = id_to_hex(user_id.as_bytes());
         let txn = match self
             .db
             .transaction_with_str_and_mode(STORE_TRUSTED_KEYS, IdbTransactionMode::Readwrite)
@@ -707,8 +710,8 @@ impl PersistenceStore {
             }
         };
 
-        let array = Uint8Array::new_with_length(key.len() as u32);
-        array.copy_from(&key);
+        let array = Uint8Array::new_with_length(key.as_slice().len() as u32);
+        array.copy_from(key.as_slice());
         if let Err(e) = store.put_with_key(array.as_ref(), &JsValue::from_str(&hex)) {
             tracing::warn!("Persistence: trusted_key put failed for {hex}: {e:?}");
         }

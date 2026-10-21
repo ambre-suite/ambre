@@ -5,7 +5,7 @@
 //! the snapshot's author. So the relay can check it, and nobody can replay it
 //! against another snapshot.
 
-use ambre_core::{DocumentId, SnapshotId};
+use ambre_core::{DocumentId, PublicKey, SnapshotId};
 
 /// The domain the transcript opens with, so the signature serves no other use.
 pub const REPORT_DOMAIN: &[u8] = b"ambre-snapshot-report-v1";
@@ -16,13 +16,13 @@ pub const REPORT_DOMAIN: &[u8] = b"ambre-snapshot-report-v1";
 pub fn report_transcript(
     document_id: DocumentId,
     snapshot_id: SnapshotId,
-    author: &[u8; 32],
+    author: &PublicKey,
 ) -> Vec<u8> {
     let mut transcript = Vec::with_capacity(REPORT_DOMAIN.len() + 16 + 16 + 32);
     transcript.extend_from_slice(REPORT_DOMAIN);
     transcript.extend_from_slice(document_id.as_uuid().as_bytes());
     transcript.extend_from_slice(snapshot_id.as_uuid().as_bytes());
-    transcript.extend_from_slice(author);
+    transcript.extend_from_slice(author.as_array());
     transcript
 }
 
@@ -36,10 +36,19 @@ mod tests {
     fn the_transcript_names_the_document_the_snapshot_and_the_author() {
         let doc = DocumentId::new();
         let snap = SnapshotId::new();
-        let base = report_transcript(doc, snap, &[1; 32]);
+        let base = report_transcript(doc, snap, &PublicKey::from_array([1; 32]));
         assert!(base.starts_with(REPORT_DOMAIN));
-        assert_ne!(base, report_transcript(DocumentId::new(), snap, &[1; 32]));
-        assert_ne!(base, report_transcript(doc, SnapshotId::new(), &[1; 32]));
-        assert_ne!(base, report_transcript(doc, snap, &[2; 32]));
+        assert_ne!(
+            base,
+            report_transcript(DocumentId::new(), snap, &PublicKey::from_array([1; 32]))
+        );
+        assert_ne!(
+            base,
+            report_transcript(doc, SnapshotId::new(), &PublicKey::from_array([1; 32]))
+        );
+        assert_ne!(
+            base,
+            report_transcript(doc, snap, &PublicKey::from_array([2; 32]))
+        );
     }
 }

@@ -27,7 +27,7 @@ pub struct DocumentSummaryRow {
     /// Exchange public key of the member who wrapped the caller's `doc_key_enc`
     /// (the inviter, or the owner at creation). `None` for a self-wrapped owner
     /// row on older data; the client then falls back to its own key.
-    pub wrapper_exchange_pubkey: Option<ambre_core::PublicKey>,
+    pub wrapper_exchange_pubkey: Option<ambre_core::ExchangePublicKey>,
     /// Total number of members on the document (routing metadata, plaintext).
     /// `> 1` means the document is shared.
     pub member_count: i64,
@@ -95,7 +95,9 @@ pub async fn list_documents_for_user(
                 updated_at: r.try_get("updated_at")?,
                 role: decode_role(r.try_get("role")?)?,
                 doc_key_enc: ambre_core::WrappedDocKey::new(r.try_get("doc_key_enc")?),
-                wrapper_exchange_pubkey: decode_opt_key(r.try_get("wrapper_exchange_pubkey")?)?,
+                wrapper_exchange_pubkey: decode_opt_exchange_key(
+                    r.try_get("wrapper_exchange_pubkey")?,
+                )?,
                 member_count: r.try_get("member_count")?,
             })
         })
@@ -216,7 +218,6 @@ pub async fn begin_deletion(
     document_id: &ambre_core::DocumentId,
     sweep_due: ambre_core::UnixSeconds,
 ) -> Result<Vec<super::DeletedChannel>, AppError> {
-    let did = id_to_uuid(*document_id);
     let mut tx = pool.begin().await?;
     let channels = super::channels::delete_space_channels_in(
         &mut tx,
@@ -224,7 +225,7 @@ pub async fn begin_deletion(
         sweep_due,
     )
     .await?;
-    begin_deletions_in(&mut tx, &[did], sweep_due).await?;
+    begin_deletions_in(&mut tx, &[*document_id], sweep_due).await?;
     tx.commit().await?;
     Ok(channels)
 }
@@ -234,16 +235,17 @@ pub async fn begin_deletion(
 /// are left, and forgets them last (`SRV-165`).
 pub(super) async fn begin_deletions_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    documents: &[uuid::Uuid],
+    documents: &[ambre_core::DocumentId],
     sweep_due: ambre_core::UnixSeconds,
 ) -> Result<(), AppError> {
+    let documents: Vec<uuid::Uuid> = documents.iter().copied().map(id_to_uuid).collect();
     sqlx::query(
         "INSERT INTO document_deletions (document_id, sweep_due) \
          SELECT unnest($1::uuid[]), $2 \
          ON CONFLICT (document_id) DO UPDATE \
          SET sweep_due = GREATEST(document_deletions.sweep_due, EXCLUDED.sweep_due)",
     )
-    .bind(documents)
+    .bind(&documents)
     .bind(sweep_due.to_i64_saturating())
     .execute(&mut **tx)
     .await?;

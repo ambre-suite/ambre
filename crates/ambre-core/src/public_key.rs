@@ -1,88 +1,109 @@
-//! Public key wrapper (`[u8; 32]`).
+//! Public key wrappers (`[u8; 32]`).
 //!
-//! A type-safe wrapper for 32-byte public keys used in Ed25519 signatures and X25519 key exchange.
+//! One type per role: [`PublicKey`] verifies an Ed25519 signature, and
+//! [`ExchangePublicKey`] receives an X25519 key exchange. Both hold 32 bytes.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use crate::error::PublicKeyError;
 
-/// A 32-byte public key.
-///
-/// The underlying array is always 32 bytes, as required by Ed25519 and X25519.
-///
-/// Public keys are not secret, so this type deliberately does NOT zeroize on
-/// drop. Doing so would only add a memset to a hot, frequently-cloned type
-/// (every `UpdatePublicData` carries one). It would also imply a
-/// confidentiality the type does not have. Zeroize is reserved for the real
-/// secret-key types.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct PublicKey([u8; 32]);
+macro_rules! define_public_key {
+    ($(#[$meta:meta])* $name:ident) => {
+        $(#[$meta])*
+        #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        pub struct $name([u8; 32]);
 
-impl PublicKey {
-    /// Creates a public key from a 32-byte array.
-    pub const fn from_array(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
+        impl $name {
+            /// Creates a public key from a 32-byte array.
+            pub const fn from_array(bytes: [u8; 32]) -> Self {
+                Self(bytes)
+            }
 
-    /// Creates a public key from a slice, returning an error if the length is not 32.
-    ///
-    /// # Errors
-    ///
-    /// [`PublicKeyError::InvalidLength`], carrying the length it received.
-    pub fn from_slice(slice: &[u8]) -> Result<Self, PublicKeyError> {
-        slice
-            .try_into()
-            .map(Self)
-            .map_err(|_| PublicKeyError::InvalidLength(slice.len()))
-    }
+            /// Creates a public key from a slice, returning an error if the length is not 32.
+            ///
+            /// # Errors
+            ///
+            /// [`PublicKeyError::InvalidLength`], carrying the length it received.
+            pub fn from_slice(slice: &[u8]) -> Result<Self, PublicKeyError> {
+                slice
+                    .try_into()
+                    .map(Self)
+                    .map_err(|_| PublicKeyError::InvalidLength(slice.len()))
+            }
 
-    /// Returns the underlying 32-byte array.
-    pub const fn as_array(&self) -> &[u8; 32] {
-        &self.0
-    }
+            /// Returns the underlying 32-byte array.
+            pub const fn as_array(&self) -> &[u8; 32] {
+                &self.0
+            }
 
-    /// Returns the key as a slice of 32 bytes.
-    pub fn as_slice(&self) -> &[u8] {
-        &self.0
-    }
+            /// Returns the key as a slice of 32 bytes.
+            pub fn as_slice(&self) -> &[u8] {
+                &self.0
+            }
 
-    /// Returns a hex-encoded string of the public key (lowercase).
-    pub fn to_hex(&self) -> String {
-        hex::encode(self.0)
-    }
+            /// Returns a hex-encoded string of the public key (lowercase).
+            pub fn to_hex(&self) -> String {
+                hex::encode(self.0)
+            }
 
-    /// Parses a public key from a hex string (with or without `0x` prefix).
-    ///
-    /// Returns an error if the string does not contain exactly 64 hex digits.
-    ///
-    /// # Errors
-    ///
-    /// [`PublicKeyError::InvalidHex`] on a non-hexadecimal digit, and
-    /// [`PublicKeyError::InvalidLength`] on any length other than 32 bytes.
-    pub fn from_hex(hex_str: &str) -> Result<Self, PublicKeyError> {
-        let stripped = hex_str.strip_prefix("0x").unwrap_or(hex_str);
-        let bytes = hex::decode(stripped)?;
-        Self::from_slice(&bytes)
-    }
+            /// Parses a public key from a hex string (with or without `0x` prefix).
+            ///
+            /// Returns an error if the string does not contain exactly 64 hex digits.
+            ///
+            /// # Errors
+            ///
+            /// [`PublicKeyError::InvalidHex`] on a non-hexadecimal digit, and
+            /// [`PublicKeyError::InvalidLength`] on any length other than 32 bytes.
+            pub fn from_hex(hex_str: &str) -> Result<Self, PublicKeyError> {
+                let stripped = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+                let bytes = hex::decode(stripped)?;
+                Self::from_slice(&bytes)
+            }
+        }
+
+        impl AsRef<[u8]> for $name {
+            fn as_ref(&self) -> &[u8] {
+                &self.0
+            }
+        }
+
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(
+                    f,
+                    concat!(stringify!($name), "(0x{}...)"),
+                    hex::encode(&self.0[..4])
+                )
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "0x{}", self.to_hex())
+            }
+        }
+    };
 }
 
-impl AsRef<[u8]> for PublicKey {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
+define_public_key! {
+    /// A 32-byte Ed25519 public key: the one that verifies a user's signatures.
+    ///
+    /// Public keys are not secret, so this type deliberately does NOT zeroize on
+    /// drop. Doing so would only add a memset to a hot, frequently-cloned type
+    /// (every `UpdatePublicData` carries one). It would also imply a
+    /// confidentiality the type does not have. Zeroize is reserved for the real
+    /// secret-key types.
+    PublicKey
 }
 
-impl fmt::Debug for PublicKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "PublicKey(0x{}...)", hex::encode(&self.0[..4]))
-    }
-}
-
-impl fmt::Display for PublicKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{}", self.to_hex())
-    }
+define_public_key! {
+    /// A 32-byte X25519 public key: the one a document key is wrapped to.
+    ///
+    /// It has the size of a [`PublicKey`] and the same text forms. A distinct
+    /// type keeps an exchange key from standing where a signing key is read.
+    /// It does not zeroize on drop, for the reason [`PublicKey`] gives.
+    ExchangePublicKey
 }
 
 #[cfg(test)]
@@ -117,6 +138,13 @@ mod tests {
         assert_eq!(pk, parsed);
         let parsed_with_prefix = PublicKey::from_hex(&format!("0x{}", hex)).unwrap();
         assert_eq!(pk, parsed_with_prefix);
+    }
+
+    #[test]
+    fn an_exchange_key_reads_its_own_hex() {
+        let key = ExchangePublicKey::from_array([0x0f; 32]);
+        assert_eq!(ExchangePublicKey::from_hex(&key.to_hex()).unwrap(), key);
+        assert_eq!(format!("{key:?}"), "ExchangePublicKey(0x0f0f0f0f...)");
     }
 
     #[test]

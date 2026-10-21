@@ -1,28 +1,13 @@
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
-use crate::extract::Json;
+use crate::extract::{Json, PathId};
 use crate::s3;
 use crate::state::AppState;
-
-fn parse_doc_id(s: &str) -> Result<ambre_core::DocumentId, AppError> {
-    ambre_core::Uuid::parse_str(s)
-        .map(ambre_core::DocumentId::from_uuid)
-        .map_err(|_| AppError::NotFound {
-            resource: "document",
-        })
-}
-fn parse_snap_id(s: &str) -> Result<ambre_core::SnapshotId, AppError> {
-    ambre_core::Uuid::parse_str(s)
-        .map(ambre_core::SnapshotId::from_uuid)
-        .map_err(|_| AppError::NotFound {
-            resource: "snapshot",
-        })
-}
 
 /// Summary of the latest snapshot (id + S3 key).
 #[derive(serde::Serialize)]
@@ -54,10 +39,9 @@ pub struct ReferenceSnapshot {
 pub async fn get_snapshot_metadata(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -105,10 +89,8 @@ pub struct ConfirmedSnapshotJson {
 pub async fn confirm_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((document_id, snapshot_id)): Path<(String, String)>,
+    PathId((doc_id, snap_id)): PathId<(ambre_core::DocumentId, ambre_core::SnapshotId)>,
 ) -> Result<axum::Json<ConfirmedSnapshotJson>, AppError> {
-    let doc_id = parse_doc_id(&document_id)?;
-    let snap_id = parse_snap_id(&snapshot_id)?;
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -155,12 +137,10 @@ pub struct ReportSnapshotRequest {
 pub async fn report_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((document_id, snapshot_id)): Path<(String, String)>,
+    PathId((doc_id, snap_id)): PathId<(ambre_core::DocumentId, ambre_core::SnapshotId)>,
     Json(req): Json<ReportSnapshotRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use ed25519_dalek::{Signature, VerifyingKey};
-    let doc_id = parse_doc_id(&document_id)?;
-    let snap_id = parse_snap_id(&snapshot_id)?;
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -169,11 +149,7 @@ pub async fn report_snapshot(
         .ok_or(AppError::NotFound {
             resource: "snapshot",
         })?;
-    let author: [u8; 32] = snap
-        .author_pubkey
-        .as_slice()
-        .try_into()
-        .map_err(|_| AppError::Internal("snapshot author key length".into()))?;
+    let author = snap.author_pubkey;
     let signature = hex::decode(req.signature.as_str())
         .ok()
         .and_then(|bytes| Signature::from_slice(&bytes).ok())
@@ -204,7 +180,7 @@ pub async fn report_snapshot(
             &ambre_protocol::ws::WsServerMsg::SnapshotDropped {
                 document_id: doc_id,
                 snapshot_id: snap_id,
-                author: ambre_core::PublicKey::from_array(author),
+                author,
                 reporter: auth.signing_pubkey,
                 refinalize: dropped.refinalize,
             },
@@ -247,11 +223,10 @@ pub struct CreateSnapshotResponse {
 pub async fn create_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Json(req): Json<CreateSnapshotRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -330,11 +305,10 @@ pub struct SnapshotUploadUrlResponse {
 pub async fn snapshot_upload_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Json(req): Json<SnapshotUploadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -382,11 +356,10 @@ pub struct SnapshotDownloadUrlResponse {
 pub async fn snapshot_download_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Json(req): Json<SnapshotDownloadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -434,11 +407,10 @@ pub struct DeltasResponse {
 pub async fn get_deltas(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Query(params): Query<DeltasQuery>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;

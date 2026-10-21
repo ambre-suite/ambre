@@ -151,7 +151,7 @@ impl AuthContext {
                 refresh_token: self.refresh_token()?,
             };
             let mut request = Outgoing::json(Method::Post, &url, &body)?;
-            request.bearer = Some(bearer(&self.access_token()?));
+            request.bearer = Some(self.access_token()?);
             let resp = exchange(transport, &request).await?;
             Ok::<_, String>((request, resp))
         };
@@ -165,7 +165,7 @@ impl AuthContext {
 }
 
 /// The `Authorization` header value, wiped once the request holds its copy.
-fn bearer(token: &SecretToken) -> Zeroizing<String> {
+pub(crate) fn bearer(token: &SecretToken) -> Zeroizing<String> {
     Zeroizing::new(format!("Bearer {}", token.expose()))
 }
 
@@ -210,8 +210,9 @@ pub(crate) struct Outgoing {
     pub method: Method,
     /// Where it goes.
     pub url: String,
-    /// The `Authorization` value, on a request to the relay that needs one.
-    pub bearer: Option<Zeroizing<String>>,
+    /// The access token the `Authorization` header presents, on a request to
+    /// the relay that needs one. The transport spells the header at send time.
+    pub bearer: Option<SecretToken>,
     /// The content type and the bytes of the body, if any.
     pub body: Option<(&'static str, Vec<u8>)>,
     /// How long the transport waits before it aborts the request.
@@ -289,8 +290,8 @@ impl Transport for Fetch {
         let mut builder = gloo_net::http::RequestBuilder::new(&request.url)
             .method(request.method.gloo())
             .abort_signal(Some(&signal));
-        if let Some(bearer) = &request.bearer {
-            builder = builder.header("Authorization", bearer);
+        if let Some(token) = &request.bearer {
+            builder = builder.header("Authorization", &bearer(token));
         }
         let sent = match &request.body {
             Some((content_type, bytes)) => {
@@ -469,13 +470,13 @@ async fn exchange_auth(
     auth: &AuthContext,
     request: &mut Outgoing,
 ) -> Result<Incoming, String> {
-    request.bearer = Some(bearer(&auth.access_token()?));
+    request.bearer = Some(auth.access_token()?);
     let resp = exchange(transport, request).await?;
     if resp.status != 401 {
         return Ok(resp);
     }
     auth.refresh_via(transport).await?;
-    request.bearer = Some(bearer(&auth.access_token()?));
+    request.bearer = Some(auth.access_token()?);
     exchange(transport, request).await
 }
 
@@ -1653,7 +1654,10 @@ mod tests {
 
     /// The `Authorization` value a request carried, if any.
     fn bearer_of(request: &Outgoing) -> Option<String> {
-        request.bearer.as_ref().map(|b| b.as_str().to_owned())
+        request
+            .bearer
+            .as_ref()
+            .map(|token| bearer(token).to_string())
     }
 
     /// `SYNC-062`: a request refused for an expired token renews the pair

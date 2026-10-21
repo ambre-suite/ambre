@@ -15,20 +15,22 @@
 
 use std::collections::HashSet;
 
+use ambre_protocol::ws::AccessToken;
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
-/// Access-token claims. `sub` is the user id, and `spk` the hex Ed25519
-/// signing public key (used server-side to verify WS message signatures
-/// without a DB hit). `iat`/`exp` are standard Unix-seconds timestamps.
+/// Access-token claims. `sub` is the user id, as its hyphenated text.
+/// `spk` is the hex Ed25519 signing public key (used server-side to verify WS
+/// message signatures without a DB hit). `iat`/`exp` are standard Unix-seconds timestamps.
 ///
 /// `spk` is absent on the session of an account that has not registered its
 /// keys yet. Such a session carries no identity to sign under (`SRV-027`).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub sub: ambre_core::UserId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spk: Option<ambre_core::SigningKeyHex>,
     pub iat: ambre_core::UnixSeconds,
@@ -77,13 +79,18 @@ impl JwtKeys {
     }
 
     /// Mint a signed access token for `claims`.
-    pub fn mint(&self, claims: &Claims) -> Result<String, jsonwebtoken::errors::Error> {
+    pub fn mint(&self, claims: &Claims) -> Result<AccessToken, jsonwebtoken::errors::Error> {
         jsonwebtoken::encode(&Header::new(Algorithm::EdDSA), claims, &self.encoding)
+            .map(AccessToken::new)
     }
 
-    /// Verify a token's signature and expiry, returning its claims.
-    pub fn verify(&self, token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
-        Ok(jsonwebtoken::decode::<Claims>(token, &self.decoding, &self.validation)?.claims)
+    /// Verify a token's signature and expiry, returning its claims. A `sub`
+    /// that is not a user id fails the decode.
+    pub fn verify(&self, token: &AccessToken) -> Result<Claims, jsonwebtoken::errors::Error> {
+        Ok(
+            jsonwebtoken::decode::<Claims>(token.expose(), &self.decoding, &self.validation)?
+                .claims,
+        )
     }
 }
 
@@ -102,7 +109,7 @@ mod tests {
         let keys = JwtKeys::from_seed(&[7u8; 32]);
         let iat = now();
         let claims = Claims {
-            sub: "11111111-1111-7111-8111-111111111111".into(),
+            sub: ambre_core::UserId::parse_str("11111111-1111-7111-8111-111111111111").unwrap(),
             spk: Some(SigningKeyHex("ab".repeat(32))),
             iat,
             exp: iat.plus(Seconds(900)),
@@ -118,7 +125,7 @@ mod tests {
         let keys = JwtKeys::from_seed(&[9u8; 32]);
         let iat = UnixSeconds(now().0 - 10_000);
         let claims = Claims {
-            sub: "x".into(),
+            sub: ambre_core::UserId::new(),
             spk: Some(SigningKeyHex("y".into())),
             iat,
             exp: iat.plus(Seconds(1)), // long past
@@ -134,7 +141,7 @@ mod tests {
         let iat = now();
         let token = a
             .mint(&Claims {
-                sub: "s".into(),
+                sub: ambre_core::UserId::new(),
                 spk: Some(SigningKeyHex("p".into())),
                 iat,
                 exp: iat.plus(Seconds(900)),

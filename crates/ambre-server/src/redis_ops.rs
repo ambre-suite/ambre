@@ -5,8 +5,10 @@ use rustis::commands::{
 };
 use rustis::resp::RefBulkString;
 
+use crate::oidc::{OidcAuthState, OidcSecret};
 use crate::payload::Payload;
 use ambre_protocol::messages::Clock;
+use ambre_protocol::ws::RefreshToken;
 
 /// Atomic Lua script that validates a client clock and assigns a global
 /// monotonic sequence number.
@@ -442,6 +444,23 @@ pub async fn get_pending_deltas_map(
     Ok(map)
 }
 
+/// The value a lock holder writes into its lock key. A release compares it, so a
+/// holder drops only the lock it took.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LockToken(String);
+
+impl LockToken {
+    /// A token no other holder shares: a random UUID.
+    pub fn fresh() -> Self {
+        Self(uuid::Uuid::new_v4().to_string())
+    }
+
+    /// The token text, as the lock key stores it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Tries to acquire the per-document flush lock (`SET lock_key token NX EX ttl`).
 ///
 /// Returns `true` if this caller now holds the lock. The background S3 flusher
@@ -455,13 +474,13 @@ pub async fn get_pending_deltas_map(
 pub async fn try_acquire_flush_lock(
     redis: &Client,
     lock_key: &str,
-    token: &str,
+    token: &LockToken,
     ttl: ambre_core::Seconds,
 ) -> Result<bool, AppError> {
     const LUA: &str = "return redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2])";
     let ttl = ttl.0.to_string();
     let res: Option<String> = redis
-        .eval::<Option<String>>(LUA, [lock_key], [token, ttl.as_str()])
+        .eval::<Option<String>>(LUA, [lock_key], [token.as_str(), ttl.as_str()])
         .await
         .map_err(|e| AppError::Redis(format!("flush lock acquire: {e}")))?;
     Ok(res.is_some())
@@ -473,11 +492,11 @@ pub async fn try_acquire_flush_lock(
 pub async fn release_flush_lock(
     redis: &Client,
     lock_key: &str,
-    token: &str,
+    token: &LockToken,
 ) -> Result<(), AppError> {
     const LUA: &str = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
     let _: i64 = redis
-        .eval::<i64>(LUA, [lock_key], [token])
+        .eval::<i64>(LUA, [lock_key], [token.as_str()])
         .await
         .map_err(|e| AppError::Redis(format!("flush lock release: {e}")))?;
     Ok(())
@@ -492,7 +511,7 @@ pub async fn claim_snapshot_ask(
     ttl: ambre_core::Seconds,
 ) -> Result<bool, AppError> {
     let key = format!("doc:{document_id}:snapshot_asked");
-    try_acquire_flush_lock(redis, &key, "1", ttl).await
+    try_acquire_flush_lock(redis, &key, &LockToken("1".to_owned()), ttl).await
 }
 
 /// The last delta number the relay gave the document, 0 when its counter is
@@ -513,8 +532,11 @@ pub async fn current_seq(
 /// Refresh keys follow the pattern `refresh:{token}` with fields `user_id` and
 /// `signing_pubkey_hex`. Returns `None` when the token is unknown, expired, or
 /// was revoked (logout / rotation).
-pub async fn refresh_get(redis: &Client, token: &str) -> Result<Option<RefreshData>, AppError> {
-    let key = format!("refresh:{token}");
+pub async fn refresh_get(
+    redis: &Client,
+    token: &RefreshToken,
+) -> Result<Option<RefreshData>, AppError> {
+    let key = format!("refresh:{}", token.expose());
     // `hgetall` returns field/value pairs; rustis deserializes them as a map.
     // (Reading into `Vec<String>` fails with "invalid type: sequence, expected a
     // string" because each pair is itself a sequence.)
@@ -549,12 +571,12 @@ pub async fn refresh_get(redis: &Client, token: &str) -> Result<Option<RefreshDa
 /// Creates a refresh-token record in Redis with the configured TTL.
 pub async fn refresh_create(
     redis: &Client,
-    token: &str,
+    token: &RefreshToken,
     data: &RefreshData,
     ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
     let ttl_secs = ttl.0;
-    let key = format!("refresh:{token}");
+    let key = format!("refresh:{}", token.expose());
 
     let user_id = data.user_id.to_string();
     let signing_pubkey_hex = data
@@ -578,8 +600,8 @@ pub async fn refresh_create(
 }
 
 /// Deletes a refresh-token record (logout, or the old token during rotation).
-pub async fn refresh_delete(redis: &Client, token: &str) -> Result<(), AppError> {
-    let key = format!("refresh:{token}");
+pub async fn refresh_delete(redis: &Client, token: &RefreshToken) -> Result<(), AppError> {
+    let key = format!("refresh:{}", token.expose());
     redis
         .del([&key])
         .await
@@ -593,8 +615,8 @@ pub async fn refresh_delete(redis: &Client, token: &str) -> Result<(), AppError>
 /// `DEL` is atomic and reports how many keys it removed, so when several callers
 /// race on the same token exactly one observes `1`. That caller owns the claim;
 /// every other one observes `0` and must be rejected as a replay.
-pub async fn refresh_claim(redis: &Client, token: &str) -> Result<bool, AppError> {
-    let key = format!("refresh:{token}");
+pub async fn refresh_claim(redis: &Client, token: &RefreshToken) -> Result<bool, AppError> {
+    let key = format!("refresh:{}", token.expose());
     let removed: usize = redis
         .del([&key])
         .await
@@ -609,7 +631,10 @@ pub async fn refresh_claim(redis: &Client, token: &str) -> Result<bool, AppError
 /// for rotation. Two concurrent requests presenting the same token both observe
 /// the record before either deletes it. Both then mint a fresh session, and the
 /// replay goes undetected. Gating on the [`refresh_claim`] result closes that.
-pub async fn refresh_consume(redis: &Client, token: &str) -> Result<Option<RefreshData>, AppError> {
+pub async fn refresh_consume(
+    redis: &Client,
+    token: &RefreshToken,
+) -> Result<Option<RefreshData>, AppError> {
     let Some(data) = refresh_get(redis, token).await? else {
         return Ok(None);
     };
@@ -1066,15 +1091,17 @@ pub struct RefreshData {
 /// during the callback to validate the PKCE verifier and nonce.
 pub async fn oidc_state_set(
     redis: &Client,
-    csrf_state: &str,
-    pkce_verifier_secret: &str,
-    nonce: &str,
+    csrf_state: &ambre_core::OidcState,
+    auth_state: &OidcAuthState,
 ) -> Result<(), AppError> {
-    let key = format!("oidc:state:{csrf_state}");
+    let key = format!("oidc:state:{}", csrf_state.expose());
     redis
         .hset(
             &key,
-            [("pkce_verifier", pkce_verifier_secret), ("nonce", nonce)],
+            [
+                ("pkce_verifier", auth_state.pkce_verifier_secret.expose()),
+                ("nonce", auth_state.nonce.secret().as_str()),
+            ],
         )
         .await
         .map_err(|e| AppError::Redis(format!("oidc state set: {e}")))?;
@@ -1087,13 +1114,13 @@ pub async fn oidc_state_set(
 
 /// Retrieves and deletes OIDC authorization state from Redis.
 ///
-/// Returns `(pkce_verifier_secret, nonce)` on success, or an error if the state
-/// expired or was not found.
+/// Returns the PKCE verifier and the nonce on success, or an error if the
+/// state expired or was not found.
 pub async fn oidc_state_take(
     redis: &Client,
-    csrf_state: &str,
-) -> Result<(String, String), AppError> {
-    let key = format!("oidc:state:{csrf_state}");
+    csrf_state: &ambre_core::OidcState,
+) -> Result<OidcAuthState, AppError> {
+    let key = format!("oidc:state:{}", csrf_state.expose());
     // Read into a `HashMap`, NOT a `Vec<String>`. Under RESP3 rustis returns a hash
     // reply as a map, and deserializing that into a flat `Vec<String>` fails with
     // "invalid type: sequence, expected a string". That surfaced here as a spurious
@@ -1116,7 +1143,10 @@ pub async fn oidc_state_take(
         .await
         .map_err(|e| AppError::Redis(format!("oidc state delete: {e}")))?;
 
-    Ok((pkce_verifier, nonce))
+    Ok(OidcAuthState {
+        pkce_verifier_secret: OidcSecret::new(pkce_verifier),
+        nonce: openidconnect::Nonce::new(nonce),
+    })
 }
 
 #[cfg(test)]
@@ -1503,30 +1533,54 @@ mod redis_integration_tests {
 
         // First caller acquires; a concurrent instance cannot while it is held.
         assert!(
-            try_acquire_flush_lock(&redis, &lock_key, "tokA", ambre_core::Seconds(60))
-                .await
-                .unwrap()
+            try_acquire_flush_lock(
+                &redis,
+                &lock_key,
+                &LockToken("tokA".to_owned()),
+                ambre_core::Seconds(60)
+            )
+            .await
+            .unwrap()
         );
         assert!(
-            !try_acquire_flush_lock(&redis, &lock_key, "tokB", ambre_core::Seconds(60))
-                .await
-                .unwrap()
+            !try_acquire_flush_lock(
+                &redis,
+                &lock_key,
+                &LockToken("tokB".to_owned()),
+                ambre_core::Seconds(60)
+            )
+            .await
+            .unwrap()
         );
 
         // A non-owner (wrong token) must not be able to release it.
-        release_flush_lock(&redis, &lock_key, "tokB").await.unwrap();
+        release_flush_lock(&redis, &lock_key, &LockToken("tokB".to_owned()))
+            .await
+            .unwrap();
         assert!(
-            !try_acquire_flush_lock(&redis, &lock_key, "tokB", ambre_core::Seconds(60))
-                .await
-                .unwrap()
+            !try_acquire_flush_lock(
+                &redis,
+                &lock_key,
+                &LockToken("tokB".to_owned()),
+                ambre_core::Seconds(60)
+            )
+            .await
+            .unwrap()
         );
 
         // The real owner releases; the lock is now free again.
-        release_flush_lock(&redis, &lock_key, "tokA").await.unwrap();
+        release_flush_lock(&redis, &lock_key, &LockToken("tokA".to_owned()))
+            .await
+            .unwrap();
         assert!(
-            try_acquire_flush_lock(&redis, &lock_key, "tokB", ambre_core::Seconds(60))
-                .await
-                .unwrap()
+            try_acquire_flush_lock(
+                &redis,
+                &lock_key,
+                &LockToken("tokB".to_owned()),
+                ambre_core::Seconds(60)
+            )
+            .await
+            .unwrap()
         );
 
         let _ = redis.del([lock_key.as_str()]).await;
@@ -1713,15 +1767,19 @@ mod redis_integration_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn oidc_state_roundtrips() {
         let redis = connect_redis().await;
-        let csrf = uuid::Uuid::new_v4().to_string();
-        oidc_state_set(&redis, &csrf, "verifier-xyz", "nonce-abc")
+        let csrf = ambre_core::OidcState::new(uuid::Uuid::new_v4().to_string());
+        let kept = OidcAuthState {
+            pkce_verifier_secret: OidcSecret::new("verifier-xyz".to_owned()),
+            nonce: openidconnect::Nonce::new("nonce-abc".to_owned()),
+        };
+        oidc_state_set(&redis, &csrf, &kept)
             .await
             .expect("oidc state set");
-        let (v, n) = oidc_state_take(&redis, &csrf)
+        let taken = oidc_state_take(&redis, &csrf)
             .await
             .expect("oidc state take");
-        assert_eq!(v, "verifier-xyz");
-        assert_eq!(n, "nonce-abc");
+        assert_eq!(taken.pkce_verifier_secret.expose(), "verifier-xyz");
+        assert_eq!(taken.nonce.secret(), "nonce-abc");
     }
 
     #[tokio::test]
@@ -1809,8 +1867,8 @@ mod redis_integration_tests {
         let _ = redis.del([clocks_key.as_str(), seq_key.as_str()]).await;
     }
 
-    async fn seed_refresh(redis: &Client) -> String {
-        let token = uuid::Uuid::new_v4().to_string();
+    async fn seed_refresh(redis: &Client) -> RefreshToken {
+        let token = RefreshToken::new(uuid::Uuid::new_v4().to_string());
         let data = RefreshData {
             user_id: ambre_core::UserId::new(),
             signing_pubkey: Some(ambre_core::PublicKey::from_array([3u8; 32])),

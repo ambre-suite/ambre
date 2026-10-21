@@ -185,8 +185,8 @@ impl SyncState {
             let signing_pub_key =
                 ambre_core::SigningKeyHex::encode(signing_key.verifying_key().to_bytes());
             let exchange_pub_key = {
-                let pub_key = x25519_dalek::PublicKey::from(&exchange_key);
-                ambre_core::ExchangeKeyHex::encode(pub_key.as_bytes())
+                let pub_key = crate::sharing::own_exchange_key(&exchange_key);
+                ambre_core::ExchangeKeyHex::encode(&pub_key)
             };
             wasm_bindgen_futures::spawn_local(async move {
                 let url = format!("{url_scheme}://{api_base}/api/auth/dev/login");
@@ -369,8 +369,8 @@ impl SyncState {
                 let signing_pub_key =
                     ambre_core::SigningKeyHex::encode(signing_key.verifying_key().to_bytes());
                 let exchange_pub_key = {
-                    let pub_key = x25519_dalek::PublicKey::from(&exchange_key);
-                    ambre_core::ExchangeKeyHex::encode(pub_key.as_bytes())
+                    let pub_key = crate::sharing::own_exchange_key(&exchange_key);
+                    ambre_core::ExchangeKeyHex::encode(&pub_key)
                 };
                 // Each step below fails only on a broken platform or a bug. The
                 // account is not created then, and the user reads why.
@@ -549,7 +549,7 @@ mod provider_tests {
 
     fn worker() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
-        (SyncState::new(sink, String::new(), None), rx)
+        (SyncState::new(sink, String::new()), rx)
     }
 
     fn signed_in(keys_stored: bool) -> SyncEvent {

@@ -2011,12 +2011,25 @@ mod ed25519_tests {
         ];
         let signing_key = SigningKey::from_bytes(&[9u8; 32]);
         let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let nonce = ambre_protocol::messages::Nonce([1; 24]);
+        let ciphertext = ambre_protocol::messages::Ciphertext(b"c".to_vec());
+        let tag = ambre_protocol::messages::CommitmentTag([2; 32]);
         let mut signed = Vec::new();
-        for field in [&b"n"[..], b"c", b"p", b"t"] {
+        for field in [&nonce.0[..], &ciphertext.0, b"p", &tag.0] {
             push_framed(&mut signed, field);
         }
         let sig = signing_key.sign(&signed).to_bytes();
-        assert!(verify_sealed_signature(&pubkey, b"n", b"c", b"p", b"t", &sig).is_ok());
+        let check = |key: &PublicKey, signature: [u8; 64]| {
+            verify_sealed_signature(
+                key,
+                &nonce,
+                &ciphertext,
+                b"p",
+                &tag,
+                &ambre_protocol::messages::Signature(signature),
+            )
+        };
+        assert!(check(&pubkey, sig).is_ok());
 
         // The scalar raised by the group order: the same point equation holds.
         let mut malleated = sig;
@@ -2026,7 +2039,7 @@ mod ed25519_tests {
             *s = sum as u8;
             carry = sum >> 8;
         }
-        assert!(verify_sealed_signature(&pubkey, b"n", b"c", b"p", b"t", &malleated).is_err());
+        assert!(check(&pubkey, malleated).is_err());
 
         // The identity point, and (R = identity, S = 0), valid for any message
         // under a lax check.
@@ -2035,7 +2048,7 @@ mod ed25519_tests {
         let mut forged = [0u8; 64];
         forged[..32].copy_from_slice(&identity);
         let small = PublicKey::from_array(identity);
-        assert!(verify_sealed_signature(&small, b"n", b"c", b"p", b"t", &forged).is_err());
+        assert!(check(&small, forged).is_err());
     }
 
     #[test]

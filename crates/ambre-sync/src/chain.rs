@@ -79,7 +79,7 @@ impl Chain {
 /// key its header names.
 pub(crate) fn signed_by_writers(
     links: Vec<KeyLink>,
-    signers: Option<&HashSet<[u8; 32]>>,
+    signers: Option<&HashSet<ambre_core::PublicKey>>,
 ) -> Vec<KeyLink> {
     let Some(signers) = signers else {
         return links;
@@ -223,7 +223,9 @@ mod tests {
         if let Some(link) = links.get_mut(0) {
             *link = pipeline::seal_link(document_id, &keys[0], &keys[1], &stranger).unwrap();
         }
-        let writers = HashSet::from([rotator().verifying_key().to_bytes()]);
+        let writers = HashSet::from([ambre_core::PublicKey::from_array(
+            rotator().verifying_key().to_bytes(),
+        )]);
         let kept = signed_by_writers(links.clone(), Some(&writers));
         assert_eq!(kept.len(), 1);
         let chain = Chain::new(document_id, kept);

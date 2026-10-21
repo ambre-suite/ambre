@@ -215,7 +215,7 @@ mod tests {
         channels: Vec<(ChannelId, SealedChannelKey)>,
     ) -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         let document_id = space_id.document_id();
         let mut doc =
             SyncDocumentState::new(document_id, space_key.clone(), DocType::Murmure, true);

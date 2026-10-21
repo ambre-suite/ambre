@@ -4,7 +4,7 @@
 // per document, never a count (`SRV-110`) and never the kind of an update,
 // which stays sealed.
 
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
-use crate::extract::Json;
+use crate::extract::{Json, PathId};
 use crate::state::AppState;
 
 /// The body of a cursor move: the sequence number the caller has read up to.
@@ -47,15 +47,12 @@ pub struct ActivityJson {
 pub async fn set_read_cursor(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Json(req): Json<ReadCursorRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let not_found = || AppError::NotFound {
         resource: "document",
     };
-    let doc_id = ambre_core::Uuid::parse_str(&document_id)
-        .map(ambre_core::DocumentId::from_uuid)
-        .map_err(|_| not_found())?;
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
         .ok_or_else(not_found)?;
@@ -248,7 +245,7 @@ mod tests {
         match set_read_cursor(
             State(state.clone()),
             who,
-            Path(document.to_string()),
+            PathId(document),
             Json(ReadCursorRequest {
                 seq: ambre_core::Seq(seq),
             }),

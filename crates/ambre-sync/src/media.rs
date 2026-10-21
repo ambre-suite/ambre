@@ -468,7 +468,7 @@ mod tests {
     #[test]
     fn an_upload_is_addressed_under_the_document_key() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         let picture = b"one picture, two documents".to_vec();
         let mut addresses = Vec::new();
         for byte in [0x31, 0x32] {
@@ -498,7 +498,7 @@ mod tests {
     #[test]
     fn an_upload_waits_for_its_document_on_the_relay() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         let picture = b"a picture on a new board".to_vec();
         let answered = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| {
             rx.try_iter()

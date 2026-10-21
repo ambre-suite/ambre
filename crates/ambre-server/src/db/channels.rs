@@ -162,7 +162,7 @@ pub struct MemberChannelRow {
     /// The caller's copy of the channel key, and the exchange key of whoever
     /// wrapped it, `None` for a self-wrapped row.
     pub doc_key_enc: ambre_core::WrappedDocKey,
-    pub wrapper_exchange_pubkey: Option<ambre_core::PublicKey>,
+    pub wrapper_exchange_pubkey: Option<ambre_core::ExchangePublicKey>,
     /// For a direct message, the display names of its other members, by
     /// name then id. Empty for a channel of a space (`SRV-220`).
     pub peers: Vec<String>,
@@ -215,7 +215,9 @@ pub async fn list_member_channels(
                     .try_get::<Option<Vec<u8>>, _>("name_enc")?
                     .map(ambre_core::SealedName::new),
                 doc_key_enc: ambre_core::WrappedDocKey::new(r.try_get("doc_key_enc")?),
-                wrapper_exchange_pubkey: decode_opt_key(r.try_get("wrapper_exchange_pubkey")?)?,
+                wrapper_exchange_pubkey: decode_opt_exchange_key(
+                    r.try_get("wrapper_exchange_pubkey")?,
+                )?,
                 peers: r.try_get("peers")?,
                 meta_durable_last: r.try_get("meta_durable_last")?,
             })
@@ -709,13 +711,13 @@ struct CommitRow {
 /// of another document or none at all.
 async fn covered_seq_of(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    snapshot: uuid::Uuid,
-    document: uuid::Uuid,
+    snapshot: ambre_core::SnapshotId,
+    document: ambre_core::DocumentId,
 ) -> Result<Option<ambre_core::Seq>, AppError> {
     let covered: Option<i64> =
         sqlx::query_scalar("SELECT covered_seq FROM snapshots WHERE id = $1 AND document_id = $2")
-            .bind(snapshot)
-            .bind(document)
+            .bind(id_to_uuid(snapshot))
+            .bind(id_to_uuid(document))
             .fetch_optional(&mut **tx)
             .await?;
     Ok(covered.map(decode_seq).transpose()?)
@@ -785,8 +787,8 @@ pub async fn commit_finalization(
     if held != Some(lease_id) || !live {
         return Err(conflict("the caller holds no live lease"));
     }
+    let covered = covered_seq_of(&mut tx, snapshot_id, segment.document_id()).await?;
     let snapshot_id = id_to_uuid(snapshot_id);
-    let covered = covered_seq_of(&mut tx, snapshot_id, document).await?;
     if covered.is_none() || covered != horizon {
         return Err(conflict("the snapshot does not cover the horizon"));
     }
@@ -1015,8 +1017,8 @@ pub async fn commit_fold(
     {
         return Err(conflict("the fold reaches no further than the last one"));
     }
+    let covered = covered_seq_of(&mut tx, snapshot_id, segment.document_id()).await?;
     let snapshot_id = id_to_uuid(snapshot_id);
-    let covered = covered_seq_of(&mut tx, snapshot_id, document).await?;
     if covered.is_none() || covered != row.horizon {
         return Err(conflict("the snapshot does not cover the horizon"));
     }
@@ -1235,17 +1237,21 @@ pub(super) async fn delete_channel_in(
     if held.is_none() {
         return Ok(Vec::new());
     }
-    let documents: Vec<uuid::Uuid> =
-        sqlx::query_scalar("SELECT document_id FROM channel_documents WHERE channel_id = $1")
-            .bind(channel)
-            .fetch_all(&mut **tx)
-            .await?;
+    let documents: Vec<ambre_core::DocumentId> = sqlx::query_scalar::<_, PgId>(
+        "SELECT document_id FROM channel_documents WHERE channel_id = $1",
+    )
+    .bind(channel)
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .map(Into::into)
+    .collect();
     super::documents::begin_deletions_in(tx, &documents, sweep_due).await?;
     sqlx::query("DELETE FROM channels WHERE id = $1")
         .bind(channel)
         .execute(&mut **tx)
         .await?;
-    Ok(documents.into_iter().map(uuid_row_to_id).collect())
+    Ok(documents)
 }
 
 /// The `meta` of each private channel of `space` that holds a row of `user`.

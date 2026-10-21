@@ -13,7 +13,7 @@ use std::io::Read;
 
 use ambre_core::activity::{ActivitySummary, SummaryError};
 use ambre_core::authorship::{SESSION_NONCE_LEN, SessionNonce};
-use ambre_core::{KEY_ID_LEN, KeyId};
+use ambre_core::{KEY_ID_LEN, KeyId, PublicKey};
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -255,7 +255,7 @@ fn open_payload(
     sealed: &Sealed,
     aad: &[u8],
     doc_key: &DocumentKey,
-    author_pub: &[u8; 32],
+    author_pub: &PublicKey,
 ) -> Result<Vec<u8>, PipelineError> {
     let plaintext = envelope::open(sealed, aad, doc_key, author_pub)?;
     let (version, body) = plaintext.split_first().ok_or(PipelineError::Decompress)?;
@@ -328,12 +328,7 @@ pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<Vec<u8>, Pi
         &update.commitment_tag,
         &update.signature,
     );
-    let plaintext = open_payload(
-        &sealed,
-        &aad,
-        doc_key,
-        update.public_data.pub_key.as_array(),
-    )?;
+    let plaintext = open_payload(&sealed, &aad, doc_key, &update.public_data.pub_key)?;
     tracing::debug!(
         "[Pipeline] open_update: {} bytes ciphertext -> {} bytes plaintext",
         update.ciphertext.0.len(),
@@ -397,12 +392,7 @@ pub fn open_snapshot(snapshot: &Snapshot, doc_key: &DocumentKey) -> Result<Vec<u
         &snapshot.commitment_tag,
         &snapshot.signature,
     );
-    open_payload(
-        &sealed,
-        &aad,
-        doc_key,
-        snapshot.public_data.pub_key.as_array(),
-    )
+    open_payload(&sealed, &aad, doc_key, &snapshot.public_data.pub_key)
 }
 
 // -- Ephemeral -----------------------------------------------------------------
@@ -441,12 +431,7 @@ pub fn open_ephemeral(
         &ephemeral.commitment_tag,
         &ephemeral.signature,
     );
-    open_payload(
-        &sealed,
-        &aad,
-        doc_key,
-        ephemeral.public_data.pub_key.as_array(),
-    )
+    open_payload(&sealed, &aad, doc_key, &ephemeral.public_data.pub_key)
 }
 
 // -- What leaves the worker ----------------------------------------------------
@@ -662,7 +647,7 @@ fn object_bytes(key_id: KeyId, signing_key: &SigningKey, sealed: &Sealed) -> Vec
 fn object_parts(
     bytes: &[u8],
     doc_key: &DocumentKey,
-) -> Result<(KeyId, [u8; AUTHOR_KEY_LEN], Sealed), PipelineError> {
+) -> Result<(KeyId, PublicKey, Sealed), PipelineError> {
     check_layout(bytes)?;
     if bytes.len() < OBJECT_HEADER_LEN {
         return Err(PipelineError::ShortObject);
@@ -684,7 +669,7 @@ fn object_parts(
             .try_into()
             .map_err(|_| PipelineError::ShortObject)?,
     };
-    let author: [u8; AUTHOR_KEY_LEN] = author.try_into().map_err(|_| PipelineError::ShortObject)?;
+    let author = PublicKey::from_slice(author).map_err(|_| PipelineError::ShortObject)?;
     Ok((key_id, author, sealed))
 }
 
@@ -804,12 +789,12 @@ pub fn object_key(bytes: &[u8]) -> Result<KeyId, PipelineError> {
 ///
 /// [`PipelineError::UnknownLayout`] when the layout is not one this build
 /// reads, and [`PipelineError::ShortObject`] when the bytes cannot hold a key.
-pub fn object_author(bytes: &[u8]) -> Result<[u8; AUTHOR_KEY_LEN], PipelineError> {
+pub fn object_author(bytes: &[u8]) -> Result<PublicKey, PipelineError> {
     check_layout(bytes)?;
     let start = LAYOUT_LEN + KEY_ID_LEN;
     bytes
         .get(start..start + AUTHOR_KEY_LEN)
-        .and_then(|author| author.try_into().ok())
+        .and_then(|author| PublicKey::from_slice(author).ok())
         .ok_or(PipelineError::ShortObject)
 }
 
@@ -927,13 +912,8 @@ mod tests {
                 &update.commitment_tag,
                 &update.signature,
             );
-            let plaintext = envelope::open(
-                &sealed,
-                &aad,
-                &doc_key,
-                update.public_data.pub_key.as_array(),
-            )
-            .unwrap();
+            let plaintext =
+                envelope::open(&sealed, &aad, &doc_key, &update.public_data.pub_key).unwrap();
             assert_eq!(plaintext[0], version);
         }
     }

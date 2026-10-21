@@ -842,7 +842,7 @@ pub struct PrivateChannelDraft {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirectMember {
     pub user_id: UserId,
-    pub exchange_pub_key: ambre_core::PublicKey,
+    pub exchange_pub_key: ambre_core::ExchangePublicKey,
 }
 
 /// A direct message the view asks for: this user and `members`.

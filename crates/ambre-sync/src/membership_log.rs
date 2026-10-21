@@ -10,8 +10,9 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::MemberStanding;
-use ambre_core::{DocumentId, KeyId, Role, UserId};
-use ambre_protocol::{EntryDigest, MembershipAct, MembershipEntry};
+use ambre_core::{DocumentId, KeyId, PublicKey, Role, UserId};
+use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
+use ambre_protocol::{EntryDigest, MembershipAct, MembershipEntry, Signature};
 use ed25519_dalek::SigningKey;
 
 /// The rule of the owning application that accepts a member's own entry
@@ -38,7 +39,7 @@ pub(crate) fn public_channel_self_join(entry: &MembershipEntry) -> bool {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct SpaceWord {
     /// Every key the space log granted a writing role, at any point.
-    pub(crate) writers: HashSet<[u8; 32]>,
+    pub(crate) writers: HashSet<PublicKey>,
     /// The members a valid entry of the space log removed, and no later one
     /// added back.
     pub(crate) removed: HashSet<UserId>,
@@ -93,7 +94,7 @@ fn rank(role: Role) -> Option<u8> {
 struct Held {
     role: Role,
     /// The signing key the entry that added the member named.
-    key: [u8; 32],
+    key: PublicKey,
     /// Still a member: no later valid entry removed them.
     present: bool,
     /// The key the entry that added the member wraps (`SYNC-123`).
@@ -111,7 +112,7 @@ pub(crate) fn digest(entry: &MembershipEntry) -> Option<EntryDigest> {
 pub(crate) struct Log {
     held: HashMap<UserId, Held>,
     /// Every key the log granted a writing role, at any point.
-    signers: HashSet<[u8; 32]>,
+    signers: HashSet<PublicKey>,
     /// Whether the wrapped key carried an anchor at all.
     anchored: bool,
     /// The place and the previous digest the next entry takes.
@@ -169,7 +170,7 @@ impl Log {
     ) -> Self {
         let mut log = Self::walk(document, anchor, entries, rule.self_join);
         if let Some(space) = &rule.space {
-            log.signers.extend(&space.writers);
+            log.signers.extend(space.writers.iter().cloned());
             for member in &space.removed {
                 if let Some(held) = log.held.get_mut(member) {
                     held.present = false;
@@ -185,7 +186,7 @@ impl Log {
         entry.act == MembershipAct::Create
             && entry.author == entry.member
             && entry.role == Role::Owner
-            && signed_by(entry, entry.member_key.as_array())
+            && signed_by(entry, &entry.member_key)
     }
 
     /// Whether the state so far allows `entry`, and its author signed it.
@@ -218,7 +219,7 @@ impl Log {
             }
         };
         let key = match entry.act {
-            MembershipAct::SelfJoin => Some(entry.member_key.as_array()),
+            MembershipAct::SelfJoin => Some(&entry.member_key),
             _ => author.map(|held| &held.key),
         };
         allowed && key.is_some_and(|key| signed_by(entry, key))
@@ -232,7 +233,7 @@ impl Log {
                     entry.member,
                     Held {
                         role: entry.role,
-                        key: *entry.member_key.as_array(),
+                        key: entry.member_key.clone(),
                         present: true,
                         wraps: entry.key,
                     },
@@ -253,7 +254,7 @@ impl Log {
             && held.present
             && rank(held.role).is_some_and(|r| r >= 1)
         {
-            self.signers.insert(held.key);
+            self.signers.insert(held.key.clone());
         }
     }
 
@@ -270,7 +271,7 @@ impl Log {
     /// The keys a key link may be signed by (`SYNC-121`): every key the log
     /// granted a writing role. `None` for a document whose wrap carried no
     /// anchor, which predates the log.
-    pub(crate) fn signers(&self) -> Option<&HashSet<[u8; 32]>> {
+    pub(crate) fn signers(&self) -> Option<&HashSet<PublicKey>> {
         self.anchored.then_some(&self.signers)
     }
 
@@ -290,9 +291,9 @@ impl Log {
 }
 
 /// Whether `key` signed `entry`.
-fn signed_by(entry: &MembershipEntry, key: &[u8; 32]) -> bool {
+fn signed_by(entry: &MembershipEntry, key: &PublicKey) -> bool {
     entry.signed_bytes().is_ok_and(|bytes| {
-        ambre_crypto::signature::verify_message(key, &bytes, &entry.signature).is_ok()
+        ambre_crypto::signature::verify_message(key, &bytes, &entry.signature.0).is_ok()
     })
 }
 
@@ -327,10 +328,10 @@ pub(crate) fn sign(
         key: draft.key,
         previous: next.1,
         author,
-        signature: Vec::new(),
+        signature: Signature([0; ENTRY_SIGNATURE_LEN]),
     };
     let bytes = entry.signed_bytes().map_err(|e| e.to_string())?;
-    entry.signature = ambre_crypto::signature::sign_message(signing_key, &bytes).to_vec();
+    entry.signature = Signature(ambre_crypto::signature::sign_message(signing_key, &bytes));
     Ok(entry)
 }
 
@@ -374,8 +375,8 @@ pub(crate) mod tests {
             }
         }
 
-        pub(crate) fn public(&self) -> [u8; 32] {
-            self.key.verifying_key().to_bytes()
+        pub(crate) fn public(&self) -> PublicKey {
+            PublicKey::from_array(self.key.verifying_key().to_bytes())
         }
     }
 
@@ -396,7 +397,7 @@ pub(crate) mod tests {
         let draft = Draft {
             document: DOC,
             member: member.id,
-            member_key: ambre_core::PublicKey::from_array(member.public()),
+            member_key: member.public(),
             act,
             role,
             key: Some(KeyId::from_array([log.len() as u8; 16])),

@@ -168,7 +168,7 @@ impl DocumentKey {
         &self,
         sealed: &crate::Sealed,
         aad: &[u8],
-        author: &[u8; 32],
+        author: &ambre_core::PublicKey,
     ) -> Result<DocumentKey, CryptoError> {
         let mut bytes = crate::envelope::open(sealed, aad, self, author)?;
         let key = <[u8; 32]>::try_from(bytes.as_slice())

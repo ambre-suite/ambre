@@ -404,7 +404,7 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
     else {
         return;
     };
-    let token = uuid::Uuid::new_v4().to_string();
+    let token = crate::redis_ops::LockToken::fresh();
     match crate::redis_ops::try_acquire_flush_lock(&state.redis, &lock_key, &token, FLUSH_LOCK_TTL)
         .await
     {

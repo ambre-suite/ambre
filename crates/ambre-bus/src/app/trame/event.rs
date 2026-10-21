@@ -315,6 +315,27 @@ pub enum TrameEvent {
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub struct SheetId(pub String);
 
+impl SheetId {
+    /// The id as the CRDT container names spell it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A map keyed by sheet id answers a lookup by the bare text, as a map keyed
+/// by `String` does: both hash the same bytes.
+impl std::borrow::Borrow<str> for SheetId {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for SheetId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// Stable local identity of a personal filter view, minted where the view is
 /// saved and never shared (`trame-shared-filter`).
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]

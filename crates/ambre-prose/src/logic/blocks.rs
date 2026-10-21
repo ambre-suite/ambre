@@ -311,12 +311,16 @@ impl ProseState {
     /// A built-in name is accepted and stored as the key alone: the nine
     /// built-ins are compiled in, and `styles` holds the user's own styles
     /// (`PROSE-093`).
-    pub(super) fn set_block_style(&mut self, id: &TreeID, style_id: &str) -> ProseOutcome {
+    pub(super) fn set_block_style(
+        &mut self,
+        id: &TreeID,
+        style_id: &ambre_bus::app::prose::StyleId,
+    ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let Some(node) = doc::node_of(&tree, id) else {
             return Self::err_no_block(id);
         };
-        if let Err(e) = node.insert(doc::K_STYLE, style_id) {
+        if let Err(e) = node.insert(doc::K_STYLE, style_id.0.as_str()) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_with(Vec::new())

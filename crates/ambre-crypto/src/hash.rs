@@ -28,10 +28,10 @@ const FINGERPRINT_LEN: usize = 20;
 /// aloud for out-of-band verification. The output is stable for a given key: the
 /// same key always yields the same string.
 ///
-pub fn fingerprint(pub_key: &[u8; 32]) -> ambre_core::KeyFingerprint {
+pub fn fingerprint(pub_key: &ambre_core::ExchangePublicKey) -> ambre_core::KeyFingerprint {
     let mut hasher = Blake2b512::new();
     hasher.update(FINGERPRINT_DOMAIN);
-    hasher.update(pub_key);
+    hasher.update(pub_key.as_array());
     let digest: [u8; FINGERPRINT_LEN] = prefix(&hasher.finalize());
     let encoded = BASE32_NOPAD.encode(&digest);
     // Group into 4-char blocks: "XXXX XXXX ..." (8 groups for 32 chars).

@@ -62,7 +62,9 @@ static INSTANCE_ID: std::sync::LazyLock<String> =
 fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: bool, req: &Request) -> String {
     let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok());
     if let Some(token) = header("authorization").and_then(|h| h.strip_prefix("Bearer "))
-        && let Ok(claims) = jwt.verify(token.trim())
+        && let Ok(claims) = jwt.verify(&ambre_protocol::ws::AccessToken::new(
+            token.trim().to_owned(),
+        ))
     {
         return format!("user:{}", claims.sub);
     }
@@ -319,12 +321,15 @@ mod tests {
         let user = ambre_core::UserId::new();
         let now = crate::s3::unix_now();
         let claims = crate::jwt::Claims {
-            sub: user.to_string(),
+            sub: user,
             spk: None,
             iat: now,
             exp: now.plus(ambre_core::Seconds(900)),
         };
-        (user, format!("Bearer {}", jwt.mint(&claims).unwrap()))
+        (
+            user,
+            format!("Bearer {}", jwt.mint(&claims).unwrap().expose()),
+        )
     }
 
     /// `SRV-019`: an authenticated request is bucketed by its caller, from

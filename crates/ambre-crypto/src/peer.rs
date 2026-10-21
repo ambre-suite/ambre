@@ -9,7 +9,7 @@
 use ambre_core::authorship::{
     ENTRY_SIGNATURE_LEN, PeerEntry, PeerId, SESSION_NONCE_LEN, SessionNonce,
 };
-use ambre_core::{DocumentId, UserId};
+use ambre_core::{DocumentId, PublicKey, UserId};
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 
@@ -32,10 +32,10 @@ pub fn draw_nonce() -> SessionNonce {
 /// The CRDT engine reserves `u64::MAX`, so a hash that lands on it takes the
 /// value below. Both ends derive alike, so the check still holds.
 #[must_use]
-pub fn derive_peer_id(signing_pub: &[u8; 32], nonce: &SessionNonce) -> PeerId {
+pub fn derive_peer_id(signing_pub: &PublicKey, nonce: &SessionNonce) -> PeerId {
     let digest = Blake2b512::new()
         .chain_update(PEER_DOMAIN)
-        .chain_update(signing_pub)
+        .chain_update(signing_pub.as_array())
         .chain_update(nonce.0)
         .finalize();
     let mut head = [0u8; 8];
@@ -64,7 +64,8 @@ pub fn session_identity(
     document: DocumentId,
     nonce: SessionNonce,
 ) -> (PeerId, PeerEntry) {
-    let peer = derive_peer_id(&signing_key.verifying_key().to_bytes(), &nonce);
+    let own = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+    let peer = derive_peer_id(&own, &nonce);
     let signature = signing_key
         .sign(&entry_transcript(document, peer, &nonce))
         .to_bytes();
@@ -86,12 +87,12 @@ pub fn entry_resolves(
     entry: &PeerEntry,
     document: DocumentId,
     peer: PeerId,
-    user_key: &[u8; 32],
+    user_key: &PublicKey,
 ) -> bool {
     if derive_peer_id(user_key, &entry.nonce) != peer {
         return false;
     }
-    let Ok(verifying_key) = VerifyingKey::from_bytes(user_key) else {
+    let Ok(verifying_key) = VerifyingKey::from_bytes(user_key.as_array()) else {
         return false;
     };
     let signature: &[u8; ENTRY_SIGNATURE_LEN] = &entry.signature;
@@ -113,7 +114,7 @@ pub fn resolve_peer(
     entry: Option<&PeerEntry>,
     document: DocumentId,
     peer: PeerId,
-    key_of: impl Fn(UserId) -> Option<[u8; 32]>,
+    key_of: impl Fn(UserId) -> Option<PublicKey>,
 ) -> Option<UserId> {
     let entry = entry?;
     let key = key_of(entry.user)?;
@@ -128,8 +129,8 @@ mod tests {
         SigningKey::from_bytes(&[seed; 32])
     }
 
-    fn public(key: &SigningKey) -> [u8; 32] {
-        key.verifying_key().to_bytes()
+    fn public(key: &SigningKey) -> PublicKey {
+        PublicKey::from_array(key.verifying_key().to_bytes())
     }
 
     /// The derivation is pinned to a value, so another build derives the same
@@ -148,7 +149,7 @@ mod tests {
         assert_eq!(PEER_DOMAIN, b"ambre-peer-v1");
         // Computed outside Rust: the first eight bytes, little-endian, of
         // Python's `hashlib.blake2b(b"ambre-peer-v1" + bytes([1]*32) + bytes([9]*16))`.
-        let pinned = derive_peer_id(&[1; 32], &nonce);
+        let pinned = derive_peer_id(&PublicKey::from_array([1; 32]), &nonce);
         assert_eq!(pinned, ambre_core::PeerId(0x280d_a166_ca77_5390));
     }
 

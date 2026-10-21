@@ -307,7 +307,7 @@ enum SyncEvent {
         /// (`ambre-spec-membership.md`). Seeds `SyncDocumentState::signing_keys` so
         /// inbound ephemerals resolve to a spoof-proof author. Empty for a
         /// local-only open (no members response, hence no peers to resolve).
-        signing_keys: Vec<([u8; 32], UserId)>,
+        signing_keys: Vec<(ambre_core::PublicKey, UserId)>,
         /// This client's own role on this document, read from its entry in the
         /// same members response (architecture). `Role::Owner` for a
         /// local-only open. Gates mutating commands in Logic as a UX measure;
@@ -475,7 +475,7 @@ enum SyncEvent {
         user_id: UserId,
         display_name: String,
         email: ambre_core::Email,
-        exchange_pub_key: ambre_core::PublicKey,
+        exchange_pub_key: ambre_core::ExchangePublicKey,
         fingerprint: ambre_core::KeyFingerprint,
     },
     /// The key a user the client named is served with, and its fingerprint.
@@ -483,7 +483,7 @@ enum SyncEvent {
     MemberKeyReady {
         id: RequestId,
         user_id: UserId,
-        exchange_pub_key: ambre_core::PublicKey,
+        exchange_pub_key: ambre_core::ExchangePublicKey,
         fingerprint: ambre_core::KeyFingerprint,
     },
     /// Invite completed: the invitee's DocumentKey was wrapped via ECDH and the
@@ -521,7 +521,7 @@ enum SyncEvent {
         /// the same response. Membership just changed often enough for someone to
         /// ask for the list. This is where a new member becomes resolvable and a
         /// revoked one stops. Ignored when the document is not open locally.
-        signing_keys: Vec<([u8; 32], UserId)>,
+        signing_keys: Vec<(ambre_core::PublicKey, UserId)>,
     },
     /// User search results from the server (decoded, plaintext).
     UserSearchReady {
@@ -677,7 +677,7 @@ struct SyncDocumentState {
     /// Per-author ephemeral anti-replay counter. Keyed by the author's Ed25519
     /// verifying key bytes. An inbound ephemeral whose counter is <= the stored
     /// value is silently dropped.
-    ephemeral_remote_counters: HashMap<[u8; 32], u64>,
+    ephemeral_remote_counters: HashMap<ambre_core::PublicKey, u64>,
     /// Directory of this document's members' Ed25519 signing keys, mapping an
     /// ephemeral author's verifying key to their canonical `UserId`
     /// (`ambre-spec-membership.md`). Built from the members response already fetched at open and
@@ -687,7 +687,7 @@ struct SyncDocumentState {
     /// This is a *membership* directory, not a *trust* store: it trusts the
     /// server's key mapping. Detecting a server that substitutes a member's keys
     /// is the TOFU trusted-keys store's job (architecture) and is orthogonal.
-    signing_keys: HashMap<[u8; 32], UserId>,
+    signing_keys: HashMap<ambre_core::PublicKey, UserId>,
     /// How many member listings of this document were asked, and which one
     /// the directory holds. Two listings can cross on the way, and the answer
     /// to the older one changes nothing. It cannot bring back the key of a
@@ -733,7 +733,7 @@ struct SyncDocumentState {
 /// A snapshot the Logic thread is checking.
 struct PendingCheck {
     /// The signing key its sealed blob verified under: who built it.
-    author: [u8; 32],
+    author: ambre_core::PublicKey,
     covered_seq: Seq,
     /// The opened snapshot, kept on open only: a match adopts it.
     payload: Option<Vec<u8>>,
@@ -855,28 +855,33 @@ impl SyncDocumentState {
     /// evicted first. Eviction resets that author's baseline, so a later *stale*
     /// ephemeral from an evicted author could replay once. That is harmless for
     /// presence, and it cannot affect an active author whose counter keeps rising.
-    fn accept_ephemeral_counter(&mut self, author_pk: [u8; 32], counter: u64) -> bool {
+    fn accept_ephemeral_counter(
+        &mut self,
+        author_pk: &ambre_core::PublicKey,
+        counter: u64,
+    ) -> bool {
         let last = self
             .ephemeral_remote_counters
-            .get(&author_pk)
+            .get(author_pk)
             .copied()
             .unwrap_or(0);
         if counter <= last {
             return false;
         }
-        let is_new = !self.ephemeral_remote_counters.contains_key(&author_pk);
+        let is_new = !self.ephemeral_remote_counters.contains_key(author_pk);
         if is_new && self.ephemeral_remote_counters.len() >= MAX_EPHEMERAL_REMOTE_AUTHORS {
             // Evict the least-active (lowest-counter) author to make room.
             let evict = self
                 .ephemeral_remote_counters
                 .iter()
                 .min_by_key(|&(_, &c)| c)
-                .map(|(k, _)| *k);
+                .map(|(k, _)| k.clone());
             if let Some(evict) = evict {
                 self.ephemeral_remote_counters.remove(&evict);
             }
         }
-        self.ephemeral_remote_counters.insert(author_pk, counter);
+        self.ephemeral_remote_counters
+            .insert(author_pk.clone(), counter);
         true
     }
 
@@ -887,7 +892,10 @@ impl SyncDocumentState {
     /// Entries whose key is not valid hex or not 32 bytes are skipped. A member
     /// we cannot key on simply never resolves, which costs that peer's cursor
     /// rather than the whole document's presence.
-    fn set_signing_keys(&mut self, entries: impl IntoIterator<Item = ([u8; 32], UserId)>) {
+    fn set_signing_keys(
+        &mut self,
+        entries: impl IntoIterator<Item = (ambre_core::PublicKey, UserId)>,
+    ) {
         self.signing_keys = entries.into_iter().collect();
     }
 
@@ -901,8 +909,8 @@ impl SyncDocumentState {
     /// directory has not been filled yet). The caller drops the sample: presence
     /// is best-effort, so showing nothing is preferable to attributing a cursor
     /// to a guessed identity.
-    fn resolve_ephemeral_author(&self, author_pk: [u8; 32]) -> Option<UserId> {
-        self.signing_keys.get(&author_pk).copied()
+    fn resolve_ephemeral_author(&self, author_pk: &ambre_core::PublicKey) -> Option<UserId> {
+        self.signing_keys.get(author_pk).copied()
     }
 
     /// Opens a snapshot blob with the one key it names: a snapshot sealed
@@ -916,13 +924,13 @@ impl SyncDocumentState {
     fn open_signed_snapshot(
         &self,
         blob: &[u8],
-    ) -> Result<(Vec<u8>, [u8; 32]), pipeline::PipelineError> {
+    ) -> Result<(Vec<u8>, ambre_core::PublicKey), pipeline::PipelineError> {
         let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id)?;
         let key = self
             .key_named(snapshot.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;
         let payload = pipeline::open_snapshot(&snapshot, &key)?;
-        Ok((payload, *snapshot.public_data.pub_key.as_array()))
+        Ok((payload, snapshot.public_data.pub_key.clone()))
     }
 
     /// Opens an update with the one key it names, and with no other
@@ -947,12 +955,12 @@ impl SyncDocumentState {
         seq: Seq,
     ) -> Result<SignedDelta, pipeline::PipelineError> {
         let body = pipeline::split_update_body(self.open_update_named(update)?)?;
-        let signer = *update.public_data.pub_key.as_array();
+        let signer = &update.public_data.pub_key;
         Ok(SignedDelta {
             seq,
-            peer: ambre_crypto::peer::derive_peer_id(&signer, &body.nonce),
+            peer: ambre_crypto::peer::derive_peer_id(signer, &body.nonce),
             nonce: body.nonce,
-            user: self.signing_keys.get(&signer).copied(),
+            user: self.signing_keys.get(signer).copied(),
             summary: body.summary.map(Into::into),
             payload: body.delta,
         })
@@ -1118,25 +1126,16 @@ pub struct SyncState {
 }
 
 impl SyncState {
+    /// A signed-out worker state: the session's tokens arrive with a sign-in.
     #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
-    pub fn new(
-        logic_tx: LogicSink,
-        api_base: String,
-        tokens: Option<(String, String, u64)>,
-    ) -> Self {
+    pub fn new(logic_tx: LogicSink, api_base: String) -> Self {
         let api_base = crate::http::RelayHost::new(api_base);
         let url_scheme = if api_base.is_local() { "http" } else { "https" };
         Self {
             logic_tx,
             api_base,
             url_scheme,
-            tokens: Rc::new(RefCell::new(tokens.map(
-                |(access_token, refresh_token, access_expires_in)| http::TokenPair {
-                    access_token: http::SecretToken::from(access_token),
-                    refresh_token: http::SecretToken::from(refresh_token),
-                    access_expires_in: ambre_core::Seconds(access_expires_in),
-                },
-            ))),
+            tokens: Rc::new(RefCell::new(None)),
             user_id: None,
             master_seed: None,
             signing_key: None,
@@ -1678,7 +1677,7 @@ pub async fn run_wasm(
     api_base: String,
 ) {
     tracing::info!("Ambre Sync worker starting (wasm async)");
-    run(cmd_rx, SyncState::new(logic_sink, api_base, None)).await;
+    run(cmd_rx, SyncState::new(logic_sink, api_base)).await;
     tracing::info!("Ambre Sync worker exiting (command channel closed)");
 }
 
@@ -1722,10 +1721,8 @@ mod run_tests {
             .run_until(async {
                 let (sink, _logic_rx) = LogicSink::channel();
                 let (cmd_tx, cmd_rx) = ambre_bus::conduit::unbounded::<SyncCommand>();
-                let looped = tokio::task::spawn_local(run(
-                    cmd_rx,
-                    SyncState::new(sink, String::new(), None),
-                ));
+                let looped =
+                    tokio::task::spawn_local(run(cmd_rx, SyncState::new(sink, String::new())));
                 tokio::task::yield_now().await;
 
                 let ran = Rc::new(Cell::new(false));
@@ -1821,14 +1818,14 @@ mod ephemeral_tests {
     #[test]
     fn monotonic_counter_accepted_replay_dropped() {
         let mut d = doc_state();
-        let author = [1u8; 32];
-        assert!(d.accept_ephemeral_counter(author, 1));
-        assert!(d.accept_ephemeral_counter(author, 2));
+        let author = ambre_core::PublicKey::from_array([1u8; 32]);
+        assert!(d.accept_ephemeral_counter(&author, 1));
+        assert!(d.accept_ephemeral_counter(&author, 2));
         // Replay / stale counters are dropped.
-        assert!(!d.accept_ephemeral_counter(author, 2));
-        assert!(!d.accept_ephemeral_counter(author, 1));
+        assert!(!d.accept_ephemeral_counter(&author, 2));
+        assert!(!d.accept_ephemeral_counter(&author, 1));
         // Forward progress resumes.
-        assert!(d.accept_ephemeral_counter(author, 3));
+        assert!(d.accept_ephemeral_counter(&author, 3));
     }
 
     #[test]
@@ -1838,32 +1835,38 @@ mod ephemeral_tests {
         for i in 0..(MAX_EPHEMERAL_REMOTE_AUTHORS as u64 + 100) {
             let mut author = [0u8; 32];
             author[..8].copy_from_slice(&i.to_le_bytes());
-            assert!(d.accept_ephemeral_counter(author, 1));
+            let author = ambre_core::PublicKey::from_array(author);
+            assert!(d.accept_ephemeral_counter(&author, 1));
         }
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
     }
 
     // -- Presence identity resolution (`sync`, "Presence identity") ------------
 
+    /// The signing key whose 32 bytes all read `byte`.
+    fn key(byte: u8) -> ambre_core::PublicKey {
+        ambre_core::PublicKey::from_array([byte; 32])
+    }
+
     #[test]
     fn author_resolves_to_the_member_behind_the_signing_key() {
         let mut d = doc_state();
         let alice = UserId::new();
-        d.set_signing_keys([([7u8; 32], alice)]);
+        d.set_signing_keys([(key(7), alice)]);
 
-        assert_eq!(d.resolve_ephemeral_author([7u8; 32]), Some(alice));
+        assert_eq!(d.resolve_ephemeral_author(&key(7)), Some(alice));
     }
 
     #[test]
     fn unknown_author_key_is_not_resolved() {
         let mut d = doc_state();
-        d.set_signing_keys([([7u8; 32], UserId::new())]);
+        d.set_signing_keys([(key(7), UserId::new())]);
 
         // A non-member (or a document whose directory is not filled yet) must not
         // be attributed to anyone. The caller drops the sample rather than showing
         // a cursor under a guessed identity.
-        assert_eq!(d.resolve_ephemeral_author([9u8; 32]), None);
-        assert_eq!(doc_state().resolve_ephemeral_author([7u8; 32]), None);
+        assert_eq!(d.resolve_ephemeral_author(&key(9)), None);
+        assert_eq!(doc_state().resolve_ephemeral_author(&key(7)), None);
     }
 
     #[test]
@@ -1871,14 +1874,14 @@ mod ephemeral_tests {
         let mut d = doc_state();
         let revoked = UserId::new();
         let kept = UserId::new();
-        d.set_signing_keys([([1u8; 32], revoked), ([2u8; 32], kept)]);
-        assert_eq!(d.resolve_ephemeral_author([1u8; 32]), Some(revoked));
+        d.set_signing_keys([(key(1), revoked), (key(2), kept)]);
+        assert_eq!(d.resolve_ephemeral_author(&key(1)), Some(revoked));
 
         // A membership change replaces the directory wholesale, so a revoked
         // member stops resolving instead of lingering.
-        d.set_signing_keys([([2u8; 32], kept)]);
-        assert_eq!(d.resolve_ephemeral_author([1u8; 32]), None);
-        assert_eq!(d.resolve_ephemeral_author([2u8; 32]), Some(kept));
+        d.set_signing_keys([(key(2), kept)]);
+        assert_eq!(d.resolve_ephemeral_author(&key(1)), None);
+        assert_eq!(d.resolve_ephemeral_author(&key(2)), Some(kept));
     }
 }
 
@@ -1896,7 +1899,7 @@ mod seal_tests {
     /// handed.
     fn with_socket() -> (SyncState, DocumentId, ambre_bus::conduit::Receiver<Vec<u8>>) {
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
         let id = DocumentId::new();
         let doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, true);

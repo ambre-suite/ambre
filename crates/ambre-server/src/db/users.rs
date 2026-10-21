@@ -22,7 +22,7 @@ pub struct UserRow {
     /// `None` until the account registers its keys: a provider login creates
     /// the account first (`SRV-027`). Both keys are set or neither is.
     pub signing_pubkey: Option<ambre_core::PublicKey>,
-    pub exchange_pubkey: Option<ambre_core::PublicKey>,
+    pub exchange_pubkey: Option<ambre_core::ExchangePublicKey>,
 }
 
 /// Projection of `users` for search results (no key material).
@@ -36,7 +36,7 @@ pub struct UserInfoRow {
     pub email_verified: bool,
     pub display_name: String,
     pub signing_pubkey: ambre_core::PublicKey,
-    pub exchange_pubkey: ambre_core::PublicKey,
+    pub exchange_pubkey: ambre_core::ExchangePublicKey,
 }
 
 /// Fetches a user by their typed `UserId`.
@@ -67,7 +67,7 @@ pub async fn get_user(
                 .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
                 .map(ambre_core::MasterKeySalt::new),
             signing_pubkey: decode_opt_key(r.try_get("signing_pubkey")?)?,
-            exchange_pubkey: decode_opt_key(r.try_get("exchange_pubkey")?)?,
+            exchange_pubkey: decode_opt_exchange_key(r.try_get("exchange_pubkey")?)?,
         })),
         None => Ok(None),
     }
@@ -117,7 +117,7 @@ pub async fn get_user_by_email(
                 .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
                 .map(ambre_core::MasterKeySalt::new),
             signing_pubkey: decode_opt_key(r.try_get("signing_pubkey")?)?,
-            exchange_pubkey: decode_opt_key(r.try_get("exchange_pubkey")?)?,
+            exchange_pubkey: decode_opt_exchange_key(r.try_get("exchange_pubkey")?)?,
         })),
         None => Ok(None),
     }
@@ -133,8 +133,8 @@ pub async fn create_user(
     display_name: &str,
     master_key_enc: &ambre_core::WrappedMasterKey,
     master_key_salt: &ambre_core::MasterKeySalt,
-    signing_pubkey: &[u8],
-    exchange_pubkey: &[u8],
+    signing_pubkey: &ambre_core::PublicKey,
+    exchange_pubkey: &ambre_core::ExchangePublicKey,
 ) -> Result<UserRow, AppError> {
     let row = sqlx::query(
         "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey"
@@ -143,8 +143,8 @@ pub async fn create_user(
     .bind(display_name)
     .bind(master_key_enc.as_bytes())
     .bind(master_key_salt.as_bytes())
-    .bind(signing_pubkey)
-    .bind(exchange_pubkey)
+    .bind(signing_pubkey.as_slice())
+    .bind(exchange_pubkey.as_slice())
     .fetch_one(pool)
     .await
     .map_err(map_email_conflict)?;
@@ -165,7 +165,7 @@ pub async fn create_user(
             .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
             .map(ambre_core::MasterKeySalt::new),
         signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
-        exchange_pubkey: decode_opt_key(row.try_get("exchange_pubkey")?)?,
+        exchange_pubkey: decode_opt_exchange_key(row.try_get("exchange_pubkey")?)?,
     })
 }
 
@@ -240,7 +240,7 @@ pub async fn upsert_user_from_oidc(
             .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
             .map(ambre_core::MasterKeySalt::new),
         signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
-        exchange_pubkey: decode_opt_key(row.try_get("exchange_pubkey")?)?,
+        exchange_pubkey: decode_opt_exchange_key(row.try_get("exchange_pubkey")?)?,
     };
 
     tx.commit().await?;
@@ -263,8 +263,8 @@ pub async fn upsert_user_from_oidc(
 pub async fn dev_upsert_user(
     pool: &PgPool,
     username: &str,
-    signing_pubkey: &[u8],
-    exchange_pubkey: &[u8],
+    signing_pubkey: &ambre_core::PublicKey,
+    exchange_pubkey: &ambre_core::ExchangePublicKey,
 ) -> Result<UserRow, AppError> {
     let email = format!("{username}@dev.local");
     // `(xmax = 0)` is true only for a freshly INSERTed row (vs an ON CONFLICT
@@ -274,8 +274,8 @@ pub async fn dev_upsert_user(
     )
     .bind(username)
     .bind(&email)
-    .bind(signing_pubkey)
-    .bind(exchange_pubkey)
+    .bind(signing_pubkey.as_slice())
+    .bind(exchange_pubkey.as_slice())
     .fetch_one(pool)
     .await
     .map_err(map_email_conflict)?;
@@ -299,7 +299,7 @@ pub async fn dev_upsert_user(
             .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
             .map(ambre_core::MasterKeySalt::new),
         signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
-        exchange_pubkey: decode_opt_key(row.try_get("exchange_pubkey")?)?,
+        exchange_pubkey: decode_opt_exchange_key(row.try_get("exchange_pubkey")?)?,
     })
 }
 
@@ -332,7 +332,7 @@ pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>
                 email_verified: r.try_get("email_verified")?,
                 display_name: r.try_get("display_name")?,
                 signing_pubkey: decode_key(r.try_get("signing_pubkey")?)?,
-                exchange_pubkey: decode_key(r.try_get("exchange_pubkey")?)?,
+                exchange_pubkey: decode_exchange_key(r.try_get("exchange_pubkey")?)?,
             })
         })
         .collect()
@@ -409,8 +409,8 @@ mod tests {
             "Alice",
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
-            &[3u8; 32],
-            &[4u8; 32],
+            &ambre_core::PublicKey::from_array([3u8; 32]),
+            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )
         .await
         .expect("setup account");
@@ -468,8 +468,8 @@ mod tests {
             "Impostor",
             &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([8u8; 16].to_vec()),
-            &[7u8; 32],
-            &[6u8; 32],
+            &ambre_core::PublicKey::from_array([7u8; 32]),
+            &ambre_core::ExchangePublicKey::from_array([6u8; 32]),
         )
         .await
         .expect_err("a verified email must not be claimable via setup");
@@ -541,8 +541,8 @@ mod tests {
             "Bob",
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
-            &[3u8; 32],
-            &[4u8; 32],
+            &ambre_core::PublicKey::from_array([3u8; 32]),
+            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )
         .await
         .expect("first claim");
@@ -553,8 +553,8 @@ mod tests {
             "Impostor",
             &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([8u8; 16].to_vec()),
-            &[7u8; 32],
-            &[6u8; 32],
+            &ambre_core::PublicKey::from_array([7u8; 32]),
+            &ambre_core::ExchangePublicKey::from_array([6u8; 32]),
         )
         .await
         .expect_err("second claim must conflict");
@@ -572,8 +572,8 @@ mod tests {
             "Carol",
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
-            &[3u8; 32],
-            &[4u8; 32],
+            &ambre_core::PublicKey::from_array([3u8; 32]),
+            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )
         .await
         .expect("create user");

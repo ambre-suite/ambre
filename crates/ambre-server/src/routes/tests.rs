@@ -386,10 +386,14 @@ mod handler_tests {
     async fn a_provider_return_signs_the_person_in(pool: sqlx::PgPool) {
         use crate::oidc::stub::{CLIENT_ID, EMAIL, NAME, StubProvider};
         let stub = StubProvider::spawn().await;
-        let clients =
-            crate::oidc::start_oidc_clients(&stub.issuer, CLIENT_ID, "s", "https://app/cb")
-                .await
-                .unwrap();
+        let clients = crate::oidc::start_oidc_clients(
+            &stub.issuer,
+            CLIENT_ID,
+            &crate::oidc::OidcSecret::new("s".to_owned()),
+            "https://app/cb",
+        )
+        .await
+        .unwrap();
         let app = shipped_router(test_app_state_with(pool, clients).await);
         let salt = uuid::Uuid::new_v4().into_bytes();
         let peer = std::net::SocketAddr::from(([10, 22, salt[0], salt[1]], 0));
@@ -1029,7 +1033,8 @@ mod handler_tests {
         key: &ed25519_dalek::SigningKey,
     ) -> String {
         use ed25519_dalek::Signer;
-        entry.signature = key.sign(&entry.signed_bytes().unwrap()).to_bytes().to_vec();
+        entry.signature =
+            ambre_protocol::Signature(key.sign(&entry.signed_bytes().unwrap()).to_bytes());
         base64_encode(&entry.encode().unwrap())
     }
 
@@ -1054,7 +1059,7 @@ mod handler_tests {
                 .then(|| ambre_core::KeyId::from_array([1; 16])),
             previous: (position > 0).then_some(ambre_protocol::EntryDigest([position as u8; 32])),
             author,
-            signature: Vec::new(),
+            signature: ambre_protocol::Signature([0; 64]),
         }
     }
 
@@ -1371,8 +1376,7 @@ mod handler_tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let alive =
-            crate::redis_ops::refresh_get(&state.redis, theirs.refresh_token.expose()).await;
+        let alive = crate::redis_ops::refresh_get(&state.redis, &theirs.refresh_token).await;
         assert!(alive.unwrap().is_some(), "a stranger's session survives");
 
         let resp = app
@@ -1380,7 +1384,7 @@ mod handler_tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let gone = crate::redis_ops::refresh_get(&state.redis, mine.refresh_token.expose()).await;
+        let gone = crate::redis_ops::refresh_get(&state.redis, &mine.refresh_token).await;
         assert!(gone.unwrap().is_none(), "the caller's own session ends");
     }
 
@@ -1401,7 +1405,7 @@ mod handler_tests {
             let tokens = crate::auth::issue_session(&state, ambre_core::UserId::new(), None)
                 .await
                 .unwrap();
-            let claims = state.jwt.verify(tokens.access_token.expose()).unwrap();
+            let claims = state.jwt.verify(&tokens.access_token).unwrap();
             assert_eq!(claims.exp.since(claims.iat), ambre_core::Seconds(minted));
             assert_eq!(tokens.access_expires_in, ambre_core::Seconds(minted));
         }
@@ -1660,6 +1664,86 @@ mod handler_tests {
         assert_eq!(put_master_keys(&app, &auth).await, StatusCode::CONFLICT);
     }
 
+    /// `SRV-232`: a public key of the wrong length is refused before any row
+    /// is written. So is it at the account setup, the dev sign-in and the key
+    /// registration, for the signing key and for the exchange key.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_public_key_of_the_wrong_length_is_refused_and_written_nowhere(pool: sqlx::PgPool) {
+        let state = test_app_state_dev(pool).await;
+        let app = build_test_router(state.clone());
+        let post = |uri: &str, body: serde_json::Value, auth: Option<&str>| {
+            let mut req = Request::post(uri).header("content-type", "application/json");
+            if let Some(auth) = auth {
+                req = req.header("authorization", auth);
+            }
+            req.body(Body::from(body.to_string())).unwrap()
+        };
+        let short = hex::encode([5u8; 31]);
+        let users = || async {
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM users")
+                .fetch_one(&state.db)
+                .await
+                .unwrap()
+        };
+        for key in ["signing_pubkey", "exchange_pubkey"] {
+            let mut body = serde_json::json!({
+                "email": "short@ambre.app",
+                "display_name": "Short",
+                "master_key_enc": base64_encode(&[1u8; 72]),
+                "master_key_salt": base64_encode(&[2u8; 32]),
+                "signing_pubkey": hex::encode([3u8; 32]),
+                "exchange_pubkey": hex::encode([4u8; 32]),
+            });
+            body[key] = serde_json::json!(short);
+            let resp = app
+                .clone()
+                .oneshot(post("/api/auth/setup", body, None))
+                .await;
+            assert_eq!(resp.unwrap().status(), StatusCode::CONFLICT, "setup {key}");
+        }
+        for key in ["signing_pub_key", "exchange_pub_key"] {
+            let mut body = dev_login_body("shorty");
+            body[key] = serde_json::json!(short);
+            let resp = app
+                .clone()
+                .oneshot(post("/api/auth/dev/login", body, None))
+                .await;
+            assert_eq!(resp.unwrap().status(), StatusCode::BAD_REQUEST, "dev {key}");
+        }
+        assert_eq!(users().await, 0, "no account was created");
+
+        let resp = app
+            .clone()
+            .oneshot(post("/api/auth/dev/login", dev_login_body("alice"), None))
+            .await
+            .unwrap();
+        let auth = format!("Bearer {}", access_token_of(resp).await);
+        for key in ["signing_pubkey", "exchange_pubkey"] {
+            let mut body = store_master_keys_body();
+            body[key] = serde_json::json!(short);
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::put("/api/keys/master")
+                        .header("content-type", "application/json")
+                        .header("authorization", &auth)
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::CONFLICT, "store {key}");
+        }
+        let stored: Option<Vec<u8>> =
+            sqlx::query_scalar("SELECT master_key_enc FROM users WHERE email = 'alice@dev.local'")
+                .fetch_one(&state.db)
+                .await
+                .unwrap();
+        assert_eq!(stored, None, "no key material was written");
+        assert_eq!(put_master_keys(&app, &auth).await, StatusCode::OK);
+    }
+
     async fn status_and_code(app: &Router, req: Request<Body>) -> (StatusCode, String) {
         let resp = app.clone().oneshot(with_peer(req)).await.unwrap();
         let status = resp.status();
@@ -1715,7 +1799,7 @@ mod handler_tests {
         let refused = status_and_code(&app, get_with("/api/documents", &setup)).await;
         assert_eq!(refused, (StatusCode::FORBIDDEN, "SETUP_REQUIRED".into()));
         assert!(matches!(
-            crate::auth::authenticate_token(&state, tokens.access_token.expose()),
+            crate::auth::authenticate_token(&state, &tokens.access_token),
             Err(crate::error::AppError::SetupRequired)
         ));
         let (me, _) = status_and_code(&app, get_with("/api/auth/me", &setup)).await;
@@ -1755,7 +1839,11 @@ mod handler_tests {
             .unwrap();
         assert_eq!(stored.status(), StatusCode::OK);
         let token = access_token_of(stored).await;
-        let session = crate::auth::authenticate_token(&state, &token).unwrap();
+        let session = crate::auth::authenticate_token(
+            &state,
+            &ambre_protocol::ws::AccessToken::new(token.clone()),
+        )
+        .unwrap();
         assert_eq!(
             session.signing_pubkey,
             ambre_core::PublicKey::from_array([3u8; 32])
@@ -3216,7 +3304,11 @@ mod handler_tests {
         let snapshot = ambre_core::SnapshotId::parse_str(&snap).unwrap();
         let report = format!("/api/documents/{doc_id}/snapshots/{snap}/report");
         let signed = |author: [u8; 32]| {
-            let transcript = report_transcript(document, snapshot, &author);
+            let transcript = report_transcript(
+                document,
+                snapshot,
+                &ambre_core::PublicKey::from_array(author),
+            );
             serde_json::json!({ "signature": hex::encode(key.sign(&transcript).to_bytes()) })
         };
 
@@ -3255,7 +3347,11 @@ mod handler_tests {
         let confirm = format!("/api/documents/{doc_id}/snapshots/{kept}/confirm");
         post_json(&app, &reporter, confirm, serde_json::json!({})).await;
         let kept_id = ambre_core::SnapshotId::parse_str(&kept).unwrap();
-        let transcript = report_transcript(document, kept_id, &[3u8; 32]);
+        let transcript = report_transcript(
+            document,
+            kept_id,
+            &ambre_core::PublicKey::from_array([3u8; 32]),
+        );
         let body =
             serde_json::json!({ "signature": hex::encode(key.sign(&transcript).to_bytes()) });
         let report = format!("/api/documents/{doc_id}/snapshots/{kept}/report");

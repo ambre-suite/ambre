@@ -641,7 +641,7 @@ impl ProseState {
                 after_id.map(tree_id),
             ),
             ProseCommand::SetBlockStyle { block_id, style_id } => {
-                self.set_block_style(&tree_id(block_id), &style_id.0)
+                self.set_block_style(&tree_id(block_id), &style_id)
             }
             ProseCommand::SetHeadingLevel { block_id, level } => {
                 self.set_heading_level(&tree_id(block_id), level)

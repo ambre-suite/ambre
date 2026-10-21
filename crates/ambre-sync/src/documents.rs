@@ -409,7 +409,7 @@ pub(crate) fn unwrap_listed_key(
     } else {
         wrapper_exchange_pub_key.clone()
     };
-    let peer_pub: [u8; 32] = hex::decode(wrapper_hex.as_str()).ok()?.try_into().ok()?;
+    let peer_pub = crate::sharing::decode_exchange_pubkey(&wrapper_hex).ok()?;
     ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()
 }
 

@@ -1,4 +1,4 @@
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
@@ -7,7 +7,7 @@ use ambre_core::Role;
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
-use crate::extract::Json;
+use crate::extract::{Json, PathId};
 use crate::state::AppState;
 
 // -- Types ------------------------------------------------------------
@@ -116,16 +116,6 @@ fn org_role_valid(role: Role) -> Result<Role, AppError> {
     }
 }
 
-fn parse_org_id(s: &str) -> Result<ambre_core::OrgId, AppError> {
-    ambre_core::OrgId::parse_str(s).map_err(|_| AppError::NotFound {
-        resource: "organization",
-    })
-}
-
-fn parse_user_id_str(s: &str) -> Result<ambre_core::UserId, AppError> {
-    ambre_core::UserId::parse_str(s).map_err(|_| AppError::NotFound { resource: "user" })
-}
-
 /// Validates the escrow parameters at org creation.
 ///
 /// Shamir k-of-n threshold reconstruction is not yet implemented (see
@@ -218,10 +208,9 @@ pub async fn list_orgs(
 pub async fn get_org(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(org_id): Path<String>,
+    PathId(org_id): PathId<ambre_core::OrgId>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
-    let org_id = parse_org_id(&org_id)?;
     let uid = session.user_id;
 
     // Must be a member to view.
@@ -245,11 +234,10 @@ pub async fn get_org(
 pub async fn update_org(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(org_id): Path<String>,
+    PathId(org_id): PathId<ambre_core::OrgId>,
     Json(req): Json<UpdateOrgRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
-    let org_id = parse_org_id(&org_id)?;
     let uid = session.user_id;
 
     require_org_role(&state.db, &org_id, &uid, &[Role::Owner]).await?;
@@ -266,10 +254,9 @@ pub async fn update_org(
 pub async fn delete_org(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(org_id): Path<String>,
+    PathId(org_id): PathId<ambre_core::OrgId>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
-    let org_id = parse_org_id(&org_id)?;
     let uid = session.user_id;
 
     require_org_role(&state.db, &org_id, &uid, &[Role::Owner]).await?;
@@ -298,11 +285,10 @@ fn refuse_share(share: Option<&serde::de::IgnoredAny>) -> Result<(), AppError> {
 pub async fn add_member(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(org_id): Path<String>,
+    PathId(org_id): PathId<ambre_core::OrgId>,
     Json(req): Json<AddMemberRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
-    let org_id = parse_org_id(&org_id)?;
     let uid = session.user_id;
 
     let caller = require_org_role(&state.db, &org_id, &uid, &[Role::Owner, Role::Admin]).await?;
@@ -342,10 +328,9 @@ pub async fn add_member(
 pub async fn list_members(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(org_id): Path<String>,
+    PathId(org_id): PathId<ambre_core::OrgId>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
-    let org_id = parse_org_id(&org_id)?;
     let uid = session.user_id;
 
     require_org_role(
@@ -365,12 +350,10 @@ pub async fn list_members(
 pub async fn remove_member(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((org_id, target_uid)): Path<(String, String)>,
+    PathId((org_id, target_uid)): PathId<(ambre_core::OrgId, ambre_core::UserId)>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
-    let org_id = parse_org_id(&org_id)?;
     let uid = session.user_id;
-    let target_uid = parse_user_id_str(&target_uid)?;
 
     // Owner or admin can remove. Members cannot remove others.
     let caller = require_org_role(&state.db, &org_id, &uid, &[Role::Owner, Role::Admin]).await?;
@@ -398,13 +381,11 @@ pub async fn remove_member(
 pub async fn update_member_role(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((org_id, target_uid)): Path<(String, String)>,
+    PathId((org_id, target_uid)): PathId<(ambre_core::OrgId, ambre_core::UserId)>,
     Json(req): Json<UpdateMemberRoleRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
-    let org_id = parse_org_id(&org_id)?;
     let uid = session.user_id;
-    let target_uid = parse_user_id_str(&target_uid)?;
 
     require_org_role(&state.db, &org_id, &uid, &[Role::Owner]).await?;
 
@@ -434,12 +415,10 @@ pub async fn update_member_role(
 pub async fn recover_master_key(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((org_id, target_uid)): Path<(String, String)>,
+    PathId((org_id, target_uid)): PathId<(ambre_core::OrgId, ambre_core::UserId)>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
-    let org_id = parse_org_id(&org_id)?;
     let caller_uid = session.user_id;
-    let target_uid = parse_user_id_str(&target_uid)?;
 
     require_org_role(&state.db, &org_id, &caller_uid, &[Role::Owner]).await?;
 
@@ -525,28 +504,6 @@ mod tests {
         assert!(validate_shamir_params(0, 5).is_err()); // threshold < 1
         assert!(validate_shamir_params(1, 0).is_err()); // total < 1
         assert!(validate_shamir_params(2, 1).is_err()); // threshold > total
-    }
-
-    #[test]
-    fn parse_org_id_valid() {
-        let id = "00000000-0000-0000-0000-000000000001";
-        assert!(parse_org_id(id).is_ok());
-    }
-
-    #[test]
-    fn parse_org_id_invalid() {
-        assert!(parse_org_id("not-a-uuid").is_err());
-    }
-
-    #[test]
-    fn parse_user_id_str_valid() {
-        let id = "00000000-0000-0000-0000-000000000001";
-        assert!(parse_user_id_str(id).is_ok());
-    }
-
-    #[test]
-    fn parse_user_id_str_invalid() {
-        assert!(parse_user_id_str("not-a-uuid").is_err());
     }
 
     // -- Response formatting ------------------------------------------------

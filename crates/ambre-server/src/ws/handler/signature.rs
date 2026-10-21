@@ -2,6 +2,8 @@
 // The signature check of a sealed envelope: the one place the socket path reads
 // a ciphertext's bytes, so it holds no log line (`scripts/crate_boundaries.py`).
 
+use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
+
 use crate::error::AppError;
 
 /// Appends `len(field) as u32 LE || field` to `msg`.
@@ -36,11 +38,11 @@ pub(crate) fn verify_update_signature(
     let public_data_bytes = postcard::to_allocvec(&update.public_data).map_err(AppError::Decode)?;
     verify_sealed_signature(
         pubkey,
-        &update.nonce.0,
-        &update.ciphertext.0,
+        &update.nonce,
+        &update.ciphertext,
         &public_data_bytes,
-        &update.commitment_tag.0,
-        &update.signature.0,
+        &update.commitment_tag,
+        &update.signature,
     )
 }
 
@@ -60,11 +62,11 @@ pub(crate) fn verify_ephemeral_signature(
         postcard::to_allocvec(&ephemeral.public_data).map_err(AppError::Decode)?;
     verify_sealed_signature(
         pubkey,
-        &ephemeral.nonce.0,
-        &ephemeral.ciphertext.0,
+        &ephemeral.nonce,
+        &ephemeral.ciphertext,
         &public_data_bytes,
-        &ephemeral.commitment_tag.0,
-        &ephemeral.signature.0,
+        &ephemeral.commitment_tag,
+        &ephemeral.signature,
     )
 }
 
@@ -75,22 +77,22 @@ pub(crate) fn verify_ephemeral_signature(
 /// `Ephemeral` paths cannot drift apart.
 pub(crate) fn verify_sealed_signature(
     pubkey: &ambre_core::PublicKey,
-    nonce: &[u8],
-    ciphertext: &[u8],
+    nonce: &Nonce,
+    ciphertext: &Ciphertext,
     public_data_bytes: &[u8],
-    commitment_tag: &[u8],
-    signature: &[u8; 64],
+    commitment_tag: &CommitmentTag,
+    signature: &Signature,
 ) -> Result<(), AppError> {
     use ed25519_dalek::{Signature as DalekSig, VerifyingKey};
 
     let mut signed_data = Vec::new();
-    push_framed(&mut signed_data, nonce);
-    push_framed(&mut signed_data, ciphertext);
+    push_framed(&mut signed_data, &nonce.0);
+    push_framed(&mut signed_data, &ciphertext.0);
     push_framed(&mut signed_data, public_data_bytes);
-    push_framed(&mut signed_data, commitment_tag);
+    push_framed(&mut signed_data, &commitment_tag.0);
 
     let vk = VerifyingKey::from_bytes(pubkey.as_array()).map_err(|_| AppError::InvalidSignature)?;
-    let sig = DalekSig::from_slice(signature).map_err(|_| AppError::InvalidSignature)?;
+    let sig = DalekSig::from_bytes(&signature.0);
 
     // Strict verification (canonical S, no small-order A) so a relayed signature
     // cannot be malleated into a second valid signature over the same envelope.

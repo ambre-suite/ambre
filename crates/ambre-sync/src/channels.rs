@@ -1015,8 +1015,8 @@ pub(crate) fn join_key(
     exchange_key: &StaticSecret,
 ) -> Result<(ambre_core::WrappedDocKey, KeyId), String> {
     let (key, anchor) = unseal_channel_key(channel_id, sealed, space_keys)?;
-    let own_pub = x25519_dalek::PublicKey::from(exchange_key);
-    let wrapped = crate::sharing::wrap_anchored_b64(exchange_key, own_pub.as_bytes(), &key, anchor)
+    let own_pub = crate::sharing::own_exchange_key(exchange_key);
+    let wrapped = crate::sharing::wrap_anchored_b64(exchange_key, &own_pub, &key, anchor)
         .map_err(|e| format!("wrap the channel key: {e}"))?;
     Ok((wrapped, key.id()))
 }
@@ -1041,9 +1041,7 @@ pub(crate) fn self_join_entry(
     let draft = membership_log::Draft {
         document: meta,
         member: author.user_id,
-        member_key: ambre_core::PublicKey::from_array(
-            author.signing_key.verifying_key().to_bytes(),
-        ),
+        member_key: author.public(),
         act: ambre_protocol::MembershipAct::SelfJoin,
         role: head.role,
         key: Some(key),
@@ -1070,15 +1068,15 @@ pub(crate) fn direct_message_request(
     exchange_key: &StaticSecret,
     channel_id: ChannelId,
     (meta, segment): (MetaId, SegmentId),
-    members: &[(&DirectMember, [u8; 32])],
+    members: &[(&DirectMember, ambre_core::PublicKey)],
 ) -> Result<http::CreateDirectMessageRequest, String> {
     let key = DocumentKey::generate();
     let document = meta.document_id();
-    let own_key = author.signing_key.verifying_key().to_bytes();
+    let own_key = author.public();
     let others: Vec<UserId> = members.iter().map(|(m, _)| m.user_id).collect();
-    let signing_keys: HashMap<UserId, [u8; 32]> = members
+    let signing_keys: HashMap<UserId, ambre_core::PublicKey> = members
         .iter()
-        .map(|(m, signing)| (m.user_id, *signing))
+        .map(|(m, signing)| (m.user_id, signing.clone()))
         .chain([(author.user_id, own_key)])
         .collect();
     let mut next = (0, None);
@@ -1090,7 +1088,7 @@ pub(crate) fn direct_message_request(
             member,
             member_key: signing_keys
                 .get(&member)
-                .map(|key| ambre_core::PublicKey::from_array(*key))
+                .cloned()
                 .ok_or("a member has no signing key")?,
             act,
             role,
@@ -1104,15 +1102,15 @@ pub(crate) fn direct_message_request(
     }
     // The creation goes first, so the first digest is the log's root.
     let root = root.ok_or("the log holds no creation")?;
-    let wrap = |peer: &[u8; 32]| {
+    let wrap = |peer: &ambre_core::ExchangePublicKey| {
         crate::sharing::wrap_anchored_b64(exchange_key, peer, &key, Some(root))
             .map_err(|e| format!("wrap the channel key: {e}"))
     };
-    let own_pub = x25519_dalek::PublicKey::from(exchange_key);
+    let own_pub = crate::sharing::own_exchange_key(exchange_key);
     let members = members
         .iter()
         .map(|(m, _)| {
-            wrap(m.exchange_pub_key.as_array()).map(|doc_key_enc| http::DirectMemberJson {
+            wrap(&m.exchange_pub_key).map(|doc_key_enc| http::DirectMemberJson {
                 user_id: m.user_id,
                 doc_key_enc,
             })
@@ -1123,7 +1121,7 @@ pub(crate) fn direct_message_request(
         meta_id: meta,
         segment_id: segment,
         members,
-        doc_key_enc: wrap(own_pub.as_bytes())?,
+        doc_key_enc: wrap(&own_pub)?,
         key_id: key.id(),
         entries,
     })
@@ -1136,7 +1134,7 @@ pub(crate) fn check_pinned(
     served_hex: &ambre_core::ExchangeKeyHex,
 ) -> Result<(), String> {
     let served = crate::sharing::decode_exchange_pubkey(served_hex)?;
-    if served == *member.exchange_pub_key.as_array() {
+    if served == member.exchange_pub_key {
         Ok(())
     } else {
         Err(format!(
@@ -1296,9 +1294,9 @@ pub(crate) mod tests {
             nonce: *nonce,
             ciphertext: ciphertext.to_vec(),
         };
-        let own_pub = x25519_dalek::PublicKey::from(exchange_key);
+        let own_pub = crate::sharing::own_exchange_key(exchange_key);
         let (key, anchor) =
-            ambre_crypto::ecdh::unwrap_anchored(exchange_key, own_pub.as_bytes(), &wrapped).ok()?;
+            ambre_crypto::ecdh::unwrap_anchored(exchange_key, &own_pub, &wrapped).ok()?;
         assert_eq!(anchor, Some(ANCHOR.0), "every wrap carries meta's anchor");
         Some(key)
     }
@@ -1311,14 +1309,9 @@ pub(crate) mod tests {
     ) -> (SealedChannelKey, ambre_core::WrappedDocKey) {
         let channel_key = DocumentKey::generate();
         let sealed = seal_channel_key(channel_id, &channel_key, space_key, ANCHOR).expect("seal");
-        let own_pub = x25519_dalek::PublicKey::from(creator);
-        let own = crate::sharing::wrap_anchored_b64(
-            creator,
-            own_pub.as_bytes(),
-            &channel_key,
-            Some(ANCHOR),
-        )
-        .expect("wrap");
+        let own_pub = crate::sharing::own_exchange_key(creator);
+        let own = crate::sharing::wrap_anchored_b64(creator, &own_pub, &channel_key, Some(ANCHOR))
+            .expect("wrap");
         (sealed, own)
     }
 
@@ -1404,7 +1397,7 @@ pub(crate) mod tests {
     #[test]
     fn with_no_relay_a_creation_and_a_join_fail_at_once() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, String::new(), None);
+        let state = SyncState::new(sink, String::new());
         let (channel_id, space_id) = (ChannelId::new(), SpaceId::new());
         for public in [true, false] {
             let documents = (MetaId::new(), SegmentId::new());
@@ -1429,7 +1422,7 @@ pub(crate) mod tests {
     #[test]
     fn a_delete_answers_logic_and_leaves_the_sessions_to_it() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         let channel_id = ChannelId::new();
         let meta = DocumentId::new();
         state.documents.insert(
@@ -1469,7 +1462,7 @@ pub(crate) mod tests {
     #[test]
     fn a_leave_answers_logic_and_leaves_the_sessions_to_it() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         let channel_id = ChannelId::new();
         let meta = DocumentId::new();
         state.documents.insert(
@@ -1510,7 +1503,7 @@ pub(crate) mod tests {
     #[test]
     fn a_listing_refused_for_want_of_membership_reads_as_refused() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         let channel_id = ChannelId::new();
         let url = "GET https://relay.example/api/channels/c/documents";
         for message in [
@@ -1539,7 +1532,7 @@ pub(crate) mod tests {
     #[test]
     fn a_listing_of_a_space_forwards_its_channels_and_a_failure_nothing() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, String::new(), None);
+        let state = SyncState::new(sink, String::new());
         let space_id = SpaceId::new();
         let channel_id = ChannelId::new();
         let body = format!(r#"{{"channels":["{channel_id}"]}}"#);
@@ -1563,7 +1556,7 @@ pub(crate) mod tests {
     #[test]
     fn the_share_of_a_murmure_document_lists_the_users_channels() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         for doc_type in [DocType::Prose, DocType::Murmure] {
             state.handle_ws_message(ambre_protocol::ws::WsServerMsg::DocumentShared {
                 document_id: DocumentId::new(),
@@ -1584,7 +1577,7 @@ pub(crate) mod tests {
     #[test]
     fn the_loss_of_a_document_not_held_as_another_kind_lists_the_users_channels() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         state.user_id = Some(UserId::new());
         let (prose, murmure, unheld) = (DocumentId::new(), DocumentId::new(), DocumentId::new());
         for (id, doc_type) in [(prose, DocType::Prose), (murmure, DocType::Murmure)] {
@@ -1613,7 +1606,7 @@ pub(crate) mod tests {
     #[test]
     fn a_listing_of_the_users_channels_forwards_their_places() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         state.handle_list_member_channels();
         state.handle_list_member_channels();
         let (space, bare) = (SpaceId::new(), SpaceId::new());
@@ -1705,14 +1698,13 @@ pub(crate) mod tests {
     /// none, and so does an empty one. A meta never named shows none.
     #[tokio::test]
     async fn a_listed_name_opens_under_the_users_key_of_its_meta() {
-        let mut state = SyncState::new(LogicSink::channel().0, String::new(), None);
+        let mut state = SyncState::new(LogicSink::channel().0, String::new());
         state.signing_key =
             Some(ambre_crypto::MasterSeed::from_array([5; 32]).derive_signing_key());
         let own = exchange_key(1);
-        let own_pub = x25519_dalek::PublicKey::from(&own);
+        let own_pub = crate::sharing::own_exchange_key(&own);
         let key = DocumentKey::generate();
-        let wrapped =
-            ambre_crypto::ecdh::wrap_document_key(&own, own_pub.as_bytes(), &key).unwrap();
+        let wrapped = ambre_crypto::ecdh::wrap_document_key(&own, &own_pub, &key).unwrap();
         let doc_key_enc = ambre_core::WrappedDocKey::new(
             [wrapped.nonce.as_slice(), &wrapped.ciphertext].concat(),
         );
@@ -1778,7 +1770,7 @@ pub(crate) mod tests {
     /// its meta, under the channel key, and only meta opens it.
     #[test]
     fn a_channel_name_is_sealed_under_the_channel_key_for_its_meta() {
-        let mut state = SyncState::new(LogicSink::channel().0, String::new(), None);
+        let mut state = SyncState::new(LogicSink::channel().0, String::new());
         let (meta, key) = (MetaId::new(), DocumentKey::generate());
         assert!(
             state.seal_channel_name(meta, &key, "Design").is_err(),
@@ -1800,7 +1792,7 @@ pub(crate) mod tests {
     #[test]
     fn a_new_space_is_created_as_a_space() {
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         let (space, gone) = (SpaceId::new(), SpaceId::new());
         let other = DocumentId::new();
         state.handle_command(SyncCommand::CreateSpace { space_id: space });
@@ -1840,7 +1832,7 @@ pub(crate) mod tests {
     #[test]
     fn a_listed_meta_walks_under_the_word_of_its_open_space() {
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         let (space_id, meta) = (SpaceId::new(), DocumentId::new());
         let document_id = space_id.document_id();
         let mut space =
@@ -1856,7 +1848,7 @@ pub(crate) mod tests {
     #[test]
     fn with_no_relay_the_open_fails_at_once() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, String::new(), None);
+        let state = SyncState::new(sink, String::new());
         let channel_id = ChannelId::new();
         state.handle_open_channel(channel_id, None);
         let events: Vec<LogicEvent> = rx.try_iter().collect();
@@ -1879,18 +1871,16 @@ pub(crate) mod tests {
             nonce: *nonce,
             ciphertext: ciphertext.to_vec(),
         };
-        let sender_pub = x25519_dalek::PublicKey::from(sender);
+        let sender_pub = crate::sharing::own_exchange_key(sender);
         let (key, root) =
-            ambre_crypto::ecdh::unwrap_anchored(holder, sender_pub.as_bytes(), &wrapped).ok()?;
+            ambre_crypto::ecdh::unwrap_anchored(holder, &sender_pub, &wrapped).ok()?;
         Some((key, root.map(ambre_protocol::EntryDigest)))
     }
 
     fn member_of(exchange_key: &StaticSecret) -> DirectMember {
         DirectMember {
             user_id: UserId::new(),
-            exchange_pub_key: ambre_core::PublicKey::from_array(
-                x25519_dalek::PublicKey::from(exchange_key).to_bytes(),
-            ),
+            exchange_pub_key: crate::sharing::own_exchange_key(exchange_key),
         }
     }
 
@@ -1912,9 +1902,11 @@ pub(crate) mod tests {
             .map(|(m, seed)| {
                 (
                     m,
-                    SigningKey::from_bytes(&[seed; 32])
-                        .verifying_key()
-                        .to_bytes(),
+                    ambre_core::PublicKey::from_array(
+                        SigningKey::from_bytes(&[seed; 32])
+                            .verifying_key()
+                            .to_bytes(),
+                    ),
                 )
             })
             .collect();
@@ -1967,7 +1959,7 @@ pub(crate) mod tests {
             )
             .is_ok()
         );
-        let other = x25519_dalek::PublicKey::from(&exchange_key(3)).to_bytes();
+        let other = crate::sharing::own_exchange_key(&exchange_key(3));
         assert!(check_pinned(&bob, &ambre_core::ExchangeKeyHex::encode(other)).is_err());
         assert!(check_pinned(&bob, &ambre_core::ExchangeKeyHex("not hex".to_owned())).is_err());
     }
@@ -1975,7 +1967,7 @@ pub(crate) mod tests {
     #[test]
     fn with_no_relay_a_direct_message_fails_at_once() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, String::new(), None);
+        let state = SyncState::new(sink, String::new());
         let channel_id = ChannelId::new();
         let members = vec![member_of(&exchange_key(2))];
         state.handle_create_direct_message(channel_id, (MetaId::new(), SegmentId::new()), members);

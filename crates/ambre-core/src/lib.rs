@@ -6,7 +6,7 @@
 //!   [`FootnoteId`], [`CommentId`], [`ReplyId`], [`SuggestionId`]:
 //!   strongly-typed identifiers (distinct newtypes over `Uuid`)
 //! - [`DocType`]: enum of document types (Prose, Trame, Toile, Murmure)
-//! - [`PublicKey`]: wrapper `[u8; 32]` for Ed25519 or X25519
+//! - [`PublicKey`], [`ExchangePublicKey`]: `[u8; 32]` wrappers for Ed25519 and X25519
 //! - [`Seq`]: the relay's sequence number of a document
 //! - [`Version`]: version byte for serialization
 //! - [`schema`]: the persisted schema version and its migration walk
@@ -93,7 +93,7 @@ pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
 pub use media::{ByteSize, ContentHash, MediaType};
 pub use name::{NAME_MAX_CHARS, NAME_TOO_LONG, name_fits};
 pub use object_key::ObjectKey;
-pub use public_key::PublicKey;
+pub use public_key::{ExchangePublicKey, PublicKey};
 pub use role::Role;
 pub use schema::{
     SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,

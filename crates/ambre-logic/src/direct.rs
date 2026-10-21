@@ -209,7 +209,7 @@ mod tests {
     fn bob() -> DirectMember {
         DirectMember {
             user_id: UserId::new(),
-            exchange_pub_key: ambre_core::PublicKey::from_array([9; 32]),
+            exchange_pub_key: ambre_core::ExchangePublicKey::from_array([9; 32]),
         }
     }
 
@@ -381,7 +381,7 @@ mod tests {
             invitee_email: Some(ambre_core::Email::from("carol@test.local")),
             invitee,
             role: ambre_bus::Role::Editor,
-            expect_exchange_pub_key: ambre_core::PublicKey::from_array([3; 32]),
+            expect_exchange_pub_key: ambre_core::ExchangePublicKey::from_array([3; 32]),
             now: NOW,
         }
     }
@@ -542,7 +542,7 @@ mod tests {
 
         let member = DirectMember {
             user_id: listed,
-            exchange_pub_key: ambre_core::PublicKey::from_array([9; 32]),
+            exchange_pub_key: ambre_core::ExchangePublicKey::from_array([9; 32]),
         };
         state.handle_logic_command(LogicCommand::InviteToChannel {
             id: first,

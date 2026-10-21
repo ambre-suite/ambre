@@ -128,7 +128,7 @@ pub const GOOGLE_ISSUER: &str = "https://accounts.google.com";
 pub async fn start_oidc_clients(
     google_issuer: &str,
     google_client_id: &str,
-    google_client_secret: &str,
+    google_client_secret: &OidcSecret,
     google_redirect_uri: &str,
 ) -> Result<OidcClients, AppError> {
     if google_client_id.is_empty() {
@@ -151,7 +151,7 @@ pub async fn start_oidc_clients(
 async fn init_oidc_clients(
     google_issuer: &str,
     google_client_id: &str,
-    google_client_secret: &str,
+    google_client_secret: &OidcSecret,
     google_redirect_uri: &str,
 ) -> Result<OidcClients, AppError> {
     let http_client = reqwest::Client::new();
@@ -169,7 +169,7 @@ async fn init_oidc_clients(
     let client = OidcClient::from_provider_metadata(
         provider_metadata,
         ClientId::new(google_client_id.to_string()),
-        Some(ClientSecret::new(google_client_secret.to_string())),
+        Some(ClientSecret::new(google_client_secret.expose().to_owned())),
     );
 
     let mut map = HashMap::new();
@@ -480,9 +480,14 @@ mod tests {
         StubProvider::spawn().await.issuer
     }
 
+    /// The client secret every test configures.
+    fn secret() -> OidcSecret {
+        OidcSecret::new("secret".to_owned())
+    }
+
     /// The `google` client discovered at `stub`.
     async fn client_of(stub: &StubProvider) -> OidcClients {
-        start_oidc_clients(&stub.issuer, CLIENT_ID, "secret", "https://app/cb")
+        start_oidc_clients(&stub.issuer, CLIENT_ID, &secret(), "https://app/cb")
             .await
             .unwrap()
     }
@@ -555,9 +560,12 @@ mod tests {
     /// With no client id configured nothing is discovered, and sign-in is off.
     #[tokio::test]
     async fn a_configured_provider_that_does_not_answer_stops_the_start() {
-        let started = start_oidc_clients(SILENT_ISSUER, "client", "secret", "https://app/cb").await;
+        let started =
+            start_oidc_clients(SILENT_ISSUER, "client", &secret(), "https://app/cb").await;
         assert!(matches!(started, Err(AppError::Oidc(_))));
-        let off = start_oidc_clients(SILENT_ISSUER, "", "", "").await.unwrap();
+        let off = start_oidc_clients(SILENT_ISSUER, "", &OidcSecret::default(), "")
+            .await
+            .unwrap();
         assert!(off.is_empty());
     }
 
@@ -566,7 +574,7 @@ mod tests {
     #[tokio::test]
     async fn a_sign_in_is_sent_to_the_configured_provider() {
         let issuer = spawn_provider().await;
-        let clients = start_oidc_clients(&issuer, "client", "secret", "https://app/cb")
+        let clients = start_oidc_clients(&issuer, "client", &secret(), "https://app/cb")
             .await
             .unwrap();
         let (login, _) = login_url(&clients["google"]).await.unwrap();

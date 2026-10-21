@@ -1,4 +1,4 @@
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::response::IntoResponse;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -8,22 +8,9 @@ use ambre_core::Role;
 use crate::auth::{self};
 use crate::db;
 use crate::error::AppError;
-use crate::extract::Json;
+use crate::extract::{Json, PathId};
 use crate::redis_ops;
 use crate::state::AppState;
-
-fn parse_doc_id(s: &str) -> Result<ambre_core::DocumentId, AppError> {
-    ambre_core::Uuid::parse_str(s)
-        .map(ambre_core::DocumentId::from_uuid)
-        .map_err(|_| AppError::NotFound {
-            resource: "document",
-        })
-}
-fn parse_user_id(s: &str) -> Result<ambre_core::UserId, AppError> {
-    ambre_core::Uuid::parse_str(s)
-        .map(ambre_core::UserId::from_uuid)
-        .map_err(|_| AppError::NotFound { resource: "user" })
-}
 
 // -- Setup Account -------------------------------------------------
 
@@ -82,12 +69,7 @@ pub async fn setup_account(
     validate_identity(&req.email, &req.display_name)?;
     let mk_enc = req.master_key_enc;
     let mk_salt = req.master_key_salt;
-    let spk = hex::decode(req.signing_pubkey.as_str()).map_err(|e| AppError::Conflict {
-        detail: e.to_string(),
-    })?;
-    let epk = hex::decode(req.exchange_pubkey.as_str()).map_err(|e| AppError::Conflict {
-        detail: e.to_string(),
-    })?;
+    let (spk, epk) = super::keys::account_keys(&req.signing_pubkey, &req.exchange_pubkey)?;
 
     let user = db::create_user(
         &state.db,
@@ -100,10 +82,7 @@ pub async fn setup_account(
     )
     .await?;
     let user_id = user.id;
-    let signing_pubkey =
-        ambre_core::PublicKey::from_slice(&spk).map_err(|e| AppError::Conflict {
-            detail: e.to_string(),
-        })?;
+    let signing_pubkey = spk;
 
     let tokens = auth::issue_session(&state, user_id, Some(signing_pubkey)).await?;
     tracing::debug!(user_id = %user_id, provider = "setup", "login");
@@ -158,11 +137,7 @@ pub async fn logout(
     auth: auth::AccountSession,
     Json(req): Json<LogoutRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    if let Some(token) = req
-        .refresh_token
-        .as_ref()
-        .map(ambre_protocol::ws::RefreshToken::expose)
-    {
+    if let Some(token) = req.refresh_token.as_ref() {
         // Only revoke a token that actually belongs to the caller. Without this an
         // authenticated user could delete another user's refresh token (session
         // revocation of a third party) by presenting it here. The token is an
@@ -364,11 +339,10 @@ pub struct GetDocumentResponse {
 pub async fn get_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
 ) -> Result<impl IntoResponse, AppError> {
     // The extractor refuses an anonymous caller before the register is read, so
     // no query runs on behalf of nobody (`SRV-018`).
-    let doc_id = parse_doc_id(&document_id)?;
     let doc = db::get_document(&state.db, &doc_id)
         .await?
         .ok_or(AppError::NotFound {
@@ -408,11 +382,10 @@ pub struct RenameDocumentRequest {
 pub async fn rename_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
     Json(req): Json<RenameDocumentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -428,10 +401,9 @@ pub async fn rename_document(
 pub async fn delete_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -506,10 +478,9 @@ pub async fn search_users(
 pub async fn get_pubkeys(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(user_id): Path<String>,
+    PathId(uid): PathId<ambre_core::UserId>,
 ) -> Result<impl IntoResponse, AppError> {
     let _s = auth;
-    let uid = parse_user_id(&user_id)?;
     let u = db::get_user(&state.db, &uid)
         .await?
         .ok_or(AppError::NotFound { resource: "user" })?;
@@ -555,10 +526,9 @@ pub struct MemberInfoJson {
 pub async fn list_document_members(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path(document_id): Path<String>,
+    PathId(doc_id): PathId<ambre_core::DocumentId>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
     // A non-member and an absent document draw the same 404 (`SRV-005`). The
     // client reads that 404 as a document not created yet, and opens it locally.
     // The admin who re-keys a public channel reads whom it wraps for
@@ -631,12 +601,10 @@ pub struct UpdateMemberRoleRequest {
 pub async fn update_document_member_role(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Path((document_id, user_id)): Path<(String, String)>,
+    PathId((doc_id, target)): PathId<(ambre_core::DocumentId, ambre_core::UserId)>,
     Json(req): Json<UpdateMemberRoleRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let doc_id = parse_doc_id(&document_id)?;
-    let target = parse_user_id(&user_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;

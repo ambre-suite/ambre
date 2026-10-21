@@ -1291,8 +1291,8 @@ impl SyncState {
                 // Anti-replay: reject ephemerals with a non-monotonic counter for
                 // the same author. The counter map is bounded (see
                 // `accept_ephemeral_counter` / `MAX_EPHEMERAL_REMOTE_AUTHORS`).
-                let author_pk = *eph.public_data.pub_key.as_array();
-                if !doc_state.accept_ephemeral_counter(author_pk, eph.public_data.counter.0) {
+                let author_pk = eph.public_data.pub_key.clone();
+                if !doc_state.accept_ephemeral_counter(&author_pk, eph.public_data.counter.0) {
                     tracing::debug!(
                         "Sync: dropping replayed ephemeral from {:?} (counter {})",
                         author_pk,
@@ -1309,7 +1309,7 @@ impl SyncState {
                 // sample is dropped rather than shown under a guessed identity.
                 // Presence is best-effort; a dropped sample is corrected by the
                 // next one.
-                let Some(from_user_id) = doc_state.resolve_ephemeral_author(author_pk) else {
+                let Some(from_user_id) = doc_state.resolve_ephemeral_author(&author_pk) else {
                     tracing::debug!(
                         "Sync: dropping ephemeral from unattributable author {author_pk:?}"
                     );
@@ -1337,7 +1337,7 @@ impl SyncState {
                 let Some(doc_state) = self.documents.get(&document_id) else {
                     return;
                 };
-                let Some(user_id) = doc_state.resolve_ephemeral_author(*pub_key.as_array()) else {
+                let Some(user_id) = doc_state.resolve_ephemeral_author(&pub_key) else {
                     tracing::debug!("Sync: dropping PeerLeft from an unattributable key");
                     return;
                 };
@@ -1367,8 +1367,8 @@ impl SyncState {
                     .is_some_and(|key| key.verifying_key().to_bytes() == *author.as_array());
                 self.send_to_logic(LogicEvent::SnapshotDropped {
                     document_id,
-                    author: doc_state.resolve_ephemeral_author(*author.as_array()),
-                    reporter: doc_state.resolve_ephemeral_author(*reporter.as_array()),
+                    author: doc_state.resolve_ephemeral_author(&author),
+                    reporter: doc_state.resolve_ephemeral_author(&reporter),
                     refinalize: refinalize && !own,
                 });
             }
@@ -1647,7 +1647,7 @@ mod tests {
     /// A worker holding one open document, and the queue of what it tells Logic.
     fn with_open_document() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         let id = DocumentId::new();
         state.documents.insert(
             id,
@@ -1826,7 +1826,7 @@ mod tests {
         use ambre_protocol::ws::{WsClientMsg, decode_client_msg};
 
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
         let id = DocumentId::new();
         let mut doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, true);
@@ -1878,7 +1878,7 @@ mod tests {
         use ambre_protocol::ws::{WsClientMsg, decode_client_msg};
 
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new(), None);
+        let mut state = SyncState::new(sink, String::new());
         let mut cursors = std::collections::HashMap::new();
         for last in [7, 12] {
             let id = DocumentId::new();

@@ -8,6 +8,7 @@
 //! Assembly into `ambre_protocol::{Update,Snapshot,Ephemeral}` and the
 //! compression version byte live in the Sync thread, not here.
 
+use ambre_core::PublicKey;
 use ed25519_dalek::SigningKey;
 
 use crate::aead;
@@ -80,7 +81,7 @@ pub fn open(
     sealed: &Sealed,
     aad: &[u8],
     doc_key: &DocumentKey,
-    author_pub: &[u8; 32],
+    author_pub: &PublicKey,
 ) -> Result<Vec<u8>, CryptoError> {
     signature::verify(
         author_pub,
