@@ -274,37 +274,7 @@ impl NoticeKind {
     }
 }
 
-/// Where a segment stands in its life.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SegmentState {
-    /// The segment new messages go to.
-    Active,
-    /// A segment being finalized, still open to late deltas.
-    Closing,
-    /// An immutable segment, loaded on demand only (`MURMURE-023`).
-    Final,
-}
-
-impl SegmentState {
-    /// The word a `segments` entry stores.
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Active => "active",
-            Self::Closing => "closing",
-            Self::Final => "final",
-        }
-    }
-
-    /// The state a stored word names, or `None` for a word no build wrote.
-    pub(crate) fn parse(word: &str) -> Option<Self> {
-        match word {
-            "active" => Some(Self::Active),
-            "closing" => Some(Self::Closing),
-            "final" => Some(Self::Final),
-            _ => None,
-        }
-    }
-}
+pub use ambre_core::SegmentState;
 
 /// A timestamp as Loro stores it. Loro has no unsigned integer, and a
 /// millisecond count past `i64::MAX` is 292 million years away, so saturating

@@ -621,40 +621,38 @@ pub async fn take_finalize_lease(
         state: Some(state),
         horizon,
         final_snapshot,
-        grace_left_ms,
-        lease_left_ms,
+        grace_left,
+        lease_left,
     }) = row
     else {
         return Err(not_closing());
     };
-    if !finalizable(&state, final_snapshot) {
+    if !finalizable(state, final_snapshot) {
         return Err(not_closing());
     }
-    let wait = |ms: i64| FinalizeLease::Wait {
-        retry_in: std::time::Duration::from_millis(ms.unsigned_abs()),
-    };
-    let horizon = match horizon {
-        Some(horizon) => horizon,
-        None if grace_left_ms > 0 => return Ok(wait(grace_left_ms)),
-        None => {
+    let wait = |retry_in| FinalizeLease::Wait { retry_in };
+    let horizon = match (horizon, grace_left) {
+        (Some(horizon), _) => horizon,
+        (None, Some(left)) => return Ok(wait(left)),
+        (None, None) => {
             let Some(seq) = lock().await? else {
                 return Ok(FinalizeLease::Wait {
                     retry_in: terms.pending_retry,
                 });
             };
-            let seq = i64::try_from(seq.0)
+            let stored = i64::try_from(seq.0)
                 .map_err(|_| AppError::Internal("delta number out of range".into()))?;
             sqlx::query("UPDATE channel_documents SET horizon = $2 WHERE document_id = $1")
                 .bind(document)
-                .bind(seq)
+                .bind(stored)
                 .execute(&mut *tx)
                 .await?;
             seq
         }
     };
-    if let Some(ms) = lease_left_ms.filter(|ms| *ms > 0) {
+    if let Some(left) = lease_left {
         tx.commit().await?;
-        return Ok(wait(ms));
+        return Ok(wait(left));
     }
     let lease_id = ambre_core::LeaseId::new();
     sqlx::query(
@@ -669,37 +667,66 @@ pub async fn take_finalize_lease(
     tx.commit().await?;
     Ok(FinalizeLease::Granted {
         lease_id,
-        horizon: decode_seq(horizon)?,
+        horizon,
         expires_in: terms.lease,
     })
 }
 
-/// What a lease request reads of a segment, the waits in milliseconds by
-/// the register's clock.
+/// What a lease request reads of a segment, the waits by the register's
+/// clock.
 #[derive(sqlx::FromRow)]
 struct LeaseRow {
-    state: Option<String>,
-    horizon: Option<i64>,
-    final_snapshot: Option<uuid::Uuid>,
-    grace_left_ms: i64,
-    lease_left_ms: Option<i64>,
+    #[sqlx(try_from = "PgOptState")]
+    state: Option<ambre_core::SegmentState>,
+    #[sqlx(try_from = "PgOptSeq")]
+    horizon: Option<ambre_core::Seq>,
+    #[sqlx(try_from = "PgOptId")]
+    final_snapshot: Option<ambre_core::SnapshotId>,
+    #[sqlx(try_from = "PgTimeLeft", rename = "grace_left_ms")]
+    grace_left: Option<std::time::Duration>,
+    #[sqlx(try_from = "PgTimeLeft", rename = "lease_left_ms")]
+    lease_left: Option<std::time::Duration>,
 }
 
 /// What a finalize commit reads of a segment.
 #[derive(sqlx::FromRow)]
 struct CommitRow {
-    state: Option<String>,
+    #[sqlx(try_from = "PgOptState")]
+    state: Option<ambre_core::SegmentState>,
     /// The live or expired lease, if any.
-    held: Option<uuid::Uuid>,
+    #[sqlx(try_from = "PgOptId")]
+    held: Option<ambre_core::LeaseId>,
     live: bool,
-    horizon: Option<i64>,
-    final_snapshot: Option<uuid::Uuid>,
+    #[sqlx(try_from = "PgOptSeq")]
+    horizon: Option<ambre_core::Seq>,
+    #[sqlx(try_from = "PgOptId")]
+    final_snapshot: Option<ambre_core::SnapshotId>,
+}
+
+/// The delta number a snapshot of `document` folds in, `None` for a snapshot
+/// of another document or none at all.
+async fn covered_seq_of(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    snapshot: uuid::Uuid,
+    document: uuid::Uuid,
+) -> Result<Option<ambre_core::Seq>, AppError> {
+    let covered: Option<i64> =
+        sqlx::query_scalar("SELECT covered_seq FROM snapshots WHERE id = $1 AND document_id = $2")
+            .bind(snapshot)
+            .bind(document)
+            .fetch_optional(&mut **tx)
+            .await?;
+    Ok(covered.map(decode_seq).transpose()?)
 }
 
 /// Whether a segment takes a lease and a commit: it is closing, or a report
 /// dropped its final snapshot (the Murmure segments spec).
-fn finalizable(state: &str, final_snapshot: Option<uuid::Uuid>) -> bool {
-    state == "closing" || (state == "final" && final_snapshot.is_none())
+fn finalizable(
+    state: ambre_core::SegmentState,
+    final_snapshot: Option<ambre_core::SnapshotId>,
+) -> bool {
+    state == ambre_core::SegmentState::Closing
+        || (state == ambre_core::SegmentState::Final && final_snapshot.is_none())
 }
 
 /// The refusal of a lease or a commit on a segment that is not closing.
@@ -724,7 +751,6 @@ pub async fn commit_finalization(
     snapshot_id: ambre_core::SnapshotId,
 ) -> Result<(), AppError> {
     let document = id_to_uuid(segment.document_id());
-    let (lease_id, snapshot_id) = (id_to_uuid(lease_id), id_to_uuid(snapshot_id));
     let conflict = |detail: &str| AppError::Conflict {
         detail: detail.into(),
     };
@@ -748,21 +774,17 @@ pub async fn commit_finalization(
     else {
         return Err(not_closing());
     };
-    if state == "final" && final_snapshot == Some(snapshot_id) {
+    if state == ambre_core::SegmentState::Final && final_snapshot == Some(snapshot_id) {
         return Ok(());
     }
-    if !finalizable(&state, final_snapshot) {
+    if !finalizable(state, final_snapshot) {
         return Err(not_closing());
     }
     if held != Some(lease_id) || !live {
         return Err(conflict("the caller holds no live lease"));
     }
-    let covered: Option<i64> =
-        sqlx::query_scalar("SELECT covered_seq FROM snapshots WHERE id = $1 AND document_id = $2")
-            .bind(snapshot_id)
-            .bind(document)
-            .fetch_optional(&mut *tx)
-            .await?;
+    let snapshot_id = id_to_uuid(snapshot_id);
+    let covered = covered_seq_of(&mut tx, snapshot_id, document).await?;
     if covered.is_none() || covered != horizon {
         return Err(conflict("the snapshot does not cover the horizon"));
     }
@@ -806,17 +828,25 @@ pub enum FoldLease {
 }
 
 /// What a fold lease request reads of a segment and of its amendments, the
-/// waits in milliseconds by the register's clock.
+/// waits by the register's clock.
 #[derive(sqlx::FromRow)]
 struct FoldRow {
-    state: Option<String>,
-    horizon: Option<i64>,
-    final_snapshot: Option<uuid::Uuid>,
-    lease_left_ms: Option<i64>,
-    amendments: Option<uuid::Uuid>,
-    folded_seq: Option<i64>,
-    delay_left_ms: Option<i64>,
-    stored_seq: Option<i64>,
+    #[sqlx(try_from = "PgOptState")]
+    state: Option<ambre_core::SegmentState>,
+    #[sqlx(try_from = "PgOptSeq")]
+    horizon: Option<ambre_core::Seq>,
+    #[sqlx(try_from = "PgOptId")]
+    final_snapshot: Option<ambre_core::SnapshotId>,
+    #[sqlx(try_from = "PgTimeLeft", rename = "lease_left_ms")]
+    lease_left: Option<std::time::Duration>,
+    #[sqlx(try_from = "PgOptId")]
+    amendments: Option<ambre_core::DocumentId>,
+    #[sqlx(try_from = "PgOptSeq")]
+    folded_seq: Option<ambre_core::Seq>,
+    #[sqlx(try_from = "PgTimeLeft", rename = "delay_left_ms")]
+    delay_left: Option<std::time::Duration>,
+    #[sqlx(try_from = "PgOptSeq")]
+    stored_seq: Option<ambre_core::Seq>,
 }
 
 /// Take the fold lease of the final segment `segment` of a channel
@@ -864,32 +894,26 @@ pub async fn take_fold_lease(
         state: _,
         horizon: Some(horizon),
         final_snapshot: Some(_),
-        lease_left_ms,
+        lease_left,
         amendments,
         folded_seq,
-        delay_left_ms,
+        delay_left,
         stored_seq,
-    }) = row.filter(|row| row.state.as_deref() == Some("final"))
+    }) = row.filter(|row| row.state == Some(ambre_core::SegmentState::Final))
     else {
         return Err(conflict("the segment is not finalized"));
     };
-    let Some(amendments) = amendments.map(uuid_row_to_id) else {
+    let Some(amendments) = amendments else {
         return Err(conflict("the segment has no amendments"));
     };
-    let stored = stored_seq.map(decode_seq).transpose()?.unwrap_or_default();
-    let folded = folded_seq.map(decode_seq).transpose()?.unwrap_or_default();
-    let seq = relayed(amendments).await?.max(stored);
-    if seq <= folded {
+    let seq = relayed(amendments)
+        .await?
+        .max(stored_seq.unwrap_or_default());
+    if seq <= folded_seq.unwrap_or_default() {
         return Err(conflict("nothing to fold"));
     }
-    let wait = |ms: i64| FoldLease::Wait {
-        retry_in: std::time::Duration::from_millis(ms.unsigned_abs()),
-    };
-    if let Some(ms) = delay_left_ms.filter(|ms| *ms > 0) {
-        return Ok(wait(ms));
-    }
-    if let Some(ms) = lease_left_ms.filter(|ms| *ms > 0) {
-        return Ok(wait(ms));
+    if let Some(retry_in) = delay_left.or(lease_left) {
+        return Ok(FoldLease::Wait { retry_in });
     }
     let lease_id = ambre_core::LeaseId::new();
     sqlx::query(
@@ -904,7 +928,7 @@ pub async fn take_fold_lease(
     tx.commit().await?;
     Ok(FoldLease::Granted {
         lease_id,
-        horizon: decode_seq(horizon)?,
+        horizon,
         amendments,
         amendments_seq: seq,
         expires_in: terms.lease,
@@ -914,14 +938,21 @@ pub async fn take_fold_lease(
 /// What a fold commit reads of a segment and of its amendments.
 #[derive(sqlx::FromRow)]
 struct FoldCommitRow {
-    state: Option<String>,
-    held: Option<uuid::Uuid>,
+    #[sqlx(try_from = "PgOptState")]
+    state: Option<ambre_core::SegmentState>,
+    #[sqlx(try_from = "PgOptId")]
+    held: Option<ambre_core::LeaseId>,
     live: bool,
-    horizon: Option<i64>,
-    final_snapshot: Option<uuid::Uuid>,
-    amendments: Option<uuid::Uuid>,
-    folded_by: Option<uuid::Uuid>,
-    folded_seq: Option<i64>,
+    #[sqlx(try_from = "PgOptSeq")]
+    horizon: Option<ambre_core::Seq>,
+    #[sqlx(try_from = "PgOptId")]
+    final_snapshot: Option<ambre_core::SnapshotId>,
+    #[sqlx(try_from = "PgOptId")]
+    amendments: Option<ambre_core::DocumentId>,
+    #[sqlx(try_from = "PgOptId")]
+    folded_by: Option<ambre_core::SnapshotId>,
+    #[sqlx(try_from = "PgOptSeq")]
+    folded_seq: Option<ambre_core::Seq>,
 }
 
 /// Record the fold of the amendments of `segment` up to their delta
@@ -942,7 +973,6 @@ pub async fn commit_fold(
     amendments_seq: ambre_core::Seq,
 ) -> Result<(), AppError> {
     let document = id_to_uuid(segment.document_id());
-    let (lease_id, snapshot_id) = (id_to_uuid(lease_id), id_to_uuid(snapshot_id));
     let conflict = |detail: &str| AppError::Conflict {
         detail: detail.into(),
     };
@@ -961,13 +991,13 @@ pub async fn commit_fold(
     .bind(id_to_uuid(*channel_id))
     .fetch_optional(&mut *tx)
     .await?;
-    let Some(row) = row.filter(|row| row.state.as_deref() == Some("final")) else {
+    let Some(row) = row.filter(|row| row.state == Some(ambre_core::SegmentState::Final)) else {
         return Err(conflict("the segment is not finalized"));
     };
     let Some(amendments) = row.amendments else {
         return Err(conflict("the segment has no amendments"));
     };
-    if row.folded_by == Some(snapshot_id) && row.folded_seq == Some(seq) {
+    if row.folded_by == Some(snapshot_id) && row.folded_seq == Some(amendments_seq) {
         return Ok(());
     }
     if row.final_snapshot.is_none() {
@@ -976,15 +1006,15 @@ pub async fn commit_fold(
     if row.held != Some(lease_id) || !row.live {
         return Err(conflict("the caller holds no live lease"));
     }
-    if row.folded_by.is_some() && row.folded_seq.is_some_and(|folded| seq <= folded) {
+    if row.folded_by.is_some()
+        && row
+            .folded_seq
+            .is_some_and(|folded| amendments_seq <= folded)
+    {
         return Err(conflict("the fold reaches no further than the last one"));
     }
-    let covered: Option<i64> =
-        sqlx::query_scalar("SELECT covered_seq FROM snapshots WHERE id = $1 AND document_id = $2")
-            .bind(snapshot_id)
-            .bind(document)
-            .fetch_optional(&mut *tx)
-            .await?;
+    let snapshot_id = id_to_uuid(snapshot_id);
+    let covered = covered_seq_of(&mut tx, snapshot_id, document).await?;
     if covered.is_none() || covered != row.horizon {
         return Err(conflict("the snapshot does not cover the horizon"));
     }
@@ -992,7 +1022,7 @@ pub async fn commit_fold(
         "UPDATE channel_documents SET folded_by = $2, folded_seq = $3, folded_at = now() \
          WHERE document_id = $1",
     )
-    .bind(amendments)
+    .bind(id_to_uuid(amendments))
     .bind(snapshot_id)
     .bind(seq)
     .execute(&mut *tx)

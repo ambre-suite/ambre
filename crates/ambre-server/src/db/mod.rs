@@ -85,6 +85,54 @@ pub(crate) struct PgId(uuid::Uuid);
 #[sqlx(transparent)]
 pub(crate) struct PgOptId(Option<uuid::Uuid>);
 
+/// A stored sequence number that may be `NULL`, read with
+/// `#[sqlx(try_from = "PgOptSeq")]`. A negative one is a decode error, as
+/// [`decode_seq`] refuses one.
+#[derive(sqlx::Type)]
+#[sqlx(transparent)]
+pub(crate) struct PgOptSeq(Option<i64>);
+
+impl TryFrom<PgOptSeq> for Option<ambre_core::Seq> {
+    type Error = std::num::TryFromIntError;
+
+    fn try_from(PgOptSeq(stored): PgOptSeq) -> Result<Self, Self::Error> {
+        stored.map(ambre_core::Seq::try_from).transpose()
+    }
+}
+
+/// The milliseconds left until a deadline the register computed, read with
+/// `#[sqlx(try_from = "PgTimeLeft")]`: `None` once the deadline passed, or
+/// when the row holds none.
+#[derive(sqlx::Type)]
+#[sqlx(transparent)]
+pub(crate) struct PgTimeLeft(Option<i64>);
+
+impl From<PgTimeLeft> for Option<std::time::Duration> {
+    fn from(PgTimeLeft(ms): PgTimeLeft) -> Self {
+        ms.filter(|ms| *ms > 0)
+            .map(|ms| std::time::Duration::from_millis(ms.unsigned_abs()))
+    }
+}
+
+/// A stored segment state, `NULL` for a document that is no segment, read
+/// with `#[sqlx(try_from = "PgOptState")]`.
+#[derive(sqlx::Type)]
+#[sqlx(transparent)]
+pub(crate) struct PgOptState(Option<String>);
+
+impl TryFrom<PgOptState> for Option<ambre_core::SegmentState> {
+    type Error = String;
+
+    fn try_from(PgOptState(stored): PgOptState) -> Result<Self, Self::Error> {
+        stored
+            .map(|word| {
+                ambre_core::SegmentState::parse(&word)
+                    .ok_or_else(|| format!("unknown segment state {word:?}"))
+            })
+            .transpose()
+    }
+}
+
 macro_rules! pg_id {
     ($($id:ty),* $(,)?) => {$(
         impl From<PgId> for $id {
@@ -107,6 +155,7 @@ pg_id!(
     ambre_core::ChannelId,
     ambre_core::SnapshotId,
     ambre_core::OrgId,
+    ambre_core::LeaseId,
 );
 
 pub(crate) fn id_to_uuid(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
