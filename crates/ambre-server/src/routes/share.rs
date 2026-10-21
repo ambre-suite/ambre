@@ -116,14 +116,14 @@ pub struct InviteRequest {
     /// always has, rather than the extractor's 422.
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
-    pub doc_key_enc: String,
+    pub doc_key_enc: ambre_core::WrappedDocKey,
     /// The key `doc_key_enc` wraps, in hex. A rotation that replaced it
     /// refuses the invitation (`SRV-168`).
     #[serde(with = "ambre_core::serde_id::key_id")]
     pub key_id: ambre_core::KeyId,
     /// The signed entry the invite appends to the log (`SYNC-105`).
     #[serde(default)]
-    pub entry: Option<String>,
+    pub entry: Option<ambre_core::EncodedLogEntry>,
 }
 #[derive(serde::Serialize)]
 pub struct InviteResponse {
@@ -219,7 +219,7 @@ pub async fn invite_to_document(
         }
     }
     let doc_key_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(&req.doc_key_enc)
+        .decode(req.doc_key_enc.as_str())
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
@@ -231,7 +231,14 @@ pub async fn invite_to_document(
         // The entry names the key the copy wraps (`SYNC-123`).
         key: Some(Some(key_id)),
     };
-    let entry = checked_entry(&state, &s, doc_id, req.entry.as_deref(), expected).await?;
+    let entry = checked_entry(
+        &state,
+        &s,
+        doc_id,
+        req.entry.as_ref().map(ambre_core::EncodedLogEntry::as_str),
+        expected,
+    )
+    .await?;
     db::invite_document_member(
         &state.db,
         &doc_id,
@@ -273,7 +280,7 @@ pub async fn invite_to_document(
 #[derive(serde::Deserialize)]
 pub struct RemovalRequest {
     #[serde(default)]
-    pub entry: Option<String>,
+    pub entry: Option<ambre_core::EncodedLogEntry>,
 }
 
 pub async fn revoke_from_document(
@@ -299,7 +306,9 @@ pub async fn revoke_from_document(
         role: None,
         key: Some(None),
     };
-    let text = body.as_ref().and_then(|Json(body)| body.entry.as_deref());
+    let text = body
+        .as_ref()
+        .and_then(|Json(body)| body.entry.as_ref().map(ambre_core::EncodedLogEntry::as_str));
     let entry = checked_entry(&state, &s, doc_id, text, expected).await?;
     // The removal posts no rotation, so the document owes one (`SRV-122`). The
     // mirror is raised first: no delta slips in between the commit and it.
@@ -374,10 +383,10 @@ pub struct RevokeRequest {
     #[serde(with = "ambre_core::serde_id::user_id::vec")]
     pub members: Vec<ambre_core::UserId>,
     /// The link back to the key the revoke replaces (`SYNC-118`).
-    pub link: String,
+    pub link: ambre_core::EncodedKeyLink,
     /// The signed entry that records the removal (`SYNC-132`).
     #[serde(default)]
-    pub entry: Option<String>,
+    pub entry: Option<ambre_core::EncodedLogEntry>,
 }
 
 /// Removes a member and installs the new key for everyone who stays, in one
@@ -399,7 +408,7 @@ pub async fn revoke_and_rotate(
     }
     let keys = decode_keys(&req.keys)?;
     let members = req.members;
-    let link = decode_link(&req.link, doc_id)?;
+    let link = decode_link(req.link.as_str(), doc_id)?;
     let expected = Expected {
         act: ambre_protocol::MembershipAct::Revoke,
         member: target,
@@ -407,7 +416,14 @@ pub async fn revoke_and_rotate(
         // The entry names the key the rotation installs.
         key: Some(Some(link.key)),
     };
-    let entry = checked_entry(&state, &s, doc_id, req.entry.as_deref(), expected).await?;
+    let entry = checked_entry(
+        &state,
+        &s,
+        doc_id,
+        req.entry.as_ref().map(ambre_core::EncodedLogEntry::as_str),
+        expected,
+    )
+    .await?;
     // A removal from a space leaves each of its private channels owing a
     // rotation (`SRV-136`), so their mirrors are raised first.
     let owing = db::private_channels_of_member(&state.db, &doc_id, &target).await?;
@@ -567,7 +583,7 @@ fn decode_keys(entries: &[RotateKeyEntry]) -> Result<Vec<(ambre_core::UserId, Ve
         .map(|e| {
             let uid = e.user_id;
             let enc = base64::engine::general_purpose::URL_SAFE
-                .decode(&e.doc_key_enc)
+                .decode(e.doc_key_enc.as_str())
                 .map_err(|er| AppError::Conflict {
                     detail: er.to_string(),
                 })?;
@@ -614,10 +630,12 @@ pub async fn list_key_links(
     {
         return Err(AppError::Forbidden);
     }
-    let links: Vec<String> = db::document_key_links(&state.db, &doc_id)
+    let links: Vec<ambre_core::EncodedKeyLink> = db::document_key_links(&state.db, &doc_id)
         .await?
         .iter()
-        .map(|bytes| base64::engine::general_purpose::URL_SAFE.encode(bytes))
+        .map(|bytes| {
+            ambre_core::EncodedKeyLink(base64::engine::general_purpose::URL_SAFE.encode(bytes))
+        })
         .collect();
     Ok(axum::Json(KeyLinksResponse { links }))
 }
@@ -625,7 +643,7 @@ pub async fn list_key_links(
 /// Every link of a document, each in URL-safe base64, oldest first.
 #[derive(serde::Serialize)]
 pub struct KeyLinksResponse {
-    pub links: Vec<String>,
+    pub links: Vec<ambre_core::EncodedKeyLink>,
 }
 
 /// Request to rotate the Document Key after revoking a member.
@@ -637,14 +655,14 @@ pub struct RotateKeyRequest {
     #[serde(with = "ambre_core::serde_id::user_id::vec")]
     pub members: Vec<ambre_core::UserId>,
     /// The link back to the key the rotation replaces (`SYNC-118`).
-    pub link: String,
+    pub link: ambre_core::EncodedKeyLink,
 }
 /// One entry in the rotation payload: a user and their re-encrypted DocumentKey.
 #[derive(serde::Deserialize)]
 pub struct RotateKeyEntry {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub doc_key_enc: String,
+    pub doc_key_enc: ambre_core::WrappedDocKey,
 }
 
 pub async fn rotate_document_key(
@@ -675,7 +693,7 @@ pub async fn rotate_document_key(
 
     let keys = decode_keys(&req.keys)?;
     let members = req.members;
-    let link = decode_link(&req.link, doc_id)?;
+    let link = decode_link(req.link.as_str(), doc_id)?;
     db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys, &members, &link).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
     // The rotation landed, so the debt is cleared (`SRV-124`).

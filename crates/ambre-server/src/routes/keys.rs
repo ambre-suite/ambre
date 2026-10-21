@@ -12,8 +12,8 @@ use crate::state::AppState;
 /// All binary fields are hex- or base64url-encoded.
 #[derive(serde::Deserialize)]
 pub struct StoreMasterKeysRequest {
-    pub master_key_enc: String,
-    pub master_key_salt: String,
+    pub master_key_enc: ambre_core::WrappedMasterKey,
+    pub master_key_salt: ambre_core::MasterKeySalt,
     pub signing_pubkey: ambre_core::SigningKeyHex,
     pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
@@ -26,12 +26,12 @@ pub async fn store_master_keys(
     use base64::Engine;
     let s = auth;
     let mk_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(&req.master_key_enc)
+        .decode(req.master_key_enc.as_str())
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
     let mk_salt = base64::engine::general_purpose::URL_SAFE
-        .decode(&req.master_key_salt)
+        .decode(req.master_key_salt.as_str())
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
@@ -109,8 +109,8 @@ pub struct KeysStoredResponse {
 /// The client decrypts `master_key_enc` with the User Key derived from the passphrase.
 #[derive(serde::Serialize)]
 pub struct MasterKeysResponse {
-    pub master_key_enc: String,
-    pub master_key_salt: String,
+    pub master_key_enc: ambre_core::WrappedMasterKey,
+    pub master_key_salt: ambre_core::MasterKeySalt,
     pub signing_pubkey: ambre_core::SigningKeyHex,
     pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
@@ -128,12 +128,14 @@ pub async fn get_master_keys(
         master_key_enc: u
             .master_key_enc
             .as_ref()
-            .map(|v| base64::engine::general_purpose::URL_SAFE.encode(v))
+            .map(|v| {
+                ambre_core::WrappedMasterKey(base64::engine::general_purpose::URL_SAFE.encode(v))
+            })
             .unwrap_or_default(),
         master_key_salt: u
             .master_key_salt
             .as_ref()
-            .map(|v| base64::engine::general_purpose::URL_SAFE.encode(v))
+            .map(|v| ambre_core::MasterKeySalt(base64::engine::general_purpose::URL_SAFE.encode(v)))
             .unwrap_or_default(),
         // Empty until the key setup, like the master material above.
         signing_pubkey: u
@@ -166,8 +168,8 @@ impl RotatedResponse {
 /// Only `master_key_enc` and `master_key_salt` change; the seed is unchanged.
 #[derive(serde::Deserialize)]
 pub struct RotateMasterKeysRequest {
-    pub master_key_enc: String,
-    pub master_key_salt: String,
+    pub master_key_enc: ambre_core::WrappedMasterKey,
+    pub master_key_salt: ambre_core::MasterKeySalt,
 }
 
 pub async fn rotate_master_keys(
@@ -178,12 +180,12 @@ pub async fn rotate_master_keys(
     use base64::Engine;
     let s = auth;
     let mk_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(&req.master_key_enc)
+        .decode(req.master_key_enc.as_str())
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
     let mk_salt = base64::engine::general_purpose::URL_SAFE
-        .decode(&req.master_key_salt)
+        .decode(req.master_key_salt.as_str())
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;

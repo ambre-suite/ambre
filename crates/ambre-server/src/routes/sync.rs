@@ -145,7 +145,7 @@ pub async fn confirm_snapshot(
 pub struct ReportSnapshotRequest {
     /// The reporter's Ed25519 signature over
     /// [`ambre_protocol::snapshot_report::report_transcript`], hex.
-    pub signature: String,
+    pub signature: ambre_core::SignatureHex,
 }
 
 /// Drops a pending snapshot a member found at odds with its deltas (`SRV-133`).
@@ -174,7 +174,7 @@ pub async fn report_snapshot(
         .as_slice()
         .try_into()
         .map_err(|_| AppError::Internal("snapshot author key length".into()))?;
-    let signature = hex::decode(&req.signature)
+    let signature = hex::decode(req.signature.as_str())
         .ok()
         .and_then(|bytes| Signature::from_slice(&bytes).ok())
         .ok_or(AppError::InvalidSignature)?;
@@ -229,7 +229,7 @@ pub struct CreateSnapshotRequest {
     pub snapshot_id: ambre_core::SnapshotId,
     pub author_pubkey: ambre_core::SigningKeyHex,
     pub parent_hash: Option<String>,
-    pub parent_snapshot_proof: Option<String>,
+    pub parent_snapshot_proof: Option<ambre_core::EncodedProof>,
     pub update_clocks: serde_json::Value,
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` the snapshot author had applied at upload time.
@@ -288,7 +288,7 @@ pub async fn create_snapshot(
         .parent_snapshot_proof
         .map(|p| {
             base64::engine::general_purpose::URL_SAFE
-                .decode(&p)
+                .decode(p.as_str())
                 .map_err(|e| AppError::Conflict {
                     detail: e.to_string(),
                 })

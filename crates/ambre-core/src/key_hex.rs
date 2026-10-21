@@ -1,4 +1,5 @@
-//! Public keys as the relay's JSON spells them: lowercase hexadecimal.
+//! Public keys and signatures as the relay's JSON spells them: lowercase
+//! hexadecimal.
 //!
 //! A user holds two public keys, one that verifies signatures and one that
 //! wraps a document key. Both travel as the same hex text, so a bare
@@ -45,6 +46,12 @@ define_key_hex! {
     /// The hex spelling of an X25519 public key: the one a document key is
     /// wrapped to.
     ExchangeKeyHex
+}
+
+define_key_hex! {
+    /// The hex spelling of an Ed25519 signature, as a snapshot report carries
+    /// it (`AUTHOR-023`).
+    SignatureHex
 }
 
 #[cfg(test)]

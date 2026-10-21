@@ -48,14 +48,16 @@ pub(crate) fn wrap_anchored_b64(
     peer_pub: &[u8; 32],
     doc_key: &DocumentKey,
     anchor: Option<EntryDigest>,
-) -> Result<String, ambre_crypto::CryptoError> {
+) -> Result<ambre_core::WrappedDocKey, ambre_crypto::CryptoError> {
     // Fails if the peer public key is non-contributory (low-order): we refuse to
     // wrap under a predictable KEK rather than hand out a forgeable share.
     let anchor = anchor.map(|EntryDigest(bytes)| bytes);
     let wrapped = ambre_crypto::ecdh::wrap_anchored(my_xk, peer_pub, doc_key, anchor.as_ref())?;
     let mut enc = wrapped.nonce.to_vec();
     enc.extend_from_slice(&wrapped.ciphertext);
-    Ok(base64::engine::general_purpose::URL_SAFE.encode(&enc))
+    Ok(ambre_core::WrappedDocKey(
+        base64::engine::general_purpose::URL_SAFE.encode(&enc),
+    ))
 }
 
 /// Unwraps our own copy of the key among `rows`, given as `(exchange key,
@@ -69,7 +71,7 @@ pub(crate) fn unwrap_own<'a>(
     rows: impl IntoIterator<
         Item = (
             &'a ambre_core::ExchangeKeyHex,
-            &'a str,
+            &'a ambre_core::WrappedDocKey,
             &'a ambre_core::ExchangeKeyHex,
         ),
     >,
@@ -81,7 +83,7 @@ pub(crate) fn unwrap_own<'a>(
         .find(|(own, _, _)| **own == ours)
         .ok_or("own member entry not found")?;
     let encrypted = base64::engine::general_purpose::URL_SAFE
-        .decode(enc)
+        .decode(enc.as_str())
         .map_err(|e| format!("base64 decode doc_key_enc: {e}"))?;
     let (nonce, ciphertext) = encrypted
         .split_first_chunk::<24>()
@@ -133,7 +135,7 @@ pub(crate) fn served_log_under(
     let rows = resp.members.iter().map(|m| {
         (
             &m.exchange_pub_key,
-            m.doc_key_enc.as_str(),
+            &m.doc_key_enc,
             &m.wrapper_exchange_pub_key,
         )
     });
@@ -152,7 +154,7 @@ pub(crate) fn served_log_under(
 pub(crate) fn walk_served_under(
     document_id: DocumentId,
     anchor: Option<EntryDigest>,
-    texts: &[String],
+    texts: &[ambre_core::EncodedLogEntry],
     rule: &LogRule,
 ) -> Log {
     let entries = membership_log::decode(texts);
@@ -162,7 +164,11 @@ pub(crate) fn walk_served_under(
 /// The entry `draft` makes after `log`, signed by `author`, in request form.
 /// `None` for a document whose log is empty: it predates the log, and no
 /// entry of it could link to a first one.
-fn entry_after(log: &Log, draft: Draft, author: &Author) -> Result<Option<String>, String> {
+fn entry_after(
+    log: &Log,
+    draft: Draft,
+    author: &Author,
+) -> Result<Option<ambre_core::EncodedLogEntry>, String> {
     let next = log.next();
     if next.0 == 0 {
         return Ok(None);
@@ -179,7 +185,7 @@ pub(crate) fn creation(
     doc_key: &DocumentKey,
     exchange_key: &StaticSecret,
     author: &Author,
-) -> Result<(String, String), String> {
+) -> Result<(ambre_core::WrappedDocKey, ambre_core::EncodedLogEntry), String> {
     let draft = Draft {
         document: document_id,
         member: author.user_id,
@@ -209,7 +215,7 @@ pub(crate) fn build_invite_request(
     doc_key: &DocumentKey,
     role: Role,
     anchor: Option<EntryDigest>,
-    entry: Option<String>,
+    entry: Option<ambre_core::EncodedLogEntry>,
 ) -> Result<http::InviteRequest, String> {
     let peer = decode_exchange_pubkey(invitee_pub_hex)?;
     let (invitee_email, invitee_id) = match invitee {
@@ -1244,7 +1250,7 @@ fn link_to(
     previous: &DocumentKey,
     next: &DocumentKey,
     signing_key: &SigningKey,
-) -> Result<(ambre_protocol::KeyLink, String), String> {
+) -> Result<(ambre_protocol::KeyLink, ambre_core::EncodedKeyLink), String> {
     let link = crate::pipeline::seal_link(document_id, previous, next, signing_key)
         .map_err(|e| format!("Seal key link failed: {e}"))?;
     let text = http::encode_link(&link)?;
@@ -1497,7 +1503,7 @@ mod tests {
             email: "m@test.local".into(),
             signing_pub_key: ambre_core::SigningKeyHex(String::new()),
             exchange_pub_key: ambre_core::ExchangeKeyHex(pub_hex.to_string()),
-            doc_key_enc: String::new(),
+            doc_key_enc: ambre_core::WrappedDocKey(String::new()),
             role: Role::Editor,
             wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex(String::new()),
         }
@@ -1507,7 +1513,7 @@ mod tests {
     fn unwrap_b64(
         recipient: &StaticSecret,
         wrapper_pub: &[u8; 32],
-        doc_key_enc: &str,
+        doc_key_enc: &ambre_core::WrappedDocKey,
     ) -> Result<DocumentKey, String> {
         unwrap_anchor_b64(recipient, wrapper_pub, doc_key_enc).map(|(key, _)| key)
     }
@@ -1516,7 +1522,7 @@ mod tests {
     fn unwrap_anchor_b64(
         recipient: &StaticSecret,
         wrapper_pub: &[u8; 32],
-        doc_key_enc: &str,
+        doc_key_enc: &ambre_core::WrappedDocKey,
     ) -> Result<(DocumentKey, Option<EntryDigest>), String> {
         let own = ambre_core::ExchangeKeyHex::encode(PublicKey::from(recipient).to_bytes());
         let wrapper = ambre_core::ExchangeKeyHex::encode(wrapper_pub);
@@ -1805,7 +1811,8 @@ mod tests {
         match &calls[2] {
             Call::Post(url, body) => {
                 assert!(url.ends_with("/share"));
-                let enc = body["doc_key_enc"].as_str().unwrap();
+                let enc =
+                    &ambre_core::WrappedDocKey(body["doc_key_enc"].as_str().unwrap().to_owned());
                 assert!(unwrap_b64(&invitee_xk, &my_pub, enc).is_ok());
                 assert!(body.get("entry").is_none());
             }
@@ -1850,7 +1857,8 @@ mod tests {
                 assert!(url.ends_with("/share"));
                 assert_eq!(body["invitee_id"], INVITEE);
                 assert!(body.get("invitee_email").is_none());
-                let enc = body["doc_key_enc"].as_str().unwrap();
+                let enc =
+                    &ambre_core::WrappedDocKey(body["doc_key_enc"].as_str().unwrap().to_owned());
                 assert!(unwrap_b64(&invitee_xk, &my_pub, enc).is_ok());
             }
             other => panic!("expected share POST, got {other:?}"),
@@ -3092,7 +3100,7 @@ mod tests {
         anchor: EntryDigest,
         owner_exchange: String,
         rows: Vec<serde_json::Value>,
-        log: Vec<String>,
+        log: Vec<ambre_core::EncodedLogEntry>,
     }
 
     impl Logged {
@@ -3116,7 +3124,7 @@ mod tests {
             logged
         }
 
-        fn row(&mut self, peer: &Peer, doc_key_enc: String, role: Role) {
+        fn row(&mut self, peer: &Peer, doc_key_enc: ambre_core::WrappedDocKey, role: Role) {
             self.rows.push(serde_json::json!({
                 "user_id": peer.author.user_id.to_string(),
                 "display_name": "Member", "email": "m@test.local",
@@ -3130,7 +3138,10 @@ mod tests {
         /// The log walked from the anchor, with `more` entries after it.
         fn walk(&self, more: &[&str]) -> Log {
             let mut texts = self.log.clone();
-            texts.extend(more.iter().map(|text| text.to_string()));
+            texts.extend(
+                more.iter()
+                    .map(|text| ambre_core::EncodedLogEntry(text.to_string())),
+            );
             walk_served_under(
                 self.document_id,
                 Some(self.anchor),
@@ -3172,7 +3183,7 @@ mod tests {
         let text = body["entry"]
             .as_str()
             .expect("the request carries an entry");
-        membership_log::decode(&[text.to_string()])
+        membership_log::decode(&[ambre_core::EncodedLogEntry(text.to_string())])
             .pop()
             .expect("the entry decodes")
     }
@@ -3232,7 +3243,7 @@ mod tests {
             (MemberStanding::Verified, Some(Role::Editor))
         );
         let owner_pub = PublicKey::from(&owner.xk).to_bytes();
-        let enc = body["doc_key_enc"].as_str().unwrap();
+        let enc = &ambre_core::WrappedDocKey(body["doc_key_enc"].as_str().unwrap().to_owned());
         let (key, anchor) = unwrap_anchor_b64(&invitee_xk, &owner_pub, enc).unwrap();
         assert_eq!(key.id(), logged.doc_key.id());
         assert_eq!(anchor, Some(logged.anchor));
@@ -3401,7 +3412,11 @@ mod tests {
         logged.invite(&owner, &bob, Role::Viewer);
         // The relay claims a role the log never gave, and adds a stranger.
         logged.rows[1]["role"] = "owner".into();
-        logged.row(&Peer::new(9), String::new(), Role::Editor);
+        logged.row(
+            &Peer::new(9),
+            ambre_core::WrappedDocKey::default(),
+            Role::Editor,
+        );
         let resp: http::DocumentMembersResponse = serde_json::from_value(logged.answer()).unwrap();
         let (log, _) = served_log(logged.document_id, &owner.xk, &resp);
         let shown = map_members(resp.members, &log);
@@ -3438,7 +3453,7 @@ mod tests {
             .unwrap()
             .unwrap();
         logged.log.push(entry);
-        logged.row(&joiner, String::new(), Role::Editor);
+        logged.row(&joiner, ambre_core::WrappedDocKey::default(), Role::Editor);
         let rules: [(membership_log::SelfJoinRule, MemberStanding); 2] = [
             (
                 membership_log::public_channel_self_join,

@@ -340,19 +340,21 @@ pub(crate) fn sign(
 /// # Errors
 ///
 /// The encoder's error.
-pub(crate) fn encode(entry: &MembershipEntry) -> Result<String, String> {
+pub(crate) fn encode(entry: &MembershipEntry) -> Result<ambre_core::EncodedLogEntry, String> {
     let bytes = entry.encode().map_err(|e| e.to_string())?;
-    Ok(base64::engine::general_purpose::URL_SAFE.encode(bytes))
+    Ok(ambre_core::EncodedLogEntry(
+        base64::engine::general_purpose::URL_SAFE.encode(bytes),
+    ))
 }
 
 /// The entries a members answer carries, up to the first that does not
 /// decode. The walk could not pass it anyway.
-pub(crate) fn decode(texts: &[String]) -> Vec<MembershipEntry> {
+pub(crate) fn decode(texts: &[ambre_core::EncodedLogEntry]) -> Vec<MembershipEntry> {
     texts
         .iter()
         .map_while(|text| {
             let bytes = base64::engine::general_purpose::URL_SAFE
-                .decode(text)
+                .decode(text.as_str())
                 .ok()?;
             MembershipEntry::decode(&bytes).ok()
         })
@@ -580,7 +582,8 @@ pub(crate) mod tests {
         assert_eq!(view.wraps(bob.id), Some(KeyId::from_array([1; 16])));
         assert!(Log::walk(DOC, None, &log, no_self_join).signers().is_none());
         // The entries travel through their request form.
-        let texts: Vec<String> = log.iter().map(|e| encode(e).unwrap()).collect();
+        let texts: Vec<ambre_core::EncodedLogEntry> =
+            log.iter().map(|e| encode(e).unwrap()).collect();
         assert_eq!(decode(&texts), log);
     }
 

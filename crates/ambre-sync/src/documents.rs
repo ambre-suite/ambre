@@ -22,7 +22,7 @@ impl SyncState {
                             // here (Sync) so the Logic/UI threads only ever see
                             // plaintext (`ambre-spec-launcher.md`, CHROME-044). A
                             // failed unwrap/decrypt renders as `None` ("Untitled").
-                            let name = match (e.name_enc.as_deref(), exchange_key.as_ref()) {
+                            let name = match (e.name_enc.as_ref(), exchange_key.as_ref()) {
                                 (Some(name_enc), Some(ek)) => {
                                     let listed = ListedName {
                                         document_id,
@@ -84,14 +84,16 @@ impl SyncState {
         doc_key: &DocumentKey,
         signing_key: &SigningKey,
         name: &str,
-    ) -> Result<String, pipeline::PipelineError> {
+    ) -> Result<ambre_core::SealedName, pipeline::PipelineError> {
         let sealed = pipeline::seal_object(
             name.as_bytes(),
             &pipeline::name_aad(document_id),
             doc_key,
             signing_key,
         )?;
-        Ok(base64::engine::general_purpose::URL_SAFE.encode(sealed))
+        Ok(ambre_core::SealedName(
+            base64::engine::general_purpose::URL_SAFE.encode(sealed),
+        ))
     }
 
     /// The document a create answer names, refused unless the client minted
@@ -343,9 +345,9 @@ impl SyncState {
 /// self-wrapped owner row.
 pub(crate) struct ListedName<'a> {
     pub(crate) document_id: DocumentId,
-    pub(crate) doc_key_enc: &'a str,
+    pub(crate) doc_key_enc: &'a ambre_core::WrappedDocKey,
     pub(crate) wrapper_exchange_pub_key: &'a ambre_core::ExchangeKeyHex,
-    pub(crate) name_enc: &'a str,
+    pub(crate) name_enc: &'a ambre_core::SealedName,
 }
 
 impl ListedName<'_> {
@@ -381,7 +383,7 @@ impl ListedName<'_> {
 
     fn sealed(&self) -> Option<Vec<u8>> {
         base64::engine::general_purpose::URL_SAFE
-            .decode(self.name_enc)
+            .decode(self.name_enc.as_str())
             .ok()
     }
 }
@@ -391,12 +393,12 @@ impl ListedName<'_> {
 /// the wrapper is hex, empty for a self-wrapped owner row. `None` on any
 /// decode or crypto failure.
 pub(crate) fn unwrap_listed_key(
-    doc_key_enc: &str,
+    doc_key_enc: &ambre_core::WrappedDocKey,
     wrapper_exchange_pub_key: &ambre_core::ExchangeKeyHex,
     exchange_key: &x25519_dalek::StaticSecret,
 ) -> Option<DocumentKey> {
     let wrapped_bytes = base64::engine::general_purpose::URL_SAFE
-        .decode(doc_key_enc)
+        .decode(doc_key_enc.as_str())
         .ok()?;
     let (nonce, ciphertext) = wrapped_bytes.split_first_chunk::<24>()?;
     let wrapped = ambre_crypto::WrappedKey {
@@ -446,7 +448,7 @@ mod tests {
         let sent =
             SyncState::seal_document_name(document_id, &doc_key, &signing_key, name).unwrap();
         let bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(sent)
+            .decode(sent.as_str())
             .unwrap();
         assert!(!bytes.windows(name.len()).any(|w| w == name.as_bytes()));
         assert_eq!(pipeline::object_key(&bytes).unwrap(), doc_key.id());
@@ -473,7 +475,7 @@ mod tests {
         let name =
             SyncState::seal_document_name(document_id, &keys[0], &signing_key, "Budget").unwrap();
         let bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(name)
+            .decode(name.as_str())
             .unwrap();
         let current = &keys[3];
         assert_eq!(

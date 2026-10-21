@@ -94,10 +94,10 @@ pub struct MemberChannelJson {
     pub meta_id: ambre_core::MetaId,
     /// The name sealed beside the channel's `meta`, base64, as the document
     /// list carries one (`SRV-219`). The relay never reads it.
-    pub name_enc: Option<String>,
+    pub name_enc: Option<ambre_core::SealedName>,
     /// The caller's copy of the channel key, base64, and the hex exchange key
     /// of whoever wrapped it, empty for a self-wrapped row.
-    pub doc_key_enc: String,
+    pub doc_key_enc: ambre_core::WrappedDocKey,
     pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
     /// For a direct message, the display names of its other members, which
     /// the client composes a name from (`SRV-220`). Empty otherwise.
@@ -142,8 +142,10 @@ pub async fn list_member_channels(
                 space_id: row.space_id,
                 public: row.is_public,
                 meta_id: row.meta_id,
-                name_enc: row.name_enc.map(|n| base64.encode(n)),
-                doc_key_enc: base64.encode(&row.doc_key_enc),
+                name_enc: row
+                    .name_enc
+                    .map(|n| ambre_core::SealedName(base64.encode(n))),
+                doc_key_enc: ambre_core::WrappedDocKey(base64.encode(&row.doc_key_enc)),
                 wrapper_exchange_pub_key: row
                     .wrapper_exchange_pubkey
                     .map(ambre_core::ExchangeKeyHex::encode)
@@ -198,7 +200,7 @@ pub struct CreateChannelRequest {
 pub struct DirectMemberJson {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub doc_key_enc: String,
+    pub doc_key_enc: ambre_core::WrappedDocKey,
 }
 
 /// The body of a direct message request. Every id is one the client
@@ -214,7 +216,7 @@ pub struct CreateDirectMessageRequest {
     /// Every member but the caller.
     pub members: Vec<DirectMemberJson>,
     /// The channel key wrapped for the caller.
-    pub doc_key_enc: String,
+    pub doc_key_enc: ambre_core::WrappedDocKey,
     /// The identifier of the channel key, in hex, which the creation and every
     /// invite of the log name.
     #[serde(with = "ambre_core::serde_id::key_id")]
@@ -222,7 +224,7 @@ pub struct CreateDirectMessageRequest {
     /// The log of `meta`, signed by the caller. In order, it holds its
     /// `Create`, one editor `Invite` per member in the order of `members`,
     /// then the caller's own `ChangeRole` to editor.
-    pub entries: Vec<String>,
+    pub entries: Vec<ambre_core::EncodedLogEntry>,
 }
 
 /// The direct message a request reached: the one it created, or the one
@@ -239,9 +241,9 @@ pub struct DirectMessageJson {
 /// A `meta` whose log holds entries takes no self-join without one.
 #[derive(serde::Deserialize)]
 pub struct JoinChannelRequest {
-    pub doc_key_enc: String,
+    pub doc_key_enc: ambre_core::WrappedDocKey,
     #[serde(default)]
-    pub entry: Option<String>,
+    pub entry: Option<ambre_core::EncodedLogEntry>,
 }
 
 /// The end of the log of `meta`, which a joining member extends: the
@@ -255,7 +257,7 @@ pub struct JoinHeadJson {
     pub role: Role,
     pub length: u64,
     /// The last entry, base64 url-safe, absent on an empty log.
-    pub last: Option<String>,
+    pub last: Option<ambre_core::EncodedLogEntry>,
 }
 
 /// The body of a segment close: the active segment the caller saw, and the
@@ -779,9 +781,9 @@ pub async fn create_direct_message(
             .decode(b64)
             .map_err(|e| AppError::BadRequest(e.to_string()))
     };
-    let mut keys = vec![(auth.user_id, decode(&req.doc_key_enc)?)];
+    let mut keys = vec![(auth.user_id, decode(req.doc_key_enc.as_str())?)];
     for member in &req.members {
-        keys.push((member.user_id, decode(&member.doc_key_enc)?));
+        keys.push((member.user_id, decode(member.doc_key_enc.as_str())?));
     }
     let key_id = req.key_id;
     let meta = req.meta_id.document_id();
@@ -801,7 +803,7 @@ pub async fn create_direct_message(
             role: Some(role),
             key: Some(key),
         };
-        let entry = checked_entry(&state, &auth, meta, Some(text), expected)
+        let entry = checked_entry(&state, &auth, meta, Some(text.as_str()), expected)
             .await?
             .ok_or_else(|| invalid("an entry is missing"))?;
         entries.push(entry);
@@ -900,7 +902,7 @@ pub async fn join_channel(
         role,
     } = joinable(&state, &auth, &channel_id).await?;
     let doc_key_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(&req.doc_key_enc)
+        .decode(req.doc_key_enc.as_str())
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
@@ -908,7 +910,7 @@ pub async fn join_channel(
         &state,
         &auth,
         meta_id.document_id(),
-        req.entry.as_deref(),
+        req.entry.as_ref().map(ambre_core::EncodedLogEntry::as_str),
         Expected {
             act: MembershipAct::SelfJoin,
             member: auth.user_id,
@@ -951,9 +953,9 @@ pub async fn join_channel_head(
         meta_id,
         role,
         length: u64::try_from(log.len()).unwrap_or(u64::MAX),
-        last: log
-            .last()
-            .map(|e| base64::engine::general_purpose::URL_SAFE.encode(e)),
+        last: log.last().map(|e| {
+            ambre_core::EncodedLogEntry(base64::engine::general_purpose::URL_SAFE.encode(e))
+        }),
     }))
 }
 
@@ -1032,7 +1034,7 @@ mod tests {
         who: UserId,
         act: MembershipAct,
         role: Role,
-    ) -> String {
+    ) -> ambre_core::EncodedLogEntry {
         use ed25519_dalek::Signer;
         let key = signing_key();
         let mut entry = ambre_protocol::MembershipEntry {
@@ -1051,7 +1053,9 @@ mod tests {
             .sign(&entry.signed_bytes().expect("signed bytes"))
             .to_bytes()
             .to_vec();
-        base64::engine::general_purpose::URL_SAFE.encode(entry.encode().expect("encode"))
+        ambre_core::EncodedLogEntry(
+            base64::engine::general_purpose::URL_SAFE.encode(entry.encode().expect("encode")),
+        )
     }
 
     /// The length of `document`'s log.
@@ -1065,7 +1069,7 @@ mod tests {
     async fn open_log(state: &AppState, meta: DocumentId, creator: UserId) {
         let text = signed_entry(meta, 0, creator, MembershipAct::Create, Role::Owner);
         let bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(text)
+            .decode(text.as_str())
             .expect("base64");
         let entry = db::LogEntry { position: 0, bytes };
         db::add_document_member(
@@ -1188,7 +1192,11 @@ mod tests {
     /// A `meta` whose log is empty predates it, and its self-join carries
     /// none. A channel the caller may not join gets none either: the route
     /// refuses before it reads one.
-    async fn join_entry(state: &AppState, who: UserId, channel: ChannelId) -> Option<String> {
+    async fn join_entry(
+        state: &AppState,
+        who: UserId,
+        channel: ChannelId,
+    ) -> Option<ambre_core::EncodedLogEntry> {
         let Joinable {
             meta_id: meta,
             role,
@@ -1214,7 +1222,9 @@ mod tests {
                 session(who),
                 Path(channel.to_string()),
                 Json(JoinChannelRequest {
-                    doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([key; 48]),
+                    doc_key_enc: ambre_core::WrappedDocKey(
+                        base64::engine::general_purpose::URL_SAFE.encode([key; 48]),
+                    ),
                     entry,
                 }),
             )
@@ -1269,7 +1279,9 @@ mod tests {
             Json(crate::routes::CreateDocumentRequest {
                 doc_type,
                 name_enc: None,
-                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1u8; 48]),
+                doc_key_enc: ambre_core::WrappedDocKey(
+                    base64::engine::general_purpose::URL_SAFE.encode([1u8; 48]),
+                ),
                 document_id: Some(document),
                 entry: Some(signed_entry(
                     document,
@@ -1601,7 +1613,9 @@ mod tests {
             session(alice),
             Path(channel.id.to_string()),
             Json(JoinChannelRequest {
-                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
+                doc_key_enc: ambre_core::WrappedDocKey(
+                    base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
+                ),
                 entry: entry.clone(),
             }),
         )
@@ -1610,7 +1624,7 @@ mod tests {
         let log = db::membership_log(&state.db, &meta).await.expect("log");
         assert_eq!(log.len(), 2);
         let sent = base64::engine::general_purpose::URL_SAFE
-            .decode(entry.expect("entry"))
+            .decode(entry.expect("entry").as_str())
             .expect("base64");
         assert_eq!(log.last(), Some(&sent));
 
@@ -1639,7 +1653,9 @@ mod tests {
             session(alice),
             Path(channel.id.to_string()),
             Json(JoinChannelRequest {
-                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
+                doc_key_enc: ambre_core::WrappedDocKey(
+                    base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
+                ),
                 entry: None,
             }),
         )
@@ -1669,7 +1685,9 @@ mod tests {
             session(alice),
             Path(channel.id.to_string()),
             Json(JoinChannelRequest {
-                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
+                doc_key_enc: ambre_core::WrappedDocKey(
+                    base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
+                ),
                 entry: Some(entry),
             }),
         )
@@ -1840,7 +1858,9 @@ mod tests {
                     invitee_email: Some(invitee.into()),
                     invitee_id: None,
                     role: Role::Editor,
-                    doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([9u8; 48]),
+                    doc_key_enc: ambre_core::WrappedDocKey(
+                        base64::engine::general_purpose::URL_SAFE.encode([9u8; 48]),
+                    ),
                     key_id: ambre_core::KeyId::from_array(key),
                     entry: None,
                 }),
@@ -2495,7 +2515,9 @@ mod tests {
                 )
             })
             .collect();
-        let key = |byte: u8| base64::engine::general_purpose::URL_SAFE.encode([byte; 48]);
+        let key = |byte: u8| {
+            ambre_core::WrappedDocKey(base64::engine::general_purpose::URL_SAFE.encode([byte; 48]))
+        };
         CreateDirectMessageRequest {
             channel_id: ChannelId::new(),
             meta_id: meta,
@@ -2528,7 +2550,7 @@ mod tests {
         role: Role,
         key: Option<ambre_core::KeyId>,
         author: UserId,
-    ) -> String {
+    ) -> ambre_core::EncodedLogEntry {
         use ed25519_dalek::Signer;
         let signing = signing_key();
         let mut entry = ambre_protocol::MembershipEntry {
@@ -2547,7 +2569,9 @@ mod tests {
             .sign(&entry.signed_bytes().expect("signed bytes"))
             .to_bytes()
             .to_vec();
-        base64::engine::general_purpose::URL_SAFE.encode(entry.encode().expect("encode"))
+        ambre_core::EncodedLogEntry(
+            base64::engine::general_purpose::URL_SAFE.encode(entry.encode().expect("encode")),
+        )
     }
 
     async fn open_direct(
@@ -2693,21 +2717,39 @@ mod tests {
             session(bob),
             Path(meta.to_string()),
             Json(crate::routes::RenameDocumentRequest {
-                name_enc: sealed.clone(),
+                name_enc: ambre_core::SealedName(sealed.clone()),
             }),
         )
         .await;
         assert_eq!(status(renamed), StatusCode::OK);
         let bobs = listed(bob).await.expect("listed").0.channels;
-        assert_eq!(bobs[0].name_enc.as_deref(), Some(sealed.as_str()));
-        assert_eq!(bobs[0].doc_key_enc, base64.encode([2u8; 48]));
+        assert_eq!(
+            bobs[0]
+                .name_enc
+                .as_ref()
+                .map(ambre_core::SealedName::as_str),
+            Some(sealed.as_str())
+        );
+        assert_eq!(
+            bobs[0].doc_key_enc,
+            ambre_core::WrappedDocKey(base64.encode([2u8; 48]))
+        );
         assert_eq!(
             bobs[0].wrapper_exchange_pub_key,
             ambre_core::ExchangeKeyHex::encode([4u8; 32])
         );
         let alices = listed(alice).await.expect("listed").0.channels;
-        assert_eq!(alices[0].name_enc.as_deref(), Some(sealed.as_str()));
-        assert_eq!(alices[0].doc_key_enc, base64.encode([1u8; 48]));
+        assert_eq!(
+            alices[0]
+                .name_enc
+                .as_ref()
+                .map(ambre_core::SealedName::as_str),
+            Some(sealed.as_str())
+        );
+        assert_eq!(
+            alices[0].doc_key_enc,
+            ambre_core::WrappedDocKey(base64.encode([1u8; 48]))
+        );
     }
 
     /// `SRV-220`: a direct message lists the display names of its other
@@ -3076,11 +3118,15 @@ mod tests {
                 user_id: bob,
                 keys: vec![crate::routes::share::RotateKeyEntry {
                     user_id: alice,
-                    doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([4u8; 48]),
+                    doc_key_enc: ambre_core::WrappedDocKey(
+                        base64::engine::general_purpose::URL_SAFE.encode([4u8; 48]),
+                    ),
                 }],
                 members: vec![alice],
-                link: base64::engine::general_purpose::URL_SAFE
-                    .encode(link.encode().expect("encode")),
+                link: ambre_core::EncodedKeyLink(
+                    base64::engine::general_purpose::URL_SAFE
+                        .encode(link.encode().expect("encode")),
+                ),
                 entry: None,
             }),
         )
@@ -3269,7 +3315,9 @@ mod tests {
             .iter()
             .map(|&user_id| crate::routes::share::RotateKeyEntry {
                 user_id,
-                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([4u8; 48]),
+                doc_key_enc: ambre_core::WrappedDocKey(
+                    base64::engine::general_purpose::URL_SAFE.encode([4u8; 48]),
+                ),
             })
             .collect();
         status(
@@ -3280,8 +3328,10 @@ mod tests {
                 Json(crate::routes::share::RotateKeyRequest {
                     keys,
                     members,
-                    link: base64::engine::general_purpose::URL_SAFE
-                        .encode(link.encode().expect("encode")),
+                    link: ambre_core::EncodedKeyLink(
+                        base64::engine::general_purpose::URL_SAFE
+                            .encode(link.encode().expect("encode")),
+                    ),
                 }),
             )
             .await,

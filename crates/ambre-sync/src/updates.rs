@@ -737,7 +737,7 @@ impl SyncState {
             members.iter().map(|m| {
                 (
                     &m.exchange_pub_key,
-                    m.doc_key_enc.as_str(),
+                    &m.doc_key_enc,
                     &m.wrapper_exchange_pub_key,
                 )
             }),
@@ -1538,7 +1538,7 @@ pub(crate) async fn send_vouch(
         }
         Vouch::Report(signature) => {
             let body = http::ReportSnapshotRequest {
-                signature: signature.clone(),
+                signature: ambre_core::SignatureHex(signature.clone()),
             };
             http::send_json_auth_via(transport, post, &format!("{url}/report"), &body, auth)
                 .await
@@ -1749,11 +1749,12 @@ mod tests {
             ambre_core::Role::Editor,
         );
         let mut raw = base64::engine::general_purpose::URL_SAFE
-            .decode(&row.doc_key_enc)
+            .decode(row.doc_key_enc.as_str())
             .unwrap();
         let last = raw.len() - 1;
         raw[last] ^= 1;
-        row.doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&raw);
+        row.doc_key_enc =
+            ambre_core::WrappedDocKey(base64::engine::general_purpose::URL_SAFE.encode(&raw));
         let resp = http::MembersResponse {
             members: vec![row],
             rotation_owed: false,

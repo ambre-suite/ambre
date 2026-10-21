@@ -37,7 +37,7 @@ impl SyncState {
                             "Unlock failed: incorrect passphrase or corrupted account data";
 
                         let salt = match base64::engine::general_purpose::URL_SAFE
-                            .decode(&resp.master_key_salt)
+                            .decode(resp.master_key_salt.as_str())
                         {
                             Ok(s) => s,
                             Err(e) => {
@@ -49,7 +49,7 @@ impl SyncState {
                             }
                         };
                         let master_key_enc = match base64::engine::general_purpose::URL_SAFE
-                            .decode(&resp.master_key_enc)
+                            .decode(resp.master_key_enc.as_str())
                         {
                             Ok(k) => k,
                             Err(e) => {
@@ -421,9 +421,12 @@ impl SyncState {
                 let body = http::SetupAccountRequest {
                     email,
                     display_name,
-                    master_key_enc: base64::engine::general_purpose::URL_SAFE
-                        .encode(&master_key_with_nonce),
-                    master_key_salt: base64::engine::general_purpose::URL_SAFE.encode(salt),
+                    master_key_enc: ambre_core::WrappedMasterKey(
+                        base64::engine::general_purpose::URL_SAFE.encode(&master_key_with_nonce),
+                    ),
+                    master_key_salt: ambre_core::MasterKeySalt(
+                        base64::engine::general_purpose::URL_SAFE.encode(salt),
+                    ),
                     signing_pubkey: signing_pub_key,
                     exchange_pubkey: exchange_pub_key,
                 };

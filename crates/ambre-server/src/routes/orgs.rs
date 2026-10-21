@@ -21,7 +21,7 @@ pub struct CreateOrgRequest {
     pub shamir_threshold: i16,
     pub shamir_total: i16,
     /// First member (owner) encrypted Shamir share (base64 or hex).
-    pub owner_shamir_share_enc: Option<String>,
+    pub owner_shamir_share_enc: Option<ambre_core::SealedShare>,
 }
 #[derive(serde::Serialize)]
 pub struct CreateOrgResponse {
@@ -52,7 +52,7 @@ pub struct AddMemberRequest {
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
     /// Encrypted Shamir share for this member (base64 or hex).
-    pub shamir_share_enc: Option<String>,
+    pub shamir_share_enc: Option<ambre_core::SealedShare>,
 }
 
 /// Request body for updating a member's role.
@@ -182,7 +182,8 @@ pub async fn create_org(
     })?;
     let owner_share_enc = req
         .owner_shamir_share_enc
-        .as_deref()
+        .as_ref()
+        .map(ambre_core::SealedShare::as_str)
         .map(hex::decode)
         .transpose()
         .map_err(|e| AppError::Conflict {
@@ -323,7 +324,8 @@ pub async fn add_member(
 
     let share_enc = req
         .shamir_share_enc
-        .as_deref()
+        .as_ref()
+        .map(ambre_core::SealedShare::as_str)
         .map(hex::decode)
         .transpose()
         .map_err(|e| AppError::Conflict {
@@ -469,7 +471,7 @@ pub async fn recover_master_key(
 
     Ok(axum::Json(RecoveredResponse {
         status: ambre_core::WriteStatus::Recovered,
-        master_key_enc: hex::encode(&org_master_key_enc),
+        master_key_enc: ambre_core::WrappedMasterKey(hex::encode(&org_master_key_enc)),
     }))
 }
 
@@ -478,7 +480,7 @@ pub async fn recover_master_key(
 #[derive(serde::Serialize)]
 pub struct RecoveredResponse {
     pub status: ambre_core::WriteStatus,
-    pub master_key_enc: String,
+    pub master_key_enc: ambre_core::WrappedMasterKey,
 }
 
 #[cfg(test)]

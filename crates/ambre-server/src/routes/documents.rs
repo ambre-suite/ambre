@@ -40,8 +40,8 @@ pub struct SetupAccountRequest {
     pub email: ambre_core::Email,
     /// User-supplied display name (N3).
     pub display_name: String,
-    pub master_key_enc: String,
-    pub master_key_salt: String,
+    pub master_key_enc: ambre_core::WrappedMasterKey,
+    pub master_key_salt: ambre_core::MasterKeySalt,
     pub signing_pubkey: ambre_core::SigningKeyHex,
     pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
@@ -82,12 +82,12 @@ pub async fn setup_account(
     use base64::Engine;
     validate_identity(&req.email, &req.display_name)?;
     let mk_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(&req.master_key_enc)
+        .decode(req.master_key_enc.as_str())
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
     let mk_salt = base64::engine::general_purpose::URL_SAFE
-        .decode(&req.master_key_salt)
+        .decode(req.master_key_salt.as_str())
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
@@ -201,10 +201,10 @@ pub struct DocumentSummaryJson {
     pub owner_id: ambre_core::UserId,
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
-    pub name_enc: Option<String>,
+    pub name_enc: Option<ambre_core::SealedName>,
     /// Serialized as its lowercase word.
     pub role: Role,
-    pub doc_key_enc: String,
+    pub doc_key_enc: ambre_core::WrappedDocKey,
     /// Exchange public key (hex) of whoever wrapped `doc_key_enc`. The client
     /// ECDH-unwraps the doc key with it to decrypt the name for the launcher.
     /// Empty when unknown (self-wrapped owner row): the client falls back to its
@@ -236,11 +236,13 @@ pub async fn list_documents(
                 id: doc_id,
                 owner_id,
                 doc_type: d.doc_type,
-                name_enc: d
-                    .name_enc
-                    .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
+                name_enc: d.name_enc.map(|n| {
+                    ambre_core::SealedName(base64::engine::general_purpose::URL_SAFE.encode(&n))
+                }),
                 role: d.role,
-                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&d.doc_key_enc),
+                doc_key_enc: ambre_core::WrappedDocKey(
+                    base64::engine::general_purpose::URL_SAFE.encode(&d.doc_key_enc),
+                ),
                 wrapper_exchange_pub_key: d
                     .wrapper_exchange_pubkey
                     .map(ambre_core::ExchangeKeyHex::encode)
@@ -262,8 +264,8 @@ pub async fn list_documents(
 pub struct CreateDocumentRequest {
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
-    pub name_enc: Option<String>,
-    pub doc_key_enc: String,
+    pub name_enc: Option<ambre_core::SealedName>,
+    pub doc_key_enc: ambre_core::WrappedDocKey,
     /// Optional client-generated document id (lazy creation). When present the
     /// server materializes the row under this id idempotently.
     #[serde(default, with = "ambre_core::serde_id::document_id::option")]
@@ -271,7 +273,7 @@ pub struct CreateDocumentRequest {
     /// The first entry of the membership log, signed by the creator
     /// (`SYNC-132`).
     #[serde(default)]
-    pub entry: Option<String>,
+    pub entry: Option<ambre_core::EncodedLogEntry>,
     /// The document is a Murmure space, which its members list
     /// (`SRV-216`).
     #[serde(default)]
@@ -297,7 +299,7 @@ pub async fn create_document(
         .name_enc
         .map(|n| {
             base64::engine::general_purpose::URL_SAFE
-                .decode(&n)
+                .decode(n.as_str())
                 .map_err(|e| AppError::Conflict {
                     detail: e.to_string(),
                 })
@@ -332,13 +334,17 @@ pub async fn create_document(
     }
     if created || owner_uuid == s.user_id {
         let doc_key_enc = base64::engine::general_purpose::URL_SAFE
-            .decode(&req.doc_key_enc)
+            .decode(req.doc_key_enc.as_str())
             .map_err(|e| AppError::Conflict {
                 detail: e.to_string(),
             })?;
         // An owner's retry finds the first entry already stored, and the
         // log is never rewritten (`SYNC-107`).
-        let text = req.entry.as_deref().filter(|_| created);
+        let text = req
+            .entry
+            .as_ref()
+            .map(ambre_core::EncodedLogEntry::as_str)
+            .filter(|_| created);
         let expected = super::share::Expected {
             act: ambre_protocol::MembershipAct::Create,
             member: s.user_id,
@@ -379,10 +385,10 @@ pub struct GetDocumentResponse {
     pub owner_id: ambre_core::UserId,
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
-    pub name_enc: Option<String>,
+    pub name_enc: Option<ambre_core::SealedName>,
     /// Serialized as its lowercase word.
     pub role: Option<Role>,
-    pub doc_key_enc: Option<String>,
+    pub doc_key_enc: Option<ambre_core::WrappedDocKey>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -418,9 +424,13 @@ pub async fn get_document(
         doc_type: doc.doc_type,
         name_enc: doc
             .name_enc
-            .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
+            .map(|n| ambre_core::SealedName(base64::engine::general_purpose::URL_SAFE.encode(&n))),
         role: mem.as_ref().map(|m| m.role),
-        doc_key_enc: mem.map(|m| base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc)),
+        doc_key_enc: mem.map(|m| {
+            ambre_core::WrappedDocKey(
+                base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
+            )
+        }),
         created_at: doc.created_at.to_rfc3339(),
         updated_at: doc.updated_at.to_rfc3339(),
     }))
@@ -431,7 +441,7 @@ pub async fn get_document(
 /// Request body for renaming a document. The name is E2EE encrypted.
 #[derive(serde::Deserialize)]
 pub struct RenameDocumentRequest {
-    pub name_enc: String,
+    pub name_enc: ambre_core::SealedName,
 }
 
 pub async fn rename_document(
@@ -450,7 +460,7 @@ pub async fn rename_document(
         return Err(AppError::Forbidden);
     }
     let name_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(&req.name_enc)
+        .decode(req.name_enc.as_str())
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
@@ -579,7 +589,7 @@ pub struct MemberInfoJson {
     pub role: Role,
     pub signing_pub_key: ambre_core::SigningKeyHex,
     pub exchange_pub_key: ambre_core::ExchangeKeyHex,
-    pub doc_key_enc: String,
+    pub doc_key_enc: ambre_core::WrappedDocKey,
     /// Exchange public key of whoever wrapped `doc_key_enc` (the inviter, or the
     /// member themselves at creation). The recipient unwraps via ECDH against
     /// THIS key, not its own. Falls back to the member's own key for legacy rows.
@@ -620,7 +630,9 @@ pub async fn list_document_members(
                 role: m.role,
                 signing_pub_key: ambre_core::SigningKeyHex::encode(&m.signing_pubkey),
                 exchange_pub_key: ambre_core::ExchangeKeyHex::encode(&m.exchange_pubkey),
-                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
+                doc_key_enc: ambre_core::WrappedDocKey(
+                    base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
+                ),
                 wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex::encode(
                     m.wrapper_exchange_pubkey
                         .as_ref()
@@ -634,10 +646,12 @@ pub async fn list_document_members(
     let rotation_owed = db::rotation_owed(&state.db, &doc_id).await?;
     // The signed entries beside the rows, for a client to check them against
     // (`SRV-104`, `SYNC-108`).
-    let log: Vec<String> = db::membership_log(&state.db, &doc_id)
+    let log: Vec<ambre_core::EncodedLogEntry> = db::membership_log(&state.db, &doc_id)
         .await?
         .iter()
-        .map(|bytes| base64::engine::general_purpose::URL_SAFE.encode(bytes))
+        .map(|bytes| {
+            ambre_core::EncodedLogEntry(base64::engine::general_purpose::URL_SAFE.encode(bytes))
+        })
         .collect();
     Ok(axum::Json(MembersResponse {
         members: json,
@@ -653,7 +667,7 @@ pub struct MembersResponse {
     /// Whether a member with write access must rotate before it sends.
     pub rotation_owed: bool,
     /// The signed membership entries, each in URL-safe base64.
-    pub log: Vec<String>,
+    pub log: Vec<ambre_core::EncodedLogEntry>,
 }
 
 /// Request body for changing a member's role.
@@ -664,7 +678,7 @@ pub struct UpdateMemberRoleRequest {
     pub role: ambre_core::Role,
     /// The signed entry that gives the role (`SYNC-132`).
     #[serde(default)]
-    pub entry: Option<String>,
+    pub entry: Option<ambre_core::EncodedLogEntry>,
 }
 
 pub async fn update_document_member_role(
@@ -694,8 +708,14 @@ pub async fn update_document_member_role(
         role: Some(role),
         key: Some(None),
     };
-    let entry =
-        super::share::checked_entry(&state, &s, doc_id, req.entry.as_deref(), expected).await?;
+    let entry = super::share::checked_entry(
+        &state,
+        &s,
+        doc_id,
+        req.entry.as_ref().map(ambre_core::EncodedLogEntry::as_str),
+        expected,
+    )
+    .await?;
     db::update_document_member_role(&state.db, &doc_id, &target, role, entry.as_ref()).await?;
     tracing::info!(document_id = %doc_id, target_user = %target, role = %role, by = %s.user_id, "member role updated");
     crate::redis_ops::members_changed(&state.redis, &doc_id).await;

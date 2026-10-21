@@ -29,6 +29,7 @@ pub mod channel_kind;
 pub mod doc_type;
 pub mod docfile;
 pub mod email;
+pub mod encoded;
 pub mod error;
 /// Fixture machinery (`ambre-spec-fixtures.md`). Behind the non-default
 /// `fixtures` feature so no client build can reach it (I4).
@@ -68,6 +69,10 @@ pub use docfile::{
     write_ambre_plaintext, write_ambre_sealed,
 };
 pub use email::Email;
+pub use encoded::{
+    EncodedKeyLink, EncodedLogEntry, EncodedProof, MasterKeySalt, SealedName, SealedShare,
+    WrappedDocKey, WrappedMasterKey,
+};
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
 #[cfg(feature = "fixtures")]
 pub use fixtures::{
@@ -78,7 +83,7 @@ pub use id::{
     CategoryId, ChannelId, CommentId, DocumentId, FootnoteId, LeaseId, MeetingId, MessageId,
     MetaId, OrgId, ReplyId, SegmentId, SnapshotId, SpaceId, SuggestionId, UserId,
 };
-pub use key_hex::{ExchangeKeyHex, SigningKeyHex};
+pub use key_hex::{ExchangeKeyHex, SignatureHex, SigningKeyHex};
 pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
 pub use media::{ByteSize, ContentHash, MediaType};
 pub use object_key::ObjectKey;
