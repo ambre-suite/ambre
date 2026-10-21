@@ -107,7 +107,7 @@ fn a_closing_segment_asks_for_its_lease_as_the_relay_says() {
     assert_eq!(state.lease_to_ask(NOW), None, "asked once");
 
     // The grace period runs: the relay says when to ask again.
-    state.lease_deferred(closing, 5_000);
+    state.lease_deferred(closing, ambre_core::Millis(5_000));
     assert_eq!(state.lease_to_ask(NOW), None, "the tick dates it");
     assert_eq!(state.lease_to_ask(at(4_999)), None);
     assert_eq!(state.lease_to_ask(at(5_000)), Some(closing));
@@ -152,7 +152,12 @@ fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
 
     let lease = LeaseId::new();
     assert_eq!(state.lease_to_ask(NOW), Some(closing));
-    state.lease_granted(closing, lease, ambre_core::Seq(7), LEASE_MS);
+    state.lease_granted(
+        closing,
+        lease,
+        ambre_core::Seq(7),
+        ambre_core::Millis(LEASE_MS),
+    );
     let early = state
         .final_snapshot(NOW, ambre_core::Seq(6))
         .expect("export");
@@ -185,7 +190,12 @@ fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
 fn a_lease_that_runs_out_is_asked_again() {
     let (mut state, closing) = closed_with(&["one"]);
     assert_eq!(state.lease_to_ask(NOW), Some(closing));
-    state.lease_granted(closing, LeaseId::new(), ambre_core::Seq(9), LEASE_MS);
+    state.lease_granted(
+        closing,
+        LeaseId::new(),
+        ambre_core::Seq(9),
+        ambre_core::Millis(LEASE_MS),
+    );
     assert!(
         state
             .final_snapshot(NOW, ambre_core::Seq(1))
@@ -211,7 +221,12 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
     let mut bob = peer_of(&alice);
     let before = alice.messages(closing).expect("messages");
     assert_eq!(alice.lease_to_ask(NOW), Some(closing));
-    alice.lease_granted(closing, LeaseId::new(), ambre_core::Seq(2), LEASE_MS);
+    alice.lease_granted(
+        closing,
+        LeaseId::new(),
+        ambre_core::Seq(2),
+        ambre_core::Millis(LEASE_MS),
+    );
     let snapshot = alice
         .final_snapshot(NOW, ambre_core::Seq(2))
         .expect("export")
@@ -257,7 +272,12 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
     let (mut alice, closing) = closed_with(&["one", "two"]);
     let mut bob = peer_of(&alice);
     assert_eq!(alice.lease_to_ask(NOW), Some(closing));
-    alice.lease_granted(closing, LeaseId::new(), ambre_core::Seq(2), LEASE_MS);
+    alice.lease_granted(
+        closing,
+        LeaseId::new(),
+        ambre_core::Seq(2),
+        ambre_core::Millis(LEASE_MS),
+    );
     alice
         .final_snapshot(NOW, ambre_core::Seq(2))
         .expect("export")
@@ -275,7 +295,12 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
     assert_eq!(bob.finalizing_id(), Some(closing));
     assert_eq!(bob.lease_to_ask(NOW), Some(closing));
     let lease = LeaseId::new();
-    bob.lease_granted(closing, lease, ambre_core::Seq(2), LEASE_MS);
+    bob.lease_granted(
+        closing,
+        lease,
+        ambre_core::Seq(2),
+        ambre_core::Millis(LEASE_MS),
+    );
     let snapshot = bob
         .final_snapshot(NOW, ambre_core::Seq(2))
         .expect("export")
@@ -326,7 +351,12 @@ fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, Vec<u
         .close_into(closing, SegmentId::new(), true, NOW)
         .expect("close");
     assert_eq!(alice.lease_to_ask(NOW), Some(closing));
-    alice.lease_granted(closing, LeaseId::new(), ambre_core::Seq(2), LEASE_MS);
+    alice.lease_granted(
+        closing,
+        LeaseId::new(),
+        ambre_core::Seq(2),
+        ambre_core::Millis(LEASE_MS),
+    );
     let snapshot = alice
         .final_snapshot(NOW, ambre_core::Seq(2))
         .expect("export")

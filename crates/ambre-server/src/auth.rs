@@ -120,7 +120,7 @@ pub struct TokenPair {
     pub access_token: ambre_protocol::ws::AccessToken,
     pub refresh_token: ambre_protocol::ws::RefreshToken,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
-    pub access_expires_in: u64,
+    pub access_expires_in: ambre_core::Seconds,
 }
 
 /// Mint an access JWT and create a revocable refresh token in Redis for the
@@ -141,7 +141,7 @@ pub async fn issue_session(
         sub: user_id.to_string(),
         spk: signing_pubkey.as_ref().map(ambre_core::PublicKey::to_hex),
         iat: now,
-        exp: now + access_ttl,
+        exp: now + access_ttl.0,
     };
     let access_token = state
         .jwt
@@ -173,8 +173,8 @@ pub async fn issue_session(
 pub const ACCESS_TOKEN_MAX_TTL_SECS: u64 = 15 * 60;
 
 /// The lifetime a minted token carries: the configured one, capped.
-fn access_lifetime(configured_secs: u64) -> u64 {
-    configured_secs.min(ACCESS_TOKEN_MAX_TTL_SECS)
+fn access_lifetime(configured: ambre_core::Seconds) -> ambre_core::Seconds {
+    ambre_core::Seconds(configured.0.min(ACCESS_TOKEN_MAX_TTL_SECS))
 }
 
 /// Current Unix time in seconds.

@@ -1368,7 +1368,7 @@ mod handler_tests {
         for (configured, minted) in [(24 * 3600, 900), (60, 60)] {
             let state = AppState {
                 config: Arc::new(Config {
-                    access_ttl_secs: configured,
+                    access_ttl_secs: ambre_core::Seconds(configured),
                     ..Config::default()
                 }),
                 ..(*base).clone()
@@ -1378,7 +1378,7 @@ mod handler_tests {
                 .unwrap();
             let claims = state.jwt.verify(tokens.access_token.expose()).unwrap();
             assert_eq!(claims.exp - claims.iat, minted);
-            assert_eq!(tokens.access_expires_in, minted);
+            assert_eq!(tokens.access_expires_in, ambre_core::Seconds(minted));
         }
     }
 

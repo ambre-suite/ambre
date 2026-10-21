@@ -129,11 +129,11 @@ pub const PRESIGNED_URL_MAX_TTL_SECS: u64 = 15 * 60;
 
 /// The lifetime a presigned URL is signed for: the configured one, held under
 /// the ceiling. A misconfigured day comes out as 15 minutes.
-fn presign_lifetime(ttl_secs: u64) -> Duration {
-    Duration::from_secs(ttl_secs.min(PRESIGNED_URL_MAX_TTL_SECS))
+fn presign_lifetime(ttl: ambre_core::Seconds) -> Duration {
+    Duration::from_secs(ttl.0.min(PRESIGNED_URL_MAX_TTL_SECS))
 }
 
-/// Generates a presigned S3 PUT URL valid for `ttl_secs`, bound to exactly
+/// Generates a presigned S3 PUT URL valid for `ttl`, bound to exactly
 /// `content_length` bytes.
 ///
 /// The client uploads the encrypted blob directly to S3; the server never sees
@@ -146,10 +146,10 @@ pub async fn generate_presigned_upload_url(
     s3: &S3Client,
     bucket: &str,
     key: &ambre_core::ObjectKey,
-    ttl_secs: u64,
+    ttl: ambre_core::Seconds,
     content_length: ambre_core::ByteSize,
 ) -> Result<String, AppError> {
-    let config = PresigningConfig::expires_in(presign_lifetime(ttl_secs))
+    let config = PresigningConfig::expires_in(presign_lifetime(ttl))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
     s3.put_object()
@@ -162,14 +162,14 @@ pub async fn generate_presigned_upload_url(
         .map_err(|e| AppError::S3(format!("presigned upload URL: {e}")))
 }
 
-/// Generates a presigned S3 GET URL valid for `ttl_secs`.
+/// Generates a presigned S3 GET URL valid for `ttl`.
 pub async fn generate_presigned_download_url(
     s3: &S3Client,
     bucket: &str,
     key: &ambre_core::ObjectKey,
-    ttl_secs: u64,
+    ttl: ambre_core::Seconds,
 ) -> Result<String, AppError> {
-    let config = PresigningConfig::expires_in(presign_lifetime(ttl_secs))
+    let config = PresigningConfig::expires_in(presign_lifetime(ttl))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
     s3.get_object()
@@ -344,8 +344,8 @@ const FLUSH_LOCK_TTL_SECS: u64 = 60;
 /// holds its lock at most `FLUSH_LOCK_TTL_SECS`, and a minute of margin covers
 /// the requests in flight. The tombstone lives this long, and the
 /// second sweep of the objects runs once it has passed.
-pub fn late_write_window_secs(presigned_url_ttl_secs: u64) -> u64 {
-    presign_lifetime(presigned_url_ttl_secs).as_secs() + FLUSH_LOCK_TTL_SECS + 60
+pub fn late_write_window_secs(presigned_url_ttl: ambre_core::Seconds) -> u64 {
+    presign_lifetime(presigned_url_ttl).as_secs() + FLUSH_LOCK_TTL_SECS + 60
 }
 
 /// Seconds since the Unix epoch, the clock a delete's sweep is scheduled in.
@@ -729,7 +729,7 @@ mod tests {
             &s3,
             "bucket",
             &ambre_core::ObjectKey::from("dev/documents/x/media/y"),
-            900,
+            ambre_core::Seconds(900),
             ambre_core::ByteSize(4096),
         )
         .await
@@ -757,22 +757,30 @@ mod tests {
             &s3,
             "bucket",
             &ambre_core::ObjectKey::from("k"),
-            day,
+            ambre_core::Seconds(day),
             ambre_core::ByteSize(1),
         )
         .await
         .expect("presign");
-        let down =
-            generate_presigned_download_url(&s3, "bucket", &ambre_core::ObjectKey::from("k"), day)
-                .await
-                .expect("presign");
+        let down = generate_presigned_download_url(
+            &s3,
+            "bucket",
+            &ambre_core::ObjectKey::from("k"),
+            ambre_core::Seconds(day),
+        )
+        .await
+        .expect("presign");
         for url in [up, down] {
             assert!(url.contains("X-Amz-Expires=900"), "{url}");
         }
-        let short =
-            generate_presigned_download_url(&s3, "bucket", &ambre_core::ObjectKey::from("k"), 60)
-                .await
-                .expect("presign");
+        let short = generate_presigned_download_url(
+            &s3,
+            "bucket",
+            &ambre_core::ObjectKey::from("k"),
+            ambre_core::Seconds(60),
+        )
+        .await
+        .expect("presign");
         assert!(short.contains("X-Amz-Expires=60"), "{short}");
     }
 

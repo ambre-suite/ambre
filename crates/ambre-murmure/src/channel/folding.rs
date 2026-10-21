@@ -62,7 +62,7 @@ struct Grant {
     horizon: Seq,
     amendments: DocumentId,
     amendments_seq: Seq,
-    expires_in: u64,
+    expires_in: ambre_core::Millis,
 }
 
 /// A fold snapshot to upload under a lease (`MURMURE-075`).
@@ -173,7 +173,7 @@ impl ChannelState {
                 until: None,
             },
             FoldAnswer::Deferred { retry_in } => Step::Due {
-                after: retry_in,
+                after: retry_in.0,
                 at: None,
             },
         };
@@ -225,7 +225,7 @@ impl ChannelState {
             return Ok(None);
         };
         let grant = *grant;
-        let until = *until.get_or_insert(Timestamp(now.0.saturating_add(grant.expires_in)));
+        let until = *until.get_or_insert(Timestamp(now.0.saturating_add(grant.expires_in.0)));
         let held = self.amendments.get(&segment).map(|held| held.id);
         if held != Some(grant.amendments) {
             self.fold_failed(segment);

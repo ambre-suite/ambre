@@ -94,7 +94,12 @@ fn amended() -> Amended {
         .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
         .expect("adopt");
     assert_eq!(alice.lease_to_ask(NOW), Some(segment));
-    alice.lease_granted(segment, LeaseId::new(), ambre_core::Seq(0), LEASE_MS);
+    alice.lease_granted(
+        segment,
+        LeaseId::new(),
+        ambre_core::Seq(0),
+        ambre_core::Millis(LEASE_MS),
+    );
     let sealed = alice
         .final_snapshot(NOW, ambre_core::Seq(0))
         .expect("export")
@@ -196,7 +201,7 @@ impl Amended {
                 horizon: ambre_core::Seq(0),
                 amendments: self.amendments,
                 amendments_seq: ambre_core::Seq(3),
-                expires_in: LEASE_MS,
+                expires_in: ambre_core::Millis(LEASE_MS),
             },
         );
         self.alice
@@ -234,7 +239,12 @@ fn the_fold_lease_is_asked_as_the_relay_says() {
     );
     assert_eq!(alice.fold_lease_to_ask(NOW), None, "asked once");
 
-    alice.fold_answered(segment, FoldAnswer::Deferred { retry_in: 5_000 });
+    alice.fold_answered(
+        segment,
+        FoldAnswer::Deferred {
+            retry_in: ambre_core::Millis(5_000),
+        },
+    );
     assert_eq!(alice.fold_lease_to_ask(NOW), None, "the tick dates it");
     assert_eq!(alice.fold_lease_to_ask(at(4_999)), None);
     assert_eq!(alice.fold_lease_to_ask(at(5_000)), Some(segment));
@@ -296,7 +306,7 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
             horizon: ambre_core::Seq(0),
             amendments,
             amendments_seq: ambre_core::Seq(4),
-            expires_in: LEASE_MS,
+            expires_in: ambre_core::Millis(LEASE_MS),
         },
     );
     assert!(
@@ -310,7 +320,7 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
             horizon: ambre_core::Seq(0),
             amendments,
             amendments_seq: ambre_core::Seq(3),
-            expires_in: LEASE_MS,
+            expires_in: ambre_core::Millis(LEASE_MS),
         },
     );
     let fold = amended
@@ -382,7 +392,7 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
             horizon: ambre_core::Seq(0),
             amendments: DocumentId::new(),
             amendments_seq: ambre_core::Seq(1),
-            expires_in: LEASE_MS,
+            expires_in: ambre_core::Millis(LEASE_MS),
         },
     );
     assert!(alice.fold_snapshot(NOW).expect("fold").is_none());
@@ -399,7 +409,7 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
             horizon: ambre_core::Seq(0),
             amendments,
             amendments_seq: ambre_core::Seq(9),
-            expires_in: LEASE_MS,
+            expires_in: ambre_core::Millis(LEASE_MS),
         },
     );
     let base = FINALIZE_RETRY_MS;

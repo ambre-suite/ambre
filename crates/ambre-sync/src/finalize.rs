@@ -195,14 +195,14 @@ mod tests {
             Ok(LeaseAnswer::Granted {
                 lease,
                 horizon: ambre_bus::Seq(41),
-                expires_in: 30_000
+                expires_in: ambre_core::Millis(30_000)
             })
         );
         let deferred = take_lease(&transport, &auth, BASE, channel, segment).await;
         assert_eq!(
             deferred,
             Ok(LeaseAnswer::Deferred {
-                retry_in: 86_400_000
+                retry_in: ambre_core::Millis(86_400_000)
             })
         );
         let url = format!("{BASE}/api/channels/{channel}/segments/{segment}/lease");

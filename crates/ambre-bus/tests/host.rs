@@ -712,7 +712,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             answer: LeaseAnswer::Granted {
                 lease: LeaseId::new(),
                 horizon: ambre_bus::Seq(42),
-                expires_in: 30_000,
+                expires_in: ambre_core::Millis(30_000),
             },
         },
         LogicEvent::SegmentFinalized {
@@ -733,7 +733,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 horizon: ambre_bus::Seq(42),
                 amendments: DocumentId::new(),
                 amendments_seq: ambre_bus::Seq(7),
-                expires_in: 30_000,
+                expires_in: ambre_core::Millis(30_000),
             },
         },
         LogicEvent::SegmentFolded {

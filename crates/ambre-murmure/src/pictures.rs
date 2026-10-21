@@ -166,7 +166,7 @@ impl Pictures {
 /// one is due. A still picture, or a paint under reduced motion, shows the
 /// first frame, and none is due (`MURMURE-130`).
 pub fn frame_at(picture: &Picture, now_ms: f64, still: bool) -> (usize, Option<f64>) {
-    let total: u64 = picture.frames.iter().map(|f| u64::from(f.delay_ms)).sum();
+    let total: u64 = picture.frames.iter().map(|f| f.delay_ms.0).sum();
     if still || picture.frames.len() < 2 || total == 0 {
         return (0, None);
     }
@@ -174,7 +174,7 @@ pub fn frame_at(picture: &Picture, now_ms: f64, still: bool) -> (usize, Option<f
     let at = now_ms.max(0.0) as u64 % total;
     let mut until = 0;
     for (i, frame) in picture.frames.iter().enumerate() {
-        until += u64::from(frame.delay_ms);
+        until += frame.delay_ms.0;
         if at < until {
             #[allow(clippy::cast_precision_loss)]
             return (i, Some(now_ms + (until - at) as f64));
@@ -207,7 +207,7 @@ mod tests {
                 .iter()
                 .map(|&delay_ms| PictureFrame {
                     pixels: vec![0; bytes],
-                    delay_ms,
+                    delay_ms: ambre_core::Millis(u64::from(delay_ms)),
                 })
                 .collect(),
         }

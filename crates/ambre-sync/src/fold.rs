@@ -197,14 +197,14 @@ mod tests {
                 horizon: ambre_bus::Seq(41),
                 amendments,
                 amendments_seq: ambre_bus::Seq(7),
-                expires_in: 30_000
+                expires_in: ambre_core::Millis(30_000)
             })
         );
         let deferred = take_fold_lease(&transport, &auth, BASE, channel, segment).await;
         assert_eq!(
             deferred,
             Ok(FoldAnswer::Deferred {
-                retry_in: 86_400_000
+                retry_in: ambre_core::Millis(86_400_000)
             })
         );
         let url = format!("{BASE}/api/channels/{channel}/segments/{segment}/fold-lease");

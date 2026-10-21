@@ -72,7 +72,7 @@ pub struct SetupAccountResponse {
     pub user_id: ambre_core::UserId,
     pub access_token: ambre_protocol::ws::AccessToken,
     pub refresh_token: ambre_protocol::ws::RefreshToken,
-    pub access_expires_in: u64,
+    pub access_expires_in: ambre_core::Seconds,
 }
 
 pub async fn setup_account(

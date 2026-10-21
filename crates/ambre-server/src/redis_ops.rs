@@ -545,8 +545,9 @@ pub async fn refresh_create(
     redis: &Client,
     token: &str,
     data: &RefreshData,
-    ttl_secs: u64,
+    ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
+    let ttl_secs = ttl.0;
     let key = format!("refresh:{token}");
 
     let user_id = data.user_id.to_string();
@@ -1761,7 +1762,7 @@ mod redis_integration_tests {
             user_id: ambre_core::UserId::new(),
             signing_pubkey: Some(ambre_core::PublicKey::from_array([3u8; 32])),
         };
-        refresh_create(redis, &token, &data, 60)
+        refresh_create(redis, &token, &data, ambre_core::Seconds(60))
             .await
             .expect("refresh create");
         token

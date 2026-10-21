@@ -82,7 +82,7 @@ pub struct CallbackResponse {
     /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
     pub refresh_token: ambre_protocol::ws::RefreshToken,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
-    pub access_expires_in: u64,
+    pub access_expires_in: ambre_core::Seconds,
 }
 
 /// A secret of the OIDC exchange: the client secret the provider issued, or

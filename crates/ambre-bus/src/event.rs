@@ -470,11 +470,11 @@ pub enum LeaseAnswer {
     Granted {
         lease: LeaseId,
         horizon: Seq,
-        expires_in: u64,
+        expires_in: ambre_core::Millis,
     },
     /// No lease yet: ask again in `retry_in` milliseconds. The grace period
     /// runs, or another member holds the lease.
-    Deferred { retry_in: u64 },
+    Deferred { retry_in: ambre_core::Millis },
 }
 
 /// The relay's answer to a fold lease request (`SRV-204`).
@@ -488,11 +488,11 @@ pub enum FoldAnswer {
         horizon: Seq,
         amendments: DocumentId,
         amendments_seq: Seq,
-        expires_in: u64,
+        expires_in: ambre_core::Millis,
     },
     /// No lease yet: ask again in `retry_in` milliseconds. The fold delay
     /// runs, or another member holds the lease.
-    Deferred { retry_in: u64 },
+    Deferred { retry_in: ambre_core::Millis },
 }
 
 /// Why a snapshot is checked (`ambre-spec-op-authorship.md` section 3).

@@ -102,7 +102,7 @@ pub struct KeysStoredResponse {
     pub access_token: ambre_protocol::ws::AccessToken,
     pub refresh_token: ambre_protocol::ws::RefreshToken,
     /// Access-token lifetime in seconds.
-    pub access_expires_in: u64,
+    pub access_expires_in: ambre_core::Seconds,
 }
 
 /// Response containing the full key material for the authenticated user.

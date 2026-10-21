@@ -107,7 +107,7 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
         closing,
         ambre_core::LeaseId::new(),
         ambre_core::Seq(1),
-        60_000,
+        ambre_core::Millis(60_000),
     );
     alice.mark_final(closing).expect("mark").expect("a delta");
     assert_eq!(alice.closing_id(), None, "the slot is free");

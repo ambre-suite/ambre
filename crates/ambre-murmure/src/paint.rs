@@ -1295,7 +1295,10 @@ pub(crate) mod tests {
         let gif = Picture {
             width: 2,
             height: 1,
-            frames: vec![frame(100), frame(100)],
+            frames: vec![
+                frame(ambre_core::Millis(100)),
+                frame(ambre_core::Millis(100)),
+            ],
         };
         assert!(shelf.land(file.media_ref.clone(), Some(gif)));
         let (surface, playing) = at(&shelf, 30.0, false);

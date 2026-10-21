@@ -1727,7 +1727,7 @@ mod tests {
         *state.tokens.borrow_mut() = Some(TokenPair {
             access_token: SecretToken::from("access".to_owned()),
             refresh_token: SecretToken::from("refresh".to_owned()),
-            access_expires_in: 60,
+            access_expires_in: ambre_core::Seconds(60),
         });
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
@@ -1772,7 +1772,7 @@ mod tests {
             tokens: TokenPair {
                 access_token: SecretToken::from("access".to_owned()),
                 refresh_token: SecretToken::from("refresh".to_owned()),
-                access_expires_in: 60,
+                access_expires_in: ambre_core::Seconds(60),
             },
         });
         assert_eq!(state.socket_opens, 1);
@@ -1949,7 +1949,7 @@ mod tests {
         *state.tokens.borrow_mut() = Some(TokenPair {
             access_token: SecretToken::from("acc-s3cr3t".to_owned()),
             refresh_token: SecretToken::from("ref-s3cr3t".to_owned()),
-            access_expires_in: 60,
+            access_expires_in: ambre_core::Seconds(60),
         });
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
@@ -1972,7 +1972,7 @@ mod tests {
         let pair = TokenPair {
             access_token: SecretToken::from("acc-s3cr3t".to_owned()),
             refresh_token: SecretToken::from("ref-s3cr3t".to_owned()),
-            access_expires_in: 60,
+            access_expires_in: ambre_core::Seconds(60),
         };
         let shown = format!("{pair:?}");
         assert!(!shown.contains("s3cr3t"), "{shown}");

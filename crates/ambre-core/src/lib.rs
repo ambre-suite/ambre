@@ -52,6 +52,7 @@ pub mod seq;
 pub mod serde_enums;
 /// Serde adapters for identifier serialization as hyphenated UUID strings.
 pub mod serde_id;
+pub mod span;
 pub mod status;
 pub mod uuid;
 pub mod version;
@@ -88,6 +89,7 @@ pub use schema::{
     SchemaVerdict, migrate_schema, migration_peer, scaffold_peer, verdict,
 };
 pub use seq::Seq;
+pub use span::{Millis, Seconds};
 pub use status::{RefusalCode, RotationStatus, SnapshotStatus, StatusError, WriteStatus};
 pub use uuid::Uuid;
 pub use version::Version;

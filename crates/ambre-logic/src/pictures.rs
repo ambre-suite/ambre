@@ -113,7 +113,9 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
                 held += pixels.len();
                 frames.push(PictureFrame {
                     pixels,
-                    delay_ms: delay(numer.checked_div(denom).unwrap_or(0)),
+                    delay_ms: ambre_core::Millis(u64::from(delay(
+                        numer.checked_div(denom).unwrap_or(0),
+                    ))),
                 });
             }
             (!frames.is_empty()).then_some(Picture {
@@ -132,7 +134,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
                 height,
                 frames: vec![PictureFrame {
                     pixels: scale(image, (width, height)),
-                    delay_ms: 0,
+                    delay_ms: ambre_core::Millis(0),
                 }],
             })
         }
@@ -207,7 +209,12 @@ mod tests {
         let picture = decode(&gif(3, (960, 320), 70)).expect("a GIF");
         assert_eq!((picture.width, picture.height), (480, 160));
         assert_eq!(picture.frames.len(), 3);
-        assert!(picture.frames.iter().all(|f| f.delay_ms == 70));
+        assert!(
+            picture
+                .frames
+                .iter()
+                .all(|f| f.delay_ms == ambre_core::Millis(70))
+        );
         assert!(
             picture
                 .frames
@@ -216,7 +223,12 @@ mod tests {
         );
         assert_ne!(picture.frames[0].pixels, picture.frames[1].pixels);
         let spinning = decode(&gif(2, (8, 8), 0)).expect("a GIF");
-        assert!(spinning.frames.iter().all(|f| f.delay_ms == SLOW_DELAY_MS));
+        assert!(
+            spinning
+                .frames
+                .iter()
+                .all(|f| f.delay_ms == ambre_core::Millis(u64::from(SLOW_DELAY_MS)))
+        );
     }
 
     /// A still image is one frame, and a small one keeps its size. A file

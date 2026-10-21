@@ -43,7 +43,7 @@ enum Step {
     Held {
         lease: LeaseId,
         horizon: Seq,
-        expires_in: u64,
+        expires_in: ambre_core::Millis,
         until: Option<Timestamp>,
     },
     /// This copy holds an edit the relay refused for the lock, so it is not
@@ -121,11 +121,11 @@ impl ChannelState {
 
     /// The relay deferred the lease of `segment` by `retry_in` milliseconds:
     /// the grace period runs, or another member holds the lease.
-    pub fn lease_deferred(&mut self, segment: SegmentId, retry_in: u64) {
+    pub fn lease_deferred(&mut self, segment: SegmentId, retry_in: ambre_core::Millis) {
         if let Some(finalizing) = self.finalize_step(segment) {
             finalizing.failures = 0;
             finalizing.step = Step::Due {
-                after: retry_in,
+                after: retry_in.0,
                 at: None,
             };
         }
@@ -139,7 +139,7 @@ impl ChannelState {
         segment: SegmentId,
         lease: LeaseId,
         horizon: Seq,
-        expires_in: u64,
+        expires_in: ambre_core::Millis,
     ) {
         if let Some(finalizing) = self.finalize_step(segment) {
             finalizing.failures = 0;
@@ -216,7 +216,7 @@ impl ChannelState {
             return Ok(None);
         };
         let (lease, horizon) = (*lease, *horizon);
-        let until = *until.get_or_insert(Timestamp(now.0.saturating_add(*expires_in)));
+        let until = *until.get_or_insert(Timestamp(now.0.saturating_add(expires_in.0)));
         if covered < horizon || now >= until {
             return Ok(None);
         }

@@ -419,7 +419,7 @@ const FINALIZE_PENDING_RETRY: std::time::Duration = std::time::Duration::from_se
 pub struct FinalizeLeaseJson {
     pub lease: Option<GrantedLeaseJson>,
     /// Milliseconds before asking again, `0` with a lease.
-    pub retry_in: u64,
+    pub retry_in: ambre_core::Millis,
 }
 
 /// A granted finalize lease (`SRV-113`).
@@ -430,7 +430,7 @@ pub struct GrantedLeaseJson {
     /// The last delta number the final snapshot covers.
     pub horizon: ambre_core::Seq,
     /// Milliseconds before the lease expires.
-    pub expires_in: u64,
+    pub expires_in: ambre_core::Millis,
 }
 
 /// The body of a finalize commit: the lease, and the snapshot that covers
@@ -486,7 +486,6 @@ pub async fn take_finalize_lease(
     lock_retired_segments(&state, &document).await;
     let lock = async || crate::redis_ops::lock_segment(&state.redis, &document).await;
     let answer = db::take_finalize_lease(&state.db, &channel_id, segment, terms, lock).await?;
-    let millis = |d: std::time::Duration| u64::try_from(d.as_millis()).unwrap_or(u64::MAX);
     Ok(axum::Json(match answer {
         db::FinalizeLease::Granted {
             lease_id,
@@ -498,14 +497,14 @@ pub async fn take_finalize_lease(
                 lease: Some(GrantedLeaseJson {
                     lease_id,
                     horizon,
-                    expires_in: millis(expires_in),
+                    expires_in: ambre_core::Millis::from_duration(expires_in),
                 }),
-                retry_in: 0,
+                retry_in: ambre_core::Millis(0),
             }
         }
         db::FinalizeLease::Wait { retry_in } => FinalizeLeaseJson {
             lease: None,
-            retry_in: millis(retry_in),
+            retry_in: ambre_core::Millis::from_duration(retry_in),
         },
     }))
 }
@@ -543,7 +542,7 @@ pub const FOLD_DELAY: std::time::Duration = std::time::Duration::from_secs(7 * 2
 pub struct FoldLeaseJson {
     pub lease: Option<GrantedFoldJson>,
     /// Milliseconds before asking again, `0` with a lease.
-    pub retry_in: u64,
+    pub retry_in: ambre_core::Millis,
 }
 
 /// A granted fold lease (`SRV-204`).
@@ -559,7 +558,7 @@ pub struct GrantedFoldJson {
     /// The last delta number of the amendments the fold holds.
     pub amendments_seq: ambre_core::Seq,
     /// Milliseconds before the lease expires.
-    pub expires_in: u64,
+    pub expires_in: ambre_core::Millis,
 }
 
 /// The body of a fold commit: the lease, the fold snapshot, and how far into
@@ -592,7 +591,6 @@ pub async fn take_fold_lease(
         crate::redis_ops::current_seq(&state.redis, &document).await
     };
     let answer = db::take_fold_lease(&state.db, &channel_id, segment, terms, relayed).await?;
-    let millis = |d: std::time::Duration| u64::try_from(d.as_millis()).unwrap_or(u64::MAX);
     Ok(axum::Json(match answer {
         db::FoldLease::Granted {
             lease_id,
@@ -608,14 +606,14 @@ pub async fn take_fold_lease(
                     horizon,
                     amendments,
                     amendments_seq,
-                    expires_in: millis(expires_in),
+                    expires_in: ambre_core::Millis::from_duration(expires_in),
                 }),
-                retry_in: 0,
+                retry_in: ambre_core::Millis(0),
             }
         }
         db::FoldLease::Wait { retry_in } => FoldLeaseJson {
             lease: None,
-            retry_in: millis(retry_in),
+            retry_in: ambre_core::Millis::from_duration(retry_in),
         },
     }))
 }
@@ -3714,7 +3712,12 @@ mod tests {
 
         let early = lease(&state, alice, &channel).await.expect("lease");
         assert!(early.lease.is_none(), "the segment just closed");
-        assert!(early.retry_in > FINALIZE_GRACE.as_millis() as u64 - 60_000);
+        assert!(
+            early.retry_in
+                > ambre_core::Millis::from_duration(
+                    FINALIZE_GRACE - std::time::Duration::from_secs(60)
+                )
+        );
 
         on_segment(
             &state,
@@ -3742,7 +3745,10 @@ mod tests {
         let granted = lease(&state, alice, &channel).await.expect("lease");
         let held = granted.lease.expect("the grace period has passed");
         assert_eq!(held.horizon, ambre_core::Seq(4));
-        assert_eq!(held.expires_in, FINALIZE_LEASE.as_millis() as u64);
+        assert_eq!(
+            held.expires_in,
+            ambre_core::Millis::from_duration(FINALIZE_LEASE)
+        );
         assert!(
             db::segment_locked(&state.db, &segment)
                 .await
@@ -3757,7 +3763,10 @@ mod tests {
 
         let second = lease(&state, bob, &channel).await.expect("lease");
         assert!(second.lease.is_none(), "one lease at a time");
-        assert!(second.retry_in > 0 && second.retry_in <= FINALIZE_LEASE.as_millis() as u64);
+        assert!(
+            second.retry_in > ambre_core::Millis(0)
+                && second.retry_in <= ambre_core::Millis::from_duration(FINALIZE_LEASE)
+        );
         forget_store(&state, &channel).await;
     }
 
@@ -4227,7 +4236,11 @@ mod tests {
             .expect("age");
         let early = fold_lease(&state, alice, &channel).await.expect("lease");
         assert!(early.lease.is_none());
-        assert!(early.retry_in > 6 * 24 * 3600 * 1000, "{}", early.retry_in);
+        assert!(
+            early.retry_in > ambre_core::Millis(6 * 24 * 3600 * 1000),
+            "{:?}",
+            early.retry_in
+        );
         sqlx::query("UPDATE documents SET created_at = now() - interval '8 days' WHERE id = $1")
             .bind(uuid_of_doc(amendments))
             .execute(&state.db)
@@ -4246,7 +4259,7 @@ mod tests {
         );
         let second = fold_lease(&state, bob, &channel).await.expect("lease");
         assert!(second.lease.is_none(), "one writer at a time");
-        assert!(second.retry_in > 0);
+        assert!(second.retry_in > ambre_core::Millis(0));
         forget_store(&state, &channel).await;
         set_seq(&state, amendments, 0).await;
     }
@@ -4297,7 +4310,10 @@ mod tests {
         );
         set_seq(&state, amendments, 4).await;
         let waits = fold_lease(&state, bob, &channel).await.expect("lease");
-        assert!(waits.retry_in > 6 * 24 * 3600 * 1000, "the delay restarts");
+        assert!(
+            waits.retry_in > ambre_core::Millis(6 * 24 * 3600 * 1000),
+            "the delay restarts"
+        );
 
         db::drop_pending_snapshot(&state.db, &segment, &exact)
             .await

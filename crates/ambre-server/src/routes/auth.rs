@@ -55,7 +55,7 @@ pub struct DevLoginResponse {
     /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
     pub refresh_token: ambre_protocol::ws::RefreshToken,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
-    pub access_expires_in: u64,
+    pub access_expires_in: ambre_core::Seconds,
 }
 
 /// `POST /auth/dev/login` (dev only)
@@ -133,7 +133,7 @@ pub struct RefreshRequest {
 pub struct RefreshResponse {
     pub access_token: ambre_protocol::ws::AccessToken,
     pub refresh_token: ambre_protocol::ws::RefreshToken,
-    pub access_expires_in: u64,
+    pub access_expires_in: ambre_core::Seconds,
 }
 
 /// `POST /auth/refresh` (unauthenticated; the refresh token is the credential)

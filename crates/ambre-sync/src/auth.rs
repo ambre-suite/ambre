@@ -132,7 +132,7 @@ impl SyncState {
                                         http::TokenPair {
                                             access_token: http::SecretToken::default(),
                                             refresh_token: http::SecretToken::default(),
-                                            access_expires_in: 0,
+                                            access_expires_in: ambre_core::Seconds(0),
                                         },
                                     ),
                                 });
@@ -575,7 +575,7 @@ mod provider_tests {
             tokens: TokenPair {
                 access_token: SecretToken::from("access-s3cr3t".to_owned()),
                 refresh_token: SecretToken::from("refresh-s3cr3t".to_owned()),
-                access_expires_in: 60,
+                access_expires_in: ambre_core::Seconds(60),
             },
         }
     }

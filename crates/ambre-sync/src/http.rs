@@ -37,7 +37,7 @@ pub(crate) struct TokenPair {
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
     #[allow(dead_code)]
-    pub access_expires_in: u64,
+    pub access_expires_in: ambre_core::Seconds,
 }
 
 pub(crate) type TokenStore = Rc<RefCell<Option<TokenPair>>>;
@@ -130,7 +130,7 @@ fn bearer(token: &SecretToken) -> Zeroizing<String> {
 /// Per-request timeout for every Sync HTTP call (M9). Without it a hung TCP
 /// connection or a stalled proxy would block the Sync worker's request future
 /// forever (the browser `fetch` has no default timeout).
-const REQUEST_TIMEOUT_MS: u32 = 30_000;
+const REQUEST_TIMEOUT_MS: ambre_core::Millis = ambre_core::Millis(30_000);
 
 /// The method of one request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,7 +173,7 @@ pub(crate) struct Outgoing {
     /// The content type and the bytes of the body, if any.
     pub body: Option<(&'static str, Vec<u8>)>,
     /// How long the transport waits before it aborts the request.
-    pub timeout_ms: u32,
+    pub timeout_ms: ambre_core::Millis,
 }
 
 impl Outgoing {
@@ -217,7 +217,7 @@ pub(crate) trait Transport {
     async fn send(&self, request: &Outgoing) -> Result<Incoming, String>;
 
     /// Resolves once `ms` milliseconds have passed.
-    async fn elapse(&self, ms: u32);
+    async fn elapse(&self, span: ambre_core::Millis);
 }
 
 /// The browser's `fetch`, the transport of the running worker.
@@ -241,7 +241,9 @@ impl Transport for Fetch {
         // A new signal per request, because a timeout signal starts counting
         // down the moment it is created. gloo-net copies it into the request,
         // so it may be dropped here while `fetch` still holds it.
-        let signal = web_sys::AbortSignal::timeout_with_u32(request.timeout_ms);
+        let signal = web_sys::AbortSignal::timeout_with_u32(
+            u32::try_from(request.timeout_ms.0).unwrap_or(u32::MAX),
+        );
         let mut builder = gloo_net::http::RequestBuilder::new(&request.url)
             .method(request.method.gloo())
             .abort_signal(Some(&signal));
@@ -270,7 +272,7 @@ impl Transport for Fetch {
         })
     }
 
-    async fn elapse(&self, ms: u32) {
+    async fn elapse(&self, span: ambre_core::Millis) {
         use wasm_bindgen::JsCast;
 
         let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() else {
@@ -281,7 +283,7 @@ impl Transport for Fetch {
         let timer = js_sys::Promise::new(&mut |resolve, _reject| {
             let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
                 &resolve,
-                i32::try_from(ms).unwrap_or(i32::MAX),
+                i32::try_from(span.0).unwrap_or(i32::MAX),
             );
         });
         let _ = wasm_bindgen_futures::JsFuture::from(timer).await;
@@ -412,7 +414,7 @@ async fn exchange(transport: &impl Transport, request: &Outgoing) -> Result<Inco
     let deadline = std::pin::pin!(transport.elapse(request.timeout_ms));
     let answer = match select(send, deadline).await {
         Either::Left((answer, _)) => answer,
-        Either::Right(((), _)) => Err(format!("no answer within {} ms", request.timeout_ms)),
+        Either::Right(((), _)) => Err(format!("no answer within {} ms", request.timeout_ms.0)),
     };
     answer.map_err(|e| format!("{} {}: {e}", request.method.as_str(), request.url))
 }
@@ -658,7 +660,7 @@ pub(crate) struct SetupAccountResponse {
     pub user_id: ambre_core::UserId,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
-    pub access_expires_in: u64,
+    pub access_expires_in: ambre_core::Seconds,
 }
 
 #[derive(Serialize)]
@@ -675,7 +677,7 @@ pub(crate) struct DevLoginResponse {
     pub display_name: String,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
-    pub access_expires_in: u64,
+    pub access_expires_in: ambre_core::Seconds,
 }
 
 /// The relay's answer to `GET /api/auth/{provider}/login`.
@@ -701,7 +703,7 @@ pub(crate) struct ProviderCallbackResponse {
     pub display_name: String,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
-    pub access_expires_in: u64,
+    pub access_expires_in: ambre_core::Seconds,
 }
 
 #[derive(Deserialize)]
@@ -732,7 +734,7 @@ pub(crate) struct SetupKeyRequest {
 pub(crate) struct StoreMasterKeysResponse {
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
-    pub access_expires_in: u64,
+    pub access_expires_in: ambre_core::Seconds,
 }
 
 #[derive(Deserialize)]
@@ -1017,7 +1019,7 @@ pub(crate) struct ThreadResponse {
 pub(crate) struct FinalizeLeaseResponse {
     pub lease: Option<GrantedLeaseResponse>,
     /// Milliseconds before asking again, `0` with a lease.
-    pub retry_in: u64,
+    pub retry_in: ambre_core::Millis,
 }
 
 /// A granted finalize lease.
@@ -1028,7 +1030,7 @@ pub(crate) struct GrantedLeaseResponse {
     /// The last delta the final snapshot covers.
     pub horizon: Seq,
     /// Milliseconds before the lease expires.
-    pub expires_in: u64,
+    pub expires_in: ambre_core::Millis,
 }
 
 /// `POST /api/channels/{id}/segments/{segment}/finalize`: commit the final
@@ -1047,7 +1049,7 @@ pub(crate) struct FinalizeSegmentRequest {
 pub(crate) struct FoldLeaseResponse {
     pub lease: Option<GrantedFoldResponse>,
     /// Milliseconds before asking again, `0` with a lease.
-    pub retry_in: u64,
+    pub retry_in: ambre_core::Millis,
 }
 
 /// A granted fold lease.
@@ -1063,7 +1065,7 @@ pub(crate) struct GrantedFoldResponse {
     /// The last delta of the amendments the fold holds at least.
     pub amendments_seq: Seq,
     /// Milliseconds before the lease expires.
-    pub expires_in: u64,
+    pub expires_in: ambre_core::Millis,
 }
 
 /// `POST /api/channels/{id}/segments/{segment}/fold`: commit the fold
@@ -1527,7 +1529,7 @@ pub(crate) mod scripted {
         /// Whether a request past the script hangs instead of failing.
         pub silent: Cell<bool>,
         /// Every deadline a silent transport waited out, in milliseconds.
-        pub waited: RefCell<Vec<u32>>,
+        pub waited: RefCell<Vec<ambre_core::Millis>>,
     }
 
     impl Scripted {
@@ -1574,11 +1576,11 @@ pub(crate) mod scripted {
 
         /// A silent transport's clock jumps straight to the deadline. Any
         /// other never reaches it, so a scripted answer always wins.
-        async fn elapse(&self, ms: u32) {
+        async fn elapse(&self, span: ambre_core::Millis) {
             if !self.silent.get() {
                 return std::future::pending().await;
             }
-            self.waited.borrow_mut().push(ms);
+            self.waited.borrow_mut().push(span);
         }
     }
 
@@ -1591,7 +1593,7 @@ pub(crate) mod scripted {
             tokens: Rc::new(RefCell::new(Some(TokenPair {
                 access_token: access.to_owned().into(),
                 refresh_token: refresh.to_owned().into(),
-                access_expires_in: 900,
+                access_expires_in: ambre_core::Seconds(900),
             }))),
         }
     }
@@ -1762,7 +1764,7 @@ mod tests {
 
         assert_eq!(
             error,
-            format!("POST {url}: no answer within {REQUEST_TIMEOUT_MS} ms")
+            format!("POST {url}: no answer within {} ms", REQUEST_TIMEOUT_MS.0)
         );
         assert_eq!(transport.calls(), [(Method::Post, url.to_owned())]);
         assert_eq!(*transport.waited.borrow(), [REQUEST_TIMEOUT_MS]);

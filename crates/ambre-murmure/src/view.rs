@@ -3497,7 +3497,7 @@ mod tests {
 
         let frame = || PictureFrame {
             pixels: vec![0; 2 * 4],
-            delay_ms: 100,
+            delay_ms: ambre_core::Millis(100),
         };
         let gif = Picture {
             width: 2,
@@ -3530,7 +3530,7 @@ mod tests {
         frame_with_fonts(&mut page.view);
         let frame = || PictureFrame {
             pixels: vec![0; 4],
-            delay_ms: 100,
+            delay_ms: ambre_core::Millis(100),
         };
         let picture = Some(Picture {
             width: 1,

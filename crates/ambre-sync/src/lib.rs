@@ -1138,7 +1138,7 @@ impl SyncState {
                 |(access_token, refresh_token, access_expires_in)| http::TokenPair {
                     access_token: http::SecretToken::from(access_token),
                     refresh_token: http::SecretToken::from(refresh_token),
-                    access_expires_in,
+                    access_expires_in: ambre_core::Seconds(access_expires_in),
                 },
             ))),
             user_id: None,

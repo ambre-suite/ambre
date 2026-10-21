@@ -4488,7 +4488,9 @@ mod tests {
         state.handle_logic_event(LogicEvent::FinalizeLeaseAnswered {
             channel_id,
             segment: closing,
-            answer: LeaseAnswer::Deferred { retry_in: 5_000 },
+            answer: LeaseAnswer::Deferred {
+                retry_in: ambre_core::Millis(5_000),
+            },
         });
         command(
             &mut state,
@@ -4514,7 +4516,7 @@ mod tests {
             answer: LeaseAnswer::Granted {
                 lease: LeaseId::new(),
                 horizon: ambre_core::Seq(1),
-                expires_in: 30_000,
+                expires_in: ambre_core::Millis(30_000),
             },
         });
         command(
@@ -4559,7 +4561,7 @@ mod tests {
             answer: LeaseAnswer::Granted {
                 lease: LeaseId::new(),
                 horizon: ambre_core::Seq(1),
-                expires_in: 30_000,
+                expires_in: ambre_core::Millis(30_000),
             },
         });
         command(state, channel_id, MurmureCommand::Tick { now });
@@ -5182,7 +5184,7 @@ mod tests {
                 horizon: ambre_core::Seq(1),
                 amendments,
                 amendments_seq: ambre_core::Seq(0),
-                expires_in: 30_000,
+                expires_in: ambre_core::Millis(30_000),
             },
         });
         command(
