@@ -29,10 +29,10 @@ fn seal_blob(
 fn open_blob(
     blob: &[u8],
     document_id: DocumentId,
-    content_hash: &str,
+    content_hash: &ambre_core::ContentHash,
     doc_key: &DocumentKey,
 ) -> Result<Vec<u8>, String> {
-    let address: Address = hex::decode(content_hash)
+    let address: Address = hex::decode(content_hash.as_str())
         .ok()
         .and_then(|bytes| bytes.try_into().ok())
         .ok_or_else(|| format!("not an address: {content_hash}"))?;
@@ -48,7 +48,7 @@ fn open_blob(
 /// cached one, or one the chain recovers (`SYNC-042`, `SYNC-045`).
 fn open_blob_named(
     blob: &[u8],
-    content_hash: &str,
+    content_hash: &ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
 ) -> Result<Vec<u8>, String> {
     let wanted = pipeline::object_key(blob).map_err(|e| e.to_string())?;
@@ -110,7 +110,7 @@ impl SyncState {
             return;
         };
         let address = ambre_crypto::commitment::media_address(&doc_key, &data);
-        let content_hash = hex::encode(address);
+        let content_hash = ambre_core::ContentHash(hex::encode(address));
         let Some(tx) = event_tx else {
             self.reply(
                 id,
@@ -178,7 +178,7 @@ impl SyncState {
         &self,
         id: RequestId,
         document_id: DocumentId,
-        content_hash: String,
+        content_hash: ambre_core::ContentHash,
     ) {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
@@ -224,7 +224,7 @@ impl SyncState {
         &self,
         id: RequestId,
         document_id: DocumentId,
-        content_hash: String,
+        content_hash: ambre_core::ContentHash,
     ) {
         let Some(tx) = self.event_tx.clone() else {
             self.reply(
@@ -325,7 +325,7 @@ async fn upload_media(
         doc_key,
         signing_key,
     } = upload;
-    let content_hash = hex::encode(address);
+    let content_hash = ambre_core::ContentHash(hex::encode(address));
     let outcome = match seal_blob(&data, document_id, &address, &doc_key, &signing_key) {
         Ok(blob) => upload_leg(http, base, &content_hash, &blob).await,
         Err(e) => Err(format!("seal: {e}")),
@@ -349,7 +349,7 @@ async fn download_media(
     http: &impl MediaHttp,
     base: &str,
     id: RequestId,
-    content_hash: String,
+    content_hash: ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
@@ -377,7 +377,7 @@ async fn erase_media(
     base: &str,
     id: RequestId,
     document_id: DocumentId,
-    content_hash: String,
+    content_hash: ambre_core::ContentHash,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
@@ -399,7 +399,7 @@ async fn erase_media(
 async fn upload_leg(
     http: &impl MediaHttp,
     base: &str,
-    content_hash: &str,
+    content_hash: &ambre_core::ContentHash,
     blob: &pipeline::SealedBlob,
 ) -> Result<(), String> {
     let size = blob.len() as u64;
@@ -407,7 +407,7 @@ async fn upload_leg(
         .post_json(
             &format!("{base}/media/upload-url"),
             &http::UploadUrlRequest {
-                content_hash: ambre_core::ContentHash::from(content_hash),
+                content_hash: content_hash.clone(),
                 size_bytes: ambre_core::ByteSize(size),
             },
         )
@@ -420,7 +420,7 @@ async fn upload_leg(
     http.post_json::<_, http::WriteAnswer>(
         &format!("{base}/media"),
         &http::ConfirmUploadRequest {
-            content_hash: ambre_core::ContentHash::from(content_hash),
+            content_hash: content_hash.clone(),
             size_bytes: ambre_core::ByteSize(size),
         },
     )
@@ -434,14 +434,14 @@ async fn upload_leg(
 async fn download_leg(
     http: &impl MediaHttp,
     base: &str,
-    content_hash: &str,
+    content_hash: &ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
 ) -> Result<Vec<u8>, String> {
     let link: http::DownloadUrlResponse = http
         .post_json(
             &format!("{base}/media/download-url"),
             &http::DownloadUrlRequest {
-                content_hash: ambre_core::ContentHash::from(content_hash),
+                content_hash: content_hash.clone(),
             },
         )
         .await
@@ -480,7 +480,7 @@ mod tests {
             });
             let address = answer.expect("the upload answered with an address");
             let expected = hex::encode(ambre_crypto::commitment::media_address(&key, &picture));
-            assert_eq!(address, expected);
+            assert_eq!(address, ambre_core::ContentHash(expected));
             addresses.push(address);
         }
         assert_ne!(addresses[0], addresses[1]);
@@ -682,7 +682,7 @@ mod tests {
         assert!(matches!(
             &sent[..],
             [SyncEvent::MediaUploaded { id: answered, content_hash, .. }]
-                if *answered == id && *content_hash == hex::encode(address)
+                if *answered == id && *content_hash == ambre_core::ContentHash(hex::encode(address))
         ));
     }
 
@@ -732,11 +732,18 @@ mod tests {
         ));
     }
 
-    fn sealed(data: &[u8], document_id: DocumentId, key: &DocumentKey) -> (Vec<u8>, String) {
+    fn sealed(
+        data: &[u8],
+        document_id: DocumentId,
+        key: &DocumentKey,
+    ) -> (Vec<u8>, ambre_core::ContentHash) {
         let signing = SigningKey::from_bytes(&[0x07; 32]);
         let address = ambre_crypto::commitment::media_address(key, data);
         let blob = seal_blob(data, document_id, &address, key, &signing).unwrap();
-        (blob.as_bytes().to_vec(), hex::encode(address))
+        (
+            blob.as_bytes().to_vec(),
+            ambre_core::ContentHash(hex::encode(address)),
+        )
     }
 
     /// A picture sealed before two rotations opens with the current key and
@@ -807,6 +814,6 @@ mod tests {
             b"other bytes"
         );
         assert!(open_blob(forged, document_id, &wanted, &key).is_err());
-        assert!(open_blob(forged, document_id, "not hex", &key).is_err());
+        assert!(open_blob(forged, document_id, &"not hex".into(), &key).is_err());
     }
 }

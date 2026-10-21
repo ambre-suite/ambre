@@ -435,7 +435,7 @@ fn the_draft_is_dropped_only_with_its_block() {
         },
     );
     rig.ui.apply_event(&ProseEvent::MediaArrived {
-        content_hash: "abc".to_owned(),
+        content_hash: ambre_core::ContentHash("abc".to_owned()),
         blocks: Vec::new(),
     });
     rig.ui.apply_event(&ProseEvent::RemoteCursors {

@@ -307,7 +307,7 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         };
         if let Some(slot) = pending.outstanding.remove(&id) {
-            rewrite_hash(&mut pending.batch, slot, &content_hash);
+            rewrite_hash(&mut pending.batch, slot, content_hash.as_str());
         }
         let ready = pending.outstanding.is_empty();
         if !ready {
@@ -876,7 +876,7 @@ mod tests {
             id,
             RestEvent::MediaUploaded {
                 document_id: DocumentId::new(),
-                content_hash: "realhash".to_owned(),
+                content_hash: ambre_core::ContentHash("realhash".to_owned()),
             },
         );
         assert!(has_report(&done));
@@ -913,7 +913,7 @@ mod tests {
             first_upload_id(&out),
             RestEvent::MediaUploaded {
                 document_id: DocumentId::new(),
-                content_hash: "realhash".to_owned(),
+                content_hash: ambre_core::ContentHash("realhash".to_owned()),
             },
         );
         let pages = st.pdf_pages(crate::logic::interop::PageSize::default());
@@ -956,7 +956,7 @@ mod tests {
             first_upload_id(&out),
             RestEvent::MediaUploaded {
                 document_id: DocumentId::new(),
-                content_hash: "realhash".to_owned(),
+                content_hash: ambre_core::ContentHash("realhash".to_owned()),
             },
         );
         assert_eq!((st.element_count(), st.media_count()), (1, 1));
@@ -996,7 +996,7 @@ mod tests {
             RequestId::next(),
             RestEvent::MediaUploaded {
                 document_id: DocumentId::new(),
-                content_hash: "orphan".to_owned(),
+                content_hash: ambre_core::ContentHash("orphan".to_owned()),
             },
         );
         assert!(out.display.is_empty());

@@ -19,6 +19,18 @@ impl ContentHash {
     }
 }
 
+impl std::fmt::Display for ContentHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::borrow::Borrow<str> for ContentHash {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl From<&str> for ContentHash {
     fn from(text: &str) -> Self {
         Self(text.to_owned())

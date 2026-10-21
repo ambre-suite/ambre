@@ -374,7 +374,7 @@ pub enum RestCommand {
     /// Download a media file. -> `MediaDownloaded`.
     DownloadMedia {
         document_id: DocumentId,
-        content_hash: String,
+        content_hash: ambre_core::ContentHash,
     },
     /// Erase this user's upload of a media file. -> `MediaErased`.
     ///
@@ -383,7 +383,7 @@ pub enum RestCommand {
     /// answers `MediaErased` too; only a failure to reach the relay is an error.
     EraseMedia {
         document_id: DocumentId,
-        content_hash: String,
+        content_hash: ambre_core::ContentHash,
     },
 
     // -- The native file (`.ambre`) ----------------------------------------------
@@ -472,7 +472,7 @@ pub enum RestEvent {
     AccountSetupRequired,
     /// Display `recovery_words` **exactly once**; they cannot be retrieved later.
     AccountCreated {
-        recovery_words: String,
+        recovery_words: SecretString,
     },
     PassphraseChanged,
     AccountRecovered,
@@ -546,17 +546,17 @@ pub enum RestEvent {
     // -- Media -------------------------------------------------------------------
     MediaUploaded {
         document_id: DocumentId,
-        content_hash: String,
+        content_hash: ambre_core::ContentHash,
     },
     MediaDownloaded {
         document_id: DocumentId,
-        content_hash: String,
+        content_hash: ambre_core::ContentHash,
         /// Decrypted raw media bytes, ready for display.
         data: Vec<u8>,
     },
     MediaErased {
         document_id: DocumentId,
-        content_hash: String,
+        content_hash: ambre_core::ContentHash,
     },
 
     // -- The native file (`.ambre`) ----------------------------------------------

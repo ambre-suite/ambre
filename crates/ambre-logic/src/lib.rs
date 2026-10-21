@@ -766,10 +766,10 @@ struct LogicState {
     handing_off: HashMap<ambre_bus::RequestId, (ambre_bus::RequestId, DocumentId)>,
     /// The erases of a deleted message's files the relay has not answered,
     /// each with the document its file is stored under and its address.
-    erasing: HashMap<ambre_bus::RequestId, (DocumentId, String)>,
+    erasing: HashMap<ambre_bus::RequestId, (DocumentId, ambre_core::ContentHash)>,
     /// The erases that did not reach the relay, asked again on the next
     /// connection (`ambre-spec-murmure-attachments.md`).
-    erase_owed: Vec<(DocumentId, String)>,
+    erase_owed: Vec<(DocumentId, ambre_core::ContentHash)>,
     /// The images fetched for a preview the relay has not answered, each
     /// with the channel whose view asked.
     picturing: HashMap<ambre_bus::RequestId, (ambre_bus::ChannelId, ambre_bus::MediaRef)>,

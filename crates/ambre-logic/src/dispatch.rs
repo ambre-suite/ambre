@@ -2006,11 +2006,11 @@ mod tests {
             },
             RestCommand::DownloadMedia {
                 document_id: doc,
-                content_hash: "h".to_owned(),
+                content_hash: ambre_core::ContentHash("h".to_owned()),
             },
             RestCommand::EraseMedia {
                 document_id: doc,
-                content_hash: "h".to_owned(),
+                content_hash: ambre_core::ContentHash("h".to_owned()),
             },
             RestCommand::SealDocFile {
                 plaintext: secret(),

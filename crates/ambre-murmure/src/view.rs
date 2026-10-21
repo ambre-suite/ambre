@@ -3334,7 +3334,7 @@ mod tests {
 
         let evt = RestEvent::MediaUploaded {
             document_id: DocumentId::new(),
-            content_hash: HASH.to_owned(),
+            content_hash: ambre_core::ContentHash(HASH.to_owned()),
         };
         page.events
             .try_send(UiEvent::Rest { id, evt })
@@ -3384,7 +3384,7 @@ mod tests {
         let id = drop_file(&mut page, channel, "a.png");
         let evt = RestEvent::MediaUploaded {
             document_id: DocumentId::new(),
-            content_hash: HASH.to_owned(),
+            content_hash: ambre_core::ContentHash(HASH.to_owned()),
         };
         page.events
             .try_send(UiEvent::Rest { id, evt })
@@ -3436,7 +3436,7 @@ mod tests {
         assert_eq!((channel_id, media_ref.as_str()), (channel, HASH));
         let evt = RestEvent::MediaDownloaded {
             document_id: DocumentId::new(),
-            content_hash: HASH.to_owned(),
+            content_hash: ambre_core::ContentHash(HASH.to_owned()),
             data: vec![1, 2, 3],
         };
         page.events

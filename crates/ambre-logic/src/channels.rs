@@ -1327,7 +1327,7 @@ impl LogicState {
                     id,
                     cmd: RestCommand::DownloadMedia {
                         document_id,
-                        content_hash: media_ref.as_str().to_owned(),
+                        content_hash: ambre_core::ContentHash::from(media_ref.as_str()),
                     },
                 });
             }
@@ -3691,7 +3691,7 @@ mod tests {
     }
 
     /// The erase a delete asks for, as `(request, document, file)`.
-    fn erases(sent: &[SyncCommand]) -> Vec<(RequestId, DocumentId, String)> {
+    fn erases(sent: &[SyncCommand]) -> Vec<(RequestId, DocumentId, ambre_core::ContentHash)> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {
@@ -3745,7 +3745,7 @@ mod tests {
                         cmd: RestCommand::DownloadMedia { document_id: d2, content_hash },
                     },
                 ] if *a == up && *b == down && *d1 == meta && *d2 == meta
-                    && data == &[1, 2, 3] && content_hash == file.as_str()
+                    && data == &[1, 2, 3] && content_hash.as_str() == file.as_str()
             ),
             "got {sent:?}"
         );
@@ -3832,7 +3832,7 @@ mod tests {
             id: again,
             evt: RestEvent::MediaErased {
                 document_id: meta,
-                content_hash: file.clone(),
+                content_hash: ambre_core::ContentHash(file.clone()),
             },
         });
         assert!(drain(&ui).is_empty(), "no view awaits the erase");
@@ -3847,7 +3847,7 @@ mod tests {
     }
 
     /// The image of a preview, as `(request, document, file)`.
-    fn downloads(sent: &[SyncCommand]) -> Vec<(RequestId, DocumentId, String)> {
+    fn downloads(sent: &[SyncCommand]) -> Vec<(RequestId, DocumentId, ambre_core::ContentHash)> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {
@@ -3895,7 +3895,7 @@ mod tests {
             id: *id,
             evt: RestEvent::MediaDownloaded {
                 document_id: meta,
-                content_hash: file.as_str().to_owned(),
+                content_hash: ambre_core::ContentHash(file.as_str().to_owned()),
                 data: png,
             },
         });

@@ -260,7 +260,7 @@ enum SyncEvent {
     },
     AccountCreated {
         id: RequestId,
-        recovery_words: String,
+        recovery_words: ambre_bus::SecretString,
         master_seed: MasterSeed,
         signing_key: SigningKey,
         exchange_key: StaticSecret,
@@ -579,13 +579,13 @@ enum SyncEvent {
     MediaUploaded {
         id: RequestId,
         document_id: DocumentId,
-        content_hash: String,
+        content_hash: ambre_core::ContentHash,
     },
     /// The relay holds no upload of this user's for the blob any more.
     MediaErased {
         id: RequestId,
         document_id: DocumentId,
-        content_hash: String,
+        content_hash: ambre_core::ContentHash,
     },
     /// Snapshot upload completed: the sealed blob was PUT to S3 and the server
     /// confirmed the insertion (and broadcast `SnapshotAvailable`). The returned
@@ -609,7 +609,7 @@ enum SyncEvent {
     MediaDownloaded {
         id: RequestId,
         document_id: DocumentId,
-        content_hash: String,
+        content_hash: ambre_core::ContentHash,
         data: Vec<u8>,
     },
 }

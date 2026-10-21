@@ -110,7 +110,7 @@ pub struct ProseState {
     undo: UndoManager,
     /// Decrypted picture bytes, by content hash. Session state: it never enters
     /// the document (`PROSE-044`) and it dies with the tab.
-    media_cache: HashMap<String, Vec<u8>>,
+    media_cache: HashMap<ambre_core::ContentHash, Vec<u8>>,
     /// The version vector already exported to Sync. A delta is every operation
     /// past it (`PROSE-050`, `PROSE-098`).
     last_exported_vv: VersionVector,
@@ -985,7 +985,11 @@ impl ProseState {
     ///
     /// It writes nothing to the document and produces no delta (`PROSE-061`):
     /// the cache is session state (`PROSE-044`).
-    pub fn on_media_downloaded(&mut self, content_hash: String, data: Vec<u8>) -> Vec<ProseEvent> {
+    pub fn on_media_downloaded(
+        &mut self,
+        content_hash: ambre_core::ContentHash,
+        data: Vec<u8>,
+    ) -> Vec<ProseEvent> {
         let blocks = self.blocks_showing(&content_hash);
         self.media_cache.insert(content_hash.clone(), data);
         vec![ProseEvent::MediaArrived {
@@ -996,7 +1000,7 @@ impl ProseState {
 
     /// The decrypted bytes of a cached picture, for the view that paints it.
     #[must_use]
-    pub fn cached_media(&self, content_hash: &str) -> Option<&[u8]> {
+    pub fn cached_media(&self, content_hash: &ambre_core::ContentHash) -> Option<&[u8]> {
         self.media_cache.get(content_hash).map(Vec::as_slice)
     }
 
@@ -1006,25 +1010,31 @@ impl ProseState {
     /// Test-only: `InsertImage` lands with the `Images` Story
     /// (`ambre-roadmap.md` E5).
     #[cfg(test)]
-    fn image_for_test(&mut self, content_hash: &str) -> Option<crate::events::BlockId> {
+    fn image_for_test(
+        &mut self,
+        content_hash: &ambre_core::ContentHash,
+    ) -> Option<crate::events::BlockId> {
         let id = doc::create_block(&self.doc, None, crate::events::BlockType::Image)?;
         let tree = doc::blocks(&self.doc);
         let node = doc::node_of(&tree, &id)?;
         let attrs = doc::map_at(&node, doc::K_ATTRS)?;
-        attrs.insert("content_hash", content_hash).ok()?;
+        attrs.insert("content_hash", content_hash.as_str()).ok()?;
         self.doc.commit();
         Some(crate::events::block_id(id))
     }
 
     /// The live image blocks addressing one content hash. Sorted, so two peers
     /// name them in one order.
-    fn blocks_showing(&self, content_hash: &str) -> Vec<crate::events::BlockId> {
+    fn blocks_showing(
+        &self,
+        content_hash: &ambre_core::ContentHash,
+    ) -> Vec<crate::events::BlockId> {
         let tree = doc::blocks(&self.doc);
         let mut ids: Vec<TreeID> = tree
             .nodes()
             .into_iter()
             .filter(|id| doc::block_type_of(&tree, id) == Some(crate::events::BlockType::Image))
-            .filter(|id| self.image_hash(id).as_deref() == Some(content_hash))
+            .filter(|id| self.image_hash(id).as_deref() == Some(content_hash.as_str()))
             .collect();
         ids.sort();
         ids.into_iter().map(block_id).collect()
@@ -1619,8 +1629,9 @@ mod tests {
     fn a_picture_arriving_writes_nothing_to_the_document() {
         let mut state = ProseState::new().expect("a document is built");
         let before = state.export_snapshot();
-        let events = state.on_media_downloaded("abc".to_owned(), vec![1, 2, 3]);
-        assert_eq!(state.cached_media("abc"), Some(&[1u8, 2, 3][..]));
+        let events =
+            state.on_media_downloaded(ambre_core::ContentHash("abc".to_owned()), vec![1, 2, 3]);
+        assert_eq!(state.cached_media(&"abc".into()), Some(&[1u8, 2, 3][..]));
         assert_eq!(events.len(), 1);
         assert_eq!(state.export_snapshot().len(), before.len());
     }
@@ -1634,13 +1645,16 @@ mod tests {
     fn a_picture_arriving_names_every_block_that_shows_it() {
         let mut state = ProseState::new().expect("a document is built");
         let shown = state
-            .image_for_test("a-content-hash")
+            .image_for_test(&"a-content-hash".into())
             .expect("an image block");
         let other = state
-            .image_for_test("another-hash")
+            .image_for_test(&"another-hash".into())
             .expect("an image block");
 
-        let events = state.on_media_downloaded("a-content-hash".to_owned(), vec![9]);
+        let events = state.on_media_downloaded(
+            ambre_core::ContentHash("a-content-hash".to_owned()),
+            vec![9],
+        );
         let named = events
             .iter()
             .find_map(|e| match e {
@@ -1672,8 +1686,11 @@ mod tests {
             text: "same text".to_owned(),
         });
         let before = state.export_snapshot();
-        state.on_media_downloaded("a-hash".to_owned(), vec![1, 2, 3, 4]);
-        assert!(state.cached_media("a-hash").is_some());
+        state.on_media_downloaded(
+            ambre_core::ContentHash("a-hash".to_owned()),
+            vec![1, 2, 3, 4],
+        );
+        assert!(state.cached_media(&"a-hash".into()).is_some());
         // The cache is session state: the bytes the document exports are the
         // ones it exported before the picture arrived.
         assert_eq!(state.export_snapshot(), before);
@@ -1689,7 +1706,7 @@ mod tests {
             "a restored stack retracts nothing"
         );
         assert_eq!(restored.text_of(&block).as_deref(), Some("same text"));
-        assert!(restored.cached_media("a-hash").is_none());
+        assert!(restored.cached_media(&"a-hash".into()).is_none());
     }
 
     /// The history state each command reports, if any.

@@ -1034,7 +1034,7 @@ mod tests {
         let mut state = ProseUiState::default();
         state.draft.push_str(1, "hel", &block, 0);
         state.apply_event(&ProseEvent::MediaArrived {
-            content_hash: "abc".to_owned(),
+            content_hash: ambre_core::ContentHash("abc".to_owned()),
             blocks: Vec::new(),
         });
         assert_eq!(state.draft.text_of(block, ""), "hel");

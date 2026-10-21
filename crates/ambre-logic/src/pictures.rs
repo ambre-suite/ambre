@@ -44,7 +44,7 @@ impl LogicState {
             return;
         }
         let id = RequestId::next();
-        let content_hash = asked.1.as_str().to_owned();
+        let content_hash = ambre_core::ContentHash::from(asked.1.as_str());
         self.picturing.insert(id, asked);
         self.send_to_sync(SyncCommand::Rest {
             id,

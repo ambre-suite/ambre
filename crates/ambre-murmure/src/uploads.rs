@@ -118,9 +118,13 @@ impl Uploads {
     /// The relay stored the file of `id` under `content_hash`. An address
     /// this build cannot read fails the upload. `None` for a request this
     /// model never held.
-    pub fn uploaded(&mut self, id: RequestId, content_hash: &str) -> Option<Uploaded> {
+    pub fn uploaded(
+        &mut self,
+        id: RequestId,
+        content_hash: &ambre_core::ContentHash,
+    ) -> Option<Uploaded> {
         let pending = self.pending.remove(&id)?;
-        let Some(media_ref) = MediaRef::parse(content_hash) else {
+        let Some(media_ref) = MediaRef::parse(content_hash.as_str()) else {
             return Some(Uploaded::Failed {
                 of: pending.of,
                 name: pending.name,
@@ -224,7 +228,7 @@ mod tests {
         assert!(uploads.busy(of));
         assert!(uploads.ready(of).is_empty());
         assert_eq!(
-            uploads.uploaded(RequestId(1), HASH),
+            uploads.uploaded(RequestId(1), &HASH.into()),
             Some(Uploaded::Ready(of))
         );
         assert!(!uploads.busy(of));
@@ -248,7 +252,10 @@ mod tests {
             })
         };
         assert_eq!(uploads.failed(RequestId(1)), failed("a.png"));
-        assert_eq!(uploads.uploaded(RequestId(2), "not-hex"), failed("b.png"));
+        assert_eq!(
+            uploads.uploaded(RequestId(2), &"not-hex".into()),
+            failed("b.png")
+        );
         assert!(!uploads.busy(of));
         assert!(uploads.ready(of).is_empty());
         assert_eq!(uploads.failed(RequestId(3)), None);

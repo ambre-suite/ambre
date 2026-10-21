@@ -16,11 +16,11 @@ impl LogicState {
     /// Ask the relay to erase each of `files`, stored under `document_id`.
     pub(crate) fn erase_files(&mut self, document_id: DocumentId, files: Vec<MediaRef>) {
         for file in files {
-            self.erase(document_id, file.as_str().to_owned());
+            self.erase(document_id, ambre_core::ContentHash::from(file.as_str()));
         }
     }
 
-    fn erase(&mut self, document_id: DocumentId, content_hash: String) {
+    fn erase(&mut self, document_id: DocumentId, content_hash: ambre_core::ContentHash) {
         let id = RequestId::next();
         self.erasing.insert(id, (document_id, content_hash.clone()));
         self.send_to_sync(SyncCommand::Rest {

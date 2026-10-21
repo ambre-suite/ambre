@@ -377,7 +377,7 @@ impl SyncState {
         if let Some(tx) = event_tx {
             wasm_bindgen_futures::spawn_local(async move {
                 let master_seed = MasterSeed::generate();
-                let recovery_words = encode(master_seed.recovery_bytes());
+                let recovery_words = SecretString::new(encode(master_seed.recovery_bytes()));
                 let signing_key = master_seed.derive_signing_key();
                 let exchange_key = master_seed.derive_exchange_key();
                 let signing_pub_key =
@@ -457,7 +457,7 @@ impl SyncState {
             let master_seed = MasterSeed::generate();
             self.signing_key = Some(master_seed.derive_signing_key());
             self.exchange_key = Some(master_seed.derive_exchange_key());
-            let recovery_words = encode(master_seed.recovery_bytes());
+            let recovery_words = SecretString::new(encode(master_seed.recovery_bytes()));
             self.master_seed = Some(master_seed);
             self.open_websocket();
             self.reply(id, RestEvent::AccountCreated { recovery_words });

@@ -1348,7 +1348,7 @@ pub enum ProseEvent {
     /// (`PROSE-059`, `PROSE-060`). The bytes stay in the Logic thread's cache;
     /// the view asks for them when it paints.
     MediaArrived {
-        content_hash: String,
+        content_hash: ambre_core::ContentHash,
         blocks: Vec<BlockId>,
     },
     /// A full-state read the schema gate refused (`SCHEMA-008`).
