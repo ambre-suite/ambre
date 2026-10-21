@@ -20,7 +20,7 @@ pub struct CreateOrgRequest {
     pub org_pubkey: ambre_core::ExchangeKeyHex,
     pub shamir_threshold: i16,
     pub shamir_total: i16,
-    /// First member (owner) encrypted Shamir share (base64 or hex).
+    /// First member (owner) encrypted Shamir share, URL-safe base64.
     pub owner_shamir_share_enc: Option<ambre_core::SealedShare>,
 }
 #[derive(serde::Serialize)]
@@ -51,7 +51,7 @@ pub struct AddMemberRequest {
     /// A role word, parsed by the handler: an unknown word answers 409.
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
-    /// Encrypted Shamir share for this member (base64 or hex).
+    /// Encrypted Shamir share for this member, URL-safe base64.
     pub shamir_share_enc: Option<ambre_core::SealedShare>,
 }
 
@@ -180,15 +180,6 @@ pub async fn create_org(
     let org_pubkey = hex::decode(req.org_pubkey.as_str()).map_err(|e| AppError::Conflict {
         detail: format!("invalid org_pubkey hex: {e}"),
     })?;
-    let owner_share_enc = req
-        .owner_shamir_share_enc
-        .as_ref()
-        .map(ambre_core::SealedShare::as_str)
-        .map(hex::decode)
-        .transpose()
-        .map_err(|e| AppError::Conflict {
-            detail: format!("invalid share hex: {e}"),
-        })?;
 
     let org = db::create_organization(
         &state.db,
@@ -197,7 +188,7 @@ pub async fn create_org(
         req.shamir_threshold,
         req.shamir_total,
         &owner_id,
-        owner_share_enc.as_deref(),
+        req.owner_shamir_share_enc.as_ref(),
     )
     .await?;
 
@@ -322,22 +313,12 @@ pub async fn add_member(
         }
     }
 
-    let share_enc = req
-        .shamir_share_enc
-        .as_ref()
-        .map(ambre_core::SealedShare::as_str)
-        .map(hex::decode)
-        .transpose()
-        .map_err(|e| AppError::Conflict {
-            detail: format!("invalid share hex: {e}"),
-        })?;
-
     db::add_org_member(
         &state.db,
         &org_id,
         &member_user_id,
         role,
-        share_enc.as_deref(),
+        req.shamir_share_enc.as_ref(),
     )
     .await?;
 
@@ -437,7 +418,7 @@ pub async fn update_member_role(
 /// server does not enforce (N1). When true threshold reconstruction lands, this gate
 /// is replaced by "collect k shares before releasing anything".
 ///
-/// Returns the target user's `org_master_key_enc` (hex-encoded bytes). The caller
+/// Returns the target user's `org_master_key_enc` (URL-safe base64). The caller
 /// decrypts it client-side with their copy of the organization private key, then
 /// re-encrypts it for the target user. Every recovery is logged (`log_org_recovery`).
 pub async fn recover_master_key(
@@ -471,7 +452,7 @@ pub async fn recover_master_key(
 
     Ok(axum::Json(RecoveredResponse {
         status: ambre_core::WriteStatus::Recovered,
-        master_key_enc: ambre_core::WrappedMasterKey(hex::encode(&org_master_key_enc)),
+        master_key_enc: org_master_key_enc,
     }))
 }
 
@@ -588,7 +569,7 @@ mod tests {
             email: "user@test.com".into(),
             display_name: "Test User".into(),
             role: Role::Admin,
-            shamir_share_enc: Some(vec![1, 2, 3]),
+            shamir_share_enc: Some(ambre_core::SealedShare::new(Vec::from(vec![1, 2, 3]))),
             created_at: chrono::Utc::now(),
         };
         let resp = member_to_response(&member);
@@ -1155,7 +1136,9 @@ mod tests {
             for released in 1..=2 {
                 let (status, body) = release().await;
                 assert_eq!(status, StatusCode::OK);
-                assert!(body.contains(&hex::encode([0xA5u8; 48])));
+                assert!(
+                    body.contains(&ambre_core::WrappedMasterKey::new(vec![0xA5u8; 48]).to_base64())
+                );
                 let records: Vec<(String, String, String)> = sqlx::query_as(
                     "SELECT org_id::text, target_user_id::text, recovered_by::text \
                      FROM org_recovery_log",
@@ -1181,7 +1164,7 @@ mod tests {
             let (status, body) = release().await;
             assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
             assert!(
-                !body.contains(&hex::encode([0xA5u8; 48])),
+                !body.contains(&ambre_core::WrappedMasterKey::new(vec![0xA5u8; 48]).to_base64()),
                 "an unrecorded release answers no key"
             );
         }

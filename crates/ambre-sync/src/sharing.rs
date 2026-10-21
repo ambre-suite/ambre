@@ -13,7 +13,6 @@
 
 use ambre_crypto::DocumentKey;
 use ambre_protocol::{EntryDigest, MembershipAct};
-use base64::Engine;
 use ed25519_dalek::SigningKey;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -55,9 +54,7 @@ pub(crate) fn wrap_anchored_b64(
     let wrapped = ambre_crypto::ecdh::wrap_anchored(my_xk, peer_pub, doc_key, anchor.as_ref())?;
     let mut enc = wrapped.nonce.to_vec();
     enc.extend_from_slice(&wrapped.ciphertext);
-    Ok(ambre_core::WrappedDocKey(
-        base64::engine::general_purpose::URL_SAFE.encode(&enc),
-    ))
+    Ok(ambre_core::WrappedDocKey::new(enc.to_vec()))
 }
 
 /// Unwraps our own copy of the key among `rows`, given as `(exchange key,
@@ -82,9 +79,7 @@ pub(crate) fn unwrap_own<'a>(
         .into_iter()
         .find(|(own, _, _)| **own == ours)
         .ok_or("own member entry not found")?;
-    let encrypted = base64::engine::general_purpose::URL_SAFE
-        .decode(enc.as_str())
-        .map_err(|e| format!("base64 decode doc_key_enc: {e}"))?;
+    let encrypted = enc.as_bytes();
     let (nonce, ciphertext) = encrypted
         .split_first_chunk::<24>()
         .map(|(nonce, ciphertext)| (*nonce, ciphertext.to_vec()))
@@ -1503,7 +1498,7 @@ mod tests {
             email: "m@test.local".into(),
             signing_pub_key: ambre_core::SigningKeyHex(String::new()),
             exchange_pub_key: ambre_core::ExchangeKeyHex(pub_hex.to_string()),
-            doc_key_enc: ambre_core::WrappedDocKey(String::new()),
+            doc_key_enc: ambre_core::WrappedDocKey::new(Vec::new()),
             role: Role::Editor,
             wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex(String::new()),
         }
@@ -1811,8 +1806,10 @@ mod tests {
         match &calls[2] {
             Call::Post(url, body) => {
                 assert!(url.ends_with("/share"));
-                let enc =
-                    &ambre_core::WrappedDocKey(body["doc_key_enc"].as_str().unwrap().to_owned());
+                let enc = &serde_json::from_value::<ambre_core::WrappedDocKey>(
+                    body["doc_key_enc"].clone(),
+                )
+                .unwrap();
                 assert!(unwrap_b64(&invitee_xk, &my_pub, enc).is_ok());
                 assert!(body.get("entry").is_none());
             }
@@ -1857,8 +1854,10 @@ mod tests {
                 assert!(url.ends_with("/share"));
                 assert_eq!(body["invitee_id"], INVITEE);
                 assert!(body.get("invitee_email").is_none());
-                let enc =
-                    &ambre_core::WrappedDocKey(body["doc_key_enc"].as_str().unwrap().to_owned());
+                let enc = &serde_json::from_value::<ambre_core::WrappedDocKey>(
+                    body["doc_key_enc"].clone(),
+                )
+                .unwrap();
                 assert!(unwrap_b64(&invitee_xk, &my_pub, enc).is_ok());
             }
             other => panic!("expected share POST, got {other:?}"),
@@ -2119,11 +2118,9 @@ mod tests {
 
     /// The link a request carried, read back as the relay would.
     fn posted_link(body: &serde_json::Value) -> ambre_protocol::KeyLink {
-        let text = body["link"].as_str().expect("the request carries a link");
-        let bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(text)
-            .unwrap();
-        ambre_protocol::KeyLink::decode(&bytes).unwrap()
+        let link: ambre_core::EncodedKeyLink =
+            serde_json::from_value(body["link"].clone()).expect("the request carries a link");
+        ambre_protocol::KeyLink::decode(link.as_bytes()).unwrap()
     }
 
     /// A members row, for the revoke and the debt tests.
@@ -3140,7 +3137,7 @@ mod tests {
             let mut texts = self.log.clone();
             texts.extend(
                 more.iter()
-                    .map(|text| ambre_core::EncodedLogEntry(text.to_string())),
+                    .map(|text| serde_json::from_value(serde_json::json!(text)).unwrap()),
             );
             walk_served_under(
                 self.document_id,
@@ -3183,7 +3180,7 @@ mod tests {
         let text = body["entry"]
             .as_str()
             .expect("the request carries an entry");
-        membership_log::decode(&[ambre_core::EncodedLogEntry(text.to_string())])
+        membership_log::decode(&[serde_json::from_value(serde_json::json!(text)).unwrap()])
             .pop()
             .expect("the entry decodes")
     }
@@ -3243,7 +3240,8 @@ mod tests {
             (MemberStanding::Verified, Some(Role::Editor))
         );
         let owner_pub = PublicKey::from(&owner.xk).to_bytes();
-        let enc = &ambre_core::WrappedDocKey(body["doc_key_enc"].as_str().unwrap().to_owned());
+        let enc = &serde_json::from_value::<ambre_core::WrappedDocKey>(body["doc_key_enc"].clone())
+            .unwrap();
         let (key, anchor) = unwrap_anchor_b64(&invitee_xk, &owner_pub, enc).unwrap();
         assert_eq!(key.id(), logged.doc_key.id());
         assert_eq!(anchor, Some(logged.anchor));

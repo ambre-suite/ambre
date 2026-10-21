@@ -248,7 +248,6 @@ pub async fn create_snapshot(
     Path(document_id): Path<String>,
     Json(req): Json<CreateSnapshotRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
@@ -277,13 +276,7 @@ pub async fn create_snapshot(
     }
     let pp = req
         .parent_snapshot_proof
-        .map(|p| {
-            base64::engine::general_purpose::URL_SAFE
-                .decode(p.as_str())
-                .map_err(|e| AppError::Conflict {
-                    detail: e.to_string(),
-                })
-        })
+        .map(|p| Ok::<_, AppError>(p))
         .transpose()?;
 
     // A snapshot cannot fold in a delta the relay never numbered. A horizon past
@@ -301,7 +294,7 @@ pub async fn create_snapshot(
         &state.db,
         &doc_id,
         &s.signing_pubkey,
-        pp.as_deref(),
+        pp.as_ref(),
         &req.update_clocks,
         &req.s3_key,
         covered,

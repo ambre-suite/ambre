@@ -56,18 +56,15 @@ pub(crate) async fn checked_entry(
     state: &AppState,
     auth: &auth::AuthSession,
     doc_id: ambre_core::DocumentId,
-    text: Option<&str>,
+    entry: Option<&ambre_core::EncodedLogEntry>,
     expected: Expected,
 ) -> Result<Option<db::LogEntry>, AppError> {
-    use base64::Engine;
     use ed25519_dalek::{Signature, VerifyingKey};
-    let Some(text) = text else {
+    let Some(sent) = entry else {
         return Ok(None);
     };
-    let bytes = base64::engine::general_purpose::URL_SAFE
-        .decode(text)
-        .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
-    let entry = ambre_protocol::MembershipEntry::decode(&bytes)
+    let bytes = sent.as_bytes();
+    let entry = ambre_protocol::MembershipEntry::decode(bytes)
         .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
     let member_key = db::get_user(&state.db, &expected.member)
         .await?
@@ -98,7 +95,7 @@ pub(crate) async fn checked_entry(
         .map_err(|_| AppError::InvalidSignature)?;
     Ok(Some(db::LogEntry {
         position: entry.position,
-        bytes,
+        bytes: sent.clone(),
     }))
 }
 
@@ -145,7 +142,6 @@ pub async fn invite_to_document(
     Path(document_id): Path<String>,
     Json(req): Json<InviteRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
@@ -219,11 +215,7 @@ pub async fn invite_to_document(
             return Err(AppError::Forbidden);
         }
     }
-    let doc_key_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(req.doc_key_enc.as_str())
-        .map_err(|e| AppError::Conflict {
-            detail: e.to_string(),
-        })?;
+    let doc_key_enc = req.doc_key_enc;
     let key_id = req.key_id;
     let expected = Expected {
         act: ambre_protocol::MembershipAct::Invite,
@@ -232,14 +224,7 @@ pub async fn invite_to_document(
         // The entry names the key the copy wraps (`SYNC-123`).
         key: Some(Some(key_id)),
     };
-    let entry = checked_entry(
-        &state,
-        &s,
-        doc_id,
-        req.entry.as_ref().map(ambre_core::EncodedLogEntry::as_str),
-        expected,
-    )
-    .await?;
+    let entry = checked_entry(&state, &s, doc_id, req.entry.as_ref(), expected).await?;
     db::invite_document_member(
         &state.db,
         &doc_id,
@@ -307,9 +292,7 @@ pub async fn revoke_from_document(
         role: None,
         key: Some(None),
     };
-    let text = body
-        .as_ref()
-        .and_then(|Json(body)| body.entry.as_ref().map(ambre_core::EncodedLogEntry::as_str));
+    let text = body.as_ref().and_then(|Json(body)| body.entry.as_ref());
     let entry = checked_entry(&state, &s, doc_id, text, expected).await?;
     // The removal posts no rotation, so the document owes one (`SRV-122`). The
     // mirror is raised first: no delta slips in between the commit and it.
@@ -409,7 +392,7 @@ pub async fn revoke_and_rotate(
     }
     let keys = decode_keys(&req.keys)?;
     let members = req.members;
-    let link = decode_link(req.link.as_str(), doc_id)?;
+    let link = decode_link(&req.link, doc_id)?;
     let expected = Expected {
         act: ambre_protocol::MembershipAct::Revoke,
         member: target,
@@ -417,14 +400,7 @@ pub async fn revoke_and_rotate(
         // The entry names the key the rotation installs.
         key: Some(Some(link.key)),
     };
-    let entry = checked_entry(
-        &state,
-        &s,
-        doc_id,
-        req.entry.as_ref().map(ambre_core::EncodedLogEntry::as_str),
-        expected,
-    )
-    .await?;
+    let entry = checked_entry(&state, &s, doc_id, req.entry.as_ref(), expected).await?;
     // A removal from a space leaves each of its private channels owing a
     // rotation (`SRV-136`), so their mirrors are raised first.
     let owing = db::private_channels_of_member(&state.db, &doc_id, &target).await?;
@@ -577,33 +553,22 @@ async fn restore_debt_mirror(state: &AppState, doc_id: &ambre_core::DocumentId) 
 }
 
 /// Decodes the wrapped copies of a rotation payload.
-fn decode_keys(entries: &[RotateKeyEntry]) -> Result<Vec<(ambre_core::UserId, Vec<u8>)>, AppError> {
-    use base64::Engine;
-    entries
+fn decode_keys(
+    entries: &[RotateKeyEntry],
+) -> Result<Vec<(ambre_core::UserId, ambre_core::WrappedDocKey)>, AppError> {
+    Ok(entries
         .iter()
-        .map(|e| {
-            let uid = e.user_id;
-            let enc = base64::engine::general_purpose::URL_SAFE
-                .decode(e.doc_key_enc.as_str())
-                .map_err(|er| AppError::Conflict {
-                    detail: er.to_string(),
-                })?;
-            Ok((uid, enc))
-        })
-        .collect()
+        .map(|e| (e.user_id, e.doc_key_enc.clone()))
+        .collect())
 }
 
 /// Decodes a rotation's link and refuses one the relay must not store: a
 /// malformed one, one past the size bound, one of another document.
 fn decode_link(
-    text: &str,
+    sent: &ambre_core::EncodedKeyLink,
     doc_id: ambre_core::DocumentId,
 ) -> Result<ambre_protocol::KeyLink, AppError> {
-    use base64::Engine;
-    let bytes = base64::engine::general_purpose::URL_SAFE
-        .decode(text)
-        .map_err(|e| AppError::BadRequest(format!("link: {e}")))?;
-    let link = ambre_protocol::KeyLink::decode(&bytes)
+    let link = ambre_protocol::KeyLink::decode(sent.as_bytes())
         .map_err(|e| AppError::BadRequest(format!("link: {e}")))?;
     link.validate()
         .map_err(|e| AppError::BadRequest(format!("link: {e}")))?;
@@ -620,7 +585,6 @@ pub async fn list_key_links(
     auth: auth::AuthSession,
     Path(document_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     let doc_id = parse_doc_id(&document_id)?;
     // The admin who re-keys a public channel reads the chain it extends
     // (`SRV-146`).
@@ -631,13 +595,7 @@ pub async fn list_key_links(
     {
         return Err(AppError::Forbidden);
     }
-    let links: Vec<ambre_core::EncodedKeyLink> = db::document_key_links(&state.db, &doc_id)
-        .await?
-        .iter()
-        .map(|bytes| {
-            ambre_core::EncodedKeyLink(base64::engine::general_purpose::URL_SAFE.encode(bytes))
-        })
-        .collect();
+    let links = db::document_key_links(&state.db, &doc_id).await?;
     Ok(axum::Json(KeyLinksResponse { links }))
 }
 
@@ -694,7 +652,7 @@ pub async fn rotate_document_key(
 
     let keys = decode_keys(&req.keys)?;
     let members = req.members;
-    let link = decode_link(req.link.as_str(), doc_id)?;
+    let link = decode_link(&req.link, doc_id)?;
     db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys, &members, &link).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
     // The rotation landed, so the debt is cleared (`SRV-124`).

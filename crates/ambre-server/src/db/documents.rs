@@ -9,7 +9,7 @@ pub struct DocumentRow {
     pub id: ambre_core::DocumentId,
     pub owner_id: ambre_core::UserId,
     pub doc_type: ambre_core::DocType,
-    pub name_enc: Option<Vec<u8>>,
+    pub name_enc: Option<ambre_core::SealedName>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -20,10 +20,10 @@ pub struct DocumentSummaryRow {
     pub id: ambre_core::DocumentId,
     pub owner_id: ambre_core::UserId,
     pub doc_type: ambre_core::DocType,
-    pub name_enc: Option<Vec<u8>>,
+    pub name_enc: Option<ambre_core::SealedName>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub role: ambre_core::Role,
-    pub doc_key_enc: Vec<u8>,
+    pub doc_key_enc: ambre_core::WrappedDocKey,
     /// Exchange public key of the member who wrapped the caller's `doc_key_enc`
     /// (the inviter, or the owner at creation). `None` for a self-wrapped owner
     /// row on older data; the client then falls back to its own key.
@@ -51,7 +51,9 @@ pub async fn get_document(
             id: r.try_get::<PgId, _>("id")?.into(),
             owner_id: r.try_get::<PgId, _>("owner_id")?.into(),
             doc_type: decode_doc_type(r.try_get("doc_type")?)?,
-            name_enc: r.try_get("name_enc")?,
+            name_enc: r
+                .try_get::<Option<Vec<u8>>, _>("name_enc")?
+                .map(ambre_core::SealedName::new),
             created_at: r.try_get("created_at")?,
             updated_at: r.try_get("updated_at")?,
         })),
@@ -87,10 +89,12 @@ pub async fn list_documents_for_user(
                 id: r.try_get::<PgId, _>("id")?.into(),
                 owner_id: r.try_get::<PgId, _>("owner_id")?.into(),
                 doc_type: decode_doc_type(r.try_get("doc_type")?)?,
-                name_enc: r.try_get("name_enc")?,
+                name_enc: r
+                    .try_get::<Option<Vec<u8>>, _>("name_enc")?
+                    .map(ambre_core::SealedName::new),
                 updated_at: r.try_get("updated_at")?,
                 role: decode_role(r.try_get("role")?)?,
-                doc_key_enc: r.try_get("doc_key_enc")?,
+                doc_key_enc: ambre_core::WrappedDocKey::new(r.try_get("doc_key_enc")?),
                 wrapper_exchange_pubkey: decode_opt_key(r.try_get("wrapper_exchange_pubkey")?)?,
                 member_count: r.try_get("member_count")?,
             })
@@ -112,7 +116,7 @@ pub async fn create_document(
     pool: &PgPool,
     owner_id: &ambre_core::UserId,
     doc_type: ambre_core::DocType,
-    name_enc: Option<&[u8]>,
+    name_enc: Option<&ambre_core::SealedName>,
     document_id: Option<&ambre_core::DocumentId>,
 ) -> Result<(DocumentRow, bool), AppError> {
     let owner_uid = id_to_uuid(*owner_id);
@@ -123,7 +127,9 @@ pub async fn create_document(
             id: row.try_get::<PgId, _>("id")?.into(),
             owner_id: row.try_get::<PgId, _>("owner_id")?.into(),
             doc_type: decode_doc_type(row.try_get("doc_type")?)?,
-            name_enc: row.try_get("name_enc")?,
+            name_enc: row
+                .try_get::<Option<Vec<u8>>, _>("name_enc")?
+                .map(ambre_core::SealedName::new),
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
         })
@@ -139,7 +145,7 @@ pub async fn create_document(
             .bind(did)
             .bind(owner_uid)
             .bind(doc_type)
-            .bind(name_enc)
+            .bind(name_enc.map(|v| v.as_bytes()))
             .fetch_optional(pool)
             .await?;
 
@@ -163,7 +169,7 @@ pub async fn create_document(
             )
             .bind(owner_uid)
             .bind(doc_type)
-            .bind(name_enc)
+            .bind(name_enc.map(|v| v.as_bytes()))
             .fetch_one(pool)
             .await?;
             Ok((row_to_doc(row)?, true))
@@ -175,12 +181,12 @@ pub async fn create_document(
 pub async fn rename_document(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    name_enc: &[u8],
+    name_enc: &ambre_core::SealedName,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     sqlx::query("UPDATE documents SET name_enc = $2, updated_at = now() WHERE id = $1")
         .bind(did)
-        .bind(name_enc)
+        .bind(name_enc.as_bytes())
         .execute(pool)
         .await?;
     Ok(())

@@ -12,7 +12,6 @@ use std::collections::{HashMap, HashSet};
 use ambre_bus::MemberStanding;
 use ambre_core::{DocumentId, KeyId, Role, UserId};
 use ambre_protocol::{EntryDigest, MembershipAct, MembershipEntry};
-use base64::Engine as _;
 use ed25519_dalek::SigningKey;
 
 /// The rule of the owning application that accepts a member's own entry
@@ -342,9 +341,7 @@ pub(crate) fn sign(
 /// The encoder's error.
 pub(crate) fn encode(entry: &MembershipEntry) -> Result<ambre_core::EncodedLogEntry, String> {
     let bytes = entry.encode().map_err(|e| e.to_string())?;
-    Ok(ambre_core::EncodedLogEntry(
-        base64::engine::general_purpose::URL_SAFE.encode(bytes),
-    ))
+    Ok(ambre_core::EncodedLogEntry::new(bytes.to_vec()))
 }
 
 /// The entries a members answer carries, up to the first that does not
@@ -353,9 +350,7 @@ pub(crate) fn decode(texts: &[ambre_core::EncodedLogEntry]) -> Vec<MembershipEnt
     texts
         .iter()
         .map_while(|text| {
-            let bytes = base64::engine::general_purpose::URL_SAFE
-                .decode(text.as_str())
-                .ok()?;
+            let bytes = text.as_bytes();
             MembershipEntry::decode(&bytes).ok()
         })
         .collect()

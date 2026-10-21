@@ -58,7 +58,6 @@ use ambre_protocol::ws::{WsClientMsg, WsServerMsg, encode_client_msg};
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
 
-use base64::Engine;
 use hex::encode;
 
 /// Sink for events flowing Sync -> Logic. Sync no longer shares memory with the

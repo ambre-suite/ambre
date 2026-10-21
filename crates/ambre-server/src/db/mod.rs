@@ -60,6 +60,26 @@ pub(crate) fn decode_key(bytes: Vec<u8>) -> Result<ambre_core::PublicKey, sqlx::
     ambre_core::PublicKey::from_slice(&bytes).map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
+/// A stored document key identifier. Any length but its own is a decode
+/// error.
+fn decode_key_id(bytes: Vec<u8>) -> Result<ambre_core::KeyId, sqlx::Error> {
+    <[u8; ambre_core::KEY_ID_LEN]>::try_from(bytes.as_slice())
+        .map(ambre_core::KeyId::from_array)
+        .map_err(|_| sqlx::Error::Decode(format!("a key id of {} bytes", bytes.len()).into()))
+}
+
+/// A stored sealed value that may be `NULL`, read with
+/// `#[sqlx(try_from = "PgOptBytes")]` into its role type.
+#[derive(sqlx::Type)]
+#[sqlx(transparent)]
+pub(crate) struct PgOptBytes(Option<Vec<u8>>);
+
+impl<T: From<Vec<u8>>> From<PgOptBytes> for Option<T> {
+    fn from(PgOptBytes(bytes): PgOptBytes) -> Self {
+        bytes.map(T::from)
+    }
+}
+
 /// A stored public key that may be `NULL`, as [`decode_key`] reads one.
 fn decode_opt_key(bytes: Option<Vec<u8>>) -> Result<Option<ambre_core::PublicKey>, sqlx::Error> {
     bytes.map(decode_key).transpose()
@@ -178,8 +198,8 @@ mod tests {
             &pool,
             &ambre_core::Email::from("snap@test.dev"),
             "Snap",
-            &[1u8; 32],
-            &[2u8; 16],
+            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
+            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &[3u8; 32],
             &[4u8; 32],
         )
@@ -245,8 +265,8 @@ mod tests {
             &pool,
             &ambre_core::Email::from("purge@test.dev"),
             "Purge",
-            &[1u8; 32],
-            &[2u8; 16],
+            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
+            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &[3u8; 32],
             &[4u8; 32],
         )
@@ -317,8 +337,8 @@ mod tests {
             &pool,
             &ambre_core::Email::from("horizon@test.dev"),
             "Horizon",
-            &[1u8; 32],
-            &[2u8; 16],
+            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
+            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &[3u8; 32],
             &[4u8; 32],
         )

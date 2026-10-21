@@ -79,18 +79,9 @@ pub async fn setup_account(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SetupAccountRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     validate_identity(&req.email, &req.display_name)?;
-    let mk_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(req.master_key_enc.as_str())
-        .map_err(|e| AppError::Conflict {
-            detail: e.to_string(),
-        })?;
-    let mk_salt = base64::engine::general_purpose::URL_SAFE
-        .decode(req.master_key_salt.as_str())
-        .map_err(|e| AppError::Conflict {
-            detail: e.to_string(),
-        })?;
+    let mk_enc = req.master_key_enc;
+    let mk_salt = req.master_key_salt;
     let spk = hex::decode(req.signing_pubkey.as_str()).map_err(|e| AppError::Conflict {
         detail: e.to_string(),
     })?;
@@ -224,7 +215,6 @@ pub async fn list_documents(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     let s = auth;
     let docs = db::list_documents_for_user(&state.db, &s.user_id).await?;
     let json: Vec<_> = docs
@@ -236,13 +226,9 @@ pub async fn list_documents(
                 id: doc_id,
                 owner_id,
                 doc_type: d.doc_type,
-                name_enc: d.name_enc.map(|n| {
-                    ambre_core::SealedName(base64::engine::general_purpose::URL_SAFE.encode(&n))
-                }),
+                name_enc: d.name_enc.map(|n| n.clone()),
                 role: d.role,
-                doc_key_enc: ambre_core::WrappedDocKey(
-                    base64::engine::general_purpose::URL_SAFE.encode(&d.doc_key_enc),
-                ),
+                doc_key_enc: d.doc_key_enc.clone(),
                 wrapper_exchange_pub_key: d
                     .wrapper_exchange_pubkey
                     .map(ambre_core::ExchangeKeyHex::encode)
@@ -292,19 +278,9 @@ pub async fn create_document(
     auth: auth::AuthSession,
     Json(req): Json<CreateDocumentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     let s = auth;
 
-    let name_enc = req
-        .name_enc
-        .map(|n| {
-            base64::engine::general_purpose::URL_SAFE
-                .decode(n.as_str())
-                .map_err(|e| AppError::Conflict {
-                    detail: e.to_string(),
-                })
-        })
-        .transpose()?;
+    let name_enc = req.name_enc.map(|n| Ok::<_, AppError>(n)).transpose()?;
     // Only a Murmure document is a space (`SRV-217`).
     if req.space && req.doc_type != ambre_core::DocType::Murmure {
         return Err(AppError::BadRequest("a space is a Murmure document".into()));
@@ -314,7 +290,7 @@ pub async fn create_document(
         &state.db,
         &s.user_id,
         req.doc_type,
-        name_enc.as_deref(),
+        name_enc.as_ref(),
         client_id.as_ref(),
     )
     .await?;
@@ -333,18 +309,10 @@ pub async fn create_document(
         });
     }
     if created || owner_uuid == s.user_id {
-        let doc_key_enc = base64::engine::general_purpose::URL_SAFE
-            .decode(req.doc_key_enc.as_str())
-            .map_err(|e| AppError::Conflict {
-                detail: e.to_string(),
-            })?;
+        let doc_key_enc = req.doc_key_enc;
         // An owner's retry finds the first entry already stored, and the
         // log is never rewritten (`SYNC-107`).
-        let text = req
-            .entry
-            .as_ref()
-            .map(ambre_core::EncodedLogEntry::as_str)
-            .filter(|_| created);
+        let text = req.entry.as_ref().filter(|_| created);
         let expected = super::share::Expected {
             act: ambre_protocol::MembershipAct::Create,
             member: s.user_id,
@@ -398,7 +366,6 @@ pub async fn get_document(
     auth: auth::AuthSession,
     Path(document_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     // The extractor refuses an anonymous caller before the register is read, so
     // no query runs on behalf of nobody (`SRV-018`).
     let doc_id = parse_doc_id(&document_id)?;
@@ -422,15 +389,9 @@ pub async fn get_document(
         id: doc.id,
         owner_id: doc.owner_id,
         doc_type: doc.doc_type,
-        name_enc: doc
-            .name_enc
-            .map(|n| ambre_core::SealedName(base64::engine::general_purpose::URL_SAFE.encode(&n))),
+        name_enc: doc.name_enc.map(|n| n.clone()),
         role: mem.as_ref().map(|m| m.role),
-        doc_key_enc: mem.map(|m| {
-            ambre_core::WrappedDocKey(
-                base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
-            )
-        }),
+        doc_key_enc: mem.map(|m| m.doc_key_enc.clone()),
         created_at: doc.created_at.to_rfc3339(),
         updated_at: doc.updated_at.to_rfc3339(),
     }))
@@ -450,7 +411,6 @@ pub async fn rename_document(
     Path(document_id): Path<String>,
     Json(req): Json<RenameDocumentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
@@ -459,11 +419,7 @@ pub async fn rename_document(
     if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
-    let name_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(req.name_enc.as_str())
-        .map_err(|e| AppError::Conflict {
-            detail: e.to_string(),
-        })?;
+    let name_enc = req.name_enc;
     db::rename_document(&state.db, &doc_id, &name_enc).await?;
     tracing::debug!(document_id = %doc_id, by = %s.user_id, "document renamed");
     Ok(super::Done::json(ambre_core::WriteStatus::Renamed))
@@ -601,7 +557,6 @@ pub async fn list_document_members(
     auth: auth::AuthSession,
     Path(document_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     // A non-member and an absent document draw the same 404 (`SRV-005`). The
@@ -630,9 +585,7 @@ pub async fn list_document_members(
                 role: m.role,
                 signing_pub_key: ambre_core::SigningKeyHex::encode(&m.signing_pubkey),
                 exchange_pub_key: ambre_core::ExchangeKeyHex::encode(&m.exchange_pubkey),
-                doc_key_enc: ambre_core::WrappedDocKey(
-                    base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
-                ),
+                doc_key_enc: m.doc_key_enc.clone(),
                 wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex::encode(
                     m.wrapper_exchange_pubkey
                         .as_ref()
@@ -646,13 +599,7 @@ pub async fn list_document_members(
     let rotation_owed = db::rotation_owed(&state.db, &doc_id).await?;
     // The signed entries beside the rows, for a client to check them against
     // (`SRV-104`, `SYNC-108`).
-    let log: Vec<ambre_core::EncodedLogEntry> = db::membership_log(&state.db, &doc_id)
-        .await?
-        .iter()
-        .map(|bytes| {
-            ambre_core::EncodedLogEntry(base64::engine::general_purpose::URL_SAFE.encode(bytes))
-        })
-        .collect();
+    let log = db::membership_log(&state.db, &doc_id).await?;
     Ok(axum::Json(MembersResponse {
         members: json,
         rotation_owed,
@@ -708,14 +655,8 @@ pub async fn update_document_member_role(
         role: Some(role),
         key: Some(None),
     };
-    let entry = super::share::checked_entry(
-        &state,
-        &s,
-        doc_id,
-        req.entry.as_ref().map(ambre_core::EncodedLogEntry::as_str),
-        expected,
-    )
-    .await?;
+    let entry =
+        super::share::checked_entry(&state, &s, doc_id, req.entry.as_ref(), expected).await?;
     db::update_document_member_role(&state.db, &doc_id, &target, role, entry.as_ref()).await?;
     tracing::info!(document_id = %doc_id, target_user = %target, role = %role, by = %s.user_id, "member role updated");
     crate::redis_ops::members_changed(&state.redis, &doc_id).await;

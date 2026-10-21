@@ -17,8 +17,8 @@ pub struct UserRow {
     /// an OIDC login reclaims an unverified holder's email.
     pub email_verified: bool,
     pub display_name: String,
-    pub master_key_enc: Option<Vec<u8>>,
-    pub master_key_salt: Option<Vec<u8>>,
+    pub master_key_enc: Option<ambre_core::WrappedMasterKey>,
+    pub master_key_salt: Option<ambre_core::MasterKeySalt>,
     /// `None` until the account registers its keys: a provider login creates
     /// the account first (`SRV-027`). Both keys are set or neither is.
     pub signing_pubkey: Option<ambre_core::PublicKey>,
@@ -60,8 +60,12 @@ pub async fn get_user(
             email: ambre_core::Email(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
             display_name: r.try_get("display_name")?,
-            master_key_enc: r.try_get("master_key_enc")?,
-            master_key_salt: r.try_get("master_key_salt")?,
+            master_key_enc: r
+                .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
+                .map(ambre_core::WrappedMasterKey::new),
+            master_key_salt: r
+                .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
+                .map(ambre_core::MasterKeySalt::new),
             signing_pubkey: decode_opt_key(r.try_get("signing_pubkey")?)?,
             exchange_pubkey: decode_opt_key(r.try_get("exchange_pubkey")?)?,
         })),
@@ -106,8 +110,12 @@ pub async fn get_user_by_email(
             email: ambre_core::Email(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
             display_name: r.try_get("display_name")?,
-            master_key_enc: r.try_get("master_key_enc")?,
-            master_key_salt: r.try_get("master_key_salt")?,
+            master_key_enc: r
+                .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
+                .map(ambre_core::WrappedMasterKey::new),
+            master_key_salt: r
+                .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
+                .map(ambre_core::MasterKeySalt::new),
             signing_pubkey: decode_opt_key(r.try_get("signing_pubkey")?)?,
             exchange_pubkey: decode_opt_key(r.try_get("exchange_pubkey")?)?,
         })),
@@ -123,8 +131,8 @@ pub async fn create_user(
     pool: &PgPool,
     email: &ambre_core::Email,
     display_name: &str,
-    master_key_enc: &[u8],
-    master_key_salt: &[u8],
+    master_key_enc: &ambre_core::WrappedMasterKey,
+    master_key_salt: &ambre_core::MasterKeySalt,
     signing_pubkey: &[u8],
     exchange_pubkey: &[u8],
 ) -> Result<UserRow, AppError> {
@@ -133,8 +141,8 @@ pub async fn create_user(
     )
     .bind(email.as_str())
     .bind(display_name)
-    .bind(master_key_enc)
-    .bind(master_key_salt)
+    .bind(master_key_enc.as_bytes())
+    .bind(master_key_salt.as_bytes())
     .bind(signing_pubkey)
     .bind(exchange_pubkey)
     .fetch_one(pool)
@@ -150,8 +158,12 @@ pub async fn create_user(
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: row.try_get("display_name")?,
-        master_key_enc: row.try_get("master_key_enc")?,
-        master_key_salt: row.try_get("master_key_salt")?,
+        master_key_enc: row
+            .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
+            .map(ambre_core::WrappedMasterKey::new),
+        master_key_salt: row
+            .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
+            .map(ambre_core::MasterKeySalt::new),
         signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
         exchange_pubkey: decode_opt_key(row.try_get("exchange_pubkey")?)?,
     })
@@ -221,8 +233,12 @@ pub async fn upsert_user_from_oidc(
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: row.try_get("display_name")?,
-        master_key_enc: row.try_get("master_key_enc")?,
-        master_key_salt: row.try_get("master_key_salt")?,
+        master_key_enc: row
+            .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
+            .map(ambre_core::WrappedMasterKey::new),
+        master_key_salt: row
+            .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
+            .map(ambre_core::MasterKeySalt::new),
         signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
         exchange_pubkey: decode_opt_key(row.try_get("exchange_pubkey")?)?,
     };
@@ -276,8 +292,12 @@ pub async fn dev_upsert_user(
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: row.try_get("display_name")?,
-        master_key_enc: row.try_get("master_key_enc")?,
-        master_key_salt: row.try_get("master_key_salt")?,
+        master_key_enc: row
+            .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
+            .map(ambre_core::WrappedMasterKey::new),
+        master_key_salt: row
+            .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
+            .map(ambre_core::MasterKeySalt::new),
         signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
         exchange_pubkey: decode_opt_key(row.try_get("exchange_pubkey")?)?,
     })
@@ -322,14 +342,14 @@ pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>
 pub async fn update_master_key(
     pool: &PgPool,
     user_id: &ambre_core::UserId,
-    master_key_enc: &[u8],
-    master_key_salt: &[u8],
+    master_key_enc: &ambre_core::WrappedMasterKey,
+    master_key_salt: &ambre_core::MasterKeySalt,
 ) -> Result<(), AppError> {
     let uid = id_to_uuid(*user_id);
     sqlx::query("UPDATE users SET master_key_enc = $2, master_key_salt = $3 WHERE id = $1")
         .bind(uid)
-        .bind(master_key_enc)
-        .bind(master_key_salt)
+        .bind(master_key_enc.as_bytes())
+        .bind(master_key_salt.as_bytes())
         .execute(pool)
         .await?;
     Ok(())
@@ -387,8 +407,8 @@ mod tests {
             &pool,
             &ambre_core::Email::from("alice@example.com"),
             "Alice",
-            &[1u8; 32],
-            &[2u8; 16],
+            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
+            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &[3u8; 32],
             &[4u8; 32],
         )
@@ -446,8 +466,8 @@ mod tests {
             &pool,
             &ambre_core::Email::from("DAVE@example.com"),
             "Impostor",
-            &[9u8; 32],
-            &[8u8; 16],
+            &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
+            &ambre_core::MasterKeySalt::new([8u8; 16].to_vec()),
             &[7u8; 32],
             &[6u8; 32],
         )
@@ -519,8 +539,8 @@ mod tests {
             &pool,
             &ambre_core::Email::from("bob@example.com"),
             "Bob",
-            &[1u8; 32],
-            &[2u8; 16],
+            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
+            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &[3u8; 32],
             &[4u8; 32],
         )
@@ -531,8 +551,8 @@ mod tests {
             &pool,
             &ambre_core::Email::from("BOB@example.com"),
             "Impostor",
-            &[9u8; 32],
-            &[8u8; 16],
+            &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
+            &ambre_core::MasterKeySalt::new([8u8; 16].to_vec()),
             &[7u8; 32],
             &[6u8; 32],
         )
@@ -550,8 +570,8 @@ mod tests {
             &pool,
             &ambre_core::Email::from("carol@example.com"),
             "Carol",
-            &[1u8; 32],
-            &[2u8; 16],
+            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
+            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &[3u8; 32],
             &[4u8; 32],
         )

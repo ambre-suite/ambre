@@ -1290,9 +1290,7 @@ pub(crate) mod tests {
         exchange_key: &StaticSecret,
         doc_key_enc: &ambre_core::WrappedDocKey,
     ) -> Option<DocumentKey> {
-        let bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(doc_key_enc.as_str())
-            .ok()?;
+        let bytes = doc_key_enc.as_bytes();
         let (nonce, ciphertext) = bytes.split_first_chunk::<NONCE_LEN>()?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
             nonce: *nonce,
@@ -1621,7 +1619,7 @@ pub(crate) mod tests {
         let (space, bare) = (SpaceId::new(), SpaceId::new());
         let (public, private, direct) = (ChannelId::new(), ChannelId::new(), ChannelId::new());
         let meta = MetaId::new();
-        let keys = r#""doc_key_enc":"AA","wrapper_exchange_pub_key":"""#;
+        let keys = r#""doc_key_enc":"AA==","wrapper_exchange_pub_key":"""#;
         let body = format!(
             r#"{{"channels":[
                 {{"channel_id":"{public}","space_id":"{space}","public":true,"meta_id":"{meta}",{keys},"peers":["Eve"]}},
@@ -1711,8 +1709,9 @@ pub(crate) mod tests {
         let key = DocumentKey::generate();
         let wrapped =
             ambre_crypto::ecdh::wrap_document_key(&own, own_pub.as_bytes(), &key).unwrap();
-        let doc_key_enc = base64::engine::general_purpose::URL_SAFE
-            .encode([wrapped.nonce.as_slice(), &wrapped.ciphertext].concat());
+        let doc_key_enc = ambre_core::WrappedDocKey::new(
+            [wrapped.nonce.as_slice(), &wrapped.ciphertext].concat(),
+        );
         let entry =
             |meta: MetaId, name_enc: Option<ambre_core::SealedName>| http::MemberChannelEntry {
                 channel_id: ChannelId::new(),
@@ -1720,7 +1719,7 @@ pub(crate) mod tests {
                 public: false,
                 meta_id: meta,
                 name_enc,
-                doc_key_enc: ambre_core::WrappedDocKey(doc_key_enc.clone()),
+                doc_key_enc: doc_key_enc.clone(),
                 wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex(String::new()),
                 peers: Vec::new(),
                 meta_last: None,
@@ -1756,7 +1755,7 @@ pub(crate) mod tests {
         // Each key opens, and one that does not is left out.
         // Each keeps the last number of its meta, none where none is listed.
         let mut answer = answer;
-        answer.channels[3].doc_key_enc = ambre_core::WrappedDocKey("AA".to_owned());
+        answer.channels[3].doc_key_enc = ambre_core::WrappedDocKey::new(vec![0]);
         answer.channels[0].meta_last = Some(ambre_core::Seq(6));
         let keys: Vec<_> = listed_keys(&answer, &own)
             .into_iter()
@@ -1784,9 +1783,7 @@ pub(crate) mod tests {
         state.signing_key =
             Some(ambre_crypto::MasterSeed::from_array([5; 32]).derive_signing_key());
         let sealed = state.seal_channel_name(meta, &key, "Design").unwrap();
-        let bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(sealed.as_str())
-            .unwrap();
+        let bytes = sealed.as_bytes().to_vec();
         assert!(!bytes.windows(6).any(|w| w == b"Design"));
         let open = |document_id| crate::documents::open_name(document_id, &key, &bytes, Vec::new());
         assert_eq!(open(meta.document_id()).as_deref(), Some("Design"));
@@ -1815,9 +1812,9 @@ pub(crate) mod tests {
             let request = http::CreateDocumentRequest {
                 doc_type: DocType::Murmure,
                 name_enc: None,
-                doc_key_enc: ambre_core::WrappedDocKey(String::new()),
+                doc_key_enc: ambre_core::WrappedDocKey::new(Vec::new()),
                 document_id: Some(document_id),
-                entry: Some(ambre_core::EncodedLogEntry(String::new())),
+                entry: Some(ambre_core::EncodedLogEntry::new(Vec::new())),
                 space: state.new_spaces.contains(&document_id),
             };
             serde_json::to_value(request).expect("encodes")
@@ -1870,11 +1867,9 @@ pub(crate) mod tests {
     fn unwrap_from(
         holder: &StaticSecret,
         sender: &StaticSecret,
-        doc_key_enc: &str,
+        doc_key_enc: &ambre_core::WrappedDocKey,
     ) -> Option<(DocumentKey, Option<ambre_protocol::EntryDigest>)> {
-        let bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(doc_key_enc)
-            .ok()?;
+        let bytes = doc_key_enc.as_bytes();
         let (nonce, ciphertext) = bytes.split_first_chunk::<NONCE_LEN>()?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
             nonce: *nonce,
@@ -1930,8 +1925,7 @@ pub(crate) mod tests {
         .expect("request");
 
         assert_eq!(body.entries.len(), members.len() + 2);
-        let (own_key, root) =
-            unwrap_from(&alice, &alice, body.doc_key_enc.as_str()).expect("own wrap");
+        let (own_key, root) = unwrap_from(&alice, &alice, &body.doc_key_enc).expect("own wrap");
         assert_eq!(body.key_id, own_key.id());
         let entries = membership_log::decode(&body.entries);
         let log = membership_log::Log::walk(
@@ -1951,7 +1945,7 @@ pub(crate) mod tests {
 
         for (secret, wrap) in [(&bob, &body.members[0]), (&carol, &body.members[1])] {
             let (key, opened_root) =
-                unwrap_from(secret, &alice, wrap.doc_key_enc.as_str()).expect("member wrap");
+                unwrap_from(secret, &alice, &wrap.doc_key_enc).expect("member wrap");
             assert_eq!(opened_root, root);
             assert!(same_key(&key, &own_key));
         }

@@ -1754,7 +1754,7 @@ mod access_tests {
             &doc_id,
             &editor,
             ambre_core::Role::Editor,
-            &[5u8; 32],
+            &ambre_core::WrappedDocKey::new([5u8; 32].to_vec()),
             &owner,
             None,
         )
@@ -2682,9 +2682,17 @@ mod channel_gate_tests {
             .expect("group");
         }
         if let Some((member, role)) = member {
-            db::add_document_member(pool, &meta, &member, role, &[6u8; 32], &owner, None)
-                .await
-                .expect("member");
+            db::add_document_member(
+                pool,
+                &meta,
+                &member,
+                role,
+                &ambre_core::WrappedDocKey::new([6u8; 32].to_vec()),
+                &owner,
+                None,
+            )
+            .await
+            .expect("member");
         }
         segment
     }

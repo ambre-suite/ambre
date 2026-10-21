@@ -229,7 +229,7 @@ mod tests {
                 &meta,
                 member,
                 ambre_core::Role::Viewer,
-                &[6u8; 32],
+                &ambre_core::WrappedDocKey::new([6u8; 32].to_vec()),
                 &owner,
                 None,
             )

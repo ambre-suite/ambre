@@ -1755,13 +1755,10 @@ mod tests {
             &DocumentKey::generate(),
             ambre_core::Role::Editor,
         );
-        let mut raw = base64::engine::general_purpose::URL_SAFE
-            .decode(row.doc_key_enc.as_str())
-            .unwrap();
+        let mut raw = row.doc_key_enc.as_bytes().to_vec();
         let last = raw.len() - 1;
         raw[last] ^= 1;
-        row.doc_key_enc =
-            ambre_core::WrappedDocKey(base64::engine::general_purpose::URL_SAFE.encode(&raw));
+        row.doc_key_enc = ambre_core::WrappedDocKey::new(raw.to_vec());
         let resp = http::MembersResponse {
             members: vec![row],
             rotation_owed: false,

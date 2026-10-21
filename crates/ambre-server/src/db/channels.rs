@@ -158,10 +158,10 @@ pub struct MemberChannelRow {
     pub is_public: bool,
     pub meta_id: ambre_core::MetaId,
     /// The name sealed beside `meta`, if any (`SRV-219`).
-    pub name_enc: Option<Vec<u8>>,
+    pub name_enc: Option<ambre_core::SealedName>,
     /// The caller's copy of the channel key, and the exchange key of whoever
     /// wrapped it, `None` for a self-wrapped row.
-    pub doc_key_enc: Vec<u8>,
+    pub doc_key_enc: ambre_core::WrappedDocKey,
     pub wrapper_exchange_pubkey: Option<ambre_core::PublicKey>,
     /// For a direct message, the display names of its other members, by
     /// name then id. Empty for a channel of a space (`SRV-220`).
@@ -211,8 +211,10 @@ pub async fn list_member_channels(
                 meta_id: ambre_core::MetaId::from_document(uuid_row_to_id(
                     r.try_get("document_id")?,
                 )),
-                name_enc: r.try_get("name_enc")?,
-                doc_key_enc: r.try_get("doc_key_enc")?,
+                name_enc: r
+                    .try_get::<Option<Vec<u8>>, _>("name_enc")?
+                    .map(ambre_core::SealedName::new),
+                doc_key_enc: ambre_core::WrappedDocKey::new(r.try_get("doc_key_enc")?),
                 wrapper_exchange_pubkey: decode_opt_key(r.try_get("wrapper_exchange_pubkey")?)?,
                 peers: r.try_get("peers")?,
                 meta_durable_last: r.try_get("meta_durable_last")?,
@@ -1364,7 +1366,7 @@ pub async fn add_channel_member_if_absent(
     meta_id: &ambre_core::MetaId,
     user_id: &ambre_core::UserId,
     role: ambre_core::Role,
-    doc_key_enc: &[u8],
+    doc_key_enc: &ambre_core::WrappedDocKey,
     entry: Option<&LogEntry>,
 ) -> Result<bool, AppError> {
     let uid = id_to_uuid(*user_id);
@@ -1393,7 +1395,7 @@ pub async fn add_channel_member_if_absent(
     .bind(did)
     .bind(uid)
     .bind(role.as_str())
-    .bind(doc_key_enc)
+    .bind(doc_key_enc.as_bytes())
     .execute(&mut *tx)
     .await?;
     let joined = done.rows_affected() == 1;
@@ -1413,7 +1415,7 @@ pub struct NewDirectMessage<'a> {
     /// Who creates it: a member too, and the author of every entry.
     pub creator: ambre_core::UserId,
     /// Every member, the creator included, with the key wrapped for them.
-    pub members: &'a [(ambre_core::UserId, Vec<u8>)],
+    pub members: &'a [(ambre_core::UserId, ambre_core::WrappedDocKey)],
     /// The log of `meta`, in position order.
     pub entries: &'a [LogEntry],
 }
@@ -1513,7 +1515,7 @@ pub async fn find_or_create_direct_message(
         .bind(meta)
         .bind(id_to_uuid(*member))
         .bind(ambre_core::Role::Editor.as_str())
-        .bind(doc_key_enc)
+        .bind(doc_key_enc.as_bytes())
         .bind(creator)
         .execute(&mut *tx)
         .await?;
@@ -1570,7 +1572,7 @@ mod tests {
             &document,
             &member,
             ambre_core::Role::Editor,
-            &[6u8; 32],
+            &ambre_core::WrappedDocKey::new([6u8; 32].to_vec()),
             &owner,
             None,
         )
@@ -1603,7 +1605,11 @@ mod tests {
             .expect("query")
             .expect("a member of the channel reaches its segment");
         assert_eq!(row.role, ambre_core::Role::Editor);
-        assert_eq!(row.doc_key_enc, [6u8; 32], "the key sealed on `meta`");
+        assert_eq!(
+            row.doc_key_enc,
+            ambre_core::WrappedDocKey::new([6u8; 32].to_vec()),
+            "the key sealed on `meta`"
+        );
 
         let listed: Vec<ambre_core::UserId> = list_document_members(&pool, &segment)
             .await

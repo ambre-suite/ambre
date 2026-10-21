@@ -23,18 +23,9 @@ pub async fn store_master_keys(
     auth: auth::AccountSession,
     Json(req): Json<StoreMasterKeysRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     let s = auth;
-    let mk_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(req.master_key_enc.as_str())
-        .map_err(|e| AppError::Conflict {
-            detail: e.to_string(),
-        })?;
-    let mk_salt = base64::engine::general_purpose::URL_SAFE
-        .decode(req.master_key_salt.as_str())
-        .map_err(|e| AppError::Conflict {
-            detail: e.to_string(),
-        })?;
+    let mk_enc = req.master_key_enc;
+    let mk_salt = req.master_key_salt;
     let spk = hex::decode(req.signing_pubkey.as_str()).map_err(|e| AppError::Conflict {
         detail: e.to_string(),
     })?;
@@ -61,8 +52,8 @@ pub async fn store_master_keys(
         "UPDATE users SET master_key_enc = $2, master_key_salt = $3, signing_pubkey = $4, exchange_pubkey = $5 WHERE id = $1 AND master_key_enc IS NULL"
     )
     .bind(uid)
-    .bind(&mk_enc)
-    .bind(&mk_salt)
+    .bind(mk_enc.as_bytes())
+    .bind(mk_salt.as_bytes())
     .bind(&spk)
     .bind(&epk)
     .execute(&state.db)
@@ -119,7 +110,6 @@ pub async fn get_master_keys(
     State(state): State<Arc<AppState>>,
     auth: auth::AccountSession,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     let s = auth;
     let u = db::get_user(&state.db, &s.user_id)
         .await?
@@ -128,14 +118,12 @@ pub async fn get_master_keys(
         master_key_enc: u
             .master_key_enc
             .as_ref()
-            .map(|v| {
-                ambre_core::WrappedMasterKey(base64::engine::general_purpose::URL_SAFE.encode(v))
-            })
+            .map(|v| v.clone())
             .unwrap_or_default(),
         master_key_salt: u
             .master_key_salt
             .as_ref()
-            .map(|v| ambre_core::MasterKeySalt(base64::engine::general_purpose::URL_SAFE.encode(v)))
+            .map(|v| v.clone())
             .unwrap_or_default(),
         // Empty until the key setup, like the master material above.
         signing_pubkey: u
@@ -177,18 +165,9 @@ pub async fn rotate_master_keys(
     auth: auth::AuthSession,
     Json(req): Json<RotateMasterKeysRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     let s = auth;
-    let mk_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(req.master_key_enc.as_str())
-        .map_err(|e| AppError::Conflict {
-            detail: e.to_string(),
-        })?;
-    let mk_salt = base64::engine::general_purpose::URL_SAFE
-        .decode(req.master_key_salt.as_str())
-        .map_err(|e| AppError::Conflict {
-            detail: e.to_string(),
-        })?;
+    let mk_enc = req.master_key_enc;
+    let mk_salt = req.master_key_salt;
     db::update_master_key(&state.db, &s.user_id, &mk_enc, &mk_salt).await?;
     tracing::info!(user_id = %s.user_id, "master key rotated");
     Ok(RotatedResponse::rotated())

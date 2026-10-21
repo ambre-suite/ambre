@@ -155,6 +155,7 @@ version = "0.1.0"
 name = "ambre-core"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "hex",
  "postcard",
  "serde",

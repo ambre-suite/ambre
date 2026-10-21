@@ -87,8 +87,8 @@ pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId 
         pool,
         &ambre_core::Email::from(email),
         "Test User",
-        &[1u8; 32],
-        &[2u8; 16],
+        &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
+        &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
         &[3u8; 32],
         &[4u8; 32],
     )
@@ -355,7 +355,7 @@ pub async fn create_test_document(
         &doc_id,
         &owner_id,
         ambre_core::Role::Owner,
-        &[5u8; 32],
+        &ambre_core::WrappedDocKey::new([5u8; 32].to_vec()),
         &owner_id,
         None,
     )

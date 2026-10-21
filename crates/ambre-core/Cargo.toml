@@ -16,6 +16,9 @@ description = "Types fondamentaux d'Ambre (UUID, DocType, PublicKey)"
 fixtures = []
 
 [dependencies]
+# The sealed bytes of `encoded` travel as URL-safe base64, decoded when the
+# body is read so a malformed one is refused there (`SRV-178`).
+base64 = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 uuid = { workspace = true }

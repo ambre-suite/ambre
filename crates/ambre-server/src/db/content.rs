@@ -13,7 +13,7 @@ pub struct SnapshotRow {
     #[allow(dead_code)]
     pub author_pubkey: ambre_core::PublicKey,
     #[allow(dead_code)]
-    pub parent_snapshot_proof: Option<Vec<u8>>,
+    pub parent_snapshot_proof: Option<ambre_core::EncodedProof>,
     #[allow(dead_code)]
     pub update_clocks: serde_json::Value,
     pub s3_key: ambre_core::ObjectKey,
@@ -45,7 +45,9 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
         id: r.try_get::<PgId, _>("id")?.into(),
         document_id: r.try_get::<PgId, _>("document_id")?.into(),
         author_pubkey: decode_key(r.try_get("author_pubkey")?)?,
-        parent_snapshot_proof: r.try_get("parent_snapshot_proof")?,
+        parent_snapshot_proof: r
+            .try_get::<Option<Vec<u8>>, _>("parent_snapshot_proof")?
+            .map(ambre_core::EncodedProof::new),
         update_clocks: r.try_get("update_clocks")?,
         s3_key: ambre_core::ObjectKey(r.try_get("s3_key")?),
         covered_seq: decode_seq(r.try_get("covered_seq")?)?,
@@ -106,7 +108,7 @@ pub async fn create_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     author_pubkey: &ambre_core::PublicKey,
-    parent_snapshot_proof: Option<&[u8]>,
+    parent_snapshot_proof: Option<&ambre_core::EncodedProof>,
     update_clocks: &serde_json::Value,
     s3_key: &ambre_core::ObjectKey,
     covered_seq: ambre_core::Seq,
@@ -119,7 +121,7 @@ pub async fn create_snapshot(
     .bind(snapshot_id)
     .bind(did)
     .bind(author_pubkey.as_slice())
-    .bind(parent_snapshot_proof)
+    .bind(parent_snapshot_proof.map(|v| v.as_bytes()))
     .bind(update_clocks)
     .bind(s3_key.as_str())
     .bind(covered_seq.to_i64_saturating())

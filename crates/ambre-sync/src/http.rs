@@ -1422,23 +1422,17 @@ pub(crate) struct KeyLinksResponse {
 pub(crate) fn encode_link(
     link: &ambre_protocol::KeyLink,
 ) -> Result<ambre_core::EncodedKeyLink, String> {
-    use base64::Engine as _;
     let bytes = link.encode().map_err(|e| e.to_string())?;
-    Ok(ambre_core::EncodedKeyLink(
-        base64::engine::general_purpose::URL_SAFE.encode(bytes),
-    ))
+    Ok(ambre_core::EncodedKeyLink::new(bytes.to_vec()))
 }
 
 /// The links a response carries. One that does not decode is dropped: the
 /// walk then stops before it, and the keys past it stay out of reach.
 pub(crate) fn decode_links(resp: KeyLinksResponse) -> Vec<ambre_protocol::KeyLink> {
-    use base64::Engine as _;
     resp.links
         .iter()
         .filter_map(|text| {
-            let bytes = base64::engine::general_purpose::URL_SAFE
-                .decode(text.as_str())
-                .ok()?;
+            let bytes = text.as_bytes();
             ambre_protocol::KeyLink::decode(&bytes).ok()
         })
         .collect()
@@ -2034,13 +2028,13 @@ mod tests {
     #[test]
     fn an_account_without_master_material_owes_its_setup() {
         let owed = MasterKeyResponse {
-            master_key_enc: ambre_core::WrappedMasterKey(String::new()),
-            master_key_salt: ambre_core::MasterKeySalt(String::new()),
+            master_key_enc: ambre_core::WrappedMasterKey::new(Vec::new()),
+            master_key_salt: ambre_core::MasterKeySalt::new(Vec::new()),
         };
         assert!(owed.setup_owed());
         let stored = MasterKeyResponse {
-            master_key_enc: ambre_core::WrappedMasterKey("c2VhbGVk".to_owned()),
-            master_key_salt: ambre_core::MasterKeySalt("c2FsdA==".to_owned()),
+            master_key_enc: ambre_core::WrappedMasterKey::new(b"sealed".to_vec()),
+            master_key_salt: ambre_core::MasterKeySalt::new(b"salt".to_vec()),
         };
         assert!(!stored.setup_owed());
     }

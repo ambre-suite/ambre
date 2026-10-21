@@ -281,7 +281,9 @@ mod tests {
             email: "a@example.com".into(),
             email_verified: true,
             display_name: "A".into(),
-            master_key_enc: signing_pubkey.as_ref().map(|_| vec![1u8; 56]),
+            master_key_enc: signing_pubkey
+                .as_ref()
+                .map(|_| ambre_core::WrappedMasterKey::new(vec![1u8; 56])),
             master_key_salt: None,
             exchange_pubkey: signing_pubkey
                 .as_ref()

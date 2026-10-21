@@ -91,9 +91,7 @@ impl SyncState {
             doc_key,
             signing_key,
         )?;
-        Ok(ambre_core::SealedName(
-            base64::engine::general_purpose::URL_SAFE.encode(sealed),
-        ))
+        Ok(ambre_core::SealedName::new(sealed.to_vec()))
     }
 
     /// The document a create answer names, refused unless the client minted
@@ -382,9 +380,7 @@ impl ListedName<'_> {
     }
 
     fn sealed(&self) -> Option<Vec<u8>> {
-        base64::engine::general_purpose::URL_SAFE
-            .decode(self.name_enc.as_str())
-            .ok()
+        Some(self.name_enc.as_bytes().to_vec())
     }
 }
 
@@ -397,9 +393,7 @@ pub(crate) fn unwrap_listed_key(
     wrapper_exchange_pub_key: &ambre_core::ExchangeKeyHex,
     exchange_key: &x25519_dalek::StaticSecret,
 ) -> Option<DocumentKey> {
-    let wrapped_bytes = base64::engine::general_purpose::URL_SAFE
-        .decode(doc_key_enc.as_str())
-        .ok()?;
+    let wrapped_bytes = doc_key_enc.as_bytes();
     let (nonce, ciphertext) = wrapped_bytes.split_first_chunk::<24>()?;
     let wrapped = ambre_crypto::WrappedKey {
         nonce: *nonce,
@@ -447,9 +441,7 @@ mod tests {
         let name = "Quarterly budget";
         let sent =
             SyncState::seal_document_name(document_id, &doc_key, &signing_key, name).unwrap();
-        let bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(sent.as_str())
-            .unwrap();
+        let bytes = sent.as_bytes().to_vec();
         assert!(!bytes.windows(name.len()).any(|w| w == name.as_bytes()));
         assert_eq!(pipeline::object_key(&bytes).unwrap(), doc_key.id());
         assert_eq!(
@@ -474,9 +466,7 @@ mod tests {
             .unwrap();
         let name =
             SyncState::seal_document_name(document_id, &keys[0], &signing_key, "Budget").unwrap();
-        let bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(name.as_str())
-            .unwrap();
+        let bytes = name.as_bytes().to_vec();
         let current = &keys[3];
         assert_eq!(
             open_name(document_id, current, &bytes, links.clone()).as_deref(),

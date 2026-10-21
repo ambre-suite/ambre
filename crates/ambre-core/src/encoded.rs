@@ -1,34 +1,78 @@
-//! Sealed and signed bytes as the relay's JSON spells them: URL-safe base64.
+//! Sealed and signed bytes, one type per role.
 //!
 //! A member row carries a wrapped document key beside a sealed name. An
 //! account carries a wrapped master key beside its salt, and a change
-//! carries a signed log entry. All of them travel as the same base64 text,
-//! so a bare `String` lets one stand for another. One type per role keeps
-//! them apart.
+//! carries a signed log entry. The relay stores all of them and reads none.
+//! A bare `Vec<u8>` lets one stand for another, down to the argument order
+//! of an insert. One type per role keeps them apart, from the JSON body to
+//! the column.
 //!
-//! Each is `#[serde(transparent)]` and checks nothing on parse. The reader
-//! that decodes the bytes keeps its own refusal, so the type changes no byte
-//! on the wire and no answer of the relay. The base64 codec stays with the
-//! crates that seal and open, which already depend on it.
+//! On the wire each is its URL-safe base64 text, decoded when the body is
+//! read. A value that is not base64 refuses the body there, as any field
+//! that does not decode does (`SRV-178`). `Debug` prints the length alone.
 
-use serde::{Deserialize, Serialize};
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 macro_rules! define_encoded {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
-        #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-        #[serde(transparent)]
-        pub struct $name(pub String);
+        #[derive(Clone, Default, PartialEq, Eq, Hash)]
+        pub struct $name(Vec<u8>);
 
         impl $name {
-            /// The base64 text, as the relay exchanges it.
-            pub fn as_str(&self) -> &str {
+            /// Wraps the bytes.
+            pub fn new(bytes: Vec<u8>) -> Self {
+                Self(bytes)
+            }
+
+            /// The bytes.
+            pub fn as_bytes(&self) -> &[u8] {
                 &self.0
             }
 
-            /// Whether the text is empty: a field the sender left out.
+            /// The bytes, owned.
+            pub fn into_bytes(self) -> Vec<u8> {
+                self.0
+            }
+
+            /// Whether there are no bytes: a field the sender left out.
             pub fn is_empty(&self) -> bool {
                 self.0.is_empty()
+            }
+
+            /// The text the wire carries.
+            pub fn to_base64(&self) -> String {
+                URL_SAFE.encode(&self.0)
+            }
+        }
+
+        impl From<Vec<u8>> for $name {
+            fn from(bytes: Vec<u8>) -> Self {
+                Self(bytes)
+            }
+        }
+
+        impl std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, concat!(stringify!($name), "({} bytes)"), self.0.len())
+            }
+        }
+
+        impl Serialize for $name {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.serialize_str(&self.to_base64())
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let text = String::deserialize(deserializer)?;
+                URL_SAFE
+                    .decode(text.as_bytes())
+                    .map(Self)
+                    .map_err(|e| serde::de::Error::custom(format!("not base64: {e}")))
             }
         }
     };
@@ -79,10 +123,17 @@ mod tests {
     use super::WrappedDocKey;
 
     #[test]
-    fn an_encoded_value_serializes_as_the_bare_base64_string() {
-        let key = WrappedDocKey("q83v".to_owned());
+    fn an_encoded_value_travels_as_its_url_safe_base64() {
+        let key = WrappedDocKey::new(vec![0xab, 0xcd, 0xef]);
         assert_eq!(serde_json::to_string(&key).unwrap(), "\"q83v\"");
         let parsed: WrappedDocKey = serde_json::from_str("\"q83v\"").unwrap();
-        assert_eq!(parsed, key);
+        assert_eq!(parsed.as_bytes(), &[0xab, 0xcd, 0xef]);
+        assert_eq!(format!("{parsed:?}"), "WrappedDocKey(3 bytes)");
+    }
+
+    #[test]
+    fn a_value_that_is_not_base64_refuses_the_read() {
+        assert!(serde_json::from_str::<WrappedDocKey>("\"not base64!\"").is_err());
+        assert!(serde_json::from_str::<WrappedDocKey>("\"q83\"").is_err());
     }
 }
