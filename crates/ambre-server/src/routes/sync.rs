@@ -228,7 +228,9 @@ pub struct CreateSnapshotRequest {
     #[serde(with = "ambre_core::serde_id::snapshot_id")]
     pub snapshot_id: ambre_core::SnapshotId,
     pub author_pubkey: ambre_core::SigningKeyHex,
-    pub parent_snapshot_proof: Option<ambre_core::EncodedProof>,
+    /// No client builds a parent proof yet, so one that arrives is refused
+    /// rather than stored unread (`SRV-228`). `null` reads as none.
+    pub parent_snapshot_proof: Option<serde::de::IgnoredAny>,
     pub update_clocks: serde_json::Value,
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` the snapshot author had applied at upload time.
@@ -274,10 +276,11 @@ pub async fn create_snapshot(
     if apk != s.signing_pubkey.as_slice() {
         return Err(AppError::Forbidden);
     }
-    let pp = req
-        .parent_snapshot_proof
-        .map(|p| Ok::<_, AppError>(p))
-        .transpose()?;
+    if req.parent_snapshot_proof.is_some() {
+        return Err(AppError::BadRequest(
+            "parent_snapshot_proof: no client builds one".into(),
+        ));
+    }
 
     // A snapshot cannot fold in a delta the relay never numbered. A horizon past
     // the counter would stop the relay asking for snapshots of the document.
@@ -294,7 +297,6 @@ pub async fn create_snapshot(
         &state.db,
         &doc_id,
         &s.signing_pubkey,
-        pp.as_ref(),
         &req.update_clocks,
         &req.s3_key,
         covered,

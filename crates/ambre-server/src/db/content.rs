@@ -13,8 +13,6 @@ pub struct SnapshotRow {
     #[allow(dead_code)]
     pub author_pubkey: ambre_core::PublicKey,
     #[allow(dead_code)]
-    pub parent_snapshot_proof: Option<ambre_core::EncodedProof>,
-    #[allow(dead_code)]
     pub update_clocks: serde_json::Value,
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` folded into this snapshot. Clients gate their
@@ -36,7 +34,7 @@ fn parse_status(text: &str) -> Result<SnapshotStatus, AppError> {
 
 /// The columns [`snapshot_row`] reads, in one place for every query.
 const SNAPSHOT_COLUMNS: &str = "id, document_id, author_pubkey, \
-    parent_snapshot_proof, update_clocks, s3_key, covered_seq, status, created_at";
+    update_clocks, s3_key, covered_seq, status, created_at";
 
 /// One `snapshots` row, read from [`SNAPSHOT_COLUMNS`].
 fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
@@ -45,9 +43,6 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
         id: r.try_get::<PgId, _>("id")?.into(),
         document_id: r.try_get::<PgId, _>("document_id")?.into(),
         author_pubkey: decode_key(r.try_get("author_pubkey")?)?,
-        parent_snapshot_proof: r
-            .try_get::<Option<Vec<u8>>, _>("parent_snapshot_proof")?
-            .map(ambre_core::EncodedProof::new),
         update_clocks: r.try_get("update_clocks")?,
         s3_key: ambre_core::ObjectKey(r.try_get("s3_key")?),
         covered_seq: decode_seq(r.try_get("covered_seq")?)?,
@@ -102,13 +97,12 @@ pub struct Trim {
     pub batch_keys: Vec<ambre_core::ObjectKey>,
 }
 
-/// Inserts snapshot metadata and returns the assigned `SnapshotId`.
-#[allow(clippy::too_many_arguments)]
+/// Inserts snapshot metadata and returns the assigned `SnapshotId`. The parent
+/// proof column stays empty: no client builds one (`SRV-228`).
 pub async fn create_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     author_pubkey: &ambre_core::PublicKey,
-    parent_snapshot_proof: Option<&ambre_core::EncodedProof>,
     update_clocks: &serde_json::Value,
     s3_key: &ambre_core::ObjectKey,
     covered_seq: ambre_core::Seq,
@@ -116,12 +110,11 @@ pub async fn create_snapshot(
     let did = id_to_uuid(*document_id);
     let snapshot_id = uuid::Uuid::now_v7();
     sqlx::query(
-        "INSERT INTO snapshots (id, document_id, author_pubkey, parent_snapshot_proof, update_clocks, s3_key, covered_seq) VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        "INSERT INTO snapshots (id, document_id, author_pubkey, update_clocks, s3_key, covered_seq) VALUES ($1, $2, $3, $4, $5, $6)"
     )
     .bind(snapshot_id)
     .bind(did)
     .bind(author_pubkey.as_slice())
-    .bind(parent_snapshot_proof.map(|v| v.as_bytes()))
     .bind(update_clocks)
     .bind(s3_key.as_str())
     .bind(covered_seq.to_i64_saturating())

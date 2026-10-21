@@ -1588,7 +1588,6 @@ pub(crate) async fn upload_snapshot(
     let metadata = http::CreateSnapshotRequest {
         snapshot_id: SnapshotId::new(),
         author_pubkey,
-        parent_snapshot_proof: None,
         update_clocks: serde_json::json!({}),
         s3_key: link.s3_key,
         covered_seq,

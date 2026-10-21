@@ -73,8 +73,8 @@ pub use docfile::{
 };
 pub use email::Email;
 pub use encoded::{
-    EncodedKeyLink, EncodedLogEntry, EncodedProof, EscrowedKey, MasterKeySalt, SealedName,
-    SealedShare, WrappedDocKey, WrappedMasterKey,
+    EncodedKeyLink, EncodedLogEntry, EscrowedKey, MasterKeySalt, SealedName, SealedShare,
+    WrappedDocKey, WrappedMasterKey,
 };
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
 pub use fingerprint::KeyFingerprint;

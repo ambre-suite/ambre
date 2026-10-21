@@ -474,7 +474,6 @@ mod db_tests {
             &state.db,
             &doc,
             &ambre_core::PublicKey::from_array([5u8; 32]),
-            None,
             &clocks,
             &ambre_core::ObjectKey::from("snap"),
             ambre_core::Seq(7),

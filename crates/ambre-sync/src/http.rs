@@ -1291,7 +1291,6 @@ pub(crate) struct CreateSnapshotRequest {
     #[serde(with = "ambre_core::serde_id::snapshot_id")]
     pub snapshot_id: ambre_core::SnapshotId,
     pub author_pubkey: ambre_core::SigningKeyHex,
-    pub parent_snapshot_proof: Option<ambre_core::EncodedProof>,
     pub update_clocks: serde_json::Value,
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` this client had applied when it took the snapshot.

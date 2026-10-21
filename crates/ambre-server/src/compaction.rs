@@ -202,7 +202,6 @@ mod db_tests {
             &state.db,
             doc,
             &ambre_core::PublicKey::from_array(*author),
-            None,
             &json,
             &key,
             covered,

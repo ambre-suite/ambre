@@ -151,11 +151,6 @@ define_encoded! {
     EncodedKeyLink
 }
 
-define_encoded! {
-    /// The proof a snapshot carries of the snapshot it replaces.
-    EncodedProof
-}
-
 #[cfg(test)]
 mod tests {
     use super::{MasterKeySalt, SealedName, WrappedDocKey, WrappedMasterKey};

@@ -3680,7 +3680,6 @@ mod tests {
             &state.db,
             &document,
             &ambre_core::PublicKey::from_array([1; 32]),
-            None,
             &clocks,
             &ambre_core::ObjectKey::from("s"),
             ambre_core::Seq::try_from(covered).expect("a relay number"),

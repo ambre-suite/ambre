@@ -2936,6 +2936,54 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    /// `SRV-228`: no client builds a parent proof, so a confirmation that
+    /// carries one is refused and writes no row. A `null` proof reads as none.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_snapshot_carrying_a_parent_proof_is_refused(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        // setup_and_get_auth registers signing_pubkey [3u8; 32].
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let snap_uuid = uuid::Uuid::new_v4();
+        let confirm = |proof: serde_json::Value| {
+            let body = serde_json::json!({
+                "snapshot_id": snap_uuid.to_string(),
+                "author_pubkey": hex::encode([3u8; 32]),
+                "parent_snapshot_proof": proof,
+                "update_clocks": {},
+                "s3_key": format!("dev-ambre/documents/{doc_id}/snapshots/{snap_uuid}"),
+            });
+            Request::post(format!("/api/documents/{doc_id}/snapshot"))
+                .header("content-type", "application/json")
+                .header("authorization", &owner)
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap()
+        };
+        let rows = || async {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM snapshots WHERE document_id::text = $1",
+            )
+            .bind(&doc_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap()
+        };
+
+        let resp = app
+            .clone()
+            .oneshot(confirm(serde_json::json!(base64_encode(&[1u8; 32]))))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(rows().await, 0);
+
+        let resp = app.oneshot(confirm(serde_json::Value::Null)).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(rows().await, 1);
+    }
+
     /// POST an invite as `auth`, returning the raw status (no assertion). Used
     /// by the privilege-clamp / last-owner tests that expect non-200 outcomes.
     async fn invite_status(
