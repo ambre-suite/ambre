@@ -30,6 +30,7 @@
 //! and an unchanged type leaves the shape identical (`SCHEMA-017`). That half
 //! is the reading belt's, in `schema_reading.rs`, over this same scenario.
 
+use ambre_core::Rgb;
 use std::collections::BTreeSet;
 
 use ambre_bus::{
@@ -208,8 +209,8 @@ fn postcard_layouts() -> Vec<(String, String)> {
             h_align: HAlign::Right,
             v_align: VAlign::Bottom,
             wrap: true,
-            fg: Some(0x01_02_03),
-            bg: Some(0x04_05_06),
+            fg: Some(Rgb::from_bits(0x01_02_03)),
+            bg: Some(Rgb::from_bits(0x04_05_06)),
             font: Some("f".to_owned()),
             size: Some(7),
             format: CellFormat::Time,
@@ -217,7 +218,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
             borders: Borders {
                 top: Some(CellBorder {
                     style: BorderStyle::Double,
-                    color: Some(0x0a_0b_0c),
+                    color: Some(Rgb::from_bits(0x0a_0b_0c)),
                 }),
                 right: None,
                 bottom: Some(CellBorder {
@@ -352,7 +353,7 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         patch: StylePatch {
             bold: Some(true),
             size: Some(Some(14)),
-            fg: Some(Some(0x33_66_99)),
+            fg: Some(Some(Rgb::from_bits(0x33_66_99))),
             ..Default::default()
         },
     });

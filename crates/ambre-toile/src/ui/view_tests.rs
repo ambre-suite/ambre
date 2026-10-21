@@ -7,6 +7,7 @@ use super::*;
 use ambre_bus::UserId;
 use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, PresentMode, ShapeKind};
 use ambre_bus::conduit::Receiver;
+use ambre_core::Argb;
 use kurbo::Rect;
 
 /// One board view and the far ends of its two channels.
@@ -1371,7 +1372,8 @@ fn shape(id: &str, bounds: Rect) -> DisplayElement {
 fn a_placed_note_opens_its_editor_and_the_tool_returns_to_select() {
     let mut rig = Rig::new();
     rig.sent();
-    rig.view.set_tool(Tool::Sticky(0xffff_eb3b));
+    rig.view
+        .set_tool(Tool::Sticky(Argb::from_bits(0xffff_eb3b)));
     rig.click(600.0, 400.0);
     let token = rig.sent().iter().find_map(|c| match c {
         ToileCommand::CreateElement {
@@ -2417,7 +2419,7 @@ fn a_panel_restyle_names_every_member_and_keeps_the_selection() {
         .expect("a resolved selection has a model");
     assert!(model.mixed.stroke_w, "the stroke width is mixed");
     let mut style = model.base;
-    crate::ui::floatbar::StyleEdit::Fill(Some(0xff11_2233)).apply_to(&mut style);
+    crate::ui::floatbar::StyleEdit::Fill(Some(Argb::from_bits(0xff11_2233))).apply_to(&mut style);
     rig.view.apply_restyle(style.clone());
     match rig.sent().as_slice() {
         [ToileCommand::RestyleElements { ids, style: sent }] => {
@@ -2444,7 +2446,7 @@ fn two_bar_edits_compose_and_keep_the_selection() {
     });
     rig.sent();
     rig.view
-        .apply_quick_style(StyleEdit::Fill(Some(0xff11_2233)));
+        .apply_quick_style(StyleEdit::Fill(Some(Argb::from_bits(0xff11_2233))));
     let first = match rig.sent().as_slice() {
         [ToileCommand::RestyleElements { style, .. }] => style.clone(),
         other => panic!("one restyle expected, got {other:?}"),
@@ -2463,7 +2465,11 @@ fn two_bar_edits_compose_and_keep_the_selection() {
     match rig.sent().as_slice() {
         [ToileCommand::RestyleElements { ids, style }] => {
             assert_eq!(ids, &[eid("a")]);
-            assert_eq!(style.fill, Some(0xff11_2233), "the first edit is kept");
+            assert_eq!(
+                style.fill,
+                Some(Argb::from_bits(0xff11_2233)),
+                "the first edit is kept"
+            );
             assert_eq!(style.font.weight, 700);
         }
         other => panic!("one restyle expected, got {other:?}"),

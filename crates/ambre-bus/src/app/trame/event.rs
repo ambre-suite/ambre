@@ -6,6 +6,7 @@
 //! by glob from the sibling command modules of `crate::app::trame`.
 
 use crate::UserId;
+use ambre_core::Rgb;
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- events (Logic -> UI)
@@ -388,9 +389,9 @@ pub struct DisplayCell {
     /// Wrap long text onto multiple lines inside the cell.
     pub wrap: bool,
     /// Text colour, packed `0xRRGGBB` (`None` = theme default).
-    pub fg: Option<u32>,
+    pub fg: Option<Rgb>,
     /// Fill colour, packed `0xRRGGBB` (`None` = transparent).
-    pub bg: Option<u32>,
+    pub bg: Option<Rgb>,
     /// Font family name (`None` = grid default).
     pub font: Option<String>,
     /// Font size in points (`None` = grid default).

@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::{BorderEdit, BorderPreset, BorderStyle, CellFormat, StylePatch};
+use ambre_core::Rgb;
 use loro::LoroValue;
 
 /// Select the rectangle `(r1, c1)`-`(r2, c2)`, the active cell at its far corner.
@@ -102,7 +103,7 @@ fn a_cell_back_to_the_default_style_leaves_no_entry() {
         &mut state,
         StylePatch {
             bold: Some(true),
-            bg: Some(Some(0x00ff_0000)),
+            bg: Some(Some(Rgb::from_bits(0x00ff_0000))),
             ..Default::default()
         },
     );
@@ -195,7 +196,7 @@ fn a_covered_cell_takes_no_style() {
     style(
         &mut state,
         StylePatch {
-            bg: Some(Some(0x0000_ff00)),
+            bg: Some(Some(Rgb::from_bits(0x0000_ff00))),
             border: Some(BorderEdit {
                 preset: BorderPreset::All,
                 style: BorderStyle::Thick,

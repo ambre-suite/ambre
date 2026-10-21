@@ -25,6 +25,7 @@
 // acts on. ============================================================================
 
 use ambre_chrome::commands::{CommandId, Locale};
+use ambre_core::Argb;
 
 use super::icons;
 use crate::ui::commands as registry;
@@ -70,13 +71,13 @@ pub fn SelectionToolbar(
     // The fill swatch seeds from the bar's common fill (already folded there).
     Effect::new(move |_| {
         if let Some(b) = bar.get() {
-            fill.set(b.fill);
+            fill.set(b.fill.map(Argb::bits));
         }
     });
     // The text controls seed from the inspector's common-style model.
     Effect::new(move |_| {
         if let Some(m) = model.get() {
-            text_color.set(m.base.text_color);
+            text_color.set(m.base.text_color.map(Argb::bits));
             font_family.set(family_label(&m.base.font.family));
             font_size.set(m.base.font.size);
             bold.set(m.base.font.weight >= 700);
@@ -89,11 +90,11 @@ pub fn SelectionToolbar(
     // Fill / text-colour picks: track the local swatch and emit the field edit.
     let on_fill = Callback::new(move |c: Option<u32>| {
         fill.set(c);
-        on_style.run(StyleEdit::Fill(c));
+        on_style.run(StyleEdit::Fill(c.map(Argb::from_bits)));
     });
     let on_text_color = Callback::new(move |c: Option<u32>| {
         text_color.set(c);
-        on_style.run(StyleEdit::TextColor(c));
+        on_style.run(StyleEdit::TextColor(c.map(Argb::from_bits)));
     });
     let on_font = Callback::new(move |f: Option<String>| {
         font_family.set(f.clone());

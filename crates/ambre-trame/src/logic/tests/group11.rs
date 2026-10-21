@@ -9,6 +9,7 @@ use crate::logic::schema::{
 };
 use crate::model::cell_key;
 use crate::{FillMode, GridRange, SelectionKind};
+use ambre_core::Rgb;
 use loro::LoroValue;
 
 fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
@@ -252,7 +253,7 @@ fn a_merged_fill_carries_the_style_and_shifts_the_formula() {
     state.handle_command(TrameCommand::SetCellStyle {
         patch: crate::StylePatch {
             bold: Some(true),
-            bg: Some(Some(0x00ff_0000)),
+            bg: Some(Some(Rgb::from_bits(0x00ff_0000))),
             ..Default::default()
         },
     });
@@ -261,7 +262,11 @@ fn a_merged_fill_carries_the_style_and_shifts_the_formula() {
         let cell = read_display(&mut state, row, 0);
         assert_eq!(cell.raw, formula, "tile at row {row}");
         assert!(cell.bold, "tile at row {row} lost the bold");
-        assert_eq!(cell.bg, Some(0x00ff_0000), "tile at row {row}");
+        assert_eq!(
+            cell.bg,
+            Some(Rgb::from_bits(0x00ff_0000)),
+            "tile at row {row}"
+        );
     }
 }
 

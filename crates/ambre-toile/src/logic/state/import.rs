@@ -515,6 +515,7 @@ impl ToileState {
 
 #[cfg(test)]
 mod tests {
+    use ambre_core::Argb;
     use kurbo::{Point, Size};
 
     use crate::logic::command::{InitContent, ToileCommand};
@@ -559,7 +560,7 @@ mod tests {
     fn import_applies_styles_per_slot() {
         let mut st = ToileState::new();
         let style = ElementStyle {
-            fill: Some(0xFF_3366CC),
+            fill: Some(Argb::from_bits(0xFF_3366CC)),
             ..ElementStyle::default()
         };
         let batch = ImportBatch {
@@ -571,7 +572,7 @@ mod tests {
         assert_eq!(report.imported, 1);
         // The one element carries the imported fill, not the default.
         let vp = st.derive_viewport();
-        let fills: Vec<Option<u32>> = vp
+        let fills: Vec<Option<Argb>> = vp
             .nodes
             .iter()
             .filter_map(|n| match n {
@@ -579,7 +580,7 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(fills, vec![Some(0xFF_3366CC)]);
+        assert_eq!(fills, vec![Some(Argb::from_bits(0xFF_3366CC))]);
     }
 
     #[test]

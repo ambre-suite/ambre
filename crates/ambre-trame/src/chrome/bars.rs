@@ -8,6 +8,7 @@
 use ambre_bus::StylePatch;
 use ambre_chrome::commands::{CommandId, Locale};
 use ambre_chrome::{FontSizeSelect, FormatToggle};
+use ambre_core::Rgb;
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
@@ -179,8 +180,9 @@ pub fn FormatBar(
             current=style.fg
             default=Signal::derive(move || theme_fg_default(theme.get()))
             reset_label="Automatic"
-            on_pick=Callback::new(move |c| {
-                on_style.run(StylePatch { fg: Some(c), ..Default::default() })
+            on_pick=Callback::new(move |c: Option<u32>| {
+                let fg = Some(c.map(Rgb::from_bits));
+                on_style.run(StylePatch { fg, ..Default::default() })
             })
         />
         // Fill colour: composed picker (palette + "No fill" reset + custom).
@@ -190,8 +192,9 @@ pub fn FormatBar(
             current=style.bg
             default=Signal::derive(move || theme_bg_default(theme.get()))
             reset_label="No fill (transparent)"
-            on_pick=Callback::new(move |c| {
-                on_style.run(StylePatch { bg: Some(c), ..Default::default() })
+            on_pick=Callback::new(move |c: Option<u32>| {
+                let bg = Some(c.map(Rgb::from_bits));
+                on_style.run(StylePatch { bg, ..Default::default() })
             })
         />
         <span class="sep"></span>

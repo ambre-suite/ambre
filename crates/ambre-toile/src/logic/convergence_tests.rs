@@ -6,6 +6,7 @@
 //! derived caches (`bounds` / `layers`). The whiteboard has no computed values
 //! to compare, only state and derived structures.
 
+use ambre_core::Argb;
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
 
@@ -533,7 +534,7 @@ fn an_arrow_carries_its_own_style() {
     let one = create_connector(&mut st);
     let two = create_connector(&mut st);
     let red = ElementStyle {
-        stroke: Some(0xFFCC_2222),
+        stroke: Some(Argb::from_bits(0xFFCC_2222)),
         stroke_w: 6.0,
         ..Default::default()
     };
@@ -1970,7 +1971,7 @@ fn a_restyle_over_a_selection_is_one_undo_item() {
     let b = create_rect(&mut st, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
     let before = (st.style_of(&a), st.style_of(&b));
     let style = ElementStyle {
-        fill: Some(0xff11_2233),
+        fill: Some(Argb::from_bits(0xff11_2233)),
         ..ElementStyle::default()
     };
     st.handle_command(ToileCommand::RestyleElements {
@@ -2512,7 +2513,7 @@ fn frame_snapshot_captures_declared_children_props() {
 
     // Give `a` a distinctive style + rotation so the snapshot picks them up.
     let style = ElementStyle {
-        fill: Some(0xFF12_3456),
+        fill: Some(Argb::from_bits(0xFF12_3456)),
         opacity: 0.5,
         ..ElementStyle::default()
     };
@@ -2544,7 +2545,7 @@ fn frame_snapshot_captures_declared_children_props() {
     assert_eq!(sa.bounds, Rect::new(10.0, 20.0, 40.0, 60.0));
     assert_eq!(sa.rotation, 1.0);
     assert_eq!(sa.opacity, 0.5);
-    assert_eq!(sa.fill, Some(0xFF12_3456));
+    assert_eq!(sa.fill, Some(Argb::from_bits(0xFF12_3456)));
 
     // A frame with no children yields an empty snapshot; a transition between an
     // empty and the populated frame fades every child in (endpoint sanity).
@@ -5669,7 +5670,7 @@ enum PeerOp {
     },
     RestyleNth {
         nth: usize,
-        fill: u32,
+        fill: Argb,
     },
     DeleteNth {
         nth: usize,
@@ -5753,7 +5754,10 @@ fn op_strategy() -> impl Strategy<Value = PeerOp> {
             h
         }),
         (0usize..6, -3.0f64..3.0).prop_map(|(nth, radians)| PeerOp::RotateNth { nth, radians }),
-        (0usize..6, any::<u32>()).prop_map(|(nth, fill)| PeerOp::RestyleNth { nth, fill }),
+        (0usize..6, any::<u32>()).prop_map(|(nth, fill)| PeerOp::RestyleNth {
+            nth,
+            fill: Argb::from_bits(fill)
+        }),
         (0usize..6).prop_map(|nth| PeerOp::DeleteNth { nth }),
         (0usize..6).prop_map(|nth| PeerOp::ReorderNthToBack { nth }),
         (0usize..6, 0usize..6).prop_map(|(i, j)| PeerOp::GroupNth { i, j }),
@@ -6207,11 +6211,11 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
     a.handle_command(ToileCommand::RestyleElements {
         ids: vec![id.clone()],
         style: ElementStyle {
-            fill: Some(0xFFFF_0000),
+            fill: Some(Argb::from_bits(0xFFFF_0000)),
             stroke: None,
             stroke_w: 4.0,
             opacity: 0.5,
-            text_color: Some(0xFF00_FF00),
+            text_color: Some(Argb::from_bits(0xFF00_FF00)),
             ..ElementStyle::default()
         },
     });
@@ -6219,7 +6223,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
         ids: vec![id.clone()],
         style: ElementStyle {
             fill: None,
-            stroke: Some(0xFF00_00FF),
+            stroke: Some(Argb::from_bits(0xFF00_00FF)),
             stroke_w: 1.5,
             opacity: 0.25,
             text_color: None,
@@ -6574,7 +6578,7 @@ fn an_unchanged_layout_rule_writes_nothing() {
     assert_eq!(st.crdt().oplog_vv(), before, "nothing was written");
 }
 
-fn filled_rect(st: &mut ToileState, x: f64, fill: u32) -> ElementId {
+fn filled_rect(st: &mut ToileState, x: f64, fill: Argb) -> ElementId {
     created_id(&st.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::Shape(ShapeKind::Rect),
         at: Point::new(x, 0.0),
@@ -6590,15 +6594,18 @@ fn filled_rect(st: &mut ToileState, x: f64, fill: u32) -> ElementId {
 #[test]
 fn a_combined_path_wears_the_first_sources_style() {
     let mut st = ToileState::new();
-    let red = filled_rect(&mut st, 0.0, 0xFFFF_0000);
-    let blue = filled_rect(&mut st, 5.0, 0xFF00_00FF);
+    let red = filled_rect(&mut st, 0.0, Argb::from_bits(0xFFFF_0000));
+    let blue = filled_rect(&mut st, 5.0, Argb::from_bits(0xFF00_00FF));
     let out = st.handle_command(ToileCommand::BooleanOp {
         op: BoolOp::Union,
         ids: vec![blue.clone(), red],
         keep_sources: false,
     });
     let result = created_id(&out);
-    assert_eq!(st.style_of(&result).fill, Some(0xFF00_00FF));
+    assert_eq!(
+        st.style_of(&result).fill,
+        Some(Argb::from_bits(0xFF00_00FF))
+    );
 }
 
 /// `TOILE-FEAT-035`: a locked element and a non-shape among the ids are
@@ -6606,9 +6613,9 @@ fn a_combined_path_wears_the_first_sources_style() {
 #[test]
 fn a_combine_consumes_only_its_sources() {
     let mut st = ToileState::new();
-    let one = filled_rect(&mut st, 0.0, 0xFFFF_0000);
-    let two = filled_rect(&mut st, 5.0, 0xFFFF_0000);
-    let locked = filled_rect(&mut st, 3.0, 0xFFFF_0000);
+    let one = filled_rect(&mut st, 0.0, Argb::from_bits(0xFFFF_0000));
+    let two = filled_rect(&mut st, 5.0, Argb::from_bits(0xFFFF_0000));
+    let locked = filled_rect(&mut st, 3.0, Argb::from_bits(0xFFFF_0000));
     st.handle_command(ToileCommand::LockElements {
         ids: vec![locked.clone()],
         locked: true,
@@ -6629,8 +6636,8 @@ fn a_combine_consumes_only_its_sources() {
 #[test]
 fn an_empty_combine_is_refused() {
     let mut st = ToileState::new();
-    let a = filled_rect(&mut st, 0.0, 0xFFFF_0000);
-    let b = filled_rect(&mut st, 100.0, 0xFFFF_0000);
+    let a = filled_rect(&mut st, 0.0, Argb::from_bits(0xFFFF_0000));
+    let b = filled_rect(&mut st, 100.0, Argb::from_bits(0xFFFF_0000));
     let before = st.crdt().oplog_vv();
     let out = st.handle_command(ToileCommand::BooleanOp {
         op: BoolOp::Intersect,

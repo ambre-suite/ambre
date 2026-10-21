@@ -24,6 +24,7 @@
 //! shape belt's, so the two belts read the same workbook. Its values are frozen
 //! here, so a command added to it lands with a raised version, like a new key.
 
+use ambre_core::Rgb;
 use std::collections::BTreeSet;
 
 use ambre_bus::{CellBorder, CellStyle, TrameCommand};
@@ -122,8 +123,8 @@ fn cell(row: usize, col: usize) -> String {
 }
 
 /// A packed `0xRRGGBB` colour.
-fn colour(rgb: u32) -> String {
-    format!("#{rgb:06x}")
+fn colour(rgb: Rgb) -> String {
+    format!("#{:06x}", rgb.bits())
 }
 
 /// What a resolved style sets, field by field, each in its unit.

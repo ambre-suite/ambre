@@ -28,6 +28,7 @@
 //! shape belt's, so the two belts read the same board. Its values are frozen
 //! here, so a command added to it lands with a raised version, like a new key.
 
+use ambre_core::Argb;
 use std::collections::BTreeSet;
 
 use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, verdict};
@@ -172,12 +173,12 @@ fn frozen_path(stored: &Stored) -> String {
 }
 
 /// A packed `0xAARRGGBB` colour.
-fn colour(argb: u32) -> String {
-    format!("#{argb:08x}")
+fn colour(argb: Argb) -> String {
+    format!("#{:08x}", argb.bits())
 }
 
 /// A colour that may be absent, which the painter reads as none.
-fn maybe_colour(argb: Option<u32>) -> String {
+fn maybe_colour(argb: Option<Argb>) -> String {
     argb.map_or_else(|| "none".to_owned(), colour)
 }
 

@@ -3,6 +3,7 @@
 
 use super::*;
 use ambre_canvas::{TextCache, Theme};
+use ambre_core::Rgb;
 use ambre_draw::FontContext;
 use ambre_draw::testing::{DrawOp, RecordingSurface};
 
@@ -518,7 +519,7 @@ fn a_fill_and_a_border_stop_at_the_cell_edge() {
     let l = layout();
     let rect = l.cell_rect(0, 3);
     let mut c = CellContent::plain(LONG, false, false);
-    c.bg = Some(0x00ff_0000);
+    c.bg = Some(Rgb::from_bits(0x00ff_0000));
     let ops = draw_one(&l, 0, 3, c);
     assert!(the_clip(&ops).x1 > rect.x1, "the text spills");
     let fill = ops

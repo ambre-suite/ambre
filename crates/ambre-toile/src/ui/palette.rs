@@ -16,6 +16,7 @@
 // palette (and the keyboard) write a shared `RwSignal<Tool>` the view applies.
 // ============================================================================
 
+use ambre_core::Argb;
 use std::borrow::Cow;
 
 use ambre_bus::app::toile::{STICKY_DEFAULT_FILL, ShapeKind};
@@ -92,14 +93,14 @@ pub fn tool_for_command(id: CommandId) -> Option<Tool> {
 /// (the bare-key / default colour); the rest are the standard whiteboard pastels
 /// (blue, green, pink, orange, purple, grey). Shared with the chrome popover so
 /// the offered set is host-tested here rather than buried in wasm-only code.
-pub const STICKY_SWATCHES: &[u32] = &[
-    STICKY_DEFAULT_FILL, // yellow (default)
-    0xFFA5_D8FF,         // blue
-    0xFFB2_F2BB,         // green
-    0xFFFF_C9C9,         // pink
-    0xFFFF_D8A8,         // orange
-    0xFFD0_BFFF,         // purple
-    0xFFDE_E2E6,         // grey
+pub const STICKY_SWATCHES: &[Argb] = &[
+    STICKY_DEFAULT_FILL,          // yellow (default)
+    Argb::from_bits(0xFFA5_D8FF), // blue
+    Argb::from_bits(0xFFB2_F2BB), // green
+    Argb::from_bits(0xFFFF_C9C9), // pink
+    Argb::from_bits(0xFFFF_D8A8), // orange
+    Argb::from_bits(0xFFD0_BFFF), // purple
+    Argb::from_bits(0xFFDE_E2E6), // grey
 ];
 
 /// Bind the bare-key tool chords into the launcher keymap. These are the de-facto
@@ -422,12 +423,12 @@ mod tests {
     fn sticky_swatches_lead_with_the_default_and_are_distinct() {
         assert_eq!(STICKY_SWATCHES.first(), Some(&STICKY_DEFAULT_FILL));
         let mut seen = STICKY_SWATCHES.to_vec();
-        seen.sort_unstable();
+        seen.sort_unstable_by_key(|c| c.bits());
         seen.dedup();
         assert_eq!(seen.len(), STICKY_SWATCHES.len(), "swatch colours collide");
         // Every swatch is fully opaque (alpha = 0xFF), so a note is never
         // accidentally transparent.
-        assert!(STICKY_SWATCHES.iter().all(|c| c >> 24 == 0xFF));
+        assert!(STICKY_SWATCHES.iter().all(|c| c.alpha() == 0xFF));
     }
 
     #[test]

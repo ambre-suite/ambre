@@ -8,6 +8,7 @@
 //! sheets and the selections before the walk, and the carets and the
 //! composition after it.
 
+use ambre_core::Rgba;
 use ambre_draw::{Affine, Brush, Color, DocumentWalk, DrawSurface, PositionedLayoutItem, Rect};
 
 use crate::layout::run::{CellStyle, ParleyRunData, ShapedRun};
@@ -373,7 +374,7 @@ fn paint_cell_box<S: DrawSurface>(
 }
 
 /// A colour packed as `0xRRGGBBAA`.
-fn packed(rgba: u32) -> Color {
-    let [r, g, b, a] = rgba.to_be_bytes();
+fn packed(rgba: Rgba) -> Color {
+    let [r, g, b, a] = rgba.channels();
     Color::from_rgba8(r, g, b, a)
 }

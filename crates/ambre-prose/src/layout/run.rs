@@ -6,6 +6,7 @@
 //! that paints (`PROSE-UI-006`, `PROSE-UI-114`). A run holds no GPU handle
 //! and nothing bound to a thread, so it crosses by move (`PROSE-UI-113`).
 
+use ambre_core::Rgba;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -1052,8 +1053,8 @@ pub struct CellShape {
 /// section 3`), in pixels and packed colours.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CellStyle {
-    /// The fill as `0xRRGGBBAA`. None leaves the sheet showing.
-    pub fill: Option<u32>,
+    /// The fill. None leaves the sheet showing.
+    pub fill: Option<Rgba>,
     /// The stored border. None draws the theme's hairline (`PROSE-UI-181`).
     pub border: Option<CellBorderPx>,
     /// The inset on each of the four sides.
@@ -1079,8 +1080,8 @@ pub struct CellBorderPx {
     pub bottom: f32,
     pub left: f32,
     pub right: f32,
-    /// As `0xRRGGBBAA`. None takes the theme's border colour.
-    pub color: Option<u32>,
+    /// None takes the theme's border colour.
+    pub color: Option<Rgba>,
 }
 
 // `PROSE-UI-113`: the run crosses from the thread that shapes to the thread

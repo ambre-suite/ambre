@@ -10,6 +10,7 @@
 //! Nothing here writes. The resolution runs once per run per layout, which is
 //! the row the budget pays for (`ambre-spec-budgets.md section 1`).
 
+use ambre_core::Rgba;
 use std::collections::BTreeMap;
 
 use crate::doc::DocDefaults;
@@ -41,8 +42,8 @@ pub struct ResolvedStyle {
     pub superscript: bool,
     pub subscript: bool,
     pub code_inline: bool,
-    pub color: Option<u32>,
-    pub background: Option<u32>,
+    pub color: Option<Rgba>,
+    pub background: Option<Rgba>,
     /// In points.
     pub font_size: f32,
     pub font_family: Option<String>,
@@ -212,6 +213,6 @@ mod tests {
         let short = resolve(&marks(&[("fg", "#3366cc")]), body(), &defaults);
         let long = resolve(&marks(&[("fg", "#3366ccff")]), body(), &defaults);
         assert_eq!(short.color, long.color);
-        assert_eq!(short.color, Some(0x3366_ccff));
+        assert_eq!(short.color, Some(Rgba::from_bits(0x3366_ccff)));
     }
 }

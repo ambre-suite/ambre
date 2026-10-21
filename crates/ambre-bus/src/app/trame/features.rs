@@ -11,6 +11,7 @@
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
+use ambre_core::Rgb;
 
 /// A rectangular grid range `[row..=row_end] x [col..=col_end]` (0-based,
 /// inclusive). Corners may be given in any order; the handler normalizes them.
@@ -65,16 +66,16 @@ pub enum CondFormatKind {
     IsNotEmpty,
     IsError,
     ColorScale2 {
-        min_color: u32,
-        max_color: u32,
+        min_color: Rgb,
+        max_color: Rgb,
     },
     ColorScale3 {
-        min_color: u32,
-        mid_color: u32,
-        max_color: u32,
+        min_color: Rgb,
+        mid_color: Rgb,
+        max_color: Rgb,
     },
     DataBar {
-        color: u32,
+        color: Rgb,
     },
     TopN(u32),
     BottomN(u32),
@@ -87,8 +88,8 @@ pub enum CondFormatKind {
 /// packed `0xRRGGBB`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CondStyle {
-    pub fg: Option<u32>,
-    pub bg: u32,
+    pub fg: Option<Rgb>,
+    pub bg: Rgb,
     pub bold: bool,
 }
 

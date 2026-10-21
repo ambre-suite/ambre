@@ -26,6 +26,8 @@
 pub mod activity;
 pub mod authorship;
 pub mod channel_kind;
+/// Colours typed by their packing: [`Rgba`], [`Rgb`], [`Argb`].
+pub mod color;
 pub mod credential;
 pub mod doc_type;
 pub mod docfile;
@@ -65,6 +67,7 @@ pub mod version;
 // Re-export the main types for convenient use.
 pub use authorship::{PeerEntry, PeerId, SessionNonce};
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
+pub use color::{Argb, Rgb, Rgba};
 pub use credential::{OidcCode, OidcState, PresignedUrl};
 pub use doc_type::DocType;
 pub use docfile::{

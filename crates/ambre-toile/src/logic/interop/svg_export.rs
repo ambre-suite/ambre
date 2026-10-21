@@ -16,6 +16,7 @@
 
 use std::fmt::Write as _;
 
+use ambre_core::Argb;
 use base64::Engine as _;
 use kurbo::Rect;
 
@@ -174,7 +175,8 @@ fn element_shape(el: &ExportElement) -> Option<String> {
             } else {
                 r.height()
             };
-            let (hex, op) = argb_hex_opacity(el.style.text_color.unwrap_or(0xFF00_0000));
+            let (hex, op) =
+                argb_hex_opacity(el.style.text_color.unwrap_or(Argb::from_bits(0xFF00_0000)));
             let mut attrs = format!(" font-size=\"{}\" fill=\"{hex}\"", f(size));
             if op < 1.0 {
                 let _ = write!(attrs, " fill-opacity=\"{}\"", f(f64::from(op)));
@@ -232,12 +234,9 @@ fn paint_attrs(el: &ExportElement) -> String {
 }
 
 /// Split a packed ARGB into a `#rrggbb` string and a `0.0..=1.0` alpha.
-fn argb_hex_opacity(argb: u32) -> (String, f32) {
-    let a = ((argb >> 24) & 0xFF) as f32 / 255.0;
-    let r = (argb >> 16) & 0xFF;
-    let g = (argb >> 8) & 0xFF;
-    let b = argb & 0xFF;
-    (format!("#{r:02x}{g:02x}{b:02x}"), a)
+fn argb_hex_opacity(argb: Argb) -> (String, f32) {
+    let [r, g, b, a] = argb.channels();
+    (format!("#{r:02x}{g:02x}{b:02x}"), f32::from(a) / 255.0)
 }
 
 /// Union AABB of every element's rect, or `None` if the slice is empty.
@@ -284,8 +283,8 @@ mod tests {
             Rect::new(10.0, 20.0, 110.0, 70.0),
         );
         el.style = ElementStyle {
-            fill: Some(0xFF33_66CC),
-            stroke: Some(0xFF00_0000),
+            fill: Some(Argb::from_bits(0xFF33_66CC)),
+            stroke: Some(Argb::from_bits(0xFF00_0000)),
             stroke_w: 2.0,
             ..ElementStyle::default()
         };
@@ -418,7 +417,7 @@ mod tests {
         let mut el = ExportElement::new(ElementKind::Text, Rect::new(0.0, 0.0, 50.0, 20.0));
         el.text = Some("sized".to_owned());
         el.style.font.size = 24.0;
-        el.style.text_color = Some(0xFF11_2233);
+        el.style.text_color = Some(Argb::from_bits(0xFF11_2233));
         let svg = export_svg(&[el]).document;
         assert!(
             svg.contains("font-size=\"24\" fill=\"#112233\""),

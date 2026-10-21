@@ -16,6 +16,7 @@ use ambre_bus::app::toile::{
     Anchor, CommentAnchor, ConnectorId, DisplayGeom, DisplayNode, DisplayViewport, ElementId,
     ElementKind, EndCaps, InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
 };
+use ambre_core::Argb;
 use ambre_draw::{Affine, BezPath, Point, Rect, Size};
 use kurbo::Shape;
 
@@ -34,7 +35,7 @@ pub enum Tool {
     /// click places the note in that colour atomically (folded into
     /// `CreateElement.fill`, toile-tools). `aria-pressed` compares by
     /// discriminant, so any `Sticky(_)` reads active regardless of colour.
-    Sticky(u32),
+    Sticky(Argb),
     Shape(ShapeKind),
     Connector,
     Draw,
@@ -538,7 +539,7 @@ enum Draft {
     Place {
         kind: ElementKind,
         at: Point,
-        fill: Option<u32>,
+        fill: Option<Argb>,
     },
     /// A click-placed comment thread, resolved to its anchor on release
     /// (`TOILE-UI-042`).
@@ -986,7 +987,7 @@ fn stroke_point(world: Point) -> StrokePoint {
 fn draw_style() -> ambre_bus::app::toile::ElementStyle {
     ambre_bus::app::toile::ElementStyle {
         fill: None,
-        stroke: Some(0xFF33_3333),
+        stroke: Some(Argb::from_bits(0xFF33_3333)),
         stroke_w: 2.0,
         ..Default::default()
     }
@@ -2031,7 +2032,7 @@ mod tests {
         let mut m = ToolMachine::new();
         // The tool carries the picked card colour; a click must place the sticky
         // in that colour (folded into CreateElement.fill,).
-        let picked = 0xFFFF_00FF;
+        let picked = Argb::from_bits(0xFFFF_00FF);
         m.set_tool(Tool::Sticky(picked));
         let disp = empty_display();
         let cam = cam();
@@ -2171,7 +2172,7 @@ mod tests {
     #[test]
     fn escape_reverts_an_armed_creation_tool_to_select() {
         let mut m = ToolMachine::new();
-        m.set_tool(Tool::Sticky(0xFFFE_F08A));
+        m.set_tool(Tool::Sticky(Argb::from_bits(0xFFFE_F08A)));
         let disp = empty_display();
         let cam = cam();
         // Arm a placement mid-gesture (pointer down, not yet released).

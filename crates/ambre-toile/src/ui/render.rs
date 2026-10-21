@@ -597,6 +597,7 @@ mod tests {
     use ambre_bus::app::toile::{
         DisplayConnector, DisplayElement, ElementId, ElementKind, ElementStyle, ShapeKind,
     };
+    use ambre_core::Argb;
     use ambre_draw::Color;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
@@ -762,7 +763,7 @@ mod tests {
                 bounds: Rect::new(20.0, 20.0, 70.0, 70.0),
                 rotation: 0.0,
                 opacity: 0.5,
-                fill: Some(0xFF00_00FF),
+                fill: Some(Argb::from_bits(0xFF00_00FF)),
             },
         );
         let mut surface = RecordingSurface::new();
@@ -801,7 +802,7 @@ mod tests {
         id: &str,
         kind: ElementKind,
         geom: DisplayGeom,
-        fill: Option<u32>,
+        fill: Option<Argb>,
     ) -> DisplayNode {
         let style = ElementStyle {
             fill,
@@ -845,7 +846,7 @@ mod tests {
     /// sticky is therefore drawn over the card and stays readable.
     #[test]
     fn a_caption_plate_is_painted_over_the_element_bodies() {
-        let fill = 0xFFFE_F08A;
+        let fill = Argb::from_bits(0xFFFE_F08A);
         let mut path = ambre_draw::BezPath::new();
         path.move_to((-200.0, 40.0));
         path.line_to((300.0, 40.0));
@@ -907,7 +908,7 @@ mod tests {
     // Text and paint no background, so it was invisible (toile-styles).
     #[test]
     fn sticky_paints_a_colored_card() {
-        let fill = 0xFFFE_F08A; // sticky yellow
+        let fill = Argb::from_bits(0xFFFE_F08A); // sticky yellow
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
             grid_unit: grid::BASE_GRID,
@@ -981,19 +982,30 @@ mod tests {
     fn text_ink_precedence() {
         // Explicit text_color always wins, for sticky and text alike.
         assert_eq!(
-            resolved_text_ink(true, Some(0x1234), Some(0x9999)),
-            Some(0x1234)
+            resolved_text_ink(
+                true,
+                Some(Argb::from_bits(0x1234)),
+                Some(Argb::from_bits(0x9999))
+            ),
+            Some(Argb::from_bits(0x1234))
         );
         assert_eq!(
-            resolved_text_ink(false, Some(0x1234), Some(0x9999)),
-            Some(0x1234)
+            resolved_text_ink(
+                false,
+                Some(Argb::from_bits(0x1234)),
+                Some(Argb::from_bits(0x9999))
+            ),
+            Some(Argb::from_bits(0x1234))
         );
         // No text_color: a sticky uses its ink; a text element uses its fill.
         assert_eq!(
-            resolved_text_ink(true, None, Some(0x9999)),
+            resolved_text_ink(true, None, Some(Argb::from_bits(0x9999))),
             Some(STICKY_INK)
         );
-        assert_eq!(resolved_text_ink(false, None, Some(0x9999)), Some(0x9999));
+        assert_eq!(
+            resolved_text_ink(false, None, Some(Argb::from_bits(0x9999))),
+            Some(Argb::from_bits(0x9999))
+        );
         // A text element with neither falls back to the theme (None).
         assert_eq!(resolved_text_ink(false, None, None), None);
     }
@@ -1027,7 +1039,7 @@ mod tests {
                 "t",
                 ElementKind::Text,
                 DisplayGeom::Text("hi".into()),
-                Some(0xFF00_00FF),
+                Some(Argb::from_bits(0xFF00_00FF)),
             )],
         };
         let surface = paint(&vp);
@@ -1852,7 +1864,7 @@ mod tests {
         out
     }
 
-    fn filled(id: &str, fill: u32, bounds: Rect) -> DisplayNode {
+    fn filled(id: &str, fill: Argb, bounds: Rect) -> DisplayNode {
         let DisplayNode::Element(mut e) = elem(id, DisplayGeom::Rect, bounds) else {
             panic!("elem builds an element")
         };
@@ -1861,7 +1873,7 @@ mod tests {
         DisplayNode::Element(e)
     }
 
-    fn arrow(id: &str, stroke: u32, from: (f64, f64), to: (f64, f64)) -> DisplayNode {
+    fn arrow(id: &str, stroke: Argb, from: (f64, f64), to: (f64, f64)) -> DisplayNode {
         let mut path = BezPath::new();
         path.move_to(from);
         path.line_to(to);
@@ -1880,7 +1892,7 @@ mod tests {
         })
     }
 
-    fn note(id: &str, body: &str, fill: u32, bounds: Rect) -> DisplayNode {
+    fn note(id: &str, body: &str, fill: Argb, bounds: Rect) -> DisplayNode {
         let DisplayNode::Element(mut e) = styled_elem(
             id,
             ElementKind::Sticky,
@@ -1897,13 +1909,17 @@ mod tests {
     /// an arrow between the elements around it. Reversed, the paint reverses.
     #[test]
     fn the_walk_paints_in_the_order_it_is_handed() {
-        let (red, blue, green) = (0xFFFF_0000, 0xFF00_00FF, 0xFF00_FF00);
+        let (red, blue, green) = (
+            Argb::from_bits(0xFFFF_0000),
+            Argb::from_bits(0xFF00_00FF),
+            Argb::from_bits(0xFF00_FF00),
+        );
         let a = filled("a", red, Rect::new(0.0, 0.0, 50.0, 50.0));
         let b = filled("b", green, Rect::new(20.0, 20.0, 70.0, 70.0));
         let c = arrow("c", blue, (-40.0, 30.0), (120.0, 30.0));
         let order = |nodes: Vec<DisplayNode>| {
             let surface = paint_pass(&board(nodes), &cam(), &Pass::default());
-            let at = |want: u32| {
+            let at = |want: Argb| {
                 surface
                     .ops()
                     .iter()
@@ -1929,13 +1945,13 @@ mod tests {
     fn a_note_body_is_drawn_in_an_ink_that_reads_on_its_card() {
         let bounds = Rect::new(0.0, 0.0, 200.0, 160.0);
         let cards = [
-            0xFFFE_F08A,
-            0xFFFF_FFFF,
-            0xFF00_0000,
+            Argb::from_bits(0xFFFE_F08A),
+            Argb::from_bits(0xFFFF_FFFF),
+            Argb::from_bits(0xFF00_0000),
             STICKY_INK,
-            0xFF1E_3A8A,
-            0xFF77_7777,
-            0xFFE5_3935,
+            Argb::from_bits(0xFF1E_3A8A),
+            Argb::from_bits(0xFF77_7777),
+            Argb::from_bits(0xFFE5_3935),
         ];
         for card in cards {
             let vp = board(vec![note("s", "Plan the week", card, bounds)]);
@@ -2002,7 +2018,12 @@ mod tests {
     #[test]
     fn a_body_is_laid_out_in_board_units_under_the_camera() {
         let bounds = Rect::new(-100.0, -80.0, 100.0, 80.0);
-        let vp = board(vec![note("s", "Plan", 0xFFFE_F08A, bounds)]);
+        let vp = board(vec![note(
+            "s",
+            "Plan",
+            Argb::from_bits(0xFFFE_F08A),
+            bounds,
+        )]);
         let origin = |zoom: f64| {
             let mut cam = cam();
             cam.zoom = zoom;
@@ -2128,11 +2149,16 @@ mod tests {
     #[test]
     fn the_note_under_the_editor_paints_no_body() {
         let vp = board(vec![
-            note("a", "First", 0xFFFE_F08A, Rect::new(0.0, 0.0, 160.0, 120.0)),
+            note(
+                "a",
+                "First",
+                Argb::from_bits(0xFFFE_F08A),
+                Rect::new(0.0, 0.0, 160.0, 120.0),
+            ),
             note(
                 "b",
                 "Second note",
-                0xFFFE_F08A,
+                Argb::from_bits(0xFFFE_F08A),
                 Rect::new(200.0, 0.0, 360.0, 120.0),
             ),
         ]);
@@ -2174,7 +2200,7 @@ mod tests {
     fn the_background_comes_first_and_focus_drops_the_grid() {
         let vp = board(vec![filled(
             "a",
-            0xFFFF_0000,
+            Argb::from_bits(0xFFFF_0000),
             Rect::new(0.0, 0.0, 50.0, 50.0),
         )]);
         let canvas = Rect::new(0.0, 0.0, 1000.0, 800.0);

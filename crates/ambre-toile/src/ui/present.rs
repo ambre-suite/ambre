@@ -108,6 +108,7 @@ impl Transition {
 mod tests {
     use super::*;
     use ambre_bus::app::toile::{ElementId, SnapElement};
+    use ambre_core::Argb;
     use ambre_draw::{Rect, Size};
 
     fn snap(id: &str, bounds: Rect) -> SnapElement {
@@ -116,7 +117,7 @@ mod tests {
             bounds,
             rotation: 0.0,
             opacity: 1.0,
-            fill: Some(0xFF00_0000),
+            fill: Some(Argb::from_bits(0xFF00_0000)),
         }
     }
 

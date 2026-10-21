@@ -44,6 +44,7 @@
 //! enforced while walking. Any breach aborts the whole import atomically: the
 //! returned `Err` carries no commands.
 
+use ambre_core::{Argb, Rgb};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
 
@@ -477,16 +478,11 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
 
 /// A solid paint as packed ARGB (`ElementStyle` color encoding), or `None` for a
 /// gradient / pattern paint.
-fn paint_argb(paint: &usvg::Paint, opacity: f32) -> Option<u32> {
+fn paint_argb(paint: &usvg::Paint, opacity: f32) -> Option<Argb> {
     match paint {
         usvg::Paint::Color(c) => {
-            let a = (opacity.clamp(0.0, 1.0) * 255.0).round() as u32;
-            Some(
-                (a << 24)
-                    | (u32::from(c.red) << 16)
-                    | (u32::from(c.green) << 8)
-                    | u32::from(c.blue),
-            )
+            let a = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+            Some(Rgb::from_channels(c.red, c.green, c.blue).to_argb(a))
         }
         _ => None,
     }

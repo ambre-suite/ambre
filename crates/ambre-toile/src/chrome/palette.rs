@@ -115,7 +115,7 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
                 <Icon icon=icondata::MdiNoteOutline />
                 <span
                     class="swatch-strip"
-                    style:background-color=move || format!("#{:06x}", strip_color() & 0x00ff_ffff)
+                    style:background-color=move || format!("#{:06x}", strip_color().rgb().bits())
                 ></span>
             </button>
             <Show when=move || open.get() fallback=|| ()>
@@ -126,10 +126,10 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
                             .map(|&argb| {
                                 view! {
                                     <button
-                                        aria-label=format!("#{:06x}", argb & 0x00ff_ffff)
+                                        aria-label=format!("#{:06x}", argb.rgb().bits())
                                         style:background-color=format!(
                                             "#{:06x}",
-                                            argb & 0x00ff_ffff,
+                                            argb.rgb().bits(),
                                         )
                                         on:mousedown=move |ev| ev.prevent_default()
                                         on:click=move |_| {

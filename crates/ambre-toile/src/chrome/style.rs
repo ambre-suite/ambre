@@ -30,6 +30,7 @@ use std::time::Duration;
 use ambre_bus::app::toile::ElementStyle;
 use ambre_chrome::commands::CommandId;
 use ambre_chrome::{ColorPopover, Debouncer, FontPicker, FontSizeSelect, FormatToggle};
+use ambre_core::Argb;
 use leptos::prelude::*;
 
 /// Map a stored `FontSpec.family` string to the picker's family label (`None` =
@@ -83,11 +84,11 @@ pub fn StyleInspector(
     Effect::new(move |_| {
         if let Some(m) = model.get() {
             working.set(m.base.clone());
-            fill.set(m.base.fill);
-            stroke.set(m.base.stroke);
+            fill.set(m.base.fill.map(Argb::bits));
+            stroke.set(m.base.stroke.map(Argb::bits));
             stroke_w.set(m.base.stroke_w);
             opacity.set(m.base.opacity);
-            text_color.set(m.base.text_color);
+            text_color.set(m.base.text_color.map(Argb::bits));
             font_family.set(family_label(&m.base.font.family));
             font_size.set(m.base.font.size);
             bold.set(m.base.font.weight >= 700);
@@ -112,15 +113,15 @@ pub fn StyleInspector(
     // Colour picks: update the local signal (so the swatch strip tracks) and commit.
     let on_fill = Callback::new(move |c: Option<u32>| {
         fill.set(c);
-        commit(StyleEdit::Fill(c));
+        commit(StyleEdit::Fill(c.map(Argb::from_bits)));
     });
     let on_stroke = Callback::new(move |c: Option<u32>| {
         stroke.set(c);
-        commit(StyleEdit::Stroke(c));
+        commit(StyleEdit::Stroke(c.map(Argb::from_bits)));
     });
     let on_text_color = Callback::new(move |c: Option<u32>| {
         text_color.set(c);
-        commit(StyleEdit::TextColor(c));
+        commit(StyleEdit::TextColor(c.map(Argb::from_bits)));
     });
     let on_font = Callback::new(move |f: Option<String>| {
         font_family.set(f.clone());

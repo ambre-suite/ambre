@@ -8,6 +8,7 @@
 
 use ambre_bus::{AppEvent, BorderStyle, CellFormat, HAlign, TrameEvent, UiEvent, VAlign};
 use ambre_chrome::CommandStates;
+use ambre_core::Rgb;
 use leptos::prelude::*;
 
 use super::commands::{REDO, UNDO};
@@ -135,8 +136,8 @@ pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
         // explicit pick every time the selection emits `StyleApplied`, making the
         // line-style picker revert to the cell's current edge
         // (`trame-cell-styles`).
-        s.fg.set(style.fg);
-        s.bg.set(style.bg);
+        s.fg.set(style.fg.map(Rgb::bits));
+        s.bg.set(style.bg.map(Rgb::bits));
         s.font.set(style.font.clone());
         s.size.set(style.size);
     }

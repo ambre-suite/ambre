@@ -14,6 +14,7 @@
 
 use std::collections::BTreeMap;
 
+use ambre_core::Argb;
 use ambre_core::DocType;
 use ambre_core::DocumentId;
 use ambre_core::UserId;
@@ -219,7 +220,7 @@ impl Default for FontSpec {
 /// Optional drop shadow.
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Shadow {
-    pub color: u32, // ARGB
+    pub color: Argb,
     pub dx: f32,
     pub dy: f32,
     pub blur: f32,
@@ -236,8 +237,8 @@ pub struct Shadow {
 /// guarantee holds yet. GA needs a versioned register.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct ElementStyle {
-    pub fill: Option<u32>, // ARGB, None = no fill
-    pub stroke: Option<u32>,
+    pub fill: Option<Argb>, // None = no fill
+    pub stroke: Option<Argb>,
     pub stroke_w: f32,
     pub opacity: f32, // 0.0 ..= 1.0
     pub corner: f32,  // corner radius for rect / sticky
@@ -246,14 +247,14 @@ pub struct ElementStyle {
     /// Text (foreground) colour, ARGB. `None` = the kind's default ink (a
     /// sticky's fixed readable ink, or the theme text colour for a free text
     /// element). Distinct from `fill`, which is the card / shape background.
-    pub text_color: Option<u32>,
+    pub text_color: Option<Argb>,
 }
 
 impl Default for ElementStyle {
     fn default() -> Self {
         Self {
-            fill: Some(0xFFFF_FFFF),
-            stroke: Some(0xFF33_3333),
+            fill: Some(Argb::from_bits(0xFFFF_FFFF)),
+            stroke: Some(Argb::from_bits(0xFF33_3333)),
             stroke_w: 1.0,
             opacity: 1.0,
             corner: 0.0,
@@ -273,7 +274,7 @@ pub const FRAME_NAME_MAX: usize = 120;
 /// The default sticky-note card colour (ARGB): a warm pastel yellow, the Miro /
 /// Figma-whiteboard default. Used as the seeded fill for a `sticky` element and
 /// as the Sticky tool's default colour (`toile-tools`).
-pub const STICKY_DEFAULT_FILL: u32 = 0xFFFE_F08A;
+pub const STICKY_DEFAULT_FILL: Argb = Argb::from_bits(0xFFFE_F08A);
 
 /// Corner radius (world units) of a sticky-note card. A sticky is a plain
 /// rectangle (Miro-style), so this is zero. A named constant keeps the card's
@@ -894,8 +895,8 @@ pub struct SnapElement {
     pub rotation: f64,
     /// Opacity `0.0 ..= 1.0` (from [`ElementStyle::opacity`]).
     pub opacity: f32,
-    /// Fill color as ARGB, `None` = no fill (from [`ElementStyle::fill`]).
-    pub fill: Option<u32>,
+    /// Fill color, `None` = no fill (from [`ElementStyle::fill`]).
+    pub fill: Option<Argb>,
 }
 
 /// The animatable set of a frame for a transition: its declared children as
@@ -1027,7 +1028,7 @@ pub enum ToileCommand {
         /// the rest of the default alone. The Sticky tool uses it to place a
         /// note in the picked palette colour atomically (one element, one undo
         /// item). `None` keeps the per-kind default. See `toile-styles`.
-        fill: Option<u32>,
+        fill: Option<Argb>,
         /// A request token the UI echoes in `ElementCreated`, so a deferred
         /// open claims the element this command created and no other
         /// (`TOILE-UI-194`). Zero means no deferred open is pending.
@@ -1959,10 +1960,10 @@ mod tests {
     #[test]
     fn a_style_round_trips_through_its_version() {
         let style = ElementStyle {
-            fill: Some(0xffaa_bbcc),
+            fill: Some(Argb::from_bits(0xffaa_bbcc)),
             corner: 8.0,
             shadow: Some(Shadow {
-                color: 0xff00_0000,
+                color: Argb::from_bits(0xff00_0000),
                 dx: 1.0,
                 dy: 2.0,
                 blur: 3.0,

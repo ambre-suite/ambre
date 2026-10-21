@@ -20,6 +20,7 @@
 
 use std::collections::HashMap;
 
+use ambre_core::Argb;
 use kurbo::Rect;
 
 use crate::logic::model::ElementId;
@@ -38,7 +39,7 @@ pub struct AnimatedElement {
     pub bounds: Rect,
     pub rotation: f64,
     pub opacity: f32,
-    pub fill: Option<u32>,
+    pub fill: Option<Argb>,
 }
 
 impl AnimatedElement {
@@ -148,7 +149,7 @@ fn lerp_rect(a: Rect, b: Rect, t: f64) -> Rect {
 /// is no common color to blend, so crossfade to the `t`-dominant side (`< 0.5`
 /// keeps `a`, `>= 0.5` takes `b`). This keeps the tween deterministic and never
 /// invents a color out of `None`.
-fn lerp_fill(a: Option<u32>, b: Option<u32>, t: f64) -> Option<u32> {
+fn lerp_fill(a: Option<Argb>, b: Option<Argb>, t: f64) -> Option<Argb> {
     match (a, b) {
         (Some(ca), Some(cb)) => Some(lerp_argb(ca, cb, t)),
         _ => {
@@ -162,20 +163,27 @@ fn lerp_fill(a: Option<u32>, b: Option<u32>, t: f64) -> Option<u32> {
 }
 
 /// Per-channel lerp of two ARGB colors.
-fn lerp_argb(a: u32, b: u32, t: f64) -> u32 {
+fn lerp_argb(a: Argb, b: Argb, t: f64) -> Argb {
+    let (a, b) = (a.bits(), b.bits());
     let ch = |shift: u32| {
         let ca = ((a >> shift) & 0xFF) as f64;
         let cb = ((b >> shift) & 0xFF) as f64;
         (lerp_f64(ca, cb, t).round().clamp(0.0, 255.0) as u32) << shift
     };
-    ch(24) | ch(16) | ch(8) | ch(0)
+    Argb::from_bits(ch(24) | ch(16) | ch(8) | ch(0))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn snap(id: &str, bounds: Rect, rotation: f64, opacity: f32, fill: Option<u32>) -> SnapElement {
+    fn snap(
+        id: &str,
+        bounds: Rect,
+        rotation: f64,
+        opacity: f32,
+        fill: Option<Argb>,
+    ) -> SnapElement {
         SnapElement {
             id: ElementId(id.to_owned()),
             bounds,
@@ -196,14 +204,14 @@ mod tests {
             rect(0.0, 0.0, 10.0, 10.0),
             0.0,
             1.0,
-            Some(0xFF00_0000),
+            Some(Argb::from_bits(0xFF00_0000)),
         );
         let b = snap(
             "e1",
             rect(20.0, 40.0, 30.0, 50.0),
             2.0,
             0.0,
-            Some(0xFF00_00FF),
+            Some(Argb::from_bits(0xFF00_00FF)),
         );
         let from = FrameSnapshot {
             elements: vec![a.clone()],
@@ -220,12 +228,18 @@ mod tests {
         assert_eq!(m.rotation, 1.0);
         assert_eq!(m.opacity, 0.5);
         // Blue channel midpoint of 0x00 -> 0xFF is 0x80 (128), alpha stays 0xFF.
-        assert_eq!(m.fill, Some(0xFF00_0080));
+        assert_eq!(m.fill, Some(Argb::from_bits(0xFF00_0080)));
     }
 
     #[test]
     fn new_element_fades_in() {
-        let b = snap("new", rect(0.0, 0.0, 5.0, 5.0), 0.0, 0.8, Some(0xFFAA_BBCC));
+        let b = snap(
+            "new",
+            rect(0.0, 0.0, 5.0, 5.0),
+            0.0,
+            0.8,
+            Some(Argb::from_bits(0xFFAA_BBCC)),
+        );
         let from = FrameSnapshot::default();
         let to = FrameSnapshot {
             elements: vec![b.clone()],
@@ -239,7 +253,13 @@ mod tests {
 
     #[test]
     fn gone_element_fades_out() {
-        let a = snap("old", rect(1.0, 2.0, 3.0, 4.0), 0.5, 0.6, Some(0xFF11_2233));
+        let a = snap(
+            "old",
+            rect(1.0, 2.0, 3.0, 4.0),
+            0.5,
+            0.6,
+            Some(Argb::from_bits(0xFF11_2233)),
+        );
         let from = FrameSnapshot {
             elements: vec![a.clone()],
         };
@@ -253,13 +273,19 @@ mod tests {
 
     #[test]
     fn endpoints_reproduce_source_and_target() {
-        let a = snap("e", rect(0.0, 0.0, 10.0, 10.0), 0.0, 1.0, Some(0xFF00_0000));
+        let a = snap(
+            "e",
+            rect(0.0, 0.0, 10.0, 10.0),
+            0.0,
+            1.0,
+            Some(Argb::from_bits(0xFF00_0000)),
+        );
         let b = snap(
             "e",
             rect(100.0, 100.0, 20.0, 20.0),
             3.0,
             0.2,
-            Some(0xFFFF_FFFF),
+            Some(Argb::from_bits(0xFFFF_FFFF)),
         );
         // t = 0 reproduces A, t = 1 reproduces B.
         let at0 = AnimatedElement::lerp(&a, &b, 0.0);

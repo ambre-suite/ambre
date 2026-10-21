@@ -7,6 +7,7 @@
 //! from it. A call site cannot pick a different policy for the same key,
 //! because it never states one.
 
+use ambre_core::{Rgb, Rgba};
 use loro::{ExpandType, LoroDoc, StyleConfig, StyleConfigMap};
 
 /// The formatting keys: the mark's value is the formatting itself, and an
@@ -158,7 +159,7 @@ pub enum MarkValueError {
 /// # Errors
 /// [`MarkValueError::BadColor`] for anything but a hash and six or eight
 /// hexadecimal digits.
-pub fn parse_color(raw: &str) -> Result<u32, MarkValueError> {
+pub fn parse_color(raw: &str) -> Result<Rgba, MarkValueError> {
     let bad = || MarkValueError::BadColor(raw.to_owned());
     let digits = raw.strip_prefix('#').ok_or_else(bad)?;
     if !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -166,9 +167,11 @@ pub fn parse_color(raw: &str) -> Result<u32, MarkValueError> {
     }
     match digits.len() {
         6 => u32::from_str_radix(digits, 16)
-            .map(|rgb| (rgb << 8) | 0xFF)
+            .map(|rgb| Rgb::from_bits(rgb).to_rgba(0xFF))
             .map_err(|_| bad()),
-        8 => u32::from_str_radix(digits, 16).map_err(|_| bad()),
+        8 => u32::from_str_radix(digits, 16)
+            .map(Rgba::from_bits)
+            .map_err(|_| bad()),
         _ => Err(bad()),
     }
 }
@@ -178,11 +181,10 @@ pub fn parse_color(raw: &str) -> Result<u32, MarkValueError> {
 /// A fully opaque colour is spelled in six digits, and every other in eight.
 /// Lower case throughout, so two peers writing one colour write one string.
 #[must_use]
-pub fn canonical_color(rgba: u32) -> String {
-    if rgba & 0xFF == 0xFF {
-        format!("#{:06x}", rgba >> 8)
-    } else {
-        format!("#{rgba:08x}")
+pub fn canonical_color(rgba: Rgba) -> String {
+    match rgba.channels() {
+        [_, _, _, 0xFF] => format!("#{:06x}", rgba.rgb().bits()),
+        _ => format!("#{:08x}", rgba.bits()),
     }
 }
 

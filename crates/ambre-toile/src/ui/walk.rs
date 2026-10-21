@@ -23,6 +23,7 @@ use ambre_bus::app::toile::{
     ElementId, ElementStyle,
 };
 use ambre_canvas::{Palette, TextCache};
+use ambre_core::Argb;
 use ambre_draw::{
     Affine, Alignment, BezPath, Brush, Color, DocumentWalk, DrawSurface, FontContext, ImageKey,
     ImageSource, Point, PositionedLayoutItem, Rect, Size, Stroke,
@@ -144,10 +145,10 @@ impl DocumentWalk for BoardWalk<'_> {
 
 /// The dark ink (ARGB) of a sticky-note body: a near-black, readable on a light
 /// card. Independent of the theme (the card is not).
-pub(crate) const STICKY_INK: u32 = 0xFF1A_1A1A;
+pub(crate) const STICKY_INK: Argb = Argb::from_bits(0xFF1A_1A1A);
 
 /// The light ink (ARGB) of a sticky-note body, for a dark card.
-pub(crate) const STICKY_INK_ON_DARK: u32 = 0xFFFF_FFFF;
+pub(crate) const STICKY_INK_ON_DARK: Argb = Argb::from_bits(0xFFFF_FFFF);
 
 /// The linear value of each 8-bit sRGB channel (WCAG 2), built once. A sticky
 /// body weighs four colours, and computing their powers on every frame cost an
@@ -164,19 +165,15 @@ static LINEAR: LazyLock<[f64; 256]> = LazyLock::new(|| {
 });
 
 /// The relative luminance of an ARGB colour, alpha ignored (WCAG 2).
-fn luminance(argb: u32) -> f64 {
-    // A masked byte is always inside the table.
-    let channel = |shift: u32| {
-        LINEAR
-            .get(((argb >> shift) & 0xff) as usize)
-            .copied()
-            .unwrap_or(0.0)
-    };
-    0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0)
+fn luminance(argb: Argb) -> f64 {
+    // A byte is always inside the table.
+    let channel = |c: u8| LINEAR.get(usize::from(c)).copied().unwrap_or(0.0);
+    let [r, g, b] = argb.rgb().channels();
+    0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
 }
 
 /// The WCAG 2 contrast ratio of two ARGB colours, from 1 to 21.
-pub(crate) fn contrast(a: u32, b: u32) -> f64 {
+pub(crate) fn contrast(a: Argb, b: Argb) -> f64 {
     let (la, lb) = (luminance(a), luminance(b));
     (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
 }
@@ -184,7 +181,7 @@ pub(crate) fn contrast(a: u32, b: u32) -> f64 {
 /// The ink of a sticky body on `card`: of the two inks, the one that contrasts
 /// more with the card (`TOILE-UI-262`). The worst card, a mid grey, still
 /// reads at four to one. A note with no fill paints the dark ink.
-fn sticky_ink(card: Option<u32>) -> u32 {
+fn sticky_ink(card: Option<Argb>) -> Argb {
     match card {
         Some(c) if contrast(c, STICKY_INK_ON_DARK) > contrast(c, STICKY_INK) => STICKY_INK_ON_DARK,
         _ => STICKY_INK,
@@ -193,7 +190,7 @@ fn sticky_ink(card: Option<u32>) -> u32 {
 
 /// Sticky drop-shadow colour (ARGB): a soft translucent black offset to the
 /// bottom-right so the note reads as a physical card (feedback).
-pub(crate) const STICKY_SHADOW: u32 = 0x3300_0000;
+pub(crate) const STICKY_SHADOW: Argb = Argb::from_bits(0x3300_0000);
 /// Drop-shadow offset in world units (bottom-right).
 const STICKY_SHADOW_OFFSET: f64 = 4.0;
 
@@ -230,9 +227,9 @@ pub(crate) fn sticky_or_style_font_size(
 /// editor via the same precedence in `edit.rs`.
 pub(crate) fn resolved_text_ink(
     is_sticky: bool,
-    text_color: Option<u32>,
-    fill: Option<u32>,
-) -> Option<u32> {
+    text_color: Option<Argb>,
+    fill: Option<Argb>,
+) -> Option<Argb> {
     match (text_color, is_sticky) {
         (Some(tc), _) => Some(tc),
         (None, true) => Some(sticky_ink(fill)),
@@ -240,13 +237,11 @@ pub(crate) fn resolved_text_ink(
     }
 }
 
-/// Convert an ARGB `u32` (Toile style register,) to a `peniko::Color`,
-/// pre-multiplying the element `opacity` into the alpha channel.
-pub(crate) fn argb(v: u32, opacity: f32) -> Color {
-    let a = ((v >> 24) & 0xff) as f32 / 255.0;
-    let r = ((v >> 16) & 0xff) as u8;
-    let g = ((v >> 8) & 0xff) as u8;
-    let b = (v & 0xff) as u8;
+/// Convert a Toile style colour to a `peniko::Color`, pre-multiplying the
+/// element `opacity` into the alpha channel.
+pub(crate) fn argb(v: Argb, opacity: f32) -> Color {
+    let [r, g, b, a] = v.channels();
+    let a = f32::from(a) / 255.0;
     let alpha = (a * opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
     Color::from_rgba8(r, g, b, alpha)
 }
@@ -556,7 +551,7 @@ fn paint_element<S: DrawSurface>(
 }
 
 fn paint_connector<S: DrawSurface>(surface: &mut S, c: &DisplayConnector) {
-    let color = c.style.stroke.unwrap_or(0xFF33_3333);
+    let color = c.style.stroke.unwrap_or(Argb::from_bits(0xFF33_3333));
     surface.stroke_path(
         &c.path,
         &Brush::Solid(argb(color, c.style.opacity)),

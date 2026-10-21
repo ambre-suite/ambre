@@ -123,6 +123,7 @@ pub fn style_scope_for(selection: &[ElementId], selected: &[DisplayElement]) -> 
 mod tests {
     use super::*;
     use ambre_bus::app::toile::{DisplayElement, DisplayGeom, ElementKind, ShapeKind, Viewport};
+    use ambre_core::Argb;
     use kurbo::{Affine, Point, Rect, Size};
 
     fn eid(s: &str) -> ElementId {
@@ -186,7 +187,7 @@ mod tests {
     #[test]
     fn single_element_shows_its_style_with_no_mixed() {
         let s = ElementStyle {
-            fill: Some(0xff00_ff00),
+            fill: Some(Argb::from_bits(0xff00_ff00)),
             ..ElementStyle::default()
         };
         let dv = viewport(vec![elem("a", s.clone())]);
@@ -202,11 +203,11 @@ mod tests {
     #[test]
     fn off_screen_selection_contributes_its_style() {
         let a = ElementStyle {
-            fill: Some(0xffff_0000),
+            fill: Some(Argb::from_bits(0xffff_0000)),
             ..ElementStyle::default()
         };
         let b = ElementStyle {
-            fill: Some(0xff00_00ff),
+            fill: Some(Argb::from_bits(0xff00_00ff)),
             ..ElementStyle::default()
         };
         let selected: Vec<DisplayElement> = [elem("a", a.clone()), elem("b", b.clone())]
@@ -223,11 +224,11 @@ mod tests {
     #[test]
     fn differing_fill_flags_only_fill_mixed() {
         let a = ElementStyle {
-            fill: Some(0xffff_0000),
+            fill: Some(Argb::from_bits(0xffff_0000)),
             ..ElementStyle::default()
         };
         let b = ElementStyle {
-            fill: Some(0xff00_00ff),
+            fill: Some(Argb::from_bits(0xff00_00ff)),
             ..ElementStyle::default()
         };
         let dv = viewport(vec![elem("a", a.clone()), elem("b", b)]);

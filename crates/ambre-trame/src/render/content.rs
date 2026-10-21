@@ -5,6 +5,7 @@
 // the `use super::*` glob (the parent re-exports every renderer item).
 
 use super::*;
+use ambre_core::Rgb;
 
 // -----------------------------------------------------------------------------
 // Cell content view
@@ -29,9 +30,9 @@ pub struct CellContent<'a> {
     /// Vertical alignment within the cell (or the span rect for a merge master).
     pub v_align: ambre_bus::VAlign,
     /// Text colour, packed `0xRRGGBB` (`None` = the palette default).
-    pub fg: Option<u32>,
+    pub fg: Option<Rgb>,
     /// Fill colour, packed `0xRRGGBB` (`None` = the palette `content_bg`).
-    pub bg: Option<u32>,
+    pub bg: Option<Rgb>,
     /// Font family name (`None` = the grid default).
     pub font: Option<&'a str>,
     /// Font size in points (`None` = the grid default [`BODY_SIZE`]).
@@ -66,12 +67,9 @@ impl<'a> CellContent<'a> {
 }
 
 /// Unpack a `0xRRGGBB` colour into a [`Color`].
-pub(super) fn rgb(packed: u32) -> Color {
-    Color::from_rgb8(
-        ((packed >> 16) & 0xFF) as u8,
-        ((packed >> 8) & 0xFF) as u8,
-        (packed & 0xFF) as u8,
-    )
+pub(super) fn rgb(packed: Rgb) -> Color {
+    let [r, g, b] = packed.channels();
+    Color::from_rgb8(r, g, b)
 }
 
 /// Resolve a cell's parley alignment from its [`HAlign`], deferring `Auto` to

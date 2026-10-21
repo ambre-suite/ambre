@@ -2,6 +2,7 @@
 //! (`trame-shared-filter`, `trame-cell-styles`): filter kinds, alignment, number
 //! formats, borders, and the resolved [`CellStyle`] / sparse [`StylePatch`].
 
+use ambre_core::Rgb;
 use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------------
@@ -189,7 +190,7 @@ pub enum BorderStyle {
 pub struct CellBorder {
     pub style: BorderStyle,
     /// Border colour, packed `0xRRGGBB`. `None` = the default grid-line colour.
-    pub color: Option<u32>,
+    pub color: Option<Rgb>,
 }
 
 /// The four independent edges of a cell border (`trame-cell-styles`). Each edge
@@ -217,10 +218,10 @@ pub struct CellStyle {
     pub wrap: bool,
     /// Text colour, packed `0xRRGGBB`. `None` = theme default (adapts to the
     /// light/dark theme).
-    pub fg: Option<u32>,
+    pub fg: Option<Rgb>,
     /// Fill colour, packed `0xRRGGBB`. `None` = transparent (shows the themed
     /// sheet background).
-    pub bg: Option<u32>,
+    pub bg: Option<Rgb>,
     /// Font family name. `None` = the grid default font.
     pub font: Option<String>,
     /// Font size in points. `None` = the grid default size.
@@ -247,8 +248,8 @@ pub struct StylePatch {
     pub h_align: Option<HAlign>,
     pub v_align: Option<VAlign>,
     pub wrap: Option<bool>,
-    pub fg: Option<Option<u32>>,
-    pub bg: Option<Option<u32>>,
+    pub fg: Option<Option<Rgb>>,
+    pub bg: Option<Option<Rgb>>,
     pub font: Option<Option<String>>,
     pub size: Option<Option<u16>>,
     pub format: Option<CellFormat>,
@@ -270,5 +271,5 @@ pub struct BorderEdit {
     pub preset: BorderPreset,
     pub style: BorderStyle,
     /// Border colour, packed `0xRRGGBB`. `None` = the default grid-line colour.
-    pub color: Option<u32>,
+    pub color: Option<Rgb>,
 }

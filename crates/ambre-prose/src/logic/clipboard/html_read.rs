@@ -6,6 +6,7 @@
 //! script and a remote reference included, so nothing a page carries runs or
 //! loads. The walk holds its own stack, so a deep tree never recurses.
 
+use ambre_core::Rgba;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
@@ -715,23 +716,23 @@ fn css_color(value: &str) -> Option<String> {
             .split([',', ' ', '/'])
             .filter(|part| !part.is_empty())
             .collect();
-        let channel = |part: &str| -> Option<u32> {
+        let channel = |part: &str| -> Option<u8> {
             let value = match part.strip_suffix('%') {
                 Some(percent) => percent.parse::<f32>().ok()? * 2.55,
                 None => part.parse::<f32>().ok()?,
             };
-            Some(value.round().clamp(0.0, 255.0) as u32)
+            Some(value.round().clamp(0.0, 255.0) as u8)
         };
-        let alpha = |part: &str| -> Option<u32> {
+        let alpha = |part: &str| -> Option<u8> {
             let value = match part.strip_suffix('%') {
                 Some(percent) => percent.parse::<f32>().ok()? / 100.0,
                 None => part.parse::<f32>().ok()?,
             };
-            Some((value.clamp(0.0, 1.0) * 255.0).round() as u32)
+            Some((value.clamp(0.0, 1.0) * 255.0).round() as u8)
         };
         let [r, g, b] = [parts.first()?, parts.get(1)?, parts.get(2)?].map(|p| channel(p));
         let a = parts.get(3).map_or(Some(255), |p| alpha(p))?;
-        let rgba = (r? << 24) | (g? << 16) | (b? << 8) | a;
+        let rgba = Rgba::from_channels(r?, g?, b?, a);
         if a == 0 {
             return None;
         }

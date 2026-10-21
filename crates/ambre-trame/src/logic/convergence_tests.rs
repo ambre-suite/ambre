@@ -24,6 +24,7 @@
 // it yields the union -- the CRDT convergence guarantee.
 // ============================================================================
 
+use ambre_core::Rgb;
 use proptest::prelude::*;
 
 use ambre_bus::{
@@ -425,8 +426,8 @@ type StyleView = (
     HAlign,
     VAlign,
     bool,
-    Option<u32>,
-    Option<u32>,
+    Option<Rgb>,
+    Option<Rgb>,
     Option<String>,
     Option<u16>,
     Borders,
@@ -493,15 +494,15 @@ fn base_style() -> StylePatch {
         wrap: Some(true),
         h_align: Some(HAlign::Right),
         v_align: Some(VAlign::Bottom),
-        fg: Some(Some(0x00FF_0000)),
-        bg: Some(Some(0x0000_FF00)),
+        fg: Some(Some(Rgb::from_bits(0x00FF_0000))),
+        bg: Some(Some(Rgb::from_bits(0x0000_FF00))),
         font: Some(Some("Arial".to_owned())),
         size: Some(Some(18)),
         format: Some(CellFormat::Percent),
         border: Some(BorderEdit {
             preset: BorderPreset::All,
             style: BorderStyle::Solid,
-            color: Some(0x00FF_00FF),
+            color: Some(Rgb::from_bits(0x00FF_00FF)),
         }),
         ..Default::default()
     }
@@ -542,8 +543,8 @@ fn other_style() -> StylePatch {
         wrap: Some(false),
         h_align: Some(HAlign::Left),
         v_align: Some(VAlign::Top),
-        fg: Some(Some(0x0000_00FF)),
-        bg: Some(Some(0x00FF_FF00)),
+        fg: Some(Some(Rgb::from_bits(0x0000_00FF))),
+        bg: Some(Some(Rgb::from_bits(0x00FF_FF00))),
         font: Some(Some("Times".to_owned())),
         size: Some(Some(9)),
         format: Some(CellFormat::General),
@@ -552,7 +553,7 @@ fn other_style() -> StylePatch {
         border: Some(BorderEdit {
             preset: BorderPreset::Outline,
             style: BorderStyle::Dashed,
-            color: Some(0x0000_FFFF),
+            color: Some(Rgb::from_bits(0x0000_FFFF)),
         }),
     }
 }
@@ -645,7 +646,7 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
     apply_style(
         &mut a,
         StylePatch {
-            fg: Some(Some(0x00FF_0000)),
+            fg: Some(Some(Rgb::from_bits(0x00FF_0000))),
             ..Default::default()
         },
     );
@@ -656,8 +657,8 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
         &mut b,
         StylePatch {
             bold: Some(true),
-            fg: Some(Some(0x0000_00FF)),
-            bg: Some(Some(0x0044_5566)),
+            fg: Some(Some(Rgb::from_bits(0x0000_00FF))),
+            bg: Some(Some(Rgb::from_bits(0x0044_5566))),
             ..Default::default()
         },
     );

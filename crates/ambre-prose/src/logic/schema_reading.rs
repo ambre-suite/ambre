@@ -27,6 +27,7 @@
 //! shape belt's, so the two belts read the same document. Its values are
 //! frozen here, so a command added to it lands with a raised version.
 
+use ambre_core::Rgba;
 use std::collections::BTreeSet;
 
 use ambre_core::Uuid;
@@ -235,8 +236,8 @@ fn block_name(state: &ProseState, id: &TreeID) -> String {
 }
 
 /// A packed `0xRRGGBBAA` colour.
-fn colour(rgba: u32) -> String {
-    format!("#{rgba:08x}")
+fn colour(rgba: Rgba) -> String {
+    format!("#{:08x}", rgba.bits())
 }
 
 /// What `reader` reads a stored value as, or `None` when no reader of this

@@ -10,6 +10,7 @@
 // send to the Logic thread whenever the visible range changes.
 // ============================================================================
 
+use ambre_core::Rgb;
 use std::collections::{HashMap, HashSet};
 
 use ambre_canvas::{TextEditor, TextEditorStyle};
@@ -68,8 +69,8 @@ pub struct CellData {
     pub numeric: bool,
     pub v_align: ambre_bus::VAlign,
     pub wrap: bool,
-    pub fg: Option<u32>,
-    pub bg: Option<u32>,
+    pub fg: Option<Rgb>,
+    pub bg: Option<Rgb>,
     pub font: Option<String>,
     pub size: Option<u16>,
     pub borders: ambre_bus::Borders,

@@ -2,6 +2,7 @@
 // Formatting popovers (borders, font, number format, alignment, colour).
 
 use super::*;
+use ambre_core::Rgb;
 
 /// The border presets offered by the popover, each with its Bootstrap icon and
 /// tooltip. Clicking one applies the popover's current pen (line style + colour)
@@ -84,7 +85,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
             border: Some(BorderEdit {
                 preset,
                 style: style.border_line.get_untracked(),
-                color: style.border_color.get_untracked(),
+                color: style.border_color.get_untracked().map(Rgb::from_bits),
             }),
             ..Default::default()
         });

@@ -13,6 +13,7 @@
 
 use ambre_bus::app::toile::{ConnectorId, DisplayElement, ElementId, ElementStyle};
 use ambre_canvas::{Palette, TextEditor, TextEditorStyle};
+use ambre_core::Argb;
 use ambre_draw::{Alignment, BoundingBox, Color, DrawSurface, FontContext, Point};
 
 // Re-export the shared intent type so the view keeps its `super::edit::EditIntent`
@@ -219,15 +220,10 @@ impl InlineEditor {
     }
 }
 
-/// ARGB `u32` text color to a `Color`, pre-multiplying the element `opacity`
-/// into the alpha channel (`TOILE-UI-186`), as the committed pass does.
-fn argb_text(v: u32, opacity: f32) -> Color {
-    let a = ((v >> 24) & 0xff) as f32 / 255.0;
-    let r = ((v >> 16) & 0xff) as u8;
-    let g = ((v >> 8) & 0xff) as u8;
-    let b = (v & 0xff) as u8;
-    let alpha = (a * opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
-    Color::from_rgba8(r, g, b, alpha)
+/// A text colour to a `Color`, pre-multiplying the element `opacity` into the
+/// alpha channel (`TOILE-UI-186`), as the committed pass does.
+fn argb_text(v: Argb, opacity: f32) -> Color {
+    super::walk::argb(v, opacity)
 }
 
 #[cfg(test)]
@@ -285,7 +281,7 @@ mod tests {
     #[test]
     fn the_pinned_style_carries_opacity_and_decorations() {
         let style = ElementStyle {
-            text_color: Some(0xffff_0000),
+            text_color: Some(Argb::from_bits(0xffff_0000)),
             opacity: 0.5,
             font: FontSpec {
                 underline: true,
