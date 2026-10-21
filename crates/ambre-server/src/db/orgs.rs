@@ -40,7 +40,6 @@ pub async fn create_organization(
     shamir_threshold: i16,
     shamir_total: i16,
     owner_id: &ambre_core::UserId,
-    owner_share_enc: Option<&ambre_core::SealedShare>,
 ) -> Result<OrganizationRow, AppError> {
     let org_id = &ambre_core::OrgId::new();
     let uid = id_to_uuid(*owner_id);
@@ -61,12 +60,11 @@ pub async fn create_organization(
     .await?;
 
     sqlx::query(
-        "INSERT INTO organization_members (org_id, user_id, role, shamir_share_enc)
-         VALUES ($1, $2, 'owner', $3)",
+        "INSERT INTO organization_members (org_id, user_id, role)
+         VALUES ($1, $2, 'owner')",
     )
     .bind(id_to_uuid(*org_id))
     .bind(uid)
-    .bind(owner_share_enc.map(|v| v.as_bytes()))
     .execute(&mut *tx)
     .await?;
 
@@ -167,7 +165,6 @@ pub async fn add_org_member(
     org_id: &ambre_core::OrgId,
     user_id: &ambre_core::UserId,
     role: ambre_core::Role,
-    shamir_share_enc: Option<&ambre_core::SealedShare>,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
 
@@ -185,14 +182,13 @@ pub async fn add_org_member(
     }
 
     sqlx::query(
-        "INSERT INTO organization_members (org_id, user_id, role, shamir_share_enc)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (org_id, user_id) DO UPDATE SET role = $3, shamir_share_enc = COALESCE($4, organization_members.shamir_share_enc)"
+        "INSERT INTO organization_members (org_id, user_id, role)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (org_id, user_id) DO UPDATE SET role = $3",
     )
     .bind(id_to_uuid(*org_id))
     .bind(id_to_uuid(*user_id))
     .bind(role.as_str())
-    .bind(shamir_share_enc.map(|v| v.as_bytes()))
     .execute(&mut *tx)
     .await
     .map_err(map_member_user_fk)?;

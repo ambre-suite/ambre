@@ -34,6 +34,7 @@ The caller supplies a name, a public key and the quorum it wants its escrow to r
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-062` | `FAIL` | A declared quorum MUST NOT exceed the quorum the relay enforces. | audit `N1`; this spec section 3 | `ambre_server::routes::orgs::tests::shamir_threshold_above_1_rejected_until_reconstruction_lands`; `::shamir_threshold_1_accepted`; `::shamir_out_of_range_rejected` -- the three read the refusal, the one value accepted and the range | none | verified |
+| `SRV-229` | `FAIL` | Given an organization created with a member's share, or a member added with one, the relay MUST refuse it and write no row, as no client computes a share. | this spec section 3; this spec section 5; `ZK-001` | `ambre_server::routes::orgs::tests::integration::a_shamir_share_is_refused` -- a creation and an addition each carrying a share answer `400` and write nothing, and the same addition without one lands, database tier | none | verified |
 
 ### 1.3 Change who is in the organization
 
@@ -64,7 +65,7 @@ over an opaque blob.
   narrows what a **person** can reach, never what the **relay** can. The escrowed key is sealed
   to the organization's own public key, stored opaque and handed to an owner who decrypts it
   elsewhere (`SRV-067`). `SRV-066` keeps the relay unable to combine anything.
-* **Verification.** 9 `verified`, 2 `unimplemented`. What holds is the membership: the last owner,
+* **Verification.** 10 `verified`, 2 `unimplemented`. What holds is the membership: the last owner,
   the grant and role clamps, the removal clamp, who may ask for a release, and its record. What is
   loose is the deposit, which no route performs.
 ---
@@ -103,7 +104,7 @@ Two people in one organization. The membership is the shared state.
 | the organization's public key | plaintext, supplied by the caller who creates it |
 | the declared quorum, and the number of shares it is split into | plaintext (`SRV-062`) |
 | one member row per participant, with a role | plaintext |
-| a member's share of the organization's private key | sealed, opaque, and read by nothing |
+| a member's share of the organization's private key | refused on the way in, so the column stays empty (`SRV-229`) |
 | a member's own seed, sealed to the organization | sealed, opaque, and written by nothing (`SRV-067`) |
 | one row per release | the organization, the subject, the caller, the instant (`SRV-064`) |
 
@@ -117,7 +118,7 @@ stores both sealed things and can combine neither (`SRV-066`).
 | Step of the design | Today |
 |---|---|
 | a member deposits their sealed seed | no route writes it (`SRV-067`) |
-| the private key is split into shares | the column exists; no route computes a share |
+| the private key is split into shares | the column exists; a share sent in is refused (`SRV-229`) |
 | a quorum combines its shares | a single owner asks, and the relay releases (`SRV-063`, `SRV-065`) |
 | the release is recorded | it is (`SRV-064`) |
 | the recovered seed is re-sealed for the member | outside the relay, by whoever asked (`SRV-077`) |
@@ -158,9 +159,9 @@ enforced the gate stops being a role and becomes the count of shares presented.
   no route on the relay and no path in the client ever writes it. The whole recovery feature is
   therefore reachable and useless: an owner asking for a member's key is told there is none
   (`SRV-067`).
-* **No share is ever computed.** The member row carries a sealed share and the only thing that ever
-  writes one is a caller passing it in, which no client does. So the split the design rests on
-  exists as two columns and a validation rule.
+* **No share is ever computed.** The member row has a column for a sealed share. The relay refuses
+  a share sent in, since no client computes one and nothing fixes what it holds (`SRV-229`). So
+  the split the design rests on exists as an empty column and a validation rule.
 * **A single owner is the whole quorum.** Recovery is single-authority today, which the clamp makes
   honest rather than safe. An owner alone can obtain any member's escrowed key, once a deposit
   exists (`SRV-063`, `SRV-065`).

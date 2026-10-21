@@ -20,8 +20,9 @@ pub struct CreateOrgRequest {
     pub org_pubkey: ambre_core::ExchangeKeyHex,
     pub shamir_threshold: i16,
     pub shamir_total: i16,
-    /// First member (owner) encrypted Shamir share, URL-safe base64.
-    pub owner_shamir_share_enc: Option<ambre_core::SealedShare>,
+    /// No client computes a share yet, so one that arrives is refused
+    /// (`SRV-229`). `null` reads as none.
+    pub owner_shamir_share_enc: Option<serde::de::IgnoredAny>,
 }
 #[derive(serde::Serialize)]
 pub struct CreateOrgResponse {
@@ -51,8 +52,8 @@ pub struct AddMemberRequest {
     /// A role word, parsed by the handler: an unknown word answers 409.
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
-    /// Encrypted Shamir share for this member, URL-safe base64.
-    pub shamir_share_enc: Option<ambre_core::SealedShare>,
+    /// Refused when present, as in [`CreateOrgRequest`] (`SRV-229`).
+    pub shamir_share_enc: Option<serde::de::IgnoredAny>,
 }
 
 /// Request body for updating a member's role.
@@ -176,6 +177,7 @@ pub async fn create_org(
     let owner_id = session.user_id;
 
     validate_shamir_params(req.shamir_threshold, req.shamir_total)?;
+    refuse_share(req.owner_shamir_share_enc.as_ref())?;
 
     let org_pubkey = hex::decode(req.org_pubkey.as_str()).map_err(|e| AppError::Conflict {
         detail: format!("invalid org_pubkey hex: {e}"),
@@ -188,7 +190,6 @@ pub async fn create_org(
         req.shamir_threshold,
         req.shamir_total,
         &owner_id,
-        req.owner_shamir_share_enc.as_ref(),
     )
     .await?;
 
@@ -278,6 +279,17 @@ pub async fn delete_org(
     Ok(super::Done::json(ambre_core::WriteStatus::Deleted))
 }
 
+/// A share that arrives is refused rather than stored unread: no client
+/// computes one, so nothing yet fixes what it holds (`SRV-229`).
+fn refuse_share(share: Option<&serde::de::IgnoredAny>) -> Result<(), AppError> {
+    match share {
+        Some(_) => Err(AppError::BadRequest(
+            "shamir share: no client computes one".into(),
+        )),
+        None => Ok(()),
+    }
+}
+
 /// `POST /organizations/{id}/members`
 pub async fn add_member(
     State(state): State<Arc<AppState>>,
@@ -290,6 +302,7 @@ pub async fn add_member(
     let uid = session.user_id;
 
     let caller = require_org_role(&state.db, &org_id, &uid, &[Role::Owner, Role::Admin]).await?;
+    refuse_share(req.shamir_share_enc.as_ref())?;
 
     let member_user_id = req.user_id;
 
@@ -313,14 +326,7 @@ pub async fn add_member(
         }
     }
 
-    db::add_org_member(
-        &state.db,
-        &org_id,
-        &member_user_id,
-        role,
-        req.shamir_share_enc.as_ref(),
-    )
-    .await?;
+    db::add_org_member(&state.db, &org_id, &member_user_id, role).await?;
 
     Ok((
         axum::http::StatusCode::CREATED,
@@ -830,6 +836,78 @@ mod tests {
                 .unwrap()
                 .id
                 .to_string()
+        }
+
+        /// `SRV-229`: no client computes a share, so an organization created with
+        /// one and a member added with one are refused, and no row is written.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn a_shamir_share_is_refused(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+            let owner = setup_org_user(&app, "owner@ambre.app", 10).await;
+            let _member = setup_org_user(&app, "member@ambre.app", 11).await;
+            use base64::Engine as _;
+            let share = base64::engine::general_purpose::URL_SAFE.encode([1u8; 48]);
+            let organizations = || async {
+                sqlx::query_scalar::<_, i64>("SELECT count(*) FROM organizations")
+                    .fetch_one(&state.db)
+                    .await
+                    .unwrap()
+            };
+
+            let create = serde_json::json!({
+                "name": "Acme",
+                "org_pubkey": hex::encode([5u8; 32]),
+                "shamir_threshold": 1,
+                "shamir_total": 1,
+                "owner_shamir_share_enc": share,
+            });
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::post("/api/organizations")
+                        .header("content-type", "application/json")
+                        .header("authorization", &owner)
+                        .body(Body::from(create.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+            assert_eq!(organizations().await, 0);
+
+            let org_id = create_org(&app, &owner).await;
+            let member_uid = user_id(&state, "member@ambre.app").await;
+            let body = serde_json::json!({
+                "user_id": member_uid,
+                "role": "member",
+                "shamir_share_enc": share,
+            });
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::post(format!("/api/organizations/{org_id}/members"))
+                        .header("content-type", "application/json")
+                        .header("authorization", &owner)
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+            let members: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM organization_members WHERE org_id::text = $1",
+            )
+            .bind(&org_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap();
+            assert_eq!(members, 1, "the owner alone");
+            assert_eq!(
+                post_member(&app, &owner, &org_id, &member_uid, "member").await,
+                StatusCode::CREATED
+            );
         }
 
         /// An org `admin` may add admins/members but must not be able to mint an
