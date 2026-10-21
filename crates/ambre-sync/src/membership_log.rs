@@ -352,7 +352,7 @@ pub(crate) fn decode(texts: &[ambre_core::EncodedLogEntry]) -> Vec<MembershipEnt
         .iter()
         .map_while(|text| {
             let bytes = text.as_bytes();
-            MembershipEntry::decode(&bytes).ok()
+            MembershipEntry::decode(bytes).ok()
         })
         .collect()
 }

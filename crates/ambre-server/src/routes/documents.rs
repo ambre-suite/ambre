@@ -201,7 +201,7 @@ pub async fn list_documents(
                 id: doc_id,
                 owner_id,
                 doc_type: d.doc_type,
-                name_enc: d.name_enc.map(|n| n.clone()),
+                name_enc: d.name_enc,
                 role: d.role,
                 doc_key_enc: d.doc_key_enc.clone(),
                 wrapper_exchange_pub_key: d
@@ -255,7 +255,7 @@ pub async fn create_document(
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
 
-    let name_enc = req.name_enc.map(|n| Ok::<_, AppError>(n)).transpose()?;
+    let name_enc = req.name_enc;
     // Only a Murmure document is a space (`SRV-217`).
     if req.space && req.doc_type != ambre_core::DocType::Murmure {
         return Err(AppError::BadRequest("a space is a Murmure document".into()));
@@ -363,7 +363,7 @@ pub async fn get_document(
         id: doc.id,
         owner_id: doc.owner_id,
         doc_type: doc.doc_type,
-        name_enc: doc.name_enc.map(|n| n.clone()),
+        name_enc: doc.name_enc,
         role: mem.as_ref().map(|m| m.role),
         doc_key_enc: mem.map(|m| m.doc_key_enc.clone()),
         created_at: doc.created_at.to_rfc3339(),

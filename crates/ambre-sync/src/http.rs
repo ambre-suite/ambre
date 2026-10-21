@@ -1433,7 +1433,7 @@ pub(crate) fn decode_links(resp: KeyLinksResponse) -> Vec<ambre_protocol::KeyLin
         .iter()
         .filter_map(|text| {
             let bytes = text.as_bytes();
-            ambre_protocol::KeyLink::decode(&bytes).ok()
+            ambre_protocol::KeyLink::decode(bytes).ok()
         })
         .collect()
 }

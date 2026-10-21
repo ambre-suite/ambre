@@ -536,7 +536,7 @@ mod tests {
             email: "user@test.com".into(),
             display_name: "Test User".into(),
             role: Role::Admin,
-            shamir_share_enc: Some(ambre_core::SealedShare::new(Vec::from(vec![1, 2, 3]))),
+            shamir_share_enc: Some(ambre_core::SealedShare::new(vec![1, 2, 3])),
             created_at: chrono::Utc::now(),
         };
         let resp = member_to_response(&member);

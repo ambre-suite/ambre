@@ -58,7 +58,7 @@ impl SyncState {
                             return;
                         };
                         let user_key =
-                            match ambre_crypto::passphrase::derive_user_key(&passphrase, &salt) {
+                            match ambre_crypto::passphrase::derive_user_key(&passphrase, salt) {
                                 Ok(k) => k,
                                 Err(e) => {
                                     tracing::warn!("Sync: user-key derivation failed: {e}");
