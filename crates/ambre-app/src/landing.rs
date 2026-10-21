@@ -1038,4 +1038,78 @@ mod tests {
             assert_eq!(route.doc(), Some((doc_type, id)));
         }
     }
+
+    /// A rename past the name cap is refused with a toast, sends nothing and
+    /// leaves the field open. Shortened, it goes (`SYNC-178`).
+    #[wasm_bindgen_test]
+    async fn a_rename_past_the_cap_is_refused_with_a_toast() {
+        let owner = Owner::new();
+        owner.set();
+        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(8);
+        let toasts = Toasts::new();
+        let item = DocItem {
+            document_id: DocumentId::new(),
+            doc_type: DocType::Prose,
+            name: Some("Plan".to_owned()),
+            updated_at: ambre_bus::Timestamp(0),
+            member_count: 1,
+        };
+        let docs = RwSignal::new(vec![item.clone()]);
+        let pending_delete = RwSignal::new(None);
+        let container = mount_in_container(move || {
+            view! {
+                <leptos_router::components::Router>
+                    {doc_card(item, docs, tx, pending_delete, DocType::Prose, toasts)}
+                    <ambre_chrome::ToastHost toasts=toasts />
+                </leptos_router::components::Router>
+            }
+        });
+        let rename = container
+            .query_selector(".ambre-doc-action[title='Rename']")
+            .unwrap()
+            .unwrap();
+        click(&rename);
+        tick().await;
+
+        let commit = |text: String| {
+            let input: web_sys::HtmlInputElement = container
+                .query_selector(".ambre-doc-rename-input")
+                .unwrap()
+                .expect("the field is open")
+                .dyn_into()
+                .unwrap();
+            input.set_value(&text);
+            input
+                .dispatch_event(&web_sys::Event::new("input").unwrap())
+                .unwrap();
+            press(&input, "Enter");
+        };
+        commit("a".repeat(ambre_core::NAME_MAX_CHARS + 1));
+        tick().await;
+        assert_eq!(rx.try_iter().count(), 0, "nothing leaves");
+        let toast = container
+            .query_selector(".ambre-toast")
+            .unwrap()
+            .and_then(|t| t.text_content())
+            .unwrap_or_default();
+        assert!(toast.contains(ambre_core::NAME_TOO_LONG), "{toast}");
+        assert!(
+            container
+                .query_selector(".ambre-doc-rename-input")
+                .unwrap()
+                .is_some(),
+            "the field stays open to shorten it"
+        );
+        assert_eq!(docs.get_untracked()[0].name.as_deref(), Some("Plan"));
+
+        commit("Budget".to_owned());
+        tick().await;
+        let sent: Vec<LogicCommand> = rx.try_iter().collect();
+        assert!(matches!(
+            sent.as_slice(),
+            [LogicCommand::Rest { cmd: RestCommand::RenameDocument { name, .. }, .. }]
+                if name == "Budget"
+        ));
+        container.remove();
+    }
 }
