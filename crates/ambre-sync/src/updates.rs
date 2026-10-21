@@ -4,7 +4,7 @@ use ambre_protocol::messages::Signature;
 
 /// The delay before Sync sends again the first delta the relay failed to
 /// sequence. Each later failure doubles it (`ambre-spec-budgets.md` section 8).
-const RESEND_RETRY_BASE_MS: u64 = 1_000;
+const RESEND_RETRY_BASE: ambre_core::Millis = ambre_core::Millis(1_000);
 
 /// The failures Sync sends again after. One more holds the document
 /// (`ambre-spec-budgets.md` section 8, `SYNC-159`).
@@ -12,10 +12,10 @@ const RESEND_RETRY_LIMIT: u32 = 5;
 
 /// The delay before sending again after the `failure`-th failure since the
 /// last echo, counted from one. Past the budget there is none.
-fn resend_retry_delay_ms(failure: u32) -> Option<u64> {
+fn resend_retry_delay_ms(failure: u32) -> Option<ambre_core::Millis> {
     (1..=RESEND_RETRY_LIMIT)
         .contains(&failure)
-        .then(|| RESEND_RETRY_BASE_MS << (failure - 1))
+        .then(|| ambre_core::Millis(RESEND_RETRY_BASE.0 << (failure - 1)))
 }
 
 impl SyncState {
@@ -362,7 +362,7 @@ impl SyncState {
             tracing::info!("Sync: snapshot {snapshot_id:?} vouch, no relay (test path)");
             return;
         };
-        let base = format!("{}://{}", self.url_scheme, self.api_base);
+        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let sent =
@@ -1421,7 +1421,7 @@ impl SyncState {
             );
             return;
         };
-        let base = format!("{}://{}", self.url_scheme, self.api_base);
+        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             match upload_snapshot(&http::Fetch, &auth, &base, upload).await {
@@ -1522,12 +1522,12 @@ pub(crate) enum Vouch {
 pub(crate) async fn send_vouch(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &str,
+    base: &crate::http::ApiRoot,
     document_id: DocumentId,
     snapshot_id: SnapshotId,
     vouch: &Vouch,
 ) -> Result<Option<DocumentId>, String> {
-    let url = format!("{base}/api/documents/{document_id}/snapshots/{snapshot_id}");
+    let url = format!("{base}/documents/{document_id}/snapshots/{snapshot_id}");
     let post = http::Method::Post;
     match vouch {
         Vouch::Confirm => {
@@ -1567,7 +1567,7 @@ pub(crate) struct SnapshotUpload {
 pub(crate) async fn upload_snapshot(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &str,
+    base: &crate::http::ApiRoot,
     upload: SnapshotUpload,
 ) -> Result<SnapshotId, String> {
     let SnapshotUpload {
@@ -1578,7 +1578,7 @@ pub(crate) async fn upload_snapshot(
     } = upload;
     let link: http::SnapshotUploadUrlResponse = http::post_json_auth_via(
         transport,
-        &format!("{base}/api/documents/{document_id}/snapshot/upload-url"),
+        &format!("{base}/documents/{document_id}/snapshot/upload-url"),
         &serde_json::json!({ "size_bytes": blob.len() }),
         auth,
     )
@@ -1595,7 +1595,7 @@ pub(crate) async fn upload_snapshot(
     };
     let created: http::CreateSnapshotResponse = http::post_json_auth_via(
         transport,
-        &format!("{base}/api/documents/{document_id}/snapshot"),
+        &format!("{base}/documents/{document_id}/snapshot"),
         &metadata,
         auth,
     )
@@ -1662,6 +1662,14 @@ mod tests {
     use super::*;
     use crate::http::scripted::{Scripted, session};
     use ambre_protocol::SeqUpdate;
+
+    /// The root a relay call under test reaches: `https://relay.test/api`.
+    fn root() -> crate::http::ApiRoot {
+        crate::http::ApiRoot::of(
+            "https",
+            &crate::http::RelayHost::new("relay.test".to_owned()),
+        )
+    }
 
     #[test]
     fn a_failed_members_request_is_not_an_absent_document() {
@@ -2973,7 +2981,7 @@ mod tests {
             };
             let transport = Scripted::new([Ok(answer)]);
             let auth = session("access-1", "refresh-1");
-            let folded = send_vouch(&transport, &auth, base, doc, pending, &vouch)
+            let folded = send_vouch(&transport, &auth, &root(), doc, pending, &vouch)
                 .await
                 .expect("posted");
             assert_eq!(folded, None, "no fold settles here");
@@ -3058,7 +3066,7 @@ mod tests {
             ]);
             let auth = session("access-1", "refresh-1");
 
-            let uploaded = upload_snapshot(&transport, &auth, base, upload()).await;
+            let uploaded = upload_snapshot(&transport, &auth, &root(), upload()).await;
 
             assert_eq!(uploaded.is_ok(), stored == 200, "{uploaded:?}");
             if stored == 200 {
@@ -3426,8 +3434,11 @@ mod tests {
     /// the budget the document holds it, reported once as a refused edit.
     #[test]
     fn a_delta_failing_past_the_budget_holds_its_document() {
-        assert_eq!(resend_retry_delay_ms(1), Some(RESEND_RETRY_BASE_MS));
-        assert_eq!(resend_retry_delay_ms(2), Some(2 * RESEND_RETRY_BASE_MS));
+        assert_eq!(resend_retry_delay_ms(1), Some(RESEND_RETRY_BASE));
+        assert_eq!(
+            resend_retry_delay_ms(2),
+            Some(ambre_core::Millis(2 * RESEND_RETRY_BASE.0))
+        );
         assert_eq!(resend_retry_delay_ms(RESEND_RETRY_LIMIT + 1), None);
 
         let (mut state, rx, doc, _key, sk, _snap) = setup();

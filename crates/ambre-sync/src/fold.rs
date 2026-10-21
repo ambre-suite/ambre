@@ -15,11 +15,11 @@ use crate::updates::{SnapshotUpload, upload_snapshot};
 pub(crate) async fn take_fold_lease(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &str,
+    base: &crate::http::ApiRoot,
     channel_id: ChannelId,
     segment: SegmentId,
 ) -> Result<FoldAnswer, String> {
-    let url = format!("{base}/api/channels/{channel_id}/segments/{segment}/fold-lease");
+    let url = format!("{base}/channels/{channel_id}/segments/{segment}/fold-lease");
     let answer: http::FoldLeaseResponse =
         http::post_json_auth_via(transport, &url, &serde_json::json!({}), auth).await?;
     Ok(match answer.lease {
@@ -49,14 +49,14 @@ pub(crate) struct FoldReach {
 pub(crate) async fn commit_fold(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &str,
+    base: &crate::http::ApiRoot,
     channel_id: ChannelId,
     segment: SegmentId,
     reach: FoldReach,
     upload: SnapshotUpload,
 ) -> Result<(), String> {
     let snapshot_id = upload_snapshot(transport, auth, base, upload).await?;
-    let url = format!("{base}/api/channels/{channel_id}/segments/{segment}/fold");
+    let url = format!("{base}/channels/{channel_id}/segments/{segment}/fold");
     let body = http::FoldSegmentRequest {
         lease_id: reach.lease,
         snapshot_id,
@@ -71,7 +71,7 @@ impl SyncState {
         let Some(tx) = self.event_tx.clone() else {
             return self.fold_failed(channel_id, segment, "no relay on this transport");
         };
-        let base = format!("{}://{}", self.url_scheme, self.api_base);
+        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let result = take_fold_lease(&http::Fetch, &auth, &base, channel_id, segment).await;
@@ -102,7 +102,7 @@ impl SyncState {
         let Some(tx) = self.event_tx.clone() else {
             return self.fold_failed(channel_id, segment, "no relay on this transport");
         };
-        let base = format!("{}://{}", self.url_scheme, self.api_base);
+        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let result = commit_fold(
@@ -142,6 +142,14 @@ mod tests {
     use crate::updates::{Vouch, send_vouch};
 
     const BASE: &str = "https://relay.test";
+
+    /// The root the calls under test reach, under [`BASE`].
+    fn root() -> crate::http::ApiRoot {
+        crate::http::ApiRoot::of(
+            "https",
+            &crate::http::RelayHost::new("relay.test".to_owned()),
+        )
+    }
 
     /// A sealed snapshot of `document_id` covering the deltas up to `horizon`.
     fn upload(document_id: DocumentId, horizon: Seq) -> SnapshotUpload {
@@ -189,7 +197,7 @@ mod tests {
             )),
         ]);
         let auth = session("access-1", "refresh-1");
-        let granted = take_fold_lease(&transport, &auth, BASE, channel, segment).await;
+        let granted = take_fold_lease(&transport, &auth, &root(), channel, segment).await;
         assert_eq!(
             granted,
             Ok(FoldAnswer::Granted {
@@ -200,7 +208,7 @@ mod tests {
                 expires_in: ambre_core::Millis(30_000)
             })
         );
-        let deferred = take_fold_lease(&transport, &auth, BASE, channel, segment).await;
+        let deferred = take_fold_lease(&transport, &auth, &root(), channel, segment).await;
         assert_eq!(
             deferred,
             Ok(FoldAnswer::Deferred {
@@ -238,7 +246,8 @@ mod tests {
             lease,
             amendments_seq: ambre_bus::Seq(7),
         };
-        let committed = commit_fold(&transport, &auth, BASE, channel, segment, reach, upload).await;
+        let committed =
+            commit_fold(&transport, &auth, &root(), channel, segment, reach, upload).await;
         assert_eq!(committed, Ok(()));
         let sent = transport.sent.borrow();
         let json = |at: usize| -> serde_json::Value {
@@ -271,7 +280,15 @@ mod tests {
             serde_json::json!({ "folded": amendments.to_string() }),
         ))]);
         let auth = session("access-1", "refresh-1");
-        let folded = send_vouch(&transport, &auth, BASE, document, snapshot, &Vouch::Confirm).await;
+        let folded = send_vouch(
+            &transport,
+            &auth,
+            &root(),
+            document,
+            snapshot,
+            &Vouch::Confirm,
+        )
+        .await;
         assert_eq!(folded, Ok(Some(amendments)));
     }
 }

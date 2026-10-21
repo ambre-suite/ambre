@@ -210,7 +210,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let base = format!("{url_scheme}://{api_base}/api");
+            let base = crate::http::ApiRoot::of(url_scheme, &api_base);
             let result = async {
                 for (document_id, doc_key_enc, entry, name_enc) in documents {
                     let body = http::CreateDocumentRequest {
@@ -560,7 +560,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let base = format!("{url_scheme}://{api_base}/api");
+            let base = crate::http::ApiRoot::of(url_scheme, &api_base);
             let result = async {
                 let mut signing_keys = Vec::with_capacity(members.len());
                 for member in &members {
@@ -623,7 +623,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let base = format!("{url_scheme}://{api_base}/api");
+            let base = crate::http::ApiRoot::of(url_scheme, &api_base);
             put_cursors(&base, cursors, auth.clone()).await;
             if !finals.is_empty() {
                 let url = format!("{url_scheme}://{api_base}/api/read-cursors/mark-read");
@@ -664,7 +664,7 @@ impl SyncState {
             tracing::warn!("Sync: no relay on this transport, the read cursors stay");
             return;
         }
-        let base = format!("{}://{}/api", self.url_scheme, self.api_base);
+        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             put_cursors(&base, cursors, auth).await;
@@ -882,7 +882,7 @@ async fn open_channel_names(
     answer: &http::MemberChannelsResponse,
     exchange_key: &StaticSecret,
     url_scheme: &str,
-    api_base: &str,
+    api_base: &crate::http::RelayHost,
     auth: &http::AuthContext,
 ) -> Vec<ChannelName> {
     let mut names = Vec::new();
@@ -913,7 +913,11 @@ fn no_relay() -> String {
 
 /// Move each cursor to its number, one request per document. A refused move
 /// leaves that cursor where it was and says so in the log.
-async fn put_cursors(base: &str, cursors: Vec<(DocumentId, Seq)>, auth: http::AuthContext) {
+async fn put_cursors(
+    base: &crate::http::ApiRoot,
+    cursors: Vec<(DocumentId, Seq)>,
+    auth: http::AuthContext,
+) {
     for (document_id, seq) in cursors {
         let url = format!("{base}/documents/{document_id}/read-cursor");
         let body = http::ReadCursorRequest { seq };
@@ -1734,7 +1738,14 @@ pub(crate) mod tests {
             spaces: Vec::new(),
         };
         let auth = state.auth_context();
-        let names = open_channel_names(&answer, &own, "http", "", &auth).await;
+        let names = open_channel_names(
+            &answer,
+            &own,
+            "http",
+            &crate::http::RelayHost::new(String::new()),
+            &auth,
+        )
+        .await;
         assert_eq!(
             names,
             vec![ChannelName {

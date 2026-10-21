@@ -987,7 +987,7 @@ pub struct SyncState {
     logic_tx: LogicSink,
     /// Base URL for REST API calls (for example `"api.ambre.app"`).
     #[allow(dead_code)]
-    api_base: String,
+    api_base: crate::http::RelayHost,
     /// URL scheme: `"http"` on localhost, `"https"` otherwise.
     #[allow(dead_code)]
     url_scheme: &'static str,
@@ -1125,11 +1125,8 @@ impl SyncState {
         api_base: String,
         tokens: Option<(String, String, u64)>,
     ) -> Self {
-        let url_scheme = if api_base.starts_with("localhost") || api_base.starts_with("127.0.0.1") {
-            "http"
-        } else {
-            "https"
-        };
+        let api_base = crate::http::RelayHost::new(api_base);
+        let url_scheme = if api_base.is_local() { "http" } else { "https" };
         Self {
             logic_tx,
             api_base,

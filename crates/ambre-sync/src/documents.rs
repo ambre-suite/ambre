@@ -358,7 +358,7 @@ impl ListedName<'_> {
         &self,
         exchange_key: &x25519_dalek::StaticSecret,
         url_scheme: &str,
-        api_base: &str,
+        api_base: &crate::http::RelayHost,
         auth: &http::AuthContext,
     ) -> Option<String> {
         let current = self.unwrap_key(exchange_key)?;

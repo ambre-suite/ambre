@@ -15,11 +15,11 @@ use crate::updates::{SnapshotUpload, upload_snapshot};
 pub(crate) async fn take_lease(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &str,
+    base: &crate::http::ApiRoot,
     channel_id: ChannelId,
     segment: SegmentId,
 ) -> Result<LeaseAnswer, String> {
-    let url = format!("{base}/api/channels/{channel_id}/segments/{segment}/lease");
+    let url = format!("{base}/channels/{channel_id}/segments/{segment}/lease");
     let answer: http::FinalizeLeaseResponse =
         http::post_json_auth_via(transport, &url, &serde_json::json!({}), auth).await?;
     Ok(match answer.lease {
@@ -39,14 +39,14 @@ pub(crate) async fn take_lease(
 pub(crate) async fn commit_final(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &str,
+    base: &crate::http::ApiRoot,
     channel_id: ChannelId,
     segment: SegmentId,
     lease: LeaseId,
     upload: SnapshotUpload,
 ) -> Result<(), String> {
     let snapshot_id = upload_snapshot(transport, auth, base, upload).await?;
-    let url = format!("{base}/api/channels/{channel_id}/segments/{segment}/finalize");
+    let url = format!("{base}/channels/{channel_id}/segments/{segment}/finalize");
     let body = http::FinalizeSegmentRequest {
         lease_id: lease,
         snapshot_id,
@@ -60,7 +60,7 @@ impl SyncState {
         let Some(tx) = self.event_tx.clone() else {
             return self.finalize_failed(channel_id, segment, false, "no relay on this transport");
         };
-        let base = format!("{}://{}", self.url_scheme, self.api_base);
+        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let result = take_lease(&http::Fetch, &auth, &base, channel_id, segment).await;
@@ -103,7 +103,7 @@ impl SyncState {
         let Some(tx) = self.event_tx.clone() else {
             return self.finalize_failed(channel_id, segment, false, "no relay on this transport");
         };
-        let base = format!("{}://{}", self.url_scheme, self.api_base);
+        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let result = commit_final(
@@ -149,6 +149,14 @@ mod tests {
 
     const BASE: &str = "https://relay.test";
 
+    /// The root the calls under test reach, under [`BASE`].
+    fn root() -> crate::http::ApiRoot {
+        crate::http::ApiRoot::of(
+            "https",
+            &crate::http::RelayHost::new("relay.test".to_owned()),
+        )
+    }
+
     /// A sealed snapshot of `document_id` covering the deltas up to `horizon`.
     fn upload(document_id: DocumentId, horizon: Seq) -> SnapshotUpload {
         let key = DocumentKey::generate();
@@ -189,7 +197,7 @@ mod tests {
             )),
         ]);
         let auth = session("access-1", "refresh-1");
-        let granted = take_lease(&transport, &auth, BASE, channel, segment).await;
+        let granted = take_lease(&transport, &auth, &root(), channel, segment).await;
         assert_eq!(
             granted,
             Ok(LeaseAnswer::Granted {
@@ -198,7 +206,7 @@ mod tests {
                 expires_in: ambre_core::Millis(30_000)
             })
         );
-        let deferred = take_lease(&transport, &auth, BASE, channel, segment).await;
+        let deferred = take_lease(&transport, &auth, &root(), channel, segment).await;
         assert_eq!(
             deferred,
             Ok(LeaseAnswer::Deferred {
@@ -235,7 +243,7 @@ mod tests {
         let committed = commit_final(
             &transport,
             &auth,
-            BASE,
+            &root(),
             channel,
             segment,
             lease,

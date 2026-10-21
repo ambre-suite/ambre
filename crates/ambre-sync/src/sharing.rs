@@ -405,7 +405,7 @@ pub(crate) struct InviteParams {
     pub id: RequestId,
     pub document_id: DocumentId,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     /// The email phase 1 searched, or `None` for a member known by id.
     pub invitee_email: Option<ambre_core::Email>,
     /// The user phase 1 answered, whom the user confirmed.
@@ -611,7 +611,7 @@ pub(crate) struct FetchInviteeKeyParams {
     pub id: RequestId,
     pub document_id: DocumentId,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     pub invitee_email: ambre_core::Email,
 }
 
@@ -670,7 +670,7 @@ pub(crate) struct FetchMemberKeyParams {
     pub id: RequestId,
     pub user_id: UserId,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
 }
 
 /// Fetch the exchange key the relay serves for a user the client already
@@ -720,7 +720,7 @@ pub(crate) struct RevokeParams {
     pub document_id: DocumentId,
     pub user_id: UserId,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
     /// The key the revoke replaces, sealed under the new one (`SYNC-116`).
     pub previous: DocumentKey,
@@ -859,7 +859,7 @@ pub(crate) struct LeaveParams {
     /// This user, who signs their own revoke: a departure removes no one else.
     pub author: Author,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
 }
 
@@ -901,7 +901,7 @@ async fn leave_document<H: ShareHttp>(
     document_id: DocumentId,
     author: &Author,
     url_scheme: &str,
-    api_base: &str,
+    api_base: &crate::http::RelayHost,
     exchange_key: &StaticSecret,
 ) -> Result<(), String> {
     let me = author.user_id;
@@ -947,7 +947,7 @@ pub(crate) struct ChannelLeaveParams {
     /// This user, who signs their own revoke on the channel's `meta`.
     pub author: Author,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
 }
 
@@ -985,7 +985,7 @@ pub(crate) struct SegmentCloseParams {
     /// This user, who creates the successor.
     pub author: Author,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
 }
 
@@ -1001,7 +1001,7 @@ pub(crate) async fn close_segment_task<H: ShareHttp>(
     http: &H,
     p: SegmentCloseParams,
 ) -> Result<(SegmentId, bool), String> {
-    let base = format!("{}://{}/api", p.url_scheme, p.api_base);
+    let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let successor = p.successor.document_id();
     let (doc_key_enc, entry) = creation(successor, &p.meta_key, &p.exchange_key, &p.author)?;
     let body = http::CreateDocumentRequest {
@@ -1043,7 +1043,7 @@ pub(crate) struct AmendmentsParams {
     /// This user, who creates the document.
     pub author: Author,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
 }
 
@@ -1057,7 +1057,7 @@ pub(crate) async fn amendments_task<H: ShareHttp>(
     http: &H,
     p: AmendmentsParams,
 ) -> Result<DocumentId, String> {
-    let base = format!("{}://{}/api", p.url_scheme, p.api_base);
+    let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let (doc_key_enc, entry) = creation(p.amendments, &p.meta_key, &p.exchange_key, &p.author)?;
     let body = http::CreateDocumentRequest {
         doc_type: ambre_core::DocType::Murmure,
@@ -1099,7 +1099,7 @@ pub(crate) struct ThreadParams {
     /// This user, who creates the document.
     pub author: Author,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
 }
 
@@ -1113,7 +1113,7 @@ pub(crate) async fn thread_task<H: ShareHttp>(
     http: &H,
     p: ThreadParams,
 ) -> Result<DocumentId, String> {
-    let base = format!("{}://{}/api", p.url_scheme, p.api_base);
+    let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let (doc_key_enc, entry) = creation(p.thread, &p.meta_key, &p.exchange_key, &p.author)?;
     let body = http::CreateDocumentRequest {
         doc_type: ambre_core::DocType::Murmure,
@@ -1146,7 +1146,7 @@ pub(crate) async fn thread_task<H: ShareHttp>(
 pub(crate) struct SettleParams {
     pub document_id: DocumentId,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
     /// The key the rotation replaces, sealed under the new one (`SYNC-116`).
     pub previous: DocumentKey,
@@ -1162,7 +1162,7 @@ pub(crate) struct RoleChangeParams {
     pub user_id: UserId,
     pub role: Role,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
     /// The owner who signs the change's entry.
     pub author: Author,
@@ -1342,7 +1342,7 @@ pub(crate) struct RotateChannelParams {
     pub space_id: ambre_bus::SpaceId,
     pub channel_id: ChannelId,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
     /// Signs the link the rotation leaves.
     pub signing_key: SigningKey,
@@ -1377,7 +1377,7 @@ async fn rotate_channel<H: ShareHttp>(
     http: &H,
     p: &RotateChannelParams,
 ) -> Result<ambre_bus::SealedChannelKey, String> {
-    let base = format!("{}://{}/api", p.url_scheme, p.api_base);
+    let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let head = http
         .get_json::<http::JoinHeadResponse>(&format!("{base}/channels/{}/join", p.channel_id))
         .await
@@ -1431,7 +1431,7 @@ pub(crate) struct ListMembersParams {
     pub asked: u64,
     pub document_id: DocumentId,
     pub url_scheme: &'static str,
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     /// Unwraps our own row, whose seal carries the log anchor (`SYNC-104`).
     pub exchange_key: StaticSecret,
     /// The rule the document's log walks under (`SYNC-106`).
@@ -1765,7 +1765,7 @@ mod tests {
             id: RequestId::next(),
             document_id: DocumentId::new(),
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             invitee_email: Some("invitee@test.local".into()),
             invitee: UserId::parse_str(INVITEE).expect("an id"),
             role: Role::Editor,
@@ -1985,7 +1985,7 @@ mod tests {
             id: RequestId::next(),
             document_id: DocumentId::new(),
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             invitee_email: "invitee@test.local".into(),
         }
     }
@@ -2030,7 +2030,7 @@ mod tests {
             id: RequestId::next(),
             user_id,
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
         }
     }
 
@@ -2110,7 +2110,7 @@ mod tests {
             document_id: DocumentId::new(),
             user_id: UserId::new(),
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
             previous: DocumentKey::generate(),
             author: author(),
@@ -2360,7 +2360,7 @@ mod tests {
             channel_id,
             author: same(&bob.author),
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: bob.xk.clone(),
         };
         assert_eq!(leave_channel_task(&http, params).await, Ok(()));
@@ -2391,7 +2391,7 @@ mod tests {
             channel_id: ChannelId::new(),
             author: author(),
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         };
         let http = FakeHttp::new(vec![Err("404".into())]);
@@ -2424,7 +2424,7 @@ mod tests {
             meta_key: DocumentKey::generate(),
             author: author(),
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         }
     }
@@ -2503,7 +2503,7 @@ mod tests {
             meta_key: DocumentKey::generate(),
             author: author(),
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         }
     }
@@ -2573,7 +2573,7 @@ mod tests {
             meta_key: DocumentKey::generate(),
             author: author(),
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         }
     }
@@ -2668,7 +2668,7 @@ mod tests {
             document_id: DocumentId::new(),
             author,
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk,
         };
         leave_task(&http, params, &etx, &sink).await;
@@ -2691,7 +2691,7 @@ mod tests {
         SettleParams {
             document_id: DocumentId::new(),
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
             previous: DocumentKey::generate(),
             signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
@@ -2768,7 +2768,7 @@ mod tests {
             space_id,
             channel_id,
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
             signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
             previous: previous.clone(),
@@ -2816,7 +2816,7 @@ mod tests {
             space_id,
             channel_id,
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk,
             signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
             previous,
@@ -2935,7 +2935,7 @@ mod tests {
             asked: 1,
             document_id: DocumentId::new(),
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
             rule: LogRule::document(),
         }
@@ -3336,7 +3336,7 @@ mod tests {
             document_id: logged.document_id,
             author: same(&bob.author),
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: bob.xk.clone(),
         };
         let http = FakeHttp::new(vec![
@@ -3374,7 +3374,7 @@ mod tests {
             user_id: bob.author.user_id,
             role: Role::Viewer,
             url_scheme: "https",
-            api_base: "api.test".into(),
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: owner.xk.clone(),
             author: same(&owner.author),
         };

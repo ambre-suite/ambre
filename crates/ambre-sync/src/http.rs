@@ -42,9 +42,51 @@ pub(crate) struct TokenPair {
 
 pub(crate) type TokenStore = Rc<RefCell<Option<TokenPair>>>;
 
+/// The relay as the page names it: a host and an optional port, such as
+/// `relay.example` or `localhost:3000`. Every URL of the relay is built from
+/// it, through [`ApiRoot`] or the socket address.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RelayHost(String);
+
+impl RelayHost {
+    /// The host the page configured.
+    pub(crate) fn new(host: String) -> Self {
+        Self(host)
+    }
+
+    /// Whether the relay runs on this machine, which speaks plain HTTP.
+    pub(crate) fn is_local(&self) -> bool {
+        self.0.starts_with("localhost") || self.0.starts_with("127.0.0.1")
+    }
+}
+
+impl std::fmt::Display for RelayHost {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// The root of the relay's REST routes, `{scheme}://{host}/api`. Built in
+/// one place, so no route adds or forgets the `/api` itself.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ApiRoot(String);
+
+impl ApiRoot {
+    /// The root of `host`'s routes under `scheme`.
+    pub(crate) fn of(scheme: &str, host: &RelayHost) -> Self {
+        Self(format!("{scheme}://{host}/api"))
+    }
+}
+
+impl std::fmt::Display for ApiRoot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct AuthContext {
-    pub api_base: String,
+    pub api_base: crate::http::RelayHost,
     pub url_scheme: &'static str,
     pub tokens: TokenStore,
 }
@@ -541,7 +583,7 @@ pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>
 /// relay, then the object itself. `None` when either step fails.
 pub(crate) async fn download_snapshot(
     url_scheme: &str,
-    api_base: &str,
+    api_base: &crate::http::RelayHost,
     document_id: ambre_core::DocumentId,
     snapshot_id: ambre_core::SnapshotId,
     auth: AuthContext,
@@ -1406,7 +1448,7 @@ pub(crate) fn decode_links(resp: KeyLinksResponse) -> Vec<ambre_protocol::KeyLin
 /// frames sealed under a key older than the cache then stay closed.
 pub(crate) async fn fetch_key_links(
     url_scheme: &str,
-    api_base: &str,
+    api_base: &crate::http::RelayHost,
     document_id: ambre_core::DocumentId,
     auth: AuthContext,
 ) -> Vec<ambre_protocol::KeyLink> {
@@ -1591,7 +1633,7 @@ pub(crate) mod scripted {
     /// `refresh`, against `https://relay.test`.
     pub(crate) fn session(access: &str, refresh: &str) -> AuthContext {
         AuthContext {
-            api_base: "relay.test".to_owned(),
+            api_base: crate::http::RelayHost::new("relay.test".to_owned()),
             url_scheme: "https",
             tokens: Rc::new(RefCell::new(Some(TokenPair {
                 access_token: access.to_owned().into(),

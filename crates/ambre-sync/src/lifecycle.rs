@@ -5,17 +5,18 @@
 
 use std::rc::Rc;
 
+use ambre_core::{Millis, UnixMillis};
+
 use crate::{WS_CLOSE_SETUP_REQUIRED, WS_CLOSE_UNAUTHORIZED};
 
-/// The first reconnect delay, in milliseconds.
-const BASE_DELAY_MS: u64 = 250;
+/// The first reconnect delay.
+const BASE_DELAY: Millis = Millis(250);
 
-/// The longest reconnect delay before jitter, in milliseconds.
-const MAX_DELAY_MS: u64 = 10_000;
+/// The longest reconnect delay before jitter.
+const MAX_DELAY: Millis = Millis(10_000);
 
-/// The worker's clock, in milliseconds. A host test swaps in one it advances
-/// by hand.
-pub(crate) type Clock = Rc<dyn Fn() -> u64>;
+/// The worker's wall clock. A host test swaps in one it advances by hand.
+pub(crate) type Clock = Rc<dyn Fn() -> UnixMillis>;
 
 /// The clock of the running worker: the browser's wall clock.
 #[cfg(target_arch = "wasm32")]
@@ -23,14 +24,19 @@ pub(crate) fn system_clock() -> Clock {
     // The wall clock is a positive count of milliseconds well below 2^53, so
     // the conversion is exact.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    Rc::new(|| js_sys::Date::now() as u64)
+    Rc::new(|| UnixMillis(js_sys::Date::now() as u64))
 }
 
-/// The clock of a native build: milliseconds since the clock was made.
+/// The clock of a native build: the system's wall clock.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn system_clock() -> Clock {
-    let start = std::time::Instant::now();
-    Rc::new(move || u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX))
+    Rc::new(|| {
+        UnixMillis(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX)),
+        )
+    })
 }
 
 /// What the shell does after a socket event.
@@ -42,10 +48,10 @@ pub(crate) enum Next {
     Open,
     /// Renew the session's token, then report the outcome.
     Renew,
-    /// Arm a timer for `delay_ms`, then report it fired.
+    /// Arm a timer for `delay`, then report it fired.
     Wait {
         /// How long the timer waits.
-        delay_ms: u64,
+        delay: Millis,
     },
     /// The account owes its key setup: stay closed until a session with keys.
     SetupOwed,
@@ -58,25 +64,28 @@ pub(crate) struct Lifecycle {
     /// Attempts since the last frame, which set the next delay.
     attempts: u32,
     /// When the armed reconnect is due, on the worker's clock.
-    deadline_ms: Option<u64>,
+    deadline: Option<UnixMillis>,
 }
 
 impl Lifecycle {
     /// The delay before jitter after `attempts` failures in a row. It starts at
     /// 250 ms and doubles, capped at 10 s.
-    pub(crate) fn delay_ms(attempts: u32) -> u64 {
-        BASE_DELAY_MS
-            .saturating_mul(1 << attempts.min(6))
-            .min(MAX_DELAY_MS)
+    pub(crate) fn delay(attempts: u32) -> Millis {
+        Millis(
+            BASE_DELAY
+                .0
+                .saturating_mul(1 << attempts.min(6))
+                .min(MAX_DELAY.0),
+        )
     }
 
-    /// The socket closed with `code` at `now_ms`, or failed with no close,
+    /// The socket closed with `code` at `now`, or failed with no close,
     /// which reads as code 0 (`SYNC-070`). `wanted` is whether any document
     /// still needs it. `jitter` is a fraction in `[0, 1)` added to the delay.
-    pub(crate) fn closed(&mut self, code: u16, wanted: bool, now_ms: u64, jitter: f64) -> Next {
+    pub(crate) fn closed(&mut self, code: u16, wanted: bool, now: UnixMillis, jitter: f64) -> Next {
         if code == WS_CLOSE_SETUP_REQUIRED {
             // A renewed session would have no keys either (`SYNC-133`).
-            self.deadline_ms = None;
+            self.deadline = None;
             return Next::SetupOwed;
         }
         if !wanted {
@@ -87,13 +96,13 @@ impl Lifecycle {
             // (`SYNC-063`).
             return Next::Renew;
         }
-        self.back_off(now_ms, jitter)
+        self.back_off(now, jitter)
     }
 
     /// Arms the next reconnect. The delay grows with each attempt until a
     /// frame arrives (`SYNC-064`).
-    pub(crate) fn back_off(&mut self, now_ms: u64, jitter: f64) -> Next {
-        let capped = Self::delay_ms(self.attempts);
+    pub(crate) fn back_off(&mut self, now: UnixMillis, jitter: f64) -> Next {
+        let capped = Self::delay(self.attempts).0;
         self.attempts = self.attempts.saturating_add(1);
         // `capped` is at most 10 s, so the product fits and is not negative.
         #[allow(
@@ -102,9 +111,9 @@ impl Lifecycle {
             clippy::cast_precision_loss
         )]
         let spread = (capped as f64 * jitter.clamp(0.0, 1.0)) as u64;
-        let delay_ms = capped.saturating_add(spread);
-        self.deadline_ms = Some(now_ms.saturating_add(delay_ms));
-        Next::Wait { delay_ms }
+        let delay = Millis(capped.saturating_add(spread));
+        self.deadline = Some(now.plus(delay));
+        Next::Wait { delay }
     }
 
     /// A frame arrived, so the connection is live and the backoff starts over.
@@ -120,17 +129,17 @@ impl Lifecycle {
         Next::Open
     }
 
-    /// The timer fired at `now_ms`. Opens once the deadline has passed, and
+    /// The timer fired at `now`. Opens once the deadline has passed, and
     /// arms again for what remains when the timer fired early.
-    pub(crate) fn poll(&mut self, now_ms: u64) -> Next {
-        match self.deadline_ms {
+    pub(crate) fn poll(&mut self, now: UnixMillis) -> Next {
+        match self.deadline {
             None => Next::Idle,
-            Some(due) if now_ms >= due => {
-                self.deadline_ms = None;
+            Some(due) if now >= due => {
+                self.deadline = None;
                 Next::Open
             }
             Some(due) => Next::Wait {
-                delay_ms: due - now_ms,
+                delay: Millis(due.0 - now.0),
             },
         }
     }
@@ -138,7 +147,7 @@ impl Lifecycle {
     /// Starts over, with no attempt counted and no deadline armed.
     pub(crate) fn reset(&mut self) {
         self.attempts = 0;
-        self.deadline_ms = None;
+        self.deadline = None;
     }
 }
 
@@ -151,18 +160,18 @@ mod tests {
     #[test]
     fn the_wait_grows_while_no_frame_arrives() {
         let mut lifecycle = Lifecycle::default();
-        let mut now = 0;
+        let mut now = UnixMillis(0);
         let mut waits = Vec::new();
         for _ in 0..8 {
-            let Next::Wait { delay_ms } = lifecycle.closed(1006, true, now, 0.0) else {
+            let Next::Wait { delay } = lifecycle.closed(1006, true, now, 0.0) else {
                 panic!("a close backs off");
             };
-            waits.push(delay_ms);
+            waits.push(delay.0);
             assert_eq!(
-                lifecycle.poll(now + delay_ms - 1),
-                Next::Wait { delay_ms: 1 }
+                lifecycle.poll(UnixMillis(now.0 + delay.0 - 1)),
+                Next::Wait { delay: Millis(1) }
             );
-            now += delay_ms;
+            now = now.plus(delay);
             assert_eq!(lifecycle.poll(now), Next::Open);
             assert_eq!(lifecycle.poll(now), Next::Idle, "one open per deadline");
         }
@@ -174,18 +183,18 @@ mod tests {
     #[test]
     fn the_wait_resets_on_a_frame_alone() {
         let mut lifecycle = Lifecycle::default();
-        lifecycle.closed(1006, true, 0, 0.0);
-        lifecycle.poll(250);
+        lifecycle.closed(1006, true, UnixMillis(0), 0.0);
+        lifecycle.poll(UnixMillis(250));
         // Opened and closed again with no frame between.
         assert_eq!(
-            lifecycle.closed(1006, true, 250, 0.0),
-            Next::Wait { delay_ms: 500 }
+            lifecycle.closed(1006, true, UnixMillis(250), 0.0),
+            Next::Wait { delay: Millis(500) }
         );
-        lifecycle.poll(750);
+        lifecycle.poll(UnixMillis(750));
         lifecycle.frame();
         assert_eq!(
-            lifecycle.closed(1006, true, 800, 0.0),
-            Next::Wait { delay_ms: 250 }
+            lifecycle.closed(1006, true, UnixMillis(800), 0.0),
+            Next::Wait { delay: Millis(250) }
         );
     }
 
@@ -194,20 +203,20 @@ mod tests {
     #[test]
     fn an_authentication_refusal_renews_and_reopens() {
         let mut lifecycle = Lifecycle::default();
-        lifecycle.closed(1006, true, 0, 0.0);
+        lifecycle.closed(1006, true, UnixMillis(0), 0.0);
         assert_eq!(
-            lifecycle.closed(WS_CLOSE_UNAUTHORIZED, true, 10, 0.0),
+            lifecycle.closed(WS_CLOSE_UNAUTHORIZED, true, UnixMillis(10), 0.0),
             Next::Renew
         );
         assert_eq!(lifecycle.renewed(), Next::Open);
         assert_eq!(
-            lifecycle.poll(10_000),
+            lifecycle.poll(UnixMillis(10_000)),
             Next::Idle,
             "the old deadline is gone"
         );
         assert_eq!(
-            lifecycle.closed(1006, true, 20, 0.0),
-            Next::Wait { delay_ms: 250 }
+            lifecycle.closed(1006, true, UnixMillis(20), 0.0),
+            Next::Wait { delay: Millis(250) }
         );
     }
 
@@ -218,21 +227,28 @@ mod tests {
         let mut errored = Lifecycle::default();
         let mut closed = Lifecycle::default();
         assert_eq!(
-            errored.closed(0, true, 0, 0.5),
-            closed.closed(1006, true, 0, 0.5)
+            errored.closed(0, true, UnixMillis(0), 0.5),
+            closed.closed(1006, true, UnixMillis(0), 0.5)
         );
         assert_eq!(
-            errored.closed(0, true, 0, 0.0),
-            Next::Wait { delay_ms: 500 }
+            errored.closed(0, true, UnixMillis(0), 0.0),
+            Next::Wait { delay: Millis(500) }
         );
 
         let mut lifecycle = Lifecycle::default();
-        lifecycle.closed(1006, true, 0, 0.0);
+        lifecycle.closed(1006, true, UnixMillis(0), 0.0);
         assert_eq!(
-            lifecycle.closed(WS_CLOSE_SETUP_REQUIRED, true, 0, 0.0),
+            lifecycle.closed(WS_CLOSE_SETUP_REQUIRED, true, UnixMillis(0), 0.0),
             Next::SetupOwed
         );
-        assert_eq!(lifecycle.poll(u64::MAX), Next::Idle, "no timer reopens it");
-        assert_eq!(lifecycle.closed(1006, false, 0, 0.0), Next::Idle);
+        assert_eq!(
+            lifecycle.poll(UnixMillis(u64::MAX)),
+            Next::Idle,
+            "no timer reopens it"
+        );
+        assert_eq!(
+            lifecycle.closed(1006, false, UnixMillis(0), 0.0),
+            Next::Idle
+        );
     }
 }

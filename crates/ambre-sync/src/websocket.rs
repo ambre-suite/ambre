@@ -5,7 +5,7 @@ use ambre_protocol::ws::AccessToken;
 
 /// The delay before Sync asks again for the first stopped replay of a
 /// document. Each later stop doubles it (`ambre-spec-budgets.md` section 8).
-const REPLAY_RETRY_BASE_MS: u64 = 1_000;
+const REPLAY_RETRY_BASE: ambre_core::Millis = ambre_core::Millis(1_000);
 
 /// The stops Sync asks again after. One more reaches Logic as an error
 /// (`ambre-spec-budgets.md` section 8, `SYNC-154`).
@@ -13,10 +13,10 @@ const REPLAY_RETRY_LIMIT: u32 = 5;
 
 /// The delay before asking again after the `stop`-th stop of one replay,
 /// counted from one. Past the budget there is none (`SYNC-154`).
-fn replay_retry_delay_ms(stop: u32) -> Option<u64> {
+fn replay_retry_delay_ms(stop: u32) -> Option<ambre_core::Millis> {
     (1..=REPLAY_RETRY_LIMIT)
         .contains(&stop)
-        .then(|| REPLAY_RETRY_BASE_MS << (stop - 1))
+        .then(|| ambre_core::Millis(REPLAY_RETRY_BASE.0 << (stop - 1)))
 }
 
 /// The stops of one document's replay since its budget last started.
@@ -34,7 +34,7 @@ pub(crate) struct ReplayStops {
 /// socket's first frame, so no log line, proxy record or URL holds it
 /// (`SYNC-061`, `ambre-spec-session.md`, `SRV-031`).
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-pub(crate) fn socket_address(scheme: &str, api_base: &str) -> String {
+pub(crate) fn socket_address(scheme: &str, api_base: &crate::http::RelayHost) -> String {
     format!("{scheme}://{api_base}/api/ws")
 }
 
@@ -226,7 +226,7 @@ impl SyncState {
                 }
             }
             lifecycle::Next::Renew => self.reauthenticate(),
-            lifecycle::Next::Wait { delay_ms } => self.arm_reconnect_timer(delay_ms),
+            lifecycle::Next::Wait { delay } => self.arm_reconnect_timer(delay),
             lifecycle::Next::SetupOwed => {
                 // The socket reopens once a session with keys is stored
                 // (`SYNC-133`). Meanwhile the client is told a setup is owed
@@ -251,10 +251,10 @@ impl SyncState {
     }
 
     /// Asks the worker's timers for a [`SyncEvent::ReconnectNow`] in
-    /// `delay_ms`. The shell only schedules: the lifecycle decides what the
+    /// `delay`. The shell only schedules: the lifecycle decides what the
     /// timer means when it fires.
     #[cfg(target_arch = "wasm32")]
-    fn arm_reconnect_timer(&mut self, delay_ms: u64) {
+    fn arm_reconnect_timer(&mut self, delay: ambre_core::Millis) {
         use wasm_bindgen::JsCast;
 
         let Some(tx) = self.event_tx.clone() else {
@@ -266,9 +266,9 @@ impl SyncState {
         if let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() {
             let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
                 cb.as_ref().unchecked_ref(),
-                i32::try_from(delay_ms).unwrap_or(i32::MAX),
+                i32::try_from(delay.0).unwrap_or(i32::MAX),
             );
-            tracing::warn!("Sync: reconnect scheduled in {delay_ms}ms");
+            tracing::warn!("Sync: reconnect scheduled in {}ms", delay.0);
         }
         // Keep the closure alive until it fires (replaces any previous pending one).
         self._reconnect_timer = Some(cb);
@@ -277,13 +277,13 @@ impl SyncState {
     /// Native: no timer. A host test advances the clock and sends
     /// [`SyncEvent::ReconnectNow`] itself.
     #[cfg(not(target_arch = "wasm32"))]
-    fn arm_reconnect_timer(&mut self, _delay_ms: u64) {}
+    fn arm_reconnect_timer(&mut self, _delay: ambre_core::Millis) {}
 
-    /// Asks the worker's timers for `event` in `delay_ms`, such as a
+    /// Asks the worker's timers for `event` in `delay`, such as a
     /// [`SyncEvent::ReplayRetry`]. The closure runs once and frees itself, so
     /// several documents can wait at once.
     #[cfg(target_arch = "wasm32")]
-    pub(crate) fn arm_event_timer(&self, event: SyncEvent, delay_ms: u64) {
+    pub(crate) fn arm_event_timer(&self, event: SyncEvent, delay: ambre_core::Millis) {
         use wasm_bindgen::JsCast;
 
         let Some(tx) = self.event_tx.clone() else {
@@ -295,14 +295,14 @@ impl SyncState {
         if let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() {
             let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
                 cb.unchecked_ref(),
-                i32::try_from(delay_ms).unwrap_or(i32::MAX),
+                i32::try_from(delay.0).unwrap_or(i32::MAX),
             );
         }
     }
 
     /// Native: no timer. A host test sends the event itself.
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn arm_event_timer(&self, _event: SyncEvent, _delay_ms: u64) {}
+    pub(crate) fn arm_event_timer(&self, _event: SyncEvent, _delay: ambre_core::Millis) {}
 
     /// The relay stopped a replay. Ask again after a delay that doubles at
     /// each stop (`SYNC-153`). A stop past the one before starts the budget
@@ -1672,7 +1672,7 @@ mod tests {
         let (mut state, _rx) = with_open_document();
         let now = std::rc::Rc::new(std::cell::Cell::new(0_u64));
         let clock = now.clone();
-        state.clock = std::rc::Rc::new(move || clock.get());
+        state.clock = std::rc::Rc::new(move || ambre_core::UnixMillis(clock.get()));
         let fire_at = |state: &mut SyncState, at: u64| {
             now.set(at);
             state.handle_sync_event(SyncEvent::ReconnectNow);
@@ -1706,7 +1706,7 @@ mod tests {
         let reopens = |state: &mut SyncState| {
             let now = std::rc::Rc::new(std::cell::Cell::new(0_u64));
             let clock = now.clone();
-            state.clock = std::rc::Rc::new(move || clock.get());
+            state.clock = std::rc::Rc::new(move || ambre_core::UnixMillis(clock.get()));
             state.handle_sync_event(closed(1006));
             now.set(60_000);
             state.handle_sync_event(SyncEvent::ReconnectNow);
@@ -1932,7 +1932,10 @@ mod tests {
     #[test]
     fn the_socket_address_carries_no_token() {
         assert_eq!(
-            socket_address("wss", "relay.example"),
+            socket_address(
+                "wss",
+                &crate::http::RelayHost::new("relay.example".to_owned())
+            ),
             "wss://relay.example/api/ws"
         );
     }
@@ -2062,7 +2065,9 @@ mod tests {
     /// in all, and a sixth arms no timer (`ambre-spec-budgets.md` section 8).
     #[test]
     fn the_replay_retry_delay_doubles_up_to_its_budget() {
-        let delays: Vec<Option<u64>> = (0..=6).map(replay_retry_delay_ms).collect();
+        let delays: Vec<Option<u64>> = (0..=6)
+            .map(|stop| replay_retry_delay_ms(stop).map(|d| d.0))
+            .collect();
         assert_eq!(
             delays,
             [

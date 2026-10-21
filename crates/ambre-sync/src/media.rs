@@ -140,7 +140,10 @@ impl SyncState {
             signing_key,
         };
         wasm_bindgen_futures::spawn_local(async move {
-            let base = format!("{url_scheme}://{api_base}/api/documents/{document_id}");
+            let base = format!(
+                "{}/documents/{document_id}",
+                crate::http::ApiRoot::of(url_scheme, &api_base)
+            );
             upload_media(&GlooHttp { auth }, &base, upload, &tx, &logic_tx).await;
         });
     }
@@ -211,7 +214,10 @@ impl SyncState {
         };
 
         wasm_bindgen_futures::spawn_local(async move {
-            let base = format!("{url_scheme}://{api_base}/api/documents/{document_id}");
+            let base = format!(
+                "{}/documents/{document_id}",
+                crate::http::ApiRoot::of(url_scheme, &api_base)
+            );
             let http = GlooHttp { auth };
             download_media(&http, &base, id, content_hash, &keyring, &tx, &logic_tx).await;
         });
