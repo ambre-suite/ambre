@@ -997,7 +997,7 @@ pub(crate) mod tests {
         let ada = UserId::new();
         let mut list = MessageList::default();
         let messages = (0..100)
-            .map(|i| message(ada, i * 600_000, "hello"))
+            .map(|i| message(ada, ambre_bus::Timestamp(i * 600_000), "hello"))
             .collect();
         list.absorb(SegmentId::new(), messages);
         let focused = |focus| Shown {
@@ -1042,7 +1042,9 @@ pub(crate) mod tests {
     fn ten_thousand_messages_lay_out_only_one_viewport() {
         let ada = UserId::new();
         let mut list = MessageList::default();
-        let messages = (0..10_000).map(|i| message(ada, i, "hello")).collect();
+        let messages = (0..10_000)
+            .map(|i| message(ada, ambre_bus::Timestamp(i), "hello"))
+            .collect();
         list.absorb(SegmentId::new(), messages);
         let (surface, painted) = paint(&list, 200.0);
         assert!(painted.latest_shown);
@@ -1056,7 +1058,9 @@ pub(crate) mod tests {
     fn a_list_resting_on_a_row_paints_from_it() {
         let ada = UserId::new();
         let mut list = MessageList::default();
-        let messages = (0..100).map(|i| message(ada, i, "hello")).collect();
+        let messages = (0..100)
+            .map(|i| message(ada, ambre_bus::Timestamp(i), "hello"))
+            .collect();
         list.absorb(SegmentId::new(), messages);
         let at = |anchor| Shown {
             list: &list,
@@ -1085,7 +1089,10 @@ pub(crate) mod tests {
         let ada = UserId::new();
         let mut list = MessageList::default();
         let bodies = ["a", "abcd", "abcdefgh"];
-        let messages = bodies.iter().map(|b| message(ada, 0, b)).collect();
+        let messages = bodies
+            .iter()
+            .map(|b| message(ada, ambre_bus::Timestamp(0), b))
+            .collect();
         list.absorb(SegmentId::new(), messages);
         let (surface, painted) = paint(&list, 600.0);
         assert_eq!(painted.laid_out, 3);
@@ -1101,7 +1108,7 @@ pub(crate) mod tests {
     /// (`MURMURE-185`).
     #[test]
     fn a_deleted_body_paints_muted_and_a_reply_count_in_the_accent() {
-        let mut gone = message(UserId::new(), 0, "");
+        let mut gone = message(UserId::new(), ambre_bus::Timestamp(0), "");
         gone.deleted = true;
         gone.thread = Some(ThreadHead {
             document: DocumentId::new(),
@@ -1125,7 +1132,7 @@ pub(crate) mod tests {
     fn the_reactions_paint_as_chips_under_the_body() {
         use ambre_bus::Reaction;
         let (me, ada) = (UserId::new(), UserId::new());
-        let mut reacted = message(ada, 0, "hello");
+        let mut reacted = message(ada, ambre_bus::Timestamp(0), "hello");
         reacted.reactions = vec![
             Reaction {
                 emoji: ambre_bus::Emoji::from("\u{1F44D}"),
@@ -1139,7 +1146,10 @@ pub(crate) mod tests {
         let mut list = MessageList::default();
         list.absorb(SegmentId::new(), vec![reacted.clone()]);
         let mut bare = MessageList::default();
-        bare.absorb(SegmentId::new(), vec![message(ada, 0, "hello")]);
+        bare.absorb(
+            SegmentId::new(),
+            vec![message(ada, ambre_bus::Timestamp(0), "hello")],
+        );
         let tall = |painted: &Painted| painted.rows[0].2 - painted.rows[0].1;
         let (_, plain) = paint(&bare, 600.0);
 
@@ -1205,12 +1215,15 @@ pub(crate) mod tests {
             media_type: MediaType("image/png".to_owned()),
             size: ByteSize(2048),
         };
-        let mut carrying = message(ada, 0, "hello");
+        let mut carrying = message(ada, ambre_bus::Timestamp(0), "hello");
         carrying.attachments = vec![file.clone()];
         let mut list = MessageList::default();
         list.absorb(SegmentId::new(), vec![carrying]);
         let mut bare = MessageList::default();
-        bare.absorb(SegmentId::new(), vec![message(ada, 0, "hello")]);
+        bare.absorb(
+            SegmentId::new(),
+            vec![message(ada, ambre_bus::Timestamp(0), "hello")],
+        );
         let tall = |painted: &Painted| painted.rows[0].2 - painted.rows[0].1;
         let (_, plain) = paint(&bare, 600.0);
         let (_, at) = paint(&list, 600.0);
@@ -1251,7 +1264,7 @@ pub(crate) mod tests {
             media_type: MediaType("image/gif".to_owned()),
             size: ByteSize(2048),
         };
-        let mut carrying = message(ada, 0, "hello");
+        let mut carrying = message(ada, ambre_bus::Timestamp(0), "hello");
         carrying.attachments = vec![file.clone()];
         let mut list = MessageList::default();
         list.absorb(SegmentId::new(), vec![carrying]);
@@ -1342,12 +1355,18 @@ pub(crate) mod tests {
         };
         let ada = UserId::new();
         let mut plain = MessageList::default();
-        plain.absorb(SegmentId::new(), vec![message(ada, 0, "no picture here")]);
+        plain.absorb(
+            SegmentId::new(),
+            vec![message(ada, ambre_bus::Timestamp(0), "no picture here")],
+        );
         assert_eq!(requested(&plain), 0, "nothing fetched at start");
         let mut said = MessageList::default();
-        said.absorb(SegmentId::new(), vec![message(ada, 0, "ship it \u{1F680}")]);
+        said.absorb(
+            SegmentId::new(),
+            vec![message(ada, ambre_bus::Timestamp(0), "ship it \u{1F680}")],
+        );
         assert_eq!(requested(&said), 1);
-        let mut reacted = message(ada, 0, "ship it");
+        let mut reacted = message(ada, ambre_bus::Timestamp(0), "ship it");
         reacted.reactions = vec![ambre_bus::Reaction {
             emoji: ambre_bus::Emoji::from("\u{1F389}"),
             users: vec![ada],
@@ -1362,7 +1381,7 @@ pub(crate) mod tests {
     /// mention before them does not shift them.
     #[test]
     fn a_sent_body_draws_each_of_its_marks() {
-        let mut sent = message(UserId::new(), 0, "@bo hi bold c d");
+        let mut sent = message(UserId::new(), ambre_bus::Timestamp(0), "@bo hi bold c d");
         sent.mentions = vec![Mention {
             target: MentionTarget::User(UserId::new()),
             range: 0..3,
@@ -1419,7 +1438,7 @@ pub(crate) mod tests {
     #[test]
     fn a_sent_block_draws_its_margin_marks() {
         let margin = |body: &str, styles: Vec<StyleMark>| {
-            let mut sent = message(UserId::new(), 0, body);
+            let mut sent = message(UserId::new(), ambre_bus::Timestamp(0), body);
             sent.styles = styles;
             let mut list = MessageList::default();
             list.absorb(SegmentId::new(), vec![sent]);
@@ -1449,7 +1468,11 @@ pub(crate) mod tests {
     fn a_sent_block_draws_its_lines_past_its_margin_mark() {
         let long = "word ".repeat(30);
         for style in [TextStyle::Quote, TextStyle::List] {
-            let mut sent = message(UserId::new(), 0, &format!("{long}\nplain"));
+            let mut sent = message(
+                UserId::new(),
+                ambre_bus::Timestamp(0),
+                &format!("{long}\nplain"),
+            );
             sent.styles = vec![StyleMark {
                 style,
                 range: 0..long.len() + 1,
@@ -1494,7 +1517,10 @@ pub(crate) mod tests {
     fn the_unread_line_paints_above_the_first_unread_message() {
         let ada = UserId::new();
         let mut list = MessageList::default();
-        let messages: Vec<_> = ["a", "abcd"].iter().map(|b| message(ada, 0, b)).collect();
+        let messages: Vec<_> = ["a", "abcd"]
+            .iter()
+            .map(|b| message(ada, ambre_bus::Timestamp(0), b))
+            .collect();
         let unread = messages.get(1).map(|m| m.id);
         list.absorb(SegmentId::new(), messages);
         let (plain, _) = paint(&list, 600.0);
@@ -1527,7 +1553,10 @@ pub(crate) mod tests {
     fn a_band_paints_as_one_muted_row() {
         let ada = UserId::new();
         let mut list = MessageList::default();
-        list.absorb(SegmentId::new(), vec![message(ada, 30, "abcd")]);
+        list.absorb(
+            SegmentId::new(),
+            vec![message(ada, ambre_bus::Timestamp(30), "abcd")],
+        );
         let band = crate::list::Band {
             cause: ambre_bus::Unreadable::Damaged,
             from: Timestamp(10),
@@ -1555,7 +1584,10 @@ pub(crate) mod tests {
         let ada = UserId::new();
         let mut list = MessageList::default();
         let bodies = ["hello", "brave", "world"];
-        let messages = bodies.iter().map(|b| message(ada, 0, b)).collect();
+        let messages = bodies
+            .iter()
+            .map(|b| message(ada, ambre_bus::Timestamp(0), b))
+            .collect();
         list.absorb(SegmentId::new(), messages);
         let keys = list.keys();
         let (_, plain) = paint(&list, 600.0);

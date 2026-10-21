@@ -79,7 +79,7 @@ impl ToileState {
         &mut self,
         anchor: &CommentAnchor,
         body: &str,
-        ts: i64,
+        ts: ambre_core::Timestamp,
     ) -> ToileOutcome {
         // A session with no identity has no author to write under. The UI cannot
         // reach this pre-`SessionReady`; guard anyway.
@@ -121,7 +121,7 @@ impl ToileState {
         thread: &ThreadId,
         anchor: Vec<u8>,
         author: UserId,
-        ts: i64,
+        ts: ambre_core::Timestamp,
         body: &str,
     ) -> Option<()> {
         let map = self
@@ -140,7 +140,12 @@ impl ToileState {
     /// Append a message to `thread`. A missing thread, an empty body and a
     /// session with no `UserId` write nothing. Outside the undo stack, like
     /// every comment write (`TOILE-FEAT-017`).
-    pub(super) fn reply_comment(&mut self, thread: &ThreadId, body: &str, ts: i64) -> ToileOutcome {
+    pub(super) fn reply_comment(
+        &mut self,
+        thread: &ThreadId,
+        body: &str,
+        ts: ambre_core::Timestamp,
+    ) -> ToileOutcome {
         let Some(author) = self.my_user_id else {
             return ToileOutcome::display_only(Vec::new());
         };
@@ -387,10 +392,15 @@ impl ToileState {
 /// Append one message to a thread's list: the author, the clock and the body
 /// text container, in the same write as the message map (`TOILE-029`). `None`
 /// when Loro refuses one of the writes.
-fn push_message(messages: &LoroMovableList, author: UserId, ts: i64, body: &str) -> Option<()> {
+fn push_message(
+    messages: &LoroMovableList,
+    author: UserId,
+    ts: ambre_core::Timestamp,
+    body: &str,
+) -> Option<()> {
     let map = messages.push_container(LoroMap::new()).ok()?;
     map.insert(AUTHOR, author.to_string()).ok()?;
-    map.insert(TS, ts).ok()?;
+    map.insert(TS, ts.to_i64_saturating()).ok()?;
     let text = map.insert_container(BODY, LoroText::new()).ok()?;
     text.insert(0, body).ok()?;
     Some(())
@@ -422,8 +432,8 @@ fn read_message(value: &LoroValue) -> Option<CommentMessage> {
     };
     let author = UserId::parse_str(author).ok()?;
     let ts = match fields.get(TS) {
-        Some(LoroValue::I64(ts)) => *ts,
-        _ => 0,
+        Some(LoroValue::I64(ts)) => ambre_core::Timestamp::from_i64(*ts),
+        _ => ambre_core::Timestamp::default(),
     };
     let body = match fields.get(BODY) {
         Some(LoroValue::String(body)) => body.to_string(),

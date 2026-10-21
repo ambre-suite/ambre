@@ -256,7 +256,7 @@ impl ProseView {
             return;
         };
         self.annotations.intent.set(None);
-        let now_ms = js_sys::Date::now() as u64;
+        let now_ms = ambre_core::Timestamp(js_sys::Date::now() as u64);
         if let Some(command) = self.state.take_intent(intent, now_ms) {
             send_edit(&mut self.outbox, self.document_id, command);
             self.busy_pub.publish(self.outbox.is_busy());

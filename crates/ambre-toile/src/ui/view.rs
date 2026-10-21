@@ -4361,8 +4361,9 @@ impl ToileView {
 /// (`toile-comments` section 5). The Logic thread holds no clock, and nothing
 /// orders by this one (`TOILE-FEAT-012`): the reader sees it, and that is all.
 #[cfg(target_arch = "wasm32")]
-fn wall_clock_ms() -> i64 {
-    js_sys::Date::now() as i64
+fn wall_clock_ms() -> ambre_core::Timestamp {
+    // `Date.now()` is a whole, non-negative count of milliseconds.
+    ambre_core::Timestamp(js_sys::Date::now() as u64)
 }
 
 /// The canvas element's top-left client offset (CSS px), so a canvas-local anchor

@@ -235,7 +235,7 @@ mod tests {
     fn a_reaction_encodes() {
         let reaction = Reaction {
             kind: ReactionKind::Emoji("+1".to_owned()),
-            ts: 0,
+            ts: ambre_bus::Timestamp(0),
         };
         assert!(encode(&reaction).is_ok());
     }

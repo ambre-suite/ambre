@@ -315,8 +315,7 @@ pub struct IrStyle {
 pub struct IrComment {
     pub id:         Uuid,
     pub resolved:   bool,
-    /// Unix ms.
-    pub created_at: u64,
+    pub created_at: Timestamp,
     /// The opening body first, then the replies.
     pub replies:    Vec<IrReply>,
 }
@@ -324,7 +323,7 @@ pub struct IrComment {
 pub struct IrReply {
     pub id:         Uuid,
     pub author:     String,
-    pub created_at: u64,
+    pub created_at: Timestamp,
     pub text:       String,
 }
 

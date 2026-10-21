@@ -425,7 +425,9 @@ fn write_the_bands(state: &mut ProseState) {
         target: HfTarget::FirstPage,
         pos: 0,
     });
-    state.handle_command(ProseCommand::StampModified { now_ms: 1 });
+    state.handle_command(ProseCommand::StampModified {
+        now_ms: ambre_core::Timestamp(1),
+    });
 }
 
 /// The horizontal rule deleted, so the hiding marker is written.
@@ -447,7 +449,7 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
         block_id: root,
         range: (0, 1),
         text: "A comment.".to_owned(),
-        now_ms: 1,
+        now_ms: ambre_core::Timestamp(1),
     });
     let Some(thread) = state.comments().into_iter().next() else {
         panic!("the scenario opened a thread");
@@ -455,7 +457,7 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
     state.handle_command(ProseCommand::ReplyToComment {
         comment_id: thread.comment_id,
         text: "A reply.".to_owned(),
-        now_ms: 2,
+        now_ms: ambre_core::Timestamp(2),
     });
 }
 

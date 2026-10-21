@@ -378,7 +378,7 @@ fn write_created(
     name: &str,
     now: Timestamp,
 ) -> Result<(), MurmureError> {
-    schema::write_space_header(doc, space_id, now.0)?;
+    schema::write_space_header(doc, space_id, now)?;
     if !name.is_empty() {
         doc.get_map(SPACE).insert(SPACE_NAME, name)?;
     }

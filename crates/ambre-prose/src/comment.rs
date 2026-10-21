@@ -83,8 +83,8 @@ fn read_reply(map: &LoroMap) -> Option<CommentReply> {
         reply_id: ReplyId::parse_str(&doc::read_string(map, doc::REPLY_ID)?).ok()?,
         author: doc::read_string(map, doc::REPLY_AUTHOR).unwrap_or_default(),
         user_id: UserId::parse_str(&doc::read_string(map, doc::REPLY_USER)?).ok()?,
-        created_at: ambre_bus::Timestamp(
-            u64::try_from(doc::read_i64(map, doc::REPLY_CREATED).unwrap_or(0)).unwrap_or(0),
+        created_at: ambre_bus::Timestamp::from_i64(
+            doc::read_i64(map, doc::REPLY_CREATED).unwrap_or(0),
         ),
         text,
     })

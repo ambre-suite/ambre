@@ -1480,7 +1480,10 @@ pub(crate) mod tests {
         // A second record over the same cell, written as a peer's concurrent
         // merge lands: straight into the map, with a later stamp.
         let (anchor, extent) = (cell_at(&state, table, 0, 1), cell_at(&state, table, 1, 1));
-        let later = earlier.first().map_or(0, |region| region.stamp) + 10;
+        let later = earlier
+            .first()
+            .map_or(0, |region| region.stamp.to_i64_saturating())
+            + 10;
         let map = state
             .table_attrs(&table)
             .and_then(|attrs| doc::map_at(&attrs, doc::A_MERGED))
@@ -1503,6 +1506,6 @@ pub(crate) mod tests {
         let standing = state.regions_of(&table);
         assert_eq!(standing.len(), 1);
         assert_eq!(standing[0].anchor, anchor);
-        assert_eq!(standing[0].stamp, later);
+        assert_eq!(standing[0].stamp, ambre_core::Timestamp::from_i64(later));
     }
 }

@@ -32,7 +32,7 @@ impl ProseState {
         block: &TreeID,
         range: (u32, u32),
         text: &str,
-        now_ms: u64,
+        now_ms: ambre_core::Timestamp,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         if doc::is_band(&tree, block) {
@@ -77,7 +77,7 @@ impl ProseState {
         &mut self,
         id: &CommentId,
         text: &str,
-        now_ms: u64,
+        now_ms: ambre_core::Timestamp,
     ) -> ProseOutcome {
         let Some(entry) = comment::entry(&self.doc, id) else {
             return ProseOutcome::refused(ProseRefusal::NoSuchComment(*id));
@@ -262,7 +262,12 @@ impl ProseState {
 
     /// One reply at the end of `list`, stamped from the session identity and
     /// never from the command (`PROSE-FEAT-077`).
-    fn write_reply(&self, list: &LoroList, text: &str, now_ms: u64) -> Result<(), String> {
+    fn write_reply(
+        &self,
+        list: &LoroList,
+        text: &str,
+        now_ms: ambre_core::Timestamp,
+    ) -> Result<(), String> {
         let user = self.my_user_id.ok_or("no identity")?;
         let reply = list
             .push_container(LoroMap::new())
@@ -277,10 +282,7 @@ impl ProseState {
             .insert(doc::REPLY_USER, user.to_string())
             .map_err(|e| format!("{e:?}"))?;
         reply
-            .insert(
-                doc::REPLY_CREATED,
-                i64::try_from(now_ms).unwrap_or(i64::MAX),
-            )
+            .insert(doc::REPLY_CREATED, now_ms.to_i64_saturating())
             .map_err(|e| format!("{e:?}"))?;
         let body = reply
             .insert_container(doc::ANNOT_TEXT, LoroText::new())
@@ -396,7 +398,7 @@ mod tests {
             block_id: block,
             range,
             text: text.to_owned(),
-            now_ms: 10,
+            now_ms: ambre_core::Timestamp(10),
         });
         state
             .comments()
@@ -419,7 +421,12 @@ mod tests {
         (t.anchor_start, t.anchor_end)
     }
 
-    fn reply(state: &mut ProseState, id: CommentId, text: &str, now_ms: u64) -> ProseOutcome {
+    fn reply(
+        state: &mut ProseState,
+        id: CommentId,
+        text: &str,
+        now_ms: ambre_core::Timestamp,
+    ) -> ProseOutcome {
         state.handle_command(ProseCommand::ReplyToComment {
             comment_id: id,
             text: text.to_owned(),
@@ -480,7 +487,7 @@ mod tests {
                 block_id: block,
                 range,
                 text: "x".to_owned(),
-                now_ms: 0,
+                now_ms: ambre_core::Timestamp(0),
             }))
         };
         assert_eq!(add(&mut state, block, (2, 2)), Some(ProseRefusal::BadRange));
@@ -528,8 +535,8 @@ mod tests {
     fn a_reply_lands_last_whatever_its_stamp() {
         let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "One.");
-        reply(&mut state, id, "Two.", 5);
-        reply(&mut state, id, "Three.", 1);
+        reply(&mut state, id, "Two.", ambre_core::Timestamp(5));
+        reply(&mut state, id, "Three.", ambre_core::Timestamp(1));
         assert_eq!(texts(&state, id), vec!["One.", "Two.", "Three."]);
     }
 
@@ -540,7 +547,7 @@ mod tests {
         let id = open(&mut state, block, (0, 5), "One.");
         state.handle_command(ProseCommand::ResolveComment { comment_id: id });
         assert!(thread(&state, id).resolved);
-        reply(&mut state, id, "Two.", 11);
+        reply(&mut state, id, "Two.", ambre_core::Timestamp(11));
         assert!(!thread(&state, id).resolved);
     }
 
@@ -552,7 +559,7 @@ mod tests {
         let id = open(&mut state, block, (0, 5), "One.");
         let other = open(&mut state, block, (6, 11), "Other.");
         let before = thread(&state, other);
-        reply(&mut state, id, "Two.", 11);
+        reply(&mut state, id, "Two.", ambre_core::Timestamp(11));
         assert_eq!(span(&state, id), (0, 5));
         assert_eq!(texts(&state, id)[0], "One.");
         assert_eq!(thread(&state, other), before);
@@ -601,7 +608,7 @@ mod tests {
     fn a_reply_is_edited_in_place_by_its_author_alone() {
         let (mut alice, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut alice, block, (0, 5), "One.");
-        reply(&mut alice, id, "Two.", 11);
+        reply(&mut alice, id, "Two.", ambre_core::Timestamp(11));
         alice.handle_command(ProseCommand::ResolveComment { comment_id: id });
         let second = thread(&alice, id).replies[1].reply_id;
         let edit = |text: &str| ProseCommand::EditCommentReply {
@@ -632,7 +639,7 @@ mod tests {
         let (mut alice, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut alice, block, (0, 5), "One.");
         for (text, at) in [("Two.", 11), ("Three.", 12)] {
-            reply(&mut alice, id, text, at);
+            reply(&mut alice, id, text, ambre_core::Timestamp(at));
         }
         alice.handle_command(ProseCommand::ResolveComment { comment_id: id });
         let second = thread(&alice, id).replies[1].reply_id;
@@ -657,7 +664,7 @@ mod tests {
     fn deleting_the_head_deletes_the_thread() {
         let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "One.");
-        reply(&mut state, id, "Two.", 11);
+        reply(&mut state, id, "Two.", ambre_core::Timestamp(11));
         let head = thread(&state, id).replies[0].reply_id;
         state.handle_command(ProseCommand::DeleteReply {
             comment_id: id,
@@ -758,7 +765,7 @@ mod tests {
             ProseCommand::ReplyToComment {
                 comment_id: id,
                 text: "Two.".to_owned(),
-                now_ms: 11,
+                now_ms: ambre_core::Timestamp(11),
             },
         );
         let ids = |state: &ProseState| -> Vec<CommentId> {
@@ -779,13 +786,13 @@ mod tests {
             block_id: block,
             range: (0, 11),
             text: "Alice.".to_owned(),
-            now_ms: 1,
+            now_ms: ambre_core::Timestamp(1),
         });
         let theirs = bob.handle_command(ProseCommand::AddComment {
             block_id: block,
             range: (6, 17),
             text: "Bob.".to_owned(),
-            now_ms: 1,
+            now_ms: ambre_core::Timestamp(1),
         });
         bob.apply_remote(&mine.update.expect("a delta"));
         alice.apply_remote(&theirs.update.expect("a delta"));
@@ -820,7 +827,7 @@ mod tests {
     fn an_undo_never_retracts_a_comment() {
         let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "One.");
-        reply(&mut state, id, "Two.", 11);
+        reply(&mut state, id, "Two.", ambre_core::Timestamp(11));
         state.handle_command(ProseCommand::Undo);
         assert_eq!(texts(&state, id), vec!["One.", "Two."]);
         assert_eq!(state.text_of(&block).as_deref(), Some(""));
@@ -839,7 +846,7 @@ mod tests {
             comment_id: id,
             reply_id: head,
         });
-        let replied = reply(&mut bob, id, "Two.", 11);
+        let replied = reply(&mut bob, id, "Two.", ambre_core::Timestamp(11));
         bob.apply_remote(&deleted.update.expect("a delta"));
         alice.apply_remote(&replied.update.expect("a delta"));
         assert!(alice.comments().is_empty());

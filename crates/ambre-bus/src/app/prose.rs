@@ -949,7 +949,7 @@ pub enum ProseCommand {
     /// engine writes it as the document's last-modified stamp when this peer
     /// wrote since the last one (`PROSE-FEAT-066`).
     StampModified {
-        now_ms: u64,
+        now_ms: ambre_core::Timestamp,
     },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
@@ -996,13 +996,13 @@ pub enum ProseCommand {
         block_id: BlockId,
         range: (u32, u32),
         text: String,
-        now_ms: u64,
+        now_ms: ambre_core::Timestamp,
     },
     /// A reply at the end of the thread, which reopens it (`PROSE-FEAT-079`).
     ReplyToComment {
         comment_id: CommentId,
         text: String,
-        now_ms: u64,
+        now_ms: ambre_core::Timestamp,
     },
     /// Close a thread.
     ResolveComment {

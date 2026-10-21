@@ -129,7 +129,12 @@ impl Created {
                 active,
                 now,
             } => {
-                schema::write_header(doc, DocumentKind::Meta, channel_id, now.0)?;
+                schema::write_header(
+                    doc,
+                    DocumentKind::Meta,
+                    channel_id,
+                    ambre_bus::Timestamp(now.0),
+                )?;
                 let channel = doc.get_map(CHANNEL);
                 channel.insert(CHANNEL_TYPE, channel_type.as_str())?;
                 if let Some(name) = name {
@@ -138,15 +143,30 @@ impl Created {
                 push_segment_entry(doc, *active, *now, SegmentState::Active)?;
             }
             Self::Segment { now } => {
-                schema::write_header(doc, DocumentKind::Segment, channel_id, now.0)?;
+                schema::write_header(
+                    doc,
+                    DocumentKind::Segment,
+                    channel_id,
+                    ambre_bus::Timestamp(now.0),
+                )?;
             }
             Self::Amendments { segment, now } => {
-                schema::write_header(doc, DocumentKind::Amendments, channel_id, now.0)?;
+                schema::write_header(
+                    doc,
+                    DocumentKind::Amendments,
+                    channel_id,
+                    ambre_bus::Timestamp(now.0),
+                )?;
                 doc.get_map(schema::HEADER)
                     .insert(schema::HEADER_SEGMENT, segment.to_string())?;
             }
             Self::Thread { segment, root, now } => {
-                schema::write_header(doc, DocumentKind::Thread, channel_id, now.0)?;
+                schema::write_header(
+                    doc,
+                    DocumentKind::Thread,
+                    channel_id,
+                    ambre_bus::Timestamp(now.0),
+                )?;
                 let header = doc.get_map(schema::HEADER);
                 header.insert(schema::HEADER_SEGMENT, segment.to_string())?;
                 header.insert(schema::HEADER_ROOT, root.to_string())?;
@@ -998,7 +1018,7 @@ impl ChannelState {
         let message = doc.get_list(MESSAGES).push_container(LoroMap::new())?;
         message.insert(MESSAGE_ID, id.to_string())?;
         message.insert(MESSAGE_AUTHOR, author.to_string())?;
-        message.insert(MESSAGE_TS, schema::ts_value(now.0))?;
+        message.insert(MESSAGE_TS, schema::ts_value(now))?;
         message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
         message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;
         message.insert(MESSAGE_NOTICE, NoticeKind::MemberAdded.as_str())?;
@@ -1056,7 +1076,7 @@ impl ChannelState {
         if map.get(&key).is_some() {
             return Ok(None);
         }
-        map.insert(&key, schema::ts_value(now.0))?;
+        map.insert(&key, schema::ts_value(now))?;
         let delta = session.export_json(doc)?;
         self.reacted_at(at, delta).map(Some)
     }
@@ -1836,7 +1856,7 @@ pub(crate) fn push_segment_entry(
 ) -> Result<(), MurmureError> {
     let entry = meta.get_list(SEGMENTS).push_container(LoroMap::new())?;
     entry.insert(SEGMENT_DOCUMENT, id.to_string())?;
-    entry.insert(SEGMENT_FROM, schema::ts_value(from.0))?;
+    entry.insert(SEGMENT_FROM, schema::ts_value(from))?;
     entry.insert(SEGMENT_STATE, state.as_str())?;
     Ok(())
 }
@@ -1990,7 +2010,7 @@ fn write_message(
     let message = doc.get_list(MESSAGES).push_container(LoroMap::new())?;
     message.insert(MESSAGE_ID, id.to_string())?;
     message.insert(MESSAGE_AUTHOR, author.to_string())?;
-    message.insert(MESSAGE_TS, schema::ts_value(now.0))?;
+    message.insert(MESSAGE_TS, schema::ts_value(now))?;
     if let Some((thread, _)) = copy {
         message.insert(MESSAGE_ALSO_IN_THREAD, thread.to_string())?;
     }

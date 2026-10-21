@@ -36,7 +36,7 @@ fn snapshot(doc: &LoroDoc) -> Vec<u8> {
 /// A segment document of `channel`, as a peer would have stored it.
 fn segment_doc(channel: ChannelId) -> LoroDoc {
     let doc = LoroDoc::new();
-    schema::write_header(&doc, DocumentKind::Segment, channel, NOW.0).expect("header");
+    schema::write_header(&doc, DocumentKind::Segment, channel, NOW).expect("header");
     doc.commit();
     doc
 }
@@ -61,7 +61,7 @@ fn stored_channel() -> Stored {
         SegmentId::new(),
     );
     let meta = LoroDoc::new();
-    schema::write_header(&meta, DocumentKind::Meta, channel, NOW.0).expect("header");
+    schema::write_header(&meta, DocumentKind::Meta, channel, NOW).expect("header");
     for (id, state) in [
         (final_id, SegmentState::Final),
         (closing_id, SegmentState::Closing),
@@ -1204,7 +1204,7 @@ fn two_finals() -> (Stored, SegmentId, SegmentId) {
     let mut stored = stored_channel();
     let (older, newer) = (SegmentId::new(), SegmentId::new());
     let meta = LoroDoc::new();
-    schema::write_header(&meta, DocumentKind::Meta, stored.channel, NOW.0).expect("header");
+    schema::write_header(&meta, DocumentKind::Meta, stored.channel, NOW).expect("header");
     for (id, from, state) in [
         (older, 10, SegmentState::Final),
         (newer, 20, SegmentState::Final),

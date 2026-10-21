@@ -164,12 +164,12 @@ impl ProseState {
     /// The stamp is the author's clock, read once and stored. Every reader then
     /// resolves the same date, whatever its own clock says. A collaborator's
     /// change is dated by the collaborator, so nothing here stamps it.
-    pub(super) fn stamp_modified(&mut self, now_ms: u64) -> ProseOutcome {
+    pub(super) fn stamp_modified(&mut self, now_ms: ambre_core::Timestamp) -> ProseOutcome {
         let ours = self.doc.oplog_vv().get(&self.peer.0).copied().unwrap_or(0);
         if ours <= self.stamped_counter {
             return ProseOutcome::nothing();
         }
-        let now = i64::try_from(now_ms).unwrap_or(i64::MAX);
+        let now = now_ms.to_i64_saturating();
         if let Err(e) = self.doc.get_map(doc::META).insert(doc::UPDATED_AT, now) {
             return Self::err_write(&format!("{e:?}"));
         }
@@ -459,7 +459,7 @@ pub(crate) mod tests {
     fn the_date_field_stores_a_format_and_no_date() {
         let (mut state, header) = with_header();
         state.handle_command(ProseCommand::StampModified {
-            now_ms: 1_700_000_000_000,
+            now_ms: ambre_core::Timestamp(1_700_000_000_000),
         });
         state.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::Date(DateFieldFormat::Long),
@@ -533,10 +533,14 @@ pub(crate) mod tests {
             pos: 0,
             text: "a".to_owned(),
         });
-        let stamped = state.handle_command(ProseCommand::StampModified { now_ms: 42 });
+        let stamped = state.handle_command(ProseCommand::StampModified {
+            now_ms: ambre_core::Timestamp(42),
+        });
         assert!(stamped.update.is_some());
         assert_eq!(doc::read_updated_at(state.document()), Some(42));
-        let again = state.handle_command(ProseCommand::StampModified { now_ms: 43 });
+        let again = state.handle_command(ProseCommand::StampModified {
+            now_ms: ambre_core::Timestamp(43),
+        });
         assert!(again.update.is_none(), "nothing was written since");
         state.handle_command(ProseCommand::Undo);
         assert_eq!(state.text_of(&header).as_deref(), Some(""));
@@ -598,7 +602,7 @@ pub(crate) mod tests {
         });
         send(&field, &mut bob);
         let stamp = alice.handle_command(ProseCommand::StampModified {
-            now_ms: 1_772_712_000_000,
+            now_ms: ambre_core::Timestamp(1_772_712_000_000),
         });
         send(&stamp, &mut bob);
         let header = crate::events::tree_id(alice.bands().header.expect("the header"));
@@ -617,7 +621,7 @@ pub(crate) mod tests {
             pos: 0,
         });
         state.handle_command(ProseCommand::StampModified {
-            now_ms: 1_772_712_000_000,
+            now_ms: ambre_core::Timestamp(1_772_712_000_000),
         });
         let header = crate::events::tree_id(header);
         let english = crate::band::resolve(state.document(), &header, 0, 1);

@@ -413,9 +413,9 @@ pub enum ProseCommand {
     // -- Comments (`features/ambre-spec-prose-comments.md`) --
     /// The author is stamped by the dispatcher from the session identity, never
     /// carried here (`PROSE-FEAT-077`). `now_ms` is a display stamp.
-    AddComment       { block_id: TreeID, range: (u32, u32), text: String, now_ms: u64 },
+    AddComment       { block_id: TreeID, range: (u32, u32), text: String, now_ms: Timestamp },
     /// Reopens a resolved thread as a side effect (`PROSE-FEAT-079`).
-    ReplyToComment   { comment_id: Uuid, text: String, now_ms: u64 },
+    ReplyToComment   { comment_id: Uuid, text: String, now_ms: Timestamp },
     ResolveComment   { comment_id: Uuid },
     /// The explicit reopen, with no reply added (`PROSE-FEAT-079`).
     ReopenComment    { comment_id: Uuid },

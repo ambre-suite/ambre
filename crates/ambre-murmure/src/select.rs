@@ -115,7 +115,7 @@ mod tests {
         let messages = bodies
             .iter()
             .enumerate()
-            .map(|(i, body)| message(ada, i as u64 * 60_000, body))
+            .map(|(i, body)| message(ada, ambre_bus::Timestamp(i as u64 * 60_000), body))
             .collect();
         list.absorb(SegmentId::new(), messages);
         list
@@ -187,9 +187,9 @@ mod tests {
     #[test]
     fn a_copy_holds_only_text_a_member_wrote() {
         let mut list = list(&["hello", "", "again"]);
-        let mut edited = message(UserId::new(), 200_000, "again");
+        let mut edited = message(UserId::new(), ambre_bus::Timestamp(200_000), "again");
         edited.edited = true;
-        let mut gone = message(UserId::new(), 100_000, "");
+        let mut gone = message(UserId::new(), ambre_bus::Timestamp(100_000), "");
         gone.deleted = true;
         let segment = SegmentId::new();
         list.absorb(segment, vec![gone, edited]);

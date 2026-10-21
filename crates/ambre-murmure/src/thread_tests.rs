@@ -737,7 +737,7 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
 /// The bytes of an empty segment of `channel`.
 fn empty_segment(channel: ChannelId) -> Vec<u8> {
     let doc = LoroDoc::new();
-    schema::write_header(&doc, DocumentKind::Segment, channel, NOW.0).expect("header");
+    schema::write_header(&doc, DocumentKind::Segment, channel, NOW).expect("header");
     doc.commit();
     doc.export(ExportMode::Snapshot).expect("snapshot")
 }
@@ -749,7 +749,7 @@ fn far_copy(alice: &ChannelState, oldest: Option<SegmentId>) -> (ChannelState, S
     let channel = alice.channel_id();
     let (middle, active) = (SegmentId::new(), SegmentId::new());
     let meta = LoroDoc::new();
-    schema::write_header(&meta, DocumentKind::Meta, channel, NOW.0).expect("header");
+    schema::write_header(&meta, DocumentKind::Meta, channel, NOW).expect("header");
     let entries = [
         oldest.map(|id| (id, 10, SegmentState::Final)),
         Some((middle, 20, SegmentState::Final)),

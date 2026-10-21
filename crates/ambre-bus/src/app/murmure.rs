@@ -164,13 +164,7 @@ impl UnreadCount {
     }
 }
 
-/// A wall-clock instant in Unix milliseconds.
-///
-/// Display only: a peer's clock is untrusted, so no rule orders or refuses a
-/// message on it (`ambre-spec-murmure-schema.md section 2`). The view stamps
-/// it, because the Logic thread reads no clock.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct Timestamp(pub u64);
+pub use ambre_core::Timestamp;
 
 /// What a mention names: one member, or every member of the channel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

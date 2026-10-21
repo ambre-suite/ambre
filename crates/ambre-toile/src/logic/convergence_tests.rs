@@ -4412,14 +4412,14 @@ fn concurrent_auto_layout_edits_converge() {
 fn emoji(s: &str) -> Reaction {
     Reaction {
         kind: ReactionKind::Emoji(s.to_owned()),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     }
 }
 
 fn vote(w: i32) -> Reaction {
     Reaction {
         kind: ReactionKind::Vote(w),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     }
 }
 
@@ -4941,7 +4941,12 @@ fn opened_thread(out: &crate::logic::command::ToileOutcome) -> ThreadId {
 }
 
 /// Open a thread on `anchor` and return its minted id.
-fn comment_on(st: &mut ToileState, anchor: CommentAnchor, body: &str, ts: i64) -> ThreadId {
+fn comment_on(
+    st: &mut ToileState,
+    anchor: CommentAnchor,
+    body: &str,
+    ts: ambre_core::Timestamp,
+) -> ThreadId {
     let out = st.handle_command(ToileCommand::CreateComment {
         anchor,
         body: body.to_owned(),
@@ -4966,12 +4971,17 @@ fn a_thread_anchors_to_an_element_or_to_a_world_point() {
     st.set_user_id(UserId::new());
     let e = create_sticky(&mut st, Point::ZERO, "note");
 
-    let on_element = comment_on(&mut st, CommentAnchor::Element(e.clone()), "on the note", 0);
+    let on_element = comment_on(
+        &mut st,
+        CommentAnchor::Element(e.clone()),
+        "on the note",
+        ambre_bus::Timestamp(0),
+    );
     let on_board = comment_on(
         &mut st,
         CommentAnchor::Point { x: 40.0, y: -12.5 },
         "on the board",
-        0,
+        ambre_bus::Timestamp(0),
     );
 
     assert_eq!(
@@ -4993,7 +5003,7 @@ fn a_message_author_is_the_user_id_of_the_session() {
     let out = st.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Point { x: 0.0, y: 0.0 },
         body: "too early".to_owned(),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     });
     assert!(
         out.update.is_none(),
@@ -5002,11 +5012,16 @@ fn a_message_author_is_the_user_id_of_the_session() {
     assert!(st.comment_thread_ids().is_empty());
 
     st.set_user_id(me);
-    let t = comment_on(&mut st, CommentAnchor::Point { x: 0.0, y: 0.0 }, "hello", 7);
+    let t = comment_on(
+        &mut st,
+        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        "hello",
+        ambre_bus::Timestamp(7),
+    );
     let thread = st.comment_thread(&t).expect("the thread reads back");
     assert_eq!(thread.messages.len(), 1);
     assert_eq!(thread.messages[0].author, me);
-    assert_eq!(thread.messages[0].ts, 7);
+    assert_eq!(thread.messages[0].ts, ambre_bus::Timestamp(7));
     assert!(!thread.resolved);
 }
 
@@ -5025,12 +5040,12 @@ fn two_peers_commenting_on_one_spot_mint_distinct_threads() {
     let out_a = a.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Element(e.clone()),
         body: "from A".to_owned(),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     });
     let out_b = b.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Element(e),
         body: "from B".to_owned(),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     });
     let (ta, tb) = (opened_thread(&out_a), opened_thread(&out_b));
     assert_ne!(ta, tb, "two peers must mint two thread ids");
@@ -5054,7 +5069,12 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
     // here disagree with it on purpose: A's reply carries the later timestamp.
     let mut a = ToileState::new();
     a.set_user_id(UserId::new());
-    let t = comment_on(&mut a, CommentAnchor::Point { x: 0.0, y: 0.0 }, "first", 50);
+    let t = comment_on(
+        &mut a,
+        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        "first",
+        ambre_bus::Timestamp(50),
+    );
 
     let mut b = ToileState::new();
     b.set_user_id(UserId::new());
@@ -5064,7 +5084,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
         .handle_command(ToileCommand::ReplyComment {
             thread: t.clone(),
             body: "from A".to_owned(),
-            ts: 900,
+            ts: ambre_bus::Timestamp(900),
         })
         .update
         .expect("A's reply broadcasts a delta");
@@ -5072,7 +5092,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
         .handle_command(ToileCommand::ReplyComment {
             thread: t.clone(),
             body: "from B".to_owned(),
-            ts: 1,
+            ts: ambre_bus::Timestamp(1),
         })
         .update
         .expect("B's reply broadcasts a delta");
@@ -5093,7 +5113,12 @@ fn concurrent_edits_of_one_message_converge_character_wise() {
     let me = UserId::new();
     let mut a = ToileState::new();
     a.set_user_id(me);
-    let t = comment_on(&mut a, CommentAnchor::Point { x: 0.0, y: 0.0 }, "typo", 0);
+    let t = comment_on(
+        &mut a,
+        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        "typo",
+        ambre_bus::Timestamp(0),
+    );
 
     let mut b = ToileState::new();
     b.set_user_id(me);
@@ -5135,7 +5160,12 @@ fn editing_another_authors_message_is_refused() {
     // the one case that needs no rule: the author's own message.
     let mut a = ToileState::new();
     a.set_user_id(UserId::new());
-    let t = comment_on(&mut a, CommentAnchor::Point { x: 0.0, y: 0.0 }, "mine", 0);
+    let t = comment_on(
+        &mut a,
+        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        "mine",
+        ambre_bus::Timestamp(0),
+    );
 
     let mut b = ToileState::new();
     b.set_user_id(UserId::new());
@@ -5163,7 +5193,7 @@ fn concurrent_resolves_converge_and_keep_the_messages() {
         &mut a,
         CommentAnchor::Point { x: 0.0, y: 0.0 },
         "settled?",
-        0,
+        ambre_bus::Timestamp(0),
     );
 
     let mut b = ToileState::new();
@@ -5224,7 +5254,7 @@ fn a_thread_survives_the_deletion_of_its_anchor_element() {
         &mut st,
         CommentAnchor::Element(e.clone()),
         "about the note",
-        0,
+        ambre_bus::Timestamp(0),
     );
 
     st.handle_command(ToileCommand::DeleteElements {
@@ -5246,7 +5276,12 @@ fn undo_reverts_the_drawing_and_never_the_comment() {
     let mut st = ToileState::new();
     st.set_user_id(UserId::new());
     let e = create_sticky(&mut st, Point::ZERO, "note");
-    let t = comment_on(&mut st, CommentAnchor::Element(e), "already read", 0);
+    let t = comment_on(
+        &mut st,
+        CommentAnchor::Element(e),
+        "already read",
+        ambre_bus::Timestamp(0),
+    );
 
     st.handle_command(ToileCommand::Undo);
 
@@ -5275,7 +5310,7 @@ fn replying_to_a_missing_thread_is_a_rejected_no_op() {
     let out = st.handle_command(ToileCommand::ReplyComment {
         thread: ElementId("ghost".to_owned()),
         body: "nobody".to_owned(),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     });
     assert!(
         out.update.is_none(),
@@ -5306,7 +5341,12 @@ fn a_fresh_thread_is_open_anchored_and_carries_its_first_message() {
     let mut st = ToileState::new();
     st.set_user_id(UserId::new());
     let e = create_sticky(&mut st, Point::ZERO, "note");
-    let t = comment_on(&mut st, CommentAnchor::Element(e.clone()), "the point", 11);
+    let t = comment_on(
+        &mut st,
+        CommentAnchor::Element(e.clone()),
+        "the point",
+        ambre_bus::Timestamp(11),
+    );
 
     let thread = st.comment_thread(&t).expect("the thread reads back");
     assert!(!thread.resolved, "a dropped thread is open");
@@ -5328,12 +5368,17 @@ fn a_reply_lands_at_the_end_of_the_thread() {
     // an earlier one fails here.
     let mut st = ToileState::new();
     st.set_user_id(UserId::new());
-    let t = comment_on(&mut st, CommentAnchor::Point { x: 0.0, y: 0.0 }, "one", 0);
+    let t = comment_on(
+        &mut st,
+        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        "one",
+        ambre_bus::Timestamp(0),
+    );
     for body in ["two", "three"] {
         st.handle_command(ToileCommand::ReplyComment {
             thread: t.clone(),
             body: body.to_owned(),
-            ts: 0,
+            ts: ambre_bus::Timestamp(0),
         });
     }
     assert_eq!(
@@ -5348,16 +5393,21 @@ fn correcting_a_message_leaves_its_neighbours_as_they_read() {
     // neighbour to read back.
     let mut st = ToileState::new();
     st.set_user_id(UserId::new());
-    let t = comment_on(&mut st, CommentAnchor::Point { x: 0.0, y: 0.0 }, "first", 0);
+    let t = comment_on(
+        &mut st,
+        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        "first",
+        ambre_bus::Timestamp(0),
+    );
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "secnd".to_owned(),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     });
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "third".to_owned(),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     });
 
     // Correct the middle message: insert the missing letter.
@@ -5384,7 +5434,7 @@ fn a_reply_moves_neither_the_pin_nor_the_resolved_flag() {
     let mut st = ToileState::new();
     st.set_user_id(UserId::new());
     let anchor = CommentAnchor::Point { x: 12.0, y: -4.0 };
-    let t = comment_on(&mut st, anchor.clone(), "open it", 0);
+    let t = comment_on(&mut st, anchor.clone(), "open it", ambre_bus::Timestamp(0));
     st.handle_command(ToileCommand::ResolveThread {
         thread: t.clone(),
         resolved: true,
@@ -5392,7 +5442,7 @@ fn a_reply_moves_neither_the_pin_nor_the_resolved_flag() {
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "one more".to_owned(),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     });
 
     let thread = st.comment_thread(&t).expect("the thread reads back");
@@ -5406,11 +5456,16 @@ fn a_resolve_keeps_every_message_body() {
     // message it kept fails here.
     let mut st = ToileState::new();
     st.set_user_id(UserId::new());
-    let t = comment_on(&mut st, CommentAnchor::Point { x: 0.0, y: 0.0 }, "why", 0);
+    let t = comment_on(
+        &mut st,
+        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        "why",
+        ambre_bus::Timestamp(0),
+    );
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "because".to_owned(),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     });
     st.handle_command(ToileCommand::ResolveThread {
         thread: t.clone(),
@@ -5431,18 +5486,23 @@ fn two_peers_answering_one_brand_new_thread_both_keep_their_reply() {
     a.set_user_id(UserId::new());
     b.set_user_id(UserId::new());
 
-    let t = comment_on(&mut a, CommentAnchor::Point { x: 0.0, y: 0.0 }, "seed", 0);
+    let t = comment_on(
+        &mut a,
+        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        "seed",
+        ambre_bus::Timestamp(0),
+    );
     b.apply_remote(&a.export_snapshot());
 
     let ra = a.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "from A".to_owned(),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     });
     let rb = b.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "from B".to_owned(),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     });
     b.apply_remote(&ra.update.expect("A's reply broadcasts a delta"));
     a.apply_remote(&rb.update.expect("B's reply broadcasts a delta"));
@@ -5460,13 +5520,23 @@ fn a_pin_carries_its_place_its_count_and_its_state() {
     let mut st = ToileState::new();
     st.set_user_id(UserId::new());
     let e = create_sticky(&mut st, Point::new(10.0, 20.0), "note");
-    let on_element = comment_on(&mut st, CommentAnchor::Element(e), "about it", 0);
+    let on_element = comment_on(
+        &mut st,
+        CommentAnchor::Element(e),
+        "about it",
+        ambre_bus::Timestamp(0),
+    );
     st.handle_command(ToileCommand::ReplyComment {
         thread: on_element.clone(),
         body: "agreed".to_owned(),
-        ts: 0,
+        ts: ambre_bus::Timestamp(0),
     });
-    let on_board = comment_on(&mut st, CommentAnchor::Point { x: 5.0, y: 6.0 }, "here", 0);
+    let on_board = comment_on(
+        &mut st,
+        CommentAnchor::Point { x: 5.0, y: 6.0 },
+        "here",
+        ambre_bus::Timestamp(0),
+    );
     st.handle_command(ToileCommand::ResolveThread {
         thread: on_board.clone(),
         resolved: true,
@@ -5498,7 +5568,12 @@ fn a_pin_leaves_the_board_with_its_anchor_element() {
     let mut st = ToileState::new();
     st.set_user_id(UserId::new());
     let e = create_sticky(&mut st, Point::ZERO, "note");
-    let t = comment_on(&mut st, CommentAnchor::Element(e.clone()), "about it", 0);
+    let t = comment_on(
+        &mut st,
+        CommentAnchor::Element(e.clone()),
+        "about it",
+        ambre_bus::Timestamp(0),
+    );
     assert_eq!(pins(&st).len(), 1);
 
     st.handle_command(ToileCommand::DeleteElements { ids: vec![e] });
@@ -5522,7 +5597,7 @@ fn the_board_carries_no_body_and_a_read_carries_them_all() {
         &mut st,
         CommentAnchor::Point { x: 0.0, y: 0.0 },
         "the body",
-        0,
+        ambre_bus::Timestamp(0),
     );
 
     // The board-wide list carries the opening line and the counts, no more.

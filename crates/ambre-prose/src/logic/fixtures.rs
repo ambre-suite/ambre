@@ -466,7 +466,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
             block_id: block_id(body),
             range: (0, 7),
             text: "Is this net or gross?".to_owned(),
-            now_ms: COMMENT_AT_MS,
+            now_ms: ambre_core::Timestamp(COMMENT_AT_MS),
         },
     )?;
     let thread = state
@@ -479,7 +479,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         ProseCommand::ReplyToComment {
             comment_id: thread,
             text: "Net.".to_owned(),
-            now_ms: COMMENT_AT_MS + 60_000,
+            now_ms: ambre_core::Timestamp(COMMENT_AT_MS + 60_000),
         },
     )?;
     Ok(state)

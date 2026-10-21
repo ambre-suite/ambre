@@ -658,7 +658,9 @@ pub struct TextDelta {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reaction {
     pub kind: ReactionKind,
-    pub ts: i64,
+    /// Stored as the `i64` the reactions sub-map was frozen with.
+    #[serde(with = "ambre_core::span::timestamp_as_i64")]
+    pub ts: ambre_core::Timestamp,
 }
 
 /// The two reaction flavours (`toile-reactions`): a free-form emoji or
@@ -711,7 +713,7 @@ pub enum CommentAnchor {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommentMessage {
     pub author: UserId,
-    pub ts: i64,
+    pub ts: ambre_core::Timestamp,
     pub body: String,
 }
 
@@ -1222,7 +1224,7 @@ pub enum ToileCommand {
     CreateComment {
         anchor: CommentAnchor,
         body: String,
-        ts: i64,
+        ts: ambre_core::Timestamp,
     },
     /// Append a message to `thread`. Same clock rule and same history exemption
     /// as [`CreateComment`](Self::CreateComment). A missing thread is a rejected
@@ -1230,7 +1232,7 @@ pub enum ToileCommand {
     ReplyComment {
         thread: ThreadId,
         body: String,
-        ts: i64,
+        ts: ambre_core::Timestamp,
     },
     /// Splice the body of the author's own message `message` (its index in the
     /// thread's message list). The body is a `LoroText`, so a self-edit

@@ -209,7 +209,7 @@ fn rewrite(doc: &LoroDoc, channel: ChannelId, view: &MessageView) -> Result<(), 
     let message = doc.get_list(MESSAGES).push_container(LoroMap::new())?;
     message.insert(MESSAGE_ID, view.id.to_string())?;
     message.insert(MESSAGE_AUTHOR, view.author.to_string())?;
-    message.insert(MESSAGE_TS, schema::ts_value(view.ts.0))?;
+    message.insert(MESSAGE_TS, schema::ts_value(view.ts))?;
     let content = message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
     if !view.text.is_empty() {
         content.insert(0, &view.text)?;
@@ -219,10 +219,7 @@ fn rewrite(doc: &LoroDoc, channel: ChannelId, view: &MessageView) -> Result<(), 
     let reactions = message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;
     for kind in &view.reactions {
         for &user in kind.users.iter().filter(|&&user| user == view.author) {
-            reactions.insert(
-                &reaction::key(user, &kind.emoji),
-                schema::ts_value(view.ts.0),
-            )?;
+            reactions.insert(&reaction::key(user, &kind.emoji), schema::ts_value(view.ts))?;
         }
     }
     if let Some(Notice::MemberAdded { member }) = view.notice {

@@ -1104,7 +1104,7 @@ async fn the_comment_panel_shows_what_the_board_answered() {
         resolved: false,
         messages: vec![CommentMessage {
             author: UserId::new(),
-            ts: 0,
+            ts: ambre_core::Timestamp(0),
             body: "read back".to_owned(),
         }],
     }));

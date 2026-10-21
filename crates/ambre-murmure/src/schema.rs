@@ -309,8 +309,8 @@ impl SegmentState {
 /// A timestamp as Loro stores it. Loro has no unsigned integer, and a
 /// millisecond count past `i64::MAX` is 292 million years away, so saturating
 /// loses nothing real.
-pub(crate) fn ts_value(ms: u64) -> i64 {
-    i64::try_from(ms).unwrap_or(i64::MAX)
+pub(crate) fn ts_value(ts: ambre_core::Timestamp) -> i64 {
+    ts.to_i64_saturating()
 }
 
 /// Write the `header` of a new document (`MURMURE-001`), and the version
@@ -322,7 +322,7 @@ pub(crate) fn write_header(
     doc: &LoroDoc,
     kind: DocumentKind,
     channel_id: ChannelId,
-    created_at: u64,
+    created_at: ambre_core::Timestamp,
 ) -> Result<(), MurmureError> {
     let header = doc.get_map(HEADER);
     header.insert(HEADER_KIND, kind.as_str())?;
@@ -341,7 +341,7 @@ pub(crate) fn write_header(
 pub(crate) fn write_space_header(
     doc: &LoroDoc,
     space_id: SpaceId,
-    created_at: u64,
+    created_at: ambre_core::Timestamp,
 ) -> Result<(), MurmureError> {
     let header = doc.get_map(HEADER);
     header.insert(HEADER_KIND, DocumentKind::Space.as_str())?;

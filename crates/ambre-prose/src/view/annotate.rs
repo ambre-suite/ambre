@@ -261,7 +261,11 @@ impl ProseUiState {
 
     /// Act on what the chrome asked. Answers the command to send, if any; a
     /// focus moves the view and sends nothing.
-    pub fn take_intent(&mut self, intent: AnnotationIntent, now_ms: u64) -> Option<ProseCommand> {
+    pub fn take_intent(
+        &mut self,
+        intent: AnnotationIntent,
+        now_ms: ambre_core::Timestamp,
+    ) -> Option<ProseCommand> {
         Some(match intent {
             AnnotationIntent::Focus { comment_id } => {
                 let thread = self.comments.iter().find(|t| t.comment_id == comment_id)?;
@@ -494,7 +498,10 @@ mod tests {
             }],
         });
         assert_eq!(
-            ui.take_intent(AnnotationIntent::Focus { comment_id: id }, 5),
+            ui.take_intent(
+                AnnotationIntent::Focus { comment_id: id },
+                ambre_core::Timestamp(5)
+            ),
             None
         );
         assert!(ui.viewport.scroll_y > 0.0);
@@ -503,20 +510,23 @@ mod tests {
             text: "ok".to_owned(),
         };
         assert_eq!(
-            ui.take_intent(reply, 5),
+            ui.take_intent(reply, ambre_core::Timestamp(5)),
             Some(ProseCommand::ReplyToComment {
                 comment_id: id,
                 text: "ok".to_owned(),
-                now_ms: 5
+                now_ms: ambre_core::Timestamp(5)
             })
         );
         let blank = AnnotationIntent::Reply {
             comment_id: id,
             text: "  ".to_owned(),
         };
-        assert_eq!(ui.take_intent(blank, 5), None);
+        assert_eq!(ui.take_intent(blank, ambre_core::Timestamp(5)), None);
         assert_eq!(
-            ui.take_intent(AnnotationIntent::Resolve { comment_id: id }, 5),
+            ui.take_intent(
+                AnnotationIntent::Resolve { comment_id: id },
+                ambre_core::Timestamp(5)
+            ),
             Some(ProseCommand::ResolveComment { comment_id: id })
         );
         let suggestion = SuggestionId::new();
@@ -525,7 +535,7 @@ mod tests {
                 AnnotationIntent::Accept {
                     suggestion_id: suggestion
                 },
-                5
+                ambre_core::Timestamp(5)
             ),
             Some(ProseCommand::AcceptSuggestion {
                 suggestion_id: suggestion
@@ -536,7 +546,7 @@ mod tests {
                 AnnotationIntent::Reject {
                     suggestion_id: suggestion
                 },
-                5
+                ambre_core::Timestamp(5)
             ),
             Some(ProseCommand::RejectSuggestion {
                 suggestion_id: suggestion

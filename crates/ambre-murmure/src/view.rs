@@ -1985,7 +1985,7 @@ mod tests {
         let messages = texts
             .iter()
             .enumerate()
-            .map(|(i, text)| message(ada, i as u64, text))
+            .map(|(i, text)| message(ada, ambre_bus::Timestamp(i as u64), text))
             .collect();
         let segment = SegmentId::new();
         send(page, channel, MurmureEvent::Messages { segment, messages });
@@ -2054,11 +2054,12 @@ mod tests {
         let mut page = page();
         let channel = ChannelId::new();
         let ada = UserId::new();
-        let root = message(ada, 0, "root");
+        let root = message(ada, ambre_bus::Timestamp(0), "root");
         let segment = SegmentId::new();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
-        let replies = ["one", "two", "three"].map(|text| message(ada, 1, text));
+        let replies =
+            ["one", "two", "three"].map(|text| message(ada, ambre_bus::Timestamp(1), text));
         let thread = DocumentId::new();
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
@@ -2085,7 +2086,7 @@ mod tests {
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
             thread,
-            messages: vec![message(ada, 4, "four")],
+            messages: vec![message(ada, ambre_bus::Timestamp(4), "four")],
         };
         send(&page, channel, ev);
         page.view.update();
@@ -2101,7 +2102,10 @@ mod tests {
         let mut page = page();
         let channel = ChannelId::new();
         let ada = UserId::new();
-        let (read, unread) = (message(ada, 0, "a"), message(ada, 1, "b"));
+        let (read, unread) = (
+            message(ada, ambre_bus::Timestamp(0), "a"),
+            message(ada, ambre_bus::Timestamp(1), "b"),
+        );
         let first = Some(unread.id);
         let segment = SegmentId::new();
         let messages = vec![read, unread];
@@ -2201,7 +2205,7 @@ mod tests {
         let mut page = page();
         let channel = ChannelId::new();
         let link = |text: &str, address: &str, range| {
-            let mut sent = message(UserId::new(), 0, text);
+            let mut sent = message(UserId::new(), ambre_bus::Timestamp(0), text);
             sent.styles = vec![StyleMark {
                 style: TextStyle::Link(address.to_owned()),
                 range,
@@ -2259,7 +2263,7 @@ mod tests {
         let (me, ada) = (UserId::new(), UserId::new());
         page.me.set(Some(me));
         let channel = ChannelId::new();
-        let mut reacted = message(ada, 1, "hello");
+        let mut reacted = message(ada, ambre_bus::Timestamp(1), "hello");
         reacted.reactions = vec![
             ambre_bus::Reaction {
                 emoji: ambre_bus::Emoji::from("\u{1F44D}"),
@@ -2384,7 +2388,7 @@ mod tests {
     fn segment(page: &Page, channel: ChannelId, from: u64, count: u64) -> Vec<MessageView> {
         let ada = UserId::new();
         let messages: Vec<_> = (from..from + count)
-            .map(|ts| message(ada, ts, "hello"))
+            .map(|ts| message(ada, ambre_bus::Timestamp(ts), "hello"))
             .collect();
         let ev = MurmureEvent::Messages {
             segment: SegmentId::new(),
@@ -2784,12 +2788,14 @@ mod tests {
         let mut page = page();
         let channel = ChannelId::new();
         let ada = UserId::new();
-        let root = message(ada, 0, "root");
+        let root = message(ada, ambre_bus::Timestamp(0), "root");
         let segment = SegmentId::new();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         let thread = DocumentId::new();
-        let replies: Vec<_> = (1..=200).map(|ts| message(ada, ts, "hello")).collect();
+        let replies: Vec<_> = (1..=200)
+            .map(|ts| message(ada, ambre_bus::Timestamp(ts), "hello"))
+            .collect();
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
             thread,
@@ -2837,7 +2843,7 @@ mod tests {
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
             thread,
-            messages: vec![message(ada, 500, "hello")],
+            messages: vec![message(ada, ambre_bus::Timestamp(500), "hello")],
         };
         send(&page, channel, ev);
         frame(&mut page.view);
@@ -2900,7 +2906,10 @@ mod tests {
         let mut page = page();
         let channel = ChannelId::new();
         let ada = UserId::new();
-        let messages = vec![message(ada, 10, "a"), message(ada, 11, "b")];
+        let messages = vec![
+            message(ada, ambre_bus::Timestamp(10), "a"),
+            message(ada, ambre_bus::Timestamp(11), "b"),
+        ];
         let segment = SegmentId::new();
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         let older = SegmentId::new();
@@ -2987,7 +2996,10 @@ mod tests {
         let channel = ChannelId::new();
         let ada = UserId::new();
         let segment = SegmentId::new();
-        let messages = vec![message(ada, 0, "a"), message(ada, 1, "b")];
+        let messages = vec![
+            message(ada, ambre_bus::Timestamp(0), "a"),
+            message(ada, ambre_bus::Timestamp(1), "b"),
+        ];
         let second = messages[1].id;
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         page.pane.set(MurmurePane::channel(channel));
@@ -3029,11 +3041,11 @@ mod tests {
         let mut page = page();
         let channel = ChannelId::new();
         let ada = UserId::new();
-        let root = message(ada, 0, "root");
+        let root = message(ada, ambre_bus::Timestamp(0), "root");
         let segment = SegmentId::new();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
-        let reply = message(ada, 1, "one");
+        let reply = message(ada, ambre_bus::Timestamp(1), "one");
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
             thread: DocumentId::new(),
@@ -3144,7 +3156,7 @@ mod tests {
         assert!(at.is_some_and(|i| (14..20).contains(&i)), "{at:?}");
         assert!(!shown(&page.view).latest_shown);
 
-        let later = message(UserId::new(), 9_000, "later");
+        let later = message(UserId::new(), ambre_bus::Timestamp(9_000), "later");
         let at = MessageRef {
             segment: SegmentId::new(),
             message: later.id,
@@ -3473,7 +3485,7 @@ mod tests {
         let mut messages: Vec<_> = texts
             .iter()
             .enumerate()
-            .map(|(i, text)| message(ada, i as u64, text))
+            .map(|(i, text)| message(ada, ambre_bus::Timestamp(i as u64), text))
             .collect();
         messages[0].attachments = vec![file.clone()];
         let segment = SegmentId::new();
@@ -3972,13 +3984,17 @@ mod tests {
         let mut page = page();
         let (me, bob) = (UserId::new(), UserId::new());
         page.me.set(Some(me));
-        let own = message(me, 0, "mine");
+        let own = message(me, ambre_bus::Timestamp(0), "mine");
         let deleted = MessageView {
             deleted: true,
             text: String::new(),
-            ..message(me, 1, "gone")
+            ..message(me, ambre_bus::Timestamp(1), "gone")
         };
-        let messages = vec![own.clone(), deleted, message(bob, 2, "theirs")];
+        let messages = vec![
+            own.clone(),
+            deleted,
+            message(bob, ambre_bus::Timestamp(2), "theirs"),
+        ];
         let segment = SegmentId::new();
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         page.pane.set(MurmurePane::Channel { channel, at: None });
@@ -4278,15 +4294,15 @@ mod tests {
         let mut page = page();
         let (me, bob) = (UserId::new(), UserId::new());
         page.me.set(Some(me));
-        let root = message(me, 0, "root");
+        let root = message(me, ambre_bus::Timestamp(0), "root");
         let segment = SegmentId::new();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
-        let own = message(me, 1, "mine");
+        let own = message(me, ambre_bus::Timestamp(1), "mine");
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
             thread: DocumentId::new(),
-            messages: vec![own.clone(), message(bob, 2, "theirs")],
+            messages: vec![own.clone(), message(bob, ambre_bus::Timestamp(2), "theirs")],
         };
         send(&page, channel, ev);
         let at = MessageRef {
@@ -4672,11 +4688,11 @@ mod tests {
                 replies: 1,
                 last_replier: Some(ada),
             }),
-            ..message(ada, 0, "root")
+            ..message(ada, ambre_bus::Timestamp(0), "root")
         };
         let copy = MessageView {
             also_in_thread: Some(thread),
-            ..message(ada, 1, "ok")
+            ..message(ada, ambre_bus::Timestamp(1), "ok")
         };
         let segment = SegmentId::new();
         let messages = vec![root.clone(), copy];
