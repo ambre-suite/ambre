@@ -337,15 +337,15 @@ async fn flush_cycle(state: &crate::state::AppState, reconcile: bool) {
 /// How long the per-document flush lock lives. It comfortably exceeds one
 /// flush; if the holder dies mid-flush the lock expires and the next cycle
 /// retries.
-const FLUSH_LOCK_TTL_SECS: u64 = 60;
+const FLUSH_LOCK_TTL: ambre_core::Seconds = ambre_core::Seconds(60);
 
 /// How long a write that began before a delete may still land after it
 /// (`SRV-057`). A presigned upload link stays valid for its lifetime. A flush
-/// holds its lock at most `FLUSH_LOCK_TTL_SECS`, and a minute of margin covers
+/// holds its lock at most `FLUSH_LOCK_TTL`, and a minute of margin covers
 /// the requests in flight. The tombstone lives this long, and the
 /// second sweep of the objects runs once it has passed.
 pub fn late_write_window(presigned_url_ttl: ambre_core::Seconds) -> ambre_core::Seconds {
-    ambre_core::Seconds(presign_lifetime(presigned_url_ttl).as_secs() + FLUSH_LOCK_TTL_SECS + 60)
+    ambre_core::Seconds(presign_lifetime(presigned_url_ttl).as_secs() + FLUSH_LOCK_TTL.0 + 60)
 }
 
 /// The current instant: the clock of a token's `iat` and of a delete's sweep.
@@ -405,13 +405,8 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
         return;
     };
     let token = uuid::Uuid::new_v4().to_string();
-    match crate::redis_ops::try_acquire_flush_lock(
-        &state.redis,
-        &lock_key,
-        &token,
-        FLUSH_LOCK_TTL_SECS,
-    )
-    .await
+    match crate::redis_ops::try_acquire_flush_lock(&state.redis, &lock_key, &token, FLUSH_LOCK_TTL)
+        .await
     {
         Ok(true) => {}
         Ok(false) => return,

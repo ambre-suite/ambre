@@ -629,7 +629,7 @@ mod tests {
         MediaBlob {
             hash: ContentHash(hash.to_owned()),
             plaintext: vec![0u8; 4],
-            mime: mime.to_owned(),
+            mime: ambre_core::MediaType::from(mime),
             width: w,
             height: h,
             thumb: vec![1, 2, 3],
@@ -861,7 +861,7 @@ mod tests {
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::ImportImage {
             bytes: solid_png(8, 8),
-            mime: "image/png".to_owned(),
+            mime: ambre_core::MediaType::from("image/png"),
             at: Point::ZERO,
         });
         // Async: one upload issued, nothing applied yet.
@@ -906,7 +906,7 @@ mod tests {
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::ImportImage {
             bytes: solid_png(8, 8),
-            mime: "image/png".to_owned(),
+            mime: ambre_core::MediaType::from("image/png"),
             at: Point::ZERO,
         });
         st.handle_service_event(
@@ -949,7 +949,7 @@ mod tests {
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::ImportImage {
             bytes: solid_png(8, 8),
-            mime: "image/png".to_owned(),
+            mime: ambre_core::MediaType::from("image/png"),
             at: Point::ZERO,
         });
         st.handle_service_event(
@@ -972,7 +972,7 @@ mod tests {
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::ImportImage {
             bytes: solid_png(8, 8),
-            mime: "image/png".to_owned(),
+            mime: ambre_core::MediaType::from("image/png"),
             at: Point::ZERO,
         });
         let id = first_upload_id(&out);

@@ -452,10 +452,10 @@ pub async fn try_acquire_flush_lock(
     redis: &Client,
     lock_key: &str,
     token: &str,
-    ttl_secs: u64,
+    ttl: ambre_core::Seconds,
 ) -> Result<bool, AppError> {
     const LUA: &str = "return redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2])";
-    let ttl = ttl_secs.to_string();
+    let ttl = ttl.0.to_string();
     let res: Option<String> = redis
         .eval::<Option<String>>(LUA, [lock_key], [token, ttl.as_str()])
         .await
@@ -479,16 +479,16 @@ pub async fn release_flush_lock(
     Ok(())
 }
 
-/// Claims the one standing snapshot request of a document for `ttl_secs`
+/// Claims the one standing snapshot request of a document for `ttl`
 /// (`SRV-038`). Returns `true` when no request stood, so this caller asks. Every
 /// instance shares the claim, so one threshold crossing asks once.
 pub async fn claim_snapshot_ask(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    ttl_secs: u64,
+    ttl: ambre_core::Seconds,
 ) -> Result<bool, AppError> {
     let key = format!("doc:{document_id}:snapshot_asked");
-    try_acquire_flush_lock(redis, &key, "1", ttl_secs).await
+    try_acquire_flush_lock(redis, &key, "1", ttl).await
 }
 
 /// The last delta number the relay gave the document, 0 when its counter is
@@ -694,7 +694,7 @@ pub async fn doc_presence_update(
     document_id: &ambre_core::DocumentId,
     pub_key_hex: &str,
     presence: &ambre_protocol::messages::Ciphertext,
-    ttl_secs: u64,
+    ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
     use base64::Engine;
     let presence_b64 = base64::engine::general_purpose::URL_SAFE.encode(&presence.0);
@@ -717,7 +717,7 @@ return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])
     let key = format!("doc:{document_id}:presence");
     let gone_key = document_gone_key(document_id);
     let owed_key = rotation_owed_key(document_id);
-    let ttl = ttl_secs.to_string();
+    let ttl = ttl.0.to_string();
     redis
         .eval::<Vec<i64>>(
             LUA,
@@ -830,16 +830,16 @@ pub fn document_gone_key(document_id: &ambre_core::DocumentId) -> String {
     format!("doc:{document_id}:gone")
 }
 
-/// Sets the tombstone of a document for `ttl_secs`: the first step of a
+/// Sets the tombstone of a document for `ttl`: the first step of a
 /// delete, before any object or key is removed.
 pub async fn mark_document_gone(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    ttl_secs: u64,
+    ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
     const LUA: &str = "return redis.call('SET', KEYS[1], '1', 'EX', ARGV[1])";
     let gone_key = document_gone_key(document_id);
-    let ttl = ttl_secs.to_string();
+    let ttl = ttl.0.to_string();
     let _: String = redis
         .eval::<String>(LUA, [gone_key.as_str()], [ttl.as_str()])
         .await
@@ -853,13 +853,13 @@ pub async fn mark_document_gone(
 /// mirror of an owed rotation and the session counts. One script, so no reader sees a half-purged
 /// document.
 ///
-/// The same script renews the tombstone for `ttl_secs`. The second sweep of
+/// The same script renews the tombstone for `ttl`. The second sweep of
 /// the objects is scheduled in the register, which a reset of this store does
 /// not lose (`SRV-057`, `SRV-165`).
 pub async fn purge_document_state(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    ttl_secs: u64,
+    ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
 redis.call('SREM', KEYS[9], KEYS[3])
@@ -884,7 +884,7 @@ return 1
                 FLUSH_DIRTY_SET,
                 gone_key.as_str(),
             ],
-            [ttl_secs.to_string()],
+            [ttl.0.to_string()],
         )
         .await
         .map_err(|e| AppError::Redis(format!("purge document state: {e}")))?;
@@ -1182,8 +1182,14 @@ mod lua_tests {
             matches!(refused, Err(AppError::RotationOwed)),
             "{refused:?}"
         );
-        let presence =
-            doc_presence_update(&redis, &doc_id, pk_hex, &super::tests::sample(), 15).await;
+        let presence = doc_presence_update(
+            &redis,
+            &doc_id,
+            pk_hex,
+            &super::tests::sample(),
+            ambre_core::Seconds(15),
+        )
+        .await;
         assert!(
             matches!(presence, Err(AppError::RotationOwed)),
             "{presence:?}"
@@ -1476,12 +1482,12 @@ mod redis_integration_tests {
 
         // First caller acquires; a concurrent instance cannot while it is held.
         assert!(
-            try_acquire_flush_lock(&redis, &lock_key, "tokA", 60)
+            try_acquire_flush_lock(&redis, &lock_key, "tokA", ambre_core::Seconds(60))
                 .await
                 .unwrap()
         );
         assert!(
-            !try_acquire_flush_lock(&redis, &lock_key, "tokB", 60)
+            !try_acquire_flush_lock(&redis, &lock_key, "tokB", ambre_core::Seconds(60))
                 .await
                 .unwrap()
         );
@@ -1489,7 +1495,7 @@ mod redis_integration_tests {
         // A non-owner (wrong token) must not be able to release it.
         release_flush_lock(&redis, &lock_key, "tokB").await.unwrap();
         assert!(
-            !try_acquire_flush_lock(&redis, &lock_key, "tokB", 60)
+            !try_acquire_flush_lock(&redis, &lock_key, "tokB", ambre_core::Seconds(60))
                 .await
                 .unwrap()
         );
@@ -1497,7 +1503,7 @@ mod redis_integration_tests {
         // The real owner releases; the lock is now free again.
         release_flush_lock(&redis, &lock_key, "tokA").await.unwrap();
         assert!(
-            try_acquire_flush_lock(&redis, &lock_key, "tokB", 60)
+            try_acquire_flush_lock(&redis, &lock_key, "tokB", ambre_core::Seconds(60))
                 .await
                 .unwrap()
         );
@@ -1654,9 +1660,15 @@ mod redis_integration_tests {
         let pk = "0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de";
         let _ = redis.del([key.as_str()]).await;
 
-        doc_presence_update(&redis, &doc, pk, &super::tests::sample(), 15)
-            .await
-            .unwrap();
+        doc_presence_update(
+            &redis,
+            &doc,
+            pk,
+            &super::tests::sample(),
+            ambre_core::Seconds(15),
+        )
+        .await
+        .unwrap();
         let present: bool = redis.hexists(&key, pk).await.unwrap();
         assert!(present, "the sample is in the hash");
 
@@ -1697,9 +1709,15 @@ mod redis_integration_tests {
         let pk = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef0";
         let _ = redis.del([key.as_str()]).await;
 
-        doc_presence_update(&redis, &doc, pk, &super::tests::sample(), 15)
-            .await
-            .unwrap();
+        doc_presence_update(
+            &redis,
+            &doc,
+            pk,
+            &super::tests::sample(),
+            ambre_core::Seconds(15),
+        )
+        .await
+        .unwrap();
 
         //HTTL returns the remaining per-field TTL; a positive value proves the
         // field will self-prune instead of leaking forever.

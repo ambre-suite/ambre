@@ -25,7 +25,7 @@ const CHECK_EVERY: u64 = 32;
 
 /// How long one request stands before the relay may ask again. A client that
 /// never answers is asked again on the next crossing past it.
-const ASK_TTL_SECS: u64 = 300;
+const ASK_TTL: ambre_core::Seconds = ambre_core::Seconds(300);
 
 /// Whether the history past `horizon` at delta `seq` reaches `threshold`.
 pub fn past_threshold(seq: ambre_core::Seq, horizon: ambre_core::Seq, threshold: u64) -> bool {
@@ -64,7 +64,7 @@ pub async fn should_ask(
     if !past_threshold(seq, horizon, threshold_of(state, document_id).await) {
         return false;
     }
-    match redis_ops::claim_snapshot_ask(&state.redis, document_id, ASK_TTL_SECS).await {
+    match redis_ops::claim_snapshot_ask(&state.redis, document_id, ASK_TTL).await {
         Ok(claimed) => claimed,
         Err(e) => {
             tracing::warn!("snapshot ask claim failed doc={document_id}: {e}");

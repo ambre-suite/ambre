@@ -107,7 +107,7 @@ pub(super) fn decode_media(
     Ok(MediaBlob {
         hash,
         plaintext: bytes.to_vec(),
-        mime: mime_of(format).to_owned(),
+        mime: ambre_core::MediaType::from(mime_of(format)),
         width,
         height,
         thumb,
@@ -152,7 +152,7 @@ mod tests {
 
         let blob = &batch.media[0];
         assert_eq!((blob.width, blob.height), (64, 48));
-        assert_eq!(blob.mime, "image/png");
+        assert_eq!(blob.mime.as_str(), "image/png");
         assert!(
             !blob.thumb.is_empty(),
             "a placeholder thumbnail is produced"

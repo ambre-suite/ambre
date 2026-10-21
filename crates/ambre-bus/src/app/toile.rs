@@ -1398,7 +1398,7 @@ pub enum ToileCommand {
     /// Import a raster image (PNG / JPG) dropped onto the board. `at` as above.
     ImportImage {
         bytes: Vec<u8>,
-        mime: String,
+        mime: ambre_core::MediaType,
         at: Point,
     },
     /// Import a Figma document (a `.fig` JSON export). `at` as above.

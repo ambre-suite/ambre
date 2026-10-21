@@ -647,9 +647,15 @@ pub(crate) async fn handle_ephemeral(
     let pub_key_hex = eph.public_data.pub_key.to_hex();
     // A refused write is not broadcast either: a document that owes a rotation
     // carries no presence sealed under a key a departed member holds (`SRV-123`).
-    if redis_ops::doc_presence_update(&state.redis, &doc_id, &pub_key_hex, &eph.ciphertext, 15)
-        .await
-        .is_err()
+    if redis_ops::doc_presence_update(
+        &state.redis,
+        &doc_id,
+        &pub_key_hex,
+        &eph.ciphertext,
+        ambre_core::Seconds(15),
+    )
+    .await
+    .is_err()
     {
         return;
     }
@@ -1378,9 +1384,15 @@ mod ephemeral_binding_tests {
                 .unwrap();
         }
         let blob = ambre_protocol::messages::Ciphertext(b"blob".to_vec());
-        redis_ops::doc_presence_update(&state.redis, &doc_id, &key_hex, &blob, 15)
-            .await
-            .unwrap();
+        redis_ops::doc_presence_update(
+            &state.redis,
+            &doc_id,
+            &key_hex,
+            &blob,
+            ambre_core::Seconds(15),
+        )
+        .await
+        .unwrap();
 
         announce_departure(&state, &doc_id, &key).await;
         let kept: bool = state.redis.hexists(&presence_key, &key_hex).await.unwrap();

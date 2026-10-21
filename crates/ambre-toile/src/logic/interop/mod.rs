@@ -156,7 +156,7 @@ impl ImportReport {
 pub struct MediaBlob {
     pub hash: ContentHash,
     pub plaintext: Vec<u8>,
-    pub mime: String,
+    pub mime: ambre_core::MediaType,
     pub width: u32,
     pub height: u32,
     pub thumb: Vec<u8>,

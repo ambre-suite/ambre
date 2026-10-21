@@ -55,6 +55,18 @@ impl MediaType {
     }
 }
 
+impl From<&str> for MediaType {
+    fn from(text: &str) -> Self {
+        Self(text.to_owned())
+    }
+}
+
+impl From<String> for MediaType {
+    fn from(text: String) -> Self {
+        Self(text)
+    }
+}
+
 /// A size in bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]

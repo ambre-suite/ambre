@@ -614,7 +614,14 @@ mod handler_tests {
         ));
         let sample = ambre_protocol::messages::Ciphertext(b"blob".to_vec());
         assert!(gone(
-            crate::redis_ops::doc_presence_update(redis, &doc, "aa", &sample, 15).await
+            crate::redis_ops::doc_presence_update(
+                redis,
+                &doc,
+                "aa",
+                &sample,
+                ambre_core::Seconds(15)
+            )
+            .await
         ));
         crate::redis_ops::seed_clock_state(
             redis,

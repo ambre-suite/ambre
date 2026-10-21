@@ -4121,7 +4121,7 @@ impl ToileView {
             },
             m if m.starts_with("image/") => ToileCommand::ImportImage {
                 bytes: file.bytes,
-                mime: m.to_owned(),
+                mime: ambre_core::MediaType::from(m),
                 at,
             },
             // The shell asks `ui::interop::accepts` before it reads a file. A

@@ -392,7 +392,7 @@ mod tests {
         let file = |media_type: &str| Attachment {
             media_ref: ambre_bus::MediaRef::parse(&"0".repeat(64)).expect("an address"),
             name: "a".to_owned(),
-            media_type: ambre_bus::MediaType(media_type.to_owned()),
+            media_type: ambre_core::MediaType::from(media_type),
             size: ambre_bus::ByteSize(1),
         };
         save_file(&file("image/png"), vec![1]);

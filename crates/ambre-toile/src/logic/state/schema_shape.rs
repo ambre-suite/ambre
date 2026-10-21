@@ -625,7 +625,7 @@ pub(super) fn board_of_every_key() -> ToileState {
     st.seed_media(&[MediaBlob {
         hash: ContentHash("h".to_owned()),
         plaintext: vec![1],
-        mime: "image/png".to_owned(),
+        mime: ambre_core::MediaType::from("image/png"),
         width: 1,
         height: 2,
         thumb,

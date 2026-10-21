@@ -407,7 +407,7 @@ mod media_request_tests {
         MediaBlob {
             hash: ContentHash(hash.to_owned()),
             plaintext: vec![0u8; 4],
-            mime: "image/png".to_owned(),
+            mime: ambre_core::MediaType::from("image/png"),
             width: w,
             height: h,
             thumb,

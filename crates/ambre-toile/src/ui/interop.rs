@@ -25,7 +25,7 @@ pub fn accepts(mime: &str) -> bool {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DroppedFile {
     pub bytes: Vec<u8>,
-    pub mime: String,
+    pub mime: ambre_core::MediaType,
     pub at: Option<Point>,
 }
 

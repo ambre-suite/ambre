@@ -220,7 +220,11 @@ fn read_file_into(
         match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
             Ok(buf) => {
                 let bytes = js_sys::Uint8Array::new(&buf).to_vec();
-                dropped.set(Some(DroppedFile { bytes, mime, at }));
+                dropped.set(Some(DroppedFile {
+                    bytes,
+                    mime: ambre_core::MediaType::from(mime),
+                    at,
+                }));
             }
             Err(_) => toasts.warning("Could not read the file"),
         }
