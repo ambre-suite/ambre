@@ -9,19 +9,36 @@
 //!
 //! On the wire each is its URL-safe base64 text, decoded when the body is
 //! read. A value that is not base64 refuses the body there, as any field
-//! that does not decode does (`SRV-178`). `Debug` prints the length alone.
+//! that does not decode does (`SRV-178`). A role whose layout fixes its
+//! length refuses any other length there too (`SRV-226`). `Debug` prints the
+//! length alone.
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+/// The nonce an AEAD seal opens with, as `ambre_crypto::aead` writes it.
+const NONCE_LEN: usize = 24;
+/// The tag an AEAD seal closes with.
+const TAG_LEN: usize = 16;
+/// A document key, and a master seed.
+const KEY_LEN: usize = 32;
+/// The digest of a log's first entry, sealed beside a wrapped key.
+const ANCHOR_LEN: usize = 32;
+
 macro_rules! define_encoded {
-    ($(#[$meta:meta])* $name:ident) => {
+    ($(#[$meta:meta])* $name:ident $(, lengths: [$($len:expr),+])?) => {
         $(#[$meta])*
         #[derive(Clone, Default, PartialEq, Eq, Hash)]
         pub struct $name(Vec<u8>);
 
         impl $name {
+            $(
+                /// The lengths the layout of this role allows; a read refuses
+                /// any other.
+                pub const LENGTHS: &'static [usize] = &[$($len),+];
+            )?
+
             /// Wraps the bytes.
             pub fn new(bytes: Vec<u8>) -> Self {
                 Self(bytes)
@@ -37,7 +54,7 @@ macro_rules! define_encoded {
                 self.0
             }
 
-            /// Whether there are no bytes: a field the sender left out.
+            /// Whether there are no bytes.
             pub fn is_empty(&self) -> bool {
                 self.0.is_empty()
             }
@@ -69,18 +86,30 @@ macro_rules! define_encoded {
         impl<'de> Deserialize<'de> for $name {
             fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
                 let text = String::deserialize(deserializer)?;
-                URL_SAFE
+                let bytes = URL_SAFE
                     .decode(text.as_bytes())
-                    .map(Self)
-                    .map_err(|e| serde::de::Error::custom(format!("not base64: {e}")))
+                    .map_err(|e| serde::de::Error::custom(format!("not base64: {e}")))?;
+                $(
+                    let lengths: &[usize] = &[$($len),+];
+                    if !lengths.contains(&bytes.len()) {
+                        return Err(serde::de::Error::custom(format!(
+                            concat!(stringify!($name), " of {} bytes, not one of {:?}"),
+                            bytes.len(),
+                            lengths,
+                        )));
+                    }
+                )?
+                Ok(Self(bytes))
             }
         }
     };
 }
 
 define_encoded! {
-    /// A document key wrapped to one member: `nonce || ciphertext`.
-    WrappedDocKey
+    /// A document key wrapped to one member: `nonce || ciphertext`, the key
+    /// sealed alone or beside the anchor of its log.
+    WrappedDocKey,
+    lengths: [NONCE_LEN + KEY_LEN + TAG_LEN, NONCE_LEN + KEY_LEN + ANCHOR_LEN + TAG_LEN]
 }
 
 define_encoded! {
@@ -89,13 +118,22 @@ define_encoded! {
 }
 
 define_encoded! {
-    /// An account's master seed wrapped under the key its passphrase derives.
-    WrappedMasterKey
+    /// An account's master seed wrapped under the key its passphrase derives:
+    /// `nonce || ciphertext`.
+    WrappedMasterKey,
+    lengths: [NONCE_LEN + KEY_LEN + TAG_LEN]
 }
 
 define_encoded! {
     /// The salt the passphrase key of an account is derived with.
-    MasterKeySalt
+    MasterKeySalt,
+    lengths: [32]
+}
+
+define_encoded! {
+    /// A member's master seed sealed to their organization, for a recovery
+    /// (`SRV-067`). No client seals one yet, so no layout fixes its length.
+    EscrowedKey
 }
 
 define_encoded! {
@@ -120,20 +158,50 @@ define_encoded! {
 
 #[cfg(test)]
 mod tests {
-    use super::WrappedDocKey;
+    use super::{MasterKeySalt, SealedName, WrappedDocKey, WrappedMasterKey};
+    use serde::de::DeserializeOwned;
+
+    fn wire(len: usize) -> String {
+        serde_json::to_string(&SealedName::new(vec![7; len])).unwrap()
+    }
+
+    fn reads<T: DeserializeOwned>(len: usize) -> bool {
+        serde_json::from_str::<T>(&wire(len)).is_ok()
+    }
 
     #[test]
     fn an_encoded_value_travels_as_its_url_safe_base64() {
-        let key = WrappedDocKey::new(vec![0xab, 0xcd, 0xef]);
-        assert_eq!(serde_json::to_string(&key).unwrap(), "\"q83v\"");
-        let parsed: WrappedDocKey = serde_json::from_str("\"q83v\"").unwrap();
+        let name = SealedName::new(vec![0xab, 0xcd, 0xef]);
+        assert_eq!(serde_json::to_string(&name).unwrap(), "\"q83v\"");
+        let parsed: SealedName = serde_json::from_str("\"q83v\"").unwrap();
         assert_eq!(parsed.as_bytes(), &[0xab, 0xcd, 0xef]);
-        assert_eq!(format!("{parsed:?}"), "WrappedDocKey(3 bytes)");
+        assert_eq!(format!("{parsed:?}"), "SealedName(3 bytes)");
     }
 
     #[test]
     fn a_value_that_is_not_base64_refuses_the_read() {
-        assert!(serde_json::from_str::<WrappedDocKey>("\"not base64!\"").is_err());
-        assert!(serde_json::from_str::<WrappedDocKey>("\"q83\"").is_err());
+        assert!(serde_json::from_str::<SealedName>("\"not base64!\"").is_err());
+        assert!(serde_json::from_str::<SealedName>("\"q83\"").is_err());
+    }
+
+    /// `SRV-226`: each role whose layout fixes its length reads that length
+    /// alone. An empty value, one byte short and one byte past are refused.
+    #[test]
+    fn a_fixed_role_refuses_any_other_length() {
+        fn only<T: DeserializeOwned>(lengths: &[usize]) {
+            for &len in lengths {
+                assert!(reads::<T>(len), "{len}");
+                assert!(!reads::<T>(len - 1), "{}", len - 1);
+                assert!(!reads::<T>(len + 1), "{}", len + 1);
+            }
+            assert!(!reads::<T>(0));
+        }
+        only::<WrappedDocKey>(WrappedDocKey::LENGTHS);
+        only::<WrappedMasterKey>(WrappedMasterKey::LENGTHS);
+        only::<MasterKeySalt>(MasterKeySalt::LENGTHS);
+        assert_eq!(WrappedDocKey::LENGTHS, [72, 104]);
+        assert_eq!(WrappedMasterKey::LENGTHS, [72]);
+        assert_eq!(MasterKeySalt::LENGTHS, [32]);
+        assert!(reads::<SealedName>(0) && reads::<SealedName>(4000));
     }
 }

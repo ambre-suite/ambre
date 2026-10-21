@@ -1619,7 +1619,7 @@ mod tests {
                 "email": "m@test.local",
                 "signing_pub_key": "",
                 "exchange_pub_key": "ab",
-                "doc_key_enc": "",
+                "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]),
                 "role": role,
             }))
         };
@@ -2129,7 +2129,7 @@ mod tests {
             "user_id": uid,
             "display_name": name, "email": "m@test.local",
             "signing_pub_key": "00".repeat(32), "exchange_pub_key": pub_hex,
-            "doc_key_enc": "", "role": "editor",
+            "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "editor",
         })
     }
 
@@ -2882,13 +2882,13 @@ mod tests {
                     "user_id": "11111111-1111-1111-1111-111111111111",
                     "display_name": "A", "email": "a@test.local",
                     "signing_pub_key": "00", "exchange_pub_key": a_pub,
-                    "doc_key_enc": "", "role": "editor",
+                    "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "editor",
                 },
                 {
                     "user_id": "22222222-2222-2222-2222-222222222222",
                     "display_name": "Broken", "email": "b@test.local",
                     "signing_pub_key": "00", "exchange_pub_key": "garbage",
-                    "doc_key_enc": "", "role": "editor",
+                    "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "editor",
                 },
             ] })),
             Ok(serde_json::json!({ "status": "revoked" })),
@@ -2945,7 +2945,7 @@ mod tests {
             "user_id": "11111111-1111-1111-1111-111111111111",
             "display_name": "A", "email": "a@test.local",
             "signing_pub_key": "00", "exchange_pub_key": "ab",
-            "doc_key_enc": "", "role": "viewer",
+            "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "viewer",
         } ] }))]);
         let (etx, erx, _sink, _lrx) = channels();
         list_members_task(&http, list_params(), &etx).await;
@@ -3038,7 +3038,7 @@ mod tests {
             "user_id": uid,
             "display_name": "A", "email": "a@test.local",
             "signing_pub_key": key_hex, "exchange_pub_key": "ab",
-            "doc_key_enc": "", "role": "viewer",
+            "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "viewer",
         } ] }))]);
         let (etx, erx, _sink, _lrx) = channels();
         list_members_task(&http, list_params(), &etx).await;
@@ -3412,7 +3412,7 @@ mod tests {
         logged.rows[1]["role"] = "owner".into();
         logged.row(
             &Peer::new(9),
-            ambre_core::WrappedDocKey::default(),
+            ambre_core::WrappedDocKey::new(vec![0; 72]),
             Role::Editor,
         );
         let resp: http::DocumentMembersResponse = serde_json::from_value(logged.answer()).unwrap();
@@ -3451,7 +3451,11 @@ mod tests {
             .unwrap()
             .unwrap();
         logged.log.push(entry);
-        logged.row(&joiner, ambre_core::WrappedDocKey::default(), Role::Editor);
+        logged.row(
+            &joiner,
+            ambre_core::WrappedDocKey::new(vec![0; 72]),
+            Role::Editor,
+        );
         let rules: [(membership_log::SelfJoinRule, MemberStanding); 2] = [
             (
                 membership_log::public_channel_self_join,

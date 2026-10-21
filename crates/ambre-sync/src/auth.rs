@@ -36,8 +36,16 @@ impl SyncState {
                         const BAD_PASS: &str =
                             "Unlock failed: incorrect passphrase or corrupted account data";
 
-                        let salt = resp.master_key_salt.as_bytes();
-                        let master_key_enc = resp.master_key_enc.as_bytes();
+                        let (Some(master_key_enc), Some(salt)) =
+                            (&resp.master_key_enc, &resp.master_key_salt)
+                        else {
+                            tracing::warn!("Sync: master key without its salt");
+                            let _ = logic_tx.send(LogicEvent::AuthError {
+                                message: CORRUPT.into(),
+                            });
+                            return;
+                        };
+                        let (master_key_enc, salt) = (master_key_enc.as_bytes(), salt.as_bytes());
                         let Some((nonce, ciphertext)) = master_key_enc.split_first_chunk::<24>()
                         else {
                             tracing::warn!(

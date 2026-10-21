@@ -98,10 +98,11 @@ pub struct KeysStoredResponse {
 
 /// Response containing the full key material for the authenticated user.
 /// The client decrypts `master_key_enc` with the User Key derived from the passphrase.
+/// Both are `null` until the key setup: no empty value stands for an absent one.
 #[derive(serde::Serialize)]
 pub struct MasterKeysResponse {
-    pub master_key_enc: ambre_core::WrappedMasterKey,
-    pub master_key_salt: ambre_core::MasterKeySalt,
+    pub master_key_enc: Option<ambre_core::WrappedMasterKey>,
+    pub master_key_salt: Option<ambre_core::MasterKeySalt>,
     pub signing_pubkey: ambre_core::SigningKeyHex,
     pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
@@ -115,17 +116,9 @@ pub async fn get_master_keys(
         .await?
         .ok_or(AppError::NotFound { resource: "user" })?;
     Ok(axum::Json(MasterKeysResponse {
-        master_key_enc: u
-            .master_key_enc
-            .as_ref()
-            .map(|v| v.clone())
-            .unwrap_or_default(),
-        master_key_salt: u
-            .master_key_salt
-            .as_ref()
-            .map(|v| v.clone())
-            .unwrap_or_default(),
-        // Empty until the key setup, like the master material above.
+        master_key_enc: u.master_key_enc,
+        master_key_salt: u.master_key_salt,
+        // Empty until the key setup.
         signing_pubkey: u
             .signing_pubkey
             .map(ambre_core::SigningKeyHex::encode)

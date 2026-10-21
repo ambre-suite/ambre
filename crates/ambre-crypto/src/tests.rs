@@ -318,6 +318,30 @@ fn the_log_anchor_travels_sealed_with_the_key() {
     assert!(ecdh::unwrap_anchored(&bob, &alice_pub, &tampered).is_err());
 }
 
+/// Holds `SRV-226` against the primitives. Each length the wire reads for a
+/// wrapped key is the length a wrap writes. A change of layout fails here,
+/// rather than at every relay read.
+#[test]
+fn a_wrap_has_a_length_the_wire_reads() {
+    let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
+    let bob_pub =
+        x25519_dalek::PublicKey::from(&MasterSeed::from_array([0x02; 32]).derive_exchange_key())
+            .to_bytes();
+    let doc_key = DocumentKey::from_array([0x55; 32]);
+    let length = |wrapped: ecdh::WrappedKey| wrapped.nonce.len() + wrapped.ciphertext.len();
+    let bare = length(ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap());
+    let anchored =
+        length(ecdh::wrap_anchored(&alice, &bob_pub, &doc_key, Some(&[0x66; 32])).unwrap());
+    assert_eq!(ambre_core::WrappedDocKey::LENGTHS, [bare, anchored]);
+
+    let seed = MasterSeed::from_array([0x03; 32]);
+    let (nonce, ciphertext) = seed.wrap_for_storage(&doc_key, b"aad").unwrap();
+    assert_eq!(
+        ambre_core::WrappedMasterKey::LENGTHS,
+        [nonce.len() + ciphertext.len()]
+    );
+}
+
 #[test]
 fn weak_peer_public_key_rejected() {
     // The all-zero u-coordinate is a low-order point: the X25519 output is the

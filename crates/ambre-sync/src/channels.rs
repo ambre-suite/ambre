@@ -1619,7 +1619,11 @@ pub(crate) mod tests {
         let (space, bare) = (SpaceId::new(), SpaceId::new());
         let (public, private, direct) = (ChannelId::new(), ChannelId::new(), ChannelId::new());
         let meta = MetaId::new();
-        let keys = r#""doc_key_enc":"AA==","wrapper_exchange_pub_key":"""#;
+        // A wrap of the right length that opens under no key of this user.
+        let keys = format!(
+            r#""doc_key_enc":{},"wrapper_exchange_pub_key":"""#,
+            serde_json::to_string(&ambre_core::WrappedDocKey::new(vec![0; 72])).unwrap()
+        );
         let body = format!(
             r#"{{"channels":[
                 {{"channel_id":"{public}","space_id":"{space}","public":true,"meta_id":"{meta}",{keys},"peers":["Eve"]}},

@@ -402,7 +402,7 @@ pub async fn log_org_recovery(
 pub async fn get_user_org_master_key_enc(
     pool: &PgPool,
     user_id: &ambre_core::UserId,
-) -> Result<Option<ambre_core::WrappedMasterKey>, AppError> {
+) -> Result<Option<ambre_core::EscrowedKey>, AppError> {
     let row = sqlx::query("SELECT org_master_key_enc FROM users WHERE id = $1")
         .bind(id_to_uuid(*user_id))
         .fetch_optional(pool)
@@ -411,6 +411,6 @@ pub async fn get_user_org_master_key_enc(
         r.try_get::<Option<Vec<u8>>, _>("org_master_key_enc")
             .ok()
             .flatten()
-            .map(ambre_core::WrappedMasterKey::new)
+            .map(ambre_core::EscrowedKey::new)
     }))
 }

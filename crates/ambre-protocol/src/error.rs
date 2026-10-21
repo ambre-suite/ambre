@@ -30,6 +30,11 @@ pub enum SerializationError {
     /// Postcard serialization failed.
     #[error("postcard serialization failed: {0}")]
     Postcard(#[from] postcard::Error),
+
+    /// The bytes decode, but are not the encoding of what they decode to.
+    /// Trailing bytes, or a field written in a longer form than its own.
+    #[error("the bytes are not the canonical encoding of their value")]
+    NotCanonical,
 }
 
 /// Errors related to field validation, enforced by the `validate()` methods on

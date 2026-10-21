@@ -750,15 +750,15 @@ pub(crate) struct ProviderCallbackResponse {
 
 #[derive(Deserialize)]
 pub(crate) struct MasterKeyResponse {
-    pub master_key_enc: ambre_core::WrappedMasterKey,
-    pub master_key_salt: ambre_core::MasterKeySalt,
+    pub master_key_enc: Option<ambre_core::WrappedMasterKey>,
+    pub master_key_salt: Option<ambre_core::MasterKeySalt>,
 }
 
 impl MasterKeyResponse {
     /// Whether the account still owes its key setup: the relay holds no master
-    /// material for it, and sends the fields empty.
+    /// material for it, and sends the fields `null`.
     pub fn setup_owed(&self) -> bool {
-        self.master_key_enc.is_empty()
+        self.master_key_enc.is_none()
     }
 }
 
@@ -2027,15 +2027,14 @@ mod tests {
     /// corrupted account (`SYNC-134`).
     #[test]
     fn an_account_without_master_material_owes_its_setup() {
-        let owed = MasterKeyResponse {
-            master_key_enc: ambre_core::WrappedMasterKey::new(Vec::new()),
-            master_key_salt: ambre_core::MasterKeySalt::new(Vec::new()),
-        };
+        let owed: MasterKeyResponse =
+            serde_json::from_str(r#"{"master_key_enc":null,"master_key_salt":null}"#).unwrap();
         assert!(owed.setup_owed());
-        let stored = MasterKeyResponse {
-            master_key_enc: ambre_core::WrappedMasterKey::new(b"sealed".to_vec()),
-            master_key_salt: ambre_core::MasterKeySalt::new(b"salt".to_vec()),
-        };
+        let stored = serde_json::json!({
+            "master_key_enc": ambre_core::WrappedMasterKey::new(vec![1; 72]),
+            "master_key_salt": ambre_core::MasterKeySalt::new(vec![2; 32]),
+        });
+        let stored: MasterKeyResponse = serde_json::from_value(stored).unwrap();
         assert!(!stored.setup_owed());
     }
 

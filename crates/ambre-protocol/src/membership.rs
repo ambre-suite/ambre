@@ -147,13 +147,22 @@ impl MembershipEntry {
         Ok(postcard::to_allocvec(self)?)
     }
 
-    /// Reads back what [`Self::encode`] wrote.
+    /// Reads back what [`Self::encode`] wrote, and nothing else. The relay
+    /// stores the bytes it was sent, and the next entry's digest covers the
+    /// encoding. Bytes that decode to the same entry but differ from its
+    /// encoding are refused (`SRV-227`).
     ///
     /// # Errors
     ///
-    /// [`SerializationError::Postcard`] for bytes that are not an entry.
+    /// * [`SerializationError::Postcard`] for bytes that are not an entry.
+    /// * [`SerializationError::NotCanonical`] for bytes past the entry, or a
+    ///   field written in a longer form than its encoding.
     pub fn decode(bytes: &[u8]) -> Result<Self, SerializationError> {
-        Ok(postcard::from_bytes(bytes)?)
+        let entry: Self = postcard::from_bytes(bytes)?;
+        if entry.encode()? != bytes {
+            return Err(SerializationError::NotCanonical);
+        }
+        Ok(entry)
     }
 }
 
@@ -222,6 +231,26 @@ mod tests {
             MembershipEntry::decode(&sent.encode().unwrap()).unwrap(),
             sent
         );
+    }
+
+    /// `SRV-227`: an entry reads from its own encoding alone. A byte past its
+    /// end, and a position written in a longer varint, are refused.
+    #[test]
+    fn an_entry_reads_from_its_own_encoding_alone() {
+        let sent = entry().encode().unwrap();
+        let mut trailing = sent.clone();
+        trailing.push(0);
+        assert_eq!(
+            MembershipEntry::decode(&trailing),
+            Err(SerializationError::NotCanonical)
+        );
+        // The position follows the 16 bytes of the document id. Position 1 is
+        // the varint `01`; `81 00` is the same value in a longer form.
+        assert_eq!(sent[16], 0x01);
+        let mut longer = sent[..16].to_vec();
+        longer.extend([0x81, 0x00]);
+        longer.extend(&sent[17..]);
+        assert!(MembershipEntry::decode(&longer).is_err());
     }
 
     /// An ownerless log opens with its creation, and leaves the creator and

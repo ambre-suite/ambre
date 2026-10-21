@@ -461,7 +461,7 @@ pub async fn recover_master_key(
 #[derive(serde::Serialize)]
 pub struct RecoveredResponse {
     pub status: ambre_core::WriteStatus,
-    pub master_key_enc: ambre_core::WrappedMasterKey,
+    pub master_key_enc: ambre_core::EscrowedKey,
 }
 
 #[cfg(test)]
@@ -717,8 +717,8 @@ mod tests {
             let body = serde_json::json!({
                 "email": email,
                 "display_name": "Org User",
-                "master_key_enc": base64::engine::general_purpose::URL_SAFE.encode([1u8; 32]),
-                "master_key_salt": base64::engine::general_purpose::URL_SAFE.encode([2u8; 16]),
+                "master_key_enc": base64::engine::general_purpose::URL_SAFE.encode([1u8; 72]),
+                "master_key_salt": base64::engine::general_purpose::URL_SAFE.encode([2u8; 32]),
                 "signing_pubkey": hex::encode([spk; 32]),
                 "exchange_pubkey": hex::encode([spk; 32]),
             });
@@ -1136,9 +1136,7 @@ mod tests {
             for released in 1..=2 {
                 let (status, body) = release().await;
                 assert_eq!(status, StatusCode::OK);
-                assert!(
-                    body.contains(&ambre_core::WrappedMasterKey::new(vec![0xA5u8; 48]).to_base64())
-                );
+                assert!(body.contains(&ambre_core::EscrowedKey::new(vec![0xA5u8; 48]).to_base64()));
                 let records: Vec<(String, String, String)> = sqlx::query_as(
                     "SELECT org_id::text, target_user_id::text, recovered_by::text \
                      FROM org_recovery_log",
@@ -1164,7 +1162,7 @@ mod tests {
             let (status, body) = release().await;
             assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
             assert!(
-                !body.contains(&ambre_core::WrappedMasterKey::new(vec![0xA5u8; 48]).to_base64()),
+                !body.contains(&ambre_core::EscrowedKey::new(vec![0xA5u8; 48]).to_base64()),
                 "an unrecorded release answers no key"
             );
         }
