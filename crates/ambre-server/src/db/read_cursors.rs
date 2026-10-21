@@ -12,11 +12,11 @@ pub struct ActivityRow {
     /// A segment or a thread: the client counts a thread's mentions alone.
     pub kind: ambre_core::ChannelDocumentKind,
     /// The caller's cursor on the document, 0 when it never wrote one.
-    pub cursor: i64,
+    pub cursor: ambre_core::Seq,
     /// The highest sequence number the register holds for the document: its
     /// flushed deltas and the horizon of its snapshots. The ephemeral store
     /// may hold a higher one not yet flushed.
-    pub durable_last: i64,
+    pub durable_last: ambre_core::Seq,
 }
 
 /// Move the caller's cursor on a document to `seq`, forward or back.
@@ -26,7 +26,7 @@ pub async fn set_read_cursor(
     pool: &PgPool,
     user_id: &ambre_core::UserId,
     document_id: &ambre_core::DocumentId,
-    seq: i64,
+    seq: ambre_core::Seq,
 ) -> Result<(), AppError> {
     set_read_cursors(pool, user_id, &[(*document_id, seq)]).await
 }
@@ -36,11 +36,11 @@ pub async fn set_read_cursor(
 pub async fn set_read_cursors(
     pool: &PgPool,
     user_id: &ambre_core::UserId,
-    cursors: &[(ambre_core::DocumentId, i64)],
+    cursors: &[(ambre_core::DocumentId, ambre_core::Seq)],
 ) -> Result<(), AppError> {
     let (documents, seqs): (Vec<uuid::Uuid>, Vec<i64>) = cursors
         .iter()
-        .map(|(document_id, seq)| (id_to_uuid(*document_id), *seq))
+        .map(|(document_id, seq)| (id_to_uuid(*document_id), seq.to_i64_saturating()))
         .unzip();
     sqlx::query(
         "INSERT INTO read_cursors (user_id, document_id, seq) \
@@ -90,8 +90,8 @@ pub async fn channel_activity(
                 channel_id: r.try_get::<PgId, _>("channel_id")?.into(),
                 document_id: r.try_get::<PgId, _>("document_id")?.into(),
                 kind: channels::decode_kind(r.try_get("kind")?)?,
-                cursor: r.try_get("cursor")?,
-                durable_last: r.try_get("durable_last")?,
+                cursor: decode_seq(r.try_get("cursor")?)?,
+                durable_last: decode_seq(r.try_get("durable_last")?)?,
             })
         })
         .collect()

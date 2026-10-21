@@ -430,13 +430,13 @@ pub async fn retired_unlocked_segments(
 pub async fn record_lock(
     pool: &PgPool,
     segment: &ambre_core::DocumentId,
-    horizon: u64,
+    horizon: ambre_core::Seq,
 ) -> Result<(), AppError> {
     sqlx::query(
         "UPDATE channel_documents SET horizon = $2 WHERE document_id = $1 AND horizon IS NULL",
     )
     .bind(id_to_uuid(*segment))
-    .bind(i64::try_from(horizon).unwrap_or(i64::MAX))
+    .bind(horizon.to_i64_saturating())
     .execute(pool)
     .await?;
     Ok(())
@@ -598,7 +598,7 @@ pub async fn take_finalize_lease(
     channel_id: &ambre_core::ChannelId,
     segment: ambre_core::SegmentId,
     terms: LeaseTerms,
-    lock: impl AsyncFnOnce() -> Result<Option<u64>, AppError>,
+    lock: impl AsyncFnOnce() -> Result<Option<ambre_core::Seq>, AppError>,
 ) -> Result<FinalizeLease, AppError> {
     let document = id_to_uuid(segment.document_id());
     let mut tx = pool.begin().await?;
@@ -642,7 +642,7 @@ pub async fn take_finalize_lease(
                     retry_in: terms.pending_retry,
                 });
             };
-            let seq = i64::try_from(seq)
+            let seq = i64::try_from(seq.0)
                 .map_err(|_| AppError::Internal("delta number out of range".into()))?;
             sqlx::query("UPDATE channel_documents SET horizon = $2 WHERE document_id = $1")
                 .bind(document)
@@ -669,7 +669,7 @@ pub async fn take_finalize_lease(
     tx.commit().await?;
     Ok(FinalizeLease::Granted {
         lease_id,
-        horizon: ambre_core::Seq(horizon.unsigned_abs()),
+        horizon: decode_seq(horizon)?,
         expires_in: terms.lease,
     })
 }
@@ -833,7 +833,7 @@ pub async fn take_fold_lease(
     channel_id: &ambre_core::ChannelId,
     segment: ambre_core::SegmentId,
     terms: FoldTerms,
-    relayed: impl AsyncFnOnce(ambre_core::DocumentId) -> Result<u64, AppError>,
+    relayed: impl AsyncFnOnce(ambre_core::DocumentId) -> Result<ambre_core::Seq, AppError>,
 ) -> Result<FoldLease, AppError> {
     let document = id_to_uuid(segment.document_id());
     let conflict = |detail: &str| AppError::Conflict {
@@ -876,10 +876,10 @@ pub async fn take_fold_lease(
     let Some(amendments) = amendments.map(uuid_row_to_id) else {
         return Err(conflict("the segment has no amendments"));
     };
-    let seq = relayed(amendments)
-        .await?
-        .max(stored_seq.unwrap_or(0).unsigned_abs());
-    if seq <= folded_seq.unwrap_or(0).unsigned_abs() {
+    let stored = stored_seq.map(decode_seq).transpose()?.unwrap_or_default();
+    let folded = folded_seq.map(decode_seq).transpose()?.unwrap_or_default();
+    let seq = relayed(amendments).await?.max(stored);
+    if seq <= folded {
         return Err(conflict("nothing to fold"));
     }
     let wait = |ms: i64| FoldLease::Wait {
@@ -904,9 +904,9 @@ pub async fn take_fold_lease(
     tx.commit().await?;
     Ok(FoldLease::Granted {
         lease_id,
-        horizon: ambre_core::Seq(horizon.unsigned_abs()),
+        horizon: decode_seq(horizon)?,
         amendments,
-        amendments_seq: ambre_core::Seq(seq),
+        amendments_seq: seq,
         expires_in: terms.lease,
     })
 }

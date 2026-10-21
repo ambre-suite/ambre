@@ -53,8 +53,8 @@ async fn refuse_delta(
 /// could not be read. Returns that run and the unreadable seq, if any, so the
 /// page never carries a hole the caller cannot see (`SRV-041`).
 pub(crate) fn contiguous_prefix(
-    mut fetched: Vec<(u64, Option<ambre_protocol::SeqUpdate>)>,
-) -> (Vec<ambre_protocol::SeqUpdate>, Option<u64>) {
+    mut fetched: Vec<(ambre_core::Seq, Option<ambre_protocol::SeqUpdate>)>,
+) -> (Vec<ambre_protocol::SeqUpdate>, Option<ambre_core::Seq>) {
     fetched.sort_by_key(|(seq, _)| *seq);
     let mut prefix = Vec::with_capacity(fetched.len());
     for (seq, update) in fetched {
@@ -771,17 +771,17 @@ pub(crate) async fn handle_request_missing(
         let pending = &pending;
         let held = &batches;
         let fetches = updates.into_iter().map(|row| {
-            let seq = row.seq.0;
+            let seq = row.seq;
             async move {
                 let wire = match (row.wire, row.batch_key, row.s3_key) {
                     (Some(wire), _, _) => Some(wire),
-                    (None, Some(key), _) => held.frame(&key, row.seq.to_i64_saturating()),
+                    (None, Some(key), _) => held.frame(&key, row.seq),
                     (None, None, Some(key)) => {
                         match crate::s3::fetch_object(&state.s3, &state.s3_bucket, &key).await {
                             Ok(Some(bytes)) => Some(bytes),
                             Ok(None) => pending.get(&seq).cloned(),
                             Err(e) => {
-                                tracing::error!(seq, error = %e, "replay: S3 fetch failed");
+                                tracing::error!(seq = seq.0, error = %e, "replay: S3 fetch failed");
                                 pending.get(&seq).cloned()
                             }
                         }
@@ -790,21 +790,15 @@ pub(crate) async fn handle_request_missing(
                 };
                 let Some(wire) = wire else {
                     tracing::error!(
-                        seq,
+                        seq = seq.0,
                         "replay: delta not found in its row, its batch, S3 or pending"
                     );
                     return (seq, None);
                 };
                 match wire.open::<ambre_protocol::Update>() {
-                    Ok(update) => (
-                        seq,
-                        Some(ambre_protocol::SeqUpdate {
-                            seq: ambre_protocol::messages::Seq(seq),
-                            update,
-                        }),
-                    ),
+                    Ok(update) => (seq, Some(ambre_protocol::SeqUpdate { seq, update })),
                     Err(e) => {
-                        tracing::error!(seq, error = %e, "replay: Update decode failed");
+                        tracing::error!(seq = seq.0, error = %e, "replay: Update decode failed");
                         (seq, None)
                     }
                 }
@@ -824,7 +818,7 @@ pub(crate) async fn handle_request_missing(
             return;
         }
         if let Some(seq) = unreadable {
-            tracing::warn!(seq, "replay stopped at a delta it could not read");
+            tracing::warn!(seq = seq.0, "replay stopped at a delta it could not read");
             let msg = Payload::server_msg(&WsServerMsg::ReplayStopped {
                 document_id,
                 after_seq: delivered,
@@ -838,7 +832,7 @@ pub(crate) async fn handle_request_missing(
             return;
         }
         cursor = next_cursor;
-        batches.forget_through(cursor.to_i64_saturating());
+        batches.forget_through(cursor);
     }
 }
 
@@ -2200,19 +2194,22 @@ mod refusal_tests {
 
     #[test]
     fn a_replay_page_stops_at_the_first_unreadable_delta() {
+        use ambre_core::Seq;
         let fetched = vec![
-            (4, Some(seq_update(4))),
-            (2, Some(seq_update(2))),
-            (3, None),
-            (1, Some(seq_update(1))),
+            (Seq(4), Some(seq_update(4))),
+            (Seq(2), Some(seq_update(2))),
+            (Seq(3), None),
+            (Seq(1), Some(seq_update(1))),
         ];
         let (page, unreadable) = contiguous_prefix(fetched);
         let seqs: Vec<u64> = page.iter().map(|u| u.seq.0).collect();
         assert_eq!(seqs, [1, 2], "seq 4 is held back behind the hole at 3");
-        assert_eq!(unreadable, Some(3));
+        assert_eq!(unreadable, Some(Seq(3)));
 
-        let (page, unreadable) =
-            contiguous_prefix(vec![(2, Some(seq_update(2))), (1, Some(seq_update(1)))]);
+        let (page, unreadable) = contiguous_prefix(vec![
+            (ambre_core::Seq(2), Some(seq_update(2))),
+            (ambre_core::Seq(1), Some(seq_update(1))),
+        ]);
         assert_eq!(page.len(), 2);
         assert_eq!(unreadable, None);
     }
@@ -2600,7 +2597,12 @@ mod hot_tail_tests {
                 .unwrap(),
             4
         );
-        let batch = crate::hot_tail::batch_key(&state.config.s3_env_prefix, &doc_id, 1, 4);
+        let batch = crate::hot_tail::batch_key(
+            &state.config.s3_env_prefix,
+            &doc_id,
+            ambre_core::Seq(1),
+            ambre_core::Seq(4),
+        );
         assert_eq!(replay(&state, &mut conn, doc_id).await, before);
         assert_eq!(
             stub.gets(batch.as_str()),

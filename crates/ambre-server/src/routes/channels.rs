@@ -133,7 +133,7 @@ pub async fn list_member_channels(
         .zip(counters)
         .map(|(row, counter)| {
             // The live counter runs ahead of the register until a flush.
-            let live = counter.and_then(|c| i64::try_from(c).ok()).unwrap_or(0);
+            let live = counter.map_or(0, ambre_core::Seq::to_i64_saturating);
             let last = u64::try_from(row.meta_durable_last.max(live)).unwrap_or(0);
             use base64::Engine;
             let base64 = base64::engine::general_purpose::URL_SAFE;
@@ -396,7 +396,7 @@ pub(crate) async fn lock_retired_segments(state: &AppState, document_id: &ambre_
         for segment in db::retired_unlocked_segments(&state.db, document_id).await? {
             let horizon = crate::redis_ops::lock_segment_now(&state.redis, &segment).await?;
             db::record_lock(&state.db, &segment, horizon).await?;
-            tracing::info!(segment = %segment, horizon, "segment locked by a rotation");
+            tracing::info!(segment = %segment, horizon = horizon.0, "segment locked by a rotation");
         }
         Ok::<(), AppError>(())
     };

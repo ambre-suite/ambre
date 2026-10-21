@@ -409,8 +409,8 @@ pub async fn attach_wire(
 pub async fn lock_inline_tail(
     tx: &mut sqlx::PgConnection,
     document_id: &ambre_core::DocumentId,
-) -> Result<Option<Vec<(i64, Payload)>>, AppError> {
-    let rows = sqlx::query_as(
+) -> Result<Option<Vec<(ambre_core::Seq, Payload)>>, AppError> {
+    let rows: Result<Vec<(i64, Payload)>, _> = sqlx::query_as(
         "SELECT seq, wire FROM updates WHERE document_id = $1 AND wire IS NOT NULL \
          ORDER BY seq FOR UPDATE NOWAIT",
     )
@@ -418,7 +418,11 @@ pub async fn lock_inline_tail(
     .fetch_all(tx)
     .await;
     match rows {
-        Ok(rows) => Ok(Some(rows)),
+        Ok(rows) => Ok(Some(
+            rows.into_iter()
+                .map(|(seq, wire)| Ok((decode_seq(seq)?, wire)))
+                .collect::<Result<_, sqlx::Error>>()?,
+        )),
         // `lock_not_available`: a move already runs.
         Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some("55P03") => Ok(None),
         Err(e) => Err(e.into()),
@@ -430,7 +434,7 @@ pub async fn lock_inline_tail(
 pub async fn point_rows_at_batch(
     tx: &mut sqlx::PgConnection,
     document_id: &ambre_core::DocumentId,
-    seqs: &[i64],
+    seqs: &[ambre_core::Seq],
     batch_key: &ambre_core::ObjectKey,
 ) -> Result<u64, AppError> {
     let moved = sqlx::query(
@@ -438,7 +442,11 @@ pub async fn point_rows_at_batch(
          WHERE document_id = $1 AND seq = ANY($2) AND wire IS NOT NULL",
     )
     .bind(id_to_uuid(*document_id))
-    .bind(seqs)
+    .bind(
+        seqs.iter()
+            .map(|s| s.to_i64_saturating())
+            .collect::<Vec<_>>(),
+    )
     .bind(batch_key.as_str())
     .execute(tx)
     .await?

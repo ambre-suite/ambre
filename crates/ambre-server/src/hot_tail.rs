@@ -34,7 +34,7 @@ pub fn past_watermark(deltas: i64, bytes: i64) -> bool {
 
 /// How many of the newest frames of `tail` stay inline after a move. It is at
 /// most a quarter of the cap, in deltas and in bytes alike.
-fn kept_after_move(tail: &[(i64, Payload)]) -> usize {
+fn kept_after_move(tail: &[(ambre_core::Seq, Payload)]) -> usize {
     let mut kept = 0usize;
     let mut bytes = 0i64;
     for (_, wire) in tail.iter().rev() {
@@ -54,22 +54,23 @@ fn kept_after_move(tail: &[(i64, Payload)]) -> usize {
 pub fn batch_key(
     env_prefix: &str,
     document_id: &ambre_core::DocumentId,
-    first: i64,
-    last: i64,
+    first: ambre_core::Seq,
+    last: ambre_core::Seq,
 ) -> ambre_core::ObjectKey {
     ambre_core::ObjectKey(format!(
-        "{env_prefix}/documents/{document_id}/batches/{first:010}-{last:010}"
+        "{env_prefix}/documents/{document_id}/batches/{:010}-{:010}",
+        first.0, last.0
     ))
 }
 
 /// Encodes a batch: each delta's number and its sealed envelope, unchanged
 /// (`SRV-153`).
-fn encode_batch(frames: &[(i64, Payload)]) -> Result<Payload, AppError> {
+fn encode_batch(frames: &[(ambre_core::Seq, Payload)]) -> Result<Payload, AppError> {
     Payload::batch(frames).map_err(|e| AppError::Internal(format!("batch encode: {e}")))
 }
 
 /// Decodes a batch into its frames by number.
-fn decode_batch(batch: &Payload) -> Result<BTreeMap<i64, Payload>, AppError> {
+fn decode_batch(batch: &Payload) -> Result<BTreeMap<ambre_core::Seq, Payload>, AppError> {
     batch
         .unbatch()
         .map_err(|e| AppError::Internal(format!("batch decode: {e}")))
@@ -111,7 +112,7 @@ pub async fn move_to_batch(
         .send()
         .await
         .map_err(|e| AppError::S3(format!("batch put {key}: {e}")))?;
-    let seqs: Vec<i64> = moved.iter().map(|(seq, _)| *seq).collect();
+    let seqs: Vec<ambre_core::Seq> = moved.iter().map(|(seq, _)| *seq).collect();
     crate::db::point_rows_at_batch(&mut tx, document_id, &seqs, &key).await?;
     tx.commit().await?;
     Ok(seqs.len())
@@ -167,7 +168,7 @@ pub async fn trim(state: &AppState) -> Result<u64, AppError> {
 /// The batch objects one replay has fetched, each fetched once (`SRV-155`).
 #[derive(Default)]
 pub struct BatchCache {
-    held: HashMap<ambre_core::ObjectKey, BTreeMap<i64, Payload>>,
+    held: HashMap<ambre_core::ObjectKey, BTreeMap<ambre_core::Seq, Payload>>,
 }
 
 impl BatchCache {
@@ -200,13 +201,13 @@ impl BatchCache {
     }
 
     /// The frame of delta `seq` in batch `key`, when the batch is held.
-    pub fn frame(&self, key: &ambre_core::ObjectKey, seq: i64) -> Option<Payload> {
+    pub fn frame(&self, key: &ambre_core::ObjectKey, seq: ambre_core::Seq) -> Option<Payload> {
         self.held.get(key)?.get(&seq).cloned()
     }
 
     /// Forgets every batch whose last delta is at or below `seq`: a replay goes
     /// forward, so it never needs one again.
-    pub fn forget_through(&mut self, seq: i64) {
+    pub fn forget_through(&mut self, seq: ambre_core::Seq) {
         self.held
             .retain(|_, frames| frames.last_key_value().is_some_and(|(last, _)| *last > seq));
     }
@@ -216,9 +217,14 @@ impl BatchCache {
 mod tests {
     use super::*;
 
-    fn tail(n: usize, size: usize) -> Vec<(i64, Payload)> {
+    fn tail(n: usize, size: usize) -> Vec<(ambre_core::Seq, Payload)> {
         (1..=n)
-            .map(|s| (i64::try_from(s).unwrap(), Payload::new(vec![0u8; size])))
+            .map(|s| {
+                (
+                    ambre_core::Seq(u64::try_from(s).unwrap()),
+                    Payload::new(vec![0u8; size]),
+                )
+            })
             .collect()
     }
 
@@ -243,14 +249,14 @@ mod tests {
     #[test]
     fn a_batch_keeps_each_number_and_frame() {
         let frames = vec![(3, vec![1, 2]), (7, vec![]), (9, vec![5; 300])];
-        let sealed: Vec<(i64, Payload)> = frames
+        let sealed: Vec<(ambre_core::Seq, Payload)> = frames
             .iter()
-            .map(|(s, f)| (*s, Payload::new(f.clone())))
+            .map(|(s, f)| (ambre_core::Seq(*s), Payload::new(f.clone())))
             .collect();
         let back = decode_batch(&encode_batch(&sealed).unwrap()).unwrap();
-        let back: Vec<(i64, Vec<u8>)> = back
+        let back: Vec<(u64, Vec<u8>)> = back
             .into_iter()
-            .map(|(s, f)| (s, f.expose_bytes().to_vec()))
+            .map(|(s, f)| (s.0, f.expose_bytes().to_vec()))
             .collect();
         assert_eq!(back, frames);
     }
@@ -372,7 +378,12 @@ mod db_tests {
         }
         assert_eq!(move_to_batch(&state, &doc, None).await.unwrap(), 136);
 
-        let key = batch_key(&state.config.s3_env_prefix, &doc, 1, 136);
+        let key = batch_key(
+            &state.config.s3_env_prefix,
+            &doc,
+            ambre_core::Seq(1),
+            ambre_core::Seq(136),
+        );
         let rows = homes(&state, &doc).await;
         assert!(
             rows.iter()
@@ -384,7 +395,7 @@ mod db_tests {
             decode_batch(&Payload::new(stub.object(key.as_str()).unwrap()))
                 .unwrap()
                 .into_iter()
-                .map(|(s, f)| (s, f.expose_bytes().to_vec()))
+                .map(|(s, f)| (s.to_i64_saturating(), f.expose_bytes().to_vec()))
                 .collect();
         let expected: BTreeMap<i64, Vec<u8>> = (1..=136).map(|s| (s, frame(s))).collect();
         assert_eq!(
@@ -444,8 +455,18 @@ mod db_tests {
             inline(&state, &doc, seq, &frame(seq), INLINE_CAP).await;
         }
         move_to_batch(&state, &doc, Some(0)).await.unwrap();
-        let older = batch_key(&state.config.s3_env_prefix, &doc, 1, 5);
-        let newer = batch_key(&state.config.s3_env_prefix, &doc, 6, 10);
+        let older = batch_key(
+            &state.config.s3_env_prefix,
+            &doc,
+            ambre_core::Seq(1),
+            ambre_core::Seq(5),
+        );
+        let newer = batch_key(
+            &state.config.s3_env_prefix,
+            &doc,
+            ambre_core::Seq(6),
+            ambre_core::Seq(10),
+        );
         assert_eq!(stub.keys(), [older.0.clone(), newer.0.clone()]);
 
         let clocks = serde_json::json!({});

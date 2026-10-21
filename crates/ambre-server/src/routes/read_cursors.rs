@@ -59,10 +59,14 @@ pub async fn set_read_cursor(
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
         .ok_or_else(not_found)?;
-    let seq = i64::try_from(req.seq.0).map_err(|_| AppError::Conflict {
-        detail: "sequence number out of range".into(),
-    })?;
-    db::set_read_cursor(&state.db, &auth.user_id, &doc_id, seq).await?;
+    // The register holds a signed 64-bit number: a cursor past it is refused,
+    // never clamped.
+    if i64::try_from(req.seq.0).is_err() {
+        return Err(AppError::Conflict {
+            detail: "sequence number out of range".into(),
+        });
+    }
+    db::set_read_cursor(&state.db, &auth.user_id, &doc_id, req.seq).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -87,8 +91,8 @@ pub async fn get_activity(
                 document_id,
                 kind: row.kind,
                 active: last > row.cursor,
-                read: ambre_core::Seq(u64::try_from(row.cursor).unwrap_or(0)),
-                last: ambre_core::Seq(u64::try_from(last).unwrap_or(0)),
+                read: row.cursor,
+                last,
             }
         })
         .collect();
@@ -115,13 +119,14 @@ pub async fn mark_read(
     let wanted: Option<std::collections::HashSet<ambre_core::DocumentId>> = body
         .and_then(|Json(req)| req.documents)
         .map(|ids| ids.into_iter().collect());
-    let cursors: Vec<(ambre_core::DocumentId, i64)> = last_numbers(&state, &auth.user_id)
-        .await?
-        .into_iter()
-        .filter(|(row, last)| *last > row.cursor)
-        .filter(|(row, _)| wanted.as_ref().is_none_or(|w| w.contains(&row.document_id)))
-        .map(|(row, last)| (row.document_id, last))
-        .collect();
+    let cursors: Vec<(ambre_core::DocumentId, ambre_core::Seq)> =
+        last_numbers(&state, &auth.user_id)
+            .await?
+            .into_iter()
+            .filter(|(row, last)| *last > row.cursor)
+            .filter(|(row, _)| wanted.as_ref().is_none_or(|w| w.contains(&row.document_id)))
+            .map(|(row, last)| (row.document_id, last))
+            .collect();
     db::set_read_cursors(&state.db, &auth.user_id, &cursors).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -132,7 +137,7 @@ pub async fn mark_read(
 async fn last_numbers(
     state: &AppState,
     user_id: &ambre_core::UserId,
-) -> Result<Vec<(db::ActivityRow, i64)>, AppError> {
+) -> Result<Vec<(db::ActivityRow, ambre_core::Seq)>, AppError> {
     let rows = db::channel_activity(&state.db, user_id).await?;
     let ids: Vec<ambre_core::DocumentId> = rows
         .iter()
@@ -147,8 +152,7 @@ async fn last_numbers(
         .into_iter()
         .zip(counters)
         .map(|(row, counter)| {
-            let live = counter.and_then(|c| i64::try_from(c).ok()).unwrap_or(0);
-            let last = row.durable_last.max(live);
+            let last = row.durable_last.max(counter.unwrap_or_default());
             (row, last)
         })
         .collect())

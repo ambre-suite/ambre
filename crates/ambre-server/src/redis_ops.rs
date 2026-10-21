@@ -137,7 +137,7 @@ fn clock_refusal(error: &str, got: Clock) -> AppError {
 pub async fn document_seqs(
     redis: &Client,
     document_ids: &[ambre_core::DocumentId],
-) -> Result<Vec<Option<u64>>, AppError> {
+) -> Result<Vec<Option<ambre_core::Seq>>, AppError> {
     if document_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -145,10 +145,14 @@ pub async fn document_seqs(
         .iter()
         .map(|id| format!("doc:{id}:seq"))
         .collect();
-    redis
+    let counters = redis
         .mget::<Vec<Option<u64>>>(keys)
         .await
-        .map_err(|e| AppError::Redis(format!("sequence counters: {e}")))
+        .map_err(|e| AppError::Redis(format!("sequence counters: {e}")))?;
+    Ok(counters
+        .into_iter()
+        .map(|c| c.map(ambre_core::Seq))
+        .collect())
 }
 
 /// Reseeds a cold Redis clock/seq state to the durable high-water marks, using
@@ -426,7 +430,7 @@ pub async fn push_dead_letter(
 pub async fn get_pending_deltas_map(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-) -> Result<std::collections::HashMap<u64, Payload>, AppError> {
+) -> Result<std::collections::HashMap<ambre_core::Seq, Payload>, AppError> {
     let entries = pending_entries(redis, &format!("doc:{document_id}:pending")).await?;
     let mut map = std::collections::HashMap::with_capacity(entries.len());
     for entry in &entries {
@@ -496,12 +500,12 @@ pub async fn claim_snapshot_ask(
 pub async fn current_seq(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-) -> Result<u64, AppError> {
+) -> Result<ambre_core::Seq, AppError> {
     let seq: Option<u64> = redis
         .get(format!("doc:{document_id}:seq"))
         .await
         .map_err(|e| AppError::Redis(format!("current seq: {e}")))?;
-    Ok(seq.unwrap_or(0))
+    Ok(ambre_core::Seq(seq.unwrap_or(0)))
 }
 
 /// Retrieves a refresh-token record from Redis.
@@ -921,7 +925,7 @@ pub fn segment_locked_key(document_id: &ambre_core::DocumentId) -> String {
 pub async fn lock_segment(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-) -> Result<Option<u64>, AppError> {
+) -> Result<Option<ambre_core::Seq>, AppError> {
     const LUA: &str = r#"
 if redis.call('LLEN', KEYS[1]) > 0 then
     return -1
@@ -940,7 +944,7 @@ return tonumber(redis.call('GET', KEYS[3])) or 0
         )
         .await
         .map_err(|e| AppError::Redis(format!("lock segment: {e}")))?;
-    Ok(u64::try_from(answer).ok())
+    Ok(ambre_core::Seq::try_from(answer).ok())
 }
 
 /// Lock a segment against deltas at once, a delta still unflushed included,
@@ -949,7 +953,7 @@ return tonumber(redis.call('GET', KEYS[3])) or 0
 pub async fn lock_segment_now(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-) -> Result<u64, AppError> {
+) -> Result<ambre_core::Seq, AppError> {
     const LUA: &str = r#"
 redis.call('SET', KEYS[1], '1')
 return tonumber(redis.call('GET', KEYS[2])) or 0
@@ -960,7 +964,7 @@ return tonumber(redis.call('GET', KEYS[2])) or 0
         .eval::<i64>(LUA, [locked.as_str(), seq.as_str()], Vec::<String>::new())
         .await
         .map_err(|e| AppError::Redis(format!("lock segment now: {e}")))?;
-    Ok(answer.unsigned_abs())
+    Ok(ambre_core::Seq(answer.unsigned_abs()))
 }
 
 /// Seal an amendments document a fold holds up to its delta `folded_seq`
@@ -971,7 +975,7 @@ return tonumber(redis.call('GET', KEYS[2])) or 0
 pub async fn seal_folded(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    folded_seq: u64,
+    folded_seq: ambre_core::Seq,
 ) -> Result<bool, AppError> {
     const LUA: &str = r#"
 if redis.call('LLEN', KEYS[1]) > 0 then
@@ -990,7 +994,7 @@ return 1
         .eval::<i64>(
             LUA,
             [pending.as_str(), locked.as_str(), seq.as_str()],
-            [folded_seq.to_string()],
+            [folded_seq.0.to_string()],
         )
         .await
         .map_err(|e| AppError::Redis(format!("seal folded: {e}")))?;
@@ -1228,7 +1232,10 @@ mod lua_tests {
         assert_eq!(locked, 0, "a pending delta holds the lock back");
 
         let _: usize = redis.del(&pending).await.unwrap();
-        assert_eq!(lock_segment(&redis, &doc_id).await.unwrap(), Some(2));
+        assert_eq!(
+            lock_segment(&redis, &doc_id).await.unwrap(),
+            Some(ambre_core::Seq(2))
+        );
         let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(3)).await;
         assert!(
             matches!(refused, Err(AppError::SegmentLocked)),
@@ -1253,7 +1260,10 @@ mod lua_tests {
         let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
         let pk_hex = "0dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd1";
-        assert_eq!(lock_segment_now(&redis, &doc_id).await.unwrap(), 0);
+        assert_eq!(
+            lock_segment_now(&redis, &doc_id).await.unwrap(),
+            ambre_core::Seq(0)
+        );
         let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
 
         for clock in 1..=2 {
@@ -1265,7 +1275,10 @@ mod lua_tests {
             .rpush(format!("doc:{doc_id}:pending"), "entry")
             .await
             .unwrap();
-        assert_eq!(lock_segment_now(&redis, &doc_id).await.unwrap(), 2);
+        assert_eq!(
+            lock_segment_now(&redis, &doc_id).await.unwrap(),
+            ambre_core::Seq(2)
+        );
         let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(3)).await;
         assert!(
             matches!(refused, Err(AppError::SegmentLocked)),
@@ -1292,19 +1305,27 @@ mod lua_tests {
                 .expect("amendments take deltas");
         }
         assert!(
-            !seal_folded(&redis, &doc_id, 1).await.unwrap(),
+            !seal_folded(&redis, &doc_id, ambre_core::Seq(1))
+                .await
+                .unwrap(),
             "a delta came past the fold"
         );
         let _: usize = redis.rpush(&pending, "entry").await.unwrap();
         assert!(
-            !seal_folded(&redis, &doc_id, 2).await.unwrap(),
+            !seal_folded(&redis, &doc_id, ambre_core::Seq(2))
+                .await
+                .unwrap(),
             "a delta waits to be flushed"
         );
         let locked: usize = redis.exists(segment_locked_key(&doc_id)).await.unwrap();
         assert_eq!(locked, 0, "a refused seal locks nothing");
 
         let _: usize = redis.del(&pending).await.unwrap();
-        assert!(seal_folded(&redis, &doc_id, 2).await.unwrap());
+        assert!(
+            seal_folded(&redis, &doc_id, ambre_core::Seq(2))
+                .await
+                .unwrap()
+        );
         let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(3)).await;
         assert!(
             matches!(refused, Err(AppError::SegmentLocked)),
@@ -1641,10 +1662,13 @@ mod redis_integration_tests {
         let map = get_pending_deltas_map(&redis, &doc).await.unwrap();
         assert_eq!(map.len(), 2);
         assert_eq!(
-            map.get(&7).map(Payload::expose_bytes),
+            map.get(&ambre_core::Seq(7)).map(Payload::expose_bytes),
             Some(&[1u8, 2, 3][..])
         );
-        assert_eq!(map.get(&8).map(Payload::expose_bytes), Some(&[4u8, 5][..]));
+        assert_eq!(
+            map.get(&ambre_core::Seq(8)).map(Payload::expose_bytes),
+            Some(&[4u8, 5][..])
+        );
 
         let _ = redis.del([key.as_str()]).await;
     }

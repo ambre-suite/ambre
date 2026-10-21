@@ -130,7 +130,7 @@ pub async fn confirm_snapshot(
             tracing::warn!(s3_key = %key, error = %e, "replaced snapshot: S3 delete failed");
         }
     }
-    if !crate::redis_ops::seal_folded(&state.redis, &fold.amendments, fold.folded_seq.0).await? {
+    if !crate::redis_ops::seal_folded(&state.redis, &fold.amendments, fold.folded_seq).await? {
         return Ok(axum::Json(ConfirmedSnapshotJson { folded: None }));
     }
     crate::deletion::delete_document(&state, &fold.amendments).await?;
@@ -300,7 +300,7 @@ pub async fn create_snapshot(
     // A cold counter reads 0 and bounds nothing.
     let last = crate::redis_ops::current_seq(&state.redis, &doc_id).await?;
     let covered = req.covered_seq;
-    if last > 0 && covered.0 > last {
+    if last > ambre_core::Seq(0) && covered > last {
         return Err(AppError::BadRequest(
             "covered_seq past the last delta".into(),
         ));

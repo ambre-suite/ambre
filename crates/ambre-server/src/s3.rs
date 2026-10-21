@@ -516,7 +516,7 @@ async fn drain_front(pending_key: &str, entries: &[Payload], sink: &mut impl Dra
         let Some((seq, s3_key, update_wire)) = entry.read_pending() else {
             tracing::error!(
                 key = pending_key,
-                seq = entry.pending_seq().unwrap_or(0),
+                seq = entry.pending_seq().map_or(0, |s| s.0),
                 entry_len = entry.len(),
                 reason = "malformed json / missing fields / bad base64",
                 "flush: dead-lettering poison entry"
@@ -528,13 +528,13 @@ async fn drain_front(pending_key: &str, entries: &[Payload], sink: &mut impl Dra
 
         match sink.store(&s3_key, update_wire).await {
             Ok(()) => {
-                tracing::debug!(s3_key = %s3_key, seq, "flushed delta to S3");
+                tracing::debug!(s3_key = %s3_key, seq = seq.0, "flushed delta to S3");
                 processed += 1;
             }
             Err(e) => {
                 // Transient (retryable) failure: stop here so the front trim
                 // keeps this entry and everything after it for the next cycle.
-                tracing::error!(s3_key = %s3_key, seq, error = %e, "flush: S3 upload failed, will retry");
+                tracing::error!(s3_key = %s3_key, seq = seq.0, error = %e, "flush: S3 upload failed, will retry");
                 break;
             }
         }
