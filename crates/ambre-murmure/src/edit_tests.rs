@@ -201,14 +201,20 @@ fn an_edit_and_a_concurrent_reaction_both_hold() {
     let edited = alice.edit(message, &plain("lunch at noon?"));
     let reacted = bob
         .state
-        .react(bob.segment(), message, THUMB, bob.user, NOW)
+        .react(
+            bob.segment(),
+            message,
+            &ambre_bus::Emoji::from(THUMB),
+            bob.user,
+            NOW,
+        )
         .expect("react")
         .expect("a new reaction writes");
     alice.receive(&bob, &reacted, 2);
     bob.receive(&alice, &edited, 3);
 
     let reaction = Reaction {
-        emoji: THUMB.to_owned(),
+        emoji: ambre_bus::Emoji(THUMB.to_owned()),
         users: vec![bob.user],
     };
     for member in [&alice, &bob] {
@@ -288,7 +294,13 @@ fn a_delete_keeps_the_thread_and_the_reactions() {
     let (mut alice, mut bob, message) = pair(&plain("who is in?"));
     let reacted = bob
         .state
-        .react(bob.segment(), message, THUMB, bob.user, NOW)
+        .react(
+            bob.segment(),
+            message,
+            &ambre_bus::Emoji::from(THUMB),
+            bob.user,
+            NOW,
+        )
         .expect("react")
         .expect("a new reaction writes");
     alice.receive(&bob, &reacted, 2);

@@ -496,7 +496,8 @@ fn fingerprint_is_stable_grouped_base32() {
     // out-of-band verification, so it is frozen. Any change to the domain tag,
     // truncation length, alphabet or grouping must break this test on purpose.
     // It must not silently shift what two people compare over the phone.
-    let fp = hash::fingerprint(&[0u8; 32]);
+    let fingerprint = hash::fingerprint(&[0u8; 32]);
+    let fp = fingerprint.as_str();
     assert_eq!(fp, "2HBA RR6Y FDOA EIJF ZZFT YWQZ MKRW N5FK");
 
     // 20 bytes -> 32 base32 chars -> 8 groups of 4, space-separated.
@@ -510,7 +511,7 @@ fn fingerprint_is_stable_grouped_base32() {
         "unexpected characters: {fp}"
     );
     // Deterministic: recomputing yields the identical string.
-    assert_eq!(fp, hash::fingerprint(&[0u8; 32]));
+    assert_eq!(fp, hash::fingerprint(&[0u8; 32]).as_str());
 }
 
 #[test]

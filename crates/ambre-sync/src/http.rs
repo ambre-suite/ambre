@@ -552,7 +552,7 @@ pub(crate) async fn download_snapshot(
     let resp = post_json_auth::<_, SnapshotDownloadUrlResponse>(&url, &body, auth)
         .await
         .ok()?;
-    fetch_bytes(&resp.download_url).await.ok()
+    fetch_bytes(resp.download_url.expose()).await.ok()
 }
 
 pub(crate) async fn delete_auth(url: &str, auth: AuthContext) -> Result<(), String> {
@@ -684,14 +684,14 @@ pub(crate) struct DevLoginResponse {
 #[derive(Deserialize)]
 pub(crate) struct ProviderLoginResponse {
     pub url: String,
-    pub state: String,
+    pub state: ambre_core::OidcState,
 }
 
 /// The provider's return, posted to `/api/auth/{provider}/callback`.
 #[derive(Serialize)]
 pub(crate) struct ProviderCallbackRequest {
-    pub code: String,
-    pub state: String,
+    pub code: ambre_core::OidcCode,
+    pub state: ambre_core::OidcState,
 }
 
 /// The relay's answer to a provider return: who signed in, and their tokens.
@@ -1238,7 +1238,7 @@ pub(crate) struct ReportSnapshotRequest {
 /// URL plus the S3 key the server will reference when the upload is confirmed.
 #[derive(Deserialize)]
 pub(crate) struct SnapshotUploadUrlResponse {
-    pub upload_url: String,
+    pub upload_url: ambre_core::PresignedUrl,
     pub s3_key: ambre_core::ObjectKey,
 }
 
@@ -1272,7 +1272,7 @@ pub(crate) struct SnapshotDownloadUrlRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct SnapshotDownloadUrlResponse {
-    pub download_url: String,
+    pub download_url: ambre_core::PresignedUrl,
 }
 
 #[derive(Deserialize)]
@@ -1493,7 +1493,7 @@ pub(crate) struct UploadUrlRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct UploadUrlResponse {
-    pub upload_url: String,
+    pub upload_url: ambre_core::PresignedUrl,
     #[allow(dead_code)]
     pub s3_key: ambre_core::ObjectKey,
 }
@@ -1505,7 +1505,7 @@ pub(crate) struct DownloadUrlRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct DownloadUrlResponse {
-    pub download_url: String,
+    pub download_url: ambre_core::PresignedUrl,
 }
 
 /// Confirms one put. The same two fields as [`UploadUrlRequest`] (`SYNC-053`).

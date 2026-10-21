@@ -42,11 +42,12 @@ pub use activity::{ActivityAnchor, ActivityKind, ActivitySummary};
 pub use app::murmure::{
     Attachment, ByteSize, CatalogueEntry, CategoryView, ChannelActivity, ChannelDocument,
     ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, DirectMember, DirectMessageDraft,
-    DirectMessageEvent, DirectPeers, DocumentActivity, HeldReply, HeldSend, MediaRef, MediaType,
-    MemberChannel, MemberView, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft,
-    MessageView, MurmureCommand, MurmureEvent, Notice, Picture, PictureFrame, Presence,
-    PrivateChannelDraft, PublicChannelDraft, Reaction, SealedChannelKey, SearchMatch, SpaceCommand,
-    SpaceEvent, StyleMark, TextStyle, ThreadHead, Timestamp, Topic, UnreadCount, Unreadable,
+    DirectMessageEvent, DirectPeers, DocumentActivity, Emoji, HeldReply, HeldSend, MediaRef,
+    MediaType, MemberChannel, MemberView, Mention, MentionCount, MentionTarget, MessageAt,
+    MessageDraft, MessageView, MurmureCommand, MurmureEvent, Notice, Picture, PictureFrame,
+    Presence, PrivateChannelDraft, PublicChannelDraft, Reaction, SealedChannelKey, SearchMatch,
+    SpaceCommand, SpaceEvent, StyleMark, TextStyle, ThreadHead, Timestamp, Topic, UnreadCount,
+    Unreadable,
 };
 pub use command::SyncCommand;
 pub use event::{
@@ -149,8 +150,8 @@ pub enum CopyOutcome {
 // Re-export core types so that users don't need to depend on ambre-core directly.
 pub use ambre_core::{
     CategoryId, ChannelDocumentKind, ChannelId, CommentId, DocType, DocumentId, Email, FootnoteId,
-    LeaseId, MeetingId, MessageId, MetaId, PublicKey, ReplyId, Role, SegmentId, Seq, SnapshotId,
-    SpaceId, SuggestionId, UserId, Uuid,
+    KeyFingerprint, LeaseId, MeetingId, MessageId, MetaId, PublicKey, ReplyId, Role, SegmentId,
+    Seq, SnapshotId, SpaceId, SuggestionId, UserId, Uuid,
 };
 
 #[cfg(test)]

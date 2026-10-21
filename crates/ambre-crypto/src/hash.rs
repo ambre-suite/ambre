@@ -28,7 +28,7 @@ const FINGERPRINT_LEN: usize = 20;
 /// aloud for out-of-band verification. The output is stable for a given key: the
 /// same key always yields the same string.
 ///
-pub fn fingerprint(pub_key: &[u8; 32]) -> String {
+pub fn fingerprint(pub_key: &[u8; 32]) -> ambre_core::KeyFingerprint {
     let mut hasher = Blake2b512::new();
     hasher.update(FINGERPRINT_DOMAIN);
     hasher.update(pub_key);
@@ -42,7 +42,7 @@ pub fn fingerprint(pub_key: &[u8; 32]) -> String {
         }
         out.push(c);
     }
-    out
+    ambre_core::KeyFingerprint(out)
 }
 
 /// The first `N` bytes of `digest`, zero-filled past its end. Every caller

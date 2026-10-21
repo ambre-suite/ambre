@@ -21,8 +21,8 @@ const RETURN_PREFIX: &str = "/signin/";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProviderReturn {
     pub provider: String,
-    pub code: String,
-    pub state: String,
+    pub code: ambre_core::OidcCode,
+    pub state: ambre_core::OidcState,
 }
 
 /// Whether `provider` may name a provider in a relay path: lowercase ASCII
@@ -55,8 +55,8 @@ pub(crate) fn parse_return(path: &str, query: &str) -> Option<ProviderReturn> {
     let state = params.get("state").filter(|s| !s.is_empty())?;
     Some(ProviderReturn {
         provider: provider.to_owned(),
-        code,
-        state,
+        code: ambre_core::OidcCode::new(code),
+        state: ambre_core::OidcState::new(state),
     })
 }
 
@@ -67,7 +67,7 @@ pub(crate) fn accept_return(
     ret: ProviderReturn,
     pending: Option<String>,
 ) -> Option<ProviderReturn> {
-    (pending.as_deref() == Some(ret.state.as_str())).then_some(ret)
+    (pending.as_deref() == Some(ret.state.expose())).then_some(ret)
 }
 
 /// Whether `url` may be followed: an `https` address. The address is data from
@@ -153,8 +153,8 @@ mod tests {
     fn google(state: &str) -> ProviderReturn {
         ProviderReturn {
             provider: "google".into(),
-            code: "4/0Ab".into(),
-            state: state.into(),
+            code: ambre_core::OidcCode::new("4/0Ab".to_owned()),
+            state: ambre_core::OidcState::new(state.to_owned()),
         }
     }
 

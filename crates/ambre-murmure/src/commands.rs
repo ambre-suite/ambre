@@ -9,8 +9,8 @@
 //! (`MURMURE-419`). The menu of a message offers the ones its target allows.
 
 use ambre_bus::{
-    ChannelId, HeldReply, HeldSend, LogicCommand, Mention, MessageAt, MessageId, MurmureCommand,
-    StyleMark, Timestamp,
+    ChannelId, Emoji, HeldReply, HeldSend, LogicCommand, Mention, MessageAt, MessageId,
+    MurmureCommand, StyleMark, Timestamp,
 };
 use ambre_commands::{
     Command, CommandCategory, CommandId, Key, KeyBinding, Keymap, Locale, Modifiers,
@@ -282,7 +282,7 @@ pub struct PendingReaction {
 impl PendingReaction {
     /// The command that reacts with `emoji`, stamped `now` by the view
     /// (`MURMURE-092`).
-    pub fn command(self, emoji: String, now: Timestamp) -> LogicCommand {
+    pub fn command(self, emoji: Emoji, now: Timestamp) -> LogicCommand {
         LogicCommand::Channel {
             channel_id: self.channel,
             command: MurmureCommand::React {
@@ -919,7 +919,7 @@ mod tests {
                     emoji,
                     now,
                 },
-        } = pending.command("\u{1F680}".to_owned(), Timestamp(9))
+        } = pending.command(ambre_bus::Emoji::from("\u{1F680}"), Timestamp(9))
         else {
             panic!("a pick reacts to the message");
         };

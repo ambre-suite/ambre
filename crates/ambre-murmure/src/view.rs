@@ -16,9 +16,9 @@ use std::rc::Rc;
 
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
-    Attachment, ByteSize, ChannelId, DocumentId, LogicCommand, MessageAt, MessageId, MessageView,
-    MurmureCommand, MurmureEvent, RequestId, RestEvent, SegmentId, TextStyle, Timestamp, UiEvent,
-    UserId,
+    Attachment, ByteSize, ChannelId, DocumentId, Emoji, LogicCommand, MessageAt, MessageId,
+    MessageView, MurmureCommand, MurmureEvent, RequestId, RestEvent, SegmentId, TextStyle,
+    Timestamp, UiEvent, UserId,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, TextInput,
@@ -624,7 +624,7 @@ impl MurmureView {
         }
     }
 
-    fn press_chip(&self, i: usize, emoji: String) {
+    fn press_chip(&self, i: usize, emoji: Emoji) {
         let (Some(me), Some(target)) = ((self.reads.me)(), self.target_of_row(i)) else {
             return;
         };
@@ -2262,11 +2262,11 @@ mod tests {
         let mut reacted = message(ada, 1, "hello");
         reacted.reactions = vec![
             ambre_bus::Reaction {
-                emoji: "\u{1F44D}".to_owned(),
+                emoji: ambre_bus::Emoji::from("\u{1F44D}"),
                 users: vec![ada],
             },
             ambre_bus::Reaction {
-                emoji: "\u{1F389}".to_owned(),
+                emoji: ambre_bus::Emoji::from("\u{1F389}"),
                 users: vec![me],
             },
         ];

@@ -231,6 +231,26 @@ pub struct MessageDraft {
     pub styles: Vec<StyleMark>,
 }
 
+/// One emoji a member reacts with, as the view picked it. The engine
+/// refuses a value that is not one emoji, and this type keeps the value
+/// apart from free text.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Emoji(pub String);
+
+impl Emoji {
+    /// The emoji, as its characters spell it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for Emoji {
+    fn from(text: &str) -> Self {
+        Self(text.to_owned())
+    }
+}
+
 /// The address of a blob, as the Sync worker named it: sixty-four lowercase
 /// hexadecimal characters, keyed by the document key (`ambre-spec-media.md`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -357,7 +377,7 @@ pub enum MurmureCommand {
     React {
         at: MessageAt,
         message: MessageId,
-        emoji: String,
+        emoji: Emoji,
         /// The instant the member reacted, stamped by the view.
         now: Timestamp,
     },
@@ -366,7 +386,7 @@ pub enum MurmureCommand {
     Unreact {
         at: MessageAt,
         message: MessageId,
-        emoji: String,
+        emoji: Emoji,
     },
     /// Replace the body of this session's own `message` with `draft`, and
     /// mark it edited (`MURMURE-084`). Its author, identity and reactions
@@ -566,7 +586,7 @@ impl MessageView {
 /// The members who reacted to a message with one emoji.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reaction {
-    pub emoji: String,
+    pub emoji: Emoji,
     /// Each member once, in identifier order.
     pub users: Vec<UserId>,
 }

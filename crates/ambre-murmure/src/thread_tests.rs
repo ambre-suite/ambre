@@ -522,14 +522,14 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
     let read = &replies_of(&state, thread)[0];
     assert_eq!((read.text.as_str(), read.edited), ("hello", true));
     let reacted = state
-        .react(at, reply, "\u{1F44D}", alice, NOW)
+        .react(at, reply, &ambre_bus::Emoji::from("\u{1F44D}"), alice, NOW)
         .expect("react")
         .expect("a change");
     assert!(in_thread(&reacted));
     assert_eq!(reacted.summary.kind, ActivityKind::Reaction);
     assert_eq!(replies_of(&state, thread)[0].reactions.len(), 1);
     let removed = state
-        .unreact(at, reply, "\u{1F44D}", alice)
+        .unreact(at, reply, &ambre_bus::Emoji::from("\u{1F44D}"), alice)
         .expect("unreact")
         .expect("a change");
     assert!(in_thread(&removed));
@@ -545,7 +545,13 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
     // The root itself still changes in its segment.
     assert!(
         state
-            .react(state.active_id(), root, "\u{1F44D}", alice, NOW)
+            .react(
+                state.active_id(),
+                root,
+                &ambre_bus::Emoji::from("\u{1F44D}"),
+                alice,
+                NOW
+            )
             .expect("react")
             .is_some_and(|sent| sent.document == state.active_id().document_id())
     );
@@ -553,7 +559,7 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
         state.react(
             MessageAt::Thread(MessageId::new()),
             reply,
-            "\u{1F44D}",
+            &ambre_bus::Emoji::from("\u{1F44D}"),
             alice,
             NOW
         ),
@@ -576,7 +582,13 @@ fn another_member_reacts_to_a_reply_and_never_edits_it() {
     let reply = replies_of(&bob, thread)[0].id;
     let at = MessageAt::Thread(root);
     let reacted = bob
-        .react(at, reply, "\u{1F389}", bob_user, NOW)
+        .react(
+            at,
+            reply,
+            &ambre_bus::Emoji::from("\u{1F389}"),
+            bob_user,
+            NOW,
+        )
         .expect("react")
         .expect("a change");
     alice

@@ -7,7 +7,7 @@
 //! reacting with one emoji at once write two keys, and both stay
 //! (`MURMURE-007`).
 
-use ambre_bus::Reaction;
+use ambre_bus::{Emoji, Reaction};
 use ambre_core::UserId;
 use loro::{Container, ContainerID, Index, LoroDoc, LoroMap, ValueOrContainer};
 use unicode_segmentation::UnicodeSegmentation;
@@ -22,8 +22,8 @@ const EMOJI_MAX_BYTES: usize = 64;
 ///
 /// The user comes first: a `UserId` is written without a space, so the first
 /// space ends it, whatever the emoji holds.
-pub(crate) fn key(user: UserId, emoji: &str) -> String {
-    format!("{user} {emoji}")
+pub(crate) fn key(user: UserId, emoji: &Emoji) -> String {
+    format!("{user} {}", emoji.as_str())
 }
 
 /// The member a reaction key names, `None` for a key no build writes.
@@ -48,13 +48,13 @@ pub(crate) fn read(message: &LoroMap) -> Vec<Reaction> {
         return Vec::new();
     };
     // The written identifier sorts as its bytes do.
-    let mut entries: Vec<(String, String, UserId)> = Vec::new();
+    let mut entries: Vec<(Emoji, String, UserId)> = Vec::new();
     map.for_each(|key, _| {
         let Some((written, emoji)) = key.split_once(' ') else {
             return;
         };
         if let Ok(user) = UserId::parse_str(written) {
-            entries.push((emoji.to_owned(), written.to_owned(), user));
+            entries.push((Emoji(emoji.to_owned()), written.to_owned(), user));
         }
     });
     entries.sort_unstable_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));

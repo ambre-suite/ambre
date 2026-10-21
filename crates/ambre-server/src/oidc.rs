@@ -53,7 +53,7 @@ pub type OidcClients = Arc<HashMap<String, OidcProviderState>>;
 #[derive(serde::Serialize)]
 pub struct LoginResponse {
     pub url: String,
-    pub state: String,
+    pub state: ambre_core::OidcState,
 }
 
 /// Received by `POST /auth/{provider}/callback`.
@@ -63,8 +63,8 @@ pub struct LoginResponse {
 /// Redis, exchanges the code for tokens, and creates a session.
 #[derive(serde::Deserialize)]
 pub struct CallbackRequest {
-    pub code: String,
-    pub state: String,
+    pub code: ambre_core::OidcCode,
+    pub state: ambre_core::OidcState,
 }
 
 /// Returned by `POST /auth/{provider}/callback` after successful authentication.
@@ -223,7 +223,7 @@ pub async fn login_url(
     Ok((
         LoginResponse {
             url: auth_url.to_string(),
-            state: csrf_secret,
+            state: ambre_core::OidcState::new(csrf_secret),
         },
         oidc_state,
     ))

@@ -446,11 +446,11 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             let reaction = message
                 .reactions
                 .iter()
-                .find(|r| key.ends_with(&format!(" {}", r.emoji)))?;
+                .find(|r| key.ends_with(&format!(" {}", r.emoji.as_str())))?;
             (reaction.users == [AUTHOR] && key.starts_with(&AUTHOR.to_string())).then(|| {
                 format!(
                     "message {n} has a reaction of {} bytes by the author",
-                    reaction.emoji.len()
+                    reaction.emoji.as_str().len()
                 )
             })
         }

@@ -387,7 +387,7 @@ impl<'a> Row<'a> {
 /// What the chip of `reaction` reads: the emoji, and how many members chose
 /// it.
 pub fn chip_label(reaction: &Reaction) -> String {
-    format!("{} {}", reaction.emoji, reaction.users.len())
+    format!("{} {}", reaction.emoji.as_str(), reaction.users.len())
 }
 
 /// What the chip of a file reads: its name and its size.

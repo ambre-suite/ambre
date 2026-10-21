@@ -414,7 +414,7 @@ async fn upload_leg(
         .await
         .map_err(|e| format!("upload-url: {e}"))?;
     // The presigned PUT goes straight to object storage, not to the relay.
-    http.put_sealed(&link.upload_url, blob)
+    http.put_sealed(link.upload_url.expose(), blob)
         .await
         .map_err(|e| format!("S3 PUT: {e}"))?;
     http.post_json::<_, http::WriteAnswer>(
@@ -447,7 +447,7 @@ async fn download_leg(
         .await
         .map_err(|e| format!("download-url: {e}"))?;
     let blob = http
-        .fetch_bytes(&link.download_url)
+        .fetch_bytes(link.download_url.expose())
         .await
         .map_err(|e| format!("S3 GET: {e}"))?;
     open_blob_named(&blob, content_hash, keyring).map_err(|e| format!("Open: {e}"))

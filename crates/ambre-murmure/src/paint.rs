@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
-use ambre_bus::{Attachment, MediaRef, MessageId, TextStyle, Timestamp, UserId};
+use ambre_bus::{Attachment, Emoji, MediaRef, MessageId, TextStyle, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
 use ambre_draw::{
@@ -89,7 +89,7 @@ pub struct Painted {
     pub link: Option<String>,
     /// The reaction chip a click landed on: the index of its row, and its
     /// emoji.
-    pub chip: Option<(usize, String)>,
+    pub chip: Option<(usize, Emoji)>,
     /// The file chip a click landed on: the file it fetches.
     pub file: Option<Attachment>,
     /// The files whose preview this paint drew, decoded or not. Only these
@@ -292,7 +292,7 @@ fn chip_at(
     (x, y): (f32, f32),
     width: f32,
     pics: Option<Pictured<'_>>,
-) -> Option<(usize, String)> {
+) -> Option<(usize, Emoji)> {
     let &(i, top, _) = rows
         .iter()
         .find(|&&(_, top, tall)| top <= y && y < top + tall)?;
@@ -1128,11 +1128,11 @@ pub(crate) mod tests {
         let mut reacted = message(ada, 0, "hello");
         reacted.reactions = vec![
             Reaction {
-                emoji: "\u{1F44D}".to_owned(),
+                emoji: ambre_bus::Emoji::from("\u{1F44D}"),
                 users: vec![ada],
             },
             Reaction {
-                emoji: "\u{1F389}".to_owned(),
+                emoji: ambre_bus::Emoji::from("\u{1F389}"),
                 users: vec![ada, me],
             },
         ];
@@ -1161,7 +1161,7 @@ pub(crate) mod tests {
         };
         let (surface, painted) = paint_from(shown, 600.0);
         assert!(tall(&painted) > tall(&plain), "the chips take room");
-        assert_eq!(painted.chip, Some((0, "\u{1F44D}".to_owned())));
+        assert_eq!(painted.chip, Some((0, Emoji::from("\u{1F44D}"))));
         let fills = |color: Color| -> Vec<Rect> {
             surface
                 .ops()
@@ -1349,7 +1349,7 @@ pub(crate) mod tests {
         assert_eq!(requested(&said), 1);
         let mut reacted = message(ada, 0, "ship it");
         reacted.reactions = vec![ambre_bus::Reaction {
-            emoji: "\u{1F389}".to_owned(),
+            emoji: ambre_bus::Emoji::from("\u{1F389}"),
             users: vec![ada],
         }];
         let mut chipped = MessageList::default();

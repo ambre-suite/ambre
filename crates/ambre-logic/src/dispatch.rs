@@ -2047,8 +2047,8 @@ mod tests {
             },
             RestCommand::ProviderReturn {
                 provider: "p".to_owned(),
-                code: "c".to_owned(),
-                state: "s".to_owned(),
+                code: ambre_core::OidcCode::new("c".to_owned()),
+                state: ambre_core::OidcState::new("s".to_owned()),
             },
         ];
         for cmd in &all {

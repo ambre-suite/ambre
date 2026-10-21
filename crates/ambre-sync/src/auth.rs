@@ -295,8 +295,8 @@ impl SyncState {
         &mut self,
         id: RequestId,
         provider: String,
-        code: String,
-        state: String,
+        code: ambre_core::OidcCode,
+        state: ambre_core::OidcState,
     ) {
         tracing::info!("Sync: ProviderReturn ({provider})");
         if !is_provider_name(&provider) {
@@ -641,8 +641,8 @@ mod provider_tests {
             RequestId::next(),
             RestCommand::ProviderReturn {
                 provider: "../keys/master".into(),
-                code: "c".into(),
-                state: "s".into(),
+                code: ambre_core::OidcCode::new("c".to_owned()),
+                state: ambre_core::OidcState::new("s".to_owned()),
             },
         );
         let told: Vec<LogicEvent> = rx.try_iter().collect();

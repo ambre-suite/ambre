@@ -1408,7 +1408,7 @@ pub fn main() {
                     evt: ambre_bus::RestEvent::ProviderAddress { url, state },
                     ..
                 } => {
-                    signin::follow_address(url, state, |url| {
+                    signin::follow_address(url, state.expose(), |url| {
                         if let Some(window) = web_sys::window() {
                             let _ = window.location().set_href(url);
                         }

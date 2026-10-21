@@ -148,7 +148,7 @@ pub async fn generate_presigned_upload_url(
     key: &ambre_core::ObjectKey,
     ttl: ambre_core::Seconds,
     content_length: ambre_core::ByteSize,
-) -> Result<String, AppError> {
+) -> Result<ambre_core::PresignedUrl, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
@@ -158,7 +158,7 @@ pub async fn generate_presigned_upload_url(
         .content_length(i64::try_from(content_length.0).unwrap_or(i64::MAX))
         .presigned(config)
         .await
-        .map(|req| req.uri().to_string())
+        .map(|req| ambre_core::PresignedUrl::new(req.uri().to_string()))
         .map_err(|e| AppError::S3(format!("presigned upload URL: {e}")))
 }
 
@@ -168,7 +168,7 @@ pub async fn generate_presigned_download_url(
     bucket: &str,
     key: &ambre_core::ObjectKey,
     ttl: ambre_core::Seconds,
-) -> Result<String, AppError> {
+) -> Result<ambre_core::PresignedUrl, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
@@ -177,7 +177,7 @@ pub async fn generate_presigned_download_url(
         .key(key.as_str())
         .presigned(config)
         .await
-        .map(|req| req.uri().to_string())
+        .map(|req| ambre_core::PresignedUrl::new(req.uri().to_string()))
         .map_err(|e| AppError::S3(format!("presigned download URL: {e}")))
 }
 
@@ -733,7 +733,9 @@ mod tests {
             ambre_core::ByteSize(4096),
         )
         .await
-        .expect("presign");
+        .expect("presign")
+        .expose()
+        .to_owned();
         let lower = url.to_lowercase();
         // SigV4 lists signed headers in `X-Amz-SignedHeaders`; content-length
         // must be among them for S3 to enforce it.
@@ -761,7 +763,9 @@ mod tests {
             ambre_core::ByteSize(1),
         )
         .await
-        .expect("presign");
+        .expect("presign")
+        .expose()
+        .to_owned();
         let down = generate_presigned_download_url(
             &s3,
             "bucket",
@@ -769,7 +773,9 @@ mod tests {
             ambre_core::Seconds(day),
         )
         .await
-        .expect("presign");
+        .expect("presign")
+        .expose()
+        .to_owned();
         for url in [up, down] {
             assert!(url.contains("X-Amz-Expires=900"), "{url}");
         }
@@ -780,7 +786,9 @@ mod tests {
             ambre_core::Seconds(60),
         )
         .await
-        .expect("presign");
+        .expect("presign")
+        .expose()
+        .to_owned();
         assert!(short.contains("X-Amz-Expires=60"), "{short}");
     }
 

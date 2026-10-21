@@ -238,7 +238,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
         .react(
             segment,
             message,
-            "\u{1F44D}",
+            &ambre_bus::Emoji::from("\u{1F44D}"),
             AUTHOR,
             Timestamp(1_700_000_000_002),
         )

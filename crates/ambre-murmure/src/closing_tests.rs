@@ -363,7 +363,13 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
     };
     let moved = messages[0].id;
     let reacted = bob
-        .react(old, moved, "\u{1F44D}", bob_user, NOW)
+        .react(
+            old,
+            moved,
+            &ambre_bus::Emoji::from("\u{1F44D}"),
+            bob_user,
+            NOW,
+        )
         .expect("react")
         .expect("a reaction");
     let signer = Signer {
@@ -429,7 +435,13 @@ fn a_refused_reaction_alone_moves_nothing() {
     let old = alice.active_id();
     close_created(&mut alice);
     let reacted = alice
-        .react(old, message, "\u{1F44D}", author, NOW)
+        .react(
+            old,
+            message,
+            &ambre_bus::Emoji::from("\u{1F44D}"),
+            author,
+            NOW,
+        )
         .expect("react")
         .expect("a reaction");
     let moved = alice

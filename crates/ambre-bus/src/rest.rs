@@ -445,8 +445,8 @@ pub enum RestCommand {
     /// the keys are unlocked or set up.
     ProviderReturn {
         provider: String,
-        code: String,
-        state: String,
+        code: ambre_core::OidcCode,
+        state: ambre_core::OidcState,
     },
 }
 
@@ -506,14 +506,14 @@ pub enum RestEvent {
         display_name: String,
         email: ambre_core::Email,
         exchange_pub_key: ambre_core::PublicKey,
-        fingerprint: String,
+        fingerprint: ambre_core::KeyFingerprint,
     },
     /// The answer to `FetchMemberKey`: the key the relay serves for that
     /// user, and its fingerprint, for the same comparison with the pin.
     MemberKey {
         user_id: UserId,
         exchange_pub_key: ambre_core::PublicKey,
-        fingerprint: String,
+        fingerprint: ambre_core::KeyFingerprint,
     },
     InviteSent {
         document_id: DocumentId,
@@ -611,7 +611,7 @@ pub enum RestEvent {
     /// The provider's authorization address, and the `state` the relay bound to it.
     ProviderAddress {
         url: String,
-        state: String,
+        state: ambre_core::OidcState,
     },
     /// The provider return was exchanged. The tokens stayed on the Sync worker;
     /// `keys_stored` says whether the next step is an unlock or a setup.

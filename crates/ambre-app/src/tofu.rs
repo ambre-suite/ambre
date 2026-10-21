@@ -47,7 +47,7 @@ pub(crate) struct TofuPrompt {
     /// sent beside the request, so Sync wraps only if it still matches.
     pub(crate) exchange_pub_key: ambre_core::PublicKey,
     /// Preformatted fingerprint (`ambre_crypto::fingerprint`); displayed verbatim.
-    pub(crate) fingerprint: String,
+    pub(crate) fingerprint: ambre_bus::KeyFingerprint,
     /// `false` = new (first contact), `true` = changed (diverged from the pin).
     pub(crate) changed: bool,
 }
@@ -200,13 +200,13 @@ pub(crate) fn TofuDialog(
                                             </p>
                                         }
                                     })}
-                                <p class="ambre-tofu-fingerprint">{p.fingerprint.clone()}</p>
+                                <p class="ambre-tofu-fingerprint">{p.fingerprint.0.clone()}</p>
                                 <button
                                     r#type="button"
                                     class="ambre-tofu-copy"
                                     on:click=move |_| {
                                         if let Some(win) = web_sys::window() {
-                                            let _ = win.navigator().clipboard().write_text(&fp_copy);
+                                            let _ = win.navigator().clipboard().write_text(fp_copy.as_str());
                                         }
                                     }
                                 >
@@ -269,7 +269,7 @@ mod tests {
             user_id: UserId::new(),
             display_name: "Bob".to_owned(),
             exchange_pub_key: ambre_core::PublicKey::from_array([byte; 32]),
-            fingerprint: "ABCD EFGH".to_owned(),
+            fingerprint: ambre_bus::KeyFingerprint("ABCD EFGH".to_owned()),
             changed: false,
         }
     }

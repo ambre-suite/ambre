@@ -184,7 +184,7 @@ pub async fn oidc_login(
     // credentials were already handed over. Surface the failure now instead.
     redis_ops::oidc_state_set(
         &state.redis,
-        &login_resp.state,
+        login_resp.state.expose(),
         auth_state.pkce_verifier_secret.expose(),
         &auth_state.nonce.secret().clone(),
     )
@@ -210,7 +210,8 @@ pub async fn oidc_callback(
         .get(&provider)
         .ok_or(AppError::UnknownProvider(provider.clone()))?;
 
-    let (pkce_verifier, nonce_str) = redis_ops::oidc_state_take(&state.redis, &req.state).await?;
+    let (pkce_verifier, nonce_str) =
+        redis_ops::oidc_state_take(&state.redis, req.state.expose()).await?;
 
     use openidconnect::Nonce;
     let stored_state = oidc::OidcAuthState {
@@ -218,7 +219,8 @@ pub async fn oidc_callback(
         nonce: Nonce::new(nonce_str),
     };
 
-    let claims = oidc::exchange_code(provider_state, req.code, &stored_state).await?;
+    let claims =
+        oidc::exchange_code(provider_state, req.code.expose().to_owned(), &stored_state).await?;
 
     let oidc_subject = claims.subject().to_string();
     // Reject an unverified email. It is the resolution key for document sharing

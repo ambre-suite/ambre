@@ -239,7 +239,13 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
     assert_eq!(alice.lease_to_ask(at(1)), None, "nothing left to finalize");
     // A final segment takes no operation past its finalization (`MURMURE-012`).
     assert!(matches!(
-        alice.react(closing, before[0].id, "\u{1F44D}", UserId::new(), at(1)),
+        alice.react(
+            closing,
+            before[0].id,
+            &ambre_bus::Emoji::from("\u{1F44D}"),
+            UserId::new(),
+            at(1)
+        ),
         Err(crate::MurmureError::Final(_))
     ));
 

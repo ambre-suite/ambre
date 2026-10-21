@@ -1162,7 +1162,7 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
         }] if *channel_id == direct
             && *at == MessageAt::Segment(segment)
             && *m == message
-            && emoji == "\u{1F680}"
+            && emoji.as_str() == "\u{1F680}"
             && *t == now
     ));
 

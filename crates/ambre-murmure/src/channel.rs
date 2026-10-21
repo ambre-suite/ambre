@@ -9,9 +9,9 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    ActivityKind, ActivitySummary, Attachment, ChannelMatches, MediaRef, Mention, MentionCount,
-    MentionTarget, MessageAt, MessageDraft, MessageView, MurmureEvent, Notice, SearchMatch,
-    StyleMark, ThreadHead, Timestamp, UnreadCount, Unreadable,
+    ActivityKind, ActivitySummary, Attachment, ChannelMatches, Emoji, MediaRef, Mention,
+    MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureEvent, Notice,
+    SearchMatch, StyleMark, ThreadHead, Timestamp, UnreadCount, Unreadable,
 };
 use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
 use loro::{
@@ -1043,12 +1043,12 @@ impl ChannelState {
         &mut self,
         at: impl Into<MessageAt>,
         message: MessageId,
-        emoji: &str,
+        emoji: &Emoji,
         user: UserId,
         now: Timestamp,
     ) -> Result<Option<Sent>, MurmureError> {
         let at = at.into();
-        if !reaction::is_emoji(emoji) {
+        if !reaction::is_emoji(emoji.as_str()) {
             return Err(MurmureError::NotEmoji);
         }
         let key = reaction::key(user, emoji);
@@ -1070,7 +1070,7 @@ impl ChannelState {
         &mut self,
         at: impl Into<MessageAt>,
         message: MessageId,
-        emoji: &str,
+        emoji: &Emoji,
         user: UserId,
     ) -> Result<Option<Sent>, MurmureError> {
         let at = at.into();

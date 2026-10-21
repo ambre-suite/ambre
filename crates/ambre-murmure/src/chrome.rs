@@ -519,7 +519,7 @@ impl MurmureRelay {
                 self.picked_emoji.set(Some((in_thread, emoji.to_owned())));
                 None
             }
-            Picking::Reaction(pending) => Some(pending.command(emoji.to_owned(), now)),
+            Picking::Reaction(pending) => Some(pending.command(ambre_bus::Emoji::from(emoji), now)),
         }
     }
 

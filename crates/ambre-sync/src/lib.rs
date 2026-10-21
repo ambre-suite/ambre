@@ -477,7 +477,7 @@ enum SyncEvent {
         display_name: String,
         email: ambre_core::Email,
         exchange_pub_key: ambre_core::PublicKey,
-        fingerprint: String,
+        fingerprint: ambre_core::KeyFingerprint,
     },
     /// The key a user the client named is served with, and its fingerprint.
     /// Nothing is wrapped: the Main thread compares it with the pin first.
@@ -485,7 +485,7 @@ enum SyncEvent {
         id: RequestId,
         user_id: UserId,
         exchange_pub_key: ambre_core::PublicKey,
-        fingerprint: String,
+        fingerprint: ambre_core::KeyFingerprint,
     },
     /// Invite completed: the invitee's DocumentKey was wrapped via ECDH and the
     /// server accepted the share request.

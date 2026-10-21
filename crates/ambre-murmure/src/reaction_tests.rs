@@ -55,7 +55,13 @@ impl Member {
 
     fn react(&mut self, message: MessageId, emoji: &str) -> Sent {
         self.state
-            .react(self.segment(), message, emoji, self.user, NOW)
+            .react(
+                self.segment(),
+                message,
+                &ambre_bus::Emoji::from(emoji),
+                self.user,
+                NOW,
+            )
             .expect("react")
             .expect("a new reaction writes")
     }
@@ -105,7 +111,7 @@ fn open_from(state: &ChannelState) -> ChannelState {
 fn one(emoji: &str, mut users: Vec<UserId>) -> Reaction {
     users.sort_by_key(ToString::to_string);
     Reaction {
-        emoji: emoji.to_owned(),
+        emoji: ambre_bus::Emoji(emoji.to_owned()),
         users,
     }
 }
@@ -135,14 +141,26 @@ fn a_reaction_adds_one_entry_and_leaves_the_message() {
     );
     assert!(
         bob.state
-            .react(bob.segment(), message, THUMB, bob.user, NOW)
+            .react(
+                bob.segment(),
+                message,
+                &ambre_bus::Emoji::from(THUMB),
+                bob.user,
+                NOW
+            )
             .expect("react")
             .is_none(),
         "a reaction already there writes nothing"
     );
     assert_eq!(
         bob.state
-            .react(bob.segment(), message, "ok", bob.user, NOW)
+            .react(
+                bob.segment(),
+                message,
+                &ambre_bus::Emoji::from("ok"),
+                bob.user,
+                NOW
+            )
             .map(|_| ()),
         Err(MurmureError::NotEmoji)
     );
@@ -179,7 +197,12 @@ fn removing_a_reaction_deletes_only_ones_own() {
 
     let removed = alice
         .state
-        .unreact(alice.segment(), message, THUMB, alice.user)
+        .unreact(
+            alice.segment(),
+            message,
+            &ambre_bus::Emoji::from(THUMB),
+            alice.user,
+        )
         .expect("unreact")
         .expect("an entry to remove");
     assert_eq!(removed.summary.kind, ActivityKind::Reaction);
@@ -191,7 +214,12 @@ fn removing_a_reaction_deletes_only_ones_own() {
     assert!(
         alice
             .state
-            .unreact(alice.segment(), message, THUMB, alice.user)
+            .unreact(
+                alice.segment(),
+                message,
+                &ambre_bus::Emoji::from(THUMB),
+                alice.user
+            )
             .expect("unreact")
             .is_none(),
         "no entry of hers is left, so nothing travels"
@@ -251,7 +279,7 @@ fn a_reaction_under_another_members_key_is_refused() {
         .doc(bob.segment().document_id())
         .expect("held")
         .oplog_vv();
-    let forged = crate::reaction::key(alice.user, "\u{1F44E}");
+    let forged = crate::reaction::key(alice.user, &ambre_bus::Emoji::from("\u{1F44E}"));
     reactions_map(&bob).insert(&forged, 1_i64).expect("write");
     let inserted = written_since(&bob, &before);
     let removal_from = bob
@@ -260,7 +288,10 @@ fn a_reaction_under_another_members_key_is_refused() {
         .expect("held")
         .oplog_vv();
     reactions_map(&bob)
-        .delete(&crate::reaction::key(alice.user, THUMB))
+        .delete(&crate::reaction::key(
+            alice.user,
+            &ambre_bus::Emoji::from(THUMB),
+        ))
         .expect("delete");
     let removed = written_since(&bob, &removal_from);
 

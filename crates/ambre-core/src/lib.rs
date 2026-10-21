@@ -26,11 +26,13 @@
 pub mod activity;
 pub mod authorship;
 pub mod channel_kind;
+pub mod credential;
 pub mod doc_type;
 pub mod docfile;
 pub mod email;
 pub mod encoded;
 pub mod error;
+pub mod fingerprint;
 /// Fixture machinery (`ambre-spec-fixtures.md`). Behind the non-default
 /// `fixtures` feature so no client build can reach it (I4).
 #[cfg(feature = "fixtures")]
@@ -61,6 +63,7 @@ pub mod version;
 // Re-export the main types for convenient use.
 pub use authorship::{PeerEntry, SessionNonce};
 pub use channel_kind::ChannelDocumentKind;
+pub use credential::{OidcCode, OidcState, PresignedUrl};
 pub use doc_type::DocType;
 pub use docfile::{
     AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerKind, DocFileError,
@@ -74,6 +77,7 @@ pub use encoded::{
     WrappedDocKey, WrappedMasterKey,
 };
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
+pub use fingerprint::KeyFingerprint;
 #[cfg(feature = "fixtures")]
 pub use fixtures::{
     FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape, ShapeBody, fixture_peer_count,

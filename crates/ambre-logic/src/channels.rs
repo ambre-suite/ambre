@@ -3542,13 +3542,13 @@ mod tests {
         let react = MurmureCommand::React {
             at: segment.into(),
             message,
-            emoji: "\u{1F44D}".to_owned(),
+            emoji: ambre_bus::Emoji::from("\u{1F44D}"),
             now: NOW,
         };
         let unreact = MurmureCommand::Unreact {
             at: segment.into(),
             message,
-            emoji: "\u{1F44D}".to_owned(),
+            emoji: ambre_bus::Emoji::from("\u{1F44D}"),
         };
 
         for (command, users) in [(react, vec![me]), (unreact.clone(), Vec::new())] {
@@ -5683,13 +5683,13 @@ mod tests {
             "react" => MurmureCommand::React {
                 at,
                 message: reply,
-                emoji: "\u{1F44D}".to_owned(),
+                emoji: ambre_bus::Emoji::from("\u{1F44D}"),
                 now: NOW,
             },
             "unreact" => MurmureCommand::Unreact {
                 at,
                 message: reply,
-                emoji: "\u{1F44D}".to_owned(),
+                emoji: ambre_bus::Emoji::from("\u{1F44D}"),
             },
             "edit" => MurmureCommand::EditMessage {
                 at,
