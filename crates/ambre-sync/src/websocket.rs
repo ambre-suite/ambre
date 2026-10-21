@@ -1454,7 +1454,7 @@ impl SyncState {
                 document_id,
                 key_id,
                 clock,
-            } => self.handle_key_refused(document_id, key_id, clock.0),
+            } => self.handle_key_refused(document_id, key_id, clock),
 
             WsServerMsg::ClockRefused {
                 document_id,
@@ -1467,7 +1467,7 @@ impl SyncState {
                     clock.0,
                     expected.0
                 );
-                self.handle_clock_refused(document_id, expected.0, signature);
+                self.handle_clock_refused(document_id, expected, signature);
             }
 
             WsServerMsg::DeltaRefused {
@@ -1614,7 +1614,7 @@ impl SyncState {
         &mut self,
         document_id: DocumentId,
         key_id: KeyId,
-        clock: u64,
+        clock: Clock,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;

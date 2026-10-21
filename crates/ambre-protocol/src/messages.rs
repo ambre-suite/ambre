@@ -35,6 +35,18 @@ pub use ambre_core::Seq;
 pub struct Clock(pub u64);
 
 impl Clock {
+    /// The clock just after this one: the next update its author seals.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+
+    /// The clock just before this one, zero at the start.
+    #[must_use]
+    pub const fn before(self) -> Self {
+        Self(self.0.saturating_sub(1))
+    }
+
     /// The clock as a Postgres `BIGINT` stores it, saturating at `i64::MAX`.
     pub fn to_i64_saturating(self) -> i64 {
         i64::try_from(self.0).unwrap_or(i64::MAX)

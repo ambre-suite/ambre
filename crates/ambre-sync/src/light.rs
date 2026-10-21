@@ -528,7 +528,7 @@ mod tests {
         let echo = update(document_id, snapshot, &doc_key, None);
         if let Some(doc) = state.documents.get_mut(&document_id) {
             doc.rekey.record_sent(crate::rekey::SentFrame {
-                clock: 1,
+                clock: ambre_protocol::messages::Clock(1),
                 key_id: doc_key.id(),
                 signature: echo.signature,
                 payload: b"edit".to_vec(),

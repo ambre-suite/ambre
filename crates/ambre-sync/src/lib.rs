@@ -643,7 +643,7 @@ struct SyncDocumentState {
     /// Snapshot this document's updates are currently based on. Placeholder
     /// until the snapshot flow lands; carried in every `UpdatePublicData`.
     current_snapshot_id: SnapshotId,
-    local_clock: u64,
+    local_clock: Clock,
     /// Monotonic counter for outbound ephemerals (anti-replay at the receiver).
     ephemeral_counter: u64,
     /// Highest server-assigned `seq` seen for this document. Used as
@@ -653,7 +653,7 @@ struct SyncDocumentState {
     /// quarantine. A reconnect replay can overlap a broadcast received during
     /// the same round trip, and the second copy is dropped here (`SYNC-087`).
     /// Bounded by [`APPLIED_WINDOW`].
-    ingested: BTreeSet<u64>,
+    ingested: BTreeSet<Seq>,
     /// Snapshots whose contents the Logic thread already holds. An inbound
     /// `Update` whose parent `snapshot_id` is here can be applied immediately;
     /// otherwise it is quarantined under that id.
@@ -770,7 +770,7 @@ impl SyncDocumentState {
             pending_updates: Vec::new(),
             pending_uploads: Vec::new(),
             current_snapshot_id,
-            local_clock: 0,
+            local_clock: Clock(0),
             ephemeral_counter: 0,
             last_seq: Seq(0),
             ingested: BTreeSet::new(),
@@ -797,7 +797,7 @@ impl SyncDocumentState {
     /// The window keeps the latest [`APPLIED_WINDOW`] numbers; a reconnect
     /// overlap is far shorter than that.
     fn first_arrival(&mut self, seq: Seq) -> bool {
-        if !self.ingested.insert(seq.0) {
+        if !self.ingested.insert(seq) {
             return false;
         }
         if self.ingested.len() > APPLIED_WINDOW {
