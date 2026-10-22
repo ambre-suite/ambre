@@ -44,6 +44,16 @@ pub use crate::view::column::Viewport;
 /// keystroke (`features/ambre-spec-prose-word-count.md section 4`).
 pub const RECOUNT_DELAY_MS: f64 = 500.0;
 
+/// A code-point offset of a block as the layout in force counts it, without
+/// the text the view drafted since (`PROSE-UI-201`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LaidOffset(pub u32);
+
+/// A code-point offset of a block as the document counts it, the text the
+/// view drafted included. A caret and a selection end count this way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DocOffset(pub u32);
+
 /// What this view drew and the layout in force does not carry yet: the text
 /// typed and the text deleted. It is held apart from the document, never
 /// written into a second copy of it.
@@ -288,25 +298,29 @@ impl DraftBuffer {
     /// An offset of the layout in force, as the view's text counts it. An
     /// offset at an insertion stays before it.
     #[must_use]
-    pub fn to_doc(&self, block: BlockId, laid: u32) -> u32 {
-        self.of(block).fold(laid, |at, edit| match &edit.change {
+    pub fn to_doc(&self, block: BlockId, laid: LaidOffset) -> DocOffset {
+        DocOffset(self.of(block).fold(laid.0, |at, edit| match &edit.change {
             Change::Insert(text) if at > edit.at => at.saturating_add(chars(text)),
             Change::Delete(len) if at > edit.at => at.saturating_sub(*len).max(edit.at),
             _ => at,
-        })
+        }))
     }
 
     /// An offset of the view's text, as the layout in force counts it.
     /// Inside text the layout lacks, it lands where that text goes.
     #[must_use]
-    pub fn to_laid(&self, block: BlockId, offset: u32) -> u32 {
-        self.of(block)
-            .rev()
-            .fold(offset, |at, edit| match &edit.change {
-                Change::Insert(text) if at > edit.at => at.saturating_sub(chars(text)).max(edit.at),
-                Change::Delete(len) if at > edit.at => at.saturating_add(*len),
-                _ => at,
-            })
+    pub fn to_laid(&self, block: BlockId, offset: DocOffset) -> LaidOffset {
+        LaidOffset(
+            self.of(block)
+                .rev()
+                .fold(offset.0, |at, edit| match &edit.change {
+                    Change::Insert(text) if at > edit.at => {
+                        at.saturating_sub(chars(text)).max(edit.at)
+                    }
+                    Change::Delete(len) if at > edit.at => at.saturating_add(*len),
+                    _ => at,
+                }),
+        )
     }
 
     pub fn clear(&mut self) {
@@ -1087,8 +1101,8 @@ mod tests {
         assert_eq!(draft.delta(block), 3);
         assert_eq!(draft.text_of(other, "ab"), "ab");
         // An offset of the laid text, and back.
-        assert_eq!(draft.to_doc(block, 1), 4);
-        assert_eq!(draft.to_laid(block, 4), 1);
+        assert_eq!(draft.to_doc(block, LaidOffset(1)), DocOffset(4));
+        assert_eq!(draft.to_laid(block, DocOffset(4)), LaidOffset(1));
     }
 
     #[test]

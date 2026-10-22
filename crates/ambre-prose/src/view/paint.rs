@@ -14,7 +14,7 @@ use crate::events::{BlockId, CursorPosition, block_id};
 use crate::layout::measure::{EffectiveStyle, shape_draft};
 use crate::layout::place::NOTE_SEPARATOR_PX;
 use crate::layout::run::{ParleyRunData, ShapedRun, TableShape};
-use crate::ui::ProseUiState;
+use crate::ui::{DocOffset, ProseUiState};
 use crate::view::cache::RunKey;
 use crate::view::hit::{Fragment, cell_frame};
 pub use crate::view::walk::PagePalette;
@@ -133,7 +133,7 @@ impl ProseUiState {
             .cursor
             .filter(|_| !self.composing.is_empty())
             .map(|cursor| {
-                let at = self.to_laid(cursor.block_id, cursor.offset);
+                let at = self.to_laid(cursor.block_id, DocOffset(cursor.offset)).0;
                 (cursor.block_id, at, self.composing.clone())
             });
         let kept = self.compose_shape.take();
@@ -543,7 +543,7 @@ impl ProseUiState {
                         .is_some_and(|split| split.block == id && split.new_block.is_none()))
             })
             .map(|cursor| {
-                let laid = self.to_laid(id, cursor.offset);
+                let laid = self.to_laid(id, DocOffset(cursor.offset)).0;
                 (
                     data.line_of(laid, self.caret_upstream),
                     data.caret_box_at(laid, self.caret_upstream),

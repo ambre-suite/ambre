@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-008` | `INV` | Hit-testing MUST be the exact inverse of the drawn layout, under zoom and scroll. | this spec section 2 | `ambre_prose::input_tests::a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll` | none | verified |
+| `PROSE-UI-008` | `INV` | Hit-testing MUST be the exact inverse of the drawn layout, under zoom and scroll. | this spec section 2 | `ambre_prose::input_tests::a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll`; `::the_hit_test_answers_a_document_offset_while_drafts_wait` | none | verified |
 | `PROSE-UI-031` | `INV` | Hit-testing MUST read the shaped runs alone: a block that was never painted MUST resolve like a painted one. | this spec section 2 | `ambre_prose::input_tests::a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll` | none | verified |
 | `PROSE-UI-039` | `INV` | A selection MUST be valid with its end before its start. | this spec section 2 | `ambre_prose::input_tests::a_backwards_selection_is_read_in_order` | none | verified |
 | `PROSE-UI-151` | `INV` | Every reader of a selection MUST order its two ends before it uses them: a backwards selection MUST NOT reach a caller as it is held. | this spec section 2 | `ambre_prose::input_tests::a_backwards_selection_is_read_in_order` | none | verified |
@@ -40,7 +40,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-032` | `POST` | A block that holds no text MUST resolve to one of its two edges, chosen by the side the pointer is on. | this spec section 2 | `ambre_prose::input_tests::a_block_without_text_resolves_to_the_edge_on_the_pointers_side` | none | verified |
 | `PROSE-UI-154` | `POST` | A press that does not extend MUST collapse the selection to the caret it places. | this spec section 2 | `ambre_prose::input_tests::a_press_places_the_caret_and_collapses_the_selection` | none | verified |
 | `PROSE-UI-155` | `POST` | A second press in place MUST select the word under the pointer. | this spec section 2 | `ambre_prose::input_tests::a_second_press_selects_the_word_and_a_third_the_paragraph` | none | verified |
-| `PROSE-UI-171` | `POST` | A third press in place MUST select the paragraph the word sits in. | this spec section 2 | `ambre_prose::input_tests::a_second_press_selects_the_word_and_a_third_the_paragraph` | none | verified |
+| `PROSE-UI-171` | `POST` | A third press in place MUST select the paragraph the word sits in. | this spec section 2 | `ambre_prose::input_tests::a_second_press_selects_the_word_and_a_third_the_paragraph`; `::a_third_press_selects_the_text_drafted_at_the_blocks_end` | none | verified |
 | `PROSE-UI-072` | `POST` | A press on a document holding no block MUST place the caret in a block created through the command path, never in a locally invented one. | this spec section 2; `PROSE-027` | `ambre_prose::input_tests::a_press_on_a_document_with_no_block_asks_for_one` | none | verified |
 | `PROSE-UI-156` | `FAIL` | A press on a layout carrying no page at all MUST resolve to no position, and the caret MUST stay where it was until a block exists to hold it. | this spec section 2 | `ambre_prose::input_tests::a_press_on_a_layout_with_no_page_leaves_the_caret` | none | verified |
 | `PROSE-UI-157` | `FRAME` | Placing the caret with a press MUST NOT shape a block and MUST NOT scroll the column: what the press resolved is already on screen. | this spec section 2 | `ambre_prose::input_tests::a_press_places_the_caret_and_collapses_the_selection` | none | verified |
@@ -82,7 +82,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-167` | `POST` | Selecting the whole document MUST set the anchor at the start of the first block and the moving end at the end of the last. | this spec section 2 | `ambre_prose::input_tests::select_all_spans_the_document_and_keeps_the_window` | none | verified |
+| `PROSE-UI-167` | `POST` | Selecting the whole document MUST set the anchor at the start of the first block and the moving end at the end of the last. | this spec section 2 | `ambre_prose::input_tests::select_all_spans_the_document_and_keeps_the_window`; `::a_third_press_selects_the_text_drafted_at_the_blocks_end` | none | verified |
 | `PROSE-UI-168` | `FRAME` | Selecting the whole document MUST NOT change the scroll offset: the reader stays on the page they were on. | this spec section 2 | `ambre_prose::input_tests::select_all_spans_the_document_and_keeps_the_window` | none | verified |
 
 ### 1.8 Press inside a link

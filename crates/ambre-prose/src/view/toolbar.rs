@@ -10,7 +10,7 @@
 use ambre_commands::CommandId;
 
 use crate::events::{ActiveMarks, ProseCommand, TriState};
-use crate::ui::ProseUiState;
+use crate::ui::{DocOffset, ProseUiState};
 use crate::view::caret::Spot;
 
 /// What the format bar shows, rebuilt on every frame from the selection.
@@ -126,9 +126,9 @@ impl ProseUiState {
         ((start, start_off), (end, end_off)): (Spot, Spot),
     ) -> Option<(f32, f32)> {
         let run = self.run_of(start)?;
-        let from = self.to_laid(start, start_off);
+        let from = self.to_laid(start, DocOffset(start_off)).0;
         let to = if start == end {
-            self.to_laid(end, end_off)
+            self.to_laid(end, DocOffset(end_off)).0
         } else {
             run.len()
         };

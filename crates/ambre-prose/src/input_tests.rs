@@ -585,6 +585,37 @@ fn a_second_press_selects_the_word_and_a_third_the_paragraph() {
     assert_eq!(rig.ui.selection(), None);
 }
 
+/// `PROSE-UI-171`, `PROSE-UI-167`: text drafted at a block's end waits for
+/// the layout. It is inside the paragraph a third press selects, and inside
+/// the whole document.
+#[test]
+fn a_third_press_selects_the_text_drafted_at_the_blocks_end() {
+    let mut rig = Rig::new(&["hello brave world"]);
+    let block = rig.blocks()[0];
+    rig.ui.set_caret((block, 17));
+    rig.type_text("!!");
+    let point = rig.point_of(block, 8);
+    for at in [0.0, 100.0, 200.0] {
+        rig.press(point, false, ambre_core::PageTime(at));
+    }
+    assert_eq!(rig.ui.selection(), Some(((block, 0), (block, 19))));
+    rig.ui.select_all();
+    assert_eq!(rig.ui.selection().map(|(_, end)| end), Some((block, 19)));
+}
+
+/// `PROSE-UI-008`: the shared hit-test answers a document
+/// offset while text drafted before the point waits for the layout.
+#[test]
+fn the_hit_test_answers_a_document_offset_while_drafts_wait() {
+    let mut rig = Rig::new(&["hello brave world"]);
+    let block = rig.blocks()[0];
+    let (x, y) = rig.point_of(block, 8);
+    rig.ui.set_caret((block, 0));
+    rig.type_text("ab");
+    let hit = rig.ui.hit_test(f64::from(x), f64::from(y));
+    assert_eq!(hit, Some((block, 10)));
+}
+
 /// `PROSE-UI-072`: a press on a document holding no block asks for one, and
 /// the caret goes to it once a layout carries it.
 #[test]

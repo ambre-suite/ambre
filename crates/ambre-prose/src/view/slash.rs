@@ -7,7 +7,7 @@
 //! was typed after it, and writes none of that (`PROSE-UI-087`).
 
 use crate::events::{BlockInit, BlockType, ListStyle, OrderedStyle, ProseCommand, tree_id};
-use crate::ui::ProseUiState;
+use crate::ui::{DocOffset, ProseUiState};
 use crate::view::caret::Spot;
 
 /// The rows and columns of the table the menu inserts.
@@ -226,7 +226,7 @@ impl ProseUiState {
     /// The bottom of the line holding a place, on the canvas.
     fn under(&self, (block, offset): Spot) -> Option<(f32, f32)> {
         let run = self.run_of(block)?;
-        let caret = run.caret_box_at(self.to_laid(block, offset), false);
+        let caret = run.caret_box_at(self.to_laid(block, DocOffset(offset)).0, false);
         let (x, y0, y1) = (caret.x0 as f32, caret.y0 as f32, caret.y1 as f32);
         let (page, piece) = self.fragment_at(block, y0)?;
         Some(self.to_screen(block, page, piece, x, y1))

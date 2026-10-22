@@ -11,7 +11,7 @@ use loro::TreeID;
 use crate::events::{BlockId, block_id, tree_id};
 use crate::layout::place::BlockLayout;
 use crate::layout::run::{CellShape, TableShape};
-use crate::ui::ProseUiState;
+use crate::ui::{DocOffset, LaidOffset, ProseUiState};
 use crate::view::column::DocPos;
 use ambre_bus::app::prose::VAlign;
 
@@ -59,9 +59,30 @@ pub(crate) fn cell_frame(table: &TableShape, cell: &CellShape) -> Option<CellFra
     })
 }
 
+/// The offset a hit reads off the run drawn under the point.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HitOffset {
+    /// Read off a provisional run, which holds the draft: a document offset.
+    Drawn(DocOffset),
+    /// Read off the run of the layout in force, which lacks the draft.
+    Laid(LaidOffset),
+}
+
+impl HitOffset {
+    /// The offset read off the run drawn for `block`, in the space that run
+    /// counts.
+    fn of(ui: &ProseUiState, block: BlockId, offset: u32) -> Self {
+        if ui.provisional_run(block).is_some() {
+            Self::Drawn(DocOffset(offset))
+        } else {
+            Self::Laid(LaidOffset(offset))
+        }
+    }
+}
+
 /// The block and the offset under `(x, y)` in `table`, both from its
-/// top-left corner, and whether the run hit is provisional.
-fn cell_hit(ui: &ProseUiState, table: &TableShape, x: f32, y: f32) -> Option<(BlockId, u32, bool)> {
+/// top-left corner.
+fn cell_hit(ui: &ProseUiState, table: &TableShape, x: f32, y: f32) -> Option<(BlockId, HitOffset)> {
     let (cell, frame) = table.cells.iter().find_map(|cell| {
         let frame = cell_frame(table, cell)?;
         (x >= frame.x0 && x < frame.x1 && y >= frame.y0 && y < frame.y1).then_some((cell, frame))
@@ -78,7 +99,7 @@ fn cell_hit(ui: &ProseUiState, table: &TableShape, x: f32, y: f32) -> Option<(Bl
     let data = run.data();
     let x = x - frame.text_x - data.indent_px();
     let y = (y - top).clamp(0.0, data.height().max(0.0));
-    Some((id, data.offset_at(x, y), ui.provisional_run(id).is_some()))
+    Some((id, HitOffset::of(ui, id, data.offset_at(x, y))))
 }
 
 /// The fragment of `block` on `page`, or `None` when the block shows nothing
@@ -130,8 +151,8 @@ impl HitTest for ProseUiState {
     type Target = (BlockId, u32);
 
     fn hit_test(&self, x: f64, y: f64) -> Option<(BlockId, u32)> {
-        self.hit(x as f32, y as f32)
-            .map(|(block, offset, _)| (block, offset))
+        let (block, offset) = self.hit(x as f32, y as f32)?;
+        Some((block, self.doc_of_hit(block, offset).0))
     }
 }
 
@@ -240,13 +261,20 @@ impl ProseUiState {
         self.shaped.blocks_on(page)
     }
 
-    /// The block and the offset under a canvas point, and whether the offset
-    /// was read off a provisional run. [`HitTest`] gives the first two. A
-    /// provisional offset counts the document's code points already.
+    /// The document offset a hit on `block` names.
+    pub(crate) fn doc_of_hit(&self, block: BlockId, offset: HitOffset) -> DocOffset {
+        match offset {
+            HitOffset::Drawn(doc) => doc,
+            HitOffset::Laid(laid) => self.to_doc(block, laid),
+        }
+    }
+
+    /// The block and the offset under a canvas point, tagged with the run it
+    /// was read off. [`HitTest`] gives it as a document offset.
     ///
     /// A point in the paragraph a split opens lands in it once the document
     /// has named it, before a layout carries it (`PROSE-UI-214`).
-    pub(crate) fn hit(&self, x_px: f32, y_px: f32) -> Option<(BlockId, u32, bool)> {
+    pub(crate) fn hit(&self, x_px: f32, y_px: f32) -> Option<(BlockId, HitOffset)> {
         let DocPos::OnPage {
             page,
             x_in_page,
@@ -258,8 +286,7 @@ impl ProseUiState {
         // A header, a footer or a note answers like body text (`PROSE-UI-033`,
         // `PROSE-UI-187`).
         if let Some((block, offset)) = self.band_hit(page, x_in_page, y_in_page) {
-            let provisional = self.provisional_run(block).is_some();
-            return Some((block, offset, provisional));
+            return Some((block, HitOffset::of(self, block, offset)));
         }
         let layout = &self.shaped.layout;
         let y_body = y_in_page - layout.body_top_px();
@@ -273,7 +300,10 @@ impl ProseUiState {
         {
             let run = ghost.run.data();
             let x = x_in_page - layout.margin_left_px - run.indent_px();
-            return Some((new_block, run.offset_at(x, y_body - at.top), true));
+            return Some((
+                new_block,
+                HitOffset::Drawn(DocOffset(run.offset_at(x, y_body - at.top))),
+            ));
         }
         let mut chosen: Option<&crate::view::provisional::Piece> = None;
         for piece in &pieces {
@@ -306,7 +336,12 @@ impl ProseUiState {
             }
             None => 0,
         };
-        Some((block_id(block.block_id), offset, chosen.provisional))
+        let offset = if chosen.provisional {
+            HitOffset::Drawn(DocOffset(offset))
+        } else {
+            HitOffset::Laid(LaidOffset(offset))
+        };
+        Some((block_id(block.block_id), offset))
     }
 }
 

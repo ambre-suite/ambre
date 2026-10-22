@@ -9,7 +9,8 @@ use ambre_draw::kinetic::EdgeSpeed;
 
 use crate::events::{BlockId, CursorPosition, block_id, tree_id};
 use crate::layout::run::ParleyRunData;
-use crate::ui::ProseUiState;
+use crate::ui::{DocOffset, LaidOffset, ProseUiState};
+use crate::view::hit::HitOffset;
 
 /// A walk of the caret with the keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,17 +90,17 @@ impl ProseUiState {
     /// A document offset, as the run [`Self::run_of`] gives counts it. A laid
     /// run lacks the draft, so the draft is taken out; a provisional one
     /// holds it.
-    pub(crate) fn to_laid(&self, block: BlockId, offset: u32) -> u32 {
+    pub(crate) fn to_laid(&self, block: BlockId, offset: DocOffset) -> LaidOffset {
         if self.provisional_run(block).is_some() {
-            return offset;
+            return LaidOffset(offset.0);
         }
         self.draft.to_laid(block, offset)
     }
 
     /// An offset of the run [`Self::run_of`] gives, as the document counts it.
-    pub(crate) fn to_doc(&self, block: BlockId, laid: u32) -> u32 {
+    pub(crate) fn to_doc(&self, block: BlockId, laid: LaidOffset) -> DocOffset {
         if self.provisional_run(block).is_some() {
-            return laid;
+            return DocOffset(laid.0);
         }
         self.draft.to_doc(block, laid)
     }
@@ -132,7 +133,7 @@ impl ProseUiState {
             return;
         };
         let block = cursor.block_id;
-        let laid = self.to_laid(block, cursor.offset);
+        let laid = self.to_laid(block, DocOffset(cursor.offset)).0;
         let upstream = self.caret_upstream;
         let vertical = matches!(
             direction,
@@ -183,7 +184,12 @@ impl ProseUiState {
                 None => (block, laid, upstream),
             },
         };
-        let offset = self.to_doc(next.0, next.1);
+        // The document's end lies past any text drafted at the laid end.
+        let offset = if direction == Direction::DocEnd && self.text_ends().is_some() {
+            self.block_len(next.0)
+        } else {
+            self.to_doc(next.0, LaidOffset(next.1)).0
+        };
         // A document end may sit on a page the layout does not carry.
         if !self.shaped.carries(&tree_id(next.0)) {
             self.awaited_reveal = Some(next.0);
@@ -302,7 +308,7 @@ impl ProseUiState {
     pub(crate) fn caret_span(&self) -> Option<(f32, f32)> {
         let cursor = self.cursor.as_ref()?;
         if self.flow_index(&tree_id(cursor.block_id)).is_none() {
-            let laid = self.to_laid(cursor.block_id, cursor.offset);
+            let laid = self.to_laid(cursor.block_id, DocOffset(cursor.offset)).0;
             return self.band_caret_span(cursor.block_id, laid);
         }
         self.flow_span(cursor.block_id, cursor.offset, self.caret_upstream)
@@ -317,7 +323,7 @@ impl ProseUiState {
         offset: u32,
         upstream: bool,
     ) -> Option<(f32, f32)> {
-        let laid = self.to_laid(block_id, offset);
+        let laid = self.to_laid(block_id, DocOffset(offset)).0;
         let index = self.flow_index(&tree_id(block_id))?;
         let block = self.shaped.block(index)?;
         let run = self.run_of(block_id)?;
@@ -417,10 +423,11 @@ impl ProseUiState {
     /// the moving end at the end of the last (`PROSE-UI-167`). The window
     /// stays where it is (`PROSE-UI-168`).
     pub fn select_all(&mut self) {
-        let Some((first, last, len)) = self.text_ends() else {
+        let Some((first, last, _)) = self.text_ends() else {
             return;
         };
-        let end = self.to_doc(last, len);
+        // The end lies past any text drafted at the laid end.
+        let end = self.block_len(last);
         self.cursor = Some(CursorPosition {
             block_id: last,
             offset: end,
@@ -447,12 +454,9 @@ impl ProseUiState {
     /// side (`PROSE-UI-032`). That is the end of the text before it, or the
     /// start of the text after it.
     pub(crate) fn place_at(&self, x: f32, y: f32) -> Option<Spot> {
-        let (block, laid, provisional) = self.hit(x, y)?;
-        if provisional {
-            return Some((block, laid));
-        }
-        if self.run_of(block).is_some() {
-            return Some((block, self.to_doc(block, laid)));
+        let (block, offset) = self.hit(x, y)?;
+        if matches!(offset, HitOffset::Drawn(_)) || self.run_of(block).is_some() {
+            return Some((block, self.doc_of_hit(block, offset).0));
         }
         let x_in_page = (x - self.column.left_px(&self.viewport)) / self.viewport.scale();
         let middle = self.shaped.layout.margin_left_px + self.shaped.layout.content_width_px / 2.0;
@@ -541,12 +545,17 @@ impl ProseUiState {
         let Some(run) = self.run_of(spot.0) else {
             return;
         };
+        // The paragraph ends where the document's text does, past any text
+        // drafted at the laid end (`PROSE-UI-171`).
         let (start, end) = if paragraph {
-            (0, run.len())
+            (0, self.block_len(spot.0))
         } else {
-            run.word_around(self.to_laid(spot.0, spot.1))
+            let (start, end) = run.word_around(self.to_laid(spot.0, DocOffset(spot.1)).0);
+            (
+                self.to_doc(spot.0, LaidOffset(start)).0,
+                self.to_doc(spot.0, LaidOffset(end)).0,
+            )
         };
-        let (start, end) = (self.to_doc(spot.0, start), self.to_doc(spot.0, end));
         self.cursor = Some(CursorPosition {
             block_id: spot.0,
             offset: end,
