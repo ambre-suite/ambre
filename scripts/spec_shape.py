@@ -297,8 +297,11 @@ CONTAINER_CALL = re.compile(
 
 # The third way: a closed set of root names, declared with `crdt_names!` as
 # `enum Root: ContainerName { Header = "header", ... }`. Every variant is a
-# root container the crate opens, so each spelling has to be in the table.
-CONTAINER_ENUM = re.compile(r"enum\s+\w+\s*:\s*ContainerName\s*\{(.*?)^\s*\}", re.S | re.M)
+# root container the crate opens, so each spelling has to be in the table. A
+# `ContainerFamily` variant names one container per id, as `cells_{sheet}`
+# does, and its spelling is the leaf the table declares.
+CONTAINER_ENUM = re.compile(
+    r"enum\s+\w+\s*:\s*Container(?:Name|Family)\s*\{(.*?)^\s*\}", re.S | re.M)
 CONTAINER_SPELLING = re.compile(r'=\s*"([a-z_]+)"')
 
 LIST = re.compile(r"^(?:[-*+]\s|\d+\.\s)")

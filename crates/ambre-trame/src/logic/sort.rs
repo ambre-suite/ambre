@@ -179,7 +179,7 @@ impl TrameState {
         // list's evolving order so the `mov` indices stay correct.
         let list = self
             .doc
-            .get_movable_list(rows_list_name(&self.active_sheet));
+            .get_movable_list(SheetContainer::of(SheetRoot::Rows, &self.active_sheet).as_str());
         let mut cur: Vec<Uid> = self.index.row_ids().as_slice().to_vec();
         let Some(base) = sort_start.to_index() else {
             return TrameOutcome::display_only(vec![TrameEvent::SortComplete]);

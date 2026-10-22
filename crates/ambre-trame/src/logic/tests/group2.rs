@@ -721,7 +721,7 @@ fn delete_selected_rows_reaches_peers_whole() {
 /// height and its filter mark go with it, as a deleted column's width does.
 #[test]
 fn deleted_line_leaves_no_formatting() {
-    use crate::logic::schema::{col_widths_map_name, filter_hidden_map_name, row_heights_map_name};
+    use crate::logic::schema::{SheetContainer, SheetRoot};
     let mut state = TrameState::new();
     for r in 0..3 {
         state.handle_command(TrameCommand::SetCellText {
@@ -747,21 +747,22 @@ fn deleted_line_leaves_no_formatting() {
         col: Col::new(0),
         kind: FilterKind::Values(vec!["0".to_owned(), "2".to_owned()]),
     });
-    let len = |state: &TrameState, name: String| state.doc.get_map(name).len();
-    assert_eq!(len(&state, row_heights_map_name(TEST_SHEET)), 1);
-    assert_eq!(
-        len(&state, filter_hidden_map_name(TEST_SHEET)),
-        1,
-        "row 1 is hidden"
-    );
+    let len = |state: &TrameState, root: SheetRoot| {
+        state
+            .doc
+            .get_map(SheetContainer::of(root, TEST_SHEET).as_str())
+            .len()
+    };
+    assert_eq!(len(&state, SheetRoot::RowHeights), 1);
+    assert_eq!(len(&state, SheetRoot::FilterHidden), 1, "row 1 is hidden");
     state.handle_command(TrameCommand::DeleteRow { at: Row::new(1) });
-    assert_eq!(len(&state, row_heights_map_name(TEST_SHEET)), 0);
-    assert_eq!(len(&state, filter_hidden_map_name(TEST_SHEET)), 0);
+    assert_eq!(len(&state, SheetRoot::RowHeights), 0);
+    assert_eq!(len(&state, SheetRoot::FilterHidden), 0);
     state.handle_command(TrameCommand::ClearFilter {
         sheet_id: SheetId(TEST_SHEET.to_owned()),
     });
     state.handle_command(TrameCommand::DeleteColumn { at: Col::new(0) });
-    assert_eq!(len(&state, col_widths_map_name(TEST_SHEET)), 0);
+    assert_eq!(len(&state, SheetRoot::ColWidths), 0);
 }
 
 /// `MergeSelection` merges the tracked selection; `UnmergeActive` splits the

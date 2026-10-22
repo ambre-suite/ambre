@@ -4,6 +4,7 @@
 // `use super::*`.
 
 use super::*;
+use crate::logic::schema::{SheetContainer, SheetRoot};
 use crate::{BorderEdit, BorderPreset, BorderStyle, CellFormat, StylePatch};
 use ambre_core::Rgb;
 use loro::LoroValue;
@@ -36,16 +37,19 @@ fn style(state: &mut TrameState, patch: StylePatch) -> TrameOutcome {
 }
 
 /// The deep value of one map of the default sheet.
-fn deep(state: &TrameState, name: &str) -> LoroValue {
-    state.doc.get_map(name).get_deep_value()
+fn deep(state: &TrameState, root: SheetRoot) -> LoroValue {
+    state
+        .doc
+        .get_map(SheetContainer::of(root, DEFAULT).as_str())
+        .get_deep_value()
 }
 
 fn cells(state: &TrameState) -> LoroValue {
-    deep(state, &crate::logic::cells_map_name(DEFAULT))
+    deep(state, SheetRoot::Cells)
 }
 
 fn style_entries(state: &TrameState) -> usize {
-    match deep(state, &crate::logic::cellstyle_map_name(DEFAULT)) {
+    match deep(state, SheetRoot::CellStyle) {
         LoroValue::Map(m) => m.len(),
         other => panic!("the style container: {other:?}"),
     }

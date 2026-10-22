@@ -35,7 +35,7 @@ impl TrameState {
         };
         let _ = self
             .doc
-            .get_map(col_widths_map_name(&self.active_sheet))
+            .get_map(SheetContainer::of(SheetRoot::ColWidths, &self.active_sheet).as_str())
             .insert(&col_uid.to_key_part(), width as f64);
         self.doc.commit();
         self.col_widths.insert(col, width);
@@ -60,7 +60,7 @@ impl TrameState {
         };
         let _ = self
             .doc
-            .get_map(row_heights_map_name(&self.active_sheet))
+            .get_map(SheetContainer::of(SheetRoot::RowHeights, &self.active_sheet).as_str())
             .insert(&row_uid.to_key_part(), height as f64);
         self.doc.commit();
         self.row_heights.insert(row, height);
@@ -83,7 +83,7 @@ impl TrameState {
         self.row_heights.clear();
         if let LoroValue::Map(widths) = self
             .doc
-            .get_map(col_widths_map_name(&self.active_sheet))
+            .get_map(SheetContainer::of(SheetRoot::ColWidths, &self.active_sheet).as_str())
             .get_value()
         {
             for (key, value) in widths.iter() {
@@ -97,7 +97,7 @@ impl TrameState {
         }
         if let LoroValue::Map(heights) = self
             .doc
-            .get_map(row_heights_map_name(&self.active_sheet))
+            .get_map(SheetContainer::of(SheetRoot::RowHeights, &self.active_sheet).as_str())
             .get_value()
         {
             for (key, value) in heights.iter() {

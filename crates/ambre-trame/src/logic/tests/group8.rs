@@ -3,6 +3,7 @@
 // edit does to it (`TRAME-008`, `TRAME-171`, `TRAME-226` to `TRAME-230`).
 
 use super::*;
+use crate::logic::schema::{SheetContainer, SheetRoot};
 
 fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
     state.handle_command(TrameCommand::SetCellText {
@@ -174,8 +175,8 @@ fn a_delete_leaves_a_cell_reference_untouched() {
 /// naming the cell it read, so a later insert above it no longer moves it.
 #[test]
 fn a_positional_workbook_migrates_onto_its_cells() {
-    use crate::logic::schema::{SCHEMA_VERSION, cells_map_name};
-    use crate::model::cell_key;
+    use crate::logic::schema::SCHEMA_VERSION;
+    use crate::model::CellKey;
 
     let mut old = column(&["1", "7", "9"]);
     set(&mut old, 0, 1, "=SUM(A2:A3)+A2");
@@ -185,8 +186,8 @@ fn a_positional_workbook_migrates_onto_its_cells() {
         .resolve(CellPos::new(Row::new(0), Col::new(1)))
         .expect("B1 is materialized");
     old.doc
-        .get_map(cells_map_name(TEST_SHEET))
-        .insert(&cell_key(rl, cl), "=SUM(A2:A3)+A2")
+        .get_map(SheetContainer::of(SheetRoot::Cells, TEST_SHEET).as_str())
+        .insert(CellKey::of(rl, cl).as_str(), "=SUM(A2:A3)+A2")
         .expect("the positional text");
     old.doc
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())

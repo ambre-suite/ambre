@@ -274,7 +274,9 @@ impl TrameState {
             return 0;
         };
         let index = self.build_sheet_index(sheet_id);
-        let map = self.doc.get_map(cells_map_name(sheet_id));
+        let map = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str());
         let mut edits: Vec<((Uid, Uid), Option<String>)> = Vec::new();
         let mut refusals = Vec::new();
         let lines = self.sheet_lines();
@@ -282,7 +284,10 @@ impl TrameState {
             let Some((rl, cl)) = index.resolve(at) else {
                 continue;
             };
-            let raw = match map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value()) {
+            let raw = match map
+                .get(CellKey::of(rl, cl).as_str())
+                .map(|v| v.get_deep_value())
+            {
                 Some(LoroValue::String(s)) => s.to_string(),
                 _ => continue,
             };
@@ -337,10 +342,10 @@ impl TrameState {
         for ((rl, cl), stored) in edits {
             match stored {
                 Some(text) => {
-                    let _ = map.insert(&cell_key(rl, cl), text.as_str());
+                    let _ = map.insert(CellKey::of(rl, cl).as_str(), text.as_str());
                 }
                 None => {
-                    let _ = map.delete(&cell_key(rl, cl));
+                    let _ = map.delete(CellKey::of(rl, cl).as_str());
                 }
             }
         }

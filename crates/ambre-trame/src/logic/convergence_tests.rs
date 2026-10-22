@@ -409,7 +409,7 @@ proptest! {
         );
         // One definition of each name on both peers (`TRAME-068`); the grid
         // above reads it through `=SUM(TOTAL)`.
-        let names = |s: &TrameState| s.doc.get_map(super::schema::NAMED_RANGES_MAP).get_deep_value();
+        let names = |s: &TrameState| s.doc.get_map(crate::logic::Root::NamedRanges.as_str()).get_deep_value();
         prop_assert_eq!(names(&a), names(&b), "the named ranges diverged");
 
         // Recompute determinism: a fresh peer rebuilt from the converged

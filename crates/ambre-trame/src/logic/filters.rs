@@ -163,8 +163,12 @@ impl TrameState {
         if sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
-        let hidden = self.doc.get_map(filter_hidden_map_name(&self.active_sheet));
-        let filters = self.doc.get_map(filters_map_name(&self.active_sheet));
+        let hidden = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::FilterHidden, &self.active_sheet).as_str());
+        let filters = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::Filters, &self.active_sheet).as_str());
         let has_hidden = matches!(hidden.get_value(), LoroValue::Map(ref m) if !m.is_empty());
         let has_def = matches!(filters.get_value(), LoroValue::Map(ref m) if !m.is_empty());
         if !has_hidden && !has_def {
@@ -205,8 +209,16 @@ impl TrameState {
 
     /// Empty the filter definition and its hidden set, uncommitted.
     pub(super) fn drop_filter(&self) {
-        clear_loro_map(&self.doc.get_map(filter_hidden_map_name(&self.active_sheet)));
-        clear_loro_map(&self.doc.get_map(filters_map_name(&self.active_sheet)));
+        clear_loro_map(
+            &self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::FilterHidden, &self.active_sheet).as_str()),
+        );
+        clear_loro_map(
+            &self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Filters, &self.active_sheet).as_str()),
+        );
     }
 
     /// Bring `filter_hidden_{sheet}` to the rows the filter hides on the given
@@ -214,7 +226,9 @@ impl TrameState {
     /// so an edit that hides and shows nothing broadcasts nothing
     /// (`TRAME-FEAT-036`). Does not commit (the caller does).
     pub(super) fn write_filter_hidden(&mut self, col_uid: Uid, kind: &FilterKind) -> RowCount {
-        let hidden = self.doc.get_map(filter_hidden_map_name(&self.active_sheet));
+        let hidden = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::FilterHidden, &self.active_sheet).as_str());
         let Some(col_pos) = self.index.col_pos(&col_uid) else {
             clear_loro_map(&hidden);
             return RowCount::ZERO; // column deleted since the filter was set
@@ -251,14 +265,16 @@ impl TrameState {
     ///
     /// [`recompute_active_filter`]: Self::recompute_active_filter
     pub(super) fn persist_filter_def(&self, col_uid: Uid, kind: &FilterKind) {
-        let filters = self.doc.get_map(filters_map_name(&self.active_sheet));
+        let filters = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::Filters, &self.active_sheet).as_str());
         clear_loro_map(&filters);
         let record = FilterRecord {
             col: col_uid.to_key_part(),
             kind: kind.clone(),
         };
         let bytes = postcard::to_allocvec(&record).unwrap_or_default();
-        let _ = filters.insert(FILTER_KEY, bytes);
+        let _ = Fields::<FilterKey>::of(filters).insert(FilterKey::Active, bytes);
     }
 
     /// The active filter: the stored definition, when its column still exists
@@ -275,12 +291,14 @@ impl TrameState {
     fn stored_filter(&self) -> Option<(Uid, FilterKind)> {
         let LoroValue::Map(filters) = self
             .doc
-            .get_map(filters_map_name(&self.active_sheet))
+            .get_map(SheetContainer::of(SheetRoot::Filters, &self.active_sheet).as_str())
             .get_value()
         else {
             return None;
         };
-        let Some(LoroValue::Binary(bytes)) = filters.get(FILTER_KEY) else {
+        let Some(LoroValue::Binary(bytes)) =
+            FieldValues::<FilterKey>::of(&filters).get(FilterKey::Active)
+        else {
             return None;
         };
         let Ok(record) = postcard::from_bytes::<FilterRecord>(bytes) else {
@@ -301,7 +319,7 @@ impl TrameState {
         self.hidden_rows.clear();
         let LoroValue::Map(entries) = self
             .doc
-            .get_map(filter_hidden_map_name(&self.active_sheet))
+            .get_map(SheetContainer::of(SheetRoot::FilterHidden, &self.active_sheet).as_str())
             .get_value()
         else {
             return;

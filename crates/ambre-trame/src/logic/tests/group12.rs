@@ -4,6 +4,7 @@
 // native file paths. Helpers via `use super::*`.
 
 use super::*;
+use crate::logic::schema::{SheetContainer, SheetRoot};
 use loro::LoroValue;
 
 /// A sheet with one plain edit, so an undo has something to take back that
@@ -297,7 +298,7 @@ fn a_computed_value_stays_out_of_the_document() {
     assert_eq!(read_cell(&mut state, 0, 1), "4242x");
     let LoroValue::Map(cells) = state
         .doc
-        .get_map(crate::logic::cells_map_name(crate::logic::DEFAULT_SHEET))
+        .get_map(SheetContainer::of(SheetRoot::Cells, crate::logic::DEFAULT_SHEET).as_str())
         .get_deep_value()
     else {
         panic!("the cells map");

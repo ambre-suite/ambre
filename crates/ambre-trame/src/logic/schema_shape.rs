@@ -23,7 +23,7 @@
 //! **What holds the freeze honest.** A shape is only as wide as the scenario
 //! that builds it. A key no command reaches leaves no line, so dropping it
 //! would go unnoticed. [`every_declared_key_appears_in_the_shape`] closes that
-//! gap: it reads `schema.rs` at compile time, and demands a line for every key
+//! gap: it walks the name enums of `schema.rs`, and demands a line for every key
 //! and every per-sheet container it declares.
 //!
 //! **What it cannot hold.** A value whose meaning moves under an unchanged key
@@ -42,11 +42,11 @@ use loro::{ExportMode, LoroDoc, LoroValue};
 
 use crate::logic::TrameState;
 use crate::logic::schema::{
-    DEFAULT_SHEET, FilterRecord, MIGRATIONS, SCHEMA_VERSION, SHEETS_MAP, cells_map_name,
-    cols_list_name, filters_map_name, rows_list_name,
+    DEFAULT_SHEET, Fields, FilterKey, FilterRecord, LegacyFilterKey, MIGRATIONS, Root,
+    SCHEMA_VERSION, SheetContainer, SheetRoot,
 };
 use crate::logic::styles::StyleRecord;
-use crate::model::{Uid, cell_key};
+use crate::model::{CellKey, Uid};
 use crate::{Col, Row};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
@@ -74,7 +74,8 @@ const NOT_SCHEMA_KEYS: [&str; 1] = ["mat"];
 /// a dictionary keyed by an id, a sheet name or a user-chosen name, so its
 /// keys collapse to [`ANY`].
 pub(super) fn keys_are_schema_words(root: &str) -> bool {
-    root == ambre_core::crdt::FoundationRoot::Meta.as_str() || root.starts_with("filters_")
+    Root::parse(root) == Some(Root::Meta)
+        || SheetContainer::parse(root).is_some_and(|(family, _)| family == SheetRoot::Filters)
 }
 
 /// The type a value holds, named in the one spelling the freeze uses.
@@ -111,36 +112,36 @@ impl Shape {
     }
 }
 
-/// Every `format!("x_{sheet}")` the schema declares, as the prefix `x_`.
+/// Every per-sheet family the schema declares, as the prefix `x_` of its
+/// containers.
 ///
-/// Reading them rather than listing them is what makes a new per-sheet
-/// container fail the coverage assertion instead of passing unseen.
-pub(super) fn declared_sheet_prefixes(source: &str) -> Vec<String> {
-    let mut found = Vec::new();
-    for line in source.lines() {
-        let Some((_, tail)) = line.split_once("format!(\"") else {
-            continue;
-        };
-        let Some((name, _)) = tail.split_once("{sheet}") else {
-            continue;
-        };
-        if !name.is_empty() {
-            found.push(name.to_owned());
-        }
-    }
-    found.sort();
-    found.dedup();
+/// Walking [`SheetRoot::ALL`] rather than listing them is what makes a new
+/// per-sheet container fail the coverage assertion instead of passing unseen.
+pub(super) fn declared_sheet_prefixes() -> Vec<String> {
+    SheetRoot::ALL
+        .iter()
+        .map(|root| format!("{}_", root.as_str()))
+        .collect()
+}
+
+/// Every fixed root and map key the schema declares. The enums are walked
+/// through their `ALL`, and the default sheet id is read from the source.
+pub(super) fn declared_keys() -> Vec<String> {
+    let mut found: Vec<String> = Root::ALL
+        .iter()
+        .map(|root| root.as_str().to_owned())
+        .collect();
+    found.extend(FilterKey::ALL.iter().map(|key| key.as_str().to_owned()));
+    found.extend(declared_string_consts(SCHEMA_SOURCE));
     found
 }
 
 /// The name a root is frozen under: a per-sheet container loses its sheet id.
 pub(super) fn canonical_root(name: &str) -> String {
-    for prefix in declared_sheet_prefixes(SCHEMA_SOURCE) {
-        if name.starts_with(&prefix) {
-            return format!("{prefix}{ANY}");
-        }
+    match SheetContainer::parse(name) {
+        Some((root, _)) => format!("{}_{ANY}", root.as_str()),
+        None => name.to_owned(),
     }
-    name.to_owned()
 }
 
 /// Walk a map, recording every key and descending into the nested maps.
@@ -434,7 +435,7 @@ fn workbook_at(version: Option<u32>, write: impl FnOnce(&LoroDoc)) -> LoroDoc {
     let doc = LoroDoc::new();
     doc.set_peer_id(1)
         .expect("a fresh document takes a peer id");
-    doc.get_map(SHEETS_MAP)
+    doc.get_map(Root::Sheets.as_str())
         .insert(DEFAULT_SHEET, "Sheet1")
         .expect("the sheet");
     write(&doc);
@@ -458,12 +459,14 @@ fn canonical(from: u32) -> LoroDoc {
         0 => workbook_at(None, |_| {}),
         // The flat filter keys the `1 -> 2` step folds.
         1 => workbook_at(Some(1), |doc| {
-            let filters = doc.get_map(filters_map_name(DEFAULT_SHEET));
+            let filters = Fields::<LegacyFilterKey>::of(
+                doc.get_map(SheetContainer::of(SheetRoot::Filters, DEFAULT_SHEET).as_str()),
+            );
             for (key, value) in [
-                ("col", "0000000000000001_00000000"),
-                ("kind", "condition"),
-                ("op", "gt"),
-                ("value", "1"),
+                (LegacyFilterKey::Col, "0000000000000001_00000000"),
+                (LegacyFilterKey::Kind, "condition"),
+                (LegacyFilterKey::Op, "gt"),
+                (LegacyFilterKey::Value, "1"),
             ] {
                 filters.insert(key, value).expect("a flat key");
             }
@@ -474,16 +477,18 @@ fn canonical(from: u32) -> LoroDoc {
                 peer: ambre_core::PeerId(1),
                 counter,
             };
-            let rows = doc.get_movable_list(rows_list_name(DEFAULT_SHEET));
+            let rows =
+                doc.get_movable_list(SheetContainer::of(SheetRoot::Rows, DEFAULT_SHEET).as_str());
             for counter in 0..3 {
                 rows.push(uid(counter).to_key_part()).expect("a row");
             }
-            let cols = doc.get_movable_list(cols_list_name(DEFAULT_SHEET));
+            let cols =
+                doc.get_movable_list(SheetContainer::of(SheetRoot::Cols, DEFAULT_SHEET).as_str());
             for counter in 3..5 {
                 cols.push(uid(counter).to_key_part()).expect("a column");
             }
-            doc.get_map(cells_map_name(DEFAULT_SHEET))
-                .insert(&cell_key(uid(0), uid(4)), "=SUM(A2:A3)+A2")
+            doc.get_map(SheetContainer::of(SheetRoot::Cells, DEFAULT_SHEET).as_str())
+                .insert(CellKey::of(uid(0), uid(4)).as_str(), "=SUM(A2:A3)+A2")
                 .expect("the formula");
         }),
         _ => panic!("the step from version {from} has no canonical workbook: write one here"),
@@ -544,7 +549,7 @@ fn each_migration_step_writes_what_its_version_froze() {
 fn every_declared_key_appears_in_the_shape() {
     let state = workbook_of_every_key();
     let shape = shape_of(&state.doc);
-    for key in declared_string_consts(SCHEMA_SOURCE) {
+    for key in declared_keys() {
         assert!(
             shape.keys.contains(&key),
             "`{key}` is declared as a schema key and no line of the shape \
@@ -552,7 +557,7 @@ fn every_declared_key_appears_in_the_shape() {
              new and the scenario has to write it before the freeze can hold it."
         );
     }
-    for prefix in declared_sheet_prefixes(SCHEMA_SOURCE) {
+    for prefix in declared_sheet_prefixes() {
         let root = format!("{prefix}{ANY}");
         assert!(
             shape.keys.contains(&root),
@@ -606,7 +611,7 @@ fn a_value_type_changing_moves_the_shape() {
     };
     let cells = roots
         .keys()
-        .find(|name| name.starts_with("cells_"))
+        .find(|name| SheetContainer::parse(name).is_some_and(|(root, _)| root == SheetRoot::Cells))
         .expect("the scenario writes a cell");
     let map = state.doc.get_map(cells.as_str());
     let key = match map.get_value() {

@@ -23,6 +23,14 @@ pub trait ContainerName: Copy + 'static {
     fn as_str(self) -> &'static str;
 }
 
+/// The name a family of root containers shares, one container per id. The
+/// application joins the name and the id into the root name, and only its own
+/// constructor does the join.
+pub trait ContainerFamily: Copy + 'static {
+    /// The shared part of the name, as the document stores it.
+    fn as_str(self) -> &'static str;
+}
+
 /// A key of one map schema. A handle typed by the schema takes this key and no
 /// other, so a key of another map does not compile there.
 pub trait FieldKey: Copy + 'static {
@@ -32,7 +40,8 @@ pub trait FieldKey: Copy + 'static {
 
 /// Declares a closed set of CRDT names as an enum, one variant per name.
 ///
-/// `: ContainerName` or `: FieldKey` after the enum name implements that trait.
+/// `: ContainerName`, `: ContainerFamily` or `: FieldKey` after the enum name
+/// implements that trait.
 /// With neither, the enum names words of another kind, a text mark key for
 /// example, and only the inherent items are written.
 ///

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// [`CellStyle`]: the toolbar reports them separately, via their own sets. They
 /// ride here alongside it, so the record is the *entire* style of a cell.
 /// postcard-encoded into the single `cellstyle_{sheet}` register (see
-/// [`cellstyle_map_name`]). Storing the whole style in one LWW register, rather
+/// [`SheetRoot::CellStyle`]). Storing the whole style in one LWW register, rather
 /// than scattering it over ~11 per-attribute maps, is the convergence invariant
 /// (`trame-schema`, `TRAME-016`). Two peers that concurrently restyle the same
 /// cell race exactly once, so the merged style is always one writer's, never a
@@ -42,16 +42,18 @@ impl TrameState {
         // Styling a cell pins an identity to it, so it must be materialized just
         // like an edited value. Beyond the cap there is nothing to persist.
         let (rl, cl) = self.materialize(pos)?;
-        let key = cell_key(rl, cl);
-        let map = self.doc.get_map(cellstyle_map_name(&self.active_sheet));
+        let key = CellKey::of(rl, cl);
+        let map = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::CellStyle, &self.active_sheet).as_str());
         if !record.bold && !record.italic && record.style == CellStyle::default() {
-            let _ = map.delete(&key);
+            let _ = map.delete(key.as_str());
         } else {
             // postcard is deterministic, so both peers encode the same style to
             // the same bytes. The register is compared by CRDT metadata, not the
             // payload, so the encoding only has to round-trip.
             let bytes = postcard::to_allocvec(&record).unwrap_or_default();
-            let _ = map.insert(&key, bytes);
+            let _ = map.insert(key.as_str(), bytes);
         }
         Some(())
     }
@@ -246,7 +248,7 @@ impl TrameState {
 
         let LoroValue::Map(entries) = self
             .doc
-            .get_map(cellstyle_map_name(&self.active_sheet))
+            .get_map(SheetContainer::of(SheetRoot::CellStyle, &self.active_sheet).as_str())
             .get_value()
         else {
             return;
@@ -296,8 +298,8 @@ impl TrameState {
     pub(super) fn stored_style(&self, sheet_id: &str, rl: Uid, cl: Uid) -> Option<CellStyle> {
         match self
             .doc
-            .get_map(cellstyle_map_name(sheet_id))
-            .get(&cell_key(rl, cl))
+            .get_map(SheetContainer::of(SheetRoot::CellStyle, sheet_id).as_str())
+            .get(CellKey::of(rl, cl).as_str())
             .map(|v| v.get_deep_value())
         {
             Some(LoroValue::Binary(bytes)) => postcard::from_bytes::<StyleRecord>(&bytes)

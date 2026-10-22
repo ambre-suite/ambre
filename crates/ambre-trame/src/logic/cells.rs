@@ -29,9 +29,12 @@ impl TrameState {
         // read the CRDT value. A virtual (never-written) cell, or one cleared
         // back to empty, has no stored value and renders blank.
         if let Some((rl, cl)) = self.index.resolve(at) {
-            let map = self.doc.get_map(cells_map_name(&self.active_sheet));
-            if let Some(LoroValue::String(s)) =
-                map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value())
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str());
+            if let Some(LoroValue::String(s)) = map
+                .get(CellKey::of(rl, cl).as_str())
+                .map(|v| v.get_deep_value())
             {
                 return s.to_string();
             }
@@ -43,9 +46,12 @@ impl TrameState {
     /// cell, the literal otherwise). Empty for virtual/cleared cells.
     pub(super) fn cell_raw(&self, at: CellPos) -> String {
         if let Some((rl, cl)) = self.index.resolve(at) {
-            let map = self.doc.get_map(cells_map_name(&self.active_sheet));
-            if let Some(LoroValue::String(s)) =
-                map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value())
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str());
+            if let Some(LoroValue::String(s)) = map
+                .get(CellKey::of(rl, cl).as_str())
+                .map(|v| v.get_deep_value())
             {
                 return s.to_string();
             }
@@ -200,7 +206,7 @@ impl TrameState {
             let uid = self.mint_uid();
             let rows = self
                 .doc
-                .get_movable_list(rows_list_name(&self.active_sheet));
+                .get_movable_list(SheetContainer::of(SheetRoot::Rows, &self.active_sheet).as_str());
             rows.push(uid.to_key_part().as_str()).ok()?;
             self.index.push_row(uid);
             grew = true;
@@ -209,7 +215,7 @@ impl TrameState {
             let uid = self.mint_uid();
             let cols = self
                 .doc
-                .get_movable_list(cols_list_name(&self.active_sheet));
+                .get_movable_list(SheetContainer::of(SheetRoot::Cols, &self.active_sheet).as_str());
             cols.push(uid.to_key_part().as_str()).ok()?;
             self.index.push_col(uid);
             grew = true;
@@ -234,10 +240,10 @@ impl TrameState {
     pub(super) fn rebuild_index(&mut self) {
         let rows = self
             .doc
-            .get_movable_list(rows_list_name(&self.active_sheet));
+            .get_movable_list(SheetContainer::of(SheetRoot::Rows, &self.active_sheet).as_str());
         let cols = self
             .doc
-            .get_movable_list(cols_list_name(&self.active_sheet));
+            .get_movable_list(SheetContainer::of(SheetRoot::Cols, &self.active_sheet).as_str());
         self.index = SheetIndex::build(&rows, &cols);
     }
 
@@ -296,8 +302,8 @@ impl TrameState {
             if let Some((rl, cl)) = self.index.resolve(at) {
                 let _ = self
                     .doc
-                    .get_map(cells_map_name(&self.active_sheet))
-                    .delete(&cell_key(rl, cl));
+                    .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str())
+                    .delete(CellKey::of(rl, cl).as_str());
             }
             let cell = self.active_cell_id(at);
             let indices = self.engine_indices();
@@ -333,8 +339,8 @@ impl TrameState {
                 .unwrap_or_else(|_| text.to_string());
             let _ = self
                 .doc
-                .get_map(cells_map_name(&self.active_sheet))
-                .insert(&cell_key(rl, cl), stored.as_str());
+                .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str())
+                .insert(CellKey::of(rl, cl).as_str(), stored.as_str());
             let cell = CellId::bound(EngineSheet::ACTIVE, rl, cl);
             let indices = self.engine_indices();
             let ctx = TrameCtx {

@@ -53,13 +53,27 @@ impl Uid {
     }
 }
 
-/// Build the 51-char fixed-length cell key from a `(row, col)` uid pair, per
-/// `trame-schema`: `"{row_uid}:{col_uid}"`.
-pub fn cell_key(row: Uid, col: Uid) -> String {
-    format!("{}:{}", row.to_key_part(), col.to_key_part())
+/// The key a cell is stored under in the per-sheet cell, style and merge
+/// maps: the 51-char fixed-length `"{row_uid}:{col_uid}"`, per `trame-schema`.
+/// The one place the pair is joined.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct CellKey(String);
+
+impl CellKey {
+    /// The key of the cell at the `(row, col)` uid pair.
+    #[must_use]
+    pub fn of(row: Uid, col: Uid) -> Self {
+        Self(format!("{}:{}", row.to_key_part(), col.to_key_part()))
+    }
+
+    /// The key, for the Loro call into the map.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
-/// Inverse of [`cell_key`]: parse a stored key back into its `(row, col)` uid
+/// Inverse of [`CellKey::of`]: parse a stored key back into its `(row, col)` uid
 /// pair. Returns `None` on any malformed key.
 pub fn parse_cell_key(key: &str) -> Option<(Uid, Uid)> {
     let (row, col) = key.split_once(':')?;
@@ -271,14 +285,20 @@ fn collect_ids(list: &LoroMovableList) -> Vec<Uid> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logic::{DEFAULT_SHEET, SheetContainer, SheetRoot};
     use loro::LoroDoc;
+
+    /// The order list of one axis of the default sheet, as a workbook names it.
+    fn axis(root: SheetRoot) -> SheetContainer {
+        SheetContainer::of(root, DEFAULT_SHEET)
+    }
 
     /// Build a `SheetIndex` for a fresh doc with `n_rows` rows and `n_cols`
     /// columns materialized. Returns the doc to keep the lists attached.
     fn index_with(n_rows: usize, n_cols: usize) -> (LoroDoc, SheetIndex) {
         let doc = LoroDoc::new();
-        let rows = doc.get_movable_list("rows");
-        let cols = doc.get_movable_list("cols");
+        let rows = doc.get_movable_list(axis(SheetRoot::Rows).as_str());
+        let cols = doc.get_movable_list(axis(SheetRoot::Cols).as_str());
         for i in 0..n_rows {
             rows.push(
                 Uid {
@@ -439,12 +459,12 @@ mod tests {
             peer: ambre_core::PeerId(1),
             counter: 2,
         };
-        let key = cell_key(r, c);
-        assert_eq!(key.len(), 51);
-        assert_eq!(key, cell_key(r, c), "deterministic");
-        assert_ne!(key, cell_key(c, r), "order matters");
+        let key = CellKey::of(r, c);
+        assert_eq!(key.as_str().len(), 51);
+        assert_eq!(key, CellKey::of(r, c), "deterministic");
+        assert_ne!(key, CellKey::of(c, r), "order matters");
         assert_eq!(
-            parse_cell_key(&key),
+            parse_cell_key(key.as_str()),
             Some((r, c)),
             "round-trips, full u32 counter"
         );
@@ -486,8 +506,8 @@ mod tests {
             #[test]
             fn the_incremental_index_equals_a_rebuild(ops in prop::collection::vec(op(), 0..60)) {
                 let (doc, mut idx) = index_with(3, 2);
-                let rows = doc.get_movable_list("rows");
-                let cols = doc.get_movable_list("cols");
+                let rows = doc.get_movable_list(axis(SheetRoot::Rows).as_str());
+                let cols = doc.get_movable_list(axis(SheetRoot::Cols).as_str());
                 for (n, op) in ops.into_iter().enumerate() {
                     let id = Uid { peer: ambre_core::PeerId(9), counter: n as u32 };
                     let key = id.to_key_part();

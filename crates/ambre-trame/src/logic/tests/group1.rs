@@ -3,6 +3,7 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
+use crate::logic::schema::{Root, SheetContainer, SheetRoot};
 
 /// Bold a cell, then move the selection elsewhere: the formatting must stay
 /// pinned to the cell it was applied to, not follow the cursor. This is the
@@ -660,11 +661,11 @@ fn multi_sheet_isolation_and_name_lookup() {
     });
     let _ = state
         .doc
-        .get_map(super::super::SHEETS_MAP)
+        .get_map(Root::Sheets.as_str())
         .insert("s1", "Sheet2");
     let other = state
         .doc
-        .get_movable_list(super::super::rows_list_name("s1"));
+        .get_movable_list(SheetContainer::of(SheetRoot::Rows, "s1").as_str());
     other
         .push(
             Uid {
@@ -679,11 +680,11 @@ fn multi_sheet_isolation_and_name_lookup() {
 
     // `cells_s1` is empty; `cells_s0` holds the value -- containers are isolated.
     assert!(matches!(
-        state.doc.get_map(super::super::cells_map_name("s0")).get_value(),
+        state.doc.get_map(SheetContainer::of(SheetRoot::Cells, "s0").as_str()).get_value(),
         loro::LoroValue::Map(ref m) if m.len() == 1
     ));
     assert!(matches!(
-        state.doc.get_map(super::super::cells_map_name("s1")).get_value(),
+        state.doc.get_map(SheetContainer::of(SheetRoot::Cells, "s1").as_str()).get_value(),
         loro::LoroValue::Map(ref m) if m.is_empty()
     ));
     assert_eq!(state.sheet_name_to_id("Sheet2").as_deref(), Some("s1"));

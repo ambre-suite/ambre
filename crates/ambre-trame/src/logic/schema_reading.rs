@@ -32,23 +32,17 @@ use ambre_core::schema::verdict;
 use loro::{ExportMode, LoroValue};
 
 use super::schema_shape::{
-    ANY, canonical_root, declared_sheet_prefixes, declared_string_consts, keys_are_schema_words,
-    section_of, workbook_of_every_key,
+    ANY, canonical_root, declared_keys, declared_sheet_prefixes, keys_are_schema_words, section_of,
+    workbook_of_every_key,
 };
 use crate::formula::types::NameTarget;
 use crate::logic::TrameState;
-use crate::logic::schema::{FILTER_KEY, NAMED_RANGES_MAP, SCHEMA_VERSION, SHEET_ORDER, SHEETS_MAP};
+use crate::logic::schema::{FilterKey, Root, SCHEMA_VERSION, SheetContainer, SheetRoot};
 use crate::model::{Uid, parse_cell_key};
 use crate::{CellPos, Col};
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/readings.txt");
-
-/// The foundation's `meta` root, as a pattern.
-const META_ROOT: &str = ambre_core::crdt::FoundationRoot::Meta.as_str();
-
-/// The source the key declarations are read from, as the shape belt reads it.
-const SCHEMA_SOURCE: &str = include_str!("schema.rs");
 
 /// One stored value: the root it sits under, the keys down to it, and the value.
 struct Stored {
@@ -219,9 +213,11 @@ fn target_reading(target: &NameTarget) -> String {
 /// build resolves it.
 fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
     let key = stored.keys.first().map(String::as_str)?;
-    let root = stored.root.as_str();
-    match root {
-        META_ROOT if key == ambre_core::schema::MetaKey::SchemaVersion.as_str() => {
+    if let Some((root, sheet)) = SheetContainer::parse(&stored.root) {
+        return sheet_reading(reader, stored, key, root, sheet);
+    }
+    match Root::parse(&stored.root)? {
+        Root::Meta if key == ambre_core::schema::MetaKey::SchemaVersion.as_str() => {
             let LoroValue::I64(n) = stored.value else {
                 return None;
             };
@@ -231,12 +227,12 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
                 verdict(version, SCHEMA_VERSION)
             ))
         }
-        SHEETS_MAP => {
+        Root::Sheets => {
             let tab = reader.sheet_order_ids().iter().position(|id| id == key)?;
             let name = reader.sheet_names().remove(key)?;
             Some(format!("tab {} named {name:?}", tab + 1))
         }
-        SHEET_ORDER => {
+        Root::SheetOrder => {
             let LoroValue::String(id) = &stored.value else {
                 return None;
             };
@@ -246,21 +242,22 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
                 .position(|at| at == id.as_str())?;
             Some(format!("tab {}", tab + 1))
         }
-        NAMED_RANGES_MAP => Some(format!(
+        Root::NamedRanges => Some(format!(
             "{key} names {}",
             target_reading(reader.named.get(key)?)
         )),
-        _ => sheet_reading(reader, stored, key),
+        Root::Meta => None,
     }
 }
 
 /// The reading of a value under a per-sheet container of the active sheet.
-fn sheet_reading(reader: &TrameState, stored: &Stored, key: &str) -> Option<String> {
-    let root = stored.root.as_str();
-    let (prefix, sheet) = declared_sheet_prefixes(SCHEMA_SOURCE)
-        .into_iter()
-        .find_map(|prefix| Some((root.strip_prefix(&prefix)?.to_owned(), prefix)))
-        .map(|(sheet, prefix)| (prefix, sheet))?;
+fn sheet_reading(
+    reader: &TrameState,
+    stored: &Stored,
+    key: &str,
+    root: SheetRoot,
+    sheet: &str,
+) -> Option<String> {
     // The derived caches follow the active sheet only, and the scenario writes
     // nothing per sheet elsewhere. A value on another sheet has no reading,
     // and the coverage test names it.
@@ -277,13 +274,13 @@ fn sheet_reading(reader: &TrameState, stored: &Stored, key: &str) -> Option<Stri
         LoroValue::String(id) => Uid::parse(id),
         _ => None,
     };
-    match prefix.as_str() {
-        "cells_" => {
+    match root {
+        SheetRoot::Cells => {
             let place = at()?;
             let shown = reader.displayed_text(place);
             Some(format!("{} shows {shown:?}", cell(place)))
         }
-        "cellstyle_" => {
+        SheetRoot::CellStyle => {
             let place = at()?;
             let style = reader.styles.get(&place).cloned().unwrap_or_default();
             let read = style_reading(
@@ -293,7 +290,7 @@ fn sheet_reading(reader: &TrameState, stored: &Stored, key: &str) -> Option<Stri
             );
             Some(format!("{} {read}", cell(place)))
         }
-        "col_widths_" => {
+        SheetRoot::ColWidths => {
             let col = index.col_pos(&uid()?)?;
             Some(format!(
                 "column {} is {} px wide",
@@ -301,7 +298,7 @@ fn sheet_reading(reader: &TrameState, stored: &Stored, key: &str) -> Option<Stri
                 reader.col_width(col)
             ))
         }
-        "row_heights_" => {
+        SheetRoot::RowHeights => {
             let row = index.row_pos(&uid()?)?;
             Some(format!(
                 "row {} is {} px tall",
@@ -309,24 +306,24 @@ fn sheet_reading(reader: &TrameState, stored: &Stored, key: &str) -> Option<Stri
                 reader.row_height(row)
             ))
         }
-        "cols_" => Some(format!(
+        SheetRoot::Cols => Some(format!(
             "column {}",
             ordinal(index.col_pos(&item()?)?.get())
         )),
-        "rows_" => Some(format!("row {}", ordinal(index.row_pos(&item()?)?.get()))),
-        "merges_" => {
+        SheetRoot::Rows => Some(format!("row {}", ordinal(index.row_pos(&item()?)?.get()))),
+        SheetRoot::Merges => {
             let master = at()?;
             let end = reader.merges.get(&master)?;
             Some(format!("{}:{} merged", cell(master), cell(*end)))
         }
-        "filters_" if key == FILTER_KEY => {
+        SheetRoot::Filters if FilterKey::parse(key) == Some(FilterKey::Active) => {
             let (col, kind) = reader.load_active_filter()?;
             Some(format!(
                 "column {} keeps {kind:?}",
                 ordinal(index.col_pos(&col)?.get())
             ))
         }
-        "filter_hidden_" => {
+        SheetRoot::FilterHidden => {
             let row = index.row_pos(&uid()?)?;
             let shown = if reader.hidden_rows.contains(&row) {
                 "hidden"
@@ -425,13 +422,13 @@ fn every_stored_value_has_a_reading() {
 fn every_declared_key_has_a_reading() {
     let state = workbook_of_every_key();
     let keys = readings_of(&state, &reopened(&state)).keys;
-    for key in declared_string_consts(SCHEMA_SOURCE) {
+    for key in declared_keys() {
         assert!(
             keys.contains(&key),
             "`{key}` is declared as a schema key and no reading carries it"
         );
     }
-    for prefix in declared_sheet_prefixes(SCHEMA_SOURCE) {
+    for prefix in declared_sheet_prefixes() {
         let root = format!("{prefix}{ANY}");
         assert!(
             keys.contains(&root),

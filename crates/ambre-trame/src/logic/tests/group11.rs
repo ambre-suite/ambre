@@ -4,10 +4,9 @@
 
 use super::*;
 use crate::logic::schema::{
-    DEFAULT_SHEET, MATERIALIZE_CAP, MIN_COL_WIDTH, cells_map_name, cellstyle_map_name,
-    merges_map_name,
+    DEFAULT_SHEET, MATERIALIZE_CAP, MIN_COL_WIDTH, SheetContainer, SheetRoot,
 };
-use crate::model::cell_key;
+use crate::model::CellKey;
 use crate::{FillMode, GridRange, SelectionKind};
 use ambre_core::Rgb;
 use loro::LoroValue;
@@ -67,8 +66,8 @@ fn own_ops(state: &TrameState) -> i32 {
 }
 
 /// The value of one named container, for a before-and-after comparison.
-fn container(state: &TrameState, name: String) -> LoroValue {
-    state.doc.get_map(name).get_value()
+fn container(state: &TrameState, name: SheetContainer) -> LoroValue {
+    state.doc.get_map(name.as_str()).get_value()
 }
 
 /// The widths and heights of the first `n` columns and rows.
@@ -142,8 +141,8 @@ fn a_one_cell_merge_from_a_peer_is_no_merge() {
         .resolve(CellPos::new(Row::new(0), Col::new(0)))
         .expect("A1 is materialized");
     b.doc
-        .get_map(merges_map_name(TEST_SHEET))
-        .insert(&cell_key(rl, cl), cell_key(rl, cl).as_str())
+        .get_map(SheetContainer::of(SheetRoot::Merges, TEST_SHEET).as_str())
+        .insert(CellKey::of(rl, cl).as_str(), CellKey::of(rl, cl).as_str())
         .expect("the entry");
     b.doc.commit();
     let update = b.flush_delta().expect("the entry is a delta");
@@ -164,7 +163,7 @@ fn a_merge_past_the_cap_writes_no_entry() {
     assert!(out.update.is_none(), "the refused merge sent a delta");
     assert_eq!(own_ops(&state), before);
     assert!(
-        matches!(container(&state, merges_map_name(TEST_SHEET)), LoroValue::Map(m) if m.is_empty())
+        matches!(container(&state, SheetContainer::of(SheetRoot::Merges, TEST_SHEET)), LoroValue::Map(m) if m.is_empty())
     );
     assert_eq!(read_display(&mut state, 0, 0).merge_span, None);
 }
@@ -479,8 +478,8 @@ fn contents(state: &TrameState, ids: &[String]) -> Vec<(LoroValue, LoroValue)> {
     ids.iter()
         .map(|id| {
             (
-                container(state, cells_map_name(id)),
-                container(state, cellstyle_map_name(id)),
+                container(state, SheetContainer::of(SheetRoot::Cells, id)),
+                container(state, SheetContainer::of(SheetRoot::CellStyle, id)),
             )
         })
         .collect()

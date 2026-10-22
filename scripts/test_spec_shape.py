@@ -331,6 +331,13 @@ class Schema(unittest.TestCase):
         issues = list(spec_shape.schema_issues(doc("## 1. CONTAINERS"), self.source(code)))
         self.assertEqual(["container-missing"], kinds(issues))
 
+    def test_a_container_family_is_compared_on_its_per_sheet_leaf(self):
+        code = 'crdt_names! {\n    enum SheetRoot: ContainerFamily {\n        Cells = "cells",\n    }\n}'
+        missing = list(spec_shape.schema_issues(doc("## 1. CONTAINERS"), self.source(code)))
+        self.assertEqual(["container-missing"], kinds(missing))
+        text = doc("## 1. CONTAINERS", "| Container | Value |", "|---|---|", "| `cells_{sheet}` | a map |")
+        self.assertEqual([], list(spec_shape.schema_issues(text, self.source(code))))
+
     def test_a_declared_container_with_no_code_is_normal(self):
         """Asymmetric on purpose: that is spec-driven development working."""
         text = doc("## 1. CONTAINERS", "| Container | Value |", "|---|---|", "| `sheets` | a map |")

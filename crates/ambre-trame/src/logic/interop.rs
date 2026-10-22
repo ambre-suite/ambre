@@ -100,11 +100,11 @@ impl TrameState {
             let name = self.free_sheet_name("CSV Import");
             let _ = self
                 .doc
-                .get_map(SHEETS_MAP)
+                .get_map(Root::Sheets.as_str())
                 .insert(&sheet_id, name.as_str());
             let _ = self
                 .doc
-                .get_movable_list(SHEET_ORDER)
+                .get_movable_list(Root::SheetOrder.as_str())
                 .push(sheet_id.as_str());
             self.reseed_active_sheet();
         }
@@ -182,7 +182,7 @@ impl TrameState {
 
         let name = match self
             .doc
-            .get_map(SHEETS_MAP)
+            .get_map(Root::Sheets.as_str())
             .get(sheet_id)
             .map(|v| v.get_deep_value())
         {
@@ -202,7 +202,11 @@ impl TrameState {
     /// edit. Using their length would therefore export a rectangle padded with
     /// empty trailing rows/columns.
     fn used_extent(&self, sheet_id: &str, index: &SheetIndex) -> Option<CellPos> {
-        let LoroValue::Map(cells) = self.doc.get_map(cells_map_name(sheet_id)).get_value() else {
+        let LoroValue::Map(cells) = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str())
+            .get_value()
+        else {
             return None;
         };
         let mut max_row = None;
@@ -242,8 +246,8 @@ impl TrameState {
             Some(text) if self.engine.is_formula_cell(cell) => text,
             _ => match self
                 .doc
-                .get_map(cells_map_name(sheet_id))
-                .get(&cell_key(rl, cl))
+                .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str())
+                .get(CellKey::of(rl, cl).as_str())
                 .map(|v| v.get_deep_value())
             {
                 Some(LoroValue::String(s)) => s.to_string(),

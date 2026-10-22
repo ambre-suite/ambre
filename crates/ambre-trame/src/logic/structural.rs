@@ -22,7 +22,9 @@ impl TrameState {
         let new = self.build_sheet_index(active);
         let mut rewritten = false;
         for sheet in &self.sheets_by_idx {
-            let map = self.doc.get_map(cells_map_name(sheet));
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, sheet).as_str());
             let LoroValue::Map(cells) = map.get_value() else {
                 continue;
             };
@@ -115,10 +117,12 @@ impl TrameState {
 
     /// The list that orders the lines of axis `P` on the active sheet.
     fn line_list<P: SheetLine>(&self) -> loro::LoroMovableList {
-        self.doc.get_movable_list(match P::AXIS {
-            Axis::Row => rows_list_name(&self.active_sheet),
-            Axis::Col => cols_list_name(&self.active_sheet),
-        })
+        let root = match P::AXIS {
+            Axis::Row => SheetRoot::Rows,
+            Axis::Col => SheetRoot::Cols,
+        };
+        self.doc
+            .get_movable_list(SheetContainer::of(root, &self.active_sheet).as_str())
     }
 
     /// Remove the row/column at grid position `at` and purge what it carried,
@@ -261,11 +265,10 @@ impl TrameState {
     /// `true` when the removed column carried the active filter, which went
     /// with it.
     pub(super) fn purge_axis(&mut self, removed: Uid, axis: Axis) -> bool {
-        for name in [
-            cells_map_name(&self.active_sheet),
-            cellstyle_map_name(&self.active_sheet),
-        ] {
-            let map = self.doc.get_map(name);
+        for root in [SheetRoot::Cells, SheetRoot::CellStyle] {
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(root, &self.active_sheet).as_str());
             let LoroValue::Map(entries) = map.get_value() else {
                 continue;
             };
@@ -294,15 +297,14 @@ impl TrameState {
         // The line's own formatting is keyed by its uid alone: its size, and
         // for a row its filter mark (`TRAME-082`).
         let line_maps = match axis {
-            Axis::Row => vec![
-                row_heights_map_name(&self.active_sheet),
-                filter_hidden_map_name(&self.active_sheet),
-            ],
-            Axis::Col => vec![col_widths_map_name(&self.active_sheet)],
+            Axis::Row => vec![SheetRoot::RowHeights, SheetRoot::FilterHidden],
+            Axis::Col => vec![SheetRoot::ColWidths],
         };
         let key = removed.to_key_part();
-        for name in line_maps {
-            let map = self.doc.get_map(name);
+        for root in line_maps {
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(root, &self.active_sheet).as_str());
             if map.get(&key).is_some() {
                 let _ = map.delete(&key);
             }

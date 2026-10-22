@@ -272,7 +272,7 @@ fn overlapping_merges_resolve_to_the_lowest_master_key() {
             .index
             .resolve(at(row, col))
             .expect("materialized by the base");
-        crate::model::cell_key(r, c)
+        crate::model::CellKey::of(r, c)
     };
     let expected = if master_key(&a, 0, 0) < master_key(&a, 1, 1) {
         (at(0, 0), at(1, 1))
@@ -980,11 +980,7 @@ fn rename_to_a_blank_name_is_refused() {
 /// every per-sheet container is empty, the metrics and the filter included.
 #[test]
 fn deleted_sheet_leaves_no_data() {
-    use crate::logic::schema::{
-        cells_map_name, cellstyle_map_name, col_widths_map_name, cols_list_name,
-        filter_hidden_map_name, filters_map_name, merges_map_name, row_heights_map_name,
-        rows_list_name,
-    };
+    use crate::logic::schema::{SheetContainer, SheetRoot};
     use loro::LoroValue;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::CreateSheet {
@@ -1018,16 +1014,17 @@ fn deleted_sheet_leaves_no_data() {
         col: Col::new(0),
         kind: ambre_bus::FilterKind::Values(vec!["a".to_owned()]),
     });
-    let filled = |state: &TrameState, name: &str| !matches!(state.doc.get_map(name).get_value(), LoroValue::Map(m) if m.is_empty());
+    let filled = |state: &TrameState, name: &SheetContainer| !matches!(state.doc.get_map(name.as_str()).get_value(), LoroValue::Map(m) if m.is_empty());
     for name in [
-        col_widths_map_name(&gone),
-        row_heights_map_name(&gone),
-        filters_map_name(&gone),
-        filter_hidden_map_name(&gone),
+        SheetContainer::of(SheetRoot::ColWidths, &gone),
+        SheetContainer::of(SheetRoot::RowHeights, &gone),
+        SheetContainer::of(SheetRoot::Filters, &gone),
+        SheetContainer::of(SheetRoot::FilterHidden, &gone),
     ] {
         assert!(
             filled(&state, &name),
-            "{name} was written before the delete"
+            "{} was written before the delete",
+            name.as_str()
         );
     }
 
@@ -1035,20 +1032,28 @@ fn deleted_sheet_leaves_no_data() {
         sheet_id: SheetId(gone.clone()),
     });
     for name in [
-        cells_map_name(&gone),
-        cellstyle_map_name(&gone),
-        merges_map_name(&gone),
-        col_widths_map_name(&gone),
-        row_heights_map_name(&gone),
-        filters_map_name(&gone),
-        filter_hidden_map_name(&gone),
+        SheetContainer::of(SheetRoot::Cells, &gone),
+        SheetContainer::of(SheetRoot::CellStyle, &gone),
+        SheetContainer::of(SheetRoot::Merges, &gone),
+        SheetContainer::of(SheetRoot::ColWidths, &gone),
+        SheetContainer::of(SheetRoot::RowHeights, &gone),
+        SheetContainer::of(SheetRoot::Filters, &gone),
+        SheetContainer::of(SheetRoot::FilterHidden, &gone),
     ] {
-        assert!(!filled(&state, &name), "{name} outlived its sheet");
+        assert!(
+            !filled(&state, &name),
+            "{} outlived its sheet",
+            name.as_str()
+        );
     }
-    for name in [rows_list_name(&gone), cols_list_name(&gone)] {
+    for name in [
+        SheetContainer::of(SheetRoot::Rows, &gone),
+        SheetContainer::of(SheetRoot::Cols, &gone),
+    ] {
         assert!(
             state.doc.get_movable_list(name.as_str()).is_empty(),
-            "{name} outlived its sheet"
+            "{} outlived its sheet",
+            name.as_str()
         );
     }
 }

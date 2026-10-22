@@ -23,7 +23,7 @@ use crate::formula::types::Expr;
 use crate::formula::{
     AxisId, CellId, EngineSheet, FormulaCtx, FormulaEngine, NameTarget, SheetIndices, render,
 };
-use crate::model::{Line, SheetIndex, Uid, cell_key, parse_cell_key};
+use crate::model::{CellKey, Line, SheetIndex, Uid, parse_cell_key};
 use crate::{DisplayCell, TrameCommand, TrameEvent};
 use ambre_bus::{
     BorderPreset, CellBorder, CellFormat, CellPos, CellRect, CellStyle, ClipboardCell,
@@ -187,7 +187,7 @@ pub struct TrameState {
     /// concurrent-edit conflict (`trame-cell-merges`). Masked: excluded from the
     /// formula engine
     /// and not displayed, but never destroyed; reappear on unmerge.
-    masked_cells: HashSet<String>,
+    masked_cells: HashSet<CellKey>,
     /// CRDT sheet id per local engine index (`sheets_by_idx[i]` has index `i`).
     /// The **active sheet is always index 0**, so single-sheet code paths keep
     /// using [`CellRef::new`] (sheet 0); other sheets take 1.. in sorted-id
@@ -269,7 +269,7 @@ fn write_scaffold(doc: &LoroDoc) {
     // Register the implicit default sheet's name (idempotent map insert, so
     // a peer that also "creates" s0 converges to the same entry).
     let _ = doc
-        .get_map(SHEETS_MAP)
+        .get_map(crate::logic::Root::Sheets.as_str())
         .insert(DEFAULT_SHEET, DEFAULT_SHEET_NAME);
     // The schema version is workbook scaffolding too, and it is written in
     // the same commit so a workbook is never persisted without it

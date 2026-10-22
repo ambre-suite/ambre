@@ -3,6 +3,7 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
+use crate::logic::schema::{SheetContainer, SheetRoot};
 
 /// Hidden rows are excluded from the viewport but still counted by `=SUM`
 /// (`trame-shared-filter`): the filter is a display concern, not a data one.
@@ -368,7 +369,7 @@ fn filter_goes_with_its_column() {
     assert!(state.hidden_rows.is_empty());
     let def = state
         .doc
-        .get_map(crate::logic::schema::filters_map_name(TEST_SHEET));
+        .get_map(SheetContainer::of(SheetRoot::Filters, TEST_SHEET).as_str());
     assert_eq!(def.len(), 0, "no definition left in the document");
 }
 

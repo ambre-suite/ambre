@@ -214,7 +214,9 @@ impl TrameState {
         // or columns this cache does not yet know about. Both the engine reseed
         // and the formatting reseed below resolve cell keys through it.
         self.rebuild_index();
-        let cells_map = self.doc.get_map(cells_map_name(&self.active_sheet));
+        let cells_map = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str());
         let cell_count = match cells_map.get_value() {
             LoroValue::Map(cells) => cells.len(),
             _ => 0,

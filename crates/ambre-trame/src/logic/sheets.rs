@@ -38,7 +38,10 @@ impl TrameState {
             let Some(index) = indices.get(&idx) else {
                 continue;
             };
-            let LoroValue::Map(cells) = self.doc.get_map(cells_map_name(&sheet_id)).get_value()
+            let LoroValue::Map(cells) = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, &sheet_id).as_str())
+                .get_value()
             else {
                 continue;
             };
@@ -57,12 +60,12 @@ impl TrameState {
             for (key, value) in entries {
                 // Masked cells (covered by a merge, conflicting value) stay out of
                 // the DAG.
-                if masked.contains(key) {
-                    continue;
-                }
                 let (Some((rl, cl)), LoroValue::String(text)) = (parse_cell_key(key), value) else {
                     continue;
                 };
+                if masked.contains(&CellKey::of(rl, cl)) {
+                    continue;
+                }
                 if index.contains_row(&rl) && index.contains_col(&cl) {
                     let ctx = TrameCtx {
                         engine_sheet_by_name: &self.engine_sheet_by_name,
@@ -119,7 +122,7 @@ impl TrameState {
     /// fails to parse is dropped (the formula using it surfaces `#PARSE!`).
     pub(super) fn rebuild_named(&mut self) {
         self.named.clear();
-        let LoroValue::Map(names) = self.doc.get_map(NAMED_RANGES_MAP).get_value() else {
+        let LoroValue::Map(names) = self.doc.get_map(Root::NamedRanges.as_str()).get_value() else {
             return;
         };
         // Names cannot reference other names: resolve sheet qualifiers only.
@@ -170,8 +173,12 @@ impl TrameState {
     /// Build a fresh [`SheetIndex`] for an arbitrary sheet id (the cross-sheet
     /// reseed needs each sheet's position<->id map, not just the active one).
     pub(super) fn build_sheet_index(&self, sheet_id: &str) -> SheetIndex {
-        let rows = self.doc.get_movable_list(rows_list_name(sheet_id));
-        let cols = self.doc.get_movable_list(cols_list_name(sheet_id));
+        let rows = self
+            .doc
+            .get_movable_list(SheetContainer::of(SheetRoot::Rows, sheet_id).as_str());
+        let cols = self
+            .doc
+            .get_movable_list(SheetContainer::of(SheetRoot::Cols, sheet_id).as_str());
         SheetIndex::build(&rows, &cols)
     }
 
@@ -201,7 +208,7 @@ impl TrameState {
         };
         let _ = self
             .doc
-            .get_map(NAMED_RANGES_MAP)
+            .get_map(Root::NamedRanges.as_str())
             .insert(name, stored.as_str());
         self.doc.commit();
         self.reseed_engine();
@@ -256,7 +263,7 @@ impl TrameState {
 
     /// Remove a named range and reseed. A no-op if the name is undefined.
     pub(super) fn delete_name(&mut self, name: &str) -> TrameOutcome {
-        let map = self.doc.get_map(NAMED_RANGES_MAP);
+        let map = self.doc.get_map(Root::NamedRanges.as_str());
         if map.get(name).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
@@ -282,16 +289,17 @@ impl TrameState {
     /// the stored name, and the other reads it with the first free ` (n)` suffix.
     /// The result depends on the document alone, so every peer reads the same.
     pub(super) fn sheet_names(&self) -> HashMap<String, String> {
-        let mut stored: Vec<(String, String)> = match self.doc.get_map(SHEETS_MAP).get_value() {
-            LoroValue::Map(sheets) => sheets
-                .iter()
-                .map(|(id, name)| match name {
-                    LoroValue::String(s) => (id.clone(), s.to_string()),
-                    _ => (id.clone(), id.clone()),
-                })
-                .collect(),
-            _ => Vec::new(),
-        };
+        let mut stored: Vec<(String, String)> =
+            match self.doc.get_map(Root::Sheets.as_str()).get_value() {
+                LoroValue::Map(sheets) => sheets
+                    .iter()
+                    .map(|(id, name)| match name {
+                        LoroValue::String(s) => (id.clone(), s.to_string()),
+                        _ => (id.clone(), id.clone()),
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            };
         // A workbook with no stored sheet reads the default one (`TRAME-022`).
         if stored.is_empty() {
             stored.push((DEFAULT_SHEET.to_owned(), DEFAULT_SHEET_NAME.to_owned()));
@@ -350,7 +358,7 @@ impl TrameState {
 
     /// Every sheet id the `sheets` CRDT map holds, unordered.
     fn stored_sheet_ids(&self) -> Vec<String> {
-        match self.doc.get_map(SHEETS_MAP).get_value() {
+        match self.doc.get_map(Root::Sheets.as_str()).get_value() {
             LoroValue::Map(sheets) => sheets.keys().cloned().collect(),
             _ => Vec::new(),
         }
@@ -368,7 +376,7 @@ impl TrameState {
         }
         let _ = self
             .doc
-            .get_map(SHEETS_MAP)
+            .get_map(Root::Sheets.as_str())
             .insert(DEFAULT_SHEET, DEFAULT_SHEET_NAME);
         true
     }
@@ -379,7 +387,11 @@ impl TrameState {
     /// not merged. Then the explicit `sheet_order` entries that still correspond
     /// to a live sheet.
     pub(super) fn sheet_order_ids(&self) -> Vec<String> {
-        let listed: Vec<String> = match self.doc.get_movable_list(SHEET_ORDER).get_value() {
+        let listed: Vec<String> = match self
+            .doc
+            .get_movable_list(Root::SheetOrder.as_str())
+            .get_value()
+        {
             LoroValue::List(items) => items
                 .iter()
                 .filter_map(|v| match v {
@@ -475,8 +487,14 @@ impl TrameState {
         let id = format!("{:016x}_{:08x}", self.doc.peer_id(), self.sheet_counter);
         self.sheet_counter += 1;
         let name = self.free_sheet_name(name);
-        let _ = self.doc.get_map(SHEETS_MAP).insert(&id, name.as_str());
-        let _ = self.doc.get_movable_list(SHEET_ORDER).push(id.as_str());
+        let _ = self
+            .doc
+            .get_map(Root::Sheets.as_str())
+            .insert(&id, name.as_str());
+        let _ = self
+            .doc
+            .get_movable_list(Root::SheetOrder.as_str())
+            .push(id.as_str());
         self.doc.commit();
         // The new id sorts among the existing ones, so the engine index of
         // every sheet after it moves up. A compiled reference holds the old
@@ -516,7 +534,10 @@ impl TrameState {
         if let Some(message) = refusal {
             return TrameOutcome::display_only(vec![TrameEvent::Error { message }]);
         }
-        let _ = self.doc.get_map(SHEETS_MAP).insert(sheet_id, name);
+        let _ = self
+            .doc
+            .get_map(Root::Sheets.as_str())
+            .insert(sheet_id, name);
         self.doc.commit();
         self.reseed_engine();
         let update = self.flush_delta();
@@ -542,7 +563,7 @@ impl TrameState {
         if from == to {
             return TrameOutcome::display_only(vec![]);
         }
-        let list = self.doc.get_movable_list(SHEET_ORDER);
+        let list = self.doc.get_movable_list(Root::SheetOrder.as_str());
         // Bring the list to the canonical order if it diverges, so `mov` operates
         // on the positions the tab strip shows. The elements already listed are
         // kept: a concurrent move needs their identity to land (`TRAME-074`).
@@ -607,7 +628,7 @@ impl TrameState {
         }
         // Pick the fallback active sheet from the pre-delete order.
         let order = self.sheet_order_ids();
-        let list = self.doc.get_movable_list(SHEET_ORDER);
+        let list = self.doc.get_movable_list(Root::SheetOrder.as_str());
         if let LoroValue::List(items) = list.get_value()
             && let Some(pos) = items
                 .iter()
@@ -615,7 +636,7 @@ impl TrameState {
         {
             let _ = list.delete(pos, 1);
         }
-        let _ = self.doc.get_map(SHEETS_MAP).delete(sheet_id);
+        let _ = self.doc.get_map(Root::Sheets.as_str()).delete(sheet_id);
         self.drop_sheet_containers(sheet_id);
         self.doc.commit();
 
@@ -666,16 +687,18 @@ impl TrameState {
     /// rows, and the two axes. A deleted sheet leaves none of its data in the
     /// document (`TRAME-076`).
     pub(super) fn drop_sheet_containers(&mut self, sheet_id: &str) {
-        for name in [
-            cells_map_name(sheet_id),
-            cellstyle_map_name(sheet_id),
-            merges_map_name(sheet_id),
-            col_widths_map_name(sheet_id),
-            row_heights_map_name(sheet_id),
-            filters_map_name(sheet_id),
-            filter_hidden_map_name(sheet_id),
+        for root in [
+            SheetRoot::Cells,
+            SheetRoot::CellStyle,
+            SheetRoot::Merges,
+            SheetRoot::ColWidths,
+            SheetRoot::RowHeights,
+            SheetRoot::Filters,
+            SheetRoot::FilterHidden,
         ] {
-            let map = self.doc.get_map(name);
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(root, sheet_id).as_str());
             if let LoroValue::Map(entries) = map.get_value() {
                 let keys: Vec<String> = entries.keys().cloned().collect();
                 for key in keys {
@@ -683,8 +706,11 @@ impl TrameState {
                 }
             }
         }
-        for name in [rows_list_name(sheet_id), cols_list_name(sheet_id)] {
-            let _ = self.doc.get_movable_list(name).clear();
+        for root in [SheetRoot::Rows, SheetRoot::Cols] {
+            let _ = self
+                .doc
+                .get_movable_list(SheetContainer::of(root, sheet_id).as_str())
+                .clear();
         }
     }
 }

@@ -39,24 +39,144 @@ use crate::model::{Line, SheetIndex, Uid};
 /// avoid a duplicate `push` on merge (see `trame-schema`).
 pub(crate) const DEFAULT_SHEET: &str = "s0";
 
-/// Loro map holding sheet metadata: `{sheet_id -> name}`. Step 1 stores the name
-/// flat; the `{name: LoroText, hidden, tab_color}` sub-map of `trame-schema`
-/// lands with the sheet-tabs UI.
-pub(crate) const SHEETS_MAP: &str = "sheets";
+ambre_core::loro_fields!(pub(crate));
 
-/// `LoroMovableList` holding the tab-strip order as a sequence of `sheet_id`s
-/// (`trame-schema`, `trame-sheets`). This list *never* carries the implicit
-/// [`DEFAULT_SHEET`] eagerly, because two fresh peers would each push it and
-/// converge to a duplicate. [`TrameState::sheet_order_ids`] treats it as the
-/// implicit first tab instead. [`TrameCommand::CreateSheet`] appends an
-/// explicit sheet.
-pub(crate) const SHEET_ORDER: &str = "sheet_order";
+ambre_core::crdt_names! {
+    /// The root containers a workbook opens by one fixed name.
+    pub(crate) enum Root: ContainerName {
+        /// The schema version register (`ambre-spec-schema-version.md`).
+        Meta = ambre_core::crdt::FoundationRoot::Meta.as_str(),
+        /// Sheet metadata: `{sheet_id -> name}`. Step 1 stores the name flat;
+        /// the `{name: LoroText, hidden, tab_color}` sub-map of `trame-schema`
+        /// lands with the sheet-tabs UI.
+        Sheets = "sheets",
+        /// The tab-strip order as a `LoroMovableList` of `sheet_id`s
+        /// (`trame-schema`, `trame-sheets`). This list *never* carries the
+        /// implicit [`DEFAULT_SHEET`] eagerly, because two fresh peers would
+        /// each push it and converge to a duplicate.
+        /// [`TrameState::sheet_order_ids`] treats it as the implicit first tab
+        /// instead. [`TrameCommand::CreateSheet`] appends an explicit sheet.
+        SheetOrder = "sheet_order",
+        /// Workbook named ranges: `{name -> reference}`, where the reference is
+        /// an A1-syntax string, optionally sheet-qualified (`Sheet2!A1:B2`).
+        /// LWW: the last writer of a given name wins. Resolved positionally at
+        /// reseed time into [`TrameState::named`] (`trame-named-ranges`).
+        NamedRanges = "named_ranges",
+    }
+}
 
-/// Loro map holding workbook named ranges: `{name -> reference}` where the
-/// reference is an A1-syntax string, optionally sheet-qualified (`Sheet2!A1:B2`).
-/// LWW: the last writer of a given name wins. Resolved positionally at reseed
-/// time into [`TrameState::named`] (`trame-named-ranges`).
-pub(crate) const NAMED_RANGES_MAP: &str = "named_ranges";
+ambre_core::crdt_names! {
+    /// The per-sheet root containers, one of each per sheet. A sheet's own
+    /// container is named by [`SheetContainer::of`], `cells_{sheet}` for
+    /// example, so a multi-sheet document keeps each sheet's cells, rows,
+    /// columns and formatting isolated (`trame-schema`).
+    pub(crate) enum SheetRoot: ContainerFamily {
+        /// The cell map, `{"{row_uid}:{col_uid}" -> raw text}`.
+        Cells = "cells",
+        /// The cell-style map (`trame-cell-styles`): one atomic LWW register
+        /// per styled cell. The stable id pair keys it, so the style follows
+        /// its cell across structural ops. Absence = the grid default style.
+        ///
+        /// * The value is the whole visual style of the cell, postcard-encoded
+        ///   into the register's binary value. That is bold/italic plus the
+        ///   full [`CellStyle`]: alignments, wrap, colours, borders, font,
+        ///   number format, decimals, size.
+        /// * One register per cell, never one per attribute, is the
+        ///   convergence invariant. Two peers that concurrently restyle the
+        ///   same cell race exactly once, so the merged style is always one
+        ///   writer's. It is never a per-attribute blend across containers
+        ///   (`trame-schema`, `TRAME-016`).
+        CellStyle = "cellstyle",
+        /// The row order, a `LoroMovableList` of `row_uid`s.
+        Rows = "rows",
+        /// The column order, a `LoroMovableList` of `col_uid`s.
+        Cols = "cols",
+        /// The merge map: a LWW `LoroMap` keyed by the master (top-left)
+        /// cell's stable id pair, with the bottom-right corner's id pair as
+        /// value (`trame-cell-merges`). Keyed by stable ids so a merge follows
+        /// its cells across inserts and deletes.
+        Merges = "merges",
+        /// The shared-filter definition map: the active filter held whole as
+        /// one register under [`FilterKey::Active`], so it converges as one
+        /// LWW unit (`trame-shared-filter`, `TRAME-FEAT-025`). Empty map = no
+        /// filter.
+        Filters = "filters",
+        /// The hidden-row set: `{row_uid -> true}` for every row the active
+        /// filter hides. Kept separate from the row list to avoid polluting
+        /// the order list. Keyed by stable `row_uid`, so the hidden set follows
+        /// the data across a sort or an insert (`trame-shared-filter`).
+        FilterHidden = "filter_hidden",
+        /// The column-width map: `{col_uid -> width_px}` as an f64, keyed by
+        /// the column's stable `Uid` so the width follows its column across
+        /// inserts, deletes and reorders (`trame-resize`). Absence = the
+        /// uniform default [`DEFAULT_COL_WIDTH`]. LWW: concurrent resizes of
+        /// the same column converge on the last writer, like any cell.
+        ColWidths = "col_widths",
+        /// The row-height map: `{row_uid -> height_px}`. Row analogue of
+        /// [`SheetRoot::ColWidths`]; absence = [`DEFAULT_ROW_HEIGHT`].
+        RowHeights = "row_heights",
+    }
+}
+
+/// The root name of one sheet's container of the family `root`, as
+/// `cells_{sheet}`. The one place the two halves are joined.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct SheetContainer(String);
+
+impl SheetContainer {
+    /// The container of the family `root` that belongs to `sheet`.
+    #[must_use]
+    pub(crate) fn of(root: SheetRoot, sheet: &str) -> Self {
+        Self(format!("{}_{sheet}", root.as_str()))
+    }
+
+    /// The name, for the Loro call that opens the container.
+    #[must_use]
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The family and the sheet a stored root name joins, or `None` for a
+    /// root outside every family. The schema belts read stored roots back
+    /// through it.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn parse(name: &str) -> Option<(SheetRoot, &str)> {
+        SheetRoot::ALL
+            .iter()
+            .filter_map(|root| {
+                let sheet = name.strip_prefix(root.as_str())?.strip_prefix('_')?;
+                (!sheet.is_empty()).then_some((*root, sheet))
+            })
+            .max_by_key(|(root, _)| root.as_str().len())
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The key of a sheet's filter map since version 2.
+    pub(crate) enum FilterKey: FieldKey {
+        /// The single register: the whole filter definition, postcard-encoded
+        /// as [`FilterRecord`] (`TRAME-FEAT-025`).
+        Active = "active",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The flat keys a version 1 filter map stored. Only the `1 -> 2` step
+    /// reads them, to fold them into [`FilterKey::Active`].
+    pub(crate) enum LegacyFilterKey: FieldKey {
+        /// The filtered column's stable id, as its key part.
+        Col = "col",
+        /// `"values"` or `"condition"`.
+        Kind = "kind",
+        /// The child list of the values a values filter keeps.
+        Values = "values",
+        /// A condition filter's operator.
+        Op = "op",
+        /// A condition filter's operand.
+        Value = "value",
+    }
+}
 
 /// Maximum number of rows/columns a single write may materialize past the
 /// current used-range high-water mark. Bounds the pathological "lone value far
@@ -77,53 +197,6 @@ pub(crate) const MATERIALIZE_COLS: ColCount = ColCount::new(MATERIALIZE_CAP as u
 /// ops such as `InsertRow` use the default origin and stay undoable.
 pub(crate) const MATERIALIZE_ORIGIN: &str = "mat";
 
-/// Per-sheet container names, `cells_{sheet}` and its siblings. Keyed by sheet
-/// id so a multi-sheet document keeps each sheet's
-/// cells/rows/columns/formatting isolated (`trame-schema`).
-pub(crate) fn cells_map_name(sheet: &str) -> String {
-    format!("cells_{sheet}")
-}
-/// Per-sheet cell-style map (`cellstyle_{sheet}`, `trame-cell-styles`): one
-/// atomic LWW register per styled cell. The stable id pair keys it, so the
-/// style follows its cell across structural ops. Absence = the grid default
-/// style.
-///
-/// * The value is the whole visual style of the cell, postcard-encoded into
-///   the register's binary value. That is bold/italic plus the full
-///   [`CellStyle`]: alignments, wrap, colours, borders, font, number format,
-///   decimals, size.
-/// * One register per cell, never one per attribute, is the convergence
-///   invariant. Two peers that concurrently restyle the same cell race exactly
-///   once, so the merged style is always one writer's. It is never a
-///   per-attribute blend across containers (`trame-schema`, `TRAME-016`).
-pub(crate) fn cellstyle_map_name(sheet: &str) -> String {
-    format!("cellstyle_{sheet}")
-}
-pub(crate) fn rows_list_name(sheet: &str) -> String {
-    format!("rows_{sheet}")
-}
-pub(crate) fn cols_list_name(sheet: &str) -> String {
-    format!("cols_{sheet}")
-}
-/// Per-sheet merge map (`merges_{sheet}`): a LWW `LoroMap` keyed by the master
-/// (top-left) cell's stable id pair, with the bottom-right corner's id pair as
-/// value (`trame-cell-merges`). Keyed by stable ids so a merge
-/// follows its cells across inserts/deletes.
-pub(crate) fn merges_map_name(sheet: &str) -> String {
-    format!("merges_{sheet}")
-}
-
-/// Per-sheet shared-filter definition map (`filters_{sheet}`): the active filter
-/// held whole as one register under [`FILTER_KEY`], so it converges as one LWW
-/// unit (`trame-shared-filter`, `TRAME-FEAT-025`). Empty map = no filter.
-pub(crate) fn filters_map_name(sheet: &str) -> String {
-    format!("filters_{sheet}")
-}
-
-/// Key of the single register inside [`filters_map_name`]: the whole filter
-/// definition, postcard-encoded as [`FilterRecord`] (`TRAME-FEAT-025`).
-pub(crate) const FILTER_KEY: &str = "active";
-
 /// The whole shared-filter definition as one CRDT record
 /// (`trame-shared-filter`). postcard-encoded into the single `filters_{sheet}`
 /// register under [`FILTER_KEY`], mirroring `cellstyle_{sheet}` (`TRAME-016`).
@@ -136,28 +209,6 @@ pub(crate) struct FilterRecord {
     /// The filtered column's stable id, rendered as its 25-char key part.
     pub col: String,
     pub kind: FilterKind,
-}
-
-/// Per-sheet hidden-row set (`filter_hidden_{sheet}`): `{row_uid -> true}` for
-/// every row the active filter hides. Kept separate from `rows_{sheet}` to
-/// avoid polluting the order list. Keyed by stable `row_uid`, so the hidden set
-/// follows the data across a sort/insert (`trame-shared-filter`).
-pub(crate) fn filter_hidden_map_name(sheet: &str) -> String {
-    format!("filter_hidden_{sheet}")
-}
-
-/// Per-sheet column-width map (`col_widths_{sheet}`): `{col_uid -> width_px}` as
-/// an f64, keyed by the column's stable `Uid` so the width follows its column
-/// across inserts/deletes/reorders (`trame-resize`). Absence = the uniform
-/// default [`DEFAULT_COL_WIDTH`]. LWW: concurrent resizes of the same column
-/// converge on the last writer, like any cell.
-pub(crate) fn col_widths_map_name(sheet: &str) -> String {
-    format!("col_widths_{sheet}")
-}
-/// Per-sheet row-height map (`row_heights_{sheet}`): `{row_uid -> height_px}`.
-/// Row analogue of [`col_widths_map_name`]; absence = [`DEFAULT_ROW_HEIGHT`].
-pub(crate) fn row_heights_map_name(sheet: &str) -> String {
-    format!("row_heights_{sheet}")
 }
 
 /// Uniform fallback metrics (logical px) for never-resized axes. Mirror the UI
@@ -318,7 +369,7 @@ fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
 /// (`TRAME-FEAT-025`). Version 2 stores the whole
 /// definition as one `Binary(postcard(FilterRecord))` under [`FILTER_KEY`].
 fn filter_register_step(doc: &LoroDoc) -> Result<(), String> {
-    if let LoroValue::Map(sheets) = doc.get_map(SHEETS_MAP).get_value() {
+    if let LoroValue::Map(sheets) = doc.get_map(Root::Sheets.as_str()).get_value() {
         // Sorted: two peers migrating one history write the same operations
         // only if they write them in the same order (`SCHEMA-020`).
         let mut sheets: Vec<&String> = sheets.keys().collect();
@@ -344,7 +395,7 @@ fn filter_register_step(doc: &LoroDoc) -> Result<(), String> {
 /// used range stays a position, and a formula that does not parse is left as
 /// typed.
 fn stored_reference_step(doc: &LoroDoc) -> Result<(), String> {
-    let mut sheets: Vec<String> = match doc.get_map(SHEETS_MAP).get_value() {
+    let mut sheets: Vec<String> = match doc.get_map(Root::Sheets.as_str()).get_value() {
         LoroValue::Map(sheets) => sheets.keys().cloned().collect(),
         _ => Vec::new(),
     };
@@ -358,14 +409,14 @@ fn stored_reference_step(doc: &LoroDoc) -> Result<(), String> {
         .iter()
         .map(|s| {
             let index = SheetIndex::build(
-                &doc.get_movable_list(rows_list_name(s)),
-                &doc.get_movable_list(cols_list_name(s)),
+                &doc.get_movable_list(SheetContainer::of(SheetRoot::Rows, s).as_str()),
+                &doc.get_movable_list(SheetContainer::of(SheetRoot::Cols, s).as_str()),
             );
             (s.as_str(), index)
         })
         .collect();
     for sheet in &sheets {
-        let map = doc.get_map(cells_map_name(sheet));
+        let map = doc.get_map(SheetContainer::of(SheetRoot::Cells, sheet).as_str());
         let LoroValue::Map(cells) = map.get_value() else {
             continue;
         };
@@ -400,21 +451,22 @@ fn stored_reference_step(doc: &LoroDoc) -> Result<(), String> {
 /// Convert one sheet's flat filter shape into the single register. A sheet with
 /// no filter (an empty or absent map) is left untouched.
 fn fold_filter_keys(doc: &LoroDoc, sheet: &str) -> Result<(), String> {
-    let map = doc.get_map(filters_map_name(sheet));
+    let map = doc.get_map(SheetContainer::of(SheetRoot::Filters, sheet).as_str());
     // `get_deep_value` resolves the `values` child list, which the shallow read
     // in `load_active_filter` could not (`TRAME-FEAT-004`).
-    let LoroValue::Map(fields) = map.get_deep_value() else {
+    let LoroValue::Map(deep) = map.get_deep_value() else {
         return Ok(());
     };
+    let fields = FieldValues::<LegacyFilterKey>::of(&deep);
     // The old shape carries a flat `col` key; a version-2 register does not.
-    let Some(LoroValue::String(col)) = fields.get("col") else {
+    let Some(LoroValue::String(col)) = fields.get(LegacyFilterKey::Col) else {
         return Ok(());
     };
     let col_uid = Uid::parse(col.as_str())
         .ok_or_else(|| format!("an unreadable filter column {}", col.as_str()))?;
-    let kind = match fields.get("kind") {
+    let kind = match fields.get(LegacyFilterKey::Kind) {
         Some(LoroValue::String(kind)) if kind.as_str() == "values" => {
-            let values = match fields.get("values") {
+            let values = match fields.get(LegacyFilterKey::Values) {
                 Some(LoroValue::List(items)) => items
                     .iter()
                     .filter_map(|v| match v {
@@ -427,12 +479,12 @@ fn fold_filter_keys(doc: &LoroDoc, sheet: &str) -> Result<(), String> {
             FilterKind::Values(values)
         }
         Some(LoroValue::String(kind)) if kind.as_str() == "condition" => {
-            let op = match fields.get("op") {
+            let op = match fields.get(LegacyFilterKey::Op) {
                 Some(LoroValue::String(s)) => op_from_str(s.as_str())
                     .ok_or_else(|| format!("an unreadable filter operator {}", s.as_str()))?,
                 _ => return Err("a condition filter with no operator".to_owned()),
             };
-            let value = match fields.get("value") {
+            let value = match fields.get(LegacyFilterKey::Value) {
                 Some(LoroValue::String(s)) => s.to_string(),
                 _ => String::new(),
             };
@@ -447,12 +499,12 @@ fn fold_filter_keys(doc: &LoroDoc, sheet: &str) -> Result<(), String> {
     let bytes = postcard::to_allocvec(&record)
         .map_err(|e| format!("encoding the filter register failed: {e}"))?;
     // Replace the flat keys with the one register.
-    let mut old_keys: Vec<&String> = fields.keys().collect();
+    let mut old_keys: Vec<&String> = deep.keys().collect();
     old_keys.sort();
     for key in old_keys {
         let _ = map.delete(key.as_str());
     }
-    let _ = map.insert(FILTER_KEY, bytes);
+    let _ = Fields::<FilterKey>::of(map).insert(FilterKey::Active, bytes);
     Ok(())
 }
 
@@ -531,7 +583,7 @@ mod tests {
     /// before `ARCH P8`.
     fn snapshot_at(version: Option<u32>) -> Vec<u8> {
         let doc = LoroDoc::new();
-        doc.get_map(SHEETS_MAP)
+        doc.get_map(Root::Sheets.as_str())
             .insert(DEFAULT_SHEET, "Sheet1")
             .expect("seed");
         if let Some(v) = version {
@@ -574,7 +626,10 @@ mod tests {
         // The migration stamps and does nothing else: the workbook it carried is
         // still there.
         assert!(
-            migrated.get_map(SHEETS_MAP).get(DEFAULT_SHEET).is_some(),
+            migrated
+                .get_map(Root::Sheets.as_str())
+                .get(DEFAULT_SHEET)
+                .is_some(),
             "the migration must not drop what it migrates"
         );
     }
@@ -649,7 +704,9 @@ mod tests {
 
         // Now overwrite that register with a blob no `StyleRecord` layout can
         // produce: a record written by a client this build does not know.
-        let styles = source.doc.get_map(cellstyle_map_name(DEFAULT_SHEET));
+        let styles = source
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::CellStyle, DEFAULT_SHEET).as_str());
         let LoroValue::Map(entries) = styles.get_value() else {
             panic!("the styled cell wrote a register");
         };
@@ -743,14 +800,17 @@ mod tests {
                 i64::from(1),
             )
             .expect("stamp");
-        doc.get_map(SHEETS_MAP)
+        doc.get_map(Root::Sheets.as_str())
             .insert(DEFAULT_SHEET, "Sheet1")
             .expect("sheet");
-        let filters = doc.get_map(filters_map_name(DEFAULT_SHEET));
-        filters.insert("col", "0000000000000001_00000000").unwrap();
-        filters.insert("kind", "condition").unwrap();
-        filters.insert("op", "gt").unwrap();
-        filters.insert("value", "1").unwrap();
+        let filters = doc.get_map(SheetContainer::of(SheetRoot::Filters, DEFAULT_SHEET).as_str());
+        let filters = Fields::<LegacyFilterKey>::of(filters);
+        filters
+            .insert(LegacyFilterKey::Col, "0000000000000001_00000000")
+            .unwrap();
+        filters.insert(LegacyFilterKey::Kind, "condition").unwrap();
+        filters.insert(LegacyFilterKey::Op, "gt").unwrap();
+        filters.insert(LegacyFilterKey::Value, "1").unwrap();
         doc.commit();
         let payload = doc.export(ExportMode::Snapshot).expect("snapshot");
 
@@ -759,14 +819,19 @@ mod tests {
         migrated.import(&gated).expect("migrated snapshot imports");
         assert_eq!(read_version(&migrated).expect("reads"), SCHEMA_VERSION);
 
-        let LoroValue::Map(fields) = migrated
-            .get_map(filters_map_name(DEFAULT_SHEET))
+        let LoroValue::Map(deep) = migrated
+            .get_map(SheetContainer::of(SheetRoot::Filters, DEFAULT_SHEET).as_str())
             .get_deep_value()
         else {
             panic!("the filters map survives");
         };
-        assert!(fields.get("col").is_none(), "the flat keys are gone");
-        let LoroValue::Binary(bytes) = fields.get(FILTER_KEY).expect("one register") else {
+        let old = FieldValues::<LegacyFilterKey>::of(&deep);
+        assert!(
+            old.get(LegacyFilterKey::Col).is_none(),
+            "the flat keys are gone"
+        );
+        let fields = FieldValues::<FilterKey>::of(&deep);
+        let LoroValue::Binary(bytes) = fields.get(FilterKey::Active).expect("one register") else {
             panic!("the register is binary");
         };
         let record: FilterRecord = postcard::from_bytes(bytes).expect("decodes");

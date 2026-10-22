@@ -45,7 +45,11 @@ impl TrameState {
         let mut formulas = 0u32;
         let sheet_ids = self.fixture_sheet_ids();
         for sheet in &sheet_ids {
-            if let LoroValue::Map(map) = self.doc.get_map(cells_map_name(sheet)).get_value() {
+            if let LoroValue::Map(map) = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, sheet).as_str())
+                .get_value()
+            {
                 for value in map.values() {
                     cells = cells.saturating_add(1);
                     if matches!(value, LoroValue::String(s) if s.starts_with('=')) {
@@ -92,8 +96,12 @@ impl TrameState {
             // One index per sheet: `self.index` tracks only the active sheet, and
             // a dump quantifies over all of them.
             let index = SheetIndex::build(
-                &self.doc.get_movable_list(rows_list_name(&sheet)),
-                &self.doc.get_movable_list(cols_list_name(&sheet)),
+                &self
+                    .doc
+                    .get_movable_list(SheetContainer::of(SheetRoot::Rows, &sheet).as_str()),
+                &self
+                    .doc
+                    .get_movable_list(SheetContainer::of(SheetRoot::Cols, &sheet).as_str()),
             );
             let sheet_u16 = self.engine_sheet_by_id.get(&sheet).copied();
             // Keyed by grid position, not by stored key. The stored key carries
@@ -101,7 +109,11 @@ impl TrameState {
             // a different route" are allowed to differ in. `BTreeMap` sorts the
             // rows/columns for free, making the order deterministic.
             let mut by_pos: BTreeMap<CellPos, String> = BTreeMap::new();
-            if let LoroValue::Map(map) = self.doc.get_map(cells_map_name(&sheet)).get_value() {
+            if let LoroValue::Map(map) = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, &sheet).as_str())
+                .get_value()
+            {
                 for (key, value) in map.iter() {
                     let LoroValue::String(raw) = value else {
                         continue;
@@ -152,7 +164,11 @@ impl TrameState {
     /// sheet first. The same workbook would then dump differently depending on
     /// which tab happened to be open.
     fn fixture_sheet_ids(&self) -> Vec<String> {
-        let mut listed: Vec<String> = match self.doc.get_movable_list(SHEET_ORDER).get_value() {
+        let mut listed: Vec<String> = match self
+            .doc
+            .get_movable_list(Root::SheetOrder.as_str())
+            .get_value()
+        {
             LoroValue::List(items) => items
                 .iter()
                 .filter_map(|v| match v {
@@ -162,7 +178,7 @@ impl TrameState {
                 .collect(),
             _ => Vec::new(),
         };
-        let mut rest: Vec<String> = match self.doc.get_map(SHEETS_MAP).get_value() {
+        let mut rest: Vec<String> = match self.doc.get_map(Root::Sheets.as_str()).get_value() {
             LoroValue::Map(sheets) => sheets
                 .keys()
                 .filter(|id| !listed.contains(id))

@@ -54,10 +54,10 @@ impl TrameState {
         };
         let _ = self
             .doc
-            .get_map(merges_map_name(&self.active_sheet))
+            .get_map(SheetContainer::of(SheetRoot::Merges, &self.active_sheet).as_str())
             .insert(
-                &cell_key(master.0, master.1),
-                cell_key(extent.0, extent.1).as_str(),
+                CellKey::of(master.0, master.1).as_str(),
+                CellKey::of(extent.0, extent.1).as_str(),
             );
     }
 
@@ -121,8 +121,8 @@ impl TrameState {
             return false;
         };
         self.doc
-            .get_map(merges_map_name(&self.active_sheet))
-            .delete(&cell_key(rl, cl))
+            .get_map(SheetContainer::of(SheetRoot::Merges, &self.active_sheet).as_str())
+            .delete(CellKey::of(rl, cl).as_str())
             .is_ok()
     }
 
@@ -148,8 +148,8 @@ impl TrameState {
     pub(super) fn cell_has_raw(&self, at: CellPos) -> bool {
         has_raw_value(self.index.resolve(at).and_then(|(rl, cl)| {
             self.doc
-                .get_map(cells_map_name(&self.active_sheet))
-                .get(&cell_key(rl, cl))
+                .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str())
+                .get(CellKey::of(rl, cl).as_str())
                 .map(|v| v.get_deep_value())
         }))
     }
@@ -181,7 +181,7 @@ impl TrameState {
                 // conflict): keep the data, exclude it from the engine.
                 if self.cell_has_raw(at) {
                     if let Some((rl, cl)) = self.index.resolve(at) {
-                        self.masked_cells.insert(cell_key(rl, cl));
+                        self.masked_cells.insert(CellKey::of(rl, cl));
                     }
                     events.push(TrameEvent::MergeConflictDetected {
                         master_row: master.row,
@@ -209,7 +209,10 @@ impl TrameState {
     /// each deriving its own. A second copy of this precedence would let a
     /// masked cell differ from the block the grid draws.
     pub(super) fn resolved_merges(&self, sheet_id: &str, index: &SheetIndex) -> Vec<CellRect> {
-        let LoroValue::Map(entries) = self.doc.get_map(merges_map_name(sheet_id)).get_value()
+        let LoroValue::Map(entries) = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::Merges, sheet_id).as_str())
+            .get_value()
         else {
             return Vec::new();
         };
@@ -252,8 +255,10 @@ impl TrameState {
     /// masked conflicted cell therefore reads the same value regardless of the
     /// active tab (`trame-cell-merges`, `TRAME-020`). For the active sheet (fed
     /// with [`Self::index`]) it returns exactly [`Self::masked_cells`].
-    pub(super) fn masked_cells_for(&self, sheet_id: &str, index: &SheetIndex) -> HashSet<String> {
-        let cells = self.doc.get_map(cells_map_name(sheet_id));
+    pub(super) fn masked_cells_for(&self, sheet_id: &str, index: &SheetIndex) -> HashSet<CellKey> {
+        let cells = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str());
         self.resolved_merges(sheet_id, index)
             .into_iter()
             .flat_map(|block| {
@@ -263,10 +268,10 @@ impl TrameState {
                     .filter(move |&at| at != block.top_left)
             })
             .filter_map(|at| index.resolve(at))
-            .map(|(rl, cl)| cell_key(rl, cl))
+            .map(|(rl, cl)| CellKey::of(rl, cl))
             // A covered cell that still holds a value is a concurrent conflict:
             // mask it (keep the data, exclude it from the DAG).
-            .filter(|key| has_raw_value(cells.get(key).map(|v| v.get_deep_value())))
+            .filter(|key| has_raw_value(cells.get(key.as_str()).map(|v| v.get_deep_value())))
             .collect()
     }
 }

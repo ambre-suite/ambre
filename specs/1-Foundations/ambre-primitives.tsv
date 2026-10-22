@@ -1509,6 +1509,7 @@ ambre-core | src/color.rs | crate::color | Rgba::from_channels(a) | param | u8	n
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(b) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(g) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(r) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
+ambre-core | src/crdt.rs | crate::crdt | ContainerFamily::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed container family, which the application joins to an id
 ambre-core | src/crdt.rs | crate::crdt | ContainerName::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed root name, for the call that opens the container
 ambre-core | src/crdt.rs | crate::crdt | FieldKey::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed map key, for the call into the map
 ambre-core | src/doc_type.rs | crate::doc_type | <DocType as FromStr>::from_str(word) | param | &str	trait	signature fixed by the trait
@@ -6164,7 +6165,6 @@ ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimite
 ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter(data) | param | &[u8]	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::masked_cells_for() | ret | HashSet<String>	debt	finding: (FINDING, confirmed): cell key is a formatted String
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::masked_cells_for(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::resolved_merges(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/merges.rs | crate::logic::merges | has_raw_value() | ret | bool	generic	predicate or did-it-change return
@@ -6188,7 +6188,6 @@ ambre-trame | src/logic/mod.rs | crate::logic | TrameState.col_widths | field | 
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.engine_sheet_by_id | field | HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.engine_sheet_by_name | field | HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.entry_end | field | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.masked_cells | field | HashSet<String>	debt	finding: (FINDING, confirmed): cell key is a formatted String
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.named | field | HashMap<String,NameTarget>	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.row_heights | field | HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_counter | field | u32	newtype-inner	per-session mint counter feeding the id formatter
@@ -6236,40 +6235,21 @@ ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value
 ambre-trame | src/logic/schema.rs | crate::logic::schema | DEFAULT_COL_WIDTH | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/schema.rs | crate::logic::schema | DEFAULT_ROW_HEIGHT | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/schema.rs | crate::logic::schema | DEFAULT_SHEET | const | &str	debt	planned: lot A 1 (DEFAULT_SHEET comparisons)
-ambre-trame | src/logic/schema.rs | crate::logic::schema | FILTER_KEY | const | &str	debt	finding: (FINDING, confirmed): Loro container names as strings
 ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterRecord.col | field | String	debt	finding: (FINDING, confirmed): FilterRecord.col holds a Uid key part as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_CAP | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_ORIGIN | const | &str	debt	finding: (FINDING, confirmed): Loro container names as strings
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MIN_COL_WIDTH | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MIN_ROW_HEIGHT | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/schema.rs | crate::logic::schema | NAMED_RANGES_MAP | const | &str	debt	finding: (FINDING, confirmed): Loro container names as strings
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SCHEMA_VERSION | const | u32	debt	finding: (FINDING, confirmed): schema version u32 with a 0 sentinel
-ambre-trame | src/logic/schema.rs | crate::logic::schema | SHEETS_MAP | const | &str	debt	finding: (FINDING, confirmed): Loro container names as strings
-ambre-trame | src/logic/schema.rs | crate::logic::schema | SHEET_ORDER | const | &str	debt	finding: (FINDING, confirmed): Loro container names as strings
-ambre-trame | src/logic/schema.rs | crate::logic::schema | cells_map_name() | ret | String	debt	finding: (FINDING, confirmed): Loro container names as strings
-ambre-trame | src/logic/schema.rs | crate::logic::schema | cells_map_name(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/schema.rs | crate::logic::schema | cellstyle_map_name() | ret | String	debt	finding: (FINDING, confirmed): Loro container names as strings
-ambre-trame | src/logic/schema.rs | crate::logic::schema | cellstyle_map_name(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/schema.rs | crate::logic::schema | col_widths_map_name() | ret | String	debt	finding: (FINDING, confirmed): Loro container names as strings
-ambre-trame | src/logic/schema.rs | crate::logic::schema | col_widths_map_name(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/schema.rs | crate::logic::schema | cols_list_name() | ret | String	debt	finding: (FINDING, confirmed): Loro container names as strings
-ambre-trame | src/logic/schema.rs | crate::logic::schema | cols_list_name(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/schema.rs | crate::logic::schema | filter_hidden_map_name() | ret | String	debt	finding: (FINDING, confirmed): Loro container names as strings
-ambre-trame | src/logic/schema.rs | crate::logic::schema | filter_hidden_map_name(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
+ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
+ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	foreign-api	the per-sheet root name, for the Loro call that opens it
+ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::of(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/schema.rs | crate::logic::schema | filter_register_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
-ambre-trame | src/logic/schema.rs | crate::logic::schema | filters_map_name() | ret | String	debt	finding: (FINDING, confirmed): Loro container names as strings
-ambre-trame | src/logic/schema.rs | crate::logic::schema | filters_map_name(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/schema.rs | crate::logic::schema | fold_filter_keys() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | fold_filter_keys(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate(payload) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/schema.rs | crate::logic::schema | merges_map_name() | ret | String	debt	finding: (FINDING, confirmed): Loro container names as strings
-ambre-trame | src/logic/schema.rs | crate::logic::schema | merges_map_name(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/schema.rs | crate::logic::schema | read_version() | ret | Result<u32,SchemaError>	debt	finding: (FINDING, confirmed): schema version u32 with a 0 sentinel
-ambre-trame | src/logic/schema.rs | crate::logic::schema | row_heights_map_name() | ret | String	debt	finding: (FINDING, confirmed): Loro container names as strings
-ambre-trame | src/logic/schema.rs | crate::logic::schema | row_heights_map_name(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/schema.rs | crate::logic::schema | rows_list_name() | ret | String	debt	finding: (FINDING, confirmed): Loro container names as strings
-ambre-trame | src/logic/schema.rs | crate::logic::schema | rows_list_name(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | stored_reference_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::activate_sheet(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
@@ -6337,13 +6317,14 @@ ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::count_of(l
 ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::to_index() | ret | Option<usize>	math	count, size or local index: a Loro list index or length
 ambre-trame | src/model/line.rs | crate::model::line | Line::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
 ambre-trame | src/model/line.rs | crate::model::line | Line::to_index() | ret | Option<usize>	math	count, size or local index: a Loro list index or length
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey.0 | field | String	newtype-inner	the stored cell key CellKey types
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::as_str() | ret | &str	foreign-api	the stored cell key, for the Loro call into the map
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid.counter | field | u32	newtype-inner	Uid's own field, key-part formatter and parser
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	newtype-inner	Uid's own field, key-part formatter and parser
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	newtype-inner	Uid's own field, key-part formatter and parser
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | cell_key() | ret | String	debt	finding: (FINDING, confirmed): cell key is a formatted String
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	debt	finding: (FINDING, confirmed): cell key is a formatted String
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	foreign-api	a stored cell key as Loro reports it
 ambre-trame | src/render/cells.rs | crate::render::cells | draw_cells_on() | ret | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width(need) | param | f64	math	local geometry / pixel arithmetic

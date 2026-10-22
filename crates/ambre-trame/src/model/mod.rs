@@ -15,4 +15,4 @@ mod line;
 mod sheet_index;
 
 pub use line::Line;
-pub use sheet_index::{SheetIndex, Uid, cell_key, parse_cell_key};
+pub use sheet_index::{CellKey, SheetIndex, Uid, parse_cell_key};
