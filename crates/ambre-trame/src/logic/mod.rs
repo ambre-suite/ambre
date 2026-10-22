@@ -30,6 +30,7 @@ use ambre_bus::{
     ClipboardPayload, Col, ColCount, FilterKind, FilterOp, MergeSpan, Row, RowCount, RowSpan,
     SelectionKind, SheetId, SheetTab, SortKey, StylePatch,
 };
+pub(crate) use ambre_bus::{HeaderRow, SortOrder};
 
 // -----------------------------------------------------------------------------
 // FormulaCtx bridge

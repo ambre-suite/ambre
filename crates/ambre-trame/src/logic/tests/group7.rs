@@ -473,7 +473,7 @@ fn import_reports_unreadable_records() {
     let out = state.handle_command(TrameCommand::ImportCsv {
         data: b"a,b\n\xff\xfe,c\nd,e\n".to_vec(),
         delimiter: None,
-        has_header: false,
+        header: HeaderRow::Absent,
         target_sheet_id: Some(SheetId("s0".to_owned())),
         start_row: Row::new(0),
         start_col: Col::new(0),

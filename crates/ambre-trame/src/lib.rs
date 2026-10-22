@@ -44,8 +44,8 @@ pub use ambre_bus::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
     CellStyle, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan, ColVec,
     CondFormatKind, CondStyle, DisplayCell, FillMode, FilterKind, FilterOp, GridRange, HAlign,
-    MergeSpan, Row, RowCount, RowDelta, RowSpan, RowVec, SelectionKind, SortKey, StylePatch,
-    TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
+    HeaderRow, MergeSpan, Row, RowCount, RowDelta, RowSpan, RowVec, SelectionKind, SortKey,
+    SortOrder, StylePatch, TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };
 pub use logic::docfile::{export_ambre_plaintext, import_ambre_plaintext};
 pub use logic::{TrameOutcome, TrameState};

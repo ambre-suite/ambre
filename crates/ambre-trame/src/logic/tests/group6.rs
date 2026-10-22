@@ -504,7 +504,7 @@ fn csv_import_creates_sheet_and_cells() {
     let out = state.handle_command(TrameCommand::ImportCsv {
         data: csv,
         delimiter: None,
-        has_header: false,
+        header: HeaderRow::Absent,
         target_sheet_id: None,
         start_row: Row::new(0),
         start_col: Col::new(0),
@@ -517,14 +517,14 @@ fn csv_import_creates_sheet_and_cells() {
     assert_eq!(read_cell(&mut state, 1, 2), "3");
 }
 
-/// `has_header` skips the first record.
+/// A header row skips the first record.
 #[test]
 fn csv_import_skips_header() {
     let mut state = TrameState::new();
     let out = state.handle_command(TrameCommand::ImportCsv {
         data: b"name,age\nalice,30\n".to_vec(),
         delimiter: None,
-        has_header: true,
+        header: HeaderRow::Present,
         target_sheet_id: None,
         start_row: Row::new(0),
         start_col: Col::new(0),
@@ -541,7 +541,7 @@ fn csv_delimiter_autodetect() {
     state.handle_command(TrameCommand::ImportCsv {
         data: b"x;y;z\n1;2;3\n".to_vec(),
         delimiter: None,
-        has_header: false,
+        header: HeaderRow::Absent,
         target_sheet_id: None,
         start_row: Row::new(0),
         start_col: Col::new(0),
@@ -557,7 +557,7 @@ fn csv_import_export_roundtrip() {
     let out = state.handle_command(TrameCommand::ImportCsv {
         data: b"a,b\nc,d\n".to_vec(),
         delimiter: None,
-        has_header: false,
+        header: HeaderRow::Absent,
         target_sheet_id: None,
         start_row: Row::new(0),
         start_col: Col::new(0),
@@ -594,13 +594,13 @@ fn csv_import_malformed_never_panics() {
         let mut state = TrameState::new();
         // Each variant: auto-detect and forced delimiters, with/without header.
         for delimiter in [None, Some(b','), Some(b';')] {
-            for has_header in [false, true] {
+            for header in [HeaderRow::Absent, HeaderRow::Present] {
                 // Must return without panicking; the result is unspecified but
                 // well-formed (an ImportComplete or an Error event).
                 let _ = state.handle_command(TrameCommand::ImportCsv {
                     data: data.to_vec(),
                     delimiter,
-                    has_header,
+                    header,
                     target_sheet_id: None,
                     start_row: Row::new(0),
                     start_col: Col::new(0),
@@ -638,7 +638,11 @@ fn csv_import_random_bytes_never_panics() {
         let _ = state.handle_command(TrameCommand::ImportCsv {
             data,
             delimiter: None,
-            has_header: next() % 2 == 0,
+            header: if next() % 2 == 0 {
+                HeaderRow::Present
+            } else {
+                HeaderRow::Absent
+            },
             target_sheet_id: None,
             start_row: Row::new(0),
             start_col: Col::new(0),
@@ -695,7 +699,7 @@ fn csv_import_then_export_drops_trailing_empties() {
     let out = state.handle_command(TrameCommand::ImportCsv {
         data: csv,
         delimiter: None,
-        has_header: false,
+        header: HeaderRow::Absent,
         target_sheet_id: None,
         start_row: Row::new(0),
         start_col: Col::new(0),

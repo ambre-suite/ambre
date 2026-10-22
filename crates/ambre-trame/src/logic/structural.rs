@@ -213,10 +213,10 @@ impl TrameState {
     /// range"). Delegates to [`sort_range`](Self::sort_range) on the active
     /// sheet, which guards the empty/single-row cases and replies with
     /// [`TrameEvent::SortComplete`].
-    pub(super) fn sort_selection(&mut self, ascending: bool) -> TrameOutcome {
+    pub(super) fn sort_selection(&mut self, order: SortOrder) -> TrameOutcome {
         let rect = self.selection_bounds();
         let sheet = self.active_sheet.clone();
-        self.sort_range(&sheet, rect, ColCount::ZERO, ascending, false)
+        self.sort_range(&sheet, rect, ColCount::ZERO, order, HeaderRow::Absent)
     }
 
     /// Whole-sheet single-column sort by the active cell's column (`trame-sort`,
@@ -226,7 +226,7 @@ impl TrameState {
     /// column is passed as `sort_col` over a range anchored at column 0, with no
     /// header row. Delegates to [`sort_range`](Self::sort_range), which guards the
     /// empty range and replies with [`TrameEvent::SortComplete`].
-    pub(super) fn sort_sheet(&mut self, ascending: bool) -> TrameOutcome {
+    pub(super) fn sort_sheet(&mut self, order: SortOrder) -> TrameOutcome {
         let rect = CellRect::spanning(
             CellPos::ORIGIN,
             CellPos::new(
@@ -236,7 +236,7 @@ impl TrameState {
         );
         let sort_col = self.active.col.count_from(Col::ZERO);
         let sheet = self.active_sheet.clone();
-        self.sort_range(&sheet, rect, sort_col, ascending, false)
+        self.sort_range(&sheet, rect, sort_col, order, HeaderRow::Absent)
     }
 
     /// Multi-column sort over the tracked selection rectangle (`trame-sort`,
@@ -249,11 +249,11 @@ impl TrameState {
     pub(super) fn sort_selection_multi(
         &mut self,
         sort_keys: &[SortKey],
-        has_header: bool,
+        header: HeaderRow,
     ) -> TrameOutcome {
         let rect = self.selection_bounds();
         let sheet = self.active_sheet.clone();
-        self.sort_range_multi(&sheet, rect, sort_keys, has_header)
+        self.sort_range_multi(&sheet, rect, sort_keys, header)
     }
 
     /// Drop every cell and formatting entry whose key references the removed

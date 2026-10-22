@@ -22,7 +22,7 @@ fn import(state: &mut TrameState, data: &[u8], target_sheet_id: Option<String>) 
     state.handle_command(TrameCommand::ImportCsv {
         data: data.to_vec(),
         delimiter: None,
-        has_header: false,
+        header: HeaderRow::Absent,
         target_sheet_id: target_sheet_id.map(SheetId),
         start_row: Row::new(0),
         start_col: Col::new(0),
@@ -181,7 +181,7 @@ fn a_file_with_no_record_leaves_the_document_alone() {
         let out = state.handle_command(TrameCommand::ImportCsv {
             data: data.to_vec(),
             delimiter: None,
-            has_header: true,
+            header: HeaderRow::Present,
             target_sheet_id: None,
             start_row: Row::new(0),
             start_col: Col::new(0),
@@ -228,7 +228,7 @@ fn a_separator_outside_the_three_is_named_by_the_caller() {
     let out = state.handle_command(TrameCommand::ImportCsv {
         data: b"a|b\n".to_vec(),
         delimiter: Some(b'|'),
-        has_header: false,
+        header: HeaderRow::Absent,
         target_sheet_id: None,
         start_row: Row::new(0),
         start_col: Col::new(0),

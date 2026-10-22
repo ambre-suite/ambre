@@ -371,7 +371,11 @@ fn sort_dialog_adds_levels_and_emits_on_apply() {
     apply.click();
 
     let req = emitted.get_untracked().expect("Sort emitted a request");
-    assert!(req.has_header, "header toggle carried into the request");
+    assert_eq!(
+        req.header,
+        ambre_bus::HeaderRow::Present,
+        "header toggle carried into the request"
+    );
     // Two distinct levels (the add-level default picks the next unused column).
     assert_eq!(req.sort_keys.len(), 2, "both levels emitted");
     assert_ne!(

@@ -604,7 +604,6 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.whole_cell | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.data | field | Vec<u8>	generic	imported CSV bytes
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.delimiter | field | Option<u8>	debt	finding: CSV delimiter as Option<u8> (low, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.has_header | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MoveSheet.to_index | field | u32	math	sheet tab index
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::PasteText.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::RenameSheet.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
@@ -625,10 +624,6 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellText.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellsBatch.cells | field | Vec<(CellPos,String)>	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetProtection.description | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRange.ascending | field | bool	debt	finding: Boolean mode selectors (low-medium, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRange.has_header | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRangeMulti.has_header | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortSelectionMulti.has_header | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::UpdateCondFormat.priority | field | i64	math	rule priority order
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <SheetId as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature fixed by the trait
@@ -689,7 +684,6 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormat
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::TopN.0 | field | u32	math	top/bottom N count
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::TopNPercent.0 | field | f32	debt	finding: Raw date and percentage in Trame rules (low, suspected)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondStyle.bold | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | SortKey.ascending | field | bool	debt	finding: Boolean mode selectors (low-medium, confirmed)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::DateRange.max | field | Option<String>	debt	finding: Raw date and percentage in Trame rules (low, suspected)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::DateRange.min | field | Option<String>	debt	finding: Raw date and percentage in Trame rules (low, suspected)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::Formula.0 | field | String	free-text	user-entered rule operand, pattern or formula text
@@ -5981,7 +5975,6 @@ ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameIntent::RenameSh
 ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameRelay.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/sheet_tabs.rs | crate::chrome::sheet_tabs | ReorderSheet.to_index | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/chrome/sheet_tabs.rs | crate::chrome::sheet_tabs | SheetTabs(on_rename) | param | Callback<(SheetId,String)>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/chrome/sort_dialog.rs | crate::chrome::sort_dialog | SortApply.has_header | field | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.avg | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.count | field | u64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.count_num | field | u64	math	count, length, local index, limit or calendar/arith helper
@@ -6350,7 +6343,6 @@ ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_csv(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(data) | param | Vec<u8>	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(delimiter) | param | Option<u8>	generic	file bytes or CSV delimiter
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(has_header) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(target_sheet_id) | param | Option<String>	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::used_extent(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter() | ret | u8	generic	file bytes or CSV delimiter
@@ -6490,18 +6482,12 @@ ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::sheet_nam
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::sheet_order_ids() | ret | Vec<String>	debt	planned: lot A 1 (Vec<SheetId>)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::stored_sheet_ids() | ret | Vec<String>	debt	planned: lot A 1 (Vec<SheetId>)
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::after_reorder(rewritten) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(ascending) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(has_header) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range_multi(has_header) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range_multi(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::after_line_removal(filter_dropped) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::purge_axis() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::reanchor_formulas() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::remove_line() | ret | Option<bool>	generic	state flag
-ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::sort_selection(ascending) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::sort_selection_multi(has_header) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::sort_sheet(ascending) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/logic/styles.rs | crate::logic::styles | StyleRecord.bold | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/logic/styles.rs | crate::logic::styles | StyleRecord.italic | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::cell_is_numeric() | ret | bool	generic	predicate or did-it-change return

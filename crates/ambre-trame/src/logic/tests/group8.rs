@@ -92,8 +92,8 @@ fn a_sort_keeps_the_range_and_moves_the_cell() {
         col_start: Col::new(0),
         col_end: Col::new(0),
         sort_col: ColCount::new(0),
-        ascending: true,
-        has_header: false,
+        order: SortOrder::Ascending,
+        header: HeaderRow::Absent,
     });
     assert_eq!(read_raw(&mut state, 4, 1), "=SUM(A1:A2)", "the block stays");
     assert_eq!(read_cell(&mut state, 4, 1), "3", "and sums what is in it");

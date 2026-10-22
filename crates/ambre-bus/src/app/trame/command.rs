@@ -243,7 +243,7 @@ pub enum TrameCommand {
     UnmergeActive,
     /// Sort the current selection rectangle ascending on its first column
     /// (equivalent to [`SortRange`] over `selection.bounds()` with `sort_col = 0`,
-    /// `has_header = false`). The Logic thread resolves the geometry and the
+    /// `header = HeaderRow::Absent`). The Logic thread resolves the geometry and the
     /// active sheet itself. Replies with [`TrameEvent::SortComplete`].
     ///
     /// [`SortRange`]: TrameCommand::SortRange
@@ -274,7 +274,7 @@ pub enum TrameCommand {
     /// [`TrameEvent::SortComplete`](super::TrameEvent::SortComplete).
     SortSelectionMulti {
         sort_keys: Vec<SortKey>,
-        has_header: bool,
+        header: HeaderRow,
     },
 
     /// Request the distinct visible values of the active cell's column, for the
@@ -488,7 +488,7 @@ pub enum TrameCommand {
     /// [col_start..=col_end]` by the values in the column `col_start + sort_col`
     /// (`trame-sort`, single-column sort). Whole rows are reordered, so cells outside
     /// `[col_start..=col_end]` move with their row -- matching Google Sheets "sort range".
-    /// `has_header` keeps the first range row pinned in place.
+    /// A header row (`HeaderRow::Present`) stays pinned in place.
     ///
     /// Realized as `LoroMovableList` move ops on `rows_{sheet_id}`. Cells keyed by stable
     /// id pairs follow their row, so no cell key is rewritten and references are preserved
@@ -505,9 +505,9 @@ pub enum TrameCommand {
         col_end: Col,
         /// Column to sort on, as an index within the range (`0` = `col_start`).
         sort_col: ColCount,
-        ascending: bool,
-        /// When `true`, the first range row is treated as a header and not sorted.
-        has_header: bool,
+        order: SortOrder,
+        /// A first range row that is a header is not sorted.
+        header: HeaderRow,
     },
 
     /// Delete `sheet_id` and its per-sheet containers (`trame-sheets`). Rejected
@@ -561,8 +561,8 @@ pub enum TrameCommand {
         data: Vec<u8>,
         /// Field separator; `None` auto-detects comma vs semicolon.
         delimiter: Option<u8>,
-        /// When `true` the first record is treated as a header row and skipped.
-        has_header: bool,
+        /// A first record that is a header row is skipped.
+        header: HeaderRow,
         /// Target sheet; `None` creates a new "CSV Import" sheet.
         target_sheet_id: Option<SheetId>,
         start_row: Row,
@@ -662,7 +662,7 @@ pub enum TrameCommand {
         /// Decreasing priority: `[primary, secondary, ...]`. Each `col` is an
         /// index within the range (`0` = `col_start`).
         sort_keys: Vec<SortKey>,
-        has_header: bool,
+        header: HeaderRow,
     },
 
     /// Add a conditional-formatting rule to `sheet_id` over `range`

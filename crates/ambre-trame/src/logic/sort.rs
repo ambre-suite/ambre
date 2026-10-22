@@ -36,8 +36,8 @@ impl TrameState {
         sheet_id: &str,
         rect: CellRect,
         sort_col: ColCount,
-        ascending: bool,
-        has_header: bool,
+        order: SortOrder,
+        header: HeaderRow,
     ) -> TrameOutcome {
         // Only the active sheet has its values positioned in the engine cache.
         if sheet_id != self.active_sheet {
@@ -47,7 +47,7 @@ impl TrameState {
         if sort_col_abs > rect.bottom_right.col {
             return TrameOutcome::display_only(vec![]);
         }
-        let Some(rows) = self.sortable_rows(rect, RowCount::new(u32::from(has_header))) else {
+        let Some(rows) = self.sortable_rows(rect, header_rows(header)) else {
             return TrameOutcome::display_only(vec![]);
         };
 
@@ -72,7 +72,7 @@ impl TrameState {
         let before: Vec<Uid> = keyed.iter().map(|(uid, _)| *uid).collect();
         keyed.sort_by(|(_, a), (_, b)| {
             let ord = compare_cell_values(a, b);
-            if ascending { ord } else { ord.reverse() }
+            directed(ord, order)
         });
         let target: Vec<Uid> = keyed.into_iter().map(|(uid, _)| uid).collect();
         self.realize_sort(rows.start, &before, target)
@@ -106,7 +106,7 @@ impl TrameState {
         sheet_id: &str,
         rect: CellRect,
         sort_keys: &[SortKey],
-        has_header: bool,
+        header: HeaderRow,
     ) -> TrameOutcome {
         // Only the active sheet has its values positioned in the engine cache.
         if sheet_id != self.active_sheet {
@@ -114,15 +114,15 @@ impl TrameState {
         }
         // Resolve the keys to absolute columns inside the range; drop out-of-range
         // ones. With no usable key there is nothing to order by.
-        let keys: Vec<(Col, bool)> = sort_keys
+        let keys: Vec<(Col, SortOrder)> = sort_keys
             .iter()
-            .map(|k| (rect.top_left.col + k.col, k.ascending))
+            .map(|k| (rect.top_left.col + k.col, k.order))
             .filter(|(col, _)| *col <= rect.bottom_right.col)
             .collect();
         if keys.is_empty() {
             return TrameOutcome::display_only(vec![]);
         }
-        let Some(rows) = self.sortable_rows(rect, RowCount::new(u32::from(has_header))) else {
+        let Some(rows) = self.sortable_rows(rect, header_rows(header)) else {
             return TrameOutcome::display_only(vec![]);
         };
 
@@ -148,9 +148,8 @@ impl TrameState {
         keyed.sort_by(|(_, a), (_, b)| {
             // Lexicographic over the keys: first non-equal column decides, each
             // key applying its own direction.
-            for ((_, ascending), (va, vb)) in keys.iter().zip(a.iter().zip(b)) {
-                let ord = compare_cell_values(va, vb);
-                let ord = if *ascending { ord } else { ord.reverse() };
+            for ((_, order), (va, vb)) in keys.iter().zip(a.iter().zip(b)) {
+                let ord = directed(compare_cell_values(va, vb), *order);
                 if ord != std::cmp::Ordering::Equal {
                     return ord;
                 }
@@ -237,5 +236,21 @@ impl TrameState {
             update,
             ephemeral: None,
         }
+    }
+}
+
+/// The rows a sort leaves in place at the top of its range.
+fn header_rows(header: HeaderRow) -> RowCount {
+    match header {
+        HeaderRow::Absent => RowCount::ZERO,
+        HeaderRow::Present => RowCount::new(1),
+    }
+}
+
+/// `ord`, turned around for a descending key.
+fn directed(ord: std::cmp::Ordering, order: SortOrder) -> std::cmp::Ordering {
+    match order {
+        SortOrder::Ascending => ord,
+        SortOrder::Descending => ord.reverse(),
     }
 }

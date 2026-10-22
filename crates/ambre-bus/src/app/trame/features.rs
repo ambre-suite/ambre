@@ -66,7 +66,28 @@ pub enum FillMode {
 pub struct SortKey {
     /// Column to sort on, as an offset within the range (`0` = `col_start`).
     pub col: ColCount,
-    pub ascending: bool,
+    pub order: SortOrder,
+}
+
+/// Which way a sort orders the rows on one key (`trame-sort`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortOrder {
+    /// The smallest value first.
+    #[default]
+    Ascending,
+    /// The largest value first.
+    Descending,
+}
+
+/// Whether the first row of a range is a header: a sort leaves it in place,
+/// and a CSV import reads it as column names (`trame-sort`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HeaderRow {
+    /// Every row is data.
+    #[default]
+    Absent,
+    /// The first row names the columns.
+    Present,
 }
 
 /// A conditional-formatting rule predicate (`trame-cell-styles`).

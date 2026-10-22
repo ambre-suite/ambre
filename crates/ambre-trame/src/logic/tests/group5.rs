@@ -88,8 +88,8 @@ fn shared_filter_hidden_follows_sort() {
         col_start: Col::new(0),
         col_end: Col::new(0),
         sort_col: ColCount::new(0),
-        ascending: true,
-        has_header: false,
+        order: SortOrder::Ascending,
+        header: HeaderRow::Absent,
     });
     assert_eq!(read_cell(&mut state, 0, 0), "1", "smallest sorted to top");
     assert!(

@@ -831,8 +831,8 @@ fn sort_range_ascending_moves_whole_rows() {
         col_start: Col::new(0),
         col_end: Col::new(1),
         sort_col: ColCount::new(0),
-        ascending: true,
-        has_header: false,
+        order: SortOrder::Ascending,
+        header: HeaderRow::Absent,
     });
     assert!(
         evts.display
@@ -848,7 +848,7 @@ fn sort_range_ascending_moves_whole_rows() {
     );
 }
 
-/// Descending sort and the `has_header` pin: the first row stays put.
+/// Descending sort and the header pin: the first row stays put.
 #[test]
 fn sort_range_descending_keeps_header() {
     let mut state = TrameState::new();
@@ -866,8 +866,8 @@ fn sort_range_descending_keeps_header() {
         col_start: Col::new(0),
         col_end: Col::new(0),
         sort_col: ColCount::new(0),
-        ascending: false,
-        has_header: true,
+        order: SortOrder::Descending,
+        header: HeaderRow::Present,
     });
     assert_eq!(read_col(&mut state, 0, 3, 1), vec!["Header", "3", "2", "1"]);
 }

@@ -1541,7 +1541,7 @@ mod tests {
             command: AppCommand::Trame(TrameCommand::ImportCsv {
                 data: file.clone(),
                 delimiter: None,
-                has_header: false,
+                header: ambre_bus::HeaderRow::Absent,
                 target_sheet_id: None,
                 start_row: Row::new(0),
                 start_col: Col::new(0),

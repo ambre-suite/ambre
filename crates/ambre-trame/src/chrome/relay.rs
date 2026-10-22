@@ -79,7 +79,7 @@ impl TrameRelay {
             // the keys are range-relative, as the Logic thread reads them.
             TrameIntent::Sort(req) => TrameCommand::SortSelectionMulti {
                 sort_keys: req.sort_keys,
-                has_header: req.has_header,
+                header: req.header,
             },
             TrameIntent::Find(q) => TrameCommand::FindNext {
                 query: q.query,

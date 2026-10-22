@@ -104,7 +104,7 @@ impl CommandHandler for TrameHandler {
                     AppCommand::Trame(TrameCommand::ImportCsv {
                         data,
                         delimiter: None,
-                        has_header: false,
+                        header: ambre_bus::HeaderRow::Absent,
                         target_sheet_id: None,
                         start_row: ambre_bus::Row::ZERO,
                         start_col: ambre_bus::Col::ZERO,

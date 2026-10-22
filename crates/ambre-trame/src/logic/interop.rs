@@ -17,7 +17,7 @@ impl TrameState {
         &mut self,
         data: Vec<u8>,
         delimiter: Option<u8>,
-        has_header: bool,
+        header: HeaderRow,
         target_sheet_id: Option<String>,
         start: CellPos,
     ) -> TrameOutcome {
@@ -42,7 +42,7 @@ impl TrameState {
                 "{unreadable} record(s) of the file could not be read and were skipped"
             ),
         });
-        if has_header && !records.is_empty() {
+        if header == HeaderRow::Present && !records.is_empty() {
             records.remove(0);
         }
         if records.is_empty() {

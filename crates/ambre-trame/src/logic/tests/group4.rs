@@ -40,8 +40,8 @@ fn sort_range_formulas_follow_data() {
         col_start: Col::new(0),
         col_end: Col::new(1),
         sort_col: ColCount::new(0),
-        ascending: true,
-        has_header: false,
+        order: SortOrder::Ascending,
+        header: HeaderRow::Absent,
     });
     // Data sorts ascending: A = [1, 2].
     assert_eq!(read_col(&mut state, 0, 1, 1), vec!["1", "2"]);
@@ -89,8 +89,8 @@ fn sort_range_sum_block_is_stable_under_internal_sort() {
         col_start: Col::new(0),
         col_end: Col::new(0),
         sort_col: ColCount::new(0),
-        ascending: true,
-        has_header: false,
+        order: SortOrder::Ascending,
+        header: HeaderRow::Absent,
     });
     // Data sorts to [1, 2, 3]; the SUM cells below are untouched.
     assert_eq!(read_col(&mut state, 0, 2, 2), vec!["1", "2", "3"]);
@@ -120,8 +120,8 @@ fn sort_range_noops() {
         col_start: Col::new(0),
         col_end: Col::new(0),
         sort_col: ColCount::new(0),
-        ascending: true,
-        has_header: false,
+        order: SortOrder::Ascending,
+        header: HeaderRow::Absent,
     });
     assert!(other.update.is_none());
     assert!(other.display.is_empty());
@@ -133,8 +133,8 @@ fn sort_range_noops() {
         col_start: Col::new(0),
         col_end: Col::new(0),
         sort_col: ColCount::new(0),
-        ascending: true,
-        has_header: false,
+        order: SortOrder::Ascending,
+        header: HeaderRow::Absent,
     });
     assert!(sorted.update.is_none(), "no reorder, no broadcast");
     assert!(
@@ -263,9 +263,9 @@ fn sort_range_query_spans_the_used_width_of_a_row_band() {
     state.handle_command(TrameCommand::SortSelectionMulti {
         sort_keys: vec![ambre_bus::SortKey {
             col: ColCount::new(2),
-            ascending: true,
+            order: SortOrder::Ascending,
         }],
-        has_header: false,
+        header: HeaderRow::Absent,
     });
     assert_eq!(read_col(&mut state, 2, 2, 2), vec!["x", "y", "z"]);
     assert_eq!(read_col(&mut state, 0, 2, 0), vec!["1", "2", "3"]);
@@ -347,14 +347,14 @@ fn sort_range_multi_lexicographic_with_per_key_direction() {
         sort_keys: vec![
             SortKey {
                 col: ColCount::new(0),
-                ascending: true,
+                order: SortOrder::Ascending,
             },
             SortKey {
                 col: ColCount::new(1),
-                ascending: false,
+                order: SortOrder::Descending,
             },
         ],
-        has_header: false,
+        header: HeaderRow::Absent,
     });
     assert!(
         evts.display
@@ -400,14 +400,14 @@ fn sort_selection_multi_resolves_against_tracked_selection() {
         sort_keys: vec![
             SortKey {
                 col: ColCount::new(0),
-                ascending: true,
+                order: SortOrder::Ascending,
             },
             SortKey {
                 col: ColCount::new(1),
-                ascending: true,
+                order: SortOrder::Ascending,
             },
         ],
-        has_header: false,
+        header: HeaderRow::Absent,
     });
     assert!(
         evts.display
@@ -419,7 +419,7 @@ fn sort_selection_multi_resolves_against_tracked_selection() {
     assert_eq!(read_col(&mut state, 1, 2, 2), vec!["a", "b", "a"]);
 }
 
-/// Multi-column sort honours `has_header`: the first range row is pinned and the
+/// Multi-column sort honours a header row: the first range row is pinned. The
 /// rows below are ordered by the keys (A ascending, then B ascending).
 #[test]
 fn sort_range_multi_pins_header_row() {
@@ -448,14 +448,14 @@ fn sort_range_multi_pins_header_row() {
         sort_keys: vec![
             SortKey {
                 col: ColCount::new(0),
-                ascending: true,
+                order: SortOrder::Ascending,
             },
             SortKey {
                 col: ColCount::new(1),
-                ascending: true,
+                order: SortOrder::Ascending,
             },
         ],
-        has_header: true,
+        header: HeaderRow::Present,
     });
     assert_eq!(read_col(&mut state, 0, 3, 1), vec!["Header", "1", "2", "2"]);
     assert_eq!(read_col(&mut state, 1, 3, 2), vec!["h", "a", "a", "b"]);
@@ -481,7 +481,7 @@ fn sort_range_multi_no_keys_is_noop() {
         col_start: Col::new(0),
         col_end: Col::new(0),
         sort_keys: vec![],
-        has_header: false,
+        header: HeaderRow::Absent,
     });
     assert!(empty.update.is_none());
     assert!(
@@ -500,9 +500,9 @@ fn sort_range_multi_no_keys_is_noop() {
         col_end: Col::new(0),
         sort_keys: vec![SortKey {
             col: ColCount::new(5),
-            ascending: true,
+            order: SortOrder::Ascending,
         }],
-        has_header: false,
+        header: HeaderRow::Absent,
     });
     assert!(out.update.is_none());
     // The order is untouched.
@@ -535,14 +535,14 @@ fn sort_range_multi_already_sorted_emits_no_delta() {
         sort_keys: vec![
             SortKey {
                 col: ColCount::new(0),
-                ascending: true,
+                order: SortOrder::Ascending,
             },
             SortKey {
                 col: ColCount::new(1),
-                ascending: true,
+                order: SortOrder::Ascending,
             },
         ],
-        has_header: false,
+        header: HeaderRow::Absent,
     });
     assert!(
         evts.display

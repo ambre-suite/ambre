@@ -4,7 +4,7 @@
 use super::{TrameOutcome, TrameState, col_to_alpha};
 use crate::model::Uid;
 use crate::{CellPos, Col, ColCount, Row, RowCount};
-use crate::{SortKey, TrameCommand, TrameEvent};
+use crate::{HeaderRow, SortKey, SortOrder, TrameCommand, TrameEvent};
 use ambre_bus::{FilterKind, FilterOp, SheetId};
 
 use crate::test_support::{at, span};

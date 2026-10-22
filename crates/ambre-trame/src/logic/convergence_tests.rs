@@ -29,7 +29,8 @@ use proptest::prelude::*;
 
 use ambre_bus::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellFormat, CellStyle, ClipboardCell,
-    ClipboardPayload, FillMode, FilterKind, FilterOp, GridRange, HAlign, StylePatch, VAlign,
+    ClipboardPayload, FillMode, FilterKind, FilterOp, GridRange, HAlign, HeaderRow, SortOrder,
+    StylePatch, VAlign,
 };
 
 use super::TrameState;
@@ -147,8 +148,12 @@ impl Op {
                 col_start: Col::new(0),
                 col_end: Col::new(COLS - 1),
                 sort_col: ColCount::new(0),
-                ascending,
-                has_header: false,
+                order: if ascending {
+                    SortOrder::Ascending
+                } else {
+                    SortOrder::Descending
+                },
+                header: HeaderRow::Absent,
             },
             Op::Merge {
                 row,

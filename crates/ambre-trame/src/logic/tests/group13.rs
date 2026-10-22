@@ -61,8 +61,12 @@ fn sort(state: &mut TrameState, rows: (u32, u32), col: u32, ascending: bool) -> 
         col_start: Col::new(0),
         col_end: Col::new(1),
         sort_col: ColCount::new(col),
-        ascending,
-        has_header: false,
+        order: if ascending {
+            SortOrder::Ascending
+        } else {
+            SortOrder::Descending
+        },
+        header: HeaderRow::Absent,
     })
 }
 
@@ -468,7 +472,7 @@ fn a_sort_of_fewer_than_two_rows_changes_nothing() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["9", "1"]);
     let before = state.doc.len_ops();
-    for (row_end, has_header) in [(0, false), (1, true)] {
+    for (row_end, header) in [(0, HeaderRow::Absent), (1, HeaderRow::Present)] {
         let out = state.handle_command(TrameCommand::SortRange {
             sheet_id: SheetId(DEFAULT.to_owned()),
             row_start: Row::new(0),
@@ -476,15 +480,15 @@ fn a_sort_of_fewer_than_two_rows_changes_nothing() {
             col_start: Col::new(0),
             col_end: Col::new(0),
             sort_col: ColCount::new(0),
-            ascending: true,
-            has_header,
+            order: SortOrder::Ascending,
+            header,
         });
-        assert!(out.update.is_none(), "{row_end} {has_header}");
+        assert!(out.update.is_none(), "{row_end} {header:?}");
         assert!(
             !out.display
                 .iter()
                 .any(|e| matches!(e, TrameEvent::SortComplete)),
-            "{row_end} {has_header}"
+            "{row_end} {header:?}"
         );
     }
     assert_eq!(state.doc.len_ops(), before);

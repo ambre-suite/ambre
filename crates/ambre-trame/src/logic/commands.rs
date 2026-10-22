@@ -216,18 +216,17 @@ impl TrameState {
             // (`sort_col = 0`), no header row. The active sheet is the only
             // sortable one (see
             // `sort_range`).
-            TrameCommand::SortSelectionAsc => self.sort_selection(true),
-            TrameCommand::SortSelectionDesc => self.sort_selection(false),
+            TrameCommand::SortSelectionAsc => self.sort_selection(SortOrder::Ascending),
+            TrameCommand::SortSelectionDesc => self.sort_selection(SortOrder::Descending),
             // Whole-sheet sort by the active column (whole-column selection,
             // `trame-sort`): sorts the used range, ref column = active column.
-            TrameCommand::SortSheetAsc => self.sort_sheet(true),
-            TrameCommand::SortSheetDesc => self.sort_sheet(false),
+            TrameCommand::SortSheetAsc => self.sort_sheet(SortOrder::Ascending),
+            TrameCommand::SortSheetDesc => self.sort_sheet(SortOrder::Descending),
             // Multi-column sort over the tracked selection (the "Sort range..."
             // dialog, `trame-sort`): geometry + active sheet resolved by Logic.
-            TrameCommand::SortSelectionMulti {
-                sort_keys,
-                has_header,
-            } => self.sort_selection_multi(&sort_keys, has_header),
+            TrameCommand::SortSelectionMulti { sort_keys, header } => {
+                self.sort_selection_multi(&sort_keys, header)
+            }
             TrameCommand::Undo => self.apply_history(HistoryStep::Undo),
             TrameCommand::Redo => self.apply_history(HistoryStep::Redo),
             TrameCommand::DefineName { name, reference } => self.define_name(&name, &reference),
@@ -246,10 +245,10 @@ impl TrameState {
                 col_start,
                 col_end,
                 sort_col,
-                ascending,
-                has_header,
+                order,
+                header,
             } => match ordered_rect(row_start, row_end, col_start, col_end) {
-                Some(rect) => self.sort_range(&sheet_id.0, rect, sort_col, ascending, has_header),
+                Some(rect) => self.sort_range(&sheet_id.0, rect, sort_col, order, header),
                 None => TrameOutcome::display_only(vec![]),
             },
             TrameCommand::SortRangeMulti {
@@ -259,9 +258,9 @@ impl TrameState {
                 col_start,
                 col_end,
                 sort_keys,
-                has_header,
+                header,
             } => match ordered_rect(row_start, row_end, col_start, col_end) {
-                Some(rect) => self.sort_range_multi(&sheet_id.0, rect, &sort_keys, has_header),
+                Some(rect) => self.sort_range_multi(&sheet_id.0, rect, &sort_keys, header),
                 None => TrameOutcome::display_only(vec![]),
             },
             TrameCommand::ApplyFilter {
@@ -326,14 +325,14 @@ impl TrameState {
             TrameCommand::ImportCsv {
                 data,
                 delimiter,
-                has_header,
+                header,
                 target_sheet_id,
                 start_row,
                 start_col,
             } => self.import_csv(
                 data,
                 delimiter,
-                has_header,
+                header,
                 target_sheet_id.map(|s| s.0),
                 CellPos::new(start_row, start_col),
             ),

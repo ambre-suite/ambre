@@ -14,7 +14,7 @@
 // (`0` = the selection's left column), matching the `SortRangeMulti` contract.
 // ============================================================================
 
-use ambre_bus::{Col, ColCount, Row, SortKey};
+use ambre_bus::{Col, ColCount, HeaderRow, Row, SortKey, SortOrder};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
@@ -40,7 +40,7 @@ pub struct SortDialogState {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortApply {
     pub sort_keys: Vec<SortKey>,
-    pub has_header: bool,
+    pub header: HeaderRow,
 }
 
 /// The multi-column sort dialog. `state` carries the selection snapshot the sort
@@ -55,7 +55,7 @@ pub fn SortDialog(
     // (the selection's first column, ascending) each time the dialog reopens.
     let levels = RwSignal::new(vec![SortKey {
         col: ColCount::ZERO,
-        ascending: true,
+        order: SortOrder::Ascending,
     }]);
     let has_header = RwSignal::new(false);
 
@@ -63,7 +63,7 @@ pub fn SortDialog(
         if state.get().is_some() {
             levels.set(vec![SortKey {
                 col: ColCount::ZERO,
-                ascending: true,
+                order: SortOrder::Ascending,
             }]);
             has_header.set(false);
         }
@@ -96,7 +96,11 @@ pub fn SortDialog(
         }
         on_apply.run(SortApply {
             sort_keys: keys,
-            has_header: has_header.get_untracked(),
+            header: if has_header.get_untracked() {
+                HeaderRow::Present
+            } else {
+                HeaderRow::Absent
+            },
         });
         close();
     };
@@ -162,14 +166,18 @@ pub fn SortDialog(
                                     <select
                                         class="ambre-sort-dir"
                                         on:change=move |ev| {
-                                            let asc = event_target_value(&ev) == "asc";
+                                            let order = if event_target_value(&ev) == "asc" {
+                                                SortOrder::Ascending
+                                            } else {
+                                                SortOrder::Descending
+                                            };
                                             levels.update(|ls| {
-                                                if let Some(l) = ls.get_mut(i) { l.ascending = asc; }
+                                                if let Some(l) = ls.get_mut(i) { l.order = order; }
                                             });
                                         }
                                     >
-                                        <option value="asc" selected=key.ascending>"Ascending"</option>
-                                        <option value="desc" selected=!key.ascending>"Descending"</option>
+                                        <option value="asc" selected=key.order == SortOrder::Ascending>"Ascending"</option>
+                                        <option value="desc" selected=key.order == SortOrder::Descending>"Descending"</option>
                                     </select>
                                     <button
                                         class="ambre-sort-remove"
@@ -197,7 +205,7 @@ pub fn SortDialog(
                                 let used: Vec<ColCount> = ls.iter().map(|k| k.col).collect();
                                 let next = cols.get_value().iter().map(|(rel, _)| *rel)
                                     .find(|rel| !used.contains(rel)).unwrap_or(ColCount::ZERO);
-                                ls.push(SortKey { col: next, ascending: true });
+                                ls.push(SortKey { col: next, order: SortOrder::Ascending });
                             })
                         >
                             <Icon icon=icondata::AiPlusOutlined />
