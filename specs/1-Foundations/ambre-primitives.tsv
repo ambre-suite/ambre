@@ -24,14 +24,12 @@ ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.render_fps | fiel
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.web_frames_empty | field | bool	math	state flag
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::captures_pointer() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	math	flag cell
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::clipboard_write(cut) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drags_text() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drop_text() | ret | bool	generic	consumed answer
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drop_text(text) | param | String	free-text	dropped text
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drop_text(x) | param | f32	math	css position
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drop_text(y) | param | f32	math	css position
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::handle_input() | ret | bool	generic	consumed answer
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::paste_clipboard(own_copy) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::render_fatal(message) | param | &str	free-text	message
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::sync_children() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::tick_fps(fps) | param | &mut f32	math	fps
@@ -53,14 +51,12 @@ ambre-app | src/host/mod.rs | crate::host | AppView::cell_ids() | ret | &'static
 ambre-app | src/host/mod.rs | crate::host | AppView::cell_view(height) | param | f64	math	css size
 ambre-app | src/host/mod.rs | crate::host | AppView::cell_view(id) | param | &str	debt	planned: lot C bis 10 CanvasId (cell/canvas DOM ids)
 ambre-app | src/host/mod.rs | crate::host | AppView::cell_view(width) | param | f64	math	css size
-ambre-app | src/host/mod.rs | crate::host | AppView::clipboard_write(cut) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/host/mod.rs | crate::host | AppView::drags_text() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::drop_text() | ret | bool	generic	consumed answer
 ambre-app | src/host/mod.rs | crate::host | AppView::drop_text(text) | param | String	free-text	dropped text
 ambre-app | src/host/mod.rs | crate::host | AppView::drop_text(x) | param | f32	math	css position
 ambre-app | src/host/mod.rs | crate::host | AppView::drop_text(y) | param | f32	math	css position
 ambre-app | src/host/mod.rs | crate::host | AppView::handle_input() | ret | bool	generic	consumed answer
-ambre-app | src/host/mod.rs | crate::host | AppView::paste_clipboard(own_copy) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/host/mod.rs | crate::host | AppView::plan_repaint(hud_tick) | param | bool	math	value flag
 ambre-app | src/host/mod.rs | crate::host | AppView::resize(height) | param | u32	math	size
 ambre-app | src/host/mod.rs | crate::host | AppView::resize(width) | param | u32	math	size
@@ -95,13 +91,9 @@ ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.next | field | 
 ambre-app | src/host/murmure.rs | crate::host::murmure | page_reads(warn) | param | Rc<dyn Fn(&str)>	free-text	warning text callback
 ambre-app | src/host/murmure.rs | crate::host::murmure | save_file(data) | param | Vec<u8>	generic	file bytes
 ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::clip_published() | ret | Rc<std::cell::Cell<bool>>	trait	trait
-ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::clipboard_write(cut) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::handle_input() | ret | bool	trait	trait
-ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::paste_clipboard(own_copy) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	math	flag cell
-ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clipboard_write(cut) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::handle_input() | ret | bool	generic	consumed answer
-ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::paste_clipboard(own_copy) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/host/probe.rs | crate::host::probe | SUMMARY_EVERY_MS | const | f64	math	probe period, local
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.counts | field | Option<BTreeMap<&'static str,Vec<f64>>>	free-text	metric names and samples
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.fresh | field | bool	math	flag
@@ -114,7 +106,6 @@ ambre-app | src/host/probe.rs | crate::host::probe | mark_count(value) | param |
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.dirty | field | bool	math	dirty flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.fatal | field | bool	math	state flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.size | field | (f32,f32)	math	size
-ambre-app | src/host/prose.rs | crate::host::prose | ProseView::clipboard_write(cut) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::drop_text() | ret | bool	generic	consumed answer
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::drop_text(text) | param | String	free-text	dropped text
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::drop_text(x) | param | f32	math	css position
@@ -123,7 +114,6 @@ ambre-app | src/host/prose.rs | crate::host::prose | ProseView::feed() | ret | b
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::new(height) | param | f64	math	size
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::new(width) | param | f64	math	size
-ambre-app | src/host/prose.rs | crate::host::prose | ProseView::paste_clipboard(own_copy) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::plan_repaint(_hud_tick) | param | bool	math	value flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::resize(height) | param | u32	math	size
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::resize(width) | param | u32	math	size
@@ -191,7 +181,6 @@ ambre-app | src/platform.rs | crate::platform | open_file_picker(accept) | param
 ambre-app | src/platform.rs | crate::platform | open_file_picker(on_bytes) | param | impl Fn(Vec<u8>)+Clone+'static	generic	bytes callback
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
 ambre-app | src/platform.rs | crate::platform | open_plaintext_container(bytes) | param | Vec<u8>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
-ambre-app | src/platform.rs | crate::platform | paste_from_clipboard(plain) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/platform.rs | crate::platform | post_to_worker(bytes) | param | &[u8]	generic	bytes
 ambre-app | src/platform.rs | crate::platform | read_ambre_file(on_sealed) | param | Callback<Vec<u8>>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
 ambre-app | src/platform.rs | crate::platform | read_clipboard_blob() | ret | Option<(ambre_bus::ClipboardBlob,Option<String>)>	debt	finding: Clipboard payload strings (confirmed)
@@ -216,9 +205,7 @@ ambre-app | src/route.rs | crate::route | type_slug() | ret | &'static str	gener
 ambre-app | src/shell/app_root.rs | crate::shell::app_root | ShellHeader(about_open) | param | RwSignal<bool>	math	UI open flag signal
 ambre-app | src/shell/app_root.rs | crate::shell::app_root | ShellHeader(share_open) | param | RwSignal<bool>	math	UI open flag signal
 ambre-app | src/shell/app_root.rs | crate::shell::app_root | ShellHeader(username) | param | RwSignal<Option<String>>	debt	finding: Display names held as String (confirmed)
-ambre-app | src/shell/app_root.rs | crate::shell::app_root | exec_clipboard(copy) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/shell/app_root.rs | crate::shell::app_root | follow_shell_nav(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
-ambre-app | src/shell/app_root.rs | crate::shell::app_root | read_clipboard(plain) | param | bool	debt	finding: Clipboard mode bools (confirmed)
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath.palette_open | field | RwSignal<bool>	math	UI open flag signal
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath.seal_open | field | RwSignal<bool>	math	UI open flag signal
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::key() | ret | bool	generic	predicate result
@@ -812,7 +799,6 @@ ambre-bus | src/lib.rs | crate | ClipboardBlob::html_token() | ret | Option<&str
 ambre-bus | src/lib.rs | crate | ClipboardBlob::html_token(html) | param | &str	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | ClipboardBlob::mark_html() | ret | String	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | ClipboardBlob::mark_html(html) | param | &str	generic	HTML comment marker over &str
-ambre-bus | src/lib.rs | crate | ClipboardBlob::source(own_copy) | param | bool	generic	fact flag (plain paste / own copy), not a mode of the function
 ambre-bus | src/lib.rs | crate | CopyOutcome::Text.0 | field | String	free-text	clipboard text/html halves
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_CLOSE | const | &str	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_OPEN | const | &str	generic	HTML comment marker over &str
@@ -1425,9 +1411,7 @@ ambre-chrome | src/handler.rs | crate::handler | CommandHandler::sealed_save(pas
 ambre-chrome | src/handler.rs | crate::handler | FilePick.accept | field | &'static str	free-text	text, label or user content
 ambre-chrome | src/handler.rs | crate::handler | FilePick.read | field | Box<dyn Fn(Vec<u8>)->C>	generic	opaque file content bytes
 ambre-chrome | src/handler.rs | crate::handler | FilePick.unreadable | field | &'static str	free-text	text, label or user content
-ambre-chrome | src/handler.rs | crate::handler | ShellAction::Copy.cut | field | bool	debt	finding: Bools that select a mode
 ambre-chrome | src/handler.rs | crate::handler | ShellAction::CopyText.0 | field | String	newtype-inner	newtype inner
-ambre-chrome | src/handler.rs | crate::handler | ShellAction::Paste.plain | field | bool	debt	finding: Bools that select a mode
 ambre-chrome | src/menu.rs | crate::menu | MenuKey::Choose.0 | field | usize	newtype-inner	newtype inner
 ambre-chrome | src/menu.rs | crate::menu | MenuKey::Focus.0 | field | usize	newtype-inner	newtype inner
 ambre-chrome | src/menu.rs | crate::menu | aria_bool() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
@@ -3050,7 +3034,6 @@ ambre-murmure | src/view.rs | crate::view | MurmureView.shelf_seen | field | u64
 ambre-murmure | src/view.rs | crate::view | MurmureView.size | field | (f32,f32)	math	layout geometry in logical px
 ambre-murmure | src/view.rs | crate::view | MurmureView.top_row | field | Option<(RowKey,f32)>	math	layout geometry in logical px
 ambre-murmure | src/view.rs | crate::view | MurmureView::clipboard() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | MurmureView::clipboard(cut) | param | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/view.rs | crate::view | MurmureView::close_thread() | ret | bool	math	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::composer_input() | ret | Option<bool>	math	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::copy() | ret | Option<String>	free-text	text, label or user content
@@ -3389,7 +3372,6 @@ ambre-prose | src/input.rs | crate::input | Press.x | field | f32	math	layout ge
 ambre-prose | src/input.rs | crate::input | Press.y | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/input.rs | crate::input | ProseInput::Compose.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/input.rs | crate::input | ProseInput::ComposeEnd.0 | field | String	newtype-inner	newtype inner field
-ambre-prose | src/input.rs | crate::input | ProseInput::Copy.cut | field | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseInput::Drag.x | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseInput::Drag.y | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseInput::Drop.text | field | String	free-text	text content / label / parser input
@@ -3410,7 +3392,6 @@ ambre-prose | src/input.rs | crate::input | ProseKey::from_name(ctrl) | param | 
 ambre-prose | src/input.rs | crate::input | ProseKey::from_name(name) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | ProseUiState::act() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::copy() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/input.rs | crate::input | ProseUiState::copy(cut) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::delete() | ret | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::delete(forward) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text() | ret | bool	generic	independent flag or predicate
@@ -3429,7 +3410,6 @@ ambre-prose | src/input.rs | crate::input | ProseUiState::paste() | ret | bool	g
 ambre-prose | src/input.rs | crate::input | ProseUiState::paste(html) | param | Option<&str>	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | ProseUiState::paste(rich) | param | Option<&[u8]>	math	count, size or local index
 ambre-prose | src/input.rs | crate::input | ProseUiState::paste(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/input.rs | crate::input | ProseUiState::paste_input(own_copy) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::pick() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::pick(index) | param | usize	math	count, size or local index
 ambre-prose | src/input.rs | crate::input | ProseUiState::press() | ret | bool	generic	independent flag or predicate
@@ -5996,7 +5976,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.zoom_published | fiel
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::blur_embed() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::classify_wheel(px) | param | (f64,f64)	debt	wheel delta as bare floats and a mode bool: WheelDelta exists
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::classify_wheel(step) | param | bool	debt	wheel delta as bare floats and a mode bool: WheelDelta exists
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::clipboard_write(cut) | param | bool	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::drag_arrow_handle() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_geometry() | ret | (Point,f32,Rect)	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_geometry_of() | ret | (Point,f32,Rect)	math	geometry, layout, count or size local to the algorithm
@@ -6042,7 +6021,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::is_text_editable() |
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::new(canvas_height) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::new(canvas_width) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::new(embedded) | param | bool	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::paste_clipboard(own_copy) | param | bool	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::patch_connector_label(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::patch_connector_label(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::patch_element_text(base) | param | &str	free-text	label, message or user text
@@ -6968,7 +6946,6 @@ ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::touch_m
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::update_resize_preview(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::update_resize_preview(y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::axis_sel_contains() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::clipboard_write(cut) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::copy_selection() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::cut_selection() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::editor_local_point() | ret | Option<(f32,f32)>	math	local geometry / pixel arithmetic
@@ -6978,7 +6955,6 @@ ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::e
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::grid_paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::handle_input_editing() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::is_editing() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::paste_clipboard(own_copy) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::pointer_in_editor() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::pointer_in_editor(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::pointer_in_editor(y) | param | f64	math	local geometry / pixel arithmetic

@@ -7,6 +7,7 @@
 // ============================================================================
 
 use super::*;
+use ambre_chrome::commands::PasteForm;
 
 /// Open a transient file picker and hand the chosen file's bytes to `on_bytes`,
 /// read off the main thread (`File::array_buffer`). An application asks for
@@ -60,14 +61,14 @@ pub(crate) fn open_file_picker(
 /// active view through the same ladder as the native `paste` event
 /// (`UI-THREAD-024`). Best-effort: a clipboard the browser will not surface
 /// (permission denied, unsupported) earns a log line, not a failure -- Ctrl+V
-/// still works. `plain` keeps the text alone, for the paste-as-plain-text
+/// still works. A `Plain` form keeps the text alone, for the paste-as-plain-text
 /// entry (`PROSE-UI-227`).
 pub(crate) async fn paste_from_clipboard(
     read_promise: js_sys::Promise,
     clipboard: web_sys::Clipboard,
     paste_tx: ambre_bus::conduit::Sender<host::ClipboardPaste>,
     toasts: Toasts,
-    plain: bool,
+    form: PasteForm,
 ) {
     let (mut blob, mut token, mut found) = match read_clipboard_blob(read_promise).await {
         Some((blob, token)) => (blob, token, true),
@@ -89,7 +90,7 @@ pub(crate) async fn paste_from_clipboard(
         return;
     }
 
-    if plain {
+    if form == PasteForm::Plain {
         blob = ambre_bus::ClipboardBlob {
             text: blob.text,
             plain: true,

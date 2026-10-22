@@ -8,6 +8,7 @@ use super::prose_status::ProseFigures;
 use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
+use ambre_chrome::commands::{ClipboardWrite, PasteForm};
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
     ChannelHeader, ChannelList, ChannelMentionConfirm, DeleteConfirm, EmojiPicker, InviteControl,
@@ -994,14 +995,17 @@ pub(crate) fn AppRoot() -> impl IntoView {
 /// Copy or cut from a menu: focus the text pipe and ask the browser to fire
 /// the `copy`/`cut` DOM event the host listeners service. They write every
 /// format the active view offers.
-pub(super) fn exec_clipboard(copy: bool) {
+pub(super) fn exec_clipboard(write: ClipboardWrite) {
     if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
         if let Ok(Some(ta)) = doc.query_selector(".ambre-input")
             && let Some(el) = ta.dyn_ref::<web_sys::HtmlElement>()
         {
             let _ = el.focus();
         }
-        let cmd = if copy { "copy" } else { "cut" };
+        let cmd = match write {
+            ClipboardWrite::Copy => "copy",
+            ClipboardWrite::Cut => "cut",
+        };
         if let Ok(html_doc) = doc.dyn_into::<web_sys::HtmlDocument>() {
             let _ = html_doc.exec_command(cmd);
         }
@@ -1012,11 +1016,11 @@ pub(super) fn exec_clipboard(copy: bool) {
 /// the OS clipboard via the async Clipboard API, allowed in this click
 /// gesture. The read is decoded and handed to the host, which routes it to the
 /// active view through the same ladder as Ctrl+V (`UI-THREAD-024`,
-/// `UI-THREAD-025`). `plain` keeps the text alone (`PROSE-UI-227`).
+/// `UI-THREAD-025`). A `Plain` form keeps the text alone (`PROSE-UI-227`).
 pub(super) fn read_clipboard(
     paste_tx: ambre_bus::conduit::Sender<crate::host::ClipboardPaste>,
     toasts: Toasts,
-    plain: bool,
+    form: PasteForm,
 ) {
     let clipboard = web_sys::window().map(|w| w.navigator().clipboard());
     // `navigator.clipboard` is undefined outside a secure context, such as
@@ -1039,7 +1043,7 @@ pub(super) fn read_clipboard(
             clipboard,
             paste_tx,
             toasts,
-            plain,
+            form,
         ));
     } else {
         toasts.warning("Clipboard unavailable here (needs HTTPS); use Ctrl+V to paste");

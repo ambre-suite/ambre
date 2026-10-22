@@ -71,7 +71,8 @@ use super::viewport::ViewportTransform;
 // Context-menu bridge (`toile-menus`): the DOM `ContextMenu` reads the
 // published selection scope and writes back the chosen `CommandId`. Both ends
 // are leptos signals, so the handles and their access traits are wasm-only.
-use ambre_commands::CommandId;
+use ambre_bus::PasteSource;
+use ambre_commands::{ClipboardWrite, CommandId};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 
@@ -2661,7 +2662,7 @@ impl ToileView {
             // still rides the native Ctrl+V `paste` DOM event
             // (`toile-viewport`).
             if let Some(blob) = self.last_clip.clone() {
-                self.paste_clipboard(blob, true);
+                self.paste_clipboard(blob, PasteSource::Own);
             }
             return;
         }
@@ -4225,7 +4226,7 @@ impl ToileView {
     /// cut appends [`ToileCommand::DeleteElements`] on the same selection
     /// immediately after -- queue order guarantees Logic captured the payload
     /// before the delete. An empty selection returns [`CopyOutcome::Nothing`].
-    pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
+    pub fn clipboard_write(&mut self, write: ClipboardWrite) -> ambre_bus::CopyOutcome {
         // An open inline edit takes precedence over the board selection: copy /
         // cut act on the text selection, not the elements (`toile-text-editing`).
         // `selected_text` is font-free, so it resolves synchronously here; a cut
@@ -4235,7 +4236,7 @@ impl ToileView {
             let Some(text) = ed.selected_text() else {
                 return ambre_bus::CopyOutcome::Nothing;
             };
-            if cut {
+            if write == ClipboardWrite::Cut {
                 ed.push(EditIntent::DeleteSelection);
                 self.edit_dirty = true;
             }
@@ -4250,7 +4251,7 @@ impl ToileView {
         if !self.send_edit(ToileCommand::CopyElements { ids: ids.clone() }) {
             return ambre_bus::CopyOutcome::Nothing;
         }
-        if cut {
+        if write == ClipboardWrite::Cut {
             self.send_edit(ToileCommand::DeleteElements { ids });
             self.selection.clear();
             self.needs_full = true;
@@ -4267,14 +4268,14 @@ impl ToileView {
     }
 
     /// Service a paste from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
-    /// transport (`toile-clipboard`). When `own_copy` (the synchronous ownership
-    /// token was still on the clipboard) it prefers the in-memory `last_clip` at
+    /// transport (`toile-clipboard`). An `Own` source still carries the synchronous
+    /// ownership token. It prefers the in-memory `last_clip` at
     /// full fidelity, whatever the asynchronous OS write did. Otherwise it
     /// decodes the blob's Ambre bytes. Either way,
     /// `PasteElements` lands the id-free payload at the cursor's world position. A
     /// blob with no decodable Ambre payload is ignored (plain-text paste into a
     /// board is out of MVP).
-    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
+    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, from: PasteSource) {
         // An open inline edit consumes the paste as text at the caret
         // (`toile-clipboard`). An Ambre element payload is meaningless inside a
         // text field, so route the plain-text mirror through the same insertion
@@ -4285,7 +4286,7 @@ impl ToileView {
             }
             return;
         }
-        let source = ambre_bus::ClipboardBlob::source(self.last_clip.as_ref(), &blob, own_copy);
+        let source = ambre_bus::ClipboardBlob::source(self.last_clip.as_ref(), &blob, from);
         let Some(payload) = source
             .ambre
             .as_ref()

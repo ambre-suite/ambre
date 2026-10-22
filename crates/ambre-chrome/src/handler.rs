@@ -13,7 +13,7 @@
 // (`SCHEMA-002`), so the launcher fixes it to the bus's application command.
 // ============================================================================
 
-use ambre_commands::CommandId;
+use ambre_commands::{ClipboardWrite, CommandId, PasteForm};
 
 /// One thing a command asks of the shell, once its application has decided.
 pub enum ShellAction<C> {
@@ -27,18 +27,13 @@ pub enum ShellAction<C> {
     /// (`DOCFILE-015`).
     OpenSealedSave,
     /// Copy, or cut, the current selection through the browser.
-    Copy {
-        /// Cut rather than copy.
-        cut: bool,
-    },
+    Copy(ClipboardWrite),
     /// Put this text on the system clipboard: the copy of something the page
     /// paints, which holds no browser selection.
     CopyText(String),
-    /// Paste the system clipboard into the routed document.
-    Paste {
-        /// Drop the formatting, keep the text.
-        plain: bool,
-    },
+    /// Paste the system clipboard into the routed document, with its
+    /// formatting or as plain text.
+    Paste(PasteForm),
     /// Ask the server for the documents this user may open again. A chooser
     /// that offers them must not trust an older list.
     RefreshDocuments,

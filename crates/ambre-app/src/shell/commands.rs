@@ -130,14 +130,14 @@ impl CommandPath {
             ShellAction::Send(command) => self.send(command),
             ShellAction::OpenPalette => self.palette_open.set(true),
             ShellAction::OpenSealedSave => self.seal_open.set(true),
-            ShellAction::Copy { cut } => exec_clipboard(!cut),
+            ShellAction::Copy(write) => exec_clipboard(write),
             ShellAction::CopyText(text) => {
                 if let Some(win) = web_sys::window() {
                     let _ = win.navigator().clipboard().write_text(&text);
                 }
             }
-            ShellAction::Paste { plain } => {
-                read_clipboard(self.clipboard_paste.clone(), self.toasts, plain);
+            ShellAction::Paste(form) => {
+                read_clipboard(self.clipboard_paste.clone(), self.toasts, form);
             }
             ShellAction::RefreshDocuments => {
                 let _ = self.to_logic.try_send(LogicCommand::Rest {

@@ -93,6 +93,17 @@ pub struct ClipboardBlob {
     pub plain: bool,
 }
 
+/// Whose copy the clipboard holds when a paste reads it. The ownership token
+/// decides, never the text (`UI-THREAD-007`).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum PasteSource {
+    /// Another tab or another program wrote the clipboard last.
+    #[default]
+    Foreign,
+    /// This tab wrote the clipboard last, so the view's kept copy is the same.
+    Own,
+}
+
 impl ClipboardBlob {
     /// The blob a paste inserts: the copy the view kept in memory, or what
     /// the browser read. A plain paste takes the read, whose richer halves the
@@ -101,12 +112,12 @@ impl ClipboardBlob {
     /// decides: two tabs holding the same text are two copies
     /// (`UI-THREAD-007`).
     #[must_use]
-    pub fn source<'a>(kept: Option<&'a Self>, read: &'a Self, own_copy: bool) -> &'a Self {
+    pub fn source<'a>(kept: Option<&'a Self>, read: &'a Self, source: PasteSource) -> &'a Self {
         if read.plain {
             return read;
         }
-        match kept {
-            Some(kept) if own_copy => kept,
+        match (kept, source) {
+            (Some(kept), PasteSource::Own) => kept,
             _ => read,
         }
     }
@@ -246,20 +257,29 @@ mod clipboard_tests {
         let kept = blob("a\tb", 1);
         let same_text = blob("a\tb", 2);
         // The token says the clipboard is ours.
-        assert_eq!(ClipboardBlob::source(Some(&kept), &same_text, true), &kept);
+        assert_eq!(
+            ClipboardBlob::source(Some(&kept), &same_text, super::PasteSource::Own),
+            &kept
+        );
         // No token: the same text from another tab is another copy.
         assert_eq!(
-            ClipboardBlob::source(Some(&kept), &same_text, false),
+            ClipboardBlob::source(Some(&kept), &same_text, super::PasteSource::Foreign),
             &same_text
         );
         // Nothing was kept.
-        assert_eq!(ClipboardBlob::source(None, &same_text, true), &same_text);
+        assert_eq!(
+            ClipboardBlob::source(None, &same_text, super::PasteSource::Own),
+            &same_text
+        );
         // A plain paste never takes the kept copy.
         let plain = ClipboardBlob {
             plain: true,
             ..blob("a\tb", 5)
         };
-        assert_eq!(ClipboardBlob::source(Some(&kept), &plain, true), &plain);
+        assert_eq!(
+            ClipboardBlob::source(Some(&kept), &plain, super::PasteSource::Own),
+            &plain
+        );
     }
 
     /// Every `.rs` file under `dir`, at any depth.

@@ -9,7 +9,7 @@
 // ============================================================================
 
 use ambre_bus::{AppCommand, StylePatch, TrameCommand};
-use ambre_chrome::commands::CommandId;
+use ambre_chrome::commands::{ClipboardWrite, CommandId, PasteForm};
 use ambre_chrome::{CommandHandler, FilePick, KeyRoute, ShellAction};
 use leptos::prelude::*;
 
@@ -92,8 +92,9 @@ impl CommandHandler for TrameHandler {
             }
             FILTER_COLUMN => ShellAction::Send(self.open_filter()),
             BOLD | ITALIC => ShellAction::Send(self.toggle_style(id == BOLD)),
-            COPY | CUT => ShellAction::Copy { cut: id == CUT },
-            PASTE => ShellAction::Paste { plain: false },
+            COPY => ShellAction::Copy(ClipboardWrite::Copy),
+            CUT => ShellAction::Copy(ClipboardWrite::Cut),
+            PASTE => ShellAction::Paste(PasteForm::Rich),
             // The CSV becomes a new sheet, converted on the client
             // (`trame-import-export`).
             IMPORT_CSV => ShellAction::PickFile(FilePick {

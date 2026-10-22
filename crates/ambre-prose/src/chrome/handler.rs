@@ -11,7 +11,7 @@
 use ambre_bus::AppCommand;
 use ambre_bus::app::prose::{ExportFormat, ImportFormat, MarkdownFlavor, ProseCommand};
 use ambre_chrome::{CommandHandler, FilePick, KeyRoute, ShellAction};
-use ambre_commands::CommandId;
+use ambre_commands::{ClipboardWrite, CommandId, PasteForm};
 use leptos::prelude::*;
 
 use crate::commands::{
@@ -51,10 +51,10 @@ impl CommandHandler for ProseHandler {
             // A menu row or the palette; the chords are the view's.
             UNDO => ShellAction::Send(AppCommand::Prose(ProseCommand::Undo)),
             REDO => ShellAction::Send(AppCommand::Prose(ProseCommand::Redo)),
-            COPY | CUT => ShellAction::Copy { cut: id == CUT },
-            PASTE | PASTE_PLAIN => ShellAction::Paste {
-                plain: id == PASTE_PLAIN,
-            },
+            COPY => ShellAction::Copy(ClipboardWrite::Copy),
+            CUT => ShellAction::Copy(ClipboardWrite::Cut),
+            PASTE => ShellAction::Paste(PasteForm::Rich),
+            PASTE_PLAIN => ShellAction::Paste(PasteForm::Plain),
             _ => return Vec::new(),
         };
         vec![action]

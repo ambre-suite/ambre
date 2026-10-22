@@ -236,7 +236,10 @@ fn a_cut_whose_copy_went_nowhere_arms_nothing() {
         CellPos::new(Row::new(0), Col::new(0)),
         CellPos::new(Row::new(1), Col::new(1)),
     ));
-    assert_eq!(view.clipboard_write(true), ambre_bus::CopyOutcome::Nothing);
+    assert_eq!(
+        view.clipboard_write(ClipboardWrite::Cut),
+        ambre_bus::CopyOutcome::Nothing
+    );
     assert!(!view.cut_pending, "no cut is armed");
     assert_eq!(view.state.clipboard_anchor, None, "no range is marked");
 }
@@ -248,13 +251,14 @@ fn a_paste_takes_the_highest_rung_it_can_serve() {
     let mut rig = Rig::new();
     rig.view.last_clip = Some(clip(7, "kept"));
     rig.sent();
-    rig.view.paste_clipboard(clip(3, "read"), true);
+    rig.view.paste_clipboard(clip(3, "read"), PasteSource::Own);
     assert_eq!(
         pasted(&rig.sent()).map(|p| p.src_row),
         Some(Row::new(7)),
         "own copy"
     );
-    rig.view.paste_clipboard(clip(3, "read"), false);
+    rig.view
+        .paste_clipboard(clip(3, "read"), PasteSource::Foreign);
     assert_eq!(
         pasted(&rig.sent()).map(|p| p.src_row),
         Some(Row::new(3)),
@@ -264,7 +268,7 @@ fn a_paste_takes_the_highest_rung_it_can_serve() {
         ambre: None,
         ..clip(3, "plain")
     };
-    rig.view.paste_clipboard(foreign, false);
+    rig.view.paste_clipboard(foreign, PasteSource::Foreign);
     let sent = rig.sent();
     let cells = pasted(&sent).map(|p| p.cells.iter().map(|c| c.raw.as_str()).collect::<Vec<_>>());
     assert_eq!(cells, Some(vec!["plain"]), "no bytes: the text, as cells");
@@ -277,7 +281,7 @@ fn a_paste_into_an_open_editor_inserts_the_text() {
     let mut rig = Rig::new();
     rig.frame();
     rig.type_text("4");
-    rig.view.paste_clipboard(clip(3, "2"), false);
+    rig.view.paste_clipboard(clip(3, "2"), PasteSource::Foreign);
     assert!(rig.key("Enter"));
     rig.frame();
     let sent = rig.sent();
@@ -297,7 +301,8 @@ fn a_paste_into_an_open_editor_inserts_the_text() {
 #[test]
 fn a_paste_writes_nothing_back() {
     let mut rig = Rig::new();
-    rig.view.paste_clipboard(clip(3, "read"), false);
+    rig.view
+        .paste_clipboard(clip(3, "read"), PasteSource::Foreign);
     assert_eq!(rig.view.poll_clipboard(), None);
 }
 
@@ -547,7 +552,7 @@ fn a_cut_clears_its_source_behind_the_paste() {
         CellPos::new(Row::new(1), Col::new(1)),
     ));
     assert_eq!(
-        rig.view.clipboard_write(true),
+        rig.view.clipboard_write(ClipboardWrite::Cut),
         ambre_bus::CopyOutcome::Deferred
     );
     let copied = rig.sent();
@@ -559,7 +564,7 @@ fn a_cut_clears_its_source_behind_the_paste() {
         CellPos::new(Row::new(5), Col::new(0)),
         CellPos::new(Row::new(5), Col::new(0)),
     ));
-    rig.view.paste_clipboard(clip(0, "x"), false);
+    rig.view.paste_clipboard(clip(0, "x"), PasteSource::Foreign);
     let sent = rig.sent();
     assert!(
         matches!(
@@ -571,7 +576,7 @@ fn a_cut_clears_its_source_behind_the_paste() {
         ),
         "sent {sent:?}"
     );
-    rig.view.paste_clipboard(clip(0, "x"), false);
+    rig.view.paste_clipboard(clip(0, "x"), PasteSource::Foreign);
     assert!(
         matches!(rig.sent().as_slice(), [TrameCommand::PasteRange { .. }]),
         "a second paste clears nothing"
@@ -1522,14 +1527,14 @@ fn a_refused_paste_leaves_the_cut_source() {
         CellPos::new(Row::new(0), Col::new(0)),
         CellPos::new(Row::new(0), Col::new(0)),
     ));
-    rig.view.clipboard_write(true);
+    rig.view.clipboard_write(ClipboardWrite::Cut);
     rig.sent();
     rig.view.state.select_rect(CellRect::spanning(
         CellPos::new(Row::new(5), Col::new(0)),
         CellPos::new(Row::new(5), Col::new(0)),
     ));
     rig.lose_logic();
-    rig.view.paste_clipboard(clip(0, "a"), false);
+    rig.view.paste_clipboard(clip(0, "a"), PasteSource::Foreign);
     assert_eq!(
         rig.view.cell_seed(CellPos::new(Row::new(0), Col::new(0))),
         "a"
@@ -1606,7 +1611,9 @@ fn a_refused_send_is_never_silent() {
     type Act = fn(&mut Rig);
     let acts: [(&str, Act); 4] = [
         ("resize", |rig| rig.drag_col_1_to(200.0)),
-        ("paste", |rig| rig.view.paste_clipboard(clip(0, "a"), false)),
+        ("paste", |rig| {
+            rig.view.paste_clipboard(clip(0, "a"), PasteSource::Foreign)
+        }),
         ("clear", |rig| {
             rig.key("Delete");
         }),

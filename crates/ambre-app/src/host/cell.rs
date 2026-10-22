@@ -284,7 +284,7 @@ impl Bound {
                 "copy",
                 Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
                     let Some(view) = view.upgrade() else { return };
-                    let outcome = view.borrow_mut().clipboard_write(false);
+                    let outcome = view.borrow_mut().clipboard_write(ClipboardWrite::Copy);
                     if let ambre_bus::CopyOutcome::Text(text) = outcome
                         && let Some(data) = event
                             .dyn_ref::<web_sys::ClipboardEvent>()
@@ -830,7 +830,7 @@ mod tests {
             text.starts_with("Ada, t\n") && text.ends_with("world"),
             "{text}"
         );
-        let cut = bound.view.borrow_mut().clipboard_write(true);
+        let cut = bound.view.borrow_mut().clipboard_write(ClipboardWrite::Cut);
         assert!(
             matches!(cut, ambre_bus::CopyOutcome::Nothing),
             "a cut leaves read-only text"

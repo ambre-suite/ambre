@@ -3,8 +3,10 @@
 //! `features/ambre-spec-prose-selection.md`).
 
 use crate::layout::run::RunOffset;
+use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocOffset;
 use ambre_bus::app::prose::DocSpan;
+use ambre_commands::ClipboardWrite;
 use ambre_draw::HitTest;
 
 use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, ProseEvent, TriState};
@@ -2042,7 +2044,7 @@ fn a_cut_copies_before_it_deletes_the_selection() {
         offset: DocOffset::new(5),
         anchor: Some((block, DocOffset::ZERO)),
     });
-    assert!(rig.input(ProseInput::Copy { cut: true }));
+    assert!(rig.input(ProseInput::Copy(ClipboardWrite::Cut)));
     assert!(matches!(rig.sent[0], ProseCommand::CopyRange { .. }));
     assert!(
         rig.sent.len() > 1,
@@ -2065,7 +2067,7 @@ fn a_refused_copy_deletes_nothing() {
     rig.ui.select_all();
     let mut sent = Vec::new();
     rig.ui
-        .handle_input(&ProseInput::Copy { cut: true }, &mut |command| {
+        .handle_input(&ProseInput::Copy(ClipboardWrite::Cut), &mut |command| {
             sent.push(command);
             SendResult::Dropped
         });
@@ -2080,7 +2082,7 @@ fn a_copy_leaves_the_document_unchanged() {
     let mut rig = Rig::new(&["hello world"]);
     let block = rig.blocks()[0];
     rig.ui.select_all();
-    assert!(rig.input(ProseInput::Copy { cut: false }));
+    assert!(rig.input(ProseInput::Copy(ClipboardWrite::Copy)));
     assert!(matches!(
         rig.sent.as_slice(),
         [ProseCommand::CopyRange { .. }]
@@ -2109,7 +2111,7 @@ fn the_kept_payload_serves_only_its_own_copy() {
         offset: DocOffset::new(5),
         anchor: Some((block, DocOffset::ZERO)),
     });
-    rig.input(ProseInput::Copy { cut: false });
+    rig.input(ProseInput::Copy(ClipboardWrite::Copy));
     rig.deliver();
     let own = |text: &str| ambre_bus::ClipboardBlob {
         text: text.to_owned(),
@@ -2117,11 +2119,13 @@ fn the_kept_payload_serves_only_its_own_copy() {
         ambre: None,
         plain: false,
     };
-    let ProseInput::Paste { rich, .. } = rig.ui.paste_input(own("other"), true) else {
+    let ProseInput::Paste { rich, .. } = rig.ui.paste_input(own("other"), PasteSource::Own) else {
         panic!("a paste");
     };
     assert!(rich.is_some(), "the token keeps the payload");
-    let ProseInput::Paste { rich, text, .. } = rig.ui.paste_input(own("hello"), false) else {
+    let ProseInput::Paste { rich, text, .. } =
+        rig.ui.paste_input(own("hello"), PasteSource::Foreign)
+    else {
         panic!("a paste");
     };
     assert!(
@@ -2129,7 +2133,9 @@ fn the_kept_payload_serves_only_its_own_copy() {
         "the same text without the token is another copy"
     );
     assert_eq!(text, "hello");
-    let ProseInput::Paste { rich, text, .. } = rig.ui.paste_input(own("other"), false) else {
+    let ProseInput::Paste { rich, text, .. } =
+        rig.ui.paste_input(own("other"), PasteSource::Foreign)
+    else {
         panic!("a paste");
     };
     assert!(rich.is_none());
@@ -2177,7 +2183,7 @@ fn an_html_half_keeps_a_short_paste_off_the_typing_path() {
         ambre: None,
         plain: false,
     };
-    let input = rig.ui.paste_input(blob, false);
+    let input = rig.ui.paste_input(blob, PasteSource::Foreign);
     assert!(matches!(
         &input,
         ProseInput::Paste { html: Some(html), .. } if html == "<b>x</b>"
@@ -2203,7 +2209,7 @@ fn a_plain_paste_carries_the_text_alone() {
         offset: DocOffset::new(5),
         anchor: Some((block, DocOffset::ZERO)),
     });
-    rig.input(ProseInput::Copy { cut: false });
+    rig.input(ProseInput::Copy(ClipboardWrite::Copy));
     rig.deliver();
     let read = |plain: bool| ambre_bus::ClipboardBlob {
         text: "hello".to_owned(),
@@ -2211,11 +2217,11 @@ fn a_plain_paste_carries_the_text_alone() {
         ambre: None,
         plain,
     };
-    let ProseInput::Paste { rich, .. } = rig.ui.paste_input(read(false), true) else {
+    let ProseInput::Paste { rich, .. } = rig.ui.paste_input(read(false), PasteSource::Own) else {
         panic!("a paste");
     };
     assert!(rich.is_some(), "the ordinary paste serves the kept payload");
-    let input = rig.ui.paste_input(read(true), true);
+    let input = rig.ui.paste_input(read(true), PasteSource::Own);
     assert!(matches!(
         &input,
         ProseInput::Paste { text, html: None, rich: None } if text == "hello"

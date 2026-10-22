@@ -36,13 +36,14 @@ use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
 use ambre_bus::app::toile::ElementId;
-use ambre_bus::{DocType, DocumentId, LogicCommand};
+use ambre_bus::{DocType, DocumentId, LogicCommand, PasteSource};
 use ambre_canvas::{
     ContentRepaint, DensityWatch, FATAL_BACKDROP, FrameStats, GpuState, InputEvent, Layer,
     OverlayRepaint, Phases, RafControl, RepaintPlan, SurfaceSize, TextCache, TextInput, Tick,
     WgpuSurface, bootstrap_gpu, drive_frame, fatal_message, paint_fatal, size_backing_store,
     start_raf_loop,
 };
+use ambre_chrome::commands::ClipboardWrite;
 use ambre_draw::{DrawSurface, Point, Rect, Size};
 use ambre_toile::ui::ToileView;
 use ambre_toile::ui::embed::{VisibleEmbed, VisibleWebEmbed};
@@ -355,14 +356,14 @@ impl AppView {
     /// Logic thread, drained a frame later by
     /// [`poll_clipboard`](Self::poll_clipboard). `Nothing` lets the browser
     /// default proceed. Each app applies its own cut policy behind this call.
-    fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
+    fn clipboard_write(&mut self, write: ClipboardWrite) -> ambre_bus::CopyOutcome {
         match self {
-            AppView::Trame(v) => v.clipboard_write(cut),
-            AppView::Toile(v) => v.clipboard_write(cut),
-            AppView::Prose(v) => v.clipboard_write(cut),
+            AppView::Trame(v) => v.clipboard_write(write),
+            AppView::Toile(v) => v.clipboard_write(write),
+            AppView::Prose(v) => v.clipboard_write(write),
             // The list's text is read-only: a cut leaves it where it is, and
             // copies nothing. The composer's draft is cut like any text.
-            AppView::Murmure(v) => match v.clipboard(cut) {
+            AppView::Murmure(v) => match v.clipboard(write) {
                 Some(text) => ambre_bus::CopyOutcome::Text(text),
                 None => ambre_bus::CopyOutcome::Nothing,
             },
@@ -383,14 +384,14 @@ impl AppView {
 
     /// Service a `paste` from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
     /// transport; each view decodes its own app-specific payload behind the opaque
-    /// bytes. `own_copy` is true when the clipboard still carries this tab's
+    /// bytes. `source` is `Own` when the clipboard still carries this tab's
     /// synchronous ownership token. The view then pastes its in-memory `last_clip`
     /// at full fidelity, rather than trusting the (possibly failed) OS mirror.
-    fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
+    fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, source: PasteSource) {
         match self {
-            AppView::Trame(v) => v.paste_clipboard(blob, own_copy),
-            AppView::Toile(v) => v.paste_clipboard(blob, own_copy),
-            AppView::Prose(v) => v.paste_clipboard(blob, own_copy),
+            AppView::Trame(v) => v.paste_clipboard(blob, source),
+            AppView::Toile(v) => v.paste_clipboard(blob, source),
+            AppView::Prose(v) => v.paste_clipboard(blob, source),
             // The composer takes the text mirror alone (the Murmure composer spec).
             AppView::Murmure(v) => v.paste(&blob.text),
         }

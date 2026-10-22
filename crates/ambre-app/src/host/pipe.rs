@@ -16,9 +16,9 @@ pub(crate) trait PipeHost {
     /// consumed it, so the listener prevents the browser default.
     fn handle_input(&mut self, ev: &InputEvent) -> bool;
     /// Ask the active view for the outcome of a `copy`, or of a `cut`.
-    fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome;
+    fn clipboard_write(&mut self, write: ClipboardWrite) -> ambre_bus::CopyOutcome;
     /// Hand a decoded paste to the active view (`UI-THREAD-024`).
-    fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool);
+    fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, source: PasteSource);
     /// The per-page-load ownership token (`UI-THREAD-007`).
     fn clip_token(&self) -> &ambre_bus::ClipToken;
     /// Whether the last copy's asynchronous write landed (`UI-THREAD-054`).
@@ -30,12 +30,12 @@ impl PipeHost for FrameHost {
         FrameHost::handle_input(self, ev)
     }
 
-    fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
-        FrameHost::clipboard_write(self, cut)
+    fn clipboard_write(&mut self, write: ClipboardWrite) -> ambre_bus::CopyOutcome {
+        FrameHost::clipboard_write(self, write)
     }
 
-    fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
-        FrameHost::paste_clipboard(self, blob, own_copy);
+    fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, source: PasteSource) {
+        FrameHost::paste_clipboard(self, blob, source);
     }
 
     fn clip_token(&self) -> &ambre_bus::ClipToken {
@@ -51,8 +51,12 @@ impl PipeHost for FrameHost {
 /// the `paste` event, and the blob reaches the view by the same call
 /// (`UI-THREAD-024`).
 pub(crate) fn button_paste<H: PipeHost>(host: &mut H, paste: ClipboardPaste) {
-    let own_copy = host.clip_token().is(paste.token.as_deref());
-    host.paste_clipboard(paste.blob, own_copy);
+    let source = if host.clip_token().is(paste.token.as_deref()) {
+        PasteSource::Own
+    } else {
+        PasteSource::Foreign
+    };
+    host.paste_clipboard(paste.blob, source);
 }
 
 /// Wire every listener the pipe needs. Keys are heard on `document`, so a
@@ -177,14 +181,14 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
     // formulas.
     {
         let ta = text_input.element().clone();
-        for cut in [false, true] {
+        for write in [ClipboardWrite::Copy, ClipboardWrite::Cut] {
             let host_e = Rc::clone(host);
             let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
                 move |event: web_sys::ClipboardEvent| {
                     // A new copy owns the clipboard until its own asynchronous
                     // write lands (`UI-THREAD-054`).
                     host_e.borrow().clip_published().set(false);
-                    let outcome = host_e.borrow_mut().clipboard_write(cut);
+                    let outcome = host_e.borrow_mut().clipboard_write(write);
                     match outcome {
                         // Nothing selected: let the browser default proceed.
                         ambre_bus::CopyOutcome::Nothing => {}
@@ -214,7 +218,10 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                 },
             );
             ta.add_event_listener_with_callback(
-                if cut { "cut" } else { "copy" },
+                match write {
+                    ClipboardWrite::Copy => "copy",
+                    ClipboardWrite::Cut => "cut",
+                },
                 cb.as_ref().unchecked_ref(),
             )
             .expect("add clipboard listener");
@@ -280,15 +287,17 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                     let read = clipboard.read();
                     let host_a = Rc::clone(&host_c);
                     wasm_bindgen_futures::spawn_local(async move {
-                        let (blob, own_copy) =
-                            match crate::platform::read_clipboard_blob(read).await {
-                                Some((blob, token)) => {
-                                    let own = host_a.borrow().clip_token().is(token.as_deref());
-                                    (blob, own)
-                                }
-                                None => (fallback, false),
-                            };
-                        host_a.borrow_mut().paste_clipboard(blob, own_copy);
+                        let (blob, source) = match crate::platform::read_clipboard_blob(read).await
+                        {
+                            Some((blob, token))
+                                if host_a.borrow().clip_token().is(token.as_deref()) =>
+                            {
+                                (blob, PasteSource::Own)
+                            }
+                            Some((blob, _)) => (blob, PasteSource::Foreign),
+                            None => (fallback, PasteSource::Foreign),
+                        };
+                        host_a.borrow_mut().paste_clipboard(blob, source);
                     });
                     return;
                 }
@@ -305,7 +314,11 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                         ambre,
                         plain,
                     },
-                    own_copy,
+                    if own_copy {
+                        PasteSource::Own
+                    } else {
+                        PasteSource::Foreign
+                    },
                 );
             },
         );
@@ -386,8 +399,8 @@ mod tests {
         /// Each input event, as a short tag and its text.
         inputs: Vec<String>,
         /// Each copy asked for: `true` for a cut.
-        copies: Vec<bool>,
-        pastes: Vec<(ambre_bus::ClipboardBlob, bool)>,
+        copies: Vec<ClipboardWrite>,
+        pastes: Vec<(ambre_bus::ClipboardBlob, PasteSource)>,
         /// What a copy answers. `None` answers `Nothing`.
         outcome: Option<ambre_bus::CopyOutcome>,
         /// Whether the view consumes every key.
@@ -409,15 +422,15 @@ mod tests {
             self.consume
         }
 
-        fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
-            self.copies.push(cut);
+        fn clipboard_write(&mut self, write: ClipboardWrite) -> ambre_bus::CopyOutcome {
+            self.copies.push(write);
             self.outcome
                 .clone()
                 .unwrap_or(ambre_bus::CopyOutcome::Nothing)
         }
 
-        fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
-            self.pastes.push((blob, own_copy));
+        fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, source: PasteSource) {
+            self.pastes.push((blob, source));
         }
 
         fn clip_token(&self) -> &ambre_bus::ClipToken {
@@ -642,7 +655,7 @@ mod tests {
         rig.clip("cut", &transfer(&[]));
         rig.clip("paste", &transfer(&[("text/plain", "x")]));
         let host = rig.host.borrow();
-        assert_eq!(host.copies, vec![false, true]);
+        assert_eq!(host.copies, vec![ClipboardWrite::Copy, ClipboardWrite::Cut]);
         assert_eq!(host.pastes.len(), 1);
         assert_eq!(host.pastes[0].0.text, "x");
         assert!(rig.inputs().is_empty(), "no chord was decoded");
@@ -709,7 +722,11 @@ mod tests {
         let host = rig.host.borrow();
         assert_eq!(
             host.pastes,
-            vec![(blob.clone(), true), (blob.clone(), true), (blob, false)]
+            vec![
+                (blob.clone(), PasteSource::Own),
+                (blob.clone(), PasteSource::Own),
+                (blob, PasteSource::Foreign)
+            ]
         );
     }
 
@@ -752,14 +769,18 @@ mod tests {
             let host = rig.host.borrow();
             assert_eq!(host.pastes.len(), 1, "the read answers");
             assert_eq!(host.pastes[0].0.ambre.as_deref(), Some(&[1u8, 2, 3][..]));
-            assert!(host.pastes[0].1, "the token read back answers rung 2");
+            assert_eq!(
+                host.pastes[0].1,
+                PasteSource::Own,
+                "the token read back answers rung 2"
+            );
         }
 
         rig.host.borrow().published.set(false);
         rig.clip("paste", &transfer(&[("text/plain", "y")]));
         let host = rig.host.borrow();
         assert_eq!(host.pastes.len(), 2, "the event answers at once");
-        assert_eq!(host.pastes[1], (blob_of("y"), false));
+        assert_eq!(host.pastes[1], (blob_of("y"), PasteSource::Foreign));
     }
 
     fn blob_of(text: &str) -> ambre_bus::ClipboardBlob {

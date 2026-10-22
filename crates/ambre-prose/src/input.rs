@@ -6,7 +6,9 @@
 //! function in. Every mutation leaves through that function (`PROSE-UI-004`);
 //! the view writes its draft and its caret, and nothing else.
 
+use ambre_bus::PasteSource;
 use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset, DocSpan};
+use ambre_commands::ClipboardWrite;
 
 use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
 use crate::ui::{ProseUiState, SendResult};
@@ -114,9 +116,7 @@ pub enum ProseInput {
     ComposeEnd(String),
     /// Copy the selection, and delete it after for a cut
     /// (`PROSE-UI-044`).
-    Copy {
-        cut: bool,
-    },
+    Copy(ClipboardWrite),
     /// Paste over the selection or at the caret: this application's own
     /// bytes when there are any, the plain text otherwise (`PROSE-UI-042`).
     Paste {
@@ -382,7 +382,7 @@ impl ProseUiState {
             }
             ProseInput::Release => self.end_drag(),
             ProseInput::Drop { x, y, text } => self.drop_text(*x, *y, text, send),
-            ProseInput::Copy { cut } => self.copy(*cut, send),
+            ProseInput::Copy(write) => self.copy(*write, send),
             ProseInput::Paste { text, html, rich } => {
                 self.paste(text, html.as_deref(), rich.as_deref(), send)
             }
@@ -400,8 +400,8 @@ impl ProseUiState {
     /// clipboard; otherwise what the host read serves (`PROSE-UI-043`). The
     /// choice is the one every view makes (`UI-THREAD-053`).
     #[must_use]
-    pub fn paste_input(&self, read: ambre_bus::ClipboardBlob, own_copy: bool) -> ProseInput {
-        let source = ambre_bus::ClipboardBlob::source(self.last_clip.as_ref(), &read, own_copy);
+    pub fn paste_input(&self, read: ambre_bus::ClipboardBlob, from: PasteSource) -> ProseInput {
+        let source = ambre_bus::ClipboardBlob::source(self.last_clip.as_ref(), &read, from);
         if source.plain {
             // The menu path reads every half, so the view drops them itself.
             return ProseInput::Paste {
@@ -420,14 +420,18 @@ impl ProseUiState {
     /// Ask the Logic thread for the payload of the whole selection. A cut
     /// deletes it once the copy is sent, and not when the copy was refused
     /// (`PROSE-UI-044`, `PROSE-UI-110`).
-    fn copy(&mut self, cut: bool, send: &mut dyn FnMut(ProseCommand) -> SendResult) -> bool {
+    fn copy(
+        &mut self,
+        write: ClipboardWrite,
+        send: &mut dyn FnMut(ProseCommand) -> SendResult,
+    ) -> bool {
         let Some((anchor, focus)) = self.selection() else {
             return false;
         };
         if !send(ProseCommand::CopyRange { anchor, focus }).accepted() {
             return true;
         }
-        if cut {
+        if write == ClipboardWrite::Cut {
             self.take_selection(send);
         }
         true

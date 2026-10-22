@@ -24,7 +24,7 @@ use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, TextInput,
     Theme, ThemeControl,
 };
-use ambre_commands::Modifiers;
+use ambre_commands::{ClipboardWrite, Modifiers};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
@@ -1717,11 +1717,11 @@ impl MurmureView {
     /// The text a copy or a cut puts on the clipboard. The composer's
     /// selection, while it holds the focus, else the list's (`MURMURE-426`).
     /// A cut takes the text out of the draft. The list's text stays.
-    pub fn clipboard(&mut self, cut: bool) -> Option<String> {
+    pub fn clipboard(&mut self, write: ClipboardWrite) -> Option<String> {
         if let Some(channel) = self.writes_in()
             && self.composer.focused()
         {
-            if !cut {
+            if write == ClipboardWrite::Copy {
                 return self.composer.selected(channel);
             }
             let text = self.composer.cut(channel);
@@ -1729,7 +1729,7 @@ impl MurmureView {
             self.dirty = true;
             return text;
         }
-        self.copy().filter(|_| !cut)
+        self.copy().filter(|_| write == ClipboardWrite::Copy)
     }
 
     /// A paste lands in the composer of the region, as text.
@@ -3797,13 +3797,23 @@ mod tests {
             "Ctrl+A selects the draft"
         );
         frame_with_fonts(&mut page.view);
-        assert_eq!(page.view.clipboard(false).as_deref(), Some("hello"));
-        assert_eq!(page.view.clipboard(true).as_deref(), Some("hello"));
+        assert_eq!(
+            page.view.clipboard(ClipboardWrite::Copy).as_deref(),
+            Some("hello")
+        );
+        assert_eq!(
+            page.view.clipboard(ClipboardWrite::Cut).as_deref(),
+            Some("hello")
+        );
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().draft(channel).as_deref(), Some(""));
 
         key(&mut page, "Escape", false, ambre_bus::PageTime(0.0));
-        assert_eq!(page.view.clipboard(true), None, "the list's text stays");
+        assert_eq!(
+            page.view.clipboard(ClipboardWrite::Cut),
+            None,
+            "the list's text stays"
+        );
     }
 
     /// A `Ctrl` chord, with Shift when `shift`.
@@ -4296,9 +4306,9 @@ mod tests {
         key(&mut page, "a", true, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         samples(&page);
-        assert!(page.view.clipboard(false).is_some());
+        assert!(page.view.clipboard(ClipboardWrite::Copy).is_some());
         assert_eq!(samples(&page).0, 0, "a copy changes nothing");
-        assert!(page.view.clipboard(true).is_some());
+        assert!(page.view.clipboard(ClipboardWrite::Cut).is_some());
         assert_eq!(samples(&page).0, 1, "a cut");
     }
 

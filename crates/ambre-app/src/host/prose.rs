@@ -24,12 +24,13 @@ use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 
 use ambre_bus::app::prose::WordCount;
-use ambre_bus::{AppEvent, DocumentId, LogicCommand, Outbox, SendOutcome, UiEvent};
+use ambre_bus::{AppEvent, DocumentId, LogicCommand, Outbox, PasteSource, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
     BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, NoticePublisher,
     OverlayRepaint, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
+use ambre_chrome::commands::ClipboardWrite;
 use ambre_draw::{DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::events::BlockId;
@@ -660,11 +661,11 @@ impl ProseView {
     /// selection, and a frame later [`poll_clipboard`](Self::poll_clipboard)
     /// hands it over (`PROSE-UI-040`, `PROSE-UI-041`). With nothing selected
     /// the browser keeps its default.
-    pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
+    pub fn clipboard_write(&mut self, write: ClipboardWrite) -> ambre_bus::CopyOutcome {
         if self.state.selection().is_none() {
             return ambre_bus::CopyOutcome::Nothing;
         }
-        if self.feed(&ProseInput::Copy { cut }) {
+        if self.feed(&ProseInput::Copy(write)) {
             ambre_bus::CopyOutcome::Deferred
         } else {
             ambre_bus::CopyOutcome::Nothing
@@ -677,8 +678,8 @@ impl ProseView {
 
     /// A paste of what the host read, or of the payload kept from the last
     /// copy while the clipboard is still that copy (`PROSE-UI-043`).
-    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
-        let input = self.state.paste_input(blob, own_copy);
+    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, source: PasteSource) {
+        let input = self.state.paste_input(blob, source);
         let start = super::probe::now_ms();
         if self.feed(&input) {
             let echoed = self

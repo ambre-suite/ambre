@@ -367,19 +367,19 @@ impl FrameHost {
     /// See [`AppView::clipboard_write`]: `Text` writes immediately, `Deferred`
     /// waits for the next frame to drain the payload, `Nothing` lets the
     /// browser default proceed.
-    pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
+    pub fn clipboard_write(&mut self, write: ClipboardWrite) -> ambre_bus::CopyOutcome {
         match self.cells.typist() {
-            Some(cell) => cell.borrow_mut().clipboard_write(cut),
-            None => self.view.clipboard_write(cut),
+            Some(cell) => cell.borrow_mut().clipboard_write(write),
+            None => self.view.clipboard_write(write),
         }
     }
 
     /// Service a `paste` event with the shared clipboard transport blob.
-    /// `own_copy` signals the clipboard still holds this tab's ownership token.
-    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
+    /// `source` says whether the clipboard still holds this tab's ownership token.
+    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, source: PasteSource) {
         match self.cells.typist() {
-            Some(cell) => cell.borrow_mut().paste_clipboard(blob, own_copy),
-            None => self.view.paste_clipboard(blob, own_copy),
+            Some(cell) => cell.borrow_mut().paste_clipboard(blob, source),
+            None => self.view.paste_clipboard(blob, source),
         }
     }
 

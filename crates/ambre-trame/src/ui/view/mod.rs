@@ -13,13 +13,14 @@
 
 use ambre_bus::{
     AppCommand, AppEvent, DocumentId, FillMode, GridRange, LogicCommand, LossyOutcome, Outbox,
-    SendOutcome, TrameCommand, TrameEvent, UiEvent,
+    PasteSource, SendOutcome, TrameCommand, TrameEvent, UiEvent,
 };
 use ambre_canvas::{
     Anchor, AnchorPublisher, BusyPublisher, ContentRepaint, FilterOpenPublisher, FrameStats,
     InputEvent, OverlayRepaint, PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput,
     Theme, ThemeControl,
 };
+use ambre_commands::ClipboardWrite;
 use ambre_draw::{Clock, DrawSurface, FontContext, Rect};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::RwSignal;

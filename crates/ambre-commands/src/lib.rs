@@ -13,8 +13,10 @@
 // ============================================================================
 
 mod keybinding;
+mod mode;
 
 pub use keybinding::{Key, KeyBinding, Modifiers};
+pub use mode::{ClipboardWrite, PasteForm};
 
 use std::collections::HashMap;
 

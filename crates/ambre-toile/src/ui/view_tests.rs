@@ -675,7 +675,10 @@ fn a_cut_whose_copy_went_nowhere_deletes_nothing() {
     } = Rig::with_stickies(&[("a", A)]);
     drop(to_logic);
     view.selection = vec![eid("a")];
-    assert_eq!(view.clipboard_write(true), ambre_bus::CopyOutcome::Nothing);
+    assert_eq!(
+        view.clipboard_write(ClipboardWrite::Cut),
+        ambre_bus::CopyOutcome::Nothing
+    );
     assert_eq!(view.selection, [eid("a")], "the cut kept the selection");
 }
 
@@ -688,7 +691,7 @@ fn a_copy_names_the_whole_selection_and_sends_nothing_else() {
     rig.answer(ToileEvent::BoardIds(vec![eid("a"), eid("far")]));
     rig.sent();
     assert_eq!(
-        rig.view.clipboard_write(false),
+        rig.view.clipboard_write(ClipboardWrite::Copy),
         ambre_bus::CopyOutcome::Deferred
     );
     assert!(matches!(
@@ -761,13 +764,13 @@ fn a_paste_takes_the_highest_rung_it_can_serve() {
         origin: kept,
     }));
     rig.sent();
-    rig.view.paste_clipboard(clip(read), true);
+    rig.view.paste_clipboard(clip(read), PasteSource::Own);
     assert_eq!(
         pasted(&rig.sent()),
         Some(kept),
         "own copy: the kept payload"
     );
-    rig.view.paste_clipboard(clip(read), false);
+    rig.view.paste_clipboard(clip(read), PasteSource::Foreign);
     assert_eq!(
         pasted(&rig.sent()),
         Some(read),
@@ -782,7 +785,7 @@ fn a_paste_into_an_open_editor_inserts_the_text() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
-    rig.view.paste_clipboard(clip(B), false);
+    rig.view.paste_clipboard(clip(B), PasteSource::Foreign);
     rig.key("Escape", false, false);
     rig.paint();
     assert!(matches!(
@@ -795,7 +798,7 @@ fn a_paste_into_an_open_editor_inserts_the_text() {
 #[test]
 fn a_paste_writes_nothing_back() {
     let mut rig = Rig::new();
-    rig.view.paste_clipboard(clip(B), false);
+    rig.view.paste_clipboard(clip(B), PasteSource::Foreign);
     assert_eq!(rig.view.poll_clipboard(), None);
 }
 

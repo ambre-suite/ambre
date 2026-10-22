@@ -417,11 +417,11 @@ impl TrameView {
     /// `TrameEvent::Clipboard` and is mirrored to the OS clipboard by
     /// [`poll_clipboard`](Self::poll_clipboard). [`CopyOutcome::Nothing`] means
     /// "let the browser default proceed".
-    pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
+    pub fn clipboard_write(&mut self, write: ClipboardWrite) -> ambre_bus::CopyOutcome {
         use ambre_bus::CopyOutcome;
         // In-cell text selection takes precedence over the grid range.
         if self.editor.is_some() {
-            let text = if cut {
+            let text = if write == ClipboardWrite::Cut {
                 self.cut_selection()
             } else {
                 self.copy_selection()
@@ -454,7 +454,7 @@ impl TrameView {
             return CopyOutcome::Nothing;
         }
         self.state.clipboard_anchor = Some(self.state.selection.bounds());
-        self.cut_pending = cut;
+        self.cut_pending = write == ClipboardWrite::Cut;
         self.edit_dirty = true; // repaint the marching-ants overlay
         CopyOutcome::Deferred
     }
@@ -468,12 +468,12 @@ impl TrameView {
 
     /// Service a paste from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
     /// transport (`trame-clipboard`). Fidelity order: an open in-cell edit takes
-    /// the plain text to the caret. Else, when `own_copy` says the synchronous
+    /// the plain text to the caret. Else, when the source `Own` says the synchronous
     /// ownership token was still on the clipboard, the in-memory `last_clip` at
     /// full fidelity. That one is immune to the async OS write having failed. Else
     /// the blob's decoded Ambre payload (cross-tab/app internal round-trip), else
     /// the `text/plain` mirror as literal cells.
-    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
+    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, from: PasteSource) {
         if self.is_editing() {
             // In-cell edit: a typed payload is meaningless inside a text field;
             // route the text through the same insertion path as typing.
@@ -482,7 +482,7 @@ impl TrameView {
         }
         // The kept copy serves on this tab's token, whatever the asynchronous
         // OS write did; otherwise the OS blob does (`UI-THREAD-053`).
-        let source = ambre_bus::ClipboardBlob::source(self.last_clip.as_ref(), &blob, own_copy);
+        let source = ambre_bus::ClipboardBlob::source(self.last_clip.as_ref(), &blob, from);
         let payload = source
             .ambre
             .as_ref()
