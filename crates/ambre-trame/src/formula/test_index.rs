@@ -26,6 +26,6 @@ pub fn index_with(rows: usize, cols: usize) -> SheetIndex {
 /// A single-sheet `SheetIndices` map (sheet 0) sized `rows` x `cols`.
 pub fn indices_with(rows: usize, cols: usize) -> super::SheetIndices {
     let mut m = super::SheetIndices::new();
-    m.insert(0, index_with(rows, cols));
+    m.insert(super::EngineSheet::ACTIVE, index_with(rows, cols));
     m
 }

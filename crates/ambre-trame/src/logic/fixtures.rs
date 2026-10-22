@@ -95,7 +95,7 @@ impl TrameState {
                 &self.doc.get_movable_list(rows_list_name(&sheet)),
                 &self.doc.get_movable_list(cols_list_name(&sheet)),
             );
-            let sheet_u16 = self.sheet_id_to_u16.get(&sheet).copied();
+            let sheet_u16 = self.engine_sheet_by_id.get(&sheet).copied();
             // Keyed by grid position, not by stored key. The stored key carries
             // peer ids and mint counters, exactly what two documents "agreeing by
             // a different route" are allowed to differ in. `BTreeMap` sorts the

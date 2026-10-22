@@ -35,6 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-159` | `FRAME` | Adding a sheet MUST NOT change which sheet the reader is on. | this spec section 4 | `ambre_trame::logic::tests::group3::create_sheet_lists_and_isolates` -- it asserts the active id after the create, the new tab never being activated because nothing sends the second command the create leaves to the caller (section 6) | none | verified |
+| `TRAME-232` | `FRAME` | Adding a sheet MUST NOT change what a formula on another sheet reads. | this spec section 4 | `ambre_trame::logic::tests::group3::a_new_sheet_leaves_a_cross_sheet_formula_on_its_sheet` -- the new id sorts before the formula's own sheet, so its engine index moves | none | verified |
 
 ### 1.3 Rename a sheet
 
@@ -72,7 +73,7 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a sheet create, rename, reorder or delete is a document write, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 18 `verified`. What holds is each gesture on one peer, and what it leaves
+* **Verification.** 19 `verified`. What holds is each gesture on one peer, and what it leaves
   alone. Three concurrent cases hold too: two adds (`TRAME-071`), a delete under a reader
   (`TRAME-075`), and two deletes of the last two sheets (`TRAME-077`).
 
@@ -118,7 +119,9 @@ peer and a counter, which is why two concurrent creates cannot collide (`TRAME-0
 
 | Command | Cost |
 |---|---|
-| create, rename, move | a refreshed tab strip, and nothing else |
+| move | a refreshed tab strip, and nothing else |
+| create | a full reseed: the engine numbers the sheets by sorted id, so a new id shifts the sheets after it, and a compiled reference holds the old number (`TRAME-232`) |
+| rename | a full reseed, which re-resolves every qualifier that names the sheet |
 | delete | a full reseed: a removed id breaks every formula that pointed into it (`TRAME-009`) |
 | activate | a full reseed as well, which it should not be -- the engine pins the active sheet to its own index zero (section 6) |
 

@@ -3,19 +3,53 @@ use std::fmt;
 use crate::model::{SheetIndex, Uid};
 
 // -----------------------------------------------------------------------------
+// EngineSheet -- the engine's local sheet index
+// -----------------------------------------------------------------------------
+
+/// A sheet's local index inside the formula engine.
+///
+/// The engine interns each sheet of the workbook when it is fed: the active
+/// sheet is [`EngineSheet::ACTIVE`], the others follow by id. The index is
+/// **not** the CRDT sheet id, and it holds only until the next reseed. A new
+/// sheet whose id sorts among the others moves their indices, so a compiled
+/// reference is valid only within the epoch that compiled it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct EngineSheet(u16);
+
+impl EngineSheet {
+    /// The active sheet, always index 0.
+    pub const ACTIVE: Self = Self(0);
+
+    /// The sheet at local index `index`.
+    pub const fn new(index: u16) -> Self {
+        Self(index)
+    }
+
+    /// The local index, as the engine's tables are laid out.
+    pub const fn index(self) -> u16 {
+        self.0
+    }
+
+    /// The local index as a position in a table laid out by sheet.
+    pub const fn position(self) -> usize {
+        self.0 as usize
+    }
+}
+
+// -----------------------------------------------------------------------------
 // CellRef -- positional cell identifier (AST / parser / renderer)
 // -----------------------------------------------------------------------------
 
 /// Identifies a cell by its sheet plus zero-based row and column index.
 ///
-/// `sheet` is a local sheet index (`u16`) interned by the engine for the
+/// `sheet` is a local sheet index ([`EngineSheet`]) interned by the engine for the
 /// duration of a recomputation; it is **not** the CRDT sheet id. A formula's
 /// own sheet is the default for unqualified references (`A1`); a qualified
 /// reference (`Sheet2!A1`) carries the resolved index. Single-sheet code uses
 /// [`CellRef::new`], which defaults `sheet` to 0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CellRef {
-    pub sheet: u16,
+    pub sheet: EngineSheet,
     pub row: u32,
     pub col: u32,
 }
@@ -23,11 +57,15 @@ pub struct CellRef {
 impl CellRef {
     /// Cell on the default sheet (index 0). Used by single-sheet call sites.
     pub const fn new(row: u32, col: u32) -> Self {
-        Self { sheet: 0, row, col }
+        Self {
+            sheet: EngineSheet::ACTIVE,
+            row,
+            col,
+        }
     }
 
     /// Cell on an explicit sheet index.
-    pub const fn with_sheet(sheet: u16, row: u32, col: u32) -> Self {
+    pub const fn with_sheet(sheet: EngineSheet, row: u32, col: u32) -> Self {
         Self { sheet, row, col }
     }
 }
@@ -52,7 +90,7 @@ impl fmt::Display for CellRef {
 pub struct RangeDep {
     /// Local sheet index (see [`CellRef::sheet`]). Defaults to 0 via
     /// [`RangeDep::new`]; a cross-sheet range carries the resolved index.
-    pub sheet: u16,
+    pub sheet: EngineSheet,
     pub row_start: u32,
     pub row_end: u32,
     pub col_start: u32,
@@ -63,7 +101,7 @@ impl RangeDep {
     /// Range on the default sheet (index 0). Used by single-sheet call sites.
     pub fn new(row_start: u32, row_end: u32, col_start: u32, col_end: u32) -> Self {
         Self {
-            sheet: 0,
+            sheet: EngineSheet::ACTIVE,
             row_start,
             row_end,
             col_start,
@@ -73,7 +111,7 @@ impl RangeDep {
 
     /// Range on an explicit sheet index.
     pub fn with_sheet(
-        sheet: u16,
+        sheet: EngineSheet,
         row_start: u32,
         row_end: u32,
         col_start: u32,
@@ -128,7 +166,7 @@ pub enum LineAxis {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AxisSpan {
     /// Local sheet index (see [`CellRef::sheet`]).
-    pub sheet: u16,
+    pub sheet: EngineSheet,
     /// The axis whose lines the range takes whole.
     pub axis: LineAxis,
     pub start: u32,
@@ -139,7 +177,7 @@ impl AxisSpan {
     /// The lines between `a` and `b` on the default sheet, in either order.
     pub fn new(axis: LineAxis, a: u32, b: u32) -> Self {
         Self {
-            sheet: 0,
+            sheet: EngineSheet::ACTIVE,
             axis,
             start: a.min(b),
             end: a.max(b),
@@ -179,18 +217,18 @@ pub enum AxisId {
 /// the compiled, uid-anchored counterpart of the positional AST [`CellRef`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CellId {
-    pub sheet: u16,
+    pub sheet: EngineSheet,
     pub row: AxisId,
     pub col: AxisId,
 }
 
 impl CellId {
-    pub const fn new(sheet: u16, row: AxisId, col: AxisId) -> Self {
+    pub const fn new(sheet: EngineSheet, row: AxisId, col: AxisId) -> Self {
         Self { sheet, row, col }
     }
 
     /// Convenience constructor for a fully bound cell `(row_uid, col_uid)`.
-    pub const fn bound(sheet: u16, row: Uid, col: Uid) -> Self {
+    pub const fn bound(sheet: EngineSheet, row: Uid, col: Uid) -> Self {
         Self {
             sheet,
             row: AxisId::Bound(row),
@@ -230,7 +268,7 @@ pub enum RangeEndpoint {
 /// [`SheetIndex`] at evaluation time, so the spanned cells follow the data.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RangeId {
-    pub sheet: u16,
+    pub sheet: EngineSheet,
     pub row_start: RangeEndpoint,
     pub row_end: RangeEndpoint,
     pub col_start: RangeEndpoint,
@@ -629,10 +667,10 @@ pub enum SheetQualifier {
 pub trait FormulaCtx {
     /// Resolve a sheet display name (`Sheet2`) to its local index, or `None`
     /// if no such sheet exists (the reference becomes a parse error).
-    fn resolve_sheet(&self, name: &str) -> Option<u16>;
+    fn resolve_sheet(&self, name: &str) -> Option<EngineSheet>;
     /// Resolve a stable sheet id (`#s0_a1b2` canonical form) to its local index,
     /// or `None` if the sheet was deleted (the reference becomes `#REF!`).
-    fn resolve_sheet_id(&self, id: &str) -> Option<u16>;
+    fn resolve_sheet_id(&self, id: &str) -> Option<EngineSheet>;
     /// Resolve a defined name (`TOTAL`) to its target, or `None` if undefined.
     fn resolve_name(&self, name: &str) -> Option<NameTarget>;
 }
@@ -642,10 +680,10 @@ pub trait FormulaCtx {
 pub struct SingleSheetCtx;
 
 impl FormulaCtx for SingleSheetCtx {
-    fn resolve_sheet(&self, _name: &str) -> Option<u16> {
+    fn resolve_sheet(&self, _name: &str) -> Option<EngineSheet> {
         None
     }
-    fn resolve_sheet_id(&self, _id: &str) -> Option<u16> {
+    fn resolve_sheet_id(&self, _id: &str) -> Option<EngineSheet> {
         None
     }
     fn resolve_name(&self, _name: &str) -> Option<NameTarget> {
@@ -778,7 +816,7 @@ mod tests {
     }
     fn bound_range(r0: u32, r1: u32, c0: u32, c1: u32) -> RangeId {
         RangeId {
-            sheet: 0,
+            sheet: EngineSheet::ACTIVE,
             row_start: RangeEndpoint::Specific(AxisId::Bound(row_uid(r0))),
             row_end: RangeEndpoint::Specific(AxisId::Bound(row_uid(r1))),
             col_start: RangeEndpoint::Specific(AxisId::Bound(col_uid(c0))),
@@ -800,7 +838,7 @@ mod tests {
         // so it stays a virtual position rather than resolving to a uid.
         let idx = index_with(10, 1);
         let r = RangeId {
-            sheet: 0,
+            sheet: EngineSheet::ACTIVE,
             row_start: RangeEndpoint::Specific(AxisId::Bound(row_uid(0))),
             row_end: RangeEndpoint::Specific(AxisId::Virtual(999)),
             col_start: RangeEndpoint::Specific(AxisId::Bound(col_uid(0))),
@@ -815,7 +853,7 @@ mod tests {
         // the whole range resolve to None -> the VM yields #REF!.
         let idx = index_with(10, 10);
         let r = RangeId {
-            sheet: 0,
+            sheet: EngineSheet::ACTIVE,
             row_start: RangeEndpoint::Specific(AxisId::Bound(row_uid(0))),
             row_end: RangeEndpoint::Specific(AxisId::Bound(row_uid(999))), // not materialized
             col_start: RangeEndpoint::Specific(AxisId::Bound(col_uid(0))),

@@ -12,8 +12,8 @@ use nom::multi::{many0, many1, separated_list0};
 use nom::sequence::{delimited, preceded};
 
 use super::types::{
-    AxisSpan, BinOpKind, CellRef, CellValue, Expr, FormulaCtx, FormulaError, LineAxis, NameTarget,
-    RangeDep, SheetQualifier, StoredAxis, StoredCell, UnaryOpKind, alpha_to_col,
+    AxisSpan, BinOpKind, CellRef, CellValue, EngineSheet, Expr, FormulaCtx, FormulaError, LineAxis,
+    NameTarget, RangeDep, SheetQualifier, StoredAxis, StoredCell, UnaryOpKind, alpha_to_col,
 };
 use crate::model::Uid;
 
@@ -598,7 +598,11 @@ pub fn parse_formula(input: &str) -> Result<Expr, String> {
 /// A message for a sheet display name that resolves to nothing. A deleted sheet
 /// is not an error here: it evaluates to `#REF!`, and an undefined name to
 /// `#NAME?`.
-pub fn resolve_refs(expr: Expr, default_sheet: u16, ctx: &dyn FormulaCtx) -> Result<Expr, String> {
+pub fn resolve_refs(
+    expr: Expr,
+    default_sheet: EngineSheet,
+    ctx: &dyn FormulaCtx,
+) -> Result<Expr, String> {
     match expr {
         Expr::CellRef(mut r) => {
             r.sheet = default_sheet;

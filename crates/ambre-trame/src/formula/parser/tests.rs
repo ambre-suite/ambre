@@ -180,36 +180,41 @@ fn function_single_arg() {
 
 // -- Sheet-qualified references & named ranges ----------------------------
 
-use super::super::types::{FormulaCtx, NameTarget, RangeDep};
+use super::super::types::{EngineSheet, FormulaCtx, NameTarget, RangeDep};
+
+const S0: EngineSheet = EngineSheet::ACTIVE;
+const S2: EngineSheet = EngineSheet::new(2);
+const S3: EngineSheet = EngineSheet::new(3);
+const S5: EngineSheet = EngineSheet::new(5);
 
 /// Test context: `Sheet2` -> index 2, name `TOTAL` -> `B1:B3` on sheet 2,
 /// canonical id `#s2` -> index 2 (`#gone` resolves to nothing).
 struct TestCtx;
 impl FormulaCtx for TestCtx {
-    fn resolve_sheet(&self, name: &str) -> Option<u16> {
+    fn resolve_sheet(&self, name: &str) -> Option<EngineSheet> {
         match name {
-            "Sheet1" => Some(0),
-            "Sheet2" => Some(2),
-            "My Sheet" => Some(5),
+            "Sheet1" => Some(S0),
+            "Sheet2" => Some(S2),
+            "My Sheet" => Some(S5),
             _ => None,
         }
     }
-    fn resolve_sheet_id(&self, id: &str) -> Option<u16> {
+    fn resolve_sheet_id(&self, id: &str) -> Option<EngineSheet> {
         match id {
-            "s2" => Some(2),
+            "s2" => Some(S2),
             _ => None,
         }
     }
     fn resolve_name(&self, name: &str) -> Option<NameTarget> {
         match name {
-            "TOTAL" => Some(NameTarget::Range(RangeDep::with_sheet(2, 0, 2, 1, 1))),
-            "PIVOT" => Some(NameTarget::Cell(CellRef::with_sheet(0, 4, 0))),
+            "TOTAL" => Some(NameTarget::Range(RangeDep::with_sheet(S2, 0, 2, 1, 1))),
+            "PIVOT" => Some(NameTarget::Cell(CellRef::with_sheet(S0, 4, 0))),
             _ => None,
         }
     }
 }
 
-fn resolve(src: &str, default_sheet: u16) -> Result<Expr, String> {
+fn resolve(src: &str, default_sheet: EngineSheet) -> Result<Expr, String> {
     resolve_refs(parse(src), default_sheet, &TestCtx)
 }
 
@@ -220,9 +225,9 @@ fn sheet_qualified_cell_parses() {
 
 #[test]
 fn sheet_qualified_resolves_index() {
-    match resolve("Sheet2!A1", 0).unwrap() {
+    match resolve("Sheet2!A1", S0).unwrap() {
         Expr::CellRef(CellRef {
-            sheet: 2,
+            sheet: S2,
             row: 0,
             col: 0,
         }) => {}
@@ -232,9 +237,9 @@ fn sheet_qualified_resolves_index() {
 
 #[test]
 fn quoted_sheet_name_with_space() {
-    match resolve("'My Sheet'!B2", 0).unwrap() {
+    match resolve("'My Sheet'!B2", S0).unwrap() {
         Expr::CellRef(CellRef {
-            sheet: 5,
+            sheet: S5,
             row: 1,
             col: 1,
         }) => {}
@@ -244,9 +249,9 @@ fn quoted_sheet_name_with_space() {
 
 #[test]
 fn sheet_qualified_range_resolves() {
-    match resolve("Sheet2!A1:A10", 0).unwrap() {
+    match resolve("Sheet2!A1:A10", S0).unwrap() {
         Expr::Range(RangeDep {
-            sheet: 2,
+            sheet: S2,
             row_start: 0,
             row_end: 9,
             ..
@@ -257,9 +262,9 @@ fn sheet_qualified_range_resolves() {
 
 #[test]
 fn id_qualified_cell_resolves_index() {
-    match resolve("#s2!A1", 0).unwrap() {
+    match resolve("#s2!A1", S0).unwrap() {
         Expr::CellRef(CellRef {
-            sheet: 2,
+            sheet: S2,
             row: 0,
             col: 0,
         }) => {}
@@ -278,7 +283,7 @@ fn id_qualified_with_underscore_and_leading_digit() {
 
 #[test]
 fn deleted_sheet_id_yields_broken_ref() {
-    match resolve("#gone!A1", 0).unwrap() {
+    match resolve("#gone!A1", S0).unwrap() {
         Expr::Literal(CellValue::Error(FormulaError::BrokenRef)) => {}
         other => panic!("expected #REF! literal, got {other:?}"),
     }
@@ -286,14 +291,14 @@ fn deleted_sheet_id_yields_broken_ref() {
 
 #[test]
 fn unknown_sheet_name_is_parse_error() {
-    assert!(resolve("Nope!A1", 0).is_err());
+    assert!(resolve("Nope!A1", S0).is_err());
 }
 
 #[test]
 fn unqualified_ref_takes_default_sheet() {
-    match resolve("A1", 3).unwrap() {
+    match resolve("A1", S3).unwrap() {
         Expr::CellRef(CellRef {
-            sheet: 3,
+            sheet: S3,
             row: 0,
             col: 0,
         }) => {}
@@ -303,18 +308,18 @@ fn unqualified_ref_takes_default_sheet() {
 
 #[test]
 fn unknown_sheet_is_error() {
-    assert!(resolve("Nope!A1", 0).is_err());
+    assert!(resolve("Nope!A1", S0).is_err());
 }
 
 #[test]
 fn named_range_resolves() {
-    match resolve("SUM(TOTAL)", 0).unwrap() {
+    match resolve("SUM(TOTAL)", S0).unwrap() {
         Expr::FnCall { name, args } => {
             assert_eq!(name, "SUM");
             assert!(matches!(
                 &args[0],
                 Expr::Range(RangeDep {
-                    sheet: 2,
+                    sheet: S2,
                     row_start: 0,
                     row_end: 2,
                     ..
@@ -328,12 +333,12 @@ fn named_range_resolves() {
 #[test]
 fn named_cell_in_arithmetic() {
     // PIVOT + 1 -> CellRef(sheet 0, E1) added to 1.
-    match resolve("PIVOT+1", 0).unwrap() {
+    match resolve("PIVOT+1", S0).unwrap() {
         Expr::BinOp { lhs, .. } => {
             assert!(matches!(
                 *lhs,
                 Expr::CellRef(CellRef {
-                    sheet: 0,
+                    sheet: S0,
                     row: 4,
                     col: 0
                 })
@@ -346,7 +351,7 @@ fn named_cell_in_arithmetic() {
 #[test]
 fn undefined_name_is_error() {
     assert!(matches!(
-        resolve("UNKNOWN", 0).unwrap(),
+        resolve("UNKNOWN", S0).unwrap(),
         Expr::Literal(CellValue::Error(FormulaError::NameError))
     ));
 }
@@ -354,7 +359,7 @@ fn undefined_name_is_error() {
 #[test]
 fn bareword_name_does_not_shadow_cell_ref() {
     // `A1` is a valid cell ref, never treated as a name.
-    assert!(matches!(resolve("A1", 0).unwrap(), Expr::CellRef(_)));
+    assert!(matches!(resolve("A1", S0).unwrap(), Expr::CellRef(_)));
 }
 
 #[test]
@@ -487,7 +492,7 @@ fn the_worst_admitted_formula_fits_a_small_stack() {
         })
         .spawn(move || {
             let mut indices = crate::formula::compile::SheetIndices::new();
-            indices.insert(0, crate::formula::test_index::index_with(4, 4));
+            indices.insert(S0, crate::formula::test_index::index_with(4, 4));
             for formula in &worst {
                 let ast = parse_formula(formula).expect("admitted");
                 let _ = crate::formula::compile::compile(&ast, &indices);

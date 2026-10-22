@@ -34,9 +34,9 @@ impl TrameState {
                 None => sheet == active,
                 Some(SheetQualifier::Id(id)) => id == active,
                 Some(SheetQualifier::Name(name)) => {
-                    self.sheet_name_to_u16
+                    self.engine_sheet_by_name
                         .get(name)
-                        .and_then(|idx| self.sheets_by_idx.get(*idx as usize))
+                        .and_then(|idx| self.sheets_by_idx.get(idx.position()))
                         == Some(active)
                 }
             };

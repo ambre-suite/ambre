@@ -4403,6 +4403,8 @@
   {"edge": "verified-by", "from": "TRAME-077", "to": "ambre_trame::logic::tests::group11::two_peers_deleting_the_last_two_sheets_keep_one"},
   {"edge": "cites-section", "from": "TRAME-159", "section": "4", "to": "2-Trame/features/ambre-spec-trame-sheets.md"},
   {"edge": "verified-by", "from": "TRAME-159", "to": "ambre_trame::logic::tests::group3::create_sheet_lists_and_isolates"},
+  {"edge": "cites-section", "from": "TRAME-232", "section": "4", "to": "2-Trame/features/ambre-spec-trame-sheets.md"},
+  {"edge": "verified-by", "from": "TRAME-232", "to": "ambre_trame::logic::tests::group3::a_new_sheet_leaves_a_cross_sheet_formula_on_its_sheet"},
   {"edge": "cites-section", "from": "TRAME-160", "section": "4", "to": "2-Trame/features/ambre-spec-trame-sheets.md"},
   {"edge": "verified-by", "from": "TRAME-160", "to": "ambre_trame::logic::tests::group3::rename_to_a_blank_name_is_refused"},
   {"edge": "cites-section", "from": "TRAME-070", "section": "3", "to": "2-Trame/features/ambre-spec-trame-sheets.md"},

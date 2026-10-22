@@ -21,7 +21,7 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{Dfs, EdgeRef};
 
 use super::compile::SheetIndices;
-use super::types::{CellId, RangeId};
+use super::types::{CellId, EngineSheet, RangeId};
 
 // -----------------------------------------------------------------------------
 // CycleError
@@ -47,9 +47,9 @@ pub struct DependencyGraph {
 
     /// Range dependencies for each formula cell.
     pub range_deps: HashMap<CellId, Vec<RangeId>>,
-    /// Reverse index: sheet (local `u16`) -> list of `(formula_cell, RangeId)`
+    /// Reverse index: sheet ([`EngineSheet`]) -> list of `(formula_cell, RangeId)`
     /// whose range lives on that sheet. MVP linear scan; Phase 2: 2D interval tree.
-    pub range_index: HashMap<u16, Vec<(CellId, RangeId)>>,
+    pub range_index: HashMap<EngineSheet, Vec<(CellId, RangeId)>>,
 }
 
 impl DependencyGraph {
@@ -268,7 +268,7 @@ mod tests {
     /// synthetic uids (rows peer 1, cols peer 2, counter == position).
     fn cell(row: u32, col: u32) -> CellId {
         CellId::bound(
-            0,
+            EngineSheet::ACTIVE,
             Uid {
                 peer: ambre_core::PeerId(1),
                 counter: row,
@@ -295,7 +295,7 @@ mod tests {
             }))
         };
         RangeId {
-            sheet: 0,
+            sheet: EngineSheet::ACTIVE,
             row_start: rid(r0),
             row_end: rid(r1),
             col_start: cid(c0),
@@ -429,7 +429,7 @@ mod tests {
     /// Bound cell at grid `(row, col)` on `sheet`, matching `sheet_index`'s uids.
     fn cell_on(sheet: u16, row: u32, col: u32) -> CellId {
         CellId::bound(
-            sheet,
+            EngineSheet::new(sheet),
             Uid {
                 peer: ambre_core::PeerId(sheet as u64 * 10 + 1),
                 counter: row,
@@ -456,7 +456,7 @@ mod tests {
             }))
         };
         RangeId {
-            sheet,
+            sheet: EngineSheet::new(sheet),
             row_start: rid(r0),
             row_end: rid(r1),
             col_start: cid(c0),
@@ -472,8 +472,8 @@ mod tests {
         // to test B1's containment through *sheet 1's* index. Sheet 0's index
         // knows none of sheet 1's uids, so reusing it silently drops the link.
         let mut indices = SheetIndices::new();
-        indices.insert(0, sheet_index(0, 10, 10));
-        indices.insert(1, sheet_index(1, 10, 10));
+        indices.insert(EngineSheet::new(0), sheet_index(0, 10, 10));
+        indices.insert(EngineSheet::new(1), sheet_index(1, 10, 10));
 
         let mut dag = DependencyGraph::new();
         dag.update(cell_on(1, 0, 1), vec![cell_on(0, 0, 0)], vec![])

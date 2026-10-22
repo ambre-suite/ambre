@@ -87,9 +87,9 @@ impl TrameState {
             return Ok(text.to_string());
         };
         let name_to_id = |name: &str| {
-            self.sheet_name_to_u16
+            self.engine_sheet_by_name
                 .get(name)
-                .and_then(|idx| self.sheets_by_idx.get(*idx as usize))
+                .and_then(|idx| self.sheets_by_idx.get(idx.position()))
                 .cloned()
         };
         let Ok(ast) = parse_formula(body) else {
@@ -254,12 +254,12 @@ impl TrameState {
     pub(super) fn engine_indices(&self) -> SheetIndices {
         let mut m = SheetIndices::new();
         for (idx, id) in self.sheets_by_idx.iter().enumerate() {
-            let index = if idx == 0 {
+            let index = if idx == EngineSheet::ACTIVE.position() {
                 self.index.clone()
             } else {
                 self.build_sheet_index(id)
             };
-            m.insert(idx as u16, index);
+            m.insert(EngineSheet::new(idx as u16), index);
         }
         m
     }
@@ -277,7 +277,7 @@ impl TrameState {
             None => AxisId::Virtual(col),
         };
         CellId {
-            sheet: 0,
+            sheet: EngineSheet::ACTIVE,
             row: r,
             col: c,
         }
@@ -308,8 +308,8 @@ impl TrameState {
             let cell = self.active_cell_id(row, col);
             let indices = self.engine_indices();
             let ctx = TrameCtx {
-                sheet_name_to_u16: &self.sheet_name_to_u16,
-                sheet_id_to_u16: &self.sheet_id_to_u16,
+                engine_sheet_by_name: &self.engine_sheet_by_name,
+                engine_sheet_by_id: &self.engine_sheet_by_id,
                 named: &self.named,
             };
             self.engine.on_cell_changed(cell, "", &indices, &ctx);
@@ -341,11 +341,11 @@ impl TrameState {
                 .doc
                 .get_map(cells_map_name(&self.active_sheet))
                 .insert(&cell_key(rl, cl), stored.as_str());
-            let cell = CellId::bound(0, rl, cl);
+            let cell = CellId::bound(EngineSheet::ACTIVE, rl, cl);
             let indices = self.engine_indices();
             let ctx = TrameCtx {
-                sheet_name_to_u16: &self.sheet_name_to_u16,
-                sheet_id_to_u16: &self.sheet_id_to_u16,
+                engine_sheet_by_name: &self.engine_sheet_by_name,
+                engine_sheet_by_id: &self.engine_sheet_by_id,
                 named: &self.named,
             };
             self.engine.on_cell_changed(cell, &stored, &indices, &ctx);
@@ -426,16 +426,16 @@ impl SheetLines<'_> {
     pub(super) fn of(&self, sheet_id: &str, q: Option<&SheetQualifier>) -> Option<&SheetIndex> {
         let state = self.state;
         let idx = match q {
-            None => state.sheet_id_to_u16.get(sheet_id),
-            Some(SheetQualifier::Id(id)) => state.sheet_id_to_u16.get(id),
-            Some(SheetQualifier::Name(name)) => state.sheet_name_to_u16.get(name),
+            None => state.engine_sheet_by_id.get(sheet_id),
+            Some(SheetQualifier::Id(id)) => state.engine_sheet_by_id.get(id),
+            Some(SheetQualifier::Name(name)) => state.engine_sheet_by_name.get(name),
         }
         .copied()?;
-        if idx == 0 {
+        if idx == EngineSheet::ACTIVE {
             return Some(&state.index);
         }
-        let id = state.sheets_by_idx.get(idx as usize)?;
-        let cell = self.built.get(idx as usize)?;
+        let id = state.sheets_by_idx.get(idx.position())?;
+        let cell = self.built.get(idx.position())?;
         Some(cell.get_or_init(|| state.build_sheet_index(id)))
     }
 }

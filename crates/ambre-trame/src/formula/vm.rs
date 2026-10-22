@@ -454,12 +454,13 @@ mod tests {
     use super::super::parser::parse_formula;
     use super::super::test_index::{index_with, indices_with};
     use super::super::types::CellValue;
+    use super::super::types::EngineSheet;
     use super::*;
     use crate::model::Uid;
 
     fn cell(row: u32, col: u32) -> CellId {
         CellId::bound(
-            0,
+            EngineSheet::ACTIVE,
             Uid {
                 peer: ambre_core::PeerId(1),
                 counter: row,
@@ -509,7 +510,7 @@ mod tests {
         let mut idx = index_with(10, 10);
         idx.apply_delete_row(0); // removes row_uid(0)
         let mut indices = super::super::compile::SheetIndices::new();
-        indices.insert(0, idx);
+        indices.insert(EngineSheet::ACTIVE, idx);
 
         let cache = HashMap::new();
         let mut ctx = EvalContext::new(&bcc, &cache, &indices, 0.0);

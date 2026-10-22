@@ -20,7 +20,9 @@ use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 use crate::formula::parser::{parse_formula, resolve_refs};
 use crate::formula::types::CellValue;
 use crate::formula::types::Expr;
-use crate::formula::{AxisId, CellId, FormulaCtx, FormulaEngine, NameTarget, SheetIndices, render};
+use crate::formula::{
+    AxisId, CellId, EngineSheet, FormulaCtx, FormulaEngine, NameTarget, SheetIndices, render,
+};
 use crate::model::{SheetIndex, Uid, cell_key, parse_cell_key};
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 use ambre_bus::{
@@ -38,17 +40,17 @@ use ambre_bus::{
 /// borrowing the whole state. The engine, a sibling field, is mutated in the
 /// same call.
 struct TrameCtx<'a> {
-    sheet_name_to_u16: &'a HashMap<String, u16>,
-    sheet_id_to_u16: &'a HashMap<String, u16>,
+    engine_sheet_by_name: &'a HashMap<String, EngineSheet>,
+    engine_sheet_by_id: &'a HashMap<String, EngineSheet>,
     named: &'a HashMap<String, NameTarget>,
 }
 
 impl FormulaCtx for TrameCtx<'_> {
-    fn resolve_sheet(&self, name: &str) -> Option<u16> {
-        self.sheet_name_to_u16.get(name).copied()
+    fn resolve_sheet(&self, name: &str) -> Option<EngineSheet> {
+        self.engine_sheet_by_name.get(name).copied()
     }
-    fn resolve_sheet_id(&self, id: &str) -> Option<u16> {
-        self.sheet_id_to_u16.get(id).copied()
+    fn resolve_sheet_id(&self, id: &str) -> Option<EngineSheet> {
+        self.engine_sheet_by_id.get(id).copied()
     }
     fn resolve_name(&self, name: &str) -> Option<NameTarget> {
         self.named.get(name).cloned()
@@ -194,12 +196,12 @@ pub struct TrameState {
     sheets_by_idx: Vec<String>,
     /// Sheet *display name* -> local engine index, for resolving `Sheet2!A1`
     /// references in formulas. Derived alongside [`Self::sheets_by_idx`].
-    sheet_name_to_u16: HashMap<String, u16>,
+    engine_sheet_by_name: HashMap<String, EngineSheet>,
     /// Stable `sheet_id` -> local engine index, for resolving the canonical
     /// `#s0!A1` form persisted in the CRDT `v` text (rename-stable,
     /// `trame-sheets`).
     /// Derived alongside [`Self::sheets_by_idx`].
-    sheet_id_to_u16: HashMap<String, u16>,
+    engine_sheet_by_id: HashMap<String, EngineSheet>,
     /// Stable `sheet_id` -> current display name, for reconstructing formula-bar
     /// text from the canonical id form. Derived alongside [`Self::sheets_by_idx`].
     sheet_id_to_name: HashMap<String, String>,
@@ -396,8 +398,8 @@ impl TrameState {
             hidden_rows: HashSet::new(),
             masked_cells: HashSet::new(),
             sheets_by_idx: Vec::new(),
-            sheet_name_to_u16: HashMap::new(),
-            sheet_id_to_u16: HashMap::new(),
+            engine_sheet_by_name: HashMap::new(),
+            engine_sheet_by_id: HashMap::new(),
             sheet_id_to_name: HashMap::new(),
             named: HashMap::new(),
             write_refusals: Vec::new(),

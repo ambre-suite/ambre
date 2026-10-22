@@ -142,10 +142,10 @@ impl TrameState {
                 message: message.to_owned(),
             }])
         };
-        let Some(&idx) = self.sheet_id_to_u16.get(sheet_id) else {
+        let Some(&idx) = self.engine_sheet_by_id.get(sheet_id) else {
             return nothing("the sheet to export no longer exists");
         };
-        let index = if idx == 0 {
+        let index = if idx == EngineSheet::ACTIVE {
             self.index.clone()
         } else {
             self.build_sheet_index(sheet_id)
@@ -220,7 +220,7 @@ impl TrameState {
     fn export_cell_text(
         &self,
         sheet_id: &str,
-        idx: u16,
+        idx: EngineSheet,
         index: &SheetIndex,
         row: u32,
         col: u32,

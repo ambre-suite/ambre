@@ -272,7 +272,7 @@ impl TrameState {
         whole_cell: bool,
         in_formulas: bool,
     ) -> u32 {
-        let Some(&idx) = self.sheet_id_to_u16.get(sheet_id) else {
+        let Some(&idx) = self.engine_sheet_by_id.get(sheet_id) else {
             return 0;
         };
         let index = self.build_sheet_index(sheet_id);

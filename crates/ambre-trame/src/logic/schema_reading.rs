@@ -194,12 +194,12 @@ fn target_reading(target: &NameTarget) -> String {
     match target {
         NameTarget::Cell(at) => format!(
             "sheet {} {}",
-            at.sheet + 1,
+            at.sheet.index() + 1,
             cell(at.row as usize, at.col as usize)
         ),
         NameTarget::Range(range) => format!(
             "sheet {} {}:{}",
-            range.sheet + 1,
+            range.sheet.index() + 1,
             cell(range.row_start as usize, range.col_start as usize),
             cell(range.row_end as usize, range.col_end as usize)
         ),

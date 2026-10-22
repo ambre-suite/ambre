@@ -35,6 +35,7 @@ use super::functions::{FnCtx, call_builtin};
 use super::parser::parse_formula;
 use super::render::render;
 use super::test_index::indices_with;
+use super::types::EngineSheet;
 use super::types::{
     BinOpKind, CellId, CellRef, CellValue, Expr, Op, RangeDep, RangeValue, UnaryOpKind,
 };
@@ -49,7 +50,7 @@ use crate::model::Uid;
 /// scheme (rows on peer 1, columns on peer 2, counter == position).
 fn cell(row: u32, col: u32) -> CellId {
     CellId::bound(
-        0,
+        EngineSheet::ACTIVE,
         Uid {
             peer: ambre_core::PeerId(1),
             counter: row,

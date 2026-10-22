@@ -204,12 +204,13 @@ mod tests {
     use super::super::test_index::{index_with, indices_with};
     use super::super::types::SingleSheetCtx;
     use super::*;
+    use crate::formula::types::EngineSheet;
     use crate::model::Uid;
 
     /// Bound cell at grid `(row, col)` on sheet 0.
     fn cell(row: u32, col: u32) -> CellId {
         CellId::bound(
-            0,
+            EngineSheet::ACTIVE,
             Uid {
                 peer: ambre_core::PeerId(1),
                 counter: row,
@@ -481,7 +482,7 @@ mod tests {
         let mut moved = index_with(10, 10);
         moved.apply_move_row(0, 1);
         let mut indices = SheetIndices::new();
-        indices.insert(0, moved);
+        indices.insert(EngineSheet::ACTIVE, moved);
         engine.mark_all_dirty();
         engine.compute_all_dirty(&indices);
         assert_eq!(

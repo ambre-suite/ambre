@@ -1102,3 +1102,52 @@ fn write_beyond_the_cap_is_refused_and_said() {
     );
     assert_eq!(read_cell(&mut state, row, 0), "");
 }
+
+/// A sheet created while a cross-sheet formula is live leaves the formula
+/// reading the sheet it names. The new id sorts before `s0`, so the engine
+/// index the formula compiled against for Sheet1 now names the new sheet.
+/// Regression: `create_sheet` rebuilt the sheet maps without a reseed
+/// (`TRAME-232`).
+#[test]
+fn a_new_sheet_leaves_a_cross_sheet_formula_on_its_sheet() {
+    let mut a = TrameState::new();
+    a.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "5".to_owned(),
+    });
+    a.handle_command(TrameCommand::CreateSheet {
+        name: "Sheet2".to_owned(),
+    });
+    let s2 = second_sheet_id(&a);
+    a.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: SheetId(s2),
+    });
+    // B1 exists before the formula reads it, so the formula depends on it.
+    a.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "0".to_owned(),
+    });
+    a.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "=Sheet1!A1+B1".to_owned(),
+    });
+    assert_eq!(read_cell(&mut a, 0, 0), "5");
+
+    a.handle_command(TrameCommand::CreateSheet {
+        name: "Sheet3".to_owned(),
+    });
+    // A recompute of A1 reads Sheet1!A1 again, through the compiled index.
+    a.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "1".to_owned(),
+    });
+    assert_eq!(
+        read_cell(&mut a, 0, 0),
+        "6",
+        "Sheet2!A1 still reads Sheet1, not the new sheet"
+    );
+}

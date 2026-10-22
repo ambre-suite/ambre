@@ -17,13 +17,13 @@ use std::collections::HashMap;
 use crate::model::SheetIndex;
 
 use super::types::{
-    AxisId, AxisSpan, CellBytecode, CellId, CellRef, Expr, LineAxis, Op, RangeDep, RangeEndpoint,
-    RangeId,
+    AxisId, AxisSpan, CellBytecode, CellId, CellRef, EngineSheet, Expr, LineAxis, Op, RangeDep,
+    RangeEndpoint, RangeId,
 };
 
-/// Per-sheet indices, keyed by the engine's local sheet index (`u16`), used to
+/// Per-sheet indices, keyed by the engine's local sheet index ([`EngineSheet`]), used to
 /// bind positional references to row/column `Uid`s during compilation.
-pub type SheetIndices = HashMap<u16, SheetIndex>;
+pub type SheetIndices = HashMap<EngineSheet, SheetIndex>;
 
 /// Compile an AST into a [`CellBytecode`] (ops + dependencies), resolving
 /// positional references against `indices`.
@@ -184,7 +184,7 @@ mod tests {
     fn compile_str(input: &str) -> CellBytecode {
         let ast = parse_formula(input).unwrap();
         let mut indices = SheetIndices::new();
-        indices.insert(0, index_with(20, 10));
+        indices.insert(EngineSheet::ACTIVE, index_with(20, 10));
         compile(&ast, &indices)
     }
 

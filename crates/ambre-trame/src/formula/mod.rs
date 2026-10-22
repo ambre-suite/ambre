@@ -24,6 +24,6 @@ mod prop_tests;
 pub use compile::SheetIndices;
 pub use engine::FormulaEngine;
 pub use types::{
-    AxisId, CellId, CellRef, CellValue, FormulaCtx, FormulaError, NameTarget, RangeDep,
-    RangeEndpoint, RangeId, SheetQualifier, SingleSheetCtx,
+    AxisId, CellId, CellRef, CellValue, EngineSheet, FormulaCtx, FormulaError, NameTarget,
+    RangeDep, RangeEndpoint, RangeId, SheetQualifier, SingleSheetCtx,
 };

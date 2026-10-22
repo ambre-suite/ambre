@@ -28,11 +28,11 @@ impl TrameState {
         // row/column uid is absent from the sheet index (a deleted line) is
         // skipped.
         let indices = self.engine_indices();
-        let sheets: Vec<(String, u16)> = self
+        let sheets: Vec<(String, EngineSheet)> = self
             .sheets_by_idx
             .iter()
             .enumerate()
-            .map(|(idx, id)| (id.clone(), idx as u16))
+            .map(|(idx, id)| (id.clone(), EngineSheet::new(idx as u16)))
             .collect();
         for (sheet_id, idx) in sheets {
             let Some(index) = indices.get(&idx) else {
@@ -65,8 +65,8 @@ impl TrameState {
                 };
                 if index.contains_row(&rl) && index.contains_col(&cl) {
                     let ctx = TrameCtx {
-                        sheet_name_to_u16: &self.sheet_name_to_u16,
-                        sheet_id_to_u16: &self.sheet_id_to_u16,
+                        engine_sheet_by_name: &self.engine_sheet_by_name,
+                        engine_sheet_by_id: &self.engine_sheet_by_id,
                         named: &self.named,
                     };
                     self.engine.on_cell_changed(
@@ -81,7 +81,7 @@ impl TrameState {
         self.engine.compute_all_dirty(&indices);
     }
 
-    /// Rebuild [`Self::sheets_by_idx`] and [`Self::sheet_name_to_u16`] from the
+    /// Rebuild [`Self::sheets_by_idx`] and [`Self::engine_sheet_by_name`] from the
     /// `sheets` CRDT map. The active sheet is pinned to local index 0; remaining
     /// sheets follow in sorted-id order. The mapping is local-only (computed
     /// values never leave this client), so the exact ordering need not match
@@ -97,12 +97,13 @@ impl TrameState {
         });
 
         self.sheets_by_idx.clear();
-        self.sheet_name_to_u16.clear();
-        self.sheet_id_to_u16.clear();
+        self.engine_sheet_by_name.clear();
+        self.engine_sheet_by_id.clear();
         self.sheet_id_to_name.clear();
         for (idx, (id, name)) in entries.into_iter().enumerate() {
-            self.sheet_name_to_u16.insert(name.clone(), idx as u16);
-            self.sheet_id_to_u16.insert(id.clone(), idx as u16);
+            let sheet = EngineSheet::new(idx as u16);
+            self.engine_sheet_by_name.insert(name.clone(), sheet);
+            self.engine_sheet_by_id.insert(id.clone(), sheet);
             self.sheet_id_to_name.insert(id.clone(), name);
             self.sheets_by_idx.push(id);
         }
@@ -114,7 +115,7 @@ impl TrameState {
 
     /// Rebuild [`Self::named`] from the `named_ranges` CRDT map: parse each stored
     /// A1-syntax reference into a concrete cell/range target, resolving any
-    /// sheet qualifier against [`Self::sheet_name_to_u16`]. A reference that
+    /// sheet qualifier against [`Self::engine_sheet_by_name`]. A reference that
     /// fails to parse is dropped (the formula using it surfaces `#PARSE!`).
     pub(super) fn rebuild_named(&mut self) {
         self.named.clear();
@@ -126,14 +127,14 @@ impl TrameState {
         // Resolved on first need. Reading the order list registers its root
         // container in the snapshot, and a workbook with no legacy definition
         // must not pay for it.
-        let mut legacy_sheet: Option<u16> = None;
+        let mut legacy_sheet: Option<EngineSheet> = None;
         for (name, reference) in names.iter() {
             let LoroValue::String(reference) = reference else {
                 continue;
             };
             let ctx = TrameCtx {
-                sheet_name_to_u16: &self.sheet_name_to_u16,
-                sheet_id_to_u16: &self.sheet_id_to_u16,
+                engine_sheet_by_name: &self.engine_sheet_by_name,
+                engine_sheet_by_id: &self.engine_sheet_by_id,
                 named: &no_names,
             };
             // `define_name` stores a qualified reference. An older build stored
@@ -143,15 +144,15 @@ impl TrameState {
             let target = parse_formula(reference)
                 .and_then(|ast| {
                     let default_sheet = match (&ast, legacy_sheet) {
-                        (Expr::SheetRef { .. }, _) => 0,
+                        (Expr::SheetRef { .. }, _) => EngineSheet::ACTIVE,
                         (_, Some(sheet)) => sheet,
                         (_, None) => {
                             let sheet = self
                                 .sheet_order_ids()
                                 .first()
-                                .and_then(|id| self.sheet_id_to_u16.get(id))
+                                .and_then(|id| self.engine_sheet_by_id.get(id))
                                 .copied()
-                                .unwrap_or(0);
+                                .unwrap_or(EngineSheet::ACTIVE);
                             legacy_sheet = Some(sheet);
                             sheet
                         }
@@ -228,9 +229,9 @@ impl TrameState {
             Expr::SheetRef { sheet, inner } => {
                 let sheet = match sheet {
                     SheetQualifier::Name(name) => SheetQualifier::Id(
-                        self.sheet_name_to_u16
+                        self.engine_sheet_by_name
                             .get(&name)
-                            .and_then(|idx| self.sheets_by_idx.get(*idx as usize))
+                            .and_then(|idx| self.sheets_by_idx.get(idx.position()))
                             .cloned()?,
                     ),
                     SheetQualifier::Id(id) => SheetQualifier::Id(id),
@@ -243,11 +244,11 @@ impl TrameState {
         // inner node is a reference and not, say, a nested name.
         let no_names: HashMap<String, NameTarget> = HashMap::new();
         let ctx = TrameCtx {
-            sheet_name_to_u16: &self.sheet_name_to_u16,
-            sheet_id_to_u16: &self.sheet_id_to_u16,
+            engine_sheet_by_name: &self.engine_sheet_by_name,
+            engine_sheet_by_id: &self.engine_sheet_by_id,
             named: &no_names,
         };
-        resolve_refs(qualified.clone(), 0, &ctx)
+        resolve_refs(qualified.clone(), EngineSheet::ACTIVE, &ctx)
             .ok()
             .and_then(expr_to_name_target)?;
         Some(render::render(&qualified))
@@ -477,8 +478,10 @@ impl TrameState {
         let _ = self.doc.get_map(SHEETS_MAP).insert(&id, name.as_str());
         let _ = self.doc.get_movable_list(SHEET_ORDER).push(id.as_str());
         self.doc.commit();
-        // Refresh the name -> index map so the new sheet is addressable.
-        self.rebuild_sheet_maps();
+        // The new id sorts among the existing ones, so the engine index of
+        // every sheet after it moves up. A compiled reference holds the old
+        // index, so the engine is fed again under the new one, as a rename does.
+        self.reseed_engine();
         let update = self.flush_delta();
         TrameOutcome {
             display: vec![self.sheet_list_event()],
