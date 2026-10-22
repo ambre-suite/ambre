@@ -1917,13 +1917,14 @@ mod authorship_tests {
         let doc = LoroDoc::new();
         doc.set_peer_id(peer.0)
             .expect("a fresh document takes a peer id");
-        doc.get_map("meta")
-            .insert("schema_version", 99)
+        let meta = doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str());
+        meta.insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 99)
             .expect("an insert");
         doc.commit();
         let base = doc.oplog_vv();
         doc.set_peer_id(ALICE.0).expect("a peer id");
-        doc.get_map("meta").insert("note", "x").expect("an insert");
+        // A key no schema declares: the delta only has to carry an op.
+        meta.insert("note", "x").expect("an insert");
         doc.commit();
         doc.export(ExportMode::updates(&base)).expect("an export")
     }
