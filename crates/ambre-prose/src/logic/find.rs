@@ -7,6 +7,7 @@
 //! block's text is indexed in (`PROSE-045`).
 
 use ambre_bus::app::prose::DocSpan;
+use ambre_core::StepDirection;
 use loro::TreeID;
 
 use crate::doc;
@@ -111,20 +112,19 @@ impl ProseState {
 
     /// Move the current index one match on, wrapping at either end. The list
     /// and the document are left alone (`PROSE-FEAT-152`).
-    pub(super) fn find_step(&mut self, backwards: bool) -> ProseOutcome {
+    pub(super) fn find_step(&mut self, direction: StepDirection) -> ProseOutcome {
         let Some(session) = self.find.as_mut() else {
             return Self::err_no_search();
         };
         let count = u32::try_from(session.matches.len()).unwrap_or(u32::MAX);
-        session.current = session.current.filter(|_| count > 0).map(|at| {
-            if backwards {
-                at.checked_sub(1).unwrap_or(count - 1)
-            } else if at + 1 >= count {
-                0
-            } else {
-                at + 1
-            }
-        });
+        session.current = session
+            .current
+            .filter(|_| count > 0)
+            .map(|at| match direction {
+                StepDirection::Backward => at.checked_sub(1).unwrap_or(count - 1),
+                StepDirection::Forward if at + 1 >= count => 0,
+                StepDirection::Forward => at + 1,
+            });
         ProseOutcome::display_only(vec![ProseEvent::FindUpdated {
             current: session.current,
         }])

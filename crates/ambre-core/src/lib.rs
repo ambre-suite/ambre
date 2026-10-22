@@ -48,6 +48,8 @@ pub mod index;
 pub mod key_hex;
 pub mod key_id;
 pub mod media;
+/// Two-way choices shared across crates: [`StepDirection`], [`HistoryStep`].
+pub mod mode;
 pub mod name;
 pub mod object_key;
 pub mod payload;
@@ -102,6 +104,7 @@ pub use id::{
 pub use key_hex::{ExchangeKeyHex, SignatureHex, SigningKeyHex};
 pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
 pub use media::{ByteSize, ContentHash, MediaType};
+pub use mode::{HistoryStep, StepDirection};
 pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong, name_fits,
 };

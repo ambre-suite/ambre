@@ -12,6 +12,7 @@
 //! (`PROSE-FEAT-229`). Every peer holds both once the documents converge, so
 //! every peer keeps the same regions without exchanging anything more.
 
+use ambre_core::StepDirection;
 use loro::{LoroDoc, LoroMap, LoroTree, LoroValue, TreeID, TreeParentId};
 
 use crate::doc::{self, Region};
@@ -700,7 +701,11 @@ impl ProseState {
     /// A region is one stop, on its anchor (`PROSE-FEAT-250`). Stepping writes
     /// nothing (`PROSE-FEAT-051`), except past the last cell, where a row is
     /// appended and the caret lands in its first cell (`PROSE-FEAT-251`).
-    pub(super) fn step_table_cell(&mut self, cell: &TreeID, backwards: bool) -> ProseOutcome {
+    pub(super) fn step_table_cell(
+        &mut self,
+        cell: &TreeID,
+        direction: StepDirection,
+    ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let Some(table) = Self::table_of(&tree, cell) else {
             return Self::err_no_block(cell);
@@ -730,10 +735,9 @@ impl ProseState {
         let Some(index) = stops.iter().position(|stop| *stop == here) else {
             return Self::err_no_block(cell);
         };
-        let next = if backwards {
-            stops.get(index.saturating_sub(1)).copied()
-        } else {
-            stops.get(index + 1).copied()
+        let next = match direction {
+            StepDirection::Backward => stops.get(index.saturating_sub(1)).copied(),
+            StepDirection::Forward => stops.get(index + 1).copied(),
         };
         if let Some(next) = next {
             return ProseOutcome::display_only(vec![Self::entered(&tree, next)]);
@@ -1114,7 +1118,7 @@ pub(crate) mod tests {
         let cell = cell_at(&state, table, 0, 1);
         let outcome = state.handle_command(ProseCommand::StepTableCell {
             cell_id: block_id(cell),
-            backwards: false,
+            direction: StepDirection::Forward,
         });
         assert!(matches!(
             outcome.display.first(),
@@ -1390,10 +1394,10 @@ pub(crate) mod tests {
 
     // -- move the caret -------------------------------------------------------
 
-    fn step(state: &mut ProseState, cell: TreeID, backwards: bool) -> ProseOutcome {
+    fn step(state: &mut ProseState, cell: TreeID, direction: StepDirection) -> ProseOutcome {
         state.handle_command(ProseCommand::StepTableCell {
             cell_id: block_id(cell),
-            backwards,
+            direction,
         })
     }
 
@@ -1413,15 +1417,15 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 3);
         merge(&mut state, table, (0, 1), (1, 2));
         let first = cell_at(&state, table, 0, 0);
-        let outcome = step(&mut state, first, false);
+        let outcome = step(&mut state, first, StepDirection::Forward);
         let anchor = cell_at(&state, table, 0, 1);
         assert_eq!(entered(&outcome), anchor);
         // From the anchor, the next stop is the next row's first cell.
-        let outcome = step(&mut state, anchor, false);
+        let outcome = step(&mut state, anchor, StepDirection::Forward);
         assert_eq!(entered(&outcome), cell_at(&state, table, 1, 0));
         // And back again lands on the anchor, not on a covered cell.
         let from = cell_at(&state, table, 1, 0);
-        let outcome = step(&mut state, from, true);
+        let outcome = step(&mut state, from, StepDirection::Backward);
         assert_eq!(entered(&outcome), anchor);
     }
 
@@ -1429,9 +1433,9 @@ pub(crate) mod tests {
     fn stepping_between_cells_writes_nothing() {
         let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
         let first = cell_at(&state, table, 0, 0);
-        let outcome = step(&mut state, first, false);
+        let outcome = step(&mut state, first, StepDirection::Forward);
         assert!(outcome.update.is_none());
-        let outcome = step(&mut state, first, true);
+        let outcome = step(&mut state, first, StepDirection::Backward);
         assert!(outcome.update.is_none());
     }
 
@@ -1448,7 +1452,7 @@ pub(crate) mod tests {
         merge(&mut state, table, (0, 0), (0, 1));
         let widths = state.column_widths(&table);
         let regions = state.regions_of(&table);
-        let outcome = step(&mut state, last, false);
+        let outcome = step(&mut state, last, StepDirection::Forward);
         assert!(outcome.update.is_some());
         assert_eq!(row_lengths(&state, table), vec![2, 2, 2]);
         let first_of_new = cell_at(&state, table, 2, 0);

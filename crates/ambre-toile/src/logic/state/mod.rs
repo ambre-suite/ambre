@@ -70,6 +70,7 @@ use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
 use ambre_bus::UserId;
+use ambre_core::HistoryStep;
 use ambre_core::schema::SchemaError;
 
 use crate::logic::command::{
@@ -621,8 +622,8 @@ impl ToileState {
                     })
                     .collect(),
             ),
-            ToileCommand::Undo => self.apply_history(true),
-            ToileCommand::Redo => self.apply_history(false),
+            ToileCommand::Undo => self.apply_history(HistoryStep::Undo),
+            ToileCommand::Redo => self.apply_history(HistoryStep::Redo),
             ToileCommand::CreateConnector {
                 from,
                 from_anch,
@@ -651,8 +652,8 @@ impl ToileState {
                 query,
                 options,
                 from,
-                backward,
-            } => self.find(&query, options, from.as_ref(), backward),
+                direction,
+            } => self.find(&query, options, from.as_ref(), direction),
             ToileCommand::RequestSelectionStats { ids, kind } => self.selection_stats(&ids, kind),
             ToileCommand::RequestSelectionData { ids } => self.selection_data(&ids),
             ToileCommand::RequestBoardIds => self.board_ids(),
@@ -877,16 +878,15 @@ impl ToileState {
     /// Apply one undo or redo step. `undo()`/`redo()` commit the inverse ops,
     /// then this method reseeds the derived caches and broadcasts the delta like
     /// any structural edit. A no-op (empty stack) only reports availability.
-    fn apply_history(&mut self, undo: bool) -> ToileOutcome {
+    fn apply_history(&mut self, step: HistoryStep) -> ToileOutcome {
         // Read before the step: the deck and the notes come off the document,
         // which the step has already moved once it returns.
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
         let dangling_before = self.dangling_connectors();
-        let changed = if undo {
-            self.undo.undo()
-        } else {
-            self.undo.redo()
+        let changed = match step {
+            HistoryStep::Undo => self.undo.undo(),
+            HistoryStep::Redo => self.undo.redo(),
         }
         .unwrap_or(false);
         // An empty stack changes nothing, so it refreshes nothing

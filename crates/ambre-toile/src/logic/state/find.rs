@@ -7,6 +7,8 @@
 //! recenter on. Matches are local view state, never synced and never an undo
 //! item.
 
+use ambre_core::StepDirection;
+
 use crate::logic::command::{FindOptions, FindResults, ToileEvent, ToileOutcome};
 use crate::logic::model::{ElementId, NodeId};
 
@@ -22,14 +24,14 @@ impl ToileState {
         query: &str,
         options: FindOptions,
         from: Option<&ElementId>,
-        backward: bool,
+        direction: StepDirection,
     ) -> ToileOutcome {
         let hits = if query.is_empty() {
             Vec::new()
         } else {
             self.find_hits(query, options)
         };
-        let focus = next_focus(&hits, from, backward);
+        let focus = next_focus(&hits, from, direction);
         ToileOutcome::display_only(vec![ToileEvent::FindResults(FindResults { hits, focus })])
     }
 
@@ -79,20 +81,24 @@ impl ToileState {
 
 /// The hit to recenter on. That is the first hit for a fresh search, otherwise
 /// the hit adjacent to `from` in the requested direction, wrapping around.
-/// `backward` steps to the previous hit, else the next. A `from` that is no
-/// longer a hit restarts at the first.
-fn next_focus(hits: &[ElementId], from: Option<&ElementId>, backward: bool) -> Option<ElementId> {
+/// A `Backward` direction steps to the previous hit, else the next. A `from`
+/// that is no longer a hit restarts at the first.
+fn next_focus(
+    hits: &[ElementId],
+    from: Option<&ElementId>,
+    direction: StepDirection,
+) -> Option<ElementId> {
     let first = hits.first().cloned();
     let Some(from) = from else {
         return first;
     };
     let len = hits.len();
-    match hits.iter().position(|h| h == from) {
+    match (hits.iter().position(|h| h == from), direction) {
         // `+ len` before subtracting keeps the step unsigned and wraps correctly
         // for the backward case at index 0.
-        Some(idx) if backward => hits.get((idx + len - 1) % len).cloned(),
-        Some(idx) => hits.get((idx + 1) % len).cloned(),
-        None => first,
+        (Some(idx), StepDirection::Backward) => hits.get((idx + len - 1) % len).cloned(),
+        (Some(idx), StepDirection::Forward) => hits.get((idx + 1) % len).cloned(),
+        (None, _) => first,
     }
 }
 

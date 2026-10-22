@@ -75,8 +75,8 @@ use std::collections::HashMap;
 
 use loro::{ExportMode, LoroDoc, TreeID, UndoManager, VersionVector};
 
-use ambre_core::UserId;
 use ambre_core::schema::SchemaError;
+use ambre_core::{HistoryStep, StepDirection, UserId};
 
 use crate::doc;
 use crate::events::{
@@ -697,8 +697,8 @@ impl ProseState {
                 border,
                 padding_pt,
             } => self.set_cell_style(&tree_id(cell_id), bg, valign, border, padding_pt),
-            ProseCommand::StepTableCell { cell_id, backwards } => {
-                self.step_table_cell(&tree_id(cell_id), backwards)
+            ProseCommand::StepTableCell { cell_id, direction } => {
+                self.step_table_cell(&tree_id(cell_id), direction)
             }
             ProseCommand::InsertToc {
                 parent_id,
@@ -756,8 +756,8 @@ impl ProseState {
             }
             ProseCommand::StampModified { now_ms } => self.stamp_modified(now_ms),
             ProseCommand::FindStart { query } => self.find_start(query),
-            ProseCommand::FindNext => self.find_step(false),
-            ProseCommand::FindPrev => self.find_step(true),
+            ProseCommand::FindNext => self.find_step(StepDirection::Forward),
+            ProseCommand::FindPrev => self.find_step(StepDirection::Backward),
             ProseCommand::FindClose => self.find_close(),
             ProseCommand::ReplaceOne { replacement } => self.replace_one(&replacement),
             ProseCommand::ReplaceAll { replacement } => self.replace_all(&replacement),
@@ -813,8 +813,8 @@ impl ProseState {
             ProseCommand::AcceptAllSuggestions => self.resolve_all(true),
             ProseCommand::RejectAllSuggestions => self.resolve_all(false),
             ProseCommand::UpdateCursor { pos } => self.update_cursor(&pos),
-            ProseCommand::Undo => self.apply_history(true),
-            ProseCommand::Redo => self.apply_history(false),
+            ProseCommand::Undo => self.apply_history(HistoryStep::Undo),
+            ProseCommand::Redo => self.apply_history(HistoryStep::Redo),
             // The native header needs the identity the registry holds. So the
             // Logic dispatcher serves that export before the document is
             // reached (`PROSE-IO-028`). A text format is the document's own.
@@ -1044,12 +1044,11 @@ impl ProseState {
 
     /// One undo or one redo step. It commits the inverse operations, and the
     /// delta they produce is broadcast like any other mutation.
-    fn apply_history(&mut self, undo: bool) -> ProseOutcome {
+    fn apply_history(&mut self, step: HistoryStep) -> ProseOutcome {
         let before = self.doc.state_frontiers();
-        let changed = if undo {
-            self.undo.undo()
-        } else {
-            self.undo.redo()
+        let changed = match step {
+            HistoryStep::Undo => self.undo.undo(),
+            HistoryStep::Redo => self.undo.redo(),
         }
         .unwrap_or(false);
         if !changed {

@@ -61,7 +61,7 @@ impl ToileRelay {
                 query: q.query,
                 options: q.options,
                 from: q.from,
-                backward: q.backward,
+                direction: q.direction,
             },
             ToileIntent::Present(intent) => match intent {
                 PresenterIntent::Prev => ToileCommand::PrevSlide,

@@ -35,7 +35,8 @@ use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
 use ambre_commands::Modifiers;
 use ambre_core::{
-    ByteCount, ByteOffset, CharSpan, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes,
+    ByteCount, ByteOffset, CharSpan, HistoryStep, byte_span_to_chars, byte_to_char, char_len,
+    char_span_to_bytes,
 };
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
@@ -153,8 +154,8 @@ struct History {
     seal_after: bool,
     /// An edit waits for the next paint.
     pending: bool,
-    /// The steps asked since the last paint, `true` for a redo.
-    asked: Vec<bool>,
+    /// The steps asked since the last paint.
+    asked: Vec<HistoryStep>,
 }
 
 impl History {
@@ -203,13 +204,12 @@ impl History {
         self.pending = false;
     }
 
-    /// Walk one step back, or forward for a `redo`, and answer the text the
+    /// Walk one step back, or forward for a redo, and answer the text the
     /// draft takes. `None` with nothing to walk.
-    fn step(&mut self, redo: bool) -> Option<String> {
-        let (from, to) = if redo {
-            (&mut self.redo, &mut self.undo)
-        } else {
-            (&mut self.undo, &mut self.redo)
+    fn step(&mut self, step: HistoryStep) -> Option<String> {
+        let (from, to) = match step {
+            HistoryStep::Redo => (&mut self.redo, &mut self.undo),
+            HistoryStep::Undo => (&mut self.undo, &mut self.redo),
         };
         let text = from.pop()?;
         to.push(std::mem::replace(&mut self.last, text.clone()));
@@ -828,10 +828,14 @@ impl Composer {
                 return true;
             }
             "z" | "Z" | "y" | "Y" if primary => {
-                let redo = shift || key.eq_ignore_ascii_case("y");
+                let step = if shift || key.eq_ignore_ascii_case("y") {
+                    HistoryStep::Redo
+                } else {
+                    HistoryStep::Undo
+                };
                 self.typed = true;
                 self.editor(of);
-                self.history(of).asked.push(redo);
+                self.history(of).asked.push(step);
                 self.saying = Some((of, Say::Draft));
                 return true;
             }
@@ -1324,8 +1328,8 @@ impl Composer {
                 let history = self.histories.entry(shown).or_default();
                 history.record(&editor.text());
                 let mut walked = false;
-                for redo in std::mem::take(&mut history.asked) {
-                    if let Some(text) = history.step(redo) {
+                for step in std::mem::take(&mut history.asked) {
+                    if let Some(text) = history.step(step) {
                         editor.set_text(&text);
                         walked = true;
                     }
@@ -1603,9 +1607,13 @@ mod tests {
         history.record("hi!");
         history.edit();
         history.record("hi!?");
-        assert_eq!(history.step(false).as_deref(), Some("hi!"));
-        assert_eq!(history.step(false).as_deref(), Some(""));
-        assert_eq!(history.step(false), None, "nothing left to walk");
-        assert_eq!(history.step(true).as_deref(), Some("hi!"));
+        assert_eq!(history.step(HistoryStep::Undo).as_deref(), Some("hi!"));
+        assert_eq!(history.step(HistoryStep::Undo).as_deref(), Some(""));
+        assert_eq!(
+            history.step(HistoryStep::Undo),
+            None,
+            "nothing left to walk"
+        );
+        assert_eq!(history.step(HistoryStep::Redo).as_deref(), Some("hi!"));
     }
 }

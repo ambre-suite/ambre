@@ -16,6 +16,7 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{ElementId, FindOptions, FindResults};
+use ambre_core::StepDirection;
 use leptos::html;
 use leptos::prelude::*;
 
@@ -31,7 +32,7 @@ pub struct FindQuery {
     pub query: String,
     pub options: FindOptions,
     pub from: Option<ElementId>,
-    pub backward: bool,
+    pub direction: StepDirection,
 }
 
 /// Whether the Find panel shows. Ctrl+F opens it, and its close button or
@@ -74,7 +75,7 @@ pub fn FindPanel(
     });
 
     // Emit a `Find` with the current query / options, resume point and direction.
-    let emit = move |from: Option<ElementId>, backward: bool| {
+    let emit = move |from: Option<ElementId>, direction: StepDirection| {
         on_find.run(FindQuery {
             query: query.get_untracked(),
             options: FindOptions {
@@ -82,26 +83,26 @@ pub fn FindPanel(
                 whole_word: whole_word.get_untracked(),
             },
             from,
-            backward,
+            direction,
         });
     };
 
     // A fresh search from the query box: no resume point, Logic focuses the first
     // hit. An empty query is a valid "clear" signal (Logic replies with no hits,
     // wiping the canvas highlight and the counter).
-    let run_fresh = move || emit(None, false);
+    let run_fresh = move || emit(None, StepDirection::Forward);
 
     // Step to the next (or previous) match, resuming from the current focus.
     // Logic advances or rewinds from `from` and wraps (toile-find).
-    let step = move |backward: bool| {
+    let step = move |direction: StepDirection| {
         let from = result.with_untracked(|r| r.as_ref().and_then(|fr| fr.focus.clone()));
-        emit(from, backward);
+        emit(from, direction);
     };
 
     let close = move || {
         // Clear the query and emit so the canvas highlight is wiped, then hide.
         query.set(String::new());
-        emit(None, false);
+        emit(None, StepDirection::Forward);
         state.set(FindPanelState::Closed);
         result.set(None);
     };
@@ -142,7 +143,11 @@ pub fn FindPanel(
                                 match ev.key().as_str() {
                                     "Enter" => {
                                         ev.prevent_default();
-                                        step(ev.shift_key());
+                                        step(if ev.shift_key() {
+                                            StepDirection::Backward
+                                        } else {
+                                            StepDirection::Forward
+                                        });
                                     }
                                     "Escape" => { ev.prevent_default(); close(); }
                                     _ => {}
@@ -164,14 +169,14 @@ pub fn FindPanel(
                         <button
                             class="ambre-find-prev"
                             aria-label="Previous match"
-                            on:click=move |_| step(true)
+                            on:click=move |_| step(StepDirection::Backward)
                         >
                             "Prev"
                         </button>
                         <button
                             class="ambre-find-next"
                             aria-label="Next match"
-                            on:click=move |_| step(false)
+                            on:click=move |_| step(StepDirection::Forward)
                         >
                             "Next"
                         </button>

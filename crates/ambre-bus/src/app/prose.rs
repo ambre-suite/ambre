@@ -910,7 +910,7 @@ pub enum ProseCommand {
     /// Past the last cell, a row is appended (`PROSE-FEAT-251`).
     StepTableCell {
         cell_id: BlockId,
-        backwards: bool,
+        direction: ambre_core::StepDirection,
     },
 
     // -- Table of contents (`features/ambre-spec-prose-table-of-contents.md`) --

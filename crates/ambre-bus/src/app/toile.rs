@@ -1441,14 +1441,14 @@ pub enum ToileCommand {
     // -- Find (search on board, `toile-find`) --
     /// Non-mutating text search over the text-bearing elements (sticky / text
     /// bodies, frame titles); answered by `ToileEvent::FindResults`. `from` is the
-    /// current match to resume from; `backward` picks the previous hit rather than
+    /// current match to resume from; a `Backward` direction picks the previous hit rather than
     /// the next (both wrapping). A `None` `from` starts a fresh search focusing
     /// the first hit. No CRDT effect.
     Find {
         query: String,
         options: FindOptions,
         from: Option<ElementId>,
-        backward: bool,
+        direction: ambre_core::StepDirection,
     },
 
     // -- Selection aggregates for the status bar (`toile-status-bar`) --

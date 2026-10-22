@@ -6,6 +6,7 @@
 // module through the `use super::*` glob.
 
 use super::*;
+use ambre_core::HistoryStep;
 
 impl TrameState {
     /// Handle a UI command and return a typed outcome.
@@ -227,8 +228,8 @@ impl TrameState {
                 sort_keys,
                 has_header,
             } => self.sort_selection_multi(&sort_keys, has_header),
-            TrameCommand::Undo => self.apply_history(true),
-            TrameCommand::Redo => self.apply_history(false),
+            TrameCommand::Undo => self.apply_history(HistoryStep::Undo),
+            TrameCommand::Redo => self.apply_history(HistoryStep::Redo),
             TrameCommand::DefineName { name, reference } => self.define_name(&name, &reference),
             TrameCommand::DeleteName { name } => self.delete_name(&name),
             TrameCommand::ActivateSheet { sheet_id } => self.activate_sheet(&sheet_id.0),
@@ -398,14 +399,13 @@ impl TrameState {
     /// holds is still true (`UNDO-009`).
     ///
     /// [`UndoState`]: ambre_bus::TrameEvent::UndoState
-    pub(super) fn apply_history(&mut self, undo: bool) -> TrameOutcome {
+    pub(super) fn apply_history(&mut self, step: HistoryStep) -> TrameOutcome {
         // An undo can take back the sheet the user is on, an import's above
         // all. The reader then lands where a deletion leaves them (`TRAME-075`).
         let order = self.sheet_order_ids();
-        let changed = if undo {
-            self.undo_manager.undo()
-        } else {
-            self.undo_manager.redo()
+        let changed = match step {
+            HistoryStep::Undo => self.undo_manager.undo(),
+            HistoryStep::Redo => self.undo_manager.redo(),
         }
         .unwrap_or(false);
 

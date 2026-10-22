@@ -7,7 +7,7 @@
 //! to compare, only state and derived structures.
 
 use ambre_core::Argb;
-use ambre_core::{CharCount, CharOffset};
+use ambre_core::{CharCount, CharOffset, StepDirection};
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
 
@@ -1053,7 +1053,7 @@ fn find(
     options: crate::logic::command::FindOptions,
     from: Option<ElementId>,
 ) -> crate::logic::command::FindResults {
-    find_dir(st, query, options, from, false)
+    find_dir(st, query, options, from, StepDirection::Forward)
 }
 
 fn find_dir(
@@ -1061,13 +1061,13 @@ fn find_dir(
     query: &str,
     options: crate::logic::command::FindOptions,
     from: Option<ElementId>,
-    backward: bool,
+    direction: StepDirection,
 ) -> crate::logic::command::FindResults {
     let out = st.handle_command(ToileCommand::Find {
         query: query.to_owned(),
         options,
         from,
-        backward,
+        direction,
     });
     assert!(out.update.is_none(), "Find must not mutate the CRDT");
     out.display
@@ -1235,10 +1235,10 @@ fn a_resume_point_edited_away_restarts_at_the_first_hit() {
     );
 
     set_body(&mut st, &b, "match", "gone");
-    for backward in [false, true] {
-        let r = find_dir(&mut st, "match", opts, Some(b.clone()), backward);
+    for direction in [StepDirection::Forward, StepDirection::Backward] {
+        let r = find_dir(&mut st, "match", opts, Some(b.clone()), direction);
         assert_eq!(r.hits, vec![a.clone(), c.clone()]);
-        assert_eq!(r.focus, Some(a.clone()), "backward: {backward}");
+        assert_eq!(r.focus, Some(a.clone()), "direction: {direction:?}");
     }
 }
 
@@ -1279,10 +1279,16 @@ fn find_backward_steps_to_previous_hit_wrapping() {
 
     let opts = crate::logic::command::FindOptions::default();
     // Backward from the second hit focuses the first.
-    let r = find_dir(&mut st, "match", opts, Some(b.clone()), true);
+    let r = find_dir(
+        &mut st,
+        "match",
+        opts,
+        Some(b.clone()),
+        StepDirection::Backward,
+    );
     assert_eq!(r.focus, Some(a.clone()));
     // Backward from the first hit wraps to the last.
-    let r = find_dir(&mut st, "match", opts, Some(a), true);
+    let r = find_dir(&mut st, "match", opts, Some(a), StepDirection::Backward);
     assert_eq!(r.focus, Some(b));
 }
 

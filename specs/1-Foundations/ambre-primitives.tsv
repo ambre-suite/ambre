@@ -401,7 +401,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetHeaderEnable
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetHeadingLevel.level | field | Option<u8>	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ShowPages.first | field | u32	debt	finding: Prose page index: zero-based and one-based in one u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ShowPages.last | field | u32	debt	finding: Prose page index: zero-based and one-based in one u32 (medium, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::StepTableCell.backwards | field | bool	debt	finding: Boolean mode selectors (low-medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::UpdateTocConfig.max_level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::UpdateTocConfig.numbered | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::is_mutating() | ret | bool	generic	predicate
@@ -560,7 +559,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::CreateElement.c
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EditComment.message | field | usize	math	index of a message in its thread
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EditNotes.base | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EnterPresent.focus | field | bool	generic	named flag, setter of a flag, or predicate
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::Find.backward | field | bool	debt	finding: Boolean mode selectors (low-medium, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::Find.query | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::GotoSlide.0 | field | usize	debt	finding: Toile slide index as usize (low, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ImportFigma.bytes | field | Vec<u8>	generic	imported file bytes / decoded pixels
@@ -2526,7 +2524,6 @@ ambre-murmure | src/composer.rs | crate::composer | EDITING_LINE | const | &str	
 ambre-murmure | src/composer.rs | crate::composer | Editing.original | field | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | FAMILY | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | FILES_PX | const | f32	math	layout geometry in logical px
-ambre-murmure | src/composer.rs | crate::composer | History.asked | field | Vec<bool>	math	local value
 ambre-murmure | src/composer.rs | crate::composer | History.last | field | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | History.pending | field | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | History.redo | field | Vec<String>	free-text	text, label or user content
@@ -2534,7 +2531,6 @@ ambre-murmure | src/composer.rs | crate::composer | History.seal_after | field |
 ambre-murmure | src/composer.rs | crate::composer | History.undo | field | Vec<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | History::record(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | History::step() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | History::step(redo) | param | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/composer.rs | crate::composer | MIN_LINE_PX | const | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Marks.text | field | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Marks::draft(text) | param | String	free-text	text, label or user content
@@ -3953,7 +3949,6 @@ ambre-prose | src/logic/docfile.rs | crate::logic::docfile | ProseState::import_
 ambre-prose | src/logic/docfile.rs | crate::logic::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	math	count, size or local index
 ambre-prose | src/logic/docfile.rs | crate::logic::docfile | import_ambre_plaintext(data) | param | &[u8]	math	count, size or local index
 ambre-prose | src/logic/find.rs | crate::logic::find | FindSession.current | field | Option<u32>	math	count, size or local index
-ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::find_step(backwards) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::refresh_matches(keep) | param | Option<u32>	math	count, size or local index
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_all(replacement) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_one(replacement) | param | &str	free-text	text content / label / parser input
@@ -4032,7 +4027,6 @@ ambre-prose | src/logic/mod.rs | crate::logic | ProseState.suggesting | field | 
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.window | field | (u32,u32)	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session(entry) | param | Vec<u8>	debt	planned: lot B11 PeerEntry
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::apply_history(undo) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::apply_remote(payload) | param | &[u8]	debt	planned: lot B1 DeltaBytes
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::apply_remote_batch(payloads) | param | &[Vec<u8>]	debt	planned: lot B1 DeltaBytes
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::cached_media() | ret | Option<&[u8]>	math	count, size or local index
@@ -4099,7 +4093,6 @@ ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::resize_ta
 ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::resize_table_col(width_pt) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::set_cell_style(bg) | param | Option<u32>	debt	planned: lot D2 Rgb colours
 ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::set_cell_style(padding_pt) | param | Option<f32>	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::step_table_cell(backwards) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/tables.rs | crate::logic::tables | Rect.bottom | field | usize	debt	finding: table (row, col) pairs as bare u32 (confirmed)
 ambre-prose | src/logic/tables.rs | crate::logic::tables | Rect.left | field | usize	debt	finding: table (row, col) pairs as bare u32 (confirmed)
 ambre-prose | src/logic/tables.rs | crate::logic::tables | Rect.right | field | usize	debt	finding: table (row, col) pairs as bare u32 (confirmed)
@@ -5287,7 +5280,6 @@ ambre-toile | src/chrome/comments.rs | crate::chrome::comments | CommentsPanel(s
 ambre-toile | src/chrome/comments.rs | crate::chrome::comments | clock_label() | ret | String	free-text	label, message or user text
 ambre-toile | src/chrome/deck.rs | crate::chrome::deck | DeckPanel(state) | param | RwSignal<bool>	math	local state flag or value, not a mode selector
 ambre-toile | src/chrome/find.rs | crate::chrome::find | FindPanelState::is_open() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/chrome/find.rs | crate::chrome::find | FindQuery.backward | field | bool	debt	finding: The find direction is a bool (confirmed): find direction as bool backward
 ambre-toile | src/chrome/find.rs | crate::chrome::find | FindQuery.query | field | String	free-text	label, message or user text
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | <ToileHandler as CommandHandler>::on_key(in_text_field) | param | bool	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | <ToileHandler as CommandHandler>::sealed_save(passphrase) | param | String	trait	fixed by ambre-chrome FrameHandler::sealed_save; SecretString would be the chrome slice's fix
@@ -5507,14 +5499,12 @@ ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileSta
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::thumbnail_png(hash) | param | &str	debt	planned: lot B item 8 ContentHash ripple (DisplayContent::Image hash)
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches(query) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::find(backward) | param | bool	debt	finding: The find direction is a bool (confirmed): find direction as bool backward
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::find(query) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::find_hits(query) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match(haystack) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match(needle) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match(whole_word) | param | bool	debt	finding: The find direction is a bool (confirmed): find direction as bool backward
-ambre-toile | src/logic/state/find.rs | crate::logic::state::find | next_focus(backward) | param | bool	debt	finding: The find direction is a bool (confirmed): find direction as bool backward
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(haystack) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(needle) | param | &str	free-text	label, message or user text
@@ -5580,7 +5570,6 @@ ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.undecoda
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::active_notes() | ret | Option<(FrameId,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::adopt_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::adopt_session(entry) | param | Vec<u8>	debt	planned: lot B item 11 PeerEntry (SessionIdentity.entry)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::apply_history(undo) | param | bool	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::apply_remote(update) | param | &[u8]	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::apply_remote_batch(updates) | param | &[Vec<u8>]	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::board_walks() | ret | u64	math	geometry, layout, count or size local to the algorithm
@@ -6400,7 +6389,6 @@ ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_sou
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_source(stored) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::write_cell(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/commands.rs | crate::logic::commands | TrameState::apply_history(undo) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
