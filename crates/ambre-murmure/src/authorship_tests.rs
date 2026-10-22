@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, Timestamp};
-use ambre_core::authorship::{PEERS_MAP, PeerEntry, SessionNonce, peer_key};
+use ambre_core::authorship::{PeerEntry, SessionNonce};
 use ambre_core::{ChannelId, DocumentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroMap, LoroValue, ValueOrContainer, VersionVector};
 
@@ -428,18 +428,26 @@ fn a_registry_entry_its_signer_may_not_write_is_refused() {
     let alice = founder(ChannelType::Public);
     let bob = join(&alice);
     let segment = bob.segment();
-    let peers = bob.doc().get_map(PEERS_MAP);
+    let peers = bob
+        .doc()
+        .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str());
 
     // An entry under another PeerID would hand bob what alice created.
     let before = bob.doc().oplog_vv();
     peers
-        .insert(&peer_key(alice.signer().peer), entry(bob.user))
+        .insert(
+            ambre_core::PeerKey::of(alice.signer().peer).as_str(),
+            entry(bob.user),
+        )
         .expect("insert");
     let foreign_key = bob.json_since(&before);
     // An entry under bob's own PeerID that names alice.
     let before = bob.doc().oplog_vv();
     peers
-        .insert(&peer_key(bob.signer().peer), entry(alice.user))
+        .insert(
+            ambre_core::PeerKey::of(bob.signer().peer).as_str(),
+            entry(alice.user),
+        )
         .expect("insert");
     let foreign_user = bob.json_since(&before);
 

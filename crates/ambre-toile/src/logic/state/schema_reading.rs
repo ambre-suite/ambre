@@ -31,7 +31,7 @@
 use ambre_core::Argb;
 use std::collections::BTreeSet;
 
-use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, verdict};
+use ambre_core::schema::verdict;
 use kurbo::ParamCurve;
 use loro::LoroValue;
 
@@ -51,6 +51,9 @@ use crate::logic::schema::SCHEMA_VERSION;
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../../schema/readings.txt");
+
+/// The foundation's `meta` root, as a pattern.
+const META_ROOT: &str = ambre_core::crdt::FoundationRoot::Meta.as_str();
 
 /// The stored paths no reader of this build reads. Each is written, kept and
 /// merged, and nothing draws or plays it yet.
@@ -276,7 +279,7 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
         return Some("read by no reader of this build".to_owned());
     }
     match stored.root.as_str() {
-        SCHEMA_META_MAP if stored.key(0)? == SCHEMA_VERSION_KEY => {
+        META_ROOT if stored.key(0)? == ambre_core::schema::MetaKey::SchemaVersion.as_str() => {
             let LoroValue::I64(n) = stored.value else {
                 return None;
             };

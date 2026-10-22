@@ -33,8 +33,8 @@ use std::collections::{BTreeSet, HashMap};
 
 use ambre_bus::{MentionTarget, Notice, StyleMark, TextStyle};
 use ambre_core::Uuid;
-use ambre_core::authorship::{PEERS_MAP, PeerEntry};
-use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, verdict};
+use ambre_core::authorship::PeerEntry;
+use ambre_core::schema::verdict;
 use ambre_core::{CategoryId, ChannelId};
 use loro::{Container, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
@@ -58,6 +58,11 @@ use crate::{ChannelState, SpaceState, style};
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../schema/readings.txt");
+
+/// The foundation's `meta` root, as a pattern.
+const META_ROOT: &str = ambre_core::crdt::FoundationRoot::Meta.as_str();
+/// The foundation's peer registry root, as a pattern.
+const PEERS_ROOT: &str = ambre_core::crdt::FoundationRoot::Peers.as_str();
 
 /// The stored values no reader of this build reads.
 const UNREAD: [&str; 6] = [
@@ -288,7 +293,7 @@ fn reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
     }
     let key = stored.key(0);
     match (stored.root.as_str(), stored.kind) {
-        (SCHEMA_META_MAP, _) if key == Some(SCHEMA_VERSION_KEY) => {
+        (META_ROOT, _) if key == Some(ambre_core::schema::MetaKey::SchemaVersion.as_str()) => {
             let version = crate::schema::read_version(reader.doc(stored.kind)).ok()?;
             Some(format!(
                 "version {version}, {:?}",
@@ -296,8 +301,11 @@ fn reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             ))
         }
         (HEADER, _) => header_reading(reader, stored, key?),
-        (PEERS_MAP, _) => {
-            let read = reader.doc(stored.kind).get_map(PEERS_MAP).get(key?)?;
+        (PEERS_ROOT, _) => {
+            let read = reader
+                .doc(stored.kind)
+                .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
+                .get(key?)?;
             let LoroValue::Binary(bytes) = read.into_value().ok()? else {
                 return None;
             };

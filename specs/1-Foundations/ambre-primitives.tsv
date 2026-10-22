@@ -1473,16 +1473,16 @@ ambre-core | src/activity.rs | crate::activity | MAX_ANCHOR_LEN | const | usize	
 ambre-core | src/activity.rs | crate::activity | MAX_MENTIONS | const | usize	generic	bound / bit constant
 ambre-core | src/activity.rs | crate::activity | SummaryError::UnknownKind.0 | field | u8	newtype-inner	error carries the unknown byte
 ambre-core | src/authorship.rs | crate::authorship | ENTRY_SIGNATURE_LEN | const | usize	generic	length constant
-ambre-core | src/authorship.rs | crate::authorship | PEERS_MAP | const | &str	debt	finding: Loro root and key names as &str / String (low, suspected)
 ambre-core | src/authorship.rs | crate::authorship | PEERS_ORIGIN | const | &str	debt	finding: Loro root and key names as &str / String (low, suspected)
 ambre-core | src/authorship.rs | crate::authorship | PEER_ENTRY_LEN | const | usize	generic	length constant
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry.signature | field | [u8;ENTRY_SIGNATURE_LEN]	debt	planned: lot A bis 2: Signature moves into ambre-core; PeerEntry.signature takes it
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry::from_bytes(bytes) | param | &[u8]	generic	PeerEntry byte codec
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry::to_bytes() | ret | Vec<u8>	generic	PeerEntry byte codec
 ambre-core | src/authorship.rs | crate::authorship | PeerId.0 | field | u64	newtype-inner	PeerId/SessionNonce newtype
+ambre-core | src/authorship.rs | crate::authorship | PeerKey.0 | field | String	newtype-inner	the registry key newtype, built from a PeerId alone
+ambre-core | src/authorship.rs | crate::authorship | PeerKey::as_str() | ret | &str	newtype-inner	the registry key, for the call into the Loro map
 ambre-core | src/authorship.rs | crate::authorship | SESSION_NONCE_LEN | const | usize	generic	length constant
 ambre-core | src/authorship.rs | crate::authorship | SessionNonce.0 | field | [u8;SESSION_NONCE_LEN]	newtype-inner	PeerId/SessionNonce newtype
-ambre-core | src/authorship.rs | crate::authorship | peer_key() | ret | String	debt	finding: Loro root and key names as &str / String (low, suspected)
 ambre-core | src/channel_kind.rs | crate::channel_kind | ChannelDocumentKind::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/channel_kind.rs | crate::channel_kind | ChannelDocumentKind::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/channel_kind.rs | crate::channel_kind | SegmentState::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
@@ -1509,6 +1509,8 @@ ambre-core | src/color.rs | crate::color | Rgba::from_channels(a) | param | u8	n
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(b) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(g) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(r) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
+ambre-core | src/crdt.rs | crate::crdt | ContainerName::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed root name, for the call that opens the container
+ambre-core | src/crdt.rs | crate::crdt | FieldKey::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed map key, for the call into the map
 ambre-core | src/doc_type.rs | crate::doc_type | <DocType as FromStr>::from_str(word) | param | &str	trait	signature fixed by the trait
 ambre-core | src/doc_type.rs | crate::doc_type | <DocType as TryFrom<String>>::try_from(word) | param | String	trait	signature fixed by the trait
 ambre-core | src/doc_type.rs | crate::doc_type | DocType::as_str() | ret | &'static str	newtype-inner	DocType codec
@@ -1681,9 +1683,7 @@ ambre-core | src/role.rs | crate::role | Role::is_valid_for_organization() | ret
 ambre-core | src/schema.rs | crate::schema | Fnv.0 | field | u64	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | Fnv::feed(bytes) | param | &[u8]	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | Fnv::new(tag) | param | &[u8]	generic	FNV hash over bytes
-ambre-core | src/schema.rs | crate::schema | SCHEMA_META_MAP | const | &str	debt	finding: Loro root and key names as &str / String (low, suspected)
 ambre-core | src/schema.rs | crate::schema | SCHEMA_VERSION_ABSENT | const | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
-ambre-core | src/schema.rs | crate::schema | SCHEMA_VERSION_KEY | const | &str	debt	finding: Loro root and key names as &str / String (low, suspected)
 ambre-core | src/schema.rs | crate::schema | SchemaError::DocumentTooNew.binary | field | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
 ambre-core | src/schema.rs | crate::schema | SchemaError::DocumentTooNew.document | field | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
 ambre-core | src/schema.rs | crate::schema | SchemaError::MigrationFailed.from | field | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)

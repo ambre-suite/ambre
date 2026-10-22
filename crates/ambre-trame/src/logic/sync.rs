@@ -13,8 +13,11 @@ use super::*;
 /// manager excludes (`AUTHOR-009`). Answers the PeerID's counter past the
 /// entry, or `None` when the engine refused the write.
 fn write_entry(doc: &LoroDoc, peer: ambre_core::PeerId, entry: Vec<u8>) -> Option<i32> {
-    use ambre_core::authorship::{PEERS_MAP, PEERS_ORIGIN, peer_key};
-    if let Err(e) = doc.get_map(PEERS_MAP).insert(&peer_key(peer), entry) {
+    use ambre_core::authorship::PEERS_ORIGIN;
+    if let Err(e) = doc
+        .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
+        .insert(ambre_core::PeerKey::of(peer).as_str(), entry)
+    {
         tracing::error!("[Logic] the registry entry was refused: {e:?}");
         return None;
     }

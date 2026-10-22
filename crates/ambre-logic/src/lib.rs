@@ -1612,7 +1612,6 @@ mod authorship_tests {
     use ambre_bus::TrameCommand;
     use ambre_bus::{Col, Row};
     use ambre_core::SessionNonce;
-    use ambre_core::authorship::{PEERS_MAP, peer_key};
     use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
     const ALICE: ambre_core::PeerId = ambre_core::PeerId(0xA11CE);
@@ -1846,7 +1845,10 @@ mod authorship_tests {
             .import(&TrameState::new().export_snapshot())
             .expect("the scaffolding");
         reader.import(&hers).expect("Alice's delta");
-        let registry = |doc: &LoroDoc| match doc.get_map(PEERS_MAP).get_deep_value() {
+        let registry = |doc: &LoroDoc| match doc
+            .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
+            .get_deep_value()
+        {
             LoroValue::Map(map) => (*map).clone(),
             _ => Default::default(),
         };
@@ -1854,7 +1856,7 @@ mod authorship_tests {
         reader.import(&first).expect("the first delta");
         let after = registry(&reader);
         assert_eq!(
-            after.get(&peer_key(rig.peer)),
+            after.get(ambre_core::PeerKey::of(rig.peer).as_str()),
             Some(&LoroValue::Binary(rig.peer.0.to_le_bytes().to_vec().into()))
         );
         assert_eq!(
@@ -1862,7 +1864,10 @@ mod authorship_tests {
             hers_only.len() + 1,
             "another entry was written"
         );
-        assert_eq!(after.get(&peer_key(ALICE)), hers_only.get(&peer_key(ALICE)));
+        assert_eq!(
+            after.get(ambre_core::PeerKey::of(ALICE).as_str()),
+            hers_only.get(ambre_core::PeerKey::of(ALICE).as_str())
+        );
 
         let second = edit(&mut rig, "again");
         assert_eq!(authors(&second), vec![rig.peer]);

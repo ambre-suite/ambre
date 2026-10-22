@@ -19,9 +19,6 @@ pub const ENTRY_SIGNATURE_LEN: usize = 64;
 /// Length of an encoded [`PeerEntry`]: the user, the nonce, the signature.
 pub const PEER_ENTRY_LEN: usize = 16 + SESSION_NONCE_LEN + ENTRY_SIGNATURE_LEN;
 
-/// The root map of the peer registry, in every document (`AUTHOR-004`).
-pub const PEERS_MAP: &str = "peers";
-
 /// The commit origin of a registry write. An application keeps it off its undo
 /// stack: the entry is no gesture of the user.
 pub const PEERS_ORIGIN: &str = "ambre-peers";
@@ -92,10 +89,25 @@ impl PeerEntry {
     }
 }
 
-/// The registry key of a PeerID: sixteen lowercase hex digits.
-#[must_use]
-pub fn peer_key(peer: PeerId) -> String {
-    format!("{peer:016x}")
+/// The key of a PeerID in the peer registry,
+/// [`crate::crdt::FoundationRoot::Peers`]: sixteen lowercase hex digits
+/// (`AUTHOR-004`). Built from the PeerID alone, so no call site spells the
+/// format.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PeerKey(String);
+
+impl PeerKey {
+    /// The registry key of `peer`.
+    #[must_use]
+    pub fn of(peer: PeerId) -> Self {
+        Self(format!("{peer:016x}"))
+    }
+
+    /// The key as the registry stores it, for the call into the map.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 #[cfg(test)]
@@ -113,6 +125,6 @@ mod tests {
         assert_eq!(bytes.len(), PEER_ENTRY_LEN);
         assert_eq!(PeerEntry::from_bytes(&bytes), Some(entry));
         assert_eq!(PeerEntry::from_bytes(&bytes[1..]), None);
-        assert_eq!(peer_key(PeerId(0xab)), "00000000000000ab");
+        assert_eq!(PeerKey::of(PeerId(0xab)).as_str(), "00000000000000ab");
     }
 }

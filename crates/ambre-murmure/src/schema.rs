@@ -5,15 +5,15 @@
 //! this file and demand a line for each (`MURMURE-437`).
 //!
 //! **Where the version lives.** In the foundation's root `meta` map, under
-//! `ambre_core::schema::SCHEMA_VERSION_KEY`, as in Trame and Prose
+//! `ambre_core::schema::MetaKey::SchemaVersion`, as in Trame and Prose
 //! (`SCHEMA-004`). The `header` names the kind and the channel only
 //! (`MURMURE-001`). The root map and the `meta` *document* share a name and
 //! nothing else: one is a container, the other a kind. Absent reads as 0,
 //! and the verdict and the walk are `ambre_core::schema`'s own.
 
 use ambre_core::schema::{
-    SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
-    SchemaVerdict, migrate_schema, migration_peer, verdict,
+    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
+    migration_peer, verdict,
 };
 use ambre_core::{ChannelId, DocumentId, SpaceId};
 use loro::{LoroDoc, LoroMap, LoroValue, ValueOrContainer};
@@ -298,8 +298,11 @@ pub(crate) fn write_header(
     header.insert(HEADER_KIND, kind.as_str())?;
     header.insert(HEADER_CHANNEL, channel_id.to_string())?;
     header.insert(HEADER_CREATED_AT, ts_value(created_at))?;
-    doc.get_map(SCHEMA_META_MAP)
-        .insert(SCHEMA_VERSION_KEY, i64::from(SCHEMA_VERSION))?;
+    doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+        .insert(
+            ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+            i64::from(SCHEMA_VERSION),
+        )?;
     Ok(())
 }
 
@@ -317,8 +320,11 @@ pub(crate) fn write_space_header(
     header.insert(HEADER_KIND, DocumentKind::Space.as_str())?;
     header.insert(HEADER_SPACE, space_id.to_string())?;
     header.insert(HEADER_CREATED_AT, ts_value(created_at))?;
-    doc.get_map(SCHEMA_META_MAP)
-        .insert(SCHEMA_VERSION_KEY, i64::from(SCHEMA_VERSION))?;
+    doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+        .insert(
+            ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+            i64::from(SCHEMA_VERSION),
+        )?;
     Ok(())
 }
 
@@ -362,7 +368,10 @@ pub(crate) fn flag(map: &LoroMap, key: &str) -> bool {
 /// [`SchemaError::VersionUnreadable`] for a non-integer, a container, or an
 /// integer outside `u32`.
 pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
-    let Some(found) = doc.get_map(SCHEMA_META_MAP).get(SCHEMA_VERSION_KEY) else {
+    let Some(found) = doc
+        .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+        .get(ambre_core::schema::MetaKey::SchemaVersion.as_str())
+    else {
         return Ok(SCHEMA_VERSION_ABSENT);
     };
     match found {

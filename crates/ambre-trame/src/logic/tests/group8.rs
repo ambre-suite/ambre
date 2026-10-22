@@ -176,7 +176,6 @@ fn a_delete_leaves_a_cell_reference_untouched() {
 fn a_positional_workbook_migrates_onto_its_cells() {
     use crate::logic::schema::{SCHEMA_VERSION, cells_map_name};
     use crate::model::cell_key;
-    use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY};
 
     let mut old = column(&["1", "7", "9"]);
     set(&mut old, 0, 1, "=SUM(A2:A3)+A2");
@@ -190,8 +189,8 @@ fn a_positional_workbook_migrates_onto_its_cells() {
         .insert(&cell_key(rl, cl), "=SUM(A2:A3)+A2")
         .expect("the positional text");
     old.doc
-        .get_map(SCHEMA_META_MAP)
-        .insert(SCHEMA_VERSION_KEY, 2i64)
+        .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+        .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 2i64)
         .expect("the old version");
     old.doc.commit();
 

@@ -40,7 +40,7 @@ use kurbo::{BezPath, Point, Size};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 
 use ambre_bus::{DocType, DocumentId, UserId};
-use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, migration_peer, step_fingerprint};
+use ambre_core::schema::{migration_peer, step_fingerprint};
 
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
@@ -93,7 +93,7 @@ const NOT_SCHEMA_KEYS: [&str; 1] = ["cmt"];
 /// a dictionary keyed by an id, so its keys collapse to [`ANY`].
 pub(super) fn keys_are_schema_words(root: &str) -> bool {
     matches!(root, "board" | "presentation_config" | "meta")
-        || root == ambre_core::schema::SCHEMA_META_MAP
+        || root == ambre_core::crdt::FoundationRoot::Meta.as_str()
 }
 
 /// The type a value holds, named in the one spelling the freeze uses.
@@ -678,8 +678,11 @@ fn board_at(version: Option<u32>, write: impl FnOnce(&LoroDoc)) -> LoroDoc {
         .expect("a fresh document takes a peer id");
     write(&doc);
     if let Some(version) = version {
-        doc.get_map(SCHEMA_META_MAP)
-            .insert(SCHEMA_VERSION_KEY, i64::from(version))
+        doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+            .insert(
+                ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+                i64::from(version),
+            )
             .expect("the register");
     }
     doc.commit();
@@ -851,7 +854,7 @@ fn a_key_appearing_moves_the_shape() {
     let before = render(&shape_of(&state.doc));
     state
         .doc
-        .get_map(ambre_core::schema::SCHEMA_META_MAP)
+        .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .insert("a_key_no_build_writes", 1_i64)
         .expect("the register takes a key");
     assert_ne!(

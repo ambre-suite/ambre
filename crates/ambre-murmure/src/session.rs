@@ -6,7 +6,7 @@
 //! nothing before its PeerID lands: an operation under any other PeerID never
 //! travels (`AUTHOR-029`).
 
-use ambre_core::authorship::{PEERS_MAP, PEERS_ORIGIN, peer_key};
+use ambre_core::authorship::PEERS_ORIGIN;
 use loro::{CommitOptions, ExportMode, IdSpan, LoroDoc};
 
 use crate::error::MurmureError;
@@ -36,7 +36,8 @@ impl Session {
         doc.commit();
         doc.set_peer_id(peer.0)?;
         let sent = doc.oplog_vv().get(&peer.0).copied().unwrap_or(0);
-        doc.get_map(PEERS_MAP).insert(&peer_key(peer), entry)?;
+        doc.get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
+            .insert(ambre_core::PeerKey::of(peer).as_str(), entry)?;
         doc.commit_with(CommitOptions::new().origin(PEERS_ORIGIN));
         Ok(Self { peer, sent })
     }

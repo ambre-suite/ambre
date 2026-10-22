@@ -409,7 +409,7 @@ impl ToileState {
     /// id minted from here on carries the new PeerID. `false` when the CRDT
     /// engine refused the identity, and then nothing changed.
     pub fn adopt_session(&mut self, peer: ambre_core::PeerId, entry: Vec<u8>) -> bool {
-        use ambre_core::authorship::{PEERS_MAP, PEERS_ORIGIN, peer_key};
+        use ambre_core::authorship::PEERS_ORIGIN;
         self.doc.commit();
         if let Err(e) = self.doc.set_peer_id(peer.0) {
             tracing::error!("Toile: the session identity was refused: {e:?}");
@@ -417,7 +417,11 @@ impl ToileState {
         }
         self.peer = peer;
         self.exported_vv = self.doc.oplog_vv();
-        self.entry_end = match self.doc.get_map(PEERS_MAP).insert(&peer_key(peer), entry) {
+        self.entry_end = match self
+            .doc
+            .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
+            .insert(ambre_core::PeerKey::of(peer).as_str(), entry)
+        {
             Ok(()) => {
                 self.doc
                     .commit_with(loro::CommitOptions::new().origin(PEERS_ORIGIN));
@@ -1332,7 +1336,7 @@ mod schema_tests {
     use loro::{ExportMode, LoroDoc};
 
     use ambre_bus::app::toile::ToileEvent;
-    use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, SchemaError};
+    use ambre_core::schema::SchemaError;
 
     use crate::logic::command::{InitContent, ToileCommand};
     use crate::logic::model::{ElementKind, ShapeKind};
@@ -1359,8 +1363,11 @@ mod schema_tests {
         // A snapshot stamped one version ahead of this build.
         let newer = {
             let doc = LoroDoc::new();
-            doc.get_map(SCHEMA_META_MAP)
-                .insert(SCHEMA_VERSION_KEY, i64::from(SCHEMA_VERSION + 1))
+            doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .insert(
+                    ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+                    i64::from(SCHEMA_VERSION + 1),
+                )
                 .expect("stamp");
             doc.get_map("elements")
                 .insert_container("xx", loro::LoroMap::new())

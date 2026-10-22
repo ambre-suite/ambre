@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use ambre_bus::{CellRect, Col, ColCount, FilterKind, Row, RowCount};
 use ambre_core::schema::{
-    SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
-    SchemaVerdict, migrate_schema, migration_peer, verdict,
+    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
+    migration_peer, verdict,
 };
 
 use super::op_from_str;
@@ -234,8 +234,11 @@ pub const SCHEMA_VERSION: u32 = 3;
 /// every persistence path, not through the one that happens to check it.
 pub(crate) fn stamp(doc: &LoroDoc) {
     let _ = doc
-        .get_map(SCHEMA_META_MAP)
-        .insert(SCHEMA_VERSION_KEY, i64::from(SCHEMA_VERSION));
+        .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+        .insert(
+            ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+            i64::from(SCHEMA_VERSION),
+        );
 }
 
 /// The schema version a workbook carries, or the refusal when the register is
@@ -251,7 +254,10 @@ pub(crate) fn stamp(doc: &LoroDoc) {
 /// [`SchemaError::VersionUnreadable`] for a register holding a non-integer, a
 /// container, or an integer outside `u32`.
 pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
-    let Some(value) = doc.get_map(SCHEMA_META_MAP).get(SCHEMA_VERSION_KEY) else {
+    let Some(value) = doc
+        .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+        .get(ambre_core::schema::MetaKey::SchemaVersion.as_str())
+    else {
         return Ok(SCHEMA_VERSION_ABSENT);
     };
     match value.into_value() {
@@ -529,8 +535,11 @@ mod tests {
             .insert(DEFAULT_SHEET, "Sheet1")
             .expect("seed");
         if let Some(v) = version {
-            doc.get_map(SCHEMA_META_MAP)
-                .insert(SCHEMA_VERSION_KEY, i64::from(v))
+            doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .insert(
+                    ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+                    i64::from(v),
+                )
                 .expect("stamp");
         }
         doc.commit();
@@ -687,8 +696,8 @@ mod tests {
     #[test]
     fn a_register_holding_something_other_than_a_version_is_refused() {
         let doc = LoroDoc::new();
-        doc.get_map(SCHEMA_META_MAP)
-            .insert(SCHEMA_VERSION_KEY, "two")
+        doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+            .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), "two")
             .expect("a register a newer client might have written");
         doc.commit();
         let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
@@ -728,8 +737,11 @@ mod tests {
 
         // A version-1 workbook holding the old flat condition shape.
         let doc = LoroDoc::new();
-        doc.get_map(SCHEMA_META_MAP)
-            .insert(SCHEMA_VERSION_KEY, i64::from(1))
+        doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+            .insert(
+                ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+                i64::from(1),
+            )
             .expect("stamp");
         doc.get_map(SHEETS_MAP)
             .insert(DEFAULT_SHEET, "Sheet1")

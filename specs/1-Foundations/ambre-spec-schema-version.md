@@ -72,8 +72,8 @@ container, which is the only moment a wrong reading can still be caught.
 ## 2. MODEL
 
 **CRDT containers.** one: a root map named `meta`, key `schema_version`, holding an unsigned
-integer. The names are `ambre_core::schema::SCHEMA_META_MAP` / `SCHEMA_VERSION_KEY` so the three
-applications cannot drift apart on spelling, and each declares the container in its own schema
+integer. The names are `ambre_core::crdt::FoundationRoot::Meta` / `ambre_core::schema::MetaKey`, so
+the applications cannot drift apart on spelling, and each declares the container in its own schema
 document.
 
 **Why the whole style is one register.** A style spread over one register per attribute lets two

@@ -16,7 +16,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ambre_bus::{SnapshotPurpose as Purpose, SnapshotVerdict as Outcome};
 use ambre_core::Seq;
-use ambre_core::authorship::{PEERS_MAP, peer_key};
 use loro::{
     Counter, IdSpan, LoroDoc, LoroValue, PeerID, ValueOrContainer, VersionVector, json::JsonChange,
 };
@@ -179,8 +178,8 @@ pub(crate) fn check_snapshot(
 /// The registry entry `doc` holds for `peer` (`AUTHOR-019`).
 fn registry_entry(doc: &LoroDoc, peer: PeerID) -> Option<Vec<u8>> {
     match doc
-        .get_map(PEERS_MAP)
-        .get(&peer_key(ambre_core::PeerId(peer)))
+        .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
+        .get(ambre_core::PeerKey::of(ambre_core::PeerId(peer)).as_str())
     {
         Some(ValueOrContainer::Value(LoroValue::Binary(bytes))) => Some(bytes.to_vec()),
         _ => None,
@@ -417,8 +416,11 @@ mod tests {
         // Alice writes on, unsent, and registers her PeerID.
         alice.get_text("t").insert(0, "A").expect("insert");
         alice
-            .get_map(PEERS_MAP)
-            .insert(&peer_key(ambre_core::PeerId(1)), vec![7_u8; 4])
+            .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
+            .insert(
+                ambre_core::PeerKey::of(ambre_core::PeerId(1)).as_str(),
+                vec![7_u8; 4],
+            )
             .expect("entry");
         alice.commit();
         let snapshot = alice.export(ExportMode::Snapshot).expect("snapshot");

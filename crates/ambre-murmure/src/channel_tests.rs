@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use ambre_bus::{
     Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Timestamp, Unreadable,
 };
-use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, SchemaError};
+use ambre_core::schema::SchemaError;
 use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 
@@ -149,10 +149,21 @@ fn a_channel_is_held_as_its_documents_apart() {
     let active = state.doc(state.active_id().document_id()).expect("active");
     let mut meta_roots = root_keys(meta);
     meta_roots.sort();
-    assert_eq!(meta_roots, [CHANNEL, HEADER, SCHEMA_META_MAP, SEGMENTS]);
+    assert_eq!(
+        meta_roots,
+        [
+            CHANNEL,
+            HEADER,
+            ambre_core::crdt::FoundationRoot::Meta.as_str(),
+            SEGMENTS
+        ]
+    );
     let mut active_roots = root_keys(active);
     active_roots.sort();
-    assert_eq!(active_roots, [HEADER, SCHEMA_META_MAP]);
+    assert_eq!(
+        active_roots,
+        [HEADER, ambre_core::crdt::FoundationRoot::Meta.as_str()]
+    );
 }
 
 #[test]
@@ -174,7 +185,10 @@ fn every_document_carries_a_header_and_the_foundation_version() {
             Some(channel.to_string())
         );
         assert_eq!(
-            schema::unsigned(&doc.get_map(SCHEMA_META_MAP), SCHEMA_VERSION_KEY),
+            schema::unsigned(
+                &doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str()),
+                ambre_core::schema::MetaKey::SchemaVersion.as_str()
+            ),
             Some(u64::from(SCHEMA_VERSION))
         );
     }
@@ -400,8 +414,11 @@ fn a_document_a_newer_client_wrote_is_refused_whole() {
     let mut stored = stored_channel();
     let newer = segment_doc(stored.channel);
     newer
-        .get_map(SCHEMA_META_MAP)
-        .insert(SCHEMA_VERSION_KEY, i64::from(SCHEMA_VERSION) + 1)
+        .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+        .insert(
+            ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+            i64::from(SCHEMA_VERSION) + 1,
+        )
         .expect("bump");
     newer.commit();
     stored.segments.insert(stored.active_id, snapshot(&newer));
@@ -427,8 +444,8 @@ fn an_older_document_opens_and_the_walk_writes_nothing() {
     let mut stored = stored_channel();
     let older = segment_doc(stored.channel);
     older
-        .get_map(SCHEMA_META_MAP)
-        .insert(SCHEMA_VERSION_KEY, 1)
+        .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+        .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 1)
         .expect("stamp");
     older.commit();
     let before = older.oplog_vv();
@@ -443,7 +460,10 @@ fn an_older_document_opens_and_the_walk_writes_nothing() {
     let opened = state.doc(stored.active_id.document_id()).expect("held");
     assert_eq!(opened.oplog_vv(), before, "the walk wrote an operation");
     assert_eq!(
-        schema::unsigned(&opened.get_map(SCHEMA_META_MAP), SCHEMA_VERSION_KEY),
+        schema::unsigned(
+            &opened.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str()),
+            ambre_core::schema::MetaKey::SchemaVersion.as_str()
+        ),
         Some(1)
     );
 }
@@ -718,7 +738,15 @@ fn meta_holds_no_member_list() {
     assert!(!text.contains("member"));
     let mut roots = root_keys(meta);
     roots.sort();
-    assert_eq!(roots, [CHANNEL, HEADER, SCHEMA_META_MAP, SEGMENTS]);
+    assert_eq!(
+        roots,
+        [
+            CHANNEL,
+            HEADER,
+            ambre_core::crdt::FoundationRoot::Meta.as_str(),
+            SEGMENTS
+        ]
+    );
 }
 
 #[test]

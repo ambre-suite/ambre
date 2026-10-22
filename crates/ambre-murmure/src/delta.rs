@@ -7,7 +7,7 @@
 //! had no right to write. Only the peer registry of the segment is read, to
 //! learn which user a PeerID stands for (`ambre-spec-op-authorship.md`).
 
-use ambre_core::authorship::{PEERS_MAP, PeerEntry, peer_key};
+use ambre_core::authorship::PeerEntry;
 use ambre_core::{DocumentId, MessageId, UserId};
 use loro::json::{JsonOpContent, JsonSchema, ListOp, MapOp};
 use loro::{
@@ -132,7 +132,11 @@ pub(crate) fn read(payload: &[u8]) -> Result<JsonSchema, Refusal> {
 /// Turn each registry entry back into the bytes it was written as.
 fn restore_entries(update: &mut JsonSchema) {
     for op in update.changes.iter_mut().flat_map(|c| c.ops.iter_mut()) {
-        if !is_root(&op.container, PEERS_MAP, ContainerType::Map) {
+        if !is_root(
+            &op.container,
+            ambre_core::crdt::FoundationRoot::Peers.as_str(),
+            ContainerType::Map,
+        ) {
             continue;
         }
         let JsonOpContent::Map(MapOp::Insert { value, .. }) = &mut op.content else {
@@ -241,7 +245,12 @@ pub(crate) fn check(
                 }
                 _ => return Err(Refusal::Removed),
             },
-            root if is_root(root, PEERS_MAP, ContainerType::Map) => {
+            root if is_root(
+                root,
+                ambre_core::crdt::FoundationRoot::Peers.as_str(),
+                ContainerType::Map,
+            ) =>
+            {
                 entry_allowed(&op.content, signer.peer, user)?;
             }
             // The header and the version register hold no message.
@@ -328,7 +337,12 @@ pub(crate) fn check_amendments(
                 }
                 _ => return Err(Refusal::Removed),
             },
-            root if is_root(root, PEERS_MAP, ContainerType::Map) => {
+            root if is_root(
+                root,
+                ambre_core::crdt::FoundationRoot::Peers.as_str(),
+                ContainerType::Map,
+            ) =>
+            {
                 entry_allowed(&op.content, signer.peer, user)?;
             }
             // The header and the version register hold no amendment.
@@ -416,7 +430,7 @@ fn entry_allowed(
     let JsonOpContent::Map(MapOp::Insert { key, value }) = content else {
         return Err(Refusal::ForeignEntry);
     };
-    if *key != peer_key(peer) {
+    if *key != ambre_core::PeerKey::of(peer).as_str() {
         return Err(Refusal::ForeignEntry);
     }
     let claimed = match value {
@@ -473,8 +487,9 @@ fn is_root(id: &ContainerID, root: &str, kind: ContainerType) -> bool {
 /// The user the registry of `doc` names for `peer`, `None` when its entry is
 /// absent or unreadable (`AUTHOR-006`).
 pub(crate) fn registered(doc: &LoroDoc, peer: ambre_core::PeerId) -> Option<UserId> {
-    let ValueOrContainer::Value(LoroValue::Binary(bytes)) =
-        doc.get_map(PEERS_MAP).get(&peer_key(peer))?
+    let ValueOrContainer::Value(LoroValue::Binary(bytes)) = doc
+        .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
+        .get(ambre_core::PeerKey::of(peer).as_str())?
     else {
         return None;
     };

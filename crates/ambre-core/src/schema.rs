@@ -28,11 +28,16 @@
 
 use thiserror::Error;
 
-/// The root map every application writes its schema version into.
-pub const SCHEMA_META_MAP: &str = "meta";
-
-/// The key inside [`SCHEMA_META_MAP`] holding the version, an unsigned integer.
-pub const SCHEMA_VERSION_KEY: &str = "schema_version";
+crate::crdt_names! {
+    /// The foundation's keys of the root `meta` map,
+    /// [`crate::crdt::FoundationRoot::Meta`]. An application whose `meta` map
+    /// holds more keys spells this one through here, so the spelling cannot
+    /// drift between applications.
+    pub enum MetaKey: FieldKey {
+        /// The version, an unsigned integer.
+        SchemaVersion = "schema_version",
+    }
+}
 
 /// What a document with no version register reads as (`SCHEMA-005`).
 ///

@@ -28,7 +28,7 @@ use ambre_core::Rgb;
 use std::collections::BTreeSet;
 
 use ambre_bus::{CellBorder, CellStyle, TrameCommand};
-use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, verdict};
+use ambre_core::schema::verdict;
 use loro::{ExportMode, LoroValue};
 
 use super::schema_shape::{
@@ -43,6 +43,9 @@ use crate::{CellPos, Col};
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/readings.txt");
+
+/// The foundation's `meta` root, as a pattern.
+const META_ROOT: &str = ambre_core::crdt::FoundationRoot::Meta.as_str();
 
 /// The source the key declarations are read from, as the shape belt reads it.
 const SCHEMA_SOURCE: &str = include_str!("schema.rs");
@@ -218,7 +221,7 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
     let key = stored.keys.first().map(String::as_str)?;
     let root = stored.root.as_str();
     match root {
-        SCHEMA_META_MAP if key == SCHEMA_VERSION_KEY => {
+        META_ROOT if key == ambre_core::schema::MetaKey::SchemaVersion.as_str() => {
             let LoroValue::I64(n) = stored.value else {
                 return None;
             };

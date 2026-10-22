@@ -32,7 +32,7 @@ use ambre_core::Rgba;
 use std::collections::BTreeSet;
 
 use ambre_core::Uuid;
-use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, verdict};
+use ambre_core::schema::verdict;
 use loro::{LoroValue, TreeID, TreeParentId};
 
 use super::schema_shape::{
@@ -50,6 +50,11 @@ use crate::style::ResolvedStyle;
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/readings.txt");
+
+/// The foundation's `meta` root, as a pattern.
+const META_ROOT: &str = ambre_core::crdt::FoundationRoot::Meta.as_str();
+/// The foundation's version key, as a pattern.
+const VERSION_KEY: &str = ambre_core::schema::MetaKey::SchemaVersion.as_str();
 
 /// The stored paths no reader of this build reads. Each is written, kept and
 /// merged, and nothing lays out or draws it yet.
@@ -269,7 +274,7 @@ fn reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         };
     }
     match stored.root.as_str() {
-        SCHEMA_META_MAP => meta_reading(reader, stored),
+        META_ROOT => meta_reading(reader, stored),
         doc::BLOCKS => block_reading(reader, stored),
         doc::ANNOTS => annotation_reading(reader, stored),
         _ => None,
@@ -282,7 +287,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let document = &reader.doc;
     let key = stored.key(0)?;
     match key {
-        SCHEMA_VERSION_KEY => {
+        VERSION_KEY => {
             let LoroValue::I64(n) = stored.value else {
                 return None;
             };

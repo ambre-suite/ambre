@@ -13,7 +13,7 @@
 //! (`PRESENCE-014`). A user's two sessions read as one, so one of them closing
 //! may let the other's hidden block go: its undo then brings back nothing.
 
-use ambre_core::authorship::{PEERS_MAP, PeerEntry, peer_key};
+use ambre_core::authorship::PeerEntry;
 use loro::{LoroValue, TreeID, ValueOrContainer};
 
 use crate::doc;
@@ -100,7 +100,11 @@ impl ProseState {
         if peer == self.peer {
             return true;
         }
-        let entry = match self.doc.get_map(PEERS_MAP).get(&peer_key(peer)) {
+        let entry = match self
+            .doc
+            .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
+            .get(ambre_core::PeerKey::of(peer).as_str())
+        {
             Some(ValueOrContainer::Value(LoroValue::Binary(bytes))) => {
                 PeerEntry::from_bytes(&bytes)
             }

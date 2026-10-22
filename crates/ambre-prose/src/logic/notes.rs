@@ -525,8 +525,8 @@ mod tests {
         entry.delete(doc::ANNOT_NOTE_BLOCK).expect("unnamed");
         doc::blocks(document).delete(block).expect("gone");
         document
-            .get_map(ambre_core::schema::SCHEMA_META_MAP)
-            .insert(ambre_core::schema::SCHEMA_VERSION_KEY, 8_i64)
+            .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+            .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 8_i64)
             .expect("stamped");
         document.commit();
         let bytes = state.export_snapshot();

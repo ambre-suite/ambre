@@ -11,6 +11,7 @@
 //! - [`Version`]: version byte for serialization
 //! - [`schema`]: the persisted schema version and its migration walk
 //! - [`authorship`]: the session nonce and the peer registry entry
+//! - [`crdt`]: the typed root names and map keys of a CRDT document
 //! - [`Error`]: core error types
 //! - [`docfile`]: the `.ambre` container header in its two lineages -- plaintext
 //!   and passphrase-sealed -- shared by every app
@@ -28,6 +29,7 @@ pub mod authorship;
 pub mod channel_kind;
 /// Colours typed by their packing: [`Rgba`], [`Rgb`], [`Argb`].
 pub mod color;
+pub mod crdt;
 pub mod credential;
 pub mod doc_type;
 pub mod docfile;
@@ -73,7 +75,7 @@ pub mod uuid;
 pub mod version;
 
 // Re-export the main types for convenient use.
-pub use authorship::{PeerEntry, PeerId, SessionNonce};
+pub use authorship::{PeerEntry, PeerId, PeerKey, SessionNonce};
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Argb, Rgb, Rgba};
 pub use credential::{OidcCode, OidcState, PresignedUrl};
@@ -113,8 +115,8 @@ pub use payload::{DeltaBytes, EphemeralBytes, SnapshotBytes};
 pub use public_key::{ExchangePublicKey, PublicKey};
 pub use role::Role;
 pub use schema::{
-    SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
-    SchemaVerdict, migrate_schema, migration_peer, scaffold_peer, verdict,
+    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
+    migration_peer, scaffold_peer, verdict,
 };
 pub use seq::Seq;
 pub use span::{LamportStamp, Millis, PageTime, Seconds, Timestamp, UnixMillis, UnixSeconds};

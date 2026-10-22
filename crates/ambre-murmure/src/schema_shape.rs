@@ -596,8 +596,8 @@ fn canonical(from: u32) -> LoroDoc {
         1 | 2 => {
             let doc = LoroDoc::new();
             doc.set_peer_id(1).expect("a peer");
-            doc.get_map(ambre_core::schema::SCHEMA_META_MAP)
-                .insert(ambre_core::schema::SCHEMA_VERSION_KEY, from)
+            doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), from)
                 .expect("the stamp");
             doc.get_map(crate::schema::HEADER)
                 .insert(crate::schema::HEADER_KIND, DocumentKind::Segment.as_str())

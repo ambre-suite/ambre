@@ -23,7 +23,7 @@ use ambre_bus::app::prose::DocOffset;
 use ambre_bus::app::prose::DocSpan;
 use std::collections::BTreeSet;
 
-use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, migration_peer, step_fingerprint};
+use ambre_core::schema::{migration_peer, step_fingerprint};
 use loro::{ExportMode, LoroDoc, LoroText, LoroValue, TreeID};
 
 use crate::doc;
@@ -624,8 +624,11 @@ fn canonical(from: u32) -> LoroDoc {
         _ => panic!("the step from version {from} has no canonical document: write one here"),
     }
     if from > 0 {
-        doc.get_map(SCHEMA_META_MAP)
-            .insert(SCHEMA_VERSION_KEY, i64::from(from))
+        doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+            .insert(
+                ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+                i64::from(from),
+            )
             .expect("the register");
     }
     doc.commit();

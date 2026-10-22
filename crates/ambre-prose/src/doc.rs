@@ -27,7 +27,7 @@ use ambre_bus::app::prose::{
 
 /// The document register: the schema version, the title, the stamps, the
 /// language, and the page sub-map.
-pub(crate) const META: &str = ambre_core::schema::SCHEMA_META_MAP;
+pub(crate) const META: &str = ambre_core::crdt::FoundationRoot::Meta.as_str();
 /// The block hierarchy.
 pub(crate) const BLOCKS: &str = "blocks";
 /// The user's own paragraph styles. The nine built-in names are compiled in and

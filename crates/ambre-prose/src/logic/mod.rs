@@ -475,7 +475,7 @@ impl ProseState {
     /// no edit, so it owes no last-modified stamp. `false` when the CRDT engine
     /// refused the identity, and then nothing changed.
     pub fn adopt_session(&mut self, peer: ambre_core::PeerId, entry: Vec<u8>) -> bool {
-        use ambre_core::authorship::{PEERS_MAP, PEERS_ORIGIN, peer_key};
+        use ambre_core::authorship::PEERS_ORIGIN;
         self.doc.commit();
         if let Err(e) = self.doc.set_peer_id(peer.0) {
             tracing::error!("Prose: the session identity was refused: {e:?}");
@@ -483,7 +483,11 @@ impl ProseState {
         }
         self.peer = peer;
         self.last_exported_vv = self.doc.oplog_vv();
-        self.entry_end = match self.doc.get_map(PEERS_MAP).insert(&peer_key(peer), entry) {
+        self.entry_end = match self
+            .doc
+            .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
+            .insert(ambre_core::PeerKey::of(peer).as_str(), entry)
+        {
             Ok(()) => {
                 self.doc
                     .commit_with(loro::CommitOptions::new().origin(PEERS_ORIGIN));
