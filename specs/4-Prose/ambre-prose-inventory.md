@@ -23,7 +23,7 @@
 | `prose-headings` | Six levels of section title. | implemented | 8 |  |
 | `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | implemented | 17 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | implemented | 8 |  |
-| `prose-selection` | Where the caret is, where it goes, and what a drag selects. | implemented | 37 |  |
+| `prose-selection` | Where the caret is, where it goes, and what a drag selects. | implemented | 38 |  |
 | `prose-table-of-contents` | A list of the document's headings, with the page each one starts on. | implemented | 14 |  |
 | `prose-tables` | A grid of cells inside the document. | implemented | 47 |  |
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | implemented | 45 |  |
@@ -44,4 +44,4 @@
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 14 implemented, 10 partial, 4 design-only. 692 contract rows, 0 loose.**
+**28 features: 14 implemented, 10 partial, 4 design-only. 693 contract rows, 0 loose.**

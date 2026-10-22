@@ -188,8 +188,20 @@ impl ProseUiState {
                 None => (block, laid, upstream),
             },
         };
-        // The document's end lies past any text drafted at the laid end.
-        let offset = if direction == Direction::DocEnd && self.text_ends().is_some() {
+        // A move that lands on the end of a run lands past any text drafted
+        // there (`PROSE-UI-233`). A forward step and a move to a start stop
+        // before it.
+        let to_end = match direction {
+            Direction::DocEnd => self.text_ends().is_some(),
+            Direction::Right
+            | Direction::WordRight
+            | Direction::LineStart
+            | Direction::DocStart => false,
+            _ => self
+                .run_of(next.0)
+                .is_some_and(|run| next.1 == run.len().as_end()),
+        };
+        let offset = if to_end {
             self.block_len(next.0).as_end()
         } else {
             self.to_doc(next.0, next.1)

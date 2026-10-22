@@ -53,6 +53,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-035` | `POST` | Every caret move MUST leave the caret on screen. | this spec section 2 | `ambre_prose::input_tests::every_move_leaves_the_caret_on_screen` | none | verified |
 | `PROSE-UI-158` | `POST` | A move that takes the caret out of the window MUST scroll the least that brings it back. | this spec section 2 | `ambre_prose::input_tests::every_move_leaves_the_caret_on_screen` | none | verified |
 | `PROSE-UI-159` | `POST` | A move to the start or the end of a line MUST honour the wrapped line under the caret, and the caret's affinity at a wrap point, never the paragraph. | this spec section 2 | `ambre_prose::input_tests::home_and_end_honour_the_wrapped_line` | none | verified |
+| `PROSE-UI-233` | `POST` | A move that lands on the end of a block MUST land after the text drafted there, while no layout carries that text yet. | this spec section 2 | `ambre_prose::input_tests::a_move_to_a_blocks_end_lands_after_its_draft` | none | verified |
 | `PROSE-UI-160` | `FRAME` | A move that extends the selection MUST NOT move its anchor. | this spec section 2 | `ambre_prose::input_tests::shift_extends_from_a_fixed_anchor_and_a_plain_move_collapses` | none | verified |
 
 ### 1.4 Drag to select
@@ -100,11 +101,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: `PROSE-UI-010` (`features/ambre-spec-prose-engine.md section 1`) keeps the
   selection out of the document, and the UI thread reaches no network, crypto or persistence path
   (`UI-THREAD-004`).
-* **Verification.** 37 `verified`. The scroll tick is driven by hand in the tests, as the host drives
-  it once a frame.
-  `PROSE-UI-008` is a round trip: the point the layout draws an offset at resolves back to that
-  offset, at any zoom and scroll. `PROSE-UI-071` holds by the shape of the view: it sets a field
-  and opens nothing, and the shell is the one reader of that field.
+* **Verification.** 38 `verified`. The scroll tick is driven by hand in the tests, as the host
+  drives it once a frame. `PROSE-UI-008` is a round trip: the point the layout draws an offset at
+  resolves back to that offset, at any zoom and scroll. `PROSE-UI-071` holds by the shape of the
+  view: it sets a field and opens nothing, and the shell is the one reader of that field.
 
 ---
 

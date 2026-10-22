@@ -7811,6 +7811,8 @@
   {"edge": "verified-by", "from": "PROSE-UI-158", "to": "ambre_prose::input_tests::every_move_leaves_the_caret_on_screen"},
   {"edge": "cites-section", "from": "PROSE-UI-159", "section": "2", "to": "4-Prose/features/ambre-spec-prose-selection.md"},
   {"edge": "verified-by", "from": "PROSE-UI-159", "to": "ambre_prose::input_tests::home_and_end_honour_the_wrapped_line"},
+  {"edge": "cites-section", "from": "PROSE-UI-233", "section": "2", "to": "4-Prose/features/ambre-spec-prose-selection.md"},
+  {"edge": "verified-by", "from": "PROSE-UI-233", "to": "ambre_prose::input_tests::a_move_to_a_blocks_end_lands_after_its_draft"},
   {"edge": "cites-section", "from": "PROSE-UI-160", "section": "2", "to": "4-Prose/features/ambre-spec-prose-selection.md"},
   {"edge": "verified-by", "from": "PROSE-UI-160", "to": "ambre_prose::input_tests::shift_extends_from_a_fixed_anchor_and_a_plain_move_collapses"},
   {"edge": "cites-section", "from": "PROSE-UI-037", "section": "2", "to": "4-Prose/features/ambre-spec-prose-selection.md"},

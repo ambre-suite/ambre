@@ -624,6 +624,32 @@ fn a_third_press_selects_the_text_drafted_at_the_blocks_end() {
     );
 }
 
+/// `PROSE-UI-233`: a move to the end of a block lands after the text
+/// drafted there, before a layout carries it.
+#[test]
+fn a_move_to_a_blocks_end_lands_after_its_draft() {
+    // The key, the block drafted at its end, and the block the caret
+    // starts at the start of.
+    for (key, drafted, from) in [
+        (ProseKey::End, 0, 0),
+        (ProseKey::Down, 1, 1),
+        (ProseKey::Left, 0, 1),
+    ] {
+        let mut rig = Rig::new(&["hello", "world"]);
+        let blocks = rig.blocks();
+        rig.ui.set_caret((blocks[drafted], DocOffset::new(5)));
+        rig.type_text("xyz");
+        rig.ui.set_caret((blocks[from], DocOffset::ZERO));
+        rig.key(key, false, false);
+        let caret = rig.caret();
+        assert_eq!(
+            (caret.block_id, caret.offset),
+            (blocks[drafted], DocOffset::new(8)),
+            "{key:?}"
+        );
+    }
+}
+
 /// `PROSE-UI-008`: the shared hit-test answers a document
 /// offset while text drafted before the point waits for the layout.
 #[test]
