@@ -392,6 +392,7 @@
   {"edge": "cites-section", "from": "UI-THREAD-027", "section": "2", "to": "1-Foundations/ambre-spec-commands.md"},
   {"edge": "cites-section", "from": "UI-THREAD-028", "section": "2", "to": "1-Foundations/ambre-spec-commands.md"},
   {"edge": "verified-by", "from": "UI-THREAD-028", "to": "ambre_commands::keybinding::tests::the_control_key_and_the_command_key_fold_into_one_chord"},
+  {"edge": "verified-by", "from": "UI-THREAD-028", "to": "ambre_murmure::view::tests::the_command_key_holds_the_composer_chords"},
   {"edge": "cites-section", "from": "UI-THREAD-038", "section": "2", "to": "1-Foundations/ambre-spec-commands.md"},
   {"edge": "verified-by", "from": "UI-THREAD-038", "to": "ambre_commands::tests::keymap_resolves_default_bindings"},
   {"edge": "cites-section", "from": "UI-THREAD-040", "section": "3", "to": "1-Foundations/ambre-spec-commands.md"},

@@ -33,6 +33,7 @@ use ambre_bus::{
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
+use ambre_commands::Modifiers;
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::PendingEdit;
@@ -788,24 +789,29 @@ impl Composer {
     /// edit (`MURMURE-204`), and otherwise gives the keys back to the list.
     ///
     /// An open `@` list takes its own keys first (`MURMURE-554`). Answers
-    /// whether the composer took the key.
-    pub fn key(&mut self, of: DraftOf, key: &str, shift: bool, ctrl: bool, alt: bool) -> bool {
+    /// whether the composer took the key. `Ctrl` here is the primary
+    /// accelerator, the command key on macOS (`UI-THREAD-028`).
+    pub fn key(&mut self, of: DraftOf, key: &str, mods: Modifiers) -> bool {
         if self.composing {
             return false;
         }
-        if !(shift || ctrl || alt) && self.list_key(of, key) {
+        if mods == Modifiers::NONE && self.list_key(of, key) {
             return true;
         }
+        let Modifiers {
+            primary,
+            alt,
+            shift,
+        } = mods;
         // A chord puts its style on the selection once the keys before it
         // landed (`MURMURE-431`).
-        if ctrl
-            && !(shift || alt)
+        if mods == Modifiers::PRIMARY
             && let Some(style) = markers::chord_style(key)
         {
             self.toggle(of, style);
             return true;
         }
-        let word = ctrl || alt;
+        let word = primary || alt;
         let intent = match key {
             "Enter" if shift => {
                 // A line break closes the block marker of its line.
@@ -828,7 +834,7 @@ impl Composer {
                 self.blur();
                 return true;
             }
-            "z" | "Z" | "y" | "Y" if ctrl => {
+            "z" | "Z" | "y" | "Y" if primary => {
                 let redo = shift || key.eq_ignore_ascii_case("y");
                 self.typed = true;
                 self.editor(of);
@@ -836,7 +842,7 @@ impl Composer {
                 self.saying = Some((of, Say::Draft));
                 return true;
             }
-            "a" | "A" if ctrl => EditIntent::SelectAll,
+            "a" | "A" if primary => EditIntent::SelectAll,
             "Backspace" => EditIntent::Backspace,
             "Delete" => EditIntent::Delete,
             "ArrowLeft" => EditIntent::Left {

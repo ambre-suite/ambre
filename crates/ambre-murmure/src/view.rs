@@ -24,6 +24,7 @@ use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, TextInput,
     Theme, ThemeControl,
 };
+use ambre_commands::Modifiers;
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
@@ -1673,30 +1674,37 @@ impl MurmureView {
                 shift,
                 ctrl,
                 alt,
-                meta: false,
+                meta,
             } if self.composer.focused() => {
+                // The control and the command keys are one accelerator, so
+                // the composer's chords hold on every platform
+                // (`UI-THREAD-028`).
+                let mods = Modifiers::from_event(ctrl, alt, shift, meta);
                 // Up in an empty composer edits the member's latest message,
                 // or reply in a thread (`MURMURE-178`, `MURMURE-527`). With
                 // none, it moves the caret as ever.
-                let bare = !(shift || ctrl || alt);
                 if key == "ArrowUp"
-                    && bare
+                    && mods == Modifiers::NONE
                     && self.composer.blank(channel)
                     && let Some(edit) = self.last_own_edit(channel)
                 {
                     self.composer.start_edit(edit);
                     return Some(true);
                 }
-                if ctrl && !(shift || alt) && key.chars().eq([EMOJI_KEY]) {
+                if mods == Modifiers::PRIMARY && key.chars().eq([EMOJI_KEY]) {
                     (self.reads.ask_emoji)(self.region == Region::Thread);
                     return Some(true);
                 }
-                if !self.composer.key(channel, key, shift, ctrl, alt) {
+                if !self.composer.key(channel, key, mods) {
                     return None;
                 }
                 // The box is drawn, so its turn by Alt+Enter is said
                 // (`MURMURE-535`).
-                if key == "Enter" && alt && !shift && matches!(channel, DraftOf::Thread(..)) {
+                if key == "Enter"
+                    && mods.alt
+                    && !mods.shift
+                    && matches!(channel, DraftOf::Thread(..))
+                {
                     let checked = self.composer.also_in_channel(channel);
                     (self.reads.announce)(&also_said(checked));
                 }
@@ -3796,6 +3804,44 @@ mod tests {
             meta: false,
         };
         page.view.handle_input(&ev)
+    }
+
+    /// A `Cmd` chord, as macOS reports it: the command key, no control.
+    fn command(page: &mut Page, key: &str) -> bool {
+        let ev = InputEvent::Key {
+            key: key.to_owned(),
+            ctrl: false,
+            alt: false,
+            shift: false,
+            meta: true,
+        };
+        page.view.handle_input(&ev)
+    }
+
+    /// `UI-THREAD-028`: on macOS the composer's chords are the command key's.
+    /// `Cmd+B` styles the selection, `Cmd+Z` takes a word back, and `Cmd+;`
+    /// opens the picker, as `Ctrl` does elsewhere.
+    #[test]
+    fn the_command_key_holds_the_composer_chords() {
+        use ambre_bus::TextStyle::Bold;
+        let channel = ChannelId::new();
+        let mut page = composing(channel);
+        press_composer(&mut page);
+        type_slowly(&mut page, "hi yo");
+        for _ in 0..2 {
+            shift_key(&mut page, "ArrowLeft");
+        }
+        frame_with_fonts(&mut page.view);
+        assert!(command(&mut page, "b"), "the composer takes Cmd+B");
+        frame_with_fonts(&mut page.view);
+        assert_eq!(page.view.composer().styles(channel), [styled(Bold, 3..5)]);
+
+        key(&mut page, "End", false, ambre_bus::PageTime(0.0));
+        assert!(command(&mut page, "z"), "the composer takes Cmd+Z");
+        assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
+
+        assert!(command(&mut page, ";"), "the composer takes Cmd+;");
+        assert_eq!(*page.asked_emoji.borrow(), [false]);
     }
 
     /// Type `text` one key per frame, as a member does.
