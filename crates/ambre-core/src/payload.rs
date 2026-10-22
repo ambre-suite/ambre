@@ -65,6 +65,18 @@ macro_rules! define_payload {
             }
         }
 
+        impl<const N: usize> PartialEq<&[u8; N]> for $name {
+            fn eq(&self, other: &&[u8; N]) -> bool {
+                self.0 == *other
+            }
+        }
+
+        impl PartialEq<Vec<u8>> for $name {
+            fn eq(&self, other: &Vec<u8>) -> bool {
+                &self.0 == other
+            }
+        }
+
         impl PartialEq<[u8]> for $name {
             fn eq(&self, other: &[u8]) -> bool {
                 self.0 == other

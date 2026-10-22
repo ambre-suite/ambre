@@ -343,11 +343,11 @@ pub(crate) async fn handle_update(
     // persisted durably (S3 + Redis pending) and fanned out to every subscriber.
     // That is the same storage/cost abuse the media and snapshot caps close, on
     // the hot path.
-    let cipher_len = update.ciphertext.len();
+    let cipher_len = ambre_core::ByteSize::of_len(update.ciphertext.len());
     if cipher_len > state.config.delta_max_bytes {
         let detail = format!(
             "delta ciphertext {} bytes exceeds max {}",
-            cipher_len, state.config.delta_max_bytes
+            cipher_len.0, state.config.delta_max_bytes.0
         );
         refuse_delta(outbound_tx, &update, RefusalCode::PayloadTooLarge, &detail).await;
         return;
@@ -605,7 +605,7 @@ pub(crate) async fn handle_ephemeral(
     // blob is tiny. This mirrors the `handle_update` delta cap for the
     // fire-and-forget path. An oversized ephemeral cannot be fanned out to every
     // subscriber and stored in the presence hash. Fire-and-forget: drop silently.
-    if eph.ciphertext.len() > state.config.ephemeral_max_bytes {
+    if ambre_core::ByteSize::of_len(eph.ciphertext.len()) > state.config.ephemeral_max_bytes {
         return;
     }
 
@@ -1329,7 +1329,7 @@ mod ephemeral_binding_tests {
         };
         // Tighten the cap so the test payload is unambiguously oversized.
         Arc::get_mut(&mut state).unwrap().config = Arc::new(crate::state::Config {
-            ephemeral_max_bytes: 8,
+            ephemeral_max_bytes: ambre_core::ByteSize(8),
             ..Default::default()
         });
         let doc_id = DocumentId::new();
@@ -1425,7 +1425,7 @@ mod delta_size_cap_tests {
     use ambre_protocol::public_data::UpdatePublicData;
     use rustis::commands::{GenericCommands, ListCommands};
 
-    async fn test_state(delta_max_bytes: usize) -> Option<Arc<AppState>> {
+    async fn test_state(delta_max_bytes: u64) -> Option<Arc<AppState>> {
         let redis = rustis::client::Client::connect("redis://localhost:6379")
             .await
             .ok()?;
@@ -1435,7 +1435,7 @@ mod delta_size_cap_tests {
             .connect_lazy("postgres://localhost/ambre")
             .ok()?;
         let config = crate::state::Config {
-            delta_max_bytes,
+            delta_max_bytes: ambre_core::ByteSize(delta_max_bytes),
             ..Default::default()
         };
         Some(Arc::new(AppState {

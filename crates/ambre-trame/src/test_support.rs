@@ -54,7 +54,7 @@ impl MockSyncHandle {
         if let Some(payload) = &outcome.update {
             self.send(SyncCommand::SendUpdate {
                 document_id,
-                payload: payload.clone(),
+                payload: payload.clone().into(),
                 summary: None,
             });
         }
@@ -88,7 +88,7 @@ impl MockSyncHandle {
         self.drain()
             .into_iter()
             .filter_map(|cmd| match cmd {
-                SyncCommand::SendUpdate { payload, .. } => Some(payload),
+                SyncCommand::SendUpdate { payload, .. } => Some(payload.into_bytes()),
                 _ => None,
             })
             .collect()

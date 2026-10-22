@@ -69,7 +69,7 @@ pub enum SyncCommand {
     /// Raw CRDT delta produced by `LoroDoc::export_updates()`.
     SendUpdate {
         document_id: DocumentId,
-        payload: Vec<u8>,
+        payload: ambre_core::DeltaBytes,
         /// What the delta holds, when the application wrote a summary
         /// (`ambre-spec-residency.md`). A Murmure message carries one
         /// (the Murmure messages spec). The Sync worker seals it inside the ciphertext
@@ -82,7 +82,7 @@ pub enum SyncCommand {
     /// PeerID that wrote them (`AUTHOR-028`).
     SendUnsent {
         document_id: DocumentId,
-        payload: Vec<u8>,
+        payload: ambre_core::DeltaBytes,
         nonce: SessionNonce,
     },
 

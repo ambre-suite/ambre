@@ -9,13 +9,14 @@
 use std::collections::HashMap;
 
 use ambre_bus::DocumentId;
+use ambre_core::ByteSize;
 use ambre_core::residency::{Held, Residency};
 
 use crate::PersistWrite;
 
 /// The bytes the local store may hold on one client: the row "Local store,
 /// per client" of `ambre-spec-budgets.md` section 6.
-pub const LOCAL_STORE_BUDGET: u64 = 500 << 20;
+pub const LOCAL_STORE_BUDGET: ByteSize = ByteSize(500 << 20);
 
 /// What one document costs in the store, by kind of row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -124,7 +125,7 @@ pub struct Observed {
 pub struct StoreLedger {
     residency: Residency<DocumentId>,
     costs: HashMap<DocumentId, Cost>,
-    budget: u64,
+    budget: ByteSize,
 }
 
 impl Default for StoreLedger {
@@ -136,7 +137,7 @@ impl Default for StoreLedger {
 impl StoreLedger {
     /// An empty ledger that keeps the store within `budget` bytes.
     #[must_use]
-    pub fn new(budget: u64) -> Self {
+    pub fn new(budget: ByteSize) -> Self {
         Self {
             residency: Residency::new(),
             costs: HashMap::new(),
@@ -187,7 +188,7 @@ impl StoreLedger {
     /// Record what `id` costs, and mark it unsent when a write changed it.
     fn charge(&mut self, id: DocumentId, cost: Cost, unsent: bool) {
         self.costs.insert(id, cost);
-        self.residency.hold(id, cost.total());
+        self.residency.hold(id, ByteSize(cost.total()));
         if unsent {
             self.residency.set_unsent(id, true);
         }
@@ -198,7 +199,7 @@ impl StoreLedger {
     ///
     /// A copy named to leave is never `id`, and never a document with a
     /// change the relay has not acknowledged (`RESID-019`).
-    pub fn refused(&mut self, id: DocumentId, need: u64, retried: bool) -> Refusal {
+    pub fn refused(&mut self, id: DocumentId, need: ByteSize, retried: bool) -> Refusal {
         if !retried {
             let room = self.residency.bytes().saturating_sub(need);
             let evict: Vec<DocumentId> = self
@@ -241,7 +242,7 @@ impl StoreLedger {
 
     /// The bytes every copy costs together.
     #[must_use]
-    pub fn bytes(&self) -> u64 {
+    pub fn bytes(&self) -> ByteSize {
         self.residency.bytes()
     }
 
@@ -260,7 +261,7 @@ impl StoreLedger {
     /// Count a document as an earlier run left it. No view shows it yet.
     pub fn restore(&mut self, id: DocumentId, meta: Meta) {
         let mut held = Held::default();
-        held.bytes = meta.cost.total();
+        held.bytes = ByteSize(meta.cost.total());
         held.immutable = meta.immutable;
         held.unsent = meta.unsent;
         self.costs.insert(id, meta.cost);
@@ -299,10 +300,10 @@ mod tests {
     /// until the rest fits, and stops counting them.
     #[test]
     fn the_store_stays_within_its_budget() {
-        let mut ledger = StoreLedger::new(100);
+        let mut ledger = StoreLedger::new(ByteSize(100));
         assert!(settled(&mut ledger, doc(1), 60).is_empty());
         assert_eq!(settled(&mut ledger, doc(2), 60), vec![doc(1)]);
-        assert_eq!(ledger.bytes(), 60);
+        assert_eq!(ledger.bytes(), ByteSize(60));
         assert!(ledger.meta(doc(1)).is_none());
     }
 
@@ -310,7 +311,7 @@ mod tests {
     /// acknowledged, never leaves, even past the budget.
     #[test]
     fn a_shown_or_unsent_copy_never_leaves() {
-        let mut ledger = StoreLedger::new(100);
+        let mut ledger = StoreLedger::new(ByteSize(100));
         ledger.observe(doc(1), &PersistWrite::Shown);
         ledger.observe(doc(1), &PersistWrite::Snapshot(vec![0; 80]));
         ledger.observe(doc(1), &PersistWrite::Hidden);
@@ -318,7 +319,7 @@ mod tests {
         ledger.observe(doc(2), &PersistWrite::Shown);
         let observed = ledger.observe(doc(2), &PersistWrite::Delta(vec![0; 80]));
         assert!(observed.evict.is_empty(), "both stay");
-        assert_eq!(ledger.refused(doc(2), 10, false), Refusal::Full);
+        assert_eq!(ledger.refused(doc(2), ByteSize(10), false), Refusal::Full);
         let observed = ledger.observe(doc(1), &PersistWrite::Sent);
         assert_eq!(observed.evict, vec![doc(1)], "once acknowledged, it may go");
     }
@@ -327,33 +328,33 @@ mod tests {
     /// once. A second refusal stops editing only for an unsent change.
     #[test]
     fn a_refused_write_frees_what_the_relay_holds_then_retries_once() {
-        let mut ledger = StoreLedger::new(1_000);
+        let mut ledger = StoreLedger::new(ByteSize(1_000));
         settled(&mut ledger, doc(1), 30);
         settled(&mut ledger, doc(2), 30);
         settled(&mut ledger, doc(3), 30);
         ledger.observe(doc(4), &PersistWrite::Shown);
         ledger.observe(doc(4), &PersistWrite::Delta(vec![0; 10]));
         assert_eq!(
-            ledger.refused(doc(4), 50, false),
+            ledger.refused(doc(4), ByteSize(50), false),
             Refusal::Retry {
                 evict: vec![doc(1), doc(2)]
             },
             "the least recently viewed leave until the write fits"
         );
-        assert_eq!(ledger.bytes(), 40);
-        assert_eq!(ledger.refused(doc(4), 50, true), Refusal::Full);
-        assert_eq!(ledger.refused(doc(3), 50, true), Refusal::Drop);
+        assert_eq!(ledger.bytes(), ByteSize(40));
+        assert_eq!(ledger.refused(doc(4), ByteSize(50), true), Refusal::Full);
+        assert_eq!(ledger.refused(doc(3), ByteSize(50), true), Refusal::Drop);
     }
 
     /// `RESID-008`: what a reload restores keeps the order of the views.
     #[test]
     fn a_reload_keeps_the_order_of_the_views() {
-        let mut ledger = StoreLedger::new(100);
+        let mut ledger = StoreLedger::new(ByteSize(100));
         settled(&mut ledger, doc(1), 40);
         settled(&mut ledger, doc(2), 40);
         ledger.observe(doc(1), &PersistWrite::Shown);
         ledger.observe(doc(1), &PersistWrite::Hidden);
-        let mut reloaded = StoreLedger::new(100);
+        let mut reloaded = StoreLedger::new(ByteSize(100));
         for id in [doc(1), doc(2)] {
             let row = ledger.meta(id).map(|meta| meta.encode());
             let meta = row.and_then(|row| Meta::decode(&row));

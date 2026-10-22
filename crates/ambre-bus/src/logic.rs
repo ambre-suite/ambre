@@ -97,7 +97,7 @@ pub enum LogicCommand {
         snapshot: Option<ambre_core::SnapshotBytes>,
         /// The deltas logged since that snapshot, in no set order. A Loro
         /// import does not depend on it.
-        deltas: Vec<Vec<u8>>,
+        deltas: Vec<ambre_core::DeltaBytes>,
         /// The earlier sessions of this user on the document: each PeerID with
         /// the nonce it derives from, so what one left unsent travels
         /// (`AUTHOR-028`).

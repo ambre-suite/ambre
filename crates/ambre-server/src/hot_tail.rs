@@ -21,7 +21,7 @@ pub const INLINE_CAP: InlineCap = InlineCap {
 
 /// How long a document goes without a write before its whole tail moves out
 /// (`ambre-spec-budgets.md section 8`; `SRV-152`).
-pub const IDLE_SECS: i64 = 24 * 3600;
+pub const IDLE_SECS: ambre_core::Seconds = ambre_core::Seconds(24 * 3600);
 
 /// How many idle documents one pass moves.
 const IDLE_PASS_LIMIT: i64 = 100;

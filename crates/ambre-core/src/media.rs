@@ -68,9 +68,43 @@ impl From<String> for MediaType {
 }
 
 /// A size in bytes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
 #[serde(transparent)]
 pub struct ByteSize(pub u64);
+
+impl ByteSize {
+    /// The size of a buffer `len` bytes long, saturating at `u64::MAX`.
+    #[must_use]
+    pub fn of_len(len: usize) -> Self {
+        Self(u64::try_from(len).unwrap_or(u64::MAX))
+    }
+
+    /// The size as a buffer length, saturating at `usize::MAX`.
+    #[must_use]
+    pub fn as_len(self) -> usize {
+        usize::try_from(self.0).unwrap_or(usize::MAX)
+    }
+
+    /// The two sizes together, saturating at `u64::MAX` bytes.
+    #[must_use]
+    pub const fn saturating_add(self, other: Self) -> Self {
+        Self(self.0.saturating_add(other.0))
+    }
+
+    /// The bytes past `other`, or zero when `other` is larger.
+    #[must_use]
+    pub const fn saturating_sub(self, other: Self) -> Self {
+        Self(self.0.saturating_sub(other.0))
+    }
+}
+
+impl std::iter::Sum for ByteSize {
+    fn sum<I: Iterator<Item = Self>>(sizes: I) -> Self {
+        sizes.fold(Self(0), Self::saturating_add)
+    }
+}
 
 #[cfg(test)]
 mod tests {

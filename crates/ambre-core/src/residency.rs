@@ -10,11 +10,13 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use crate::ByteSize;
+
 /// What the policy knows of one held document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Held {
     /// The bytes the document costs in this tier.
-    pub bytes: u64,
+    pub bytes: ByteSize,
     /// A view shows it, so it never leaves (`RESID-003`).
     pub pinned: bool,
     /// Its application marks it immutable, so it leaves first (`RESID-007`).
@@ -66,7 +68,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
 
     /// Hold a document of `bytes`, or record its new size. A document held for
     /// the first time counts as viewed now.
-    pub fn hold(&mut self, key: K, bytes: u64) {
+    pub fn hold(&mut self, key: K, bytes: ByteSize) {
         let tick = self.next_tick();
         self.held
             .entry(key)
@@ -140,7 +142,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
 
     /// The bytes every held document costs together.
     #[must_use]
-    pub fn bytes(&self) -> u64 {
+    pub fn bytes(&self) -> ByteSize {
         self.held.values().map(|held| held.bytes).sum()
     }
 
@@ -152,9 +154,9 @@ impl<K: Copy + Eq + Hash> Residency<K> {
     /// documents that cannot leave exceed the budget alone, every other one is
     /// named and the tier stays over it.
     #[must_use]
-    pub fn evictions(&self, budget: u64) -> Vec<K> {
+    pub fn evictions(&self, budget: ByteSize) -> Vec<K> {
         let mut over = self.bytes().saturating_sub(budget);
-        if over == 0 {
+        if over == ByteSize(0) {
             return Vec::new();
         }
         let mut candidates: Vec<(&K, &Held)> = self
@@ -168,7 +170,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
         candidates
             .into_iter()
             .take_while(|(_, held)| {
-                let take = over > 0;
+                let take = over > ByteSize(0);
                 over = over.saturating_sub(held.bytes);
                 take
             })
@@ -181,19 +183,22 @@ impl<K: Copy + Eq + Hash> Residency<K> {
 mod tests {
     use super::*;
 
-    const MB: u64 = 1 << 20;
+    /// `n` mebibytes.
+    const fn mb(n: u64) -> ByteSize {
+        ByteSize(n << 20)
+    }
 
     /// Three documents of 10 MB each, held in the order 1, 2, 3.
     fn three() -> Residency<u8> {
         let mut tier = Residency::new();
         for key in 1..=3 {
-            tier.hold(key, 10 * MB);
+            tier.hold(key, mb(10));
         }
         tier
     }
 
     /// Hold every document the evictions name gone, as the caller does.
-    fn evict(tier: &mut Residency<u8>, budget: u64) -> Vec<u8> {
+    fn evict(tier: &mut Residency<u8>, budget: ByteSize) -> Vec<u8> {
         let gone = tier.evictions(budget);
         for key in &gone {
             tier.release(*key);
@@ -204,9 +209,9 @@ mod tests {
     #[test]
     fn a_tier_past_its_budget_comes_back_within_it() {
         let mut tier = three();
-        tier.hold(4, 25 * MB);
-        evict(&mut tier, 32 * MB);
-        assert!(tier.bytes() <= 32 * MB);
+        tier.hold(4, mb(25));
+        evict(&mut tier, mb(32));
+        assert!(tier.bytes() <= mb(32));
         assert!(
             tier.holds(4),
             "the last held stays while the rest makes room"
@@ -215,14 +220,14 @@ mod tests {
 
     #[test]
     fn a_tier_within_its_budget_evicts_nothing() {
-        assert!(three().evictions(30 * MB).is_empty());
+        assert!(three().evictions(mb(30)).is_empty());
     }
 
     #[test]
     fn a_pinned_document_never_leaves() {
         let mut tier = three();
         tier.pin(1);
-        assert_eq!(evict(&mut tier, 0), vec![2, 3]);
+        assert_eq!(evict(&mut tier, ByteSize(0)), vec![2, 3]);
         assert!(tier.holds(1));
     }
 
@@ -232,9 +237,9 @@ mod tests {
     fn an_unsent_change_keeps_its_document() {
         let mut tier = three();
         tier.set_unsent(1, true);
-        assert_eq!(evict(&mut tier, 0), vec![2, 3]);
+        assert_eq!(evict(&mut tier, ByteSize(0)), vec![2, 3]);
         tier.set_unsent(1, false);
-        assert_eq!(evict(&mut tier, 0), vec![1]);
+        assert_eq!(evict(&mut tier, ByteSize(0)), vec![1]);
     }
 
     /// Holds `RESID-007`: an immutable document leaves first, whatever its
@@ -243,7 +248,7 @@ mod tests {
     fn an_immutable_document_leaves_before_any_other() {
         let mut tier = three();
         tier.set_immutable(3, true);
-        assert_eq!(tier.evictions(20 * MB), vec![3]);
+        assert_eq!(tier.evictions(mb(20)), vec![3]);
     }
 
     /// Holds `RESID-008`: within a rank, the least recently viewed leaves
@@ -253,18 +258,18 @@ mod tests {
         let mut tier = three();
         tier.pin(1);
         tier.unpin(1);
-        assert_eq!(tier.evictions(10 * MB), vec![2, 3]);
+        assert_eq!(tier.evictions(mb(10)), vec![2, 3]);
         tier.pin(2);
         tier.unpin(2);
-        assert_eq!(tier.evictions(20 * MB), vec![3]);
+        assert_eq!(tier.evictions(mb(20)), vec![3]);
         let mut reloaded = Residency::new();
         for key in [3, 1, 2] {
             if let Some(held) = tier.get(key) {
                 reloaded.restore(key, *held, held.viewed());
             }
         }
-        reloaded.hold(4, 10 * MB);
-        assert_eq!(reloaded.evictions(20 * MB), vec![3, 1]);
+        reloaded.hold(4, mb(10));
+        assert_eq!(reloaded.evictions(mb(20)), vec![3, 1]);
     }
 
     #[test]
@@ -272,7 +277,7 @@ mod tests {
         let mut tier = three();
         tier.pin(1);
         tier.set_unsent(2, true);
-        assert_eq!(evict(&mut tier, MB), vec![3]);
-        assert_eq!(tier.bytes(), 20 * MB);
+        assert_eq!(evict(&mut tier, mb(1)), vec![3]);
+        assert_eq!(tier.bytes(), mb(20));
     }
 }

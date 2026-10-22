@@ -384,7 +384,10 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
         .expect("adopt");
 
     let relocated = bob
-        .relocate_locked(old.document_id(), &[waiting.delta, reacted.delta])
+        .relocate_locked(
+            old.document_id(),
+            &[waiting.delta.into(), reacted.delta.into()],
+        )
         .expect("relocate");
     assert!(relocated.replay.is_empty(), "no older message changed");
     let sent = relocated.sent.expect("a message moves");
@@ -445,7 +448,7 @@ fn a_refused_reaction_alone_moves_nothing() {
         .expect("react")
         .expect("a reaction");
     let moved = alice
-        .relocate_locked(old.document_id(), &[reacted.delta])
+        .relocate_locked(old.document_id(), &[reacted.delta.into()])
         .expect("relocate");
     assert!(moved.sent.is_none());
     assert!(moved.replay.is_empty(), "a reaction is not replayed");

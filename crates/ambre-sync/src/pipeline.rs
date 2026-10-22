@@ -105,7 +105,7 @@ pub struct UpdateBody {
     /// document (`RESID-014`).
     pub summary: Option<ActivitySummary>,
     /// The Loro update, opaque to the envelope.
-    pub delta: Vec<u8>,
+    pub delta: ambre_core::DeltaBytes,
 }
 
 /// The body of an update: the nonce, the summary marker, the summary when there
@@ -160,7 +160,7 @@ pub fn split_update_body(body: Vec<u8>) -> Result<UpdateBody, PipelineError> {
     Ok(UpdateBody {
         nonce,
         summary,
-        delta: delta.to_vec(),
+        delta: ambre_core::DeltaBytes::new(delta.to_vec()),
     })
 }
 
@@ -940,7 +940,7 @@ mod tests {
                 UpdateBody {
                     nonce,
                     summary: None,
-                    delta: b"delta".to_vec()
+                    delta: ambre_core::DeltaBytes::new(b"delta".to_vec())
                 }
             );
         }
@@ -978,7 +978,7 @@ mod tests {
             UpdateBody {
                 nonce,
                 summary: Some(summary),
-                delta: b"delta".to_vec()
+                delta: ambre_core::DeltaBytes::new(b"delta".to_vec())
             }
         );
     }

@@ -124,7 +124,7 @@ impl LogicState {
             Ok(sent) => {
                 self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: sent.segment.document_id(),
-                    payload: sent.delta,
+                    payload: sent.delta.into(),
                     summary: Some(sent.summary),
                 });
                 self.send_to_ui(UiEvent::Channel {
@@ -295,7 +295,10 @@ mod tests {
                 panic!("one whole upload, got {sent:?}");
             };
             assert_eq!(*up, document_id);
-            assert!(crate::sent_by(payload, peer), "only {peer:#x} wrote it");
+            assert!(
+                crate::sent_by(payload.as_bytes(), peer),
+                "only {peer:#x} wrote it"
+            );
         }
     }
 

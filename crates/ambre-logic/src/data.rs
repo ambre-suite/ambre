@@ -391,13 +391,13 @@ impl LogicState {
             // The delta that leaves for the relay is the one saved: it holds
             // every operation the command wrote.
             if persist {
-                self.owe_delta(document_id, payload.clone());
+                self.owe_delta(document_id, payload.clone().into());
             }
             // A document command carries no activity summary: only Murmure
             // writes one today (the Murmure messages spec).
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id,
-                payload,
+                payload: payload.into(),
                 summary: None,
             });
         }
@@ -513,7 +513,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         snapshot: Option<ambre_core::SnapshotBytes>,
-        deltas: Vec<Vec<u8>>,
+        deltas: Vec<ambre_core::DeltaBytes>,
         restore: Restore,
     ) -> bool {
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
@@ -540,6 +540,10 @@ impl LogicState {
         // replay is. The log is folded into a snapshot at once, so the next
         // restore reads one row.
         if !deltas.is_empty() {
+            let deltas: Vec<Vec<u8>> = deltas
+                .into_iter()
+                .map(ambre_core::DeltaBytes::into_bytes)
+                .collect();
             events.extend(doc.apply_remote_batch(&deltas));
             if restore == Restore::Kept {
                 self.owe_snapshot(document_id);
@@ -689,7 +693,7 @@ impl LogicState {
         for (payload, nonce) in sends {
             self.send_to_sync(SyncCommand::SendUnsent {
                 document_id,
-                payload,
+                payload: payload.into(),
                 nonce,
             });
         }
@@ -710,7 +714,7 @@ impl LogicState {
         {
             return;
         }
-        let accepted = authored_by(&delta.payload, delta.peer);
+        let accepted = authored_by(delta.payload.as_bytes(), delta.peer);
         self.record_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
         if !accepted {
             tracing::warn!(
@@ -720,8 +724,12 @@ impl LogicState {
             );
             return;
         }
-        self.apply_remote(document_id, Order::Update(delta.seq), &delta.payload);
-        self.track_waiting(document_id, &[(delta.seq, delta.payload.as_slice())]);
+        self.apply_remote(
+            document_id,
+            Order::Update(delta.seq),
+            delta.payload.as_bytes(),
+        );
+        self.track_waiting(document_id, &[(delta.seq, delta.payload.as_bytes())]);
     }
 
     /// Note what the deltas just applied wait on, and drop what the document
@@ -761,14 +769,20 @@ impl LogicState {
     /// Note the relay's number of a delta, and what it carries when it was
     /// accepted. A snapshot check reads which deltas a horizon covers from
     /// it (`AUTHOR-016`).
-    fn record_seq(&mut self, document_id: DocumentId, seq: Seq, payload: Option<&Vec<u8>>) {
+    fn record_seq(
+        &mut self,
+        document_id: DocumentId,
+        seq: Seq,
+        payload: Option<&ambre_core::DeltaBytes>,
+    ) {
+        let payload = payload.map(ambre_core::DeltaBytes::as_bytes);
         if let Some(doc) = self.docs.get_mut(&document_id) {
-            doc.ledger.record(seq, payload.map(Vec::as_slice));
+            doc.ledger.record(seq, payload);
             if let Some(payload) = payload {
                 doc.relay_saw(payload);
             }
         } else {
-            self.record_channel_seq(document_id, seq, payload.map(Vec::as_slice));
+            self.record_channel_seq(document_id, seq, payload);
         }
     }
 
@@ -782,10 +796,10 @@ impl LogicState {
         let accepted: Vec<(Seq, Vec<u8>)> = deltas
             .into_iter()
             .filter_map(|delta| {
-                let accepted = authored_by(&delta.payload, delta.peer);
+                let accepted = authored_by(delta.payload.as_bytes(), delta.peer);
                 self.record_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
                 if accepted {
-                    Some((delta.seq, delta.payload))
+                    Some((delta.seq, delta.payload.into_bytes()))
                 } else {
                     tracing::warn!(
                         "Logic: refused a replayed delta on doc {document_id}: an operation is \
@@ -859,7 +873,7 @@ impl LogicState {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
         }
         if persist {
-            self.owe_delta(document_id, payload.to_vec());
+            self.owe_delta(document_id, payload.to_vec().into());
             self.owe_layout(document_id);
         }
     }

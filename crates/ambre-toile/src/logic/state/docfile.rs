@@ -44,7 +44,7 @@ impl ToileState {
         // The container has said its piece; the schema register inside the
         // payload is a separate gate and it runs before any container is used
         // (`SCHEMA-006`). A file this build cannot read leaves the board alone.
-        let payload = schema::gate(&header.payload).map_err(|e| match e {
+        let payload = schema::gate(header.payload.as_bytes()).map_err(|e| match e {
             // Bytes the engine will not read already have a name in the
             // container taxonomy; the gate only happens to be where they were
             // discovered.

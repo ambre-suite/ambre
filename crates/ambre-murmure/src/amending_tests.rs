@@ -628,7 +628,10 @@ fn a_change_refused_by_the_lock_is_replayed() {
     let deleted = alice.delete(segment, ids[1], author).expect("delete");
 
     let relocated = alice
-        .relocate_locked(segment.document_id(), &[edited.delta, deleted.delta])
+        .relocate_locked(
+            segment.document_id(),
+            &[edited.delta.into(), deleted.delta.into()],
+        )
         .expect("relocate");
     assert!(relocated.sent.is_none(), "no new message moves");
     assert_eq!(

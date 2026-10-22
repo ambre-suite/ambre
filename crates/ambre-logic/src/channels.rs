@@ -532,7 +532,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         snapshot: Option<ambre_core::SnapshotBytes>,
-        deltas: &[Vec<u8>],
+        deltas: &[ambre_core::DeltaBytes],
     ) {
         let Some((&channel_id, closed)) = self
             .closed_channels
@@ -554,7 +554,7 @@ impl LogicState {
         if let Some(copy) = snapshot {
             opening.receive_at(document_id, Some(Order::Snapshot(horizon)), copy.as_bytes());
             for delta in deltas {
-                opening.receive(document_id, delta);
+                opening.receive(document_id, delta.as_bytes());
             }
             self.channel_ledgers
                 .entry(document_id)
@@ -1281,7 +1281,7 @@ impl LogicState {
                     Ok(sent) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
                             document_id: sent.segment.document_id(),
-                            payload: sent.delta,
+                            payload: sent.delta.into(),
                             summary: Some(sent.summary),
                         });
                         self.send_to_ui(UiEvent::Channel {
@@ -1418,7 +1418,7 @@ impl LogicState {
                     Ok(named) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
                             document_id: named.meta.document_id(),
-                            payload: named.delta,
+                            payload: named.delta.into(),
                             summary: None,
                         });
                         // Sealed beside meta too, so the name shows before the
@@ -1770,7 +1770,7 @@ impl LogicState {
             Ok(Some(sent)) => {
                 self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: sent.document,
-                    payload: sent.delta,
+                    payload: sent.delta.into(),
                     summary: Some(sent.summary),
                 });
                 self.send_to_ui(UiEvent::Channel {
@@ -1946,8 +1946,12 @@ impl LogicState {
             // A segment still opening is checked once it is ready, against
             // its registry then.
             for delta in deltas {
-                let kept =
-                    opening.receive_signed(document_id, delta.seq, &delta.payload, signer(delta));
+                let kept = opening.receive_signed(
+                    document_id,
+                    delta.seq,
+                    delta.payload.as_bytes(),
+                    signer(delta),
+                );
                 verdicts.push(kept.map(|()| Vec::new()));
             }
         } else if let Some((&channel_id, channel)) = self
@@ -1959,7 +1963,7 @@ impl LogicState {
                 verdicts.push(channel.apply_signed(
                     document_id,
                     delta.seq,
-                    &delta.payload,
+                    delta.payload.as_bytes(),
                     signer(delta),
                 ));
             }
@@ -1980,7 +1984,7 @@ impl LogicState {
             self.record_channel_seq(
                 document_id,
                 delta.seq,
-                accepted.then_some(delta.payload.as_slice()),
+                accepted.then_some(delta.payload.as_bytes()),
             );
             match verdict {
                 Ok(produced) => events.extend(produced),
@@ -2260,8 +2264,8 @@ mod tests {
             panic!("the whole segment, then the message, got {sent:?}");
         };
         assert_eq!((*first_to, *message_to), (active, active));
-        assert!(crate::sent_by(first, peer));
-        assert!(crate::sent_by(message, peer));
+        assert!(crate::sent_by(first.as_bytes(), peer));
+        assert!(crate::sent_by(message.as_bytes(), peer));
         assert!(drain(&ui).iter().any(|e| matches!(
             e,
             UiEvent::Channel { event: MurmureEvent::Messages { messages, .. }, .. }
@@ -5327,7 +5331,7 @@ mod tests {
             channel_id,
             edit_to(closing, message, "two", at(1)),
         );
-        let refused: Vec<Vec<u8>> = drain(&sync)
+        let refused: Vec<ambre_core::DeltaBytes> = drain(&sync)
             .into_iter()
             .filter_map(|c| match c {
                 SyncCommand::SendUpdate {

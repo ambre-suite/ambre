@@ -71,12 +71,14 @@ impl ProseState {
         data: &[u8],
     ) -> Result<(DocumentId, Vec<ProseEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
-        let events = self.import_snapshot(&header.payload).map_err(|e| match e {
-            // Bytes the engine will not read already have a name in the
-            // container taxonomy.
-            SchemaError::PayloadRejected => DocFileError::PayloadRejected,
-            other => DocFileError::PayloadSchema(other),
-        })?;
+        let events = self
+            .import_snapshot(header.payload.as_bytes())
+            .map_err(|e| match e {
+                // Bytes the engine will not read already have a name in the
+                // container taxonomy.
+                SchemaError::PayloadRejected => DocFileError::PayloadRejected,
+                other => DocFileError::PayloadSchema(other),
+            })?;
         Ok((header.document_id, events))
     }
 }
@@ -141,7 +143,8 @@ mod tests {
             .expect("the document reads");
         let header = import_ambre_plaintext(&bytes).expect("a Prose container");
         let bare = LoroDoc::new();
-        bare.import(&header.payload).expect("the payload imports");
+        bare.import(header.payload.as_bytes())
+            .expect("the payload imports");
         assert_eq!(export_ambre_plaintext(&bare, doc_id()), Some(bytes.clone()));
 
         let mut restored =

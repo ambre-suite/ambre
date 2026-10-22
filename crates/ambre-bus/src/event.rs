@@ -345,7 +345,7 @@ pub enum LogicEvent {
     /// again: the new messages they carry go to the active segment.
     DeltasLocked {
         document_id: DocumentId,
-        deltas: Vec<Vec<u8>>,
+        deltas: Vec<ambre_core::DeltaBytes>,
     },
     /// A public channel of the space has a new key, sealed under the current
     /// space key, answering
@@ -533,7 +533,7 @@ pub struct SignedDelta {
     /// which deltas a horizon covers from it (`AUTHOR-016`).
     pub seq: Seq,
     /// The Loro update, decrypted and decompressed.
-    pub payload: Vec<u8>,
+    pub payload: ambre_core::DeltaBytes,
     /// The session nonce of its author, opened from inside the ciphertext.
     pub nonce: SessionNonce,
     /// The only PeerID its operations may carry.

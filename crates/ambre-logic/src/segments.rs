@@ -80,7 +80,7 @@ impl LogicState {
         let meta = channel.meta_id().document_id();
         self.send_to_sync(SyncCommand::SendUpdate {
             document_id: meta,
-            payload: closed.meta,
+            payload: closed.meta.into(),
             summary: None,
         });
         // The created successor is held already, and its whole content leaves
@@ -184,7 +184,7 @@ impl LogicState {
         let document_id = channel.meta_id().document_id();
         self.send_to_sync(SyncCommand::SendUpdate {
             document_id,
-            payload: meta,
+            payload: meta.into(),
             summary: None,
         });
     }
@@ -288,7 +288,7 @@ impl LogicState {
                 let meta = channel.meta_id().document_id();
                 self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: meta,
-                    payload,
+                    payload: payload.into(),
                     summary: None,
                 });
             }
@@ -317,7 +317,7 @@ impl LogicState {
                 let meta = channel.meta_id().document_id();
                 self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: meta,
-                    payload,
+                    payload: payload.into(),
                     summary: None,
                 });
             }
@@ -393,7 +393,11 @@ impl LogicState {
     /// The relay refused deltas of `document_id` for its lock. The segment
     /// drops them, and the new messages they carried leave for the active
     /// segment (the Murmure segments spec).
-    pub(crate) fn deltas_locked(&mut self, document_id: DocumentId, deltas: &[Vec<u8>]) {
+    pub(crate) fn deltas_locked(
+        &mut self,
+        document_id: DocumentId,
+        deltas: &[ambre_core::DeltaBytes],
+    ) {
         let Some((&channel_id, channel)) = self
             .channels
             .iter_mut()
@@ -415,7 +419,7 @@ impl LogicState {
         if let Some(sent) = relocated.sent {
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id: sent.document,
-                payload: sent.delta,
+                payload: sent.delta.into(),
                 summary: Some(sent.summary),
             });
             self.send_to_ui(UiEvent::Channel {
@@ -492,7 +496,7 @@ impl LogicState {
         if let Some(payload) = linked.meta {
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id: meta,
-                payload,
+                payload: payload.into(),
                 summary: None,
             });
         }

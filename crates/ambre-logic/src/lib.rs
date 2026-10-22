@@ -526,7 +526,7 @@ enum Restore {
 /// A local restore held until the document has its session identity.
 struct HeldRestore {
     snapshot: Option<ambre_core::SnapshotBytes>,
-    deltas: Vec<Vec<u8>>,
+    deltas: Vec<ambre_core::DeltaBytes>,
 }
 
 impl LiveDoc {
@@ -853,7 +853,7 @@ struct Owed {
     /// A full snapshot for local persistence, in place of any delta.
     snapshot: bool,
     /// The changes the pass made, each logged as it came.
-    deltas: Vec<Vec<u8>>,
+    deltas: Vec<ambre_core::DeltaBytes>,
 }
 
 impl LogicState {
@@ -928,7 +928,7 @@ impl LogicState {
     }
 
     /// Owe local persistence one change the pass made to a document.
-    fn owe_delta(&mut self, document_id: DocumentId, delta: Vec<u8>) {
+    fn owe_delta(&mut self, document_id: DocumentId, delta: ambre_core::DeltaBytes) {
         self.owed.entry(document_id).or_default().deltas.push(delta);
     }
 
@@ -974,7 +974,8 @@ impl LogicState {
         } else {
             doc.logged = logged;
             for delta in owed.deltas {
-                self.send_to_persist(document_id, PersistWrite::Delta(delta));
+                // The store row is sealed next, so it leaves as bare bytes.
+                self.send_to_persist(document_id, PersistWrite::Delta(delta.into_bytes()));
             }
         }
     }
@@ -1141,7 +1142,7 @@ fn remote_delta(seq: u64, payload: Vec<u8>) -> ambre_bus::SignedDelta {
         .unwrap_or_default();
     ambre_bus::SignedDelta {
         seq: ambre_core::Seq(seq),
-        payload,
+        payload: payload.into(),
         nonce: ambre_core::SessionNonce([0; 16]),
         peer: ambre_core::PeerId(peer),
         user: None,
@@ -1307,7 +1308,7 @@ mod pass_tests {
             document_id,
             doc_type: DocType::Prose,
             snapshot: snapshot.map(Into::into),
-            deltas,
+            deltas: deltas.into_iter().map(Into::into).collect(),
             sessions: Vec::new(),
         });
         state.grant_identity(document_id);
@@ -1667,7 +1668,7 @@ mod authorship_tests {
     fn signed(payload: Vec<u8>, peer: ambre_core::PeerId) -> SignedDelta {
         SignedDelta {
             seq: ambre_core::Seq(0),
-            payload,
+            payload: payload.into(),
             nonce: SessionNonce([0; 16]),
             peer,
             user: None,
@@ -1695,7 +1696,7 @@ mod authorship_tests {
         rig.sync
             .try_iter()
             .find_map(|cmd| match cmd {
-                SyncCommand::SendUpdate { payload, .. } => Some(payload),
+                SyncCommand::SendUpdate { payload, .. } => Some(payload.into_bytes()),
                 _ => None,
             })
             .expect("a local edit sends a delta")
@@ -2069,7 +2070,7 @@ mod authorship_tests {
             .sync
             .try_iter()
             .filter_map(|cmd| match cmd {
-                SyncCommand::SendUpdate { payload, .. } => Some(payload),
+                SyncCommand::SendUpdate { payload, .. } => Some(payload.into_bytes()),
                 _ => None,
             })
             .collect();
@@ -2125,7 +2126,7 @@ mod authorship_tests {
                     document_id: rig.document_id,
                     doc_type,
                     snapshot: Some(cached.into()),
-                    deltas,
+                    deltas: deltas.into_iter().map(Into::into).collect(),
                     sessions: Vec::new(),
                 });
             assert!(
@@ -2223,7 +2224,9 @@ mod authorship_tests {
         let unsent: Vec<(Vec<u8>, SessionNonce)> = sent
             .into_iter()
             .filter_map(|cmd| match cmd {
-                SyncCommand::SendUnsent { payload, nonce, .. } => Some((payload, nonce)),
+                SyncCommand::SendUnsent { payload, nonce, .. } => {
+                    Some((payload.into_bytes(), nonce))
+                }
                 _ => None,
             })
             .collect();

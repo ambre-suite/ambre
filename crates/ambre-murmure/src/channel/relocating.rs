@@ -71,7 +71,7 @@ impl ChannelState {
     pub fn relocate_locked(
         &mut self,
         document_id: DocumentId,
-        refused: &[Vec<u8>],
+        refused: &[ambre_core::DeltaBytes],
     ) -> Result<Relocated, MurmureError> {
         if document_id == self.active.id {
             return Err(MurmureError::NotActive(document_id));
@@ -89,7 +89,7 @@ impl ChannelState {
         }
         let mut from = VersionVector::new();
         for payload in refused {
-            let (start, _) = delta::range(&delta::read(payload)?);
+            let (start, _) = delta::range(&delta::read(payload.as_bytes())?);
             for (&peer, &counter) in start.iter() {
                 if from.get(&peer).is_none_or(|c| *c > counter) {
                     from.insert(peer, counter);

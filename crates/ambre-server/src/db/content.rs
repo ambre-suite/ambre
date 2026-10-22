@@ -443,11 +443,11 @@ pub async fn point_rows_at_batch(
     Ok(moved)
 }
 
-/// The documents with an inline tail and no write for `idle_secs`, at most
+/// The documents with an inline tail and no write for `idle`, at most
 /// `limit` (`SRV-152`).
 pub async fn idle_inline_documents(
     pool: &PgPool,
-    idle_secs: i64,
+    idle: ambre_core::Seconds,
     limit: i64,
 ) -> Result<Vec<ambre_core::DocumentId>, AppError> {
     let ids: Vec<uuid::Uuid> = sqlx::query_scalar(
@@ -456,7 +456,7 @@ pub async fn idle_inline_documents(
                          AND v.created_at > now() - make_interval(secs => $1::BIGINT::FLOAT8)) \
          LIMIT $2",
     )
-    .bind(idle_secs)
+    .bind(i64::try_from(idle.0).unwrap_or(i64::MAX))
     .bind(limit)
     .fetch_all(pool)
     .await?;

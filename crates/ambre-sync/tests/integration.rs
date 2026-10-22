@@ -376,7 +376,7 @@ fn send_update_after_open_document_encrypts_and_sends() {
 
     state.handle_command(SyncCommand::SendUpdate {
         document_id: doc_id,
-        payload: b"hello world".to_vec(),
+        payload: b"hello world".to_vec().into(),
         summary: None,
     });
 
@@ -460,7 +460,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
     state.mark_document_server_created(doc_id);
     state.handle_command(SyncCommand::SendUpdate {
         document_id: doc_id,
-        payload: b"data".to_vec(),
+        payload: b"data".to_vec().into(),
         summary: None,
     });
     let update_msgs = mock.drain_client_msgs();

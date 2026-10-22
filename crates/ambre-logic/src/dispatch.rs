@@ -890,7 +890,7 @@ mod tests {
             .expect("the delta reached the Sync worker");
         // One outcome, and the two halves carry the same bytes: the event is
         // not a re-export (`PROSE-023`).
-        assert_eq!(confirmed, broadcast);
+        assert_eq!(broadcast, confirmed);
     }
 
     /// `PROSE-UI-006`: the layout reaches the view computed and shaped. The
@@ -1049,7 +1049,7 @@ mod tests {
         reopened.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id: header.document_id,
             doc_type: header.doc_type,
-            snapshot: Some(header.payload.into()),
+            snapshot: Some(header.payload),
             deltas: Vec::new(),
             sessions: Vec::new(),
         });
@@ -1551,24 +1551,28 @@ mod tests {
                 .any(|c| matches!(c, SyncCommand::SendUpdate { .. })),
             "the import reached no peer",
         );
-        // Every byte buffer prints as a list of numbers: the file's run must
-        // appear in none of them.
-        let run = format!("{file:?}");
-        let run = run.trim_start_matches('[').trim_end_matches(']');
+        // A payload prints its length alone, so the search reads the bytes
+        // each command carries: the file's run must appear in none of them.
+        let carried = |cmd: &SyncCommand| -> Vec<u8> {
+            match cmd {
+                SyncCommand::SendUpdate { payload, .. }
+                | SyncCommand::SendUnsent { payload, .. } => payload.as_bytes().to_vec(),
+                SyncCommand::SendSnapshot { payload, .. } => payload.as_bytes().to_vec(),
+                _ => Vec::new(),
+            }
+        };
+        let holds_file = |bytes: &[u8]| bytes.windows(file.len()).any(|w| w == file.as_slice());
         let forwarded = SyncCommand::SendUpdate {
             document_id: doc_id,
-            payload: file.clone(),
+            payload: file.clone().into(),
             summary: None,
         };
         assert!(
-            format!("{forwarded:?}").contains(run),
+            holds_file(&carried(&forwarded)),
             "the search sees a forwarded file"
         );
         for cmd in &sent {
-            assert!(
-                !format!("{cmd:?}").contains(run),
-                "the file left as it was opened"
-            );
+            assert!(!holds_file(&carried(cmd)), "the file left as it was opened");
         }
     }
 

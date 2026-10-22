@@ -124,7 +124,7 @@ impl LogicState {
         if let Some(payload) = self.unsent.remove(&document_id) {
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id,
-                payload,
+                payload: payload.into(),
                 summary: None,
             });
             self.release_waiting(document_id);
@@ -294,7 +294,7 @@ impl LogicState {
             Ok(Some(payload)) => {
                 self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: space_id.document_id(),
-                    payload,
+                    payload: payload.into(),
                     summary: None,
                 });
                 self.show_catalogue(space_id);
@@ -381,7 +381,7 @@ impl LogicState {
                     Ok(delta) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
                             document_id: space_id.document_id(),
-                            payload: delta,
+                            payload: delta.into(),
                             summary: None,
                         });
                         self.show_catalogue(space_id);
@@ -523,7 +523,7 @@ impl LogicState {
         for payload in deltas {
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id: space_id.document_id(),
-                payload,
+                payload: payload.into(),
                 summary: None,
             });
         }
@@ -778,7 +778,7 @@ impl LogicState {
             };
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id: space_id.document_id(),
-                payload: delta,
+                payload: delta.into(),
                 summary: None,
             });
         }
@@ -814,7 +814,7 @@ impl LogicState {
             match space.state.unlist_channel(channel_id) {
                 Ok(Some(delta)) => self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: space_id.document_id(),
-                    payload: delta,
+                    payload: delta.into(),
                     summary: None,
                 }),
                 Ok(None) => {}
@@ -1114,10 +1114,11 @@ mod tests {
         };
         assert_eq!(*document_id, space_id.document_id());
         assert!(
-            crate::authored_by(payload, peer),
+            crate::authored_by(payload.as_bytes(), peer),
             "the upload is written under the session's PeerID alone"
         );
-        let reopened = SpaceState::open(space_id, &[payload]).expect("the upload is the space");
+        let reopened =
+            SpaceState::open(space_id, &[payload.as_bytes()]).expect("the upload is the space");
         assert_eq!(reopened.name().as_deref(), Some("Acme"));
         assert!(
             drain(&ui).is_empty(),

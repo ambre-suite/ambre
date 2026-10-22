@@ -126,7 +126,7 @@ pub struct AmbreHeader {
     /// Document identity, UUID v7.
     pub document_id: DocumentId,
     /// Offset 22 onward: the raw Loro snapshot, uncompressed and unencrypted.
-    pub payload: Vec<u8>,
+    pub payload: crate::SnapshotBytes,
 }
 
 /// Container-level failures. Fatal by nature: a header failure leaves no
@@ -318,7 +318,7 @@ pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
         version,
         doc_type,
         document_id,
-        payload: payload.to_vec(),
+        payload: crate::SnapshotBytes::new(payload.to_vec()),
     })
 }
 
@@ -608,7 +608,11 @@ mod tests {
         // Re-writing the parsed parts reproduces the file byte for byte (I1 at
         // the container layer).
         assert_eq!(
-            write_ambre_plaintext(header.doc_type, header.document_id, &header.payload),
+            write_ambre_plaintext(
+                header.doc_type,
+                header.document_id,
+                header.payload.as_bytes()
+            ),
             bytes
         );
     }

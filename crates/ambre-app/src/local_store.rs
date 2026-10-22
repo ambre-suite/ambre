@@ -211,7 +211,7 @@ impl LocalStore {
                         document_id,
                         doc_type,
                         snapshot: snapshot.map(Into::into),
-                        deltas,
+                        deltas: deltas.into_iter().map(Into::into).collect(),
                         sessions,
                     });
             });
@@ -262,7 +262,7 @@ impl LocalStore {
             PersistWrite::Snapshot(bytes) | PersistWrite::Delta(bytes) => bytes.len(),
             _ => 0,
         };
-        let need = u64::try_from(need).unwrap_or(u64::MAX);
+        let need = ambre_core::ByteSize(u64::try_from(need).unwrap_or(u64::MAX));
         let decision = self
             .inner
             .ledger
@@ -349,7 +349,13 @@ mod tests {
         match next(rx).await {
             LogicCommand::RestoreLocalSnapshot {
                 snapshot, deltas, ..
-            } => (snapshot.map(ambre_core::SnapshotBytes::into_bytes), deltas),
+            } => (
+                snapshot.map(ambre_core::SnapshotBytes::into_bytes),
+                deltas
+                    .into_iter()
+                    .map(ambre_core::DeltaBytes::into_bytes)
+                    .collect(),
+            ),
             other => panic!("expected a restore, got {other:?}"),
         }
     }

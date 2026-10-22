@@ -1107,7 +1107,7 @@ pub struct SyncState {
     /// `RequestMissing` replay, so `local_clock` has caught up to the server and
     /// no CLOCK_MISMATCH occurs. A local-only doc flushes right when it opens.
     /// Each keeps the summary it was sent with.
-    pending_pre_session_updates: Vec<(DocumentId, Vec<u8>, Option<ActivitySummary>)>,
+    pending_pre_session_updates: Vec<(DocumentId, ambre_core::DeltaBytes, Option<ActivitySummary>)>,
 
     /// The session nonce of each open document, drawn when it opens and dropped
     /// when it closes (`AUTHOR-002`). Every update this session seals for the
@@ -1938,7 +1938,7 @@ mod seal_tests {
         let signing_key = state.signing_key.take();
         state.handle_command(SyncCommand::SendUpdate {
             document_id: id,
-            payload: b"a message".to_vec(),
+            payload: b"a message".to_vec().into(),
             summary: Some(summary.clone()),
         });
         assert!(sent(&wire).is_empty(), "sent before the session held");
@@ -1996,7 +1996,7 @@ mod seal_tests {
         let mut state = state;
         state.handle_command(SyncCommand::SendUpdate {
             document_id: id,
-            payload: typed.clone(),
+            payload: typed.clone().into(),
             summary: None,
         });
         state.handle_command(SyncCommand::SendEphemeral {

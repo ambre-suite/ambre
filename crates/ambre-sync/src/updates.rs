@@ -910,7 +910,7 @@ impl SyncState {
     /// An update with no summary, as most tests send one.
     #[cfg(test)]
     pub(crate) fn handle_send_update(&mut self, document_id: DocumentId, payload: Vec<u8>) {
-        self.send_summarized_update(document_id, payload, None);
+        self.send_summarized_update(document_id, payload.into(), None);
     }
 
     /// Sends a delta the Logic thread wrote, with the summary of what it
@@ -918,7 +918,7 @@ impl SyncState {
     pub(crate) fn send_summarized_update(
         &mut self,
         document_id: DocumentId,
-        payload: Vec<u8>,
+        payload: ambre_core::DeltaBytes,
         summary: Option<ActivitySummary>,
     ) {
         if self.signing_key.is_none() {
@@ -948,7 +948,7 @@ impl SyncState {
             return;
         };
         let summary = summary.as_ref().map(ActivitySummary::to_sealed);
-        self.send_update_body(document_id, *nonce, summary.as_ref(), &payload);
+        self.send_update_body(document_id, *nonce, summary.as_ref(), payload.as_bytes());
     }
 
     /// Builds the body of a delta this client writes and sends it.
@@ -971,7 +971,7 @@ impl SyncState {
     pub(crate) fn handle_send_unsent(
         &mut self,
         document_id: DocumentId,
-        payload: Vec<u8>,
+        payload: ambre_core::DeltaBytes,
         nonce: SessionNonce,
     ) {
         if self.signing_key.is_none() {
@@ -981,7 +981,7 @@ impl SyncState {
         }
         // What an earlier session left unsent is replayed with no summary:
         // the Logic thread no longer knows what it held.
-        self.send_update_body(document_id, nonce, None, &payload);
+        self.send_update_body(document_id, nonce, None, payload.as_bytes());
     }
 
     /// Seals an update body and sends it, or holds it while the document is
@@ -2001,7 +2001,9 @@ mod tests {
         let handed: Vec<_> = drain(&rx)
             .into_iter()
             .filter_map(|e| match e {
-                LogicEvent::RemoteUpdate { delta, .. } => Some((delta.payload, delta.summary)),
+                LogicEvent::RemoteUpdate { delta, .. } => {
+                    Some((delta.payload.into_bytes(), delta.summary))
+                }
                 _ => None,
             })
             .collect();
@@ -2047,7 +2049,7 @@ mod tests {
             .collect();
         let expected = SignedDelta {
             seq: ambre_bus::Seq(1),
-            payload: b"hello".to_vec(),
+            payload: b"hello".to_vec().into(),
             nonce: TEST_NONCE,
             peer: ambre_crypto::peer::derive_peer_id(&signer, &TEST_NONCE),
             user: Some(alice),
@@ -2146,7 +2148,7 @@ mod tests {
         let payloads: Vec<Vec<u8>> = drain(&rx)
             .into_iter()
             .map(|e| match e {
-                LogicEvent::RemoteUpdate { delta, .. } => delta.payload,
+                LogicEvent::RemoteUpdate { delta, .. } => delta.payload.into_bytes(),
                 other => panic!("expected RemoteUpdate, got {other:?}"),
             })
             .collect();
@@ -2180,7 +2182,7 @@ mod tests {
         let payloads: Vec<Vec<u8>> = drain(&rx)
             .into_iter()
             .filter_map(|e| match e {
-                LogicEvent::RemoteUpdate { delta, .. } => Some(delta.payload),
+                LogicEvent::RemoteUpdate { delta, .. } => Some(delta.payload.into_bytes()),
                 _ => None,
             })
             .collect();
@@ -3176,7 +3178,11 @@ mod tests {
                     let key = keys.iter().find(|k| k.id() == u.public_data.key_id)?;
                     let body = pipeline::open_update(&u, key).expect("opens");
                     let delta = pipeline::split_update_body(body).expect("splits").delta;
-                    Some((u.public_data.clock.0, u.public_data.key_id, delta))
+                    Some((
+                        u.public_data.clock.0,
+                        u.public_data.key_id,
+                        delta.into_bytes(),
+                    ))
                 }
                 _ => None,
             })
@@ -3837,9 +3843,9 @@ mod tests {
         let delivered: Vec<Vec<u8>> = drain(&rx)
             .into_iter()
             .flat_map(|e| match e {
-                LogicEvent::RemoteUpdate { delta, .. } => vec![delta.payload],
+                LogicEvent::RemoteUpdate { delta, .. } => vec![delta.payload.into_bytes()],
                 LogicEvent::RemoteUpdateBatch { deltas, .. } => {
-                    deltas.into_iter().map(|d| d.payload).collect()
+                    deltas.into_iter().map(|d| d.payload.into_bytes()).collect()
                 }
                 _ => Vec::new(),
             })
@@ -3872,7 +3878,7 @@ mod tests {
             .filter_map(|e| match e {
                 LogicEvent::RemoteUpdate { .. } => Some(Vec::new()),
                 LogicEvent::RemoteUpdateBatch { deltas, .. } => {
-                    Some(deltas.into_iter().map(|d| d.payload).collect())
+                    Some(deltas.into_iter().map(|d| d.payload.into_bytes()).collect())
                 }
                 _ => None,
             })
@@ -3902,7 +3908,7 @@ mod tests {
 
         state.handle_command(SyncCommand::SendUpdate {
             document_id: doc,
-            payload: b"next".to_vec(),
+            payload: b"next".to_vec().into(),
             summary: None,
         });
         let clocks: Vec<u64> = drain_ws(&ws_rx)
@@ -4061,7 +4067,7 @@ mod tests {
                 WsClientMsg::Update(u) => {
                     let body = pipeline::open_update(&u, key).expect("opens");
                     let body = pipeline::split_update_body(body).expect("splits");
-                    Some((body.nonce, body.delta))
+                    Some((body.nonce, body.delta.into_bytes()))
                 }
                 _ => None,
             })
@@ -4079,7 +4085,7 @@ mod tests {
         state.set_mock_ws(ws_tx);
         let earlier = SessionNonce([7; 16]);
 
-        state.handle_send_unsent(doc, b"old".to_vec(), earlier);
+        state.handle_send_unsent(doc, b"old".to_vec().into(), earlier);
         state.handle_send_update(doc, b"new".to_vec());
         let sent = sent_bodies(&ws_rx, &k1);
         let [(old_nonce, old), (new_nonce, new)] = sent.as_slice() else {

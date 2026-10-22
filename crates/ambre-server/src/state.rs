@@ -62,7 +62,7 @@ pub struct Config {
     /// (S3 + Redis pending) and fanned out to every subscriber. That is the same
     /// storage/cost abuse the media and snapshot caps close, on the hot write
     /// path.
-    pub delta_max_bytes: usize,
+    pub delta_max_bytes: ambre_core::ByteSize,
     /// Prefix for S3 object keys (for example "dev-ambre").
     pub s3_env_prefix: String,
     /// Google OIDC client ID.
@@ -101,7 +101,7 @@ pub struct Config {
     /// cursor position and a display name. This bounds the fire-and-forget
     /// broadcast + Redis presence-hash write, mirroring `delta_max_bytes` for the
     /// durable `Update` path.
-    pub ephemeral_max_bytes: usize,
+    pub ephemeral_max_bytes: ambre_core::ByteSize,
 }
 
 impl Default for Config {
@@ -113,7 +113,7 @@ impl Default for Config {
             presigned_url_ttl_secs: ambre_core::Seconds(900),
             media_max_bytes: ambre_core::ByteSize(100 * 1024 * 1024),
             snapshot_max_bytes: ambre_core::ByteSize(50 * 1024 * 1024),
-            delta_max_bytes: 4 * 1024 * 1024,
+            delta_max_bytes: ambre_core::ByteSize(4 * 1024 * 1024),
             s3_env_prefix: "dev-ambre".into(),
             oidc_google_client_id: String::new(),
             oidc_google_client_secret: crate::oidc::OidcSecret::default(),
@@ -122,7 +122,7 @@ impl Default for Config {
             trust_proxy_headers: false,
             ws_msg_rate_per_sec: 60,
             ws_msg_burst: 120,
-            ephemeral_max_bytes: 64 * 1024,
+            ephemeral_max_bytes: ambre_core::ByteSize(64 * 1024),
         }
     }
 }

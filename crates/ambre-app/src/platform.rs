@@ -752,7 +752,11 @@ fn read_container(
         ));
         return None;
     }
-    Some((header.document_id, header.doc_type, header.payload))
+    Some((
+        header.document_id,
+        header.doc_type,
+        header.payload.into_bytes(),
+    ))
 }
 
 /// Store a container's sealed payload as the document's copy, and navigate

@@ -148,7 +148,7 @@ mod tests {
             .expect("an edit writes a delta");
         SignedDelta {
             seq: ambre_core::Seq(peer.0),
-            payload,
+            payload: payload.into(),
             nonce: SessionNonce([0; 16]),
             peer,
             user: None,
