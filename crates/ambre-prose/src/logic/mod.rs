@@ -1021,8 +1021,10 @@ impl ProseState {
         let id = doc::create_block(&self.doc, None, crate::events::BlockType::Image)?;
         let tree = doc::blocks(&self.doc);
         let node = doc::node_of(&tree, &id)?;
-        let attrs = doc::map_at(&node, doc::K_ATTRS)?;
-        attrs.insert("content_hash", content_hash.as_str()).ok()?;
+        let attrs = doc::attrs_at(&node)?;
+        attrs
+            .insert(doc::AttrKey::ContentHash, content_hash.as_str())
+            .ok()?;
         self.doc.commit();
         Some(crate::events::block_id(id))
     }
@@ -1828,8 +1830,11 @@ mod tests {
             text: "mine".to_owned(),
         });
         let doc = LoroDoc::new();
-        doc.get_map("meta")
-            .insert("schema_version", i64::from(schema::SCHEMA_VERSION + 1))
+        doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+            .insert(
+                ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+                i64::from(schema::SCHEMA_VERSION + 1),
+            )
             .expect("a newer register");
         doc.commit();
         let newer = doc.export(ExportMode::Snapshot).expect("snapshot");

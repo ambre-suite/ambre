@@ -3092,103 +3092,40 @@ ambre-prose | src/count.rs | crate::count | saturate(n) | param | usize	math	cou
 ambre-prose | src/count.rs | crate::count | tally(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | A4_HEIGHT_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | A4_WIDTH_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | ANNOTS | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | ANNOT_ANCHOR_BLOCK | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | ANNOT_ANCHOR_END | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | ANNOT_ANCHOR_START | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | ANNOT_KIND | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | ANNOT_NOTE_BLOCK | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | ANNOT_REPLIES | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | ANNOT_RESOLVED | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | ANNOT_TEXT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_CELL_BG | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_COL_WIDTHS | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_EDGE_BOTTOM | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_EDGE_COLOR | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_EDGE_LEFT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_EDGE_RIGHT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_EDGE_TOP | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_LANG | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_LEVEL | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_MARKER | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_MAX_LEVEL | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_MERGED | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_NUMBERED | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_PADDING | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_SPELLING | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_TICKED | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A_VALIGN | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | Anchor.value | field | String	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | BAND_BLOCK | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | BAND_ENABLED | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | BLOCKS | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | BODY_SEPARATOR | const | char	debt	finding: body key strings (confirmed)
-ambre-prose | src/doc.rs | crate::doc | BODY_TAG | const | &str	debt	finding: body key strings (confirmed)
+ambre-prose | src/doc.rs | crate::doc | BODY_SEPARATOR | const | char	newtype-inner	the spelling of BodyKey, a body root name
+ambre-prose | src/doc.rs | crate::doc | BODY_TAG | const | &str	newtype-inner	the spelling of BodyKey, a body root name
 ambre-prose | src/doc.rs | crate::doc | BUILT_IN_STYLES | const | [&str;9]	debt	finding: built-in style ids as &str (confirmed)
 ambre-prose | src/doc.rs | crate::doc | Bands.different_first_page | field | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Bands.footer_enabled | field | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Bands.header_enabled | field | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Bands::holds() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Bands::on_page(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/doc.rs | crate::doc | Bands::register_of() | ret | Option<&'static str>	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
+ambre-prose | src/doc.rs | crate::doc | BodyKey.0 | field | String	newtype-inner	the body root name BodyKey types
+ambre-prose | src/doc.rs | crate::doc | BodyKey::as_str() | ret | &str	foreign-api	the body root name, for the Loro call that opens it
 ambre-prose | src/doc.rs | crate::doc | CARRIER | const | char	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | DEFAULTS | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | DEFAULT_COLUMN_WIDTH_PT | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | DEFAULT_FONT_SIZE_PT | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | DEFAULT_LINE_HEIGHT | const | f32	math	layout geometry local to algorithm
 ambre-prose | src/doc.rs | crate::doc | DEFAULT_MARGIN_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | DIFFERENT_FIRST_PAGE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | DocDefaults.font_family | field | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | DocDefaults.font_size_pt | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | DocDefaults.line_height | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/doc.rs | crate::doc | FOOTER | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | FOOTER_FIRST | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | HEADER | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | HEADER_FIRST | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_ALIGN | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_ATTRS | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_BAND | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | K_COMMENT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | K_CROSS_REF | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | K_FOOTNOTE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_HIDDEN | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_INDENT_FIRST | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_INDENT_LEFT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_INDENT_RIGHT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_KEEP_TOGETHER | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_KEEP_WITH_NEXT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_LINE_HEIGHT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_NOTE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_REGROWN | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_SPACE_AFTER | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_SPACE_BEFORE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_STYLE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_TYPE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | LH_MODE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | LH_VALUE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | META | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with(height_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with(width_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | Orientation::as_str() | ret | &'static str	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | PAGE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | PageFormat.height_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_bottom_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_left_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_right_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_top_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | PageFormat.width_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | REPLY_AUTHOR | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | REPLY_CREATED | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | REPLY_ID | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | REPLY_USER | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | R_EXTENT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | R_STAMP | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | STYLES | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | UPDATED_AT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | anchors(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | band_align_name() | ret | Option<&'static str>	debt	finding: band alignment as a name string (confirmed)
-ambre-prose | src/doc.rs | crate::doc | body_key() | ret | String	debt	finding: body key strings (confirmed)
 ambre-prose | src/doc.rs | crate::doc | carries_hiding() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | col_widths() | ret | Vec<f32>	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | heading_level_of() | ret | Option<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
@@ -3199,23 +3136,14 @@ ambre-prose | src/doc.rs | crate::doc | is_band() | ret | bool	generic	independe
 ambre-prose | src/doc.rs | crate::doc | is_built_in_style() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | is_hidden() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | is_note() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/doc.rs | crate::doc | map_at(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | map_read(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | movable_list_at(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | nesting_allows() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/doc.rs | crate::doc | parse_body_key(key) | param | &str	debt	finding: body key strings (confirmed)
-ambre-prose | src/doc.rs | crate::doc | read_band(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
+ambre-prose | src/doc.rs | crate::doc | parse_body_key(key) | param | &str	foreign-api	a root container name as Loro reports it
 ambre-prose | src/doc.rs | crate::doc | read_bool() | ret | Option<bool>	generic	independent flag or predicate
-ambre-prose | src/doc.rs | crate::doc | read_bool(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | read_f32() | ret | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/doc.rs | crate::doc | read_f32(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | read_f64() | ret | Option<f64>	math	layout geometry local to algorithm
-ambre-prose | src/doc.rs | crate::doc | read_f64(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | read_i64() | ret | Option<i64>	math	count, size or local index
-ambre-prose | src/doc.rs | crate::doc | read_i64(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | read_lang() | ret | String	debt	finding: language tag as &str (confirmed)
 ambre-prose | src/doc.rs | crate::doc | read_string() | ret | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | read_string(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | read_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | read_updated_at() | ret | Option<i64>	debt	finding: raw timestamps and durations (confirmed)
 ambre-prose | src/doc.rs | crate::doc | style_of() | ret | Option<String>	debt	finding: built-in style ids as &str (confirmed)
@@ -3434,8 +3362,6 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | shape_draft((text
 ambre-prose | src/layout/measure.rs | crate::layout::measure | shape_paragraph((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | shape_paragraph(width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | <BandHeights as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
-ambre-prose | src/layout/pass.rs | crate::layout::pass | A_IMAGE_CAPTION | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/layout/pass.rs | crate::layout::pass | A_IMAGE_HEIGHT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/layout/pass.rs | crate::layout::pass | BandHeights.footer_first_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | BandHeights.footer_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | BandHeights.header_first_px | field | f32	math	layout geometry local to algorithm
@@ -3480,9 +3406,7 @@ ambre-prose | src/layout/pass.rs | crate::layout::pass | measure_document(conten
 ambre-prose | src/layout/pass.rs | crate::layout::pass | measure_document_with((content_width_px,defaults)) | param | (f32,&doc::DocDefaults)	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | measure_document_with(toc_pages) | param | &HashMap<TreeID,u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/pass.rs | crate::layout::pass | number_at() | ret | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/layout/pass.rs | crate::layout::pass | number_at(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/layout/pass.rs | crate::layout::pass | string_at() | ret | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/layout/pass.rs | crate::layout::pass | string_at(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/layout/pass.rs | crate::layout::pass | table_metrics(content_width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/place.rs | crate::layout::place | <MeasuredBlock as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout.continuation_heights | field | Vec<f32>	math	layout geometry local to algorithm
@@ -3648,12 +3572,9 @@ ambre-prose | src/link.rs | crate::link | OPENABLE | const | [&str;3]	debt	findi
 ambre-prose | src/link.rs | crate::link | openable() | ret | bool	debt	planned: lot C5 LinkUrl
 ambre-prose | src/link.rs | crate::link | openable(url) | param | &str	debt	planned: lot C5 LinkUrl
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	free-text	text content / label / parser input
-ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::ensure_band(register) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::register(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_different_first_page(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_side_enabled(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/bands.rs | crate::logic::bands | STAMP_ORIGIN | const | &str	debt	finding: commit origins as a closed set of &str (confirmed, no collision)
-ambre-prose | src/logic/bands.rs | crate::logic::bands | Side::registers() | ret | (&'static str,&'static str)	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/logic/bands.rs | crate::logic::bands | field_mark() | ret | (&'static str,&'static str)	debt	finding: header-field codec duplicated as string literals (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | HEADING_LEVELS | const | std::ops::RangeInclusive<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::carry_style() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
@@ -3665,7 +3586,6 @@ ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentage
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::set_code_lang(lang) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::set_heading_level(level) | param | Option<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::style_of() | ret | Option<String>	debt	finding: built-in style ids as &str (confirmed)
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::write_attr(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::write_init() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | clamp_level() | ret | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | clamp_level(level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
@@ -3776,7 +3696,7 @@ ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_anchors() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_reply() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_reply(text) | param | &str	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_thread() | ret | Result<LoroMap,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
+ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_thread() | ret | Result<doc::Fields<doc::AnnotKey>,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::insert_toc(max_level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::insert_toc(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::update_toc_config(max_level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
@@ -3846,8 +3766,8 @@ ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::format_sele
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::links_touched(key) | param | Option<&str>	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::remove_mark(key) | param | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_runs() | ret | Vec<(String,ResolvedStyle)>	free-text	text content / label / parser input
-ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
+ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	foreign-api	a key of Loro's own rich-text delta
+ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(key) | param | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/mod.rs | crate::logic | LOAD_ORIGIN | const | &str	debt	finding: commit origins as a closed set of &str (confirmed, no collision)

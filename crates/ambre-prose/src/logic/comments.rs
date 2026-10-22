@@ -92,7 +92,7 @@ impl ProseState {
         if let Err(e) = self.write_reply(&replies, text, now_ms) {
             return Self::err_write(&e);
         }
-        if let Err(e) = entry.insert(doc::ANNOT_RESOLVED, false) {
+        if let Err(e) = entry.insert(doc::AnnotKey::Resolved, false) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_comments()
@@ -103,7 +103,7 @@ impl ProseState {
         let Some(entry) = comment::entry(&self.doc, id) else {
             return ProseOutcome::refused(ProseRefusal::NoSuchComment(*id));
         };
-        if let Err(e) = entry.insert(doc::ANNOT_RESOLVED, resolved) {
+        if let Err(e) = entry.insert(doc::AnnotKey::Resolved, resolved) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_comments()
@@ -155,10 +155,11 @@ impl ProseState {
             Ok(found) => found,
             Err(outcome) => return outcome,
         };
-        let body = comment::reply_at(&list, index).and_then(|map| match map.get(doc::ANNOT_TEXT) {
-            Some(loro::ValueOrContainer::Container(loro::Container::Text(text))) => Some(text),
-            _ => None,
-        });
+        let body =
+            comment::reply_at(&list, index).and_then(|map| match map.get(doc::ReplyKey::Text) {
+                Some(loro::ValueOrContainer::Container(loro::Container::Text(text))) => Some(text),
+                _ => None,
+            });
         let Some(body) = body else {
             return Self::err_write("the reply holds no text");
         };
@@ -231,33 +232,38 @@ impl ProseState {
     }
 
     /// The entry of a new thread: its kind, its anchor, open, no reply yet.
-    fn write_thread(&self, id: &CommentId, span: Span) -> Result<LoroMap, String> {
-        let annots = self.doc.get_map(doc::ANNOTS);
+    fn write_thread(
+        &self,
+        id: &CommentId,
+        span: Span,
+    ) -> Result<doc::Fields<doc::AnnotKey>, String> {
+        let annots = doc::annots(&self.doc);
         let entry = annots
             .insert_container(&id.to_hyphenated(), LoroMap::new())
+            .map(doc::Fields::of)
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::ANNOT_KIND, comment::KIND_COMMENT)
+            .insert(doc::AnnotKey::Kind, comment::KIND_COMMENT)
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::ANNOT_RESOLVED, false)
+            .insert(doc::AnnotKey::Resolved, false)
             .map_err(|e| format!("{e:?}"))?;
         Self::write_anchor(&entry, span)?;
         entry
-            .insert_container(doc::ANNOT_REPLIES, LoroList::new())
+            .insert_container(doc::AnnotKey::Replies, LoroList::new())
             .map_err(|e| format!("{e:?}"))?;
         Ok(entry)
     }
 
-    fn write_anchor(entry: &LoroMap, span: Span) -> Result<(), String> {
+    fn write_anchor(entry: &doc::Fields<doc::AnnotKey>, span: Span) -> Result<(), String> {
         entry
-            .insert(doc::ANNOT_ANCHOR_BLOCK, span.block.to_string())
+            .insert(doc::AnnotKey::AnchorBlock, span.block.to_string())
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::ANNOT_ANCHOR_START, i64::from(span.start.get()))
+            .insert(doc::AnnotKey::AnchorStart, i64::from(span.start.get()))
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::ANNOT_ANCHOR_END, i64::from(span.end.get()))
+            .insert(doc::AnnotKey::AnchorEnd, i64::from(span.end.get()))
             .map_err(|e| format!("{e:?}"))
     }
 
@@ -272,21 +278,28 @@ impl ProseState {
         let user = self.my_user_id.ok_or("no identity")?;
         let reply = list
             .push_container(LoroMap::new())
+            .map(doc::Fields::<doc::ReplyKey>::of)
             .map_err(|e| format!("{e:?}"))?;
         reply
-            .insert(doc::REPLY_ID, self.ids.mint::<ReplyId>().to_hyphenated())
+            .insert(
+                doc::ReplyKey::Id,
+                self.ids.mint::<ReplyId>().to_hyphenated(),
+            )
             .map_err(|e| format!("{e:?}"))?;
         reply
-            .insert(doc::REPLY_AUTHOR, self.my_name.clone().unwrap_or_default())
+            .insert(
+                doc::ReplyKey::Author,
+                self.my_name.clone().unwrap_or_default(),
+            )
             .map_err(|e| format!("{e:?}"))?;
         reply
-            .insert(doc::REPLY_USER, user.to_string())
+            .insert(doc::ReplyKey::User, user.to_string())
             .map_err(|e| format!("{e:?}"))?;
         reply
-            .insert(doc::REPLY_CREATED, now_ms.to_i64_saturating())
+            .insert(doc::ReplyKey::Created, now_ms.to_i64_saturating())
             .map_err(|e| format!("{e:?}"))?;
         let body = reply
-            .insert_container(doc::ANNOT_TEXT, LoroText::new())
+            .insert_container(doc::ReplyKey::Text, LoroText::new())
             .map_err(|e| format!("{e:?}"))?;
         body.insert(0, text).map_err(|e| format!("{e:?}"))
     }
@@ -308,13 +321,13 @@ impl ProseState {
         let wanted = reply.to_hyphenated();
         let found = (0..list.len()).find_map(|index| {
             let map = comment::reply_at(&list, index)?;
-            (doc::read_string(&map, doc::REPLY_ID)? == wanted).then_some((index, map))
+            (doc::read_string(&map, doc::ReplyKey::Id)? == wanted).then_some((index, map))
         });
         let Some((index, map)) = found else {
             return Err(ProseOutcome::refused(ProseRefusal::NoSuchReply(*reply)));
         };
         let mine = self.my_user_id.map(|user| user.to_string());
-        if mine.is_none() || doc::read_string(&map, doc::REPLY_USER) != mine {
+        if mine.is_none() || doc::read_string(&map, doc::ReplyKey::User) != mine {
             return Err(ProseOutcome::refused(ProseRefusal::NotYourReply));
         }
         Ok((list, index))
@@ -329,8 +342,7 @@ impl ProseState {
                 .unmark(span.start.to_usize()..span.end.to_usize(), &key)
                 .map_err(|e| format!("{e:?}"))?;
         }
-        self.doc
-            .get_map(doc::ANNOTS)
+        doc::annots(&self.doc)
             .delete(&id.to_hyphenated())
             .map_err(|e| format!("{e:?}"))
     }
@@ -732,7 +744,7 @@ mod tests {
         assert_eq!(span(&state, id), (10, 15));
         let entry = comment::entry(&state.doc, &id).expect("the entry");
         entry
-            .insert(doc::ANNOT_ANCHOR_START, 0_i64)
+            .insert(doc::AnnotKey::AnchorStart, 0_i64)
             .expect("a write");
         assert_eq!(span(&state, id), (10, 15), "the mark wins");
     }

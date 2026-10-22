@@ -364,7 +364,7 @@ impl ProseState {
         let Some(node) = doc::node_of(&tree, id) else {
             return Err(Self::err_no_block(id));
         };
-        if let Err(e) = node.insert(doc::K_TYPE, i64::from(kind.code())) {
+        if let Err(e) = node.insert(doc::NodeKey::Type, i64::from(kind.code())) {
             return Err(Self::err_write(&format!("{e:?}")));
         }
         self.write_init(id, &init).map_err(|e| Self::err_write(&e))

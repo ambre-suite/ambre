@@ -588,11 +588,11 @@ mod tests {
         let mut paginator = super::shipped_paginator();
         let _ = paginator.full(&document);
         let after_full = paginator.shaped();
-        let meta = document.get_map(crate::doc::META);
-        let Some(defaults) = crate::doc::map_at(&meta, "defaults") else {
+        let meta = crate::doc::meta(&document);
+        let Some(defaults) = crate::doc::map_at(&meta, crate::doc::MetaKey::Defaults) else {
             return;
         };
-        let _ = defaults.insert("font_size_pt", 24.0);
+        let _ = crate::doc::Fields::of(defaults).insert(crate::doc::DefaultsKey::FontSizePt, 24.0);
         let _ = paginator.reflow(&document, &[]);
         // `PROSE-082`: the inherited size moved, so every block is re-styled
         // and shaped again, even though no block was named dirty.
@@ -605,11 +605,11 @@ mod tests {
         let mut paginator = super::shipped_paginator();
         let _ = paginator.full(&document);
         let after_full = paginator.shaped();
-        let meta = document.get_map(crate::doc::META);
-        let Some(page) = crate::doc::map_at(&meta, "page") else {
+        let meta = crate::doc::meta(&document);
+        let Some(page) = crate::doc::map_at(&meta, crate::doc::MetaKey::Page) else {
             return;
         };
-        let _ = page.insert("width_mm", 100.0);
+        let _ = crate::doc::Fields::of(page).insert(crate::doc::PageKey::WidthMm, 100.0);
         let _ = paginator.reflow(&document, &[]);
         // `PROSE-082`: the width moved, so every block is shaped again.
         assert_eq!(paginator.shaped(), after_full + ids.len() as u64);
@@ -667,10 +667,10 @@ mod tests {
             };
             let tree = crate::doc::blocks(&document);
             let _ = tree.mov_after(heading, last);
-            let attrs = crate::doc::node_of(&tree, &heading)
-                .and_then(|node| crate::doc::map_at(&node, crate::doc::K_ATTRS));
+            let attrs =
+                crate::doc::node_of(&tree, &heading).and_then(|node| crate::doc::attrs_at(&node));
             if let Some(attrs) = attrs {
-                let _ = attrs.insert(crate::doc::A_LEVEL, 1_i64);
+                let _ = attrs.insert(crate::doc::AttrKey::Level, 1_i64);
             }
             let body = crate::doc::get_block_text(&document, &heading);
             let _ = body.insert(0, &format!("Heading {index}"));

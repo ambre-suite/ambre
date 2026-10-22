@@ -202,16 +202,16 @@ fn push(ops: &mut Vec<ImportOp>, parent: Parent, init: BlockInit, runs: &[IrRun]
 fn cell_styled(tree: &loro::LoroTree, cell: &TreeID) -> bool {
     doc::attrs_read(tree, cell).is_some_and(|attrs| {
         [
-            doc::A_CELL_BG,
-            doc::A_EDGE_TOP,
-            doc::A_EDGE_BOTTOM,
-            doc::A_EDGE_LEFT,
-            doc::A_EDGE_RIGHT,
-            doc::A_PADDING,
-            doc::A_VALIGN,
+            doc::AttrKey::CellBg,
+            doc::AttrKey::EdgeTop,
+            doc::AttrKey::EdgeBottom,
+            doc::AttrKey::EdgeLeft,
+            doc::AttrKey::EdgeRight,
+            doc::AttrKey::Padding,
+            doc::AttrKey::VAlign,
         ]
         .iter()
-        .any(|key| attrs.get(key).is_some())
+        .any(|key| attrs.contains(*key))
     })
 }
 
@@ -846,12 +846,9 @@ mod tests {
         let mut state = document();
         let heading: BlockId = append(&mut state, BlockInit::Heading { level: 2 }, "deep");
         let tree = doc::blocks(&state.doc);
-        let attrs = doc::map_at(
-            &doc::node_of(&tree, &tree_id(heading)).expect("node"),
-            doc::K_ATTRS,
-        )
-        .expect("attrs");
-        attrs.insert(doc::A_LEVEL, 9_i64).expect("written");
+        let attrs =
+            doc::attrs_at(&doc::node_of(&tree, &tree_id(heading)).expect("node")).expect("attrs");
+        attrs.insert(doc::AttrKey::Level, 9_i64).expect("written");
         state.doc.commit();
         let ir = state.walk();
         assert!(ir.blocks.contains(&IrBlock::Heading {

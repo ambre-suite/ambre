@@ -9,7 +9,7 @@
 
 use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
 use ambre_core::{SuggestionId, UserId};
-use loro::{Container, LoroDoc, LoroMap, LoroText, LoroValue, TreeID, ValueOrContainer};
+use loro::{Container, LoroDoc, LoroText, LoroValue, TreeID, ValueOrContainer};
 
 use crate::doc;
 use crate::events::{Suggestion, SuggestionKind, SuggestionSpan, block_id};
@@ -47,14 +47,15 @@ pub(crate) fn of_key(key: &str) -> Option<(SuggestionKind, SuggestionId)> {
 
 /// The entry of suggestion `id`, when `annots` holds one of that kind.
 #[must_use]
-pub(crate) fn entry(document: &LoroDoc, id: &SuggestionId) -> Option<LoroMap> {
-    let annots = document.get_map(doc::ANNOTS);
+pub(crate) fn entry(document: &LoroDoc, id: &SuggestionId) -> Option<doc::Fields<doc::AnnotKey>> {
+    let annots = doc::annots(document);
     let Some(ValueOrContainer::Container(Container::Map(map))) = annots.get(&id.to_hyphenated())
     else {
         return None;
     };
+    let map = doc::Fields::of(map);
     let is_suggestion = matches!(
-        map.get(doc::ANNOT_KIND),
+        map.get(doc::AnnotKey::Kind),
         Some(ValueOrContainer::Value(LoroValue::String(kind))) if kind.as_str() == KIND_SUGGESTION
     );
     is_suggestion.then_some(map)
@@ -62,8 +63,8 @@ pub(crate) fn entry(document: &LoroDoc, id: &SuggestionId) -> Option<LoroMap> {
 
 /// The user an entry names as its author (`PROSE-FEAT-260`).
 #[must_use]
-pub(crate) fn owner(entry: &LoroMap) -> Option<UserId> {
-    UserId::parse_str(&doc::read_string(entry, doc::REPLY_USER)?).ok()
+pub(crate) fn owner(entry: &doc::Fields<doc::AnnotKey>) -> Option<UserId> {
+    UserId::parse_str(&doc::read_string(entry, doc::AnnotKey::User)?).ok()
 }
 
 /// One run of text under the marks it carries, in its block's own offsets.
@@ -203,7 +204,7 @@ pub fn pending(document: &LoroDoc) -> Vec<Suggestion> {
         out.push(Suggestion {
             suggestion_id: id,
             kind,
-            author: doc::read_string(&entry, doc::REPLY_AUTHOR).unwrap_or_default(),
+            author: doc::read_string(&entry, doc::AnnotKey::Author).unwrap_or_default(),
             user_id,
             spans: vec![span],
         });

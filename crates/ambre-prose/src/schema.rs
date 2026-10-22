@@ -170,18 +170,19 @@ fn notes_to_blocks(doc: &LoroDoc) -> Result<(), String> {
 
     use crate::doc as d;
 
-    let annots = doc.get_map(d::ANNOTS);
+    let annots = d::annots(doc);
     let mut entries = Vec::new();
     for key in annots.keys() {
         let Some(ValueOrContainer::Container(Container::Map(entry))) = annots.get(&key) else {
             continue;
         };
-        if d::read_string(&entry, d::ANNOT_KIND).as_deref() != Some(crate::note::KIND_FOOTNOTE)
-            || d::read_string(&entry, d::ANNOT_NOTE_BLOCK).is_some()
+        let entry = d::Fields::<d::AnnotKey>::of(entry);
+        if d::read_string(&entry, d::AnnotKey::Kind).as_deref() != Some(crate::note::KIND_FOOTNOTE)
+            || d::read_string(&entry, d::AnnotKey::NoteBlock).is_some()
         {
             continue;
         }
-        let Some(ValueOrContainer::Container(Container::Text(text))) = entry.get(d::ANNOT_TEXT)
+        let Some(ValueOrContainer::Container(Container::Text(text))) = entry.get(d::AnnotKey::Text)
         else {
             continue;
         };
@@ -196,9 +197,11 @@ fn notes_to_blocks(doc: &LoroDoc) -> Result<(), String> {
             .apply_delta(&text.to_delta())
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(d::ANNOT_NOTE_BLOCK, block.to_string())
+            .insert(d::AnnotKey::NoteBlock, block.to_string())
             .map_err(|e| format!("{e:?}"))?;
-        entry.delete(d::ANNOT_TEXT).map_err(|e| format!("{e:?}"))?;
+        entry
+            .delete(d::AnnotKey::Text)
+            .map_err(|e| format!("{e:?}"))?;
     }
     stamp(doc);
     doc.commit();
@@ -274,7 +277,9 @@ mod tests {
     /// register at all.
     fn snapshot_at(version: Option<u32>) -> Vec<u8> {
         let doc = LoroDoc::new();
-        doc.get_map("meta").insert("title", "").expect("seed");
+        crate::doc::meta(&doc)
+            .insert(crate::doc::MetaKey::Title, "")
+            .expect("seed");
         if let Some(v) = version {
             doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
                 .insert(

@@ -5,7 +5,7 @@
 //! (`PROSE-040`, `PROSE-095`). A converged document therefore holds only the
 //! parentages section 4 declares, because no peer ever wrote another one.
 
-use loro::{LoroMap, TreeID, TreeParentId};
+use loro::{TreeID, TreeParentId};
 
 use crate::doc;
 use crate::events::{BlockId, BlockInit, BlockType, ParagraphStyle, ProseOutcome, tree_id};
@@ -73,7 +73,7 @@ impl ProseState {
     #[must_use]
     pub fn heading_level_of(&self, id: &BlockId) -> Option<u8> {
         let attrs = self.attrs_of(&tree_id(*id))?;
-        match attrs.get(doc::A_LEVEL)?.into_value() {
+        match attrs.get(doc::AttrKey::Level)?.into_value() {
             Ok(loro::LoroValue::I64(n)) => u8::try_from(n).ok(),
             _ => None,
         }
@@ -83,7 +83,7 @@ impl ProseState {
     #[must_use]
     pub fn code_lang_of(&self, id: &BlockId) -> Option<String> {
         let attrs = self.attrs_of(&tree_id(*id))?;
-        match attrs.get(doc::A_LANG)?.into_value() {
+        match attrs.get(doc::AttrKey::Lang)?.into_value() {
             Ok(loro::LoroValue::String(lang)) => Some(lang.to_string()),
             _ => None,
         }
@@ -92,19 +92,15 @@ impl ProseState {
     /// The content hash a live image block addresses.
     pub(super) fn image_hash(&self, id: &TreeID) -> Option<String> {
         let attrs = self.attrs_of(id)?;
-        match attrs.get("content_hash")?.into_value() {
-            Ok(loro::LoroValue::String(s)) => Some(s.to_string()),
+        match attrs.value(doc::AttrKey::ContentHash)? {
+            loro::LoroValue::String(s) => Some(s.to_string()),
             _ => None,
         }
     }
 
     /// The attribute map of a live block, or `None` when the type carries none.
-    fn attrs_of(&self, id: &TreeID) -> Option<LoroMap> {
-        let tree = doc::blocks(&self.doc);
-        let node = doc::node_of(&tree, id)?;
-        node.get(doc::K_ATTRS)
-            .and_then(|v| v.into_container().ok())
-            .and_then(|c| c.into_map().ok())
+    fn attrs_of(&self, id: &TreeID) -> Option<doc::Fields<doc::AttrKey>> {
+        doc::attrs_read(&doc::blocks(&self.doc), id)
     }
 
     // -- the lifecycle -----------------------------------------------------
@@ -130,7 +126,7 @@ impl ProseState {
         let tree = doc::blocks(&self.doc);
         if let Some(style_id) = style_id
             && let Some(node) = doc::node_of(&tree, &id)
-            && let Err(e) = node.insert(doc::K_STYLE, style_id)
+            && let Err(e) = node.insert(doc::NodeKey::Style, style_id)
         {
             return Self::err_write(&format!("{e:?}"));
         }
@@ -188,18 +184,18 @@ impl ProseState {
         let Some(node) = doc::node_of(&tree, id) else {
             return Err("the block vanished before its attributes landed".to_owned());
         };
-        let attrs = |key: &str, value: loro::LoroValue| -> Result<(), String> {
-            let map = doc::map_at(&node, doc::K_ATTRS)
+        let attrs = |key: doc::AttrKey, value: loro::LoroValue| -> Result<(), String> {
+            let map = doc::attrs_at(&node)
                 .ok_or_else(|| "the attribute map refused a container".to_owned())?;
             map.insert(key, value).map_err(|e| format!("{e:?}"))
         };
         match init {
             BlockInit::Heading { level } => {
-                attrs(doc::A_LEVEL, i64::from(clamp_level(*level)).into())
+                attrs(doc::AttrKey::Level, i64::from(clamp_level(*level)).into())
             }
-            BlockInit::CodeBlock { lang } => attrs(doc::A_LANG, lang.as_str().into()),
+            BlockInit::CodeBlock { lang } => attrs(doc::AttrKey::Lang, lang.as_str().into()),
             BlockInit::ListItem { style } => {
-                let map = doc::map_at(&node, doc::K_ATTRS)
+                let map = doc::attrs_at(&node)
                     .ok_or_else(|| "the attribute map refused a container".to_owned())?;
                 Self::write_list_style(&map, *style)
             }
@@ -320,7 +316,7 @@ impl ProseState {
         let Some(node) = doc::node_of(&tree, id) else {
             return Self::err_no_block(id);
         };
-        if let Err(e) = node.insert(doc::K_STYLE, style_id.0.as_str()) {
+        if let Err(e) = node.insert(doc::NodeKey::Style, style_id.0.as_str()) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_with(Vec::new())
@@ -353,12 +349,17 @@ impl ProseState {
                 return Self::err_nesting();
             }
             if let Some(node) = doc::node_of(&tree, id)
-                && let Err(e) = node.insert(doc::K_TYPE, i64::from(BlockType::Heading.code()))
+                && let Err(e) =
+                    node.insert(doc::NodeKey::Type, i64::from(BlockType::Heading.code()))
             {
                 return Self::err_write(&format!("{e:?}"));
             }
         }
-        self.write_attr(id, doc::A_LEVEL, i64::from(clamp_level(level)).into())
+        self.write_attr(
+            id,
+            doc::AttrKey::Level,
+            i64::from(clamp_level(level)).into(),
+        )
     }
 
     /// Turn a heading back into a paragraph, keeping its text and its place.
@@ -374,10 +375,10 @@ impl ProseState {
         if doc::block_type_of(&tree, id) == Some(BlockType::Paragraph) {
             return self.commit_with(Vec::new());
         }
-        if let Err(e) = node.insert(doc::K_TYPE, i64::from(BlockType::Paragraph.code())) {
+        if let Err(e) = node.insert(doc::NodeKey::Type, i64::from(BlockType::Paragraph.code())) {
             return Self::err_write(&format!("{e:?}"));
         }
-        if let Err(e) = node.delete(doc::K_ATTRS) {
+        if let Err(e) = node.delete(doc::NodeKey::Attrs) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_with(Vec::new())
@@ -388,16 +389,21 @@ impl ProseState {
         if doc::block_type_of(&doc::blocks(&self.doc), id) != Some(BlockType::CodeBlock) {
             return Self::err_no_block(id);
         }
-        self.write_attr(id, doc::A_LANG, lang.into())
+        self.write_attr(id, doc::AttrKey::Lang, lang.into())
     }
 
     /// Write one attribute of a live block.
-    fn write_attr(&mut self, id: &TreeID, key: &str, value: loro::LoroValue) -> ProseOutcome {
+    fn write_attr(
+        &mut self,
+        id: &TreeID,
+        key: doc::AttrKey,
+        value: loro::LoroValue,
+    ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let Some(node) = doc::node_of(&tree, id) else {
             return Self::err_no_block(id);
         };
-        let Some(attrs) = doc::map_at(&node, doc::K_ATTRS) else {
+        let Some(attrs) = doc::attrs_at(&node) else {
             return Self::err_write("the attribute map refused a container");
         };
         if let Err(e) = attrs.insert(key, value) {
@@ -444,7 +450,7 @@ impl ProseState {
         };
         if let Some(style_id) = doc::style_of(&tree, source) {
             target_node
-                .insert(doc::K_STYLE, style_id.as_str())
+                .insert(doc::NodeKey::Style, style_id.as_str())
                 .map_err(|e| format!("{e:?}"))?;
         }
         doc::write_paragraph_style(&target_node, &doc::read_paragraph_style(&tree, source))
@@ -454,16 +460,16 @@ impl ProseState {
         let level = self.heading_level_of(&crate::events::block_id(*source));
         let lang = self.code_lang_of(&crate::events::block_id(*source));
         if level.is_some() || lang.is_some() {
-            let attrs = doc::map_at(&target_node, doc::K_ATTRS)
+            let attrs = doc::attrs_at(&target_node)
                 .ok_or_else(|| "the attribute map refused a container".to_owned())?;
             if let Some(level) = level {
                 attrs
-                    .insert(doc::A_LEVEL, i64::from(level))
+                    .insert(doc::AttrKey::Level, i64::from(level))
                     .map_err(|e| format!("{e:?}"))?;
             }
             if let Some(lang) = lang {
                 attrs
-                    .insert(doc::A_LANG, lang.as_str())
+                    .insert(doc::AttrKey::Lang, lang.as_str())
                     .map_err(|e| format!("{e:?}"))?;
             }
         }
@@ -837,8 +843,7 @@ mod tests {
         let marker = tree
             .get_meta(id)
             .ok()
-            .and_then(|node| node.get(crate::doc::K_HIDDEN))
-            .and_then(|value| value.into_value().ok())
+            .and_then(|node| crate::doc::Fields::of(node).value(crate::doc::NodeKey::Hidden))
             .and_then(|value| value.into_string().ok())
             .map(|value| value.to_string());
         assert_eq!(marker.as_deref(), Some("7"), "the marker names the session");

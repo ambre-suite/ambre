@@ -12,7 +12,7 @@
 //! drawn and never stored (`PROSE-FEAT-065`).
 
 use ambre_bus::app::prose::DocOffset;
-use loro::{LoroMap, TreeID};
+use loro::TreeID;
 
 use crate::doc;
 use crate::events::{
@@ -38,10 +38,10 @@ pub(super) enum Side {
 
 impl Side {
     /// The register of the side's regular band, and of its first-page band.
-    fn registers(self) -> (&'static str, &'static str) {
+    fn registers(self) -> (doc::MetaKey, doc::MetaKey) {
         match self {
-            Self::Header => (doc::HEADER, doc::HEADER_FIRST),
-            Self::Footer => (doc::FOOTER, doc::FOOTER_FIRST),
+            Self::Header => (doc::MetaKey::Header, doc::MetaKey::HeaderFirst),
+            Self::Footer => (doc::MetaKey::Footer, doc::MetaKey::FooterFirst),
         }
     }
 }
@@ -85,7 +85,7 @@ impl ProseState {
         let (regular, _) = side.registers();
         let written = self
             .register(regular)
-            .and_then(|map| map.insert(doc::BAND_ENABLED, enabled).ok());
+            .and_then(|map| map.insert(doc::BandKey::Enabled, enabled).ok());
         if written.is_none() {
             return Self::err_write("the band register refused the setting");
         }
@@ -95,8 +95,8 @@ impl ProseState {
     /// Turn the first page's own bands on or off. It touches neither side's
     /// own setting nor any band block (`PROSE-FEAT-170`).
     pub(super) fn set_different_first_page(&mut self, enabled: bool) -> ProseOutcome {
-        let meta = self.doc.get_map(doc::META);
-        if let Err(e) = meta.insert(doc::DIFFERENT_FIRST_PAGE, enabled) {
+        let meta = doc::meta(&self.doc);
+        if let Err(e) = meta.insert(doc::MetaKey::DifferentFirstPage, enabled) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_bands()
@@ -143,7 +143,7 @@ impl ProseState {
     pub(super) fn set_band_align(&mut self, id: &TreeID, align: Align) -> ProseOutcome {
         let Some(name) = doc::band_align_name(align) else {
             return ProseOutcome::refused(ProseRefusal::BadMarkValue {
-                key: doc::K_ALIGN.to_owned(),
+                key: doc::BandKey::Align.as_str().to_owned(),
                 value: "justify".to_owned(),
             });
         };
@@ -152,7 +152,7 @@ impl ProseState {
         };
         let written = self
             .register(register)
-            .and_then(|map| map.insert(doc::K_ALIGN, name).ok());
+            .and_then(|map| map.insert(doc::BandKey::Align, name).ok());
         if written.is_none() {
             return Self::err_write("the band register refused the alignment");
         }
@@ -171,7 +171,7 @@ impl ProseState {
             return ProseOutcome::nothing();
         }
         let now = now_ms.to_i64_saturating();
-        if let Err(e) = self.doc.get_map(doc::META).insert(doc::UPDATED_AT, now) {
+        if let Err(e) = doc::meta(&self.doc).insert(doc::MetaKey::UpdatedAt, now) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.doc.set_next_commit_origin(STAMP_ORIGIN);
@@ -191,12 +191,12 @@ impl ProseState {
         Ok((self.ensure_band(regular)?, self.ensure_band(first)?))
     }
 
-    fn ensure_band(&mut self, register: &str) -> Result<TreeID, ProseOutcome> {
+    fn ensure_band(&mut self, register: doc::MetaKey) -> Result<TreeID, ProseOutcome> {
         let bands = doc::read_bands(&self.doc);
         let named = match register {
-            doc::HEADER => bands.header.block,
-            doc::FOOTER => bands.footer.block,
-            doc::HEADER_FIRST => bands.header_first.block,
+            doc::MetaKey::Header => bands.header.block,
+            doc::MetaKey::Footer => bands.footer.block,
+            doc::MetaKey::HeaderFirst => bands.header_first.block,
             _ => bands.footer_first.block,
         };
         if let Some(id) = named {
@@ -206,10 +206,11 @@ impl ProseState {
             return Err(Self::err_write("the tree refused a band block"));
         };
         let tree = doc::blocks(&self.doc);
-        let marked = doc::node_of(&tree, &id).and_then(|node| node.insert(doc::K_BAND, true).ok());
+        let marked =
+            doc::node_of(&tree, &id).and_then(|node| node.insert(doc::NodeKey::Band, true).ok());
         let named = self
             .register(register)
-            .and_then(|map| map.insert(doc::BAND_BLOCK, id.to_string()).ok());
+            .and_then(|map| map.insert(doc::BandKey::Block, id.to_string()).ok());
         if marked.is_none() || named.is_none() {
             return Err(Self::err_write("the band block could not be named"));
         }
@@ -217,8 +218,8 @@ impl ProseState {
     }
 
     /// The band register a key names, opened once and never replaced.
-    fn register(&self, key: &str) -> Option<LoroMap> {
-        doc::map_at(&self.doc.get_map(doc::META), key)
+    fn register(&self, key: doc::MetaKey) -> Option<doc::Fields<doc::BandKey>> {
+        doc::map_at(&doc::meta(&self.doc), key).map(doc::Fields::of)
     }
 
     /// Commit a band write and tell the view the bands as they now stand.
@@ -329,10 +330,10 @@ pub(crate) mod tests {
             pos: DocOffset::ZERO,
             text: "Secret title".to_owned(),
         });
-        let meta = state.document().get_map(doc::META).get_deep_value();
+        let meta = doc::meta(state.document()).map().get_deep_value();
         let dump = format!("{meta:?}");
         assert!(dump.contains(&crate::events::tree_id(header).to_string()));
-        assert!(dump.contains("enabled") && dump.contains(doc::BAND_BLOCK));
+        assert!(dump.contains("enabled") && dump.contains(doc::BandKey::Block.as_str()));
         assert!(!dump.contains("Secret title"));
         let bands = doc::read_bands(state.document());
         assert_eq!(bands.header.align, Align::Left);
@@ -396,9 +397,10 @@ pub(crate) mod tests {
         );
         state.handle_command(ProseCommand::SetDifferentFirstPage { enabled: false });
         assert_eq!(state.text_of(&first).as_deref(), Some("Cover"));
-        let meta = state.document().get_map(doc::META);
-        let per_side = doc::map_read(&meta, doc::HEADER)
-            .is_some_and(|map| map.get(doc::DIFFERENT_FIRST_PAGE).is_some());
+        let meta = doc::meta(state.document());
+        // A key of `meta` looked for in a band register, so the raw map.
+        let per_side = doc::map_read(&meta, doc::MetaKey::Header)
+            .is_some_and(|map| map.get(doc::MetaKey::DifferentFirstPage.as_str()).is_some());
         assert!(!per_side, "the setting is the document's, not a side's");
     }
 
@@ -628,7 +630,7 @@ pub(crate) mod tests {
         let header = crate::events::tree_id(header);
         let english = crate::band::resolve(state.document(), &header, 0, 1);
         assert_eq!(english, "March 5, 2026");
-        let _ = state.document().get_map(doc::META).insert("lang", "fr");
+        let _ = doc::meta(state.document()).insert(doc::MetaKey::Lang, "fr");
         let french = crate::band::resolve(state.document(), &header, 0, 1);
         assert_eq!(french, "5 mars 2026");
     }

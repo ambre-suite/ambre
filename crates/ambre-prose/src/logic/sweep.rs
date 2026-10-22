@@ -87,8 +87,8 @@ impl ProseState {
     /// The PeerID a block's own hiding marker names, or `None` when the block
     /// carries no marker or one that reads as no PeerID.
     fn marker_of(&self, id: &TreeID) -> Option<u64> {
-        let node = doc::blocks(&self.doc).get_meta(*id).ok()?;
-        match node.get(doc::K_HIDDEN)? {
+        let node = doc::Fields::of(doc::blocks(&self.doc).get_meta(*id).ok()?);
+        match node.get(doc::NodeKey::Hidden)? {
             ValueOrContainer::Value(LoroValue::String(peer)) => peer.parse().ok(),
             _ => None,
         }

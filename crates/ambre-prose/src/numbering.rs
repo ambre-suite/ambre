@@ -210,9 +210,9 @@ mod tests {
     fn store_raw_level(state: &ProseState, id: &BlockId, level: i64) {
         let tree = doc::blocks(state.document());
         let node = doc::node_of(&tree, &crate::events::tree_id(*id)).expect("a live block");
-        let attrs = doc::map_at(&node, doc::K_ATTRS).expect("the attribute map");
+        let attrs = doc::attrs_at(&node).expect("the attribute map");
         attrs
-            .insert(doc::A_LEVEL, level)
+            .insert(doc::AttrKey::Level, level)
             .expect("the level is stored");
         state.document().commit();
     }
@@ -222,6 +222,7 @@ mod tests {
         let tree = doc::blocks(state.document());
         doc::node_of(&tree, &crate::events::tree_id(*id))
             .expect("a live block")
+            .map()
             .get_deep_value()
     }
 

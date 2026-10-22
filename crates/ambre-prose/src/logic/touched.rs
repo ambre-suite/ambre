@@ -196,7 +196,7 @@ fn record(change: &ContainerDiff<'_>, moves: &mut TextMoves) {
             }
         }
         // Deleting a block hides it: its node map gains the marker.
-        Diff::Map(map) if map.updated.contains_key(doc::K_HIDDEN) => {
+        Diff::Map(map) if map.updated.contains_key(doc::NodeKey::Hidden.as_str()) => {
             let owner = change.path.iter().rev().find_map(|(_, index)| match index {
                 Index::Node(id) => Some(*id),
                 _ => None,

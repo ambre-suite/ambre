@@ -36,8 +36,8 @@ use ambre_core::schema::verdict;
 use loro::{LoroValue, TreeID, TreeParentId};
 
 use super::schema_shape::{
-    ANY, ANY_BODY, DOC_SOURCE, MARK_SOURCE, declared_mark_roots, declared_string_consts,
-    document_of_every_key, section_of,
+    ANY, ANY_BODY, MARK_SOURCE, declared_keys, declared_mark_roots, document_of_every_key,
+    section_of,
 };
 use crate::doc;
 use crate::events::{ParagraphStyle, block_id};
@@ -51,8 +51,6 @@ use crate::style::ResolvedStyle;
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/readings.txt");
 
-/// The foundation's `meta` root, as a pattern.
-const META_ROOT: &str = ambre_core::crdt::FoundationRoot::Meta.as_str();
 /// The foundation's version key, as a pattern.
 const VERSION_KEY: &str = ambre_core::schema::MetaKey::SchemaVersion.as_str();
 
@@ -110,7 +108,7 @@ fn stored_values(state: &ProseState) -> Vec<Stored> {
         return found;
     };
     for (root, value) in roots.iter() {
-        if root == doc::BLOCKS {
+        if doc::Root::parse(root) == Some(doc::Root::Blocks) {
             continue;
         }
         walk(root, Vec::new(), value, &mut found);
@@ -124,7 +122,12 @@ fn stored_values(state: &ProseState) -> Vec<Stored> {
             continue;
         };
         let at = vec![Segment::Key(id.to_string())];
-        walk(doc::BLOCKS, at, &meta.get_deep_value(), &mut found);
+        walk(
+            doc::Root::Blocks.as_str(),
+            at,
+            &meta.get_deep_value(),
+            &mut found,
+        );
     }
     found
 }
@@ -273,11 +276,11 @@ fn reading(reader: &ProseState, stored: &Stored) -> Option<String> {
             }
         };
     }
-    match stored.root.as_str() {
-        META_ROOT => meta_reading(reader, stored),
-        doc::BLOCKS => block_reading(reader, stored),
-        doc::ANNOTS => annotation_reading(reader, stored),
-        _ => None,
+    match doc::Root::parse(&stored.root)? {
+        doc::Root::Meta => meta_reading(reader, stored),
+        doc::Root::Blocks => block_reading(reader, stored),
+        doc::Root::Annots => annotation_reading(reader, stored),
+        doc::Root::Styles => None,
     }
 }
 
@@ -285,75 +288,82 @@ fn reading(reader: &ProseState, stored: &Stored) -> Option<String> {
 /// the bands take.
 fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let document = &reader.doc;
-    let key = stored.key(0)?;
+    let stored_key = stored.key(0)?;
+    if stored_key == VERSION_KEY {
+        let LoroValue::I64(n) = stored.value else {
+            return None;
+        };
+        let version = u32::try_from(n).ok()?;
+        return Some(format!(
+            "version {version}, {:?}",
+            verdict(version, SCHEMA_VERSION)
+        ));
+    }
+    let key = doc::MetaKey::parse(stored_key)?;
     match key {
-        VERSION_KEY => {
-            let LoroValue::I64(n) = stored.value else {
-                return None;
-            };
-            let version = u32::try_from(n).ok()?;
-            Some(format!(
-                "version {version}, {:?}",
-                verdict(version, SCHEMA_VERSION)
-            ))
-        }
-        "title" => Some(format!("titled {:?}", doc::read_title(document))),
-        "lang" => Some(format!("in {:?}", doc::read_lang(document))),
-        doc::UPDATED_AT => {
+        doc::MetaKey::Title => Some(format!("titled {:?}", doc::read_title(document))),
+        doc::MetaKey::Lang => Some(format!("in {:?}", doc::read_lang(document))),
+        doc::MetaKey::UpdatedAt => {
             let (year, month, day) = crate::band::civil_date(doc::read_updated_at(document)?);
             Some(format!("last modified {year:04}-{month:02}-{day:02} UTC"))
         }
-        "page" => {
+        doc::MetaKey::Page => {
             let page = PageBox::from_mm(doc::read_page_format(document));
-            let length = match stored.key(1)? {
-                "width_mm" => page.page_width_px,
-                "height_mm" => page.page_height_px,
-                "margin_left_mm" => page.margin_left_px,
-                "margin_top_mm" => page.margin_top_px,
-                "margin_right_mm" => {
+            let length = match doc::PageKey::parse(stored.key(1)?)? {
+                doc::PageKey::WidthMm => page.page_width_px,
+                doc::PageKey::HeightMm => page.page_height_px,
+                doc::PageKey::MarginLeftMm => page.margin_left_px,
+                doc::PageKey::MarginTopMm => page.margin_top_px,
+                doc::PageKey::MarginRightMm => {
                     page.page_width_px - page.margin_left_px - page.content_width_px
                 }
-                "margin_bottom_mm" => {
+                doc::PageKey::MarginBottomMm => {
                     page.page_height_px - page.margin_top_px - page.content_height_px
                 }
-                _ => return None,
+                doc::PageKey::Orientation => return None,
             };
             Some(format!("{} is {length} px", stored.key(1)?))
         }
-        "defaults" => {
+        doc::MetaKey::Defaults => {
             let defaults = doc::read_defaults(document);
             let style = EffectiveStyle::from_parts(
                 &defaults,
                 &ParagraphStyle::default(),
                 crate::layout::measure::Weight::Regular,
             );
-            match stored.key(1)? {
-                "font_family" => Some(format!("body set in {:?}", style.font_family)),
-                "font_size_pt" => Some(format!("body set at {} px", style.font_size_px)),
-                "line_height" => Some(format!("body lines {:?}", style.line_height)),
-                _ => None,
+            match doc::DefaultsKey::parse(stored.key(1)?)? {
+                doc::DefaultsKey::FontFamily => {
+                    Some(format!("body set in {:?}", style.font_family))
+                }
+                doc::DefaultsKey::FontSizePt => {
+                    Some(format!("body set at {} px", style.font_size_px))
+                }
+                doc::DefaultsKey::LineHeight => Some(format!("body lines {:?}", style.line_height)),
             }
         }
-        doc::DIFFERENT_FIRST_PAGE => Some(format!(
+        doc::MetaKey::DifferentFirstPage => Some(format!(
             "first page has its own bands {}",
             doc::read_bands(document).different_first_page
         )),
-        doc::HEADER | doc::FOOTER | doc::HEADER_FIRST | doc::FOOTER_FIRST => {
+        doc::MetaKey::Header
+        | doc::MetaKey::Footer
+        | doc::MetaKey::HeaderFirst
+        | doc::MetaKey::FooterFirst => {
             let bands = doc::read_bands(document);
             let (band, enabled) = match key {
-                doc::HEADER => (bands.header, Some(bands.header_enabled)),
-                doc::FOOTER => (bands.footer, Some(bands.footer_enabled)),
-                doc::HEADER_FIRST => (bands.header_first, None),
+                doc::MetaKey::Header => (bands.header, Some(bands.header_enabled)),
+                doc::MetaKey::Footer => (bands.footer, Some(bands.footer_enabled)),
+                doc::MetaKey::HeaderFirst => (bands.header_first, None),
                 _ => (bands.footer_first, None),
             };
-            match stored.key(1)? {
-                doc::BAND_ENABLED => Some(format!("{key} shown {}", enabled?)),
-                doc::BAND_BLOCK => Some(format!(
+            let key = key.as_str();
+            match doc::BandKey::parse(stored.key(1)?)? {
+                doc::BandKey::Enabled => Some(format!("{key} shown {}", enabled?)),
+                doc::BandKey::Block => Some(format!(
                     "{key} drawn from {}",
                     block_name(reader, &band.block?)
                 )),
-                "align" => Some(format!("{key} aligned {:?}", band.align)),
-                _ => None,
+                doc::BandKey::Align => Some(format!("{key} aligned {:?}", band.align)),
             }
         }
         _ => None,
@@ -368,7 +378,8 @@ fn block_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let id = TreeID::try_from(stored.key(0)?).ok()?;
     let name = block_name(reader, &id);
     // A hidden block is skipped by every reader until an undo restores it.
-    if doc::is_hidden(&tree, &id) && stored.key(1)? != doc::K_HIDDEN {
+    let field = doc::NodeKey::parse(stored.key(1)?)?;
+    if doc::is_hidden(&tree, &id) && field != doc::NodeKey::Hidden {
         return Some(format!(
             "{name} hidden, so read by no reader until restored"
         ));
@@ -379,27 +390,26 @@ fn block_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         &id,
         crate::layout::measure::Weight::Regular,
     );
-    let what = match stored.key(1)? {
-        doc::K_TYPE => format!("is a {:?}", doc::block_type_of(&tree, &id)?),
-        doc::K_STYLE => format!("styled {:?}", doc::style_of(&tree, &id)?),
-        doc::K_HIDDEN => format!("hidden {}", doc::is_hidden(&tree, &id)),
-        doc::K_REGROWN => format!(
+    let what = match field {
+        doc::NodeKey::Type => format!("is a {:?}", doc::block_type_of(&tree, &id)?),
+        doc::NodeKey::Style => format!("styled {:?}", doc::style_of(&tree, &id)?),
+        doc::NodeKey::Hidden => format!("hidden {}", doc::is_hidden(&tree, &id)),
+        doc::NodeKey::Regrown => format!(
             "counted among the grown empty roots {}",
             doc::grown_empty_roots(document, &tree).contains(&id)
         ),
-        doc::K_BAND => format!("is a band {}", doc::is_band(&tree, &id)),
-        doc::K_NOTE => format!("is a note {}", doc::is_note(&tree, &id)),
-        doc::K_ALIGN => format!("aligned {:?}", style.align),
-        doc::K_INDENT_FIRST => format!("first line indented {} px", style.indent_first_px),
-        doc::K_INDENT_LEFT => format!("indented {} px on the left", style.indent_left_px),
-        doc::K_INDENT_RIGHT => format!("indented {} px on the right", style.indent_right_px),
-        doc::K_SPACE_BEFORE => format!("{} px above", style.space_before_px),
-        doc::K_SPACE_AFTER => format!("{} px below", style.space_after_px),
-        doc::K_LINE_HEIGHT => format!("lines {:?}", style.line_height),
-        doc::K_KEEP_TOGETHER => format!("kept together {}", style.keep_together),
-        doc::K_KEEP_WITH_NEXT => format!("kept with the next {}", style.keep_with_next),
-        doc::K_ATTRS => attribute_reading(reader, &id, stored)?,
-        _ => return None,
+        doc::NodeKey::Band => format!("is a band {}", doc::is_band(&tree, &id)),
+        doc::NodeKey::Note => format!("is a note {}", doc::is_note(&tree, &id)),
+        doc::NodeKey::Align => format!("aligned {:?}", style.align),
+        doc::NodeKey::IndentFirst => format!("first line indented {} px", style.indent_first_px),
+        doc::NodeKey::IndentLeft => format!("indented {} px on the left", style.indent_left_px),
+        doc::NodeKey::IndentRight => format!("indented {} px on the right", style.indent_right_px),
+        doc::NodeKey::SpaceBefore => format!("{} px above", style.space_before_px),
+        doc::NodeKey::SpaceAfter => format!("{} px below", style.space_after_px),
+        doc::NodeKey::LineHeight => format!("lines {:?}", style.line_height),
+        doc::NodeKey::KeepTogether => format!("kept together {}", style.keep_together),
+        doc::NodeKey::KeepWithNext => format!("kept with the next {}", style.keep_with_next),
+        doc::NodeKey::Attrs => attribute_reading(reader, &id, stored)?,
     };
     Some(format!("{name} {what}"))
 }
@@ -412,49 +422,48 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
     let edge = |pick: fn(&crate::layout::run::CellBorderPx) -> f32| {
         cell().border.map_or(0.0, |border| pick(&border))
     };
-    Some(match stored.key(2)? {
-        doc::A_LEVEL => format!("at level {}", doc::heading_level_of(&tree, id)?),
-        doc::A_LANG => format!("in {:?}", reader.code_lang_of(&block_id(*id))?),
-        doc::A_MARKER | doc::A_SPELLING | doc::A_TICKED => {
+    Some(match doc::AttrKey::parse(stored.key(2)?)? {
+        doc::AttrKey::Level => format!("at level {}", doc::heading_level_of(&tree, id)?),
+        doc::AttrKey::Lang => format!("in {:?}", reader.code_lang_of(&block_id(*id))?),
+        doc::AttrKey::Marker | doc::AttrKey::Spelling | doc::AttrKey::Ticked => {
             format!("marked {:?}", doc::list_style_of(&tree, id)?)
         }
-        doc::A_MAX_LEVEL | doc::A_NUMBERED => {
+        doc::AttrKey::MaxLevel | doc::AttrKey::Numbered => {
             let toc = reader.table_of_contents(&block_id(*id))?;
             format!(
                 "lists headings to level {}, numbered {}",
                 toc.max_level, toc.numbered
             )
         }
-        doc::A_COL_WIDTHS => {
+        doc::AttrKey::ColWidths => {
             let at = stored.at(3)?;
             let stored_pt = doc::col_widths(&tree, id);
             let content = PageBox::from_mm(doc::read_page_format(&reader.doc)).content_width_px;
             let widths = column_widths_px(&stored_pt, stored_pt.len(), content);
             format!("column {} is {} px wide", at + 1, widths.get(at)?)
         }
-        doc::A_MERGED => {
+        doc::AttrKey::Merged => {
             let anchor = TreeID::try_from(stored.key(3)?).ok()?;
             let region = doc::regions(&tree, id)
                 .into_iter()
                 .find(|region| region.anchor == anchor)?;
-            match stored.key(4)? {
-                doc::R_EXTENT => format!(
+            match doc::RegionKey::parse(stored.key(4)?)? {
+                doc::RegionKey::Extent => format!(
                     "merges {} through {}",
                     block_name(reader, &region.anchor),
                     block_name(reader, &region.extent)
                 ),
-                doc::R_STAMP => format!("merge stamped {}", region.stamp),
-                _ => return None,
+                doc::RegionKey::Stamp => format!("merge stamped {}", region.stamp),
             }
         }
-        doc::A_CELL_BG => format!("filled {}", colour(cell().fill?)),
-        doc::A_EDGE_TOP => format!("top edge {} px", edge(|b| b.top)),
-        doc::A_EDGE_BOTTOM => format!("bottom edge {} px", edge(|b| b.bottom)),
-        doc::A_EDGE_LEFT => format!("left edge {} px", edge(|b| b.left)),
-        doc::A_EDGE_RIGHT => format!("right edge {} px", edge(|b| b.right)),
-        doc::A_EDGE_COLOR => format!("edged {}", colour(cell().border?.color?)),
-        doc::A_PADDING => format!("padded {} px", cell().padding_px),
-        doc::A_VALIGN => format!("set {:?}", cell().valign),
+        doc::AttrKey::CellBg => format!("filled {}", colour(cell().fill?)),
+        doc::AttrKey::EdgeTop => format!("top edge {} px", edge(|b| b.top)),
+        doc::AttrKey::EdgeBottom => format!("bottom edge {} px", edge(|b| b.bottom)),
+        doc::AttrKey::EdgeLeft => format!("left edge {} px", edge(|b| b.left)),
+        doc::AttrKey::EdgeRight => format!("right edge {} px", edge(|b| b.right)),
+        doc::AttrKey::EdgeColor => format!("edged {}", colour(cell().border?.color?)),
+        doc::AttrKey::Padding => format!("padded {} px", cell().padding_px),
+        doc::AttrKey::VAlign => format!("set {:?}", cell().valign),
         _ => return None,
     })
 }
@@ -463,7 +472,7 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
 /// suggestion the view lists.
 fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let id = Uuid::parse_str(stored.key(0)?).ok()?;
-    let field = stored.key(1)?;
+    let field = doc::AnnotKey::parse(stored.key(1)?)?;
     if let Some(thread) = reader
         .comments()
         .into_iter()
@@ -471,21 +480,20 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     {
         let anchor = thread.anchor_block.map(crate::events::tree_id);
         return Some(match field {
-            doc::ANNOT_KIND => "a comment thread".to_owned(),
-            doc::ANNOT_ANCHOR_BLOCK => format!("on {}", block_name(reader, &anchor?)),
-            doc::ANNOT_ANCHOR_START => format!("from character {}", thread.anchor_start.get()),
-            doc::ANNOT_ANCHOR_END => format!("to character {}", thread.anchor_end.get()),
-            doc::ANNOT_RESOLVED => format!("resolved {}", thread.resolved),
-            doc::ANNOT_REPLIES => {
+            doc::AnnotKey::Kind => "a comment thread".to_owned(),
+            doc::AnnotKey::AnchorBlock => format!("on {}", block_name(reader, &anchor?)),
+            doc::AnnotKey::AnchorStart => format!("from character {}", thread.anchor_start.get()),
+            doc::AnnotKey::AnchorEnd => format!("to character {}", thread.anchor_end.get()),
+            doc::AnnotKey::Resolved => format!("resolved {}", thread.resolved),
+            doc::AnnotKey::Replies => {
                 let at = stored.at(2)?;
                 let reply = thread.replies.get(at)?;
-                let what = match stored.key(3)? {
-                    doc::REPLY_ID => format!("is {}", reply.reply_id.to_hyphenated()),
-                    doc::REPLY_AUTHOR => format!("by {:?}", reply.author),
-                    doc::REPLY_USER => format!("by user {}", reply.user_id),
-                    doc::REPLY_CREATED => format!("at {} ms", reply.created_at.0),
-                    doc::ANNOT_TEXT => format!("reads {:?}", reply.text),
-                    _ => return None,
+                let what = match doc::ReplyKey::parse(stored.key(3)?)? {
+                    doc::ReplyKey::Id => format!("is {}", reply.reply_id.to_hyphenated()),
+                    doc::ReplyKey::Author => format!("by {:?}", reply.author),
+                    doc::ReplyKey::User => format!("by user {}", reply.user_id),
+                    doc::ReplyKey::Created => format!("at {} ms", reply.created_at.0),
+                    doc::ReplyKey::Text => format!("reads {:?}", reply.text),
                 };
                 format!("reply {} {what}", at + 1)
             }
@@ -498,8 +506,8 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         .find(|n| *n.footnote_id.as_uuid() == id)
     {
         return Some(match field {
-            doc::ANNOT_KIND => format!("footnote {:?}", note.ordinal),
-            doc::ANNOT_NOTE_BLOCK => format!("note reads {:?}", note.text),
+            doc::AnnotKey::Kind => format!("footnote {:?}", note.ordinal),
+            doc::AnnotKey::NoteBlock => format!("note reads {:?}", note.text),
             _ => return None,
         });
     }
@@ -508,10 +516,10 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         .into_iter()
         .find(|s| *s.suggestion_id.as_uuid() == id)?;
     Some(match field {
-        doc::ANNOT_KIND => format!("a suggested {:?}", suggestion.kind),
-        "author" => format!("suggested by {:?}", suggestion.author),
-        "user_id" => format!("suggested by user {}", suggestion.user_id),
-        "block_id" => {
+        doc::AnnotKey::Kind => format!("a suggested {:?}", suggestion.kind),
+        doc::AnnotKey::Author => format!("suggested by {:?}", suggestion.author),
+        doc::AnnotKey::User => format!("suggested by user {}", suggestion.user_id),
+        doc::AnnotKey::NoteBlock => {
             let span = suggestion.spans.first()?;
             format!(
                 "first span on {}",
@@ -720,7 +728,7 @@ fn every_stored_value_has_a_reading() {
 fn every_declared_key_has_a_reading() {
     let state = document_of_every_key();
     let keys = readings_of(&state, &reopened(&state)).keys;
-    let mut declared = declared_string_consts(DOC_SOURCE);
+    let mut declared = declared_keys();
     declared.extend(declared_mark_roots(MARK_SOURCE));
     for key in declared {
         let reached = keys.contains(&key)
@@ -762,14 +770,10 @@ fn a_reader_moving_moves_the_reading() {
     // The page box is read from the document, so the reader is moved by
     // rewriting what it reads, on the reader's copy alone.
     let misread = reopened(&state);
-    let page = misread
-        .doc
-        .get_map(doc::META)
-        .get("page")
-        .and_then(|value| value.into_container().ok())
-        .and_then(|container| container.into_map().ok())
+    let page = doc::map_read(&doc::meta(&misread.doc), doc::MetaKey::Page)
+        .map(doc::Fields::of)
         .expect("the document carries a page");
-    page.insert("width_mm", 210.0 * 25.4)
+    page.insert(doc::PageKey::WidthMm, 210.0 * 25.4)
         .expect("the register takes a value");
     misread.doc.commit();
     let after = readings_of(&state, &misread).lines;

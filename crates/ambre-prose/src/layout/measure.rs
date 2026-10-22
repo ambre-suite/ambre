@@ -441,7 +441,7 @@ impl Measurer {
         content_width_px: f32,
         weight: Weight,
     ) -> (EffectiveStyle, TextMetrics) {
-        let tree = document.get_tree(doc::BLOCKS);
+        let tree = doc::blocks(document);
         let style = EffectiveStyle::resolve(defaults, &tree, id, weight);
         let text = doc::get_block_text(document, id).to_string();
         let metrics = self.measure(&text, &style, style.text_width_px(content_width_px));

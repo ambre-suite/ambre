@@ -12,6 +12,7 @@
 //! renders as two decimal numbers joined by `@`, so neither half carries the
 //! separator (`PROSE-088`).
 
+use ambre_core::crdt::FieldKey;
 use loro::{
     LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue, TreeID, TreeParentId,
 };
@@ -25,113 +26,294 @@ use ambre_bus::app::prose::{
 // Container names and keys (`ambre-spec-prose-schema.md section 3`)
 // -----------------------------------------------------------------------------
 
-/// The document register: the schema version, the title, the stamps, the
-/// language, and the page sub-map.
-pub(crate) const META: &str = ambre_core::crdt::FoundationRoot::Meta.as_str();
-/// The block hierarchy.
-pub(crate) const BLOCKS: &str = "blocks";
-/// The user's own paragraph styles. The nine built-in names are compiled in and
-/// never stored (`PROSE-093`).
-pub(crate) const STYLES: &str = "styles";
-/// The comments, the suggestions and the footnotes, one entry each.
-pub(crate) const ANNOTS: &str = "annots";
+ambre_core::loro_fields!(pub(crate));
 
-/// The page sub-map of [`META`].
-const PAGE: &str = "page";
-/// The typographic defaults sub-map of [`META`].
-const DEFAULTS: &str = "defaults";
+ambre_core::crdt_names! {
+    /// The root containers a Prose document opens by name. A body is a root as
+    /// well, and [`BodyKey`] names it, since its name carries a tree id.
+    pub(crate) enum Root: ContainerName {
+        /// The document register: the schema version, the title, the stamps,
+        /// the language, the page sub-map and the band registers.
+        Meta = ambre_core::crdt::FoundationRoot::Meta.as_str(),
+        /// The block hierarchy.
+        Blocks = "blocks",
+        /// The user's own paragraph styles. The nine built-in names are
+        /// compiled in and never stored (`PROSE-093`).
+        Styles = "styles",
+        /// The comments, the suggestions and the footnotes, one entry each,
+        /// keyed by the annotation's id.
+        Annots = "annots",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of the `meta` register.
+    pub(crate) enum MetaKey: FieldKey {
+        Title = "title",
+        /// A BCP 47 tag.
+        Lang = "lang",
+        Pageless = "pageless",
+        /// The page sub-map, keyed by [`PageKey`].
+        Page = "page",
+        /// The typographic defaults sub-map, keyed by [`DefaultsKey`].
+        Defaults = "defaults",
+        /// The four band registers, each keyed by [`BandKey`].
+        Header = "header",
+        Footer = "footer",
+        HeaderFirst = "header_first",
+        FooterFirst = "footer_first",
+        /// The one setting that turns both first-page bands on
+        /// (`PROSE-FEAT-063`).
+        DifferentFirstPage = "different_first_page",
+        /// The last-modified stamp, Unix milliseconds by the clock of the peer
+        /// that wrote last (`PROSE-FEAT-066`).
+        UpdatedAt = "updated_at",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of the page sub-map, every length in millimetres.
+    pub(crate) enum PageKey: FieldKey {
+        Orientation = "orientation",
+        WidthMm = "width_mm",
+        HeightMm = "height_mm",
+        MarginTopMm = "margin_top_mm",
+        MarginBottomMm = "margin_bottom_mm",
+        MarginLeftMm = "margin_left_mm",
+        MarginRightMm = "margin_right_mm",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of the typographic defaults sub-map.
+    pub(crate) enum DefaultsKey: FieldKey {
+        FontFamily = "font_family",
+        FontSizePt = "font_size_pt",
+        /// A multiple of the font size.
+        LineHeight = "line_height",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of one band register.
+    pub(crate) enum BandKey: FieldKey {
+        /// Whether a side is shown, in the header and footer registers alone.
+        Enabled = "enabled",
+        /// The band block's `TreeID`, as the string Loro prints it.
+        Block = "block_id",
+        /// The band's alignment, by name.
+        Align = "align",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of a block's node map.
+    pub(crate) enum NodeKey: FieldKey {
+        /// The block type discriminant.
+        Type = "t",
+        /// The style id: a key in `styles`, or one of the nine built-in names.
+        Style = "s",
+        /// The type-specific attribute map, keyed by [`AttrKey`].
+        Attrs = "a",
+        /// The scaffolding marker. `true` on a root paragraph a peer grew
+        /// because the tree held none, and on no other block (`PROSE-094`).
+        ///
+        /// Loro refuses to raise a tombstone, so a tree that empties cannot
+        /// re-grow the block it lost. Each peer grows one of its own, and the
+        /// merge keeps one. The marker tells a grown block from one the user
+        /// asked for, so every peer drops the surplus alike.
+        Regrown = "rg",
+        /// The hiding marker, holding the Loro peer id of the session that
+        /// deleted the block, in decimal (`PROSE-122`). A user's deletion
+        /// writes it rather than removing the node (`PROSE-118`). An undo
+        /// removes the key, and the block comes back under its own `TreeID`
+        /// with its body (`PROSE-120`).
+        Hidden = "gn",
+        /// The band marker, `true` on a block that holds a header or a
+        /// footer. Such a block is a root of the block tree kept out of the
+        /// body flow (`PROSE-006`).
+        Band = "hb",
+        /// The note marker, `true` on a block that holds a footnote's text.
+        /// Such a block is a root of the block tree kept out of the body
+        /// flow, and the note's entry names it (`PROSE-FEAT-305`).
+        Note = "nb",
+        /// The nine paragraph-style keys, flat in the node map, one key per
+        /// property (`PROSE-030`).
+        Align = "align",
+        IndentFirst = "indent_first",
+        IndentLeft = "indent_left",
+        IndentRight = "indent_right",
+        SpaceBefore = "space_before",
+        SpaceAfter = "space_after",
+        /// The line height sub-map, keyed by [`LineHeightKey`].
+        LineHeight = "line_height",
+        KeepTogether = "keep_together",
+        KeepWithNext = "keep_with_next",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The two keys of the `line_height` sub-map.
+    pub(crate) enum LineHeightKey: FieldKey {
+        Mode = "mode",
+        Value = "value",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of a block's attribute map. Each applies to some block types
+    /// alone.
+    pub(crate) enum AttrKey: FieldKey {
+        /// The heading level attribute, `1..=6`.
+        Level = "level",
+        /// The code block's language. An empty value reads as plain.
+        Lang = "lang",
+        /// A list item's marker kind: 0 bullet, 1 ordered, 2 checkbox.
+        Marker = "ls",
+        /// How an ordered item's ordinal is spelled, on an ordered item alone.
+        Spelling = "lo",
+        /// Whether a checkbox item is ticked, on a checkbox item alone.
+        Ticked = "tc",
+        /// A table's column widths in points: a movable list, one entry per
+        /// column (`PROSE-FEAT-044`). A list container rather than a value,
+        /// so a column inserted and a column resized at the same moment both
+        /// survive the merge.
+        ColWidths = "col_widths",
+        /// A table's merged regions: a map from the anchor cell's id to a
+        /// region record keyed by [`RegionKey`] (`PROSE-009`). A map
+        /// container, so two regions written at once are two keys rather than
+        /// one value overwritten.
+        Merged = "merged",
+        /// A cell's background, as `"#rrggbb"`.
+        CellBg = "bg",
+        /// The four border widths of a cell, in points.
+        EdgeTop = "bt",
+        EdgeBottom = "bb",
+        EdgeLeft = "bl",
+        EdgeRight = "br",
+        /// The border colour of a cell, as `"#rrggbb"`.
+        EdgeColor = "bc",
+        /// A cell's padding, in points.
+        Padding = "pad",
+        /// A cell's vertical alignment: 0 top, 1 middle, 2 bottom.
+        VAlign = "va",
+        /// The deepest heading level a table of contents lists, one to six.
+        MaxLevel = "max_level",
+        /// Whether a table of contents numbers its entries.
+        Numbered = "numbered",
+        /// An image's box height. No command writes it yet, so no scenario
+        /// reaches it ([`UNWRITTEN_ATTRS`]).
+        ImageHeight = "h",
+        /// An image's caption. No command writes it yet.
+        ImageCaption = "caption",
+        /// The hash of an image's bytes. The image command writes it, and the
+        /// schema scenario holds no image.
+        ContentHash = "content_hash",
+    }
+}
+
+/// The attributes the schema declares and the schema scenario does not write.
+/// The two schema belts leave them out until the images Story lands
+/// (`ambre-roadmap.md` E5).
+#[cfg(test)]
+pub(crate) const UNWRITTEN_ATTRS: [AttrKey; 3] = [
+    AttrKey::ImageHeight,
+    AttrKey::ImageCaption,
+    AttrKey::ContentHash,
+];
+
+ambre_core::crdt_names! {
+    /// The keys of a merged region's record.
+    pub(crate) enum RegionKey: FieldKey {
+        /// The bottom-right cell's id.
+        Extent = "e",
+        /// The Lamport time the region was written at, which is what "the
+        /// later of two regions" reads (`PROSE-FEAT-254`).
+        Stamp = "n",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of an annotation entry. A comment, a suggestion and a
+    /// footnote each write a part of the set.
+    pub(crate) enum AnnotKey: FieldKey {
+        /// An annotation's kind, in one field of one type (`PROSE-031`).
+        Kind = "kind",
+        /// The text child of an entry, before a footnote's text moved into a
+        /// block.
+        Text = "text",
+        /// The block of a footnote's text, as the string Loro prints a
+        /// `TreeID`.
+        NoteBlock = "block_id",
+        /// The cached anchor of a comment: the block, and the span in its
+        /// offsets.
+        AnchorBlock = "anchor_block",
+        AnchorStart = "anchor_start",
+        AnchorEnd = "anchor_end",
+        /// Whether a comment thread is closed.
+        Resolved = "resolved",
+        /// A comment's list of replies, the opening one first, each keyed by
+        /// [`ReplyKey`].
+        Replies = "replies",
+        /// A suggestion's author, by display name and by id.
+        Author = "author",
+        User = "user_id",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of one reply of a comment.
+    pub(crate) enum ReplyKey: FieldKey {
+        Id = "id",
+        Author = "author",
+        User = "user_id",
+        Created = "created_at",
+        /// The reply's body, a text container.
+        Text = "text",
+    }
+}
 
 /// The tag a body key joins to a tree id.
 const BODY_TAG: &str = "t";
 /// The separator of a body key. Neither half can carry it (`PROSE-088`).
 const BODY_SEPARATOR: char = ':';
 
-/// The block type discriminant.
-pub(crate) const K_TYPE: &str = "t";
-/// The style id: a key in [`STYLES`], or one of the nine built-in names.
-pub(crate) const K_STYLE: &str = "s";
-/// The type-specific attribute map.
-pub(crate) const K_ATTRS: &str = "a";
+/// A root container of the document, which the document opens by name.
+#[must_use]
+pub(crate) fn root_map(doc: &LoroDoc, root: Root) -> LoroMap {
+    doc.get_map(root.as_str())
+}
 
-/// The scaffolding marker. `true` on a root paragraph a peer grew because the
-/// tree held none, and on no other block (`PROSE-094`).
-///
-/// Loro refuses to raise a tombstone, so a tree that empties cannot re-grow the
-/// block it lost. Each peer grows one of its own, and the merge keeps one. The
-/// marker tells a grown block from one the user asked for, so every peer drops
-/// the surplus alike.
-pub(crate) const K_REGROWN: &str = "rg";
+/// The `meta` register, attached when the document has none. A reader takes
+/// [`meta_read`] instead.
+#[must_use]
+pub(crate) fn meta(doc: &LoroDoc) -> Fields<MetaKey> {
+    Fields::of(root_map(doc, Root::Meta))
+}
 
-/// The hiding marker, holding the Loro peer id of the session that deleted
-/// the block, in decimal (`PROSE-122`). A user's deletion writes it rather
-/// than removing the node (`PROSE-118`). An undo removes the key, and the
-/// block comes back under its own `TreeID` with its body (`PROSE-120`).
-pub(crate) const K_HIDDEN: &str = "gn";
+/// The `annots` dictionary, keyed by the annotation's id. Each entry is a map
+/// keyed by [`AnnotKey`].
+#[must_use]
+pub(crate) fn annots(doc: &LoroDoc) -> LoroMap {
+    root_map(doc, Root::Annots)
+}
 
-/// The heading level attribute, `1..=6`.
-pub(crate) const A_LEVEL: &str = "level";
-/// The code block's language. An empty value reads as plain.
-pub(crate) const A_LANG: &str = "lang";
-
-/// A list item's marker kind: 0 bullet, 1 ordered, 2 checkbox.
-pub(crate) const A_MARKER: &str = "ls";
-/// How an ordered item's ordinal is spelled, on an ordered item alone.
-pub(crate) const A_SPELLING: &str = "lo";
-/// Whether a checkbox item is ticked, on a checkbox item alone.
-pub(crate) const A_TICKED: &str = "tc";
-
-/// A table's column widths in points: a movable list, one entry per column
-/// (`PROSE-FEAT-044`). A list container rather than a value, so a column
-/// inserted and a column resized at the same moment both survive the merge.
-pub(crate) const A_COL_WIDTHS: &str = "col_widths";
-/// A table's merged regions: a map from the anchor cell's id to a region
-/// record (`PROSE-009`). A map container, so two regions written at once are
-/// two keys rather than one value overwritten.
-pub(crate) const A_MERGED: &str = "merged";
-/// The region record's extent: the bottom-right cell's id.
-pub(crate) const R_EXTENT: &str = "e";
-/// The region record's stamp: the Lamport time it was written at, which is
-/// what "the later of two regions" reads (`PROSE-FEAT-254`).
-pub(crate) const R_STAMP: &str = "n";
-
-/// A cell's background, as `"#rrggbb"`.
-pub(crate) const A_CELL_BG: &str = "bg";
-/// The four border widths of a cell, in points.
-pub(crate) const A_EDGE_TOP: &str = "bt";
-pub(crate) const A_EDGE_BOTTOM: &str = "bb";
-pub(crate) const A_EDGE_LEFT: &str = "bl";
-pub(crate) const A_EDGE_RIGHT: &str = "br";
-/// The border colour of a cell, as `"#rrggbb"`.
-pub(crate) const A_EDGE_COLOR: &str = "bc";
-/// A cell's padding, in points.
-pub(crate) const A_PADDING: &str = "pad";
-/// A cell's vertical alignment: 0 top, 1 middle, 2 bottom.
-pub(crate) const A_VALIGN: &str = "va";
-
-/// The deepest heading level a table of contents lists, one to six.
-pub(crate) const A_MAX_LEVEL: &str = "max_level";
-/// Whether a table of contents numbers its entries.
-pub(crate) const A_NUMBERED: &str = "numbered";
+/// The map a stored entry holds, read as a map of the schema `K`, or `None`
+/// for a value or a container of another kind.
+#[must_use]
+pub(crate) fn fields_of<K: ambre_core::crdt::FieldKey>(
+    found: loro::ValueOrContainer,
+) -> Option<Fields<K>> {
+    found
+        .into_container()
+        .ok()
+        .and_then(|container| container.into_map().ok())
+        .map(Fields::of)
+}
 
 /// The width a column takes when the command that makes it names none
 /// (`PROSE-FEAT-232`): one inch, in points.
 pub const DEFAULT_COLUMN_WIDTH_PT: f32 = 72.0;
-
-/// The nine paragraph-style keys, flat in the node map, one key per property
-/// (`PROSE-030`).
-pub(crate) const K_ALIGN: &str = "align";
-pub(crate) const K_INDENT_FIRST: &str = "indent_first";
-pub(crate) const K_INDENT_LEFT: &str = "indent_left";
-pub(crate) const K_INDENT_RIGHT: &str = "indent_right";
-pub(crate) const K_SPACE_BEFORE: &str = "space_before";
-pub(crate) const K_SPACE_AFTER: &str = "space_after";
-pub(crate) const K_LINE_HEIGHT: &str = "line_height";
-pub(crate) const K_KEEP_TOGETHER: &str = "keep_together";
-pub(crate) const K_KEEP_WITH_NEXT: &str = "keep_with_next";
-
-/// The two keys of the `line_height` sub-map.
-const LH_MODE: &str = "mode";
-const LH_VALUE: &str = "value";
 
 /// The nine built-in style names. A document written by an older client renders
 /// them from the client rather than from stale copies of its own
@@ -158,15 +340,28 @@ pub fn is_built_in_style(style_id: &ambre_bus::app::prose::StyleId) -> bool {
 // The body key (`PROSE-088`)
 // -----------------------------------------------------------------------------
 
-/// The name of a block's body text container.
-#[must_use]
-pub fn body_key(id: &TreeID) -> String {
-    format!("{BODY_TAG}{BODY_SEPARATOR}{id}")
+/// The name of a block's body text container: the tag `t` and the tree id,
+/// joined by `:`. Built from a tree id alone, so no call site spells one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BodyKey(String);
+
+impl BodyKey {
+    /// The body name of block `id`.
+    #[must_use]
+    pub fn of(id: &TreeID) -> Self {
+        Self(format!("{BODY_TAG}{BODY_SEPARATOR}{id}"))
+    }
+
+    /// The name as the document stores it, for the call that opens the body.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 /// The pair a body key joins, or `None` for a name that is not one.
 ///
-/// The inverse of [`body_key`], and what makes the key a pair rather than an
+/// The inverse of [`BodyKey::of`], and what makes the key a pair rather than an
 /// opaque string (`PROSE-088`). A tree id renders as two decimal numbers joined
 /// by `@`, so the split takes the first separator and the rest is the id.
 #[must_use]
@@ -186,7 +381,7 @@ pub fn parse_body_key(key: &str) -> Option<TreeID> {
 /// read, and an empty body is the state a fresh paragraph is in.
 #[must_use]
 pub fn get_block_text(doc: &LoroDoc, id: &TreeID) -> LoroText {
-    doc.get_text(body_key(id))
+    doc.get_text(BodyKey::of(id).as_str())
 }
 
 // -----------------------------------------------------------------------------
@@ -196,7 +391,7 @@ pub fn get_block_text(doc: &LoroDoc, id: &TreeID) -> LoroText {
 /// The block tree.
 #[must_use]
 pub(crate) fn blocks(doc: &LoroDoc) -> LoroTree {
-    doc.get_tree(BLOCKS)
+    doc.get_tree(Root::Blocks.as_str())
 }
 
 /// A live block's node map, or `None` when the id names no live block.
@@ -204,11 +399,11 @@ pub(crate) fn blocks(doc: &LoroDoc) -> LoroTree {
 /// A tombstoned block answers `None`. It is gone as far as every command is
 /// concerned, and no path of this module reaches one.
 #[must_use]
-pub(crate) fn node_of(tree: &LoroTree, id: &TreeID) -> Option<LoroMap> {
+pub(crate) fn node_of(tree: &LoroTree, id: &TreeID) -> Option<Fields<NodeKey>> {
     if tree.is_node_deleted(id).unwrap_or(true) || is_hidden(tree, id) {
         return None;
     }
-    tree.get_meta(*id).ok()
+    tree.get_meta(*id).ok().map(Fields::of)
 }
 
 /// Whether the block, or a block on its parent chain, carries the hiding
@@ -230,7 +425,7 @@ pub(crate) fn is_hidden(tree: &LoroTree, id: &TreeID) -> bool {
 /// Whether the block itself carries the hiding marker.
 fn carries_hiding(tree: &LoroTree, id: &TreeID) -> bool {
     tree.get_meta(*id)
-        .is_ok_and(|node| node.get(K_HIDDEN).is_some())
+        .is_ok_and(|node| Fields::of(node).contains(NodeKey::Hidden))
 }
 
 /// Hide a block and the subtree under it, in place of removing it
@@ -240,8 +435,8 @@ fn carries_hiding(tree: &LoroTree, id: &TreeID) -> bool {
 /// # Errors
 /// The CRDT engine's refusal, as text.
 pub(crate) fn hide_block(doc: &LoroDoc, tree: &LoroTree, id: &TreeID) -> Result<(), String> {
-    let node = tree.get_meta(*id).map_err(|e| format!("{e:?}"))?;
-    node.insert(K_HIDDEN, doc.peer_id().to_string())
+    let node = Fields::of(tree.get_meta(*id).map_err(|e| format!("{e:?}"))?);
+    node.insert(NodeKey::Hidden, doc.peer_id().to_string())
         .map_err(|e| format!("{e:?}"))
 }
 
@@ -250,7 +445,7 @@ pub(crate) fn hide_block(doc: &LoroDoc, tree: &LoroTree, id: &TreeID) -> Result<
 #[must_use]
 pub fn block_type_of(tree: &LoroTree, id: &TreeID) -> Option<BlockType> {
     let node = node_of(tree, id)?;
-    let code = u8::try_from(read_i64(&node, K_TYPE)?).ok()?;
+    let code = u8::try_from(read_i64(&node, NodeKey::Type)?).ok()?;
     BlockType::from_code(code)
 }
 
@@ -266,8 +461,8 @@ pub(crate) fn heading_level_of(tree: &LoroTree, id: &TreeID) -> Option<u8> {
     if block_type_of(tree, id) != Some(BlockType::Heading) {
         return None;
     }
-    let attrs = map_read(&node_of(tree, id)?, K_ATTRS)?;
-    u8::try_from(read_i64(&attrs, A_LEVEL)?).ok()
+    let attrs = attrs_read(tree, id)?;
+    u8::try_from(read_i64(&attrs, AttrKey::Level)?).ok()
 }
 
 /// The marker a live list item carries.
@@ -282,14 +477,14 @@ pub(crate) fn list_style_of(tree: &LoroTree, id: &TreeID) -> Option<ListStyle> {
     if block_type_of(tree, id) != Some(BlockType::ListItem) {
         return None;
     }
-    let attrs = map_read(&node_of(tree, id)?, K_ATTRS)?;
-    match u8::try_from(read_i64(&attrs, A_MARKER)?).ok()? {
+    let attrs = attrs_read(tree, id)?;
+    match u8::try_from(read_i64(&attrs, AttrKey::Marker)?).ok()? {
         0 => Some(ListStyle::Bullet),
         1 => {
-            let code = u8::try_from(read_i64(&attrs, A_SPELLING)?).ok()?;
+            let code = u8::try_from(read_i64(&attrs, AttrKey::Spelling)?).ok()?;
             OrderedStyle::from_code(code).map(ListStyle::Ordered)
         }
-        2 => Some(ListStyle::Todo(read_bool(&attrs, A_TICKED)?)),
+        2 => Some(ListStyle::Todo(read_bool(&attrs, AttrKey::Ticked)?)),
         _ => None,
     }
 }
@@ -297,8 +492,14 @@ pub(crate) fn list_style_of(tree: &LoroTree, id: &TreeID) -> Option<ListStyle> {
 /// A live block's attribute map, or `None` when it carries none. Read-only: it
 /// never mints the map it looked for (`PROSE-079`).
 #[must_use]
-pub(crate) fn attrs_read(tree: &LoroTree, id: &TreeID) -> Option<LoroMap> {
-    map_read(&node_of(tree, id)?, K_ATTRS)
+pub(crate) fn attrs_read(tree: &LoroTree, id: &TreeID) -> Option<Fields<AttrKey>> {
+    map_read(&node_of(tree, id)?, NodeKey::Attrs).map(Fields::of)
+}
+
+/// A block's attribute map, minted when the node holds none, for the same
+/// reason as [`map_at`].
+pub(crate) fn attrs_at(node: &Fields<NodeKey>) -> Option<Fields<AttrKey>> {
+    map_at(node, NodeKey::Attrs).map(Fields::of)
 }
 
 /// The two settings a live table of contents carries: the deepest level it
@@ -314,12 +515,12 @@ pub(crate) fn toc_settings(tree: &LoroTree, id: &TreeID) -> Option<(u8, bool)> {
     let attrs = attrs_read(tree, id);
     let level = attrs
         .as_ref()
-        .and_then(|a| read_i64(a, A_MAX_LEVEL))
+        .and_then(|a| read_i64(a, AttrKey::MaxLevel))
         .and_then(|n| u8::try_from(n).ok())
         .unwrap_or(6);
     let numbered = attrs
         .as_ref()
-        .and_then(|a| read_bool(a, A_NUMBERED))
+        .and_then(|a| read_bool(a, AttrKey::Numbered))
         .unwrap_or(false);
     Some((level, numbered))
 }
@@ -328,7 +529,7 @@ pub(crate) fn toc_settings(tree: &LoroTree, id: &TreeID) -> Option<(u8, bool)> {
 #[must_use]
 pub(crate) fn col_widths_read(tree: &LoroTree, table: &TreeID) -> Option<LoroMovableList> {
     attrs_read(tree, table)?
-        .get(A_COL_WIDTHS)
+        .get(AttrKey::ColWidths)
         .and_then(|value| value.into_container().ok())
         .and_then(|container| container.into_movable_list().ok())
 }
@@ -353,7 +554,7 @@ pub(crate) fn col_widths(tree: &LoroTree, table: &TreeID) -> Vec<f32> {
 /// A table's region map, or `None` when the table carries none.
 #[must_use]
 pub(crate) fn merged_read(tree: &LoroTree, table: &TreeID) -> Option<LoroMap> {
-    map_read(&attrs_read(tree, table)?, A_MERGED)
+    map_read(&attrs_read(tree, table)?, AttrKey::Merged)
 }
 
 /// One merged region as the document holds it: two corners and a stamp,
@@ -380,11 +581,12 @@ pub(crate) fn regions(tree: &LoroTree, table: &TreeID) -> Vec<Region> {
         let Ok(anchor) = TreeID::try_from(key) else {
             return;
         };
-        let extent = match record.get(R_EXTENT) {
+        let record = FieldValues::<RegionKey>::of(&record);
+        let extent = match record.get(RegionKey::Extent) {
             Some(LoroValue::String(text)) => TreeID::try_from(text.as_str()).ok(),
             _ => None,
         };
-        let stamp = match record.get(R_STAMP) {
+        let stamp = match record.get(RegionKey::Stamp) {
             Some(LoroValue::I64(n)) => ambre_core::LamportStamp::from_i64(*n),
             _ => ambre_core::LamportStamp::default(),
         };
@@ -405,7 +607,7 @@ pub(crate) fn regions(tree: &LoroTree, table: &TreeID) -> Vec<Region> {
 #[must_use]
 pub fn style_of(tree: &LoroTree, id: &TreeID) -> Option<String> {
     let node = node_of(tree, id)?;
-    read_string(&node, K_STYLE)
+    read_string(&node, NodeKey::Style)
 }
 
 /// The live children of a parent, or of the root when `parent` is `None`.
@@ -438,7 +640,7 @@ pub(crate) fn grown_empty_roots(doc: &LoroDoc, tree: &LoroTree) -> Vec<TreeID> {
     let mut ids: Vec<TreeID> = roots(tree)
         .into_iter()
         .filter(|id| {
-            node_of(tree, id).is_some_and(|node| read_bool(&node, K_REGROWN) == Some(true))
+            node_of(tree, id).is_some_and(|node| read_bool(&node, NodeKey::Regrown) == Some(true))
         })
         .filter(|id| get_block_text(doc, id).is_empty())
         .filter(|id| children_of(tree, Some(*id)).is_empty())
@@ -490,7 +692,7 @@ pub(crate) fn nesting_allows(tree: &LoroTree, parent: Option<TreeID>, child: Blo
 /// by more than one path: the page format beside the margins, one block
 /// attribute beside another. So a write reaches the map that is already there,
 /// and mints one only when the key is empty (`PROSE-092`).
-pub(crate) fn map_at(parent: &LoroMap, key: &str) -> Option<LoroMap> {
+pub(crate) fn map_at<K: FieldKey>(parent: &Fields<K>, key: K) -> Option<LoroMap> {
     let existing = parent
         .get(key)
         .and_then(|value| value.into_container().ok())
@@ -499,14 +701,19 @@ pub(crate) fn map_at(parent: &LoroMap, key: &str) -> Option<LoroMap> {
         Some(map) => Some(map),
         None => parent
             .insert_container(key, LoroMap::new())
-            .map_err(|e| tracing::warn!("Prose: the register {key} refused a container: {e}"))
+            .map_err(|e| {
+                tracing::warn!(
+                    "Prose: the register {} refused a container: {e}",
+                    key.as_str()
+                );
+            })
             .ok(),
     }
 }
 
 /// The movable list a key holds, opened once and never replaced, for the same
 /// reason as [`map_at`].
-pub(crate) fn movable_list_at(parent: &LoroMap, key: &str) -> Option<LoroMovableList> {
+pub(crate) fn movable_list_at<K: FieldKey>(parent: &Fields<K>, key: K) -> Option<LoroMovableList> {
     let existing = parent
         .get(key)
         .and_then(|value| value.into_container().ok())
@@ -515,7 +722,9 @@ pub(crate) fn movable_list_at(parent: &LoroMap, key: &str) -> Option<LoroMovable
         Some(list) => Some(list),
         None => parent
             .insert_container(key, LoroMovableList::new())
-            .map_err(|e| tracing::warn!("Prose: the list {key} refused a container: {e}"))
+            .map_err(|e| {
+                tracing::warn!("Prose: the list {} refused a container: {e}", key.as_str())
+            })
             .ok(),
     }
 }
@@ -526,17 +735,15 @@ pub(crate) fn movable_list_at(parent: &LoroMap, key: &str) -> Option<LoroMovable
 /// container it did not find. Laying the document out writes nothing to it
 /// (`PROSE-079`).
 #[must_use]
-pub(crate) fn meta_read(doc: &LoroDoc) -> Option<LoroMap> {
-    doc.get_by_str_path(META)
-        .and_then(|value| value.into_container().ok())
-        .and_then(|container| container.into_map().ok())
+pub(crate) fn meta_read(doc: &LoroDoc) -> Option<Fields<MetaKey>> {
+    doc.get_by_str_path(Root::Meta.as_str()).and_then(fields_of)
 }
 
 /// The block tree, or `None` when the document has none, for the same reason
 /// as [`meta_read`].
 #[must_use]
 pub(crate) fn blocks_read(doc: &LoroDoc) -> Option<LoroTree> {
-    doc.get_by_str_path(BLOCKS)
+    doc.get_by_str_path(Root::Blocks.as_str())
         .and_then(|value| value.into_container().ok())
         .and_then(|container| container.into_tree().ok())
 }
@@ -547,7 +754,7 @@ pub(crate) fn blocks_read(doc: &LoroDoc) -> Option<LoroTree> {
 /// went looking for: laying the document out writes nothing to it
 /// (`PROSE-079`).
 #[must_use]
-pub(crate) fn map_read(parent: &LoroMap, key: &str) -> Option<LoroMap> {
+pub(crate) fn map_read<K: FieldKey>(parent: &Fields<K>, key: K) -> Option<LoroMap> {
     parent
         .get(key)
         .and_then(|value| value.into_container().ok())
@@ -563,39 +770,39 @@ pub(crate) fn map_read(parent: &LoroMap, key: &str) -> Option<LoroMap> {
 /// # Errors
 /// The CRDT engine's own refusal of a write.
 pub(crate) fn write_paragraph_style(
-    node: &LoroMap,
+    node: &Fields<NodeKey>,
     style: &ParagraphStyle,
 ) -> Result<(), loro::LoroError> {
     if let Some(align) = style.align {
-        node.insert(K_ALIGN, i64::from(align.code()))?;
+        node.insert(NodeKey::Align, i64::from(align.code()))?;
     }
     for (key, value) in [
-        (K_INDENT_FIRST, style.indent_first),
-        (K_INDENT_LEFT, style.indent_left),
-        (K_INDENT_RIGHT, style.indent_right),
-        (K_SPACE_BEFORE, style.space_before),
-        (K_SPACE_AFTER, style.space_after),
+        (NodeKey::IndentFirst, style.indent_first),
+        (NodeKey::IndentLeft, style.indent_left),
+        (NodeKey::IndentRight, style.indent_right),
+        (NodeKey::SpaceBefore, style.space_before),
+        (NodeKey::SpaceAfter, style.space_after),
     ] {
         if let Some(points) = value {
             node.insert(key, f64::from(points))?;
         }
     }
     for (key, value) in [
-        (K_KEEP_TOGETHER, style.keep_together),
-        (K_KEEP_WITH_NEXT, style.keep_with_next),
+        (NodeKey::KeepTogether, style.keep_together),
+        (NodeKey::KeepWithNext, style.keep_with_next),
     ] {
         if let Some(flag) = value {
             node.insert(key, flag)?;
         }
     }
     if let Some(line_height) = style.line_height {
-        let Some(map) = map_at(node, K_LINE_HEIGHT) else {
+        let Some(map) = map_at(node, NodeKey::LineHeight).map(Fields::<LineHeightKey>::of) else {
             return Err(loro::LoroError::NotFoundError(
                 "the line-height register refused a container".into(),
             ));
         };
-        map.insert(LH_MODE, i64::from(line_height.mode.code()))?;
-        map.insert(LH_VALUE, f64::from(line_height.value))?;
+        map.insert(LineHeightKey::Mode, i64::from(line_height.mode.code()))?;
+        map.insert(LineHeightKey::Value, f64::from(line_height.value))?;
     }
     Ok(())
 }
@@ -637,29 +844,26 @@ pub fn read_paragraph_style(tree: &LoroTree, id: &TreeID) -> ParagraphStyle {
         return ParagraphStyle::default();
     };
     ParagraphStyle {
-        align: read_i64(&node, K_ALIGN)
+        align: read_i64(&node, NodeKey::Align)
             .and_then(|n| u8::try_from(n).ok())
             .and_then(Align::from_code),
-        indent_first: read_f32(&node, K_INDENT_FIRST),
-        indent_left: read_f32(&node, K_INDENT_LEFT),
-        indent_right: read_f32(&node, K_INDENT_RIGHT),
-        space_before: read_f32(&node, K_SPACE_BEFORE),
-        space_after: read_f32(&node, K_SPACE_AFTER),
+        indent_first: read_f32(&node, NodeKey::IndentFirst),
+        indent_left: read_f32(&node, NodeKey::IndentLeft),
+        indent_right: read_f32(&node, NodeKey::IndentRight),
+        space_before: read_f32(&node, NodeKey::SpaceBefore),
+        space_after: read_f32(&node, NodeKey::SpaceAfter),
         line_height: read_line_height(&node),
-        keep_together: read_bool(&node, K_KEEP_TOGETHER),
-        keep_with_next: read_bool(&node, K_KEEP_WITH_NEXT),
+        keep_together: read_bool(&node, NodeKey::KeepTogether),
+        keep_with_next: read_bool(&node, NodeKey::KeepWithNext),
     }
 }
 
-fn read_line_height(node: &LoroMap) -> Option<LineHeight> {
-    let map = node
-        .get(K_LINE_HEIGHT)
-        .and_then(|v| v.into_container().ok())
-        .and_then(|c| c.into_map().ok())?;
-    let mode = u8::try_from(read_i64(&map, LH_MODE)?)
+fn read_line_height(node: &Fields<NodeKey>) -> Option<LineHeight> {
+    let map: Fields<LineHeightKey> = node.get(NodeKey::LineHeight).and_then(fields_of)?;
+    let mode = u8::try_from(read_i64(&map, LineHeightKey::Mode)?)
         .ok()
         .and_then(LineHeightMode::from_code)?;
-    let value = read_f64(&map, LH_VALUE)?;
+    let value = read_f64(&map, LineHeightKey::Value)?;
     Some(LineHeight {
         mode,
         value: value as f32,
@@ -773,20 +977,23 @@ impl Default for DocDefaults {
 #[must_use]
 pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
     let fallback = DocDefaults::default();
-    let Some(defaults) = meta_read(doc).and_then(|meta| map_read(&meta, DEFAULTS)) else {
+    let Some(defaults) = meta_read(doc)
+        .and_then(|meta| map_read(&meta, MetaKey::Defaults))
+        .map(Fields::<DefaultsKey>::of)
+    else {
         return fallback;
     };
-    let read = |key: &str, default: f32| -> f32 {
+    let read = |key: DefaultsKey, default: f32| -> f32 {
         read_f32(&defaults, key)
             .filter(|number| number.is_finite() && *number > 0.0)
             .unwrap_or(default)
     };
     DocDefaults {
-        font_family: read_string(&defaults, "font_family")
+        font_family: read_string(&defaults, DefaultsKey::FontFamily)
             .filter(|name| !name.is_empty())
             .unwrap_or(fallback.font_family),
-        font_size_pt: read("font_size_pt", fallback.font_size_pt),
-        line_height: read("line_height", fallback.line_height),
+        font_size_pt: read(DefaultsKey::FontSizePt, fallback.font_size_pt),
+        line_height: read(DefaultsKey::LineHeight, fallback.line_height),
     }
 }
 
@@ -798,16 +1005,19 @@ pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
 #[must_use]
 pub fn read_page_format(doc: &LoroDoc) -> PageFormat {
     let fallback = PageFormat::default();
-    let Some(page) = meta_read(doc).and_then(|meta| map_read(&meta, PAGE)) else {
+    let Some(page) = meta_read(doc)
+        .and_then(|meta| map_read(&meta, MetaKey::Page))
+        .map(Fields::<PageKey>::of)
+    else {
         return fallback;
     };
-    let read = |key: &str, default: f32| -> f32 {
+    let read = |key: PageKey, default: f32| -> f32 {
         read_f32(&page, key)
             .filter(|number| number.is_finite() && *number >= 0.0)
             .unwrap_or(default)
     };
-    let width_mm = read("width_mm", fallback.width_mm);
-    let height_mm = read("height_mm", fallback.height_mm);
+    let width_mm = read(PageKey::WidthMm, fallback.width_mm);
+    let height_mm = read(PageKey::HeightMm, fallback.height_mm);
     PageFormat {
         width_mm: if width_mm > 0.0 {
             width_mm
@@ -819,10 +1029,10 @@ pub fn read_page_format(doc: &LoroDoc) -> PageFormat {
         } else {
             fallback.height_mm
         },
-        margin_top_mm: read("margin_top_mm", fallback.margin_top_mm),
-        margin_bottom_mm: read("margin_bottom_mm", fallback.margin_bottom_mm),
-        margin_left_mm: read("margin_left_mm", fallback.margin_left_mm),
-        margin_right_mm: read("margin_right_mm", fallback.margin_right_mm),
+        margin_top_mm: read(PageKey::MarginTopMm, fallback.margin_top_mm),
+        margin_bottom_mm: read(PageKey::MarginBottomMm, fallback.margin_bottom_mm),
+        margin_left_mm: read(PageKey::MarginLeftMm, fallback.margin_left_mm),
+        margin_right_mm: read(PageKey::MarginRightMm, fallback.margin_right_mm),
     }
 }
 
@@ -849,12 +1059,13 @@ pub(crate) fn write_page_format(
     }
     // The register the document already holds: minting a fresh one would drop
     // the four margins `seed` wrote beside these three keys.
-    let Some(page) = map_at(&doc.get_map(META), PAGE) else {
+    let Some(page) = map_at(&meta(doc), MetaKey::Page).map(Fields::<PageKey>::of) else {
         return false;
     };
-    page.insert("orientation", orientation.as_str()).is_ok()
-        && page.insert("width_mm", f64::from(width_mm)).is_ok()
-        && page.insert("height_mm", f64::from(height_mm)).is_ok()
+    page.insert(PageKey::Orientation, orientation.as_str())
+        .is_ok()
+        && page.insert(PageKey::WidthMm, f64::from(width_mm)).is_ok()
+        && page.insert(PageKey::HeightMm, f64::from(height_mm)).is_ok()
 }
 
 // -----------------------------------------------------------------------------
@@ -870,37 +1081,37 @@ pub(crate) fn write_page_format(
 /// Returns the root paragraph, or `None` when the CRDT engine refused the
 /// scaffolding. A caller that meets `None` holds a document it must not open.
 pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
-    let meta = doc.get_map(META);
-    meta.insert("title", "").ok()?;
-    meta.insert("lang", "en").ok()?;
-    meta.insert("pageless", false).ok()?;
+    let meta = meta(doc);
+    meta.insert(MetaKey::Title, "").ok()?;
+    meta.insert(MetaKey::Lang, "en").ok()?;
+    meta.insert(MetaKey::Pageless, false).ok()?;
     if !write_page_format(doc, Orientation::Portrait, A4_WIDTH_MM, A4_HEIGHT_MM) {
         return None;
     }
-    let page = map_at(&meta, PAGE)?;
+    let page = Fields::of(map_at(&meta, MetaKey::Page)?);
     for key in [
-        "margin_top_mm",
-        "margin_bottom_mm",
-        "margin_left_mm",
-        "margin_right_mm",
+        PageKey::MarginTopMm,
+        PageKey::MarginBottomMm,
+        PageKey::MarginLeftMm,
+        PageKey::MarginRightMm,
     ] {
         page.insert(key, f64::from(DEFAULT_MARGIN_MM)).ok()?;
     }
-    let defaults = map_at(&meta, DEFAULTS)?;
+    let defaults = Fields::of(map_at(&meta, MetaKey::Defaults)?);
     let text = DocDefaults::default();
     defaults
-        .insert("font_family", text.font_family.as_str())
+        .insert(DefaultsKey::FontFamily, text.font_family.as_str())
         .ok()?;
     defaults
-        .insert("font_size_pt", f64::from(text.font_size_pt))
+        .insert(DefaultsKey::FontSizePt, f64::from(text.font_size_pt))
         .ok()?;
     defaults
-        .insert("line_height", f64::from(text.line_height))
+        .insert(DefaultsKey::LineHeight, f64::from(text.line_height))
         .ok()?;
     // The two registers no seeded key belongs to are opened all the same, so
     // every peer addresses one container rather than minting a rival one.
-    let _ = doc.get_map(STYLES);
-    let _ = doc.get_map(ANNOTS);
+    let _ = root_map(doc, Root::Styles);
+    let _ = annots(doc);
     grow_root(doc)
 }
 
@@ -911,7 +1122,7 @@ pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
 pub(crate) fn grow_root(doc: &LoroDoc) -> Option<TreeID> {
     let id = create_block(doc, None, BlockType::Paragraph)?;
     let tree = blocks(doc);
-    node_of(&tree, &id)?.insert(K_REGROWN, true).ok()?;
+    node_of(&tree, &id)?.insert(NodeKey::Regrown, true).ok()?;
     Some(id)
 }
 
@@ -932,8 +1143,9 @@ pub(crate) fn create_block(
         .create(parent)
         .map_err(|e| tracing::warn!("Prose: the tree refused a block: {e}"))
         .ok()?;
-    let node = tree.get_meta(id).ok()?;
-    node.insert(K_TYPE, i64::from(block_type.code())).ok()?;
+    let node = Fields::of(tree.get_meta(id).ok()?);
+    node.insert(NodeKey::Type, i64::from(block_type.code()))
+        .ok()?;
     if block_type.has_body() {
         // Opening the body attaches the container to the document, so a peer
         // that receives the block receives an empty body with it.
@@ -945,24 +1157,6 @@ pub(crate) fn create_block(
 // -----------------------------------------------------------------------------
 // The bands (`features/ambre-spec-prose-headers-footers.md`)
 // -----------------------------------------------------------------------------
-
-/// The band marker, `true` on a block that holds a header or a footer. Such a
-/// block is a root of the block tree kept out of the body flow (`PROSE-006`).
-pub(crate) const K_BAND: &str = "hb";
-/// The four band registers of [`META`].
-pub(crate) const HEADER: &str = "header";
-pub(crate) const FOOTER: &str = "footer";
-pub(crate) const HEADER_FIRST: &str = "header_first";
-pub(crate) const FOOTER_FIRST: &str = "footer_first";
-/// The one setting that turns both first-page bands on (`PROSE-FEAT-063`).
-pub(crate) const DIFFERENT_FIRST_PAGE: &str = "different_first_page";
-/// Whether a side is shown, in the header and footer registers alone.
-pub(crate) const BAND_ENABLED: &str = "enabled";
-/// The band block's `TreeID`, as the string Loro prints it.
-pub(crate) const BAND_BLOCK: &str = "block_id";
-/// The last-modified stamp, Unix milliseconds by the clock of the peer that
-/// wrote last (`PROSE-FEAT-066`).
-pub(crate) const UPDATED_AT: &str = "updated_at";
 
 /// One band: the block that holds its text and its alignment. Nothing of the
 /// text is here (`PROSE-FEAT-281`).
@@ -1028,12 +1222,12 @@ impl Bands {
 
     /// The register key of the band whose block is `id`, if one names it.
     #[must_use]
-    pub(crate) fn register_of(&self, id: &TreeID) -> Option<&'static str> {
+    pub(crate) fn register_of(&self, id: &TreeID) -> Option<MetaKey> {
         [
-            (self.header, HEADER),
-            (self.footer, FOOTER),
-            (self.header_first, HEADER_FIRST),
-            (self.footer_first, FOOTER_FIRST),
+            (self.header, MetaKey::Header),
+            (self.footer, MetaKey::Footer),
+            (self.header_first, MetaKey::HeaderFirst),
+            (self.footer_first, MetaKey::FooterFirst),
         ]
         .into_iter()
         .find(|(band, _)| band.block == Some(*id))
@@ -1052,12 +1246,12 @@ pub(crate) fn band_align_name(align: Align) -> Option<&'static str> {
     }
 }
 
-fn read_band(meta: &LoroMap, key: &str) -> Band {
-    let Some(map) = map_read(meta, key) else {
+fn read_band(meta: &Fields<MetaKey>, key: MetaKey) -> Band {
+    let Some(map) = map_read(meta, key).map(Fields::<BandKey>::of) else {
         return Band::default();
     };
-    let block = read_string(&map, BAND_BLOCK).and_then(|s| TreeID::try_from(s.as_str()).ok());
-    let align = match read_string(&map, K_ALIGN).as_deref() {
+    let block = read_string(&map, BandKey::Block).and_then(|s| TreeID::try_from(s.as_str()).ok());
+    let align = match read_string(&map, BandKey::Align).as_deref() {
         Some("center") => Align::Center,
         Some("right") => Align::Right,
         _ => Align::Left,
@@ -1072,8 +1266,9 @@ pub fn read_bands(doc: &LoroDoc) -> Bands {
     let Some(meta) = meta_read(doc) else {
         return Bands::default();
     };
-    let enabled = |key: &str| {
-        map_read(&meta, key).is_some_and(|map| read_bool(&map, BAND_ENABLED) == Some(true))
+    let enabled = |key: MetaKey| {
+        map_read(&meta, key)
+            .is_some_and(|map| read_bool(&Fields::of(map), BandKey::Enabled) == Some(true))
     };
     let tree = blocks_read(doc);
     let live = |band: Band| Band {
@@ -1084,26 +1279,26 @@ pub fn read_bands(doc: &LoroDoc) -> Bands {
         ..band
     };
     Bands {
-        header: live(read_band(&meta, HEADER)),
-        footer: live(read_band(&meta, FOOTER)),
-        header_first: live(read_band(&meta, HEADER_FIRST)),
-        footer_first: live(read_band(&meta, FOOTER_FIRST)),
-        header_enabled: enabled(HEADER),
-        footer_enabled: enabled(FOOTER),
-        different_first_page: read_bool(&meta, DIFFERENT_FIRST_PAGE) == Some(true),
+        header: live(read_band(&meta, MetaKey::Header)),
+        footer: live(read_band(&meta, MetaKey::Footer)),
+        header_first: live(read_band(&meta, MetaKey::HeaderFirst)),
+        footer_first: live(read_band(&meta, MetaKey::FooterFirst)),
+        header_enabled: enabled(MetaKey::Header),
+        footer_enabled: enabled(MetaKey::Footer),
+        different_first_page: read_bool(&meta, MetaKey::DifferentFirstPage) == Some(true),
     }
 }
 
 /// Whether a block holds a band rather than body text.
 #[must_use]
 pub(crate) fn is_band(tree: &LoroTree, id: &TreeID) -> bool {
-    node_of(tree, id).is_some_and(|node| read_bool(&node, K_BAND) == Some(true))
+    node_of(tree, id).is_some_and(|node| read_bool(&node, NodeKey::Band) == Some(true))
 }
 
 /// Whether a block holds a footnote's text rather than body text.
 #[must_use]
 pub(crate) fn is_note(tree: &LoroTree, id: &TreeID) -> bool {
-    node_of(tree, id).is_some_and(|node| read_bool(&node, K_NOTE) == Some(true))
+    node_of(tree, id).is_some_and(|node| read_bool(&node, NodeKey::Note) == Some(true))
 }
 
 /// Whether a block stands outside the body flow: a band or a note. Such a
@@ -1112,21 +1307,22 @@ pub(crate) fn is_note(tree: &LoroTree, id: &TreeID) -> bool {
 #[must_use]
 pub(crate) fn is_aside(tree: &LoroTree, id: &TreeID) -> bool {
     node_of(tree, id).is_some_and(|node| {
-        read_bool(&node, K_BAND) == Some(true) || read_bool(&node, K_NOTE) == Some(true)
+        read_bool(&node, NodeKey::Band) == Some(true)
+            || read_bool(&node, NodeKey::Note) == Some(true)
     })
 }
 
 /// The last-modified stamp, or `None` before any peer wrote one.
 #[must_use]
 pub fn read_updated_at(doc: &LoroDoc) -> Option<i64> {
-    meta_read(doc).and_then(|meta| read_i64(&meta, UPDATED_AT))
+    meta_read(doc).and_then(|meta| read_i64(&meta, MetaKey::UpdatedAt))
 }
 
 /// The document title, empty when none was set.
 #[must_use]
 pub fn read_title(doc: &LoroDoc) -> String {
     meta_read(doc)
-        .and_then(|meta| read_string(&meta, "title"))
+        .and_then(|meta| read_string(&meta, MetaKey::Title))
         .unwrap_or_default()
 }
 
@@ -1134,7 +1330,7 @@ pub fn read_title(doc: &LoroDoc) -> String {
 #[must_use]
 pub fn read_lang(doc: &LoroDoc) -> String {
     meta_read(doc)
-        .and_then(|meta| read_string(&meta, "lang"))
+        .and_then(|meta| read_string(&meta, MetaKey::Lang))
         .unwrap_or_default()
 }
 
@@ -1142,14 +1338,14 @@ pub fn read_lang(doc: &LoroDoc) -> String {
 // Value readers
 // -----------------------------------------------------------------------------
 
-pub(crate) fn read_i64(map: &LoroMap, key: &str) -> Option<i64> {
+pub(crate) fn read_i64<K: FieldKey>(map: &Fields<K>, key: K) -> Option<i64> {
     match map.get(key)?.into_value() {
         Ok(LoroValue::I64(n)) => Some(n),
         _ => None,
     }
 }
 
-fn read_f64(map: &LoroMap, key: &str) -> Option<f64> {
+fn read_f64<K: FieldKey>(map: &Fields<K>, key: K) -> Option<f64> {
     match map.get(key)?.into_value() {
         Ok(LoroValue::Double(n)) => Some(n),
         Ok(LoroValue::I64(n)) => Some(n as f64),
@@ -1157,18 +1353,18 @@ fn read_f64(map: &LoroMap, key: &str) -> Option<f64> {
     }
 }
 
-fn read_f32(map: &LoroMap, key: &str) -> Option<f32> {
+fn read_f32<K: FieldKey>(map: &Fields<K>, key: K) -> Option<f32> {
     read_f64(map, key).map(|n| n as f32)
 }
 
-pub(crate) fn read_bool(map: &LoroMap, key: &str) -> Option<bool> {
+pub(crate) fn read_bool<K: FieldKey>(map: &Fields<K>, key: K) -> Option<bool> {
     match map.get(key)?.into_value() {
         Ok(LoroValue::Bool(b)) => Some(b),
         _ => None,
     }
 }
 
-pub(crate) fn read_string(map: &LoroMap, key: &str) -> Option<String> {
+pub(crate) fn read_string<K: FieldKey>(map: &Fields<K>, key: K) -> Option<String> {
     match map.get(key)?.into_value() {
         Ok(LoroValue::String(s)) => Some(s.to_string()),
         _ => None,
@@ -1190,41 +1386,9 @@ pub(crate) const K_FOOTNOTE: &str = "fn";
 /// The mark a cross reference carries: its record, in hex (`PROSE-FEAT-072`).
 pub(crate) const K_CROSS_REF: &str = "ref";
 
-/// An annotation's kind, in one field of one type (`PROSE-031`).
-pub(crate) const ANNOT_KIND: &str = "kind";
-
-/// The text child of an annotation entry: a reply's body.
-pub(crate) const ANNOT_TEXT: &str = "text";
-
-/// The note marker, `true` on a block that holds a footnote's text. Such a
-/// block is a root of the block tree kept out of the body flow, and the
-/// note's entry names it (`PROSE-FEAT-305`).
-pub(crate) const K_NOTE: &str = "nb";
-
-/// The block of a footnote's text, named by its entry as the string Loro
-/// prints a `TreeID`.
-pub(crate) const ANNOT_NOTE_BLOCK: &str = "block_id";
-
 /// The root of a comment's mark. Each thread writes its own key under it,
 /// `cm:{id}`, so two threads over one character never share a value.
 pub(crate) const K_COMMENT: &str = "cm";
-
-/// The cached anchor of a comment: the block, and the span in its offsets.
-pub(crate) const ANNOT_ANCHOR_BLOCK: &str = "anchor_block";
-pub(crate) const ANNOT_ANCHOR_START: &str = "anchor_start";
-pub(crate) const ANNOT_ANCHOR_END: &str = "anchor_end";
-
-/// Whether a comment thread is closed.
-pub(crate) const ANNOT_RESOLVED: &str = "resolved";
-
-/// A comment's list of replies, the opening one first.
-pub(crate) const ANNOT_REPLIES: &str = "replies";
-
-/// The fields of one reply.
-pub(crate) const REPLY_ID: &str = "id";
-pub(crate) const REPLY_AUTHOR: &str = "author";
-pub(crate) const REPLY_USER: &str = "user_id";
-pub(crate) const REPLY_CREATED: &str = "created_at";
 
 /// Every live block, in document order: the depth-first pre-order walk of the
 /// tree, which is the document flow. The bands are left out.
@@ -1309,10 +1473,12 @@ mod tests {
     fn a_width_no_page_can_have_falls_back_for_that_key_alone() {
         let doc = LoroDoc::new();
         seed(&doc);
-        let page = map_at(&doc.get_map(META), PAGE).expect("seed writes the page register");
-        page.insert("width_mm", 0.0)
+        let page = map_at(&meta(&doc), MetaKey::Page)
+            .map(Fields::<PageKey>::of)
+            .expect("seed writes the page register");
+        page.insert(PageKey::WidthMm, 0.0)
             .expect("the register takes a double");
-        page.insert("margin_left_mm", 5.0)
+        page.insert(PageKey::MarginLeftMm, 5.0)
             .expect("the register takes a double");
         let format = read_page_format(&doc);
         assert_eq!(format.width_mm, PageFormat::default().width_mm);
@@ -1322,16 +1488,16 @@ mod tests {
     #[test]
     fn a_body_key_re_reads_as_the_pair_it_joins() {
         let id = TreeID::new(0xDEAD_BEEF_0BAD_F00D, 42);
-        let key = body_key(&id);
-        assert_eq!(parse_body_key(&key), Some(id));
+        let key = BodyKey::of(&id);
+        assert_eq!(parse_body_key(key.as_str()), Some(id));
     }
 
     #[test]
     fn neither_half_of_a_body_key_carries_the_separator() {
         let id = TreeID::new(u64::MAX, i32::MAX);
-        let key = body_key(&id);
-        assert_eq!(key.matches(BODY_SEPARATOR).count(), 1);
-        assert_eq!(parse_body_key(&key), Some(id));
+        let key = BodyKey::of(&id);
+        assert_eq!(key.as_str().matches(BODY_SEPARATOR).count(), 1);
+        assert_eq!(parse_body_key(key.as_str()), Some(id));
     }
 
     #[test]
@@ -1392,7 +1558,7 @@ mod tests {
             Some(Align::Center)
         );
         assert_eq!(read_paragraph_style(&tree, &root).indent_left, None);
-        assert!(node.get(K_INDENT_LEFT).is_none());
+        assert!(node.get(NodeKey::IndentLeft).is_none());
     }
 
     #[test]
@@ -1417,15 +1583,17 @@ mod tests {
             210.0
         ));
         doc.commit();
-        let page = map_at(&doc.get_map(META), PAGE).expect("the page register");
+        let page = map_at(&meta(&doc), MetaKey::Page)
+            .map(Fields::<PageKey>::of)
+            .expect("the page register");
         for key in [
-            "margin_top_mm",
-            "margin_bottom_mm",
-            "margin_left_mm",
-            "margin_right_mm",
+            PageKey::MarginTopMm,
+            PageKey::MarginBottomMm,
+            PageKey::MarginLeftMm,
+            PageKey::MarginRightMm,
         ] {
-            assert!(page.get(key).is_some(), "{key} was dropped");
+            assert!(page.contains(key), "{key:?} was dropped");
         }
-        assert!(page.get("orientation").is_some());
+        assert!(page.contains(PageKey::Orientation));
     }
 }

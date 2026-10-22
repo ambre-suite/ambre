@@ -58,14 +58,14 @@ impl ProseState {
     /// layout lists them (`PROSE-FEAT-291`).
     fn write_toc_settings(&mut self, id: &TreeID, max_level: u8, numbered: bool) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
-        let attrs = doc::node_of(&tree, id).and_then(|node| doc::map_at(&node, doc::K_ATTRS));
+        let attrs = doc::node_of(&tree, id).and_then(|node| doc::attrs_at(&node));
         let Some(attrs) = attrs else {
             return Self::err_write("the block refused its attribute map");
         };
         let level = i64::from(toc::clamp_level(max_level));
         let written = attrs
-            .insert(doc::A_MAX_LEVEL, LoroValue::I64(level))
-            .and_then(|()| attrs.insert(doc::A_NUMBERED, LoroValue::Bool(numbered)));
+            .insert(doc::AttrKey::MaxLevel, LoroValue::I64(level))
+            .and_then(|()| attrs.insert(doc::AttrKey::Numbered, LoroValue::Bool(numbered)));
         if let Err(e) = written {
             return Self::err_write(&format!("{e:?}"));
         }
@@ -288,9 +288,15 @@ mod tests {
         let _ = settled(&mut state, toc);
         let tree = doc::blocks(state.document());
         let attrs = doc::attrs_read(&tree, &tree_id(toc)).expect("the settings");
-        let mut keys: Vec<String> = attrs.keys().map(|key| key.to_string()).collect();
+        let mut keys: Vec<String> = attrs.map().keys().map(|key| key.to_string()).collect();
         keys.sort();
-        assert_eq!(keys, [doc::A_MAX_LEVEL, doc::A_NUMBERED]);
+        assert_eq!(
+            keys,
+            [
+                doc::AttrKey::MaxLevel.as_str(),
+                doc::AttrKey::Numbered.as_str()
+            ]
+        );
         assert!(doc::children_of(&tree, Some(tree_id(toc))).is_empty());
         assert_eq!(state.text_of(&toc), None);
     }

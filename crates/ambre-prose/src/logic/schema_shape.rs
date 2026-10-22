@@ -11,9 +11,9 @@
 //! **What holds the freeze honest.** A shape is only as wide as the scenario
 //! that builds it. A key no command reaches leaves no line, so dropping it
 //! would go unnoticed. [`every_declared_key_appears_in_the_shape`] closes that
-//! gap: it reads `doc.rs` and the mark registry at compile time, and demands a
-//! line for each key they declare. A new key with no scenario behind it fails
-//! there rather than passing silently.
+//! gap: it demands a line for each key the schema enums of `doc.rs` and the
+//! mark registry declare. A new key with no scenario behind it fails there
+//! rather than passing silently.
 //!
 //! **What it cannot hold.** A value whose meaning moves under an unchanged key
 //! and an unchanged type leaves the shape identical (`SCHEMA-017`). That half
@@ -143,7 +143,7 @@ fn shape_of(doc: &LoroDoc) -> Shape {
         }
         shape.keys.insert(name.clone());
         shape.record(name, value);
-        if name != doc::BLOCKS {
+        if name != doc::Root::Blocks.as_str() {
             walk_map(name, value, &mut shape);
         }
     }
@@ -176,7 +176,7 @@ fn walk_tree(doc: &LoroDoc, shape: &mut Shape) {
             continue;
         };
         walk_map(
-            &format!("{}/{ANY}", doc::BLOCKS),
+            &format!("{}/{ANY}", doc::Root::Blocks.as_str()),
             &meta.get_deep_value(),
             shape,
         );
@@ -286,6 +286,35 @@ pub(super) fn declared_string_consts(source: &str) -> Vec<String> {
             found.push(literal.to_owned());
         }
     }
+    found
+}
+
+/// Every name the schema enums of `doc.rs` declare, through their `ALL`.
+///
+/// The attributes no command writes yet stay out ([`doc::UNWRITTEN_ATTRS`]).
+/// The text mark keys are still bare constants, so the caller reads those
+/// from the source.
+pub(super) fn declared_keys() -> Vec<String> {
+    fn names<K: Copy>(all: &[K], spell: fn(K) -> &'static str) -> Vec<String> {
+        all.iter().map(|key| spell(*key).to_owned()).collect()
+    }
+    let mut found = names(doc::Root::ALL, doc::Root::as_str);
+    found.extend(names(doc::MetaKey::ALL, doc::MetaKey::as_str));
+    found.extend(names(doc::PageKey::ALL, doc::PageKey::as_str));
+    found.extend(names(doc::DefaultsKey::ALL, doc::DefaultsKey::as_str));
+    found.extend(names(doc::BandKey::ALL, doc::BandKey::as_str));
+    found.extend(names(doc::NodeKey::ALL, doc::NodeKey::as_str));
+    found.extend(names(doc::LineHeightKey::ALL, doc::LineHeightKey::as_str));
+    let written: Vec<doc::AttrKey> = doc::AttrKey::ALL
+        .iter()
+        .copied()
+        .filter(|key| !doc::UNWRITTEN_ATTRS.contains(key))
+        .collect();
+    found.extend(names(&written, doc::AttrKey::as_str));
+    found.extend(names(doc::RegionKey::ALL, doc::RegionKey::as_str));
+    found.extend(names(doc::AnnotKey::ALL, doc::AnnotKey::as_str));
+    found.extend(names(doc::ReplyKey::ALL, doc::ReplyKey::as_str));
+    found.extend(declared_string_consts(DOC_SOURCE));
     found
 }
 
@@ -608,15 +637,15 @@ fn canonical(from: u32) -> LoroDoc {
         // the `8 -> 9` step moves into a block of its own.
         8 => {
             crate::mark::configure(&doc);
-            let entry = doc
-                .get_map(doc::ANNOTS)
+            let entry = doc::annots(&doc)
                 .insert_container("n1", loro::LoroMap::new())
+                .map(doc::Fields::<doc::AnnotKey>::of)
                 .expect("an entry");
             entry
-                .insert(doc::ANNOT_KIND, crate::note::KIND_FOOTNOTE)
+                .insert(doc::AnnotKey::Kind, crate::note::KIND_FOOTNOTE)
                 .expect("a kind");
             let text = entry
-                .insert_container(doc::ANNOT_TEXT, LoroText::new())
+                .insert_container(doc::AnnotKey::Text, LoroText::new())
                 .expect("a text");
             text.insert(0, "old note").expect("written");
             text.mark(0..3, "b", "true").expect("marked");
@@ -689,7 +718,7 @@ fn each_migration_step_writes_what_its_version_froze() {
 fn every_declared_key_appears_in_the_shape() {
     let state = document_of_every_key();
     let shape = shape_of(&state.doc);
-    let mut declared = declared_string_consts(DOC_SOURCE);
+    let mut declared = declared_keys();
     declared.extend(declared_mark_roots(MARK_SOURCE));
     for key in declared {
         let reached = shape.keys.contains(&key)
@@ -727,9 +756,8 @@ fn a_value_changing_leaves_the_shape_alone() {
 fn a_key_appearing_moves_the_shape() {
     let state = document_of_every_key();
     let before = render(&shape_of(&state.doc));
-    state
-        .doc
-        .get_map(doc::META)
+    // The key is outside the schema on purpose, so it reaches the map raw.
+    doc::root_map(&state.doc, doc::Root::Meta)
         .insert("a_key_no_build_writes", 1_i64)
         .expect("the register takes a key");
     assert_ne!(
@@ -745,10 +773,8 @@ fn a_value_type_changing_moves_the_shape() {
     let before = render(&shape_of(&state.doc));
     // `title` is seeded as a string; the same key under a number is the drift
     // a reviewer cannot be asked to spot.
-    state
-        .doc
-        .get_map(doc::META)
-        .insert("title", 1_i64)
+    doc::meta(&state.doc)
+        .insert(doc::MetaKey::Title, 1_i64)
         .expect("the register takes a key");
     assert_ne!(
         before,

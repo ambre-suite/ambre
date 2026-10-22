@@ -78,7 +78,7 @@ impl ProseState {
         let mut out = String::from("prose\n");
         for (i, id) in order.iter().enumerate() {
             let meta = doc::node_of(&tree, id)
-                .map(|node| node.get_deep_value())
+                .map(|node| node.map().get_deep_value())
                 .unwrap_or(LoroValue::Null);
             let parent = match tree.parent(*id) {
                 Some(loro::TreeParentId::Node(parent)) => rename(&parent.to_string(), &names),
@@ -90,11 +90,12 @@ impl ProseState {
                 out.push_str(&format!("[{i}] text {}\n", render_delta(&delta, &names)));
             }
         }
-        for (label, root) in [("meta", doc::META), ("styles", doc::STYLES)] {
-            let value = self.doc.get_map(root).get_deep_value();
+        for root in [doc::Root::Meta, doc::Root::Styles] {
+            let label = root.as_str();
+            let value = doc::root_map(&self.doc, root).get_deep_value();
             out.push_str(&format!("{label} {}\n", render(&value, &names)));
         }
-        let annots = match self.doc.get_map(doc::ANNOTS).get_deep_value() {
+        let annots = match doc::annots(&self.doc).get_deep_value() {
             LoroValue::Map(map) => map
                 .iter()
                 .map(|(k, v)| (k.clone(), render(v, &names)))
@@ -245,8 +246,11 @@ fn render(value: &LoroValue, names: &HashMap<String, String>) -> String {
                 .into_iter()
                 .map(|(k, v)| match k {
                     // Minted per route: the reply is named by its place in
-                    // the list, the hiding session by nothing.
-                    doc::REPLY_ID | doc::K_HIDDEN => format!("{k}=<masked>"),
+                    // the list, the hiding session by nothing. The walk runs
+                    // over every map, so it compares the stored spellings.
+                    _ if k == doc::ReplyKey::Id.as_str() || k == doc::NodeKey::Hidden.as_str() => {
+                        format!("{k}=<masked>")
+                    }
                     _ => format!("{k}={}", render(v, names)),
                 })
                 .collect();

@@ -10,9 +10,9 @@ use std::collections::HashMap;
 
 use ambre_bus::app::prose::{DocCount, DocOffset};
 use ambre_core::{CommentId, ReplyId, UserId};
-use loro::{Container, LoroDoc, LoroList, LoroMap, LoroValue, TreeID, ValueOrContainer};
+use loro::{Container, LoroDoc, LoroList, LoroValue, TreeID, ValueOrContainer};
 
-use crate::doc;
+use crate::doc::{self, AnnotKey, Fields, ReplyKey};
 use crate::events::{CommentReply, CommentThread, block_id};
 
 /// The kind a comment's entry declares.
@@ -43,14 +43,15 @@ pub(crate) struct Span {
 
 /// The entry of thread `id`, when `annots` holds one of that kind.
 #[must_use]
-pub(crate) fn entry(document: &LoroDoc, id: &CommentId) -> Option<LoroMap> {
-    let annots = document.get_map(doc::ANNOTS);
+pub(crate) fn entry(document: &LoroDoc, id: &CommentId) -> Option<Fields<AnnotKey>> {
+    let annots = doc::annots(document);
     let Some(ValueOrContainer::Container(Container::Map(map))) = annots.get(&id.to_hyphenated())
     else {
         return None;
     };
+    let map = Fields::of(map);
     let is_comment = matches!(
-        map.get(doc::ANNOT_KIND),
+        map.get(AnnotKey::Kind),
         Some(ValueOrContainer::Value(LoroValue::String(kind))) if kind.as_str() == KIND_COMMENT
     );
     is_comment.then_some(map)
@@ -58,8 +59,8 @@ pub(crate) fn entry(document: &LoroDoc, id: &CommentId) -> Option<LoroMap> {
 
 /// The reply list of an entry.
 #[must_use]
-pub(crate) fn replies_of(entry: &LoroMap) -> Option<LoroList> {
-    match entry.get(doc::ANNOT_REPLIES) {
+pub(crate) fn replies_of(entry: &Fields<AnnotKey>) -> Option<LoroList> {
+    match entry.get(AnnotKey::Replies) {
         Some(ValueOrContainer::Container(Container::List(list))) => Some(list),
         _ => None,
     }
@@ -67,25 +68,25 @@ pub(crate) fn replies_of(entry: &LoroMap) -> Option<LoroList> {
 
 /// Reply `index` of a list.
 #[must_use]
-pub(crate) fn reply_at(list: &LoroList, index: usize) -> Option<LoroMap> {
+pub(crate) fn reply_at(list: &LoroList, index: usize) -> Option<Fields<ReplyKey>> {
     match list.get(index) {
-        Some(ValueOrContainer::Container(Container::Map(map))) => Some(map),
+        Some(ValueOrContainer::Container(Container::Map(map))) => Some(Fields::of(map)),
         _ => None,
     }
 }
 
 /// One reply as the view reads it, or `None` for a map missing a field.
-fn read_reply(map: &LoroMap) -> Option<CommentReply> {
-    let text = match map.get(doc::ANNOT_TEXT) {
+fn read_reply(map: &Fields<ReplyKey>) -> Option<CommentReply> {
+    let text = match map.get(ReplyKey::Text) {
         Some(ValueOrContainer::Container(Container::Text(text))) => text.to_string(),
         _ => String::new(),
     };
     Some(CommentReply {
-        reply_id: ReplyId::parse_str(&doc::read_string(map, doc::REPLY_ID)?).ok()?,
-        author: doc::read_string(map, doc::REPLY_AUTHOR).unwrap_or_default(),
-        user_id: UserId::parse_str(&doc::read_string(map, doc::REPLY_USER)?).ok()?,
+        reply_id: ReplyId::parse_str(&doc::read_string(map, ReplyKey::Id)?).ok()?,
+        author: doc::read_string(map, ReplyKey::Author).unwrap_or_default(),
+        user_id: UserId::parse_str(&doc::read_string(map, ReplyKey::User)?).ok()?,
         created_at: ambre_bus::Timestamp::from_i64(
-            doc::read_i64(map, doc::REPLY_CREATED).unwrap_or(0),
+            doc::read_i64(map, ReplyKey::Created).unwrap_or(0),
         ),
         text,
     })
@@ -93,7 +94,7 @@ fn read_reply(map: &LoroMap) -> Option<CommentReply> {
 
 /// The replies of a thread, in the list's own order (`PROSE-FEAT-186`).
 #[must_use]
-pub(crate) fn replies(entry: &LoroMap) -> Vec<CommentReply> {
+pub(crate) fn replies(entry: &Fields<AnnotKey>) -> Vec<CommentReply> {
     let Some(list) = replies_of(entry) else {
         return Vec::new();
     };
@@ -106,7 +107,7 @@ pub(crate) fn replies(entry: &LoroMap) -> Vec<CommentReply> {
 /// Every thread the document holds, marked or not.
 #[must_use]
 pub(crate) fn all(document: &LoroDoc) -> Vec<CommentId> {
-    let annots = document.get_map(doc::ANNOTS);
+    let annots = doc::annots(document);
     let mut ids: Vec<CommentId> = annots
         .keys()
         .filter_map(|key| CommentId::parse_str(&key).ok())
@@ -118,11 +119,10 @@ pub(crate) fn all(document: &LoroDoc) -> Vec<CommentId> {
 
 /// The cached anchor of an entry.
 #[must_use]
-pub(crate) fn cached(entry: &LoroMap) -> Option<Span> {
-    let block =
-        TreeID::try_from(doc::read_string(entry, doc::ANNOT_ANCHOR_BLOCK)?.as_str()).ok()?;
-    let start = DocOffset::new(u32::try_from(doc::read_i64(entry, doc::ANNOT_ANCHOR_START)?).ok()?);
-    let end = DocOffset::new(u32::try_from(doc::read_i64(entry, doc::ANNOT_ANCHOR_END)?).ok()?);
+pub(crate) fn cached(entry: &Fields<AnnotKey>) -> Option<Span> {
+    let block = TreeID::try_from(doc::read_string(entry, AnnotKey::AnchorBlock)?.as_str()).ok()?;
+    let start = DocOffset::new(u32::try_from(doc::read_i64(entry, AnnotKey::AnchorStart)?).ok()?);
+    let end = DocOffset::new(u32::try_from(doc::read_i64(entry, AnnotKey::AnchorEnd)?).ok()?);
     Some(Span { block, start, end })
 }
 
@@ -216,7 +216,7 @@ pub fn threads(document: &LoroDoc) -> Vec<CommentThread> {
                 anchor_start: anchor.map_or(DocOffset::ZERO, |span| span.start),
                 anchor_end: anchor.map_or(DocOffset::ZERO, |span| span.end),
                 orphaned: live.is_none(),
-                resolved: doc::read_bool(&entry, doc::ANNOT_RESOLVED) == Some(true),
+                resolved: doc::read_bool(&entry, AnnotKey::Resolved) == Some(true),
                 replies: replies(&entry),
             })
         })

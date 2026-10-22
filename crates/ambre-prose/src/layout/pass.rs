@@ -12,7 +12,7 @@ use std::sync::Arc;
 use ambre_bus::app::prose::{BlockType, DocOffset, ParagraphStyle};
 use ambre_core::FootnoteId;
 use ambre_draw::ScriptSet;
-use loro::{LoroDoc, LoroMap, LoroTree, LoroValue, TreeID};
+use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 
 use crate::doc;
 use crate::layout::geometry::PageBox;
@@ -25,15 +25,6 @@ use crate::note;
 /// The height of a horizontal rule, in pixels. One device pixel, per the
 /// measurement table of section 2.
 const RULE_HEIGHT_PX: f32 = 1.0;
-
-/// The two image attributes a height is read from.
-///
-/// The schema declares them (`ambre-spec-prose-schema.md section 3`), and no
-/// command writes them yet. So they carry no constant in `doc.rs`: a key
-/// declared there must appear in the frozen shape (`SCHEMA-018`). They move
-/// there with the images Story (`ambre-roadmap.md` E5).
-const A_IMAGE_HEIGHT: &str = "h";
-const A_IMAGE_CAPTION: &str = "caption";
 
 /// The whole document laid out: the page box, and every block on a page.
 ///
@@ -477,7 +468,7 @@ pub(crate) fn measure_document_with(
     let tree = if cached.is_empty() && previous.is_empty() {
         doc::blocks_read(document)
     } else {
-        Some(document.get_tree(doc::BLOCKS))
+        Some(doc::blocks(document))
     };
     let Some(tree) = tree else {
         return Vec::new();
@@ -662,12 +653,14 @@ fn image_height(
     style: &EffectiveStyle,
     text_width_px: f32,
 ) -> f32 {
-    let attrs = doc::node_of(tree, id).and_then(|node| doc::map_read(&node, doc::K_ATTRS));
+    let attrs = doc::attrs_read(tree, id);
     let Some(attrs) = attrs else {
         return 0.0;
     };
-    let box_px = number_at(&attrs, A_IMAGE_HEIGHT).unwrap_or(0.0).max(0.0);
-    let caption_px = match string_at(&attrs, A_IMAGE_CAPTION) {
+    let box_px = number_at(&attrs, doc::AttrKey::ImageHeight)
+        .unwrap_or(0.0)
+        .max(0.0);
+    let caption_px = match string_at(&attrs, doc::AttrKey::ImageCaption) {
         Some(caption) if !caption.is_empty() => {
             measurer
                 .measure(&caption, style, text_width_px)
@@ -818,8 +811,7 @@ pub(crate) fn column_widths_px(stored_pt: &[f32], cols: usize, content_width_px:
 /// The look a cell stores. A value that does not parse, or a width that is
 /// negative or not finite, reads as absent.
 pub(crate) fn cell_style(tree: &LoroTree, cell: &TreeID) -> CellStyle {
-    let Some(attrs) = doc::node_of(tree, cell).and_then(|node| doc::map_read(&node, doc::K_ATTRS))
-    else {
+    let Some(attrs) = doc::attrs_read(tree, cell) else {
         return CellStyle::default();
     };
     let length = |key| {
@@ -829,10 +821,10 @@ pub(crate) fn cell_style(tree: &LoroTree, cell: &TreeID) -> CellStyle {
     };
     let colour = |key| string_at(&attrs, key).and_then(|raw| crate::mark::parse_color(&raw).ok());
     let edges = [
-        length(doc::A_EDGE_TOP),
-        length(doc::A_EDGE_BOTTOM),
-        length(doc::A_EDGE_LEFT),
-        length(doc::A_EDGE_RIGHT),
+        length(doc::AttrKey::EdgeTop),
+        length(doc::AttrKey::EdgeBottom),
+        length(doc::AttrKey::EdgeLeft),
+        length(doc::AttrKey::EdgeRight),
     ];
     let [top, bottom, left, right] = edges;
     let border = edges.iter().any(Option::is_some).then(|| CellBorderPx {
@@ -840,16 +832,16 @@ pub(crate) fn cell_style(tree: &LoroTree, cell: &TreeID) -> CellStyle {
         bottom: bottom.unwrap_or(0.0),
         left: left.unwrap_or(0.0),
         right: right.unwrap_or(0.0),
-        color: colour(doc::A_EDGE_COLOR),
+        color: colour(doc::AttrKey::EdgeColor),
     });
-    let valign = number_at(&attrs, doc::A_VALIGN)
+    let valign = number_at(&attrs, doc::AttrKey::VAlign)
         .and_then(|code| u8::try_from(code as i64).ok())
         .and_then(ambre_bus::app::prose::VAlign::from_code)
         .unwrap_or(ambre_bus::app::prose::VAlign::Top);
     CellStyle {
-        fill: colour(doc::A_CELL_BG),
+        fill: colour(doc::AttrKey::CellBg),
         border,
-        padding_px: length(doc::A_PADDING).unwrap_or(0.0),
+        padding_px: length(doc::AttrKey::Padding).unwrap_or(0.0),
         valign,
     }
 }
@@ -883,7 +875,7 @@ fn cell_blocks(
 }
 
 /// A number an attribute holds, whichever number shape it was written in.
-fn number_at(attrs: &LoroMap, key: &str) -> Option<f32> {
+fn number_at(attrs: &doc::Fields<doc::AttrKey>, key: doc::AttrKey) -> Option<f32> {
     match attrs.get(key).and_then(|value| value.into_value().ok())? {
         LoroValue::Double(number) => Some(number as f32),
         LoroValue::I64(number) => Some(number as f32),
@@ -892,7 +884,7 @@ fn number_at(attrs: &LoroMap, key: &str) -> Option<f32> {
 }
 
 /// A string an attribute holds.
-fn string_at(attrs: &LoroMap, key: &str) -> Option<String> {
+fn string_at(attrs: &doc::Fields<doc::AttrKey>, key: doc::AttrKey) -> Option<String> {
     match attrs.get(key).and_then(|value| value.into_value().ok())? {
         LoroValue::String(text) => Some(text.to_string()),
         _ => None,

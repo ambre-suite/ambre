@@ -292,8 +292,7 @@ impl ProseState {
             written.map_err(|e| format!("{e:?}"))?;
         }
         if entry.is_some() {
-            self.doc
-                .get_map(doc::ANNOTS)
+            doc::annots(&self.doc)
                 .delete(&id.to_hyphenated())
                 .map_err(|e| format!("{e:?}"))?;
         }
@@ -472,19 +471,21 @@ impl ProseState {
     fn write_entry(&self) -> Result<SuggestionId, String> {
         let user = self.my_user_id.ok_or("no identity")?;
         let id: SuggestionId = self.ids.mint();
-        let entry: LoroMap = self
-            .doc
-            .get_map(doc::ANNOTS)
+        let entry = doc::annots(&self.doc)
             .insert_container(&id.to_hyphenated(), LoroMap::new())
+            .map(doc::Fields::<doc::AnnotKey>::of)
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::ANNOT_KIND, suggest::KIND_SUGGESTION)
+            .insert(doc::AnnotKey::Kind, suggest::KIND_SUGGESTION)
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::REPLY_AUTHOR, self.my_name.clone().unwrap_or_default())
+            .insert(
+                doc::AnnotKey::Author,
+                self.my_name.clone().unwrap_or_default(),
+            )
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::REPLY_USER, user.to_string())
+            .insert(doc::AnnotKey::User, user.to_string())
             .map_err(|e| format!("{e:?}"))?;
         Ok(id)
     }
@@ -1038,7 +1039,7 @@ mod tests {
         assert_eq!(text(&state, ids[0]), "Hello");
         assert!(state.suggestions().is_empty());
         assert!(crate::suggest::entry(&state.doc, &SuggestionId::new()).is_none());
-        assert_eq!(state.doc.get_map(doc::ANNOTS).len(), 0);
+        assert_eq!(doc::annots(&state.doc).len(), 0);
     }
 
     proptest! {

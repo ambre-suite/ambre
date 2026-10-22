@@ -87,7 +87,7 @@ impl ProseState {
         {
             return Self::err_write(&format!("{e:?}"));
         }
-        if let Err(e) = self.doc.get_map(doc::ANNOTS).delete(&key) {
+        if let Err(e) = doc::annots(&self.doc).delete(&key) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_notes()
@@ -104,15 +104,16 @@ impl ProseState {
     /// (`PROSE-FEAT-305`).
     fn write_note(&self, id: &FootnoteId, text: &str) -> Result<(), String> {
         let block = write_note_block(&self.doc, text)?;
-        let annots = self.doc.get_map(doc::ANNOTS);
+        let annots = doc::annots(&self.doc);
         let entry = annots
             .insert_container(&id.to_hyphenated(), LoroMap::new())
+            .map(doc::Fields::<doc::AnnotKey>::of)
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::ANNOT_KIND, crate::note::KIND_FOOTNOTE)
+            .insert(doc::AnnotKey::Kind, crate::note::KIND_FOOTNOTE)
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::ANNOT_NOTE_BLOCK, block.to_string())
+            .insert(doc::AnnotKey::NoteBlock, block.to_string())
             .map(|_| ())
             .map_err(|e| format!("{e:?}"))
     }
@@ -148,7 +149,7 @@ pub(crate) fn write_note_block(document: &loro::LoroDoc, text: &str) -> Result<T
     let tree = doc::blocks(document);
     doc::node_of(&tree, &block)
         .ok_or_else(|| "the note block is not in the tree".to_owned())?
-        .insert(doc::K_NOTE, true)
+        .insert(doc::NodeKey::Note, true)
         .map_err(|e| format!("{e:?}"))?;
     doc::get_block_text(document, &block)
         .insert(0, text)
@@ -268,10 +269,7 @@ mod tests {
                 ("later".to_owned(), Some(2))
             ]
         );
-        let stored = format!(
-            "{:?}",
-            state.document().get_map(doc::ANNOTS).get_deep_value()
-        );
+        let stored = format!("{:?}", doc::annots(state.document()).get_deep_value());
         assert!(!stored.contains("ordinal") && !stored.contains("number"));
         state.handle_command(ProseCommand::MoveBlock {
             block_id: ids[0],
@@ -411,23 +409,27 @@ mod tests {
     fn an_entry_is_a_note_by_its_declared_kind_and_by_nothing_else() {
         let (mut state, ids) = document(ambre_core::PeerId(1), &["text"]);
         let real = add(&mut state, ids[0], DocOffset::new(4), "a note");
-        let annots = state.document().get_map(doc::ANNOTS);
+        let annots = doc::annots(state.document());
         let shaped_alike = FootnoteId::new();
         let entry = annots
             .insert_container(&shaped_alike.to_hyphenated(), LoroMap::new())
+            .map(doc::Fields::<doc::AnnotKey>::of)
             .expect("an entry");
         entry
-            .insert_container(doc::ANNOT_TEXT, LoroText::new())
+            .insert_container(doc::AnnotKey::Text, LoroText::new())
             .expect("a text")
             .insert(0, "no kind")
             .expect("written");
         let other = FootnoteId::new();
         let entry = annots
             .insert_container(&other.to_hyphenated(), LoroMap::new())
+            .map(doc::Fields::<doc::AnnotKey>::of)
             .expect("an entry");
-        entry.insert(doc::ANNOT_KIND, "comment").expect("a kind");
         entry
-            .insert_container(doc::ANNOT_TEXT, LoroText::new())
+            .insert(doc::AnnotKey::Kind, "comment")
+            .expect("a kind");
+        entry
+            .insert_container(doc::AnnotKey::Text, LoroText::new())
             .expect("a text");
         state.document().commit();
         assert_eq!(note::all(state.document()), vec![real]);
@@ -518,11 +520,11 @@ mod tests {
         let block = note::block(document, &id).expect("the note's block");
         let entry = note::entry(document, &id).expect("the entry");
         let text = entry
-            .insert_container(doc::ANNOT_TEXT, LoroText::new())
+            .insert_container(doc::AnnotKey::Text, LoroText::new())
             .expect("a text");
         text.insert(0, "old note").expect("written");
         text.mark(0..3, "b", "true").expect("marked");
-        entry.delete(doc::ANNOT_NOTE_BLOCK).expect("unnamed");
+        entry.delete(doc::AnnotKey::NoteBlock).expect("unnamed");
         doc::blocks(document).delete(block).expect("gone");
         document
             .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
@@ -544,7 +546,7 @@ mod tests {
         assert!(bold, "the mark came with the text");
         let entry = note::entry(read.document(), &id).expect("the entry");
         assert!(
-            entry.get(doc::ANNOT_TEXT).is_none(),
+            entry.get(doc::AnnotKey::Text).is_none(),
             "the entry holds no text"
         );
         assert_eq!(read.root_blocks().len(), 1, "the flow holds no note");

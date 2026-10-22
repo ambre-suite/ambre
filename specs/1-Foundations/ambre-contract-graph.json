@@ -6652,7 +6652,7 @@
   {"edge": "cites-section", "from": "TOILE-129", "section": "3", "to": "3-Toile/features/ambre-spec-toile-z-order.md"},
   {"edge": "verified-by", "from": "TOILE-129", "to": "ambre_toile::logic::state::elements::inner_tests::a_delete_preserves_an_undecodable_layer_entry"},
   {"edge": "cites-section", "from": "PROSE-085", "section": "2", "to": "4-Prose/ambre-spec-prose-schema.md"},
-  {"edge": "verified-by", "from": "PROSE-085", "to": "ambre_prose::doc::body_key"},
+  {"edge": "verified-by", "from": "PROSE-085", "to": "ambre_prose::doc::BodyKey::of"},
   {"edge": "verified-by", "from": "PROSE-085", "to": "ambre_prose::logic::convergence_tests::a_block_a_peer_moved_keeps_every_reference_to_it"},
   {"edge": "cites-section", "from": "PROSE-086", "section": "2", "to": "4-Prose/ambre-spec-prose-schema.md"},
   {"edge": "verified-by", "from": "PROSE-086", "to": "ambre_prose::logic::blocks::tests::a_reference_survives_an_indent_and_a_move_into_a_table_cell"},

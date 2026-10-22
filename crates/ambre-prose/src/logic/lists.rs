@@ -6,7 +6,7 @@
 //! one subtree (`PROSE-005`). Nothing here writes a depth or an ordinal: both are
 //! read back from the tree when the list is drawn (`PROSE-FEAT-002`).
 
-use loro::{LoroMap, TreeID, TreeParentId};
+use loro::{TreeID, TreeParentId};
 
 use crate::doc;
 use crate::events::{BlockType, ListStyle, ProseOutcome};
@@ -44,25 +44,28 @@ impl ProseState {
     /// A bullet keeps no ordinal spelling and no ticked state. Absence is the
     /// value, so a key that no longer applies is deleted rather than left at a
     /// stale one (`PROSE-096`).
-    pub(super) fn write_list_style(attrs: &LoroMap, style: ListStyle) -> Result<(), String> {
+    pub(super) fn write_list_style(
+        attrs: &doc::Fields<doc::AttrKey>,
+        style: ListStyle,
+    ) -> Result<(), String> {
         let fail = |e: loro::LoroError| format!("{e:?}");
         match style {
             ListStyle::Bullet => {
-                attrs.insert(doc::A_MARKER, 0_i64).map_err(fail)?;
-                attrs.delete(doc::A_SPELLING).map_err(fail)?;
-                attrs.delete(doc::A_TICKED).map_err(fail)?;
+                attrs.insert(doc::AttrKey::Marker, 0_i64).map_err(fail)?;
+                attrs.delete(doc::AttrKey::Spelling).map_err(fail)?;
+                attrs.delete(doc::AttrKey::Ticked).map_err(fail)?;
             }
             ListStyle::Ordered(ordered) => {
-                attrs.insert(doc::A_MARKER, 1_i64).map_err(fail)?;
+                attrs.insert(doc::AttrKey::Marker, 1_i64).map_err(fail)?;
                 attrs
-                    .insert(doc::A_SPELLING, i64::from(ordered.code()))
+                    .insert(doc::AttrKey::Spelling, i64::from(ordered.code()))
                     .map_err(fail)?;
-                attrs.delete(doc::A_TICKED).map_err(fail)?;
+                attrs.delete(doc::AttrKey::Ticked).map_err(fail)?;
             }
             ListStyle::Todo(ticked) => {
-                attrs.insert(doc::A_MARKER, 2_i64).map_err(fail)?;
-                attrs.delete(doc::A_SPELLING).map_err(fail)?;
-                attrs.insert(doc::A_TICKED, ticked).map_err(fail)?;
+                attrs.insert(doc::AttrKey::Marker, 2_i64).map_err(fail)?;
+                attrs.delete(doc::AttrKey::Spelling).map_err(fail)?;
+                attrs.insert(doc::AttrKey::Ticked, ticked).map_err(fail)?;
             }
         }
         Ok(())
@@ -81,7 +84,7 @@ impl ProseState {
         let Some(node) = doc::node_of(&tree, id) else {
             return Self::err_no_block(id);
         };
-        let Some(attrs) = doc::map_at(&node, doc::K_ATTRS) else {
+        let Some(attrs) = doc::attrs_at(&node) else {
             return Self::err_write("the attribute map refused a container");
         };
         if let Err(e) = Self::write_list_style(&attrs, style) {
@@ -143,10 +146,10 @@ impl ProseState {
         let Some(node) = doc::node_of(&tree, id) else {
             return Self::err_no_block(id);
         };
-        if let Err(e) = node.insert(doc::K_TYPE, i64::from(BlockType::Paragraph.code())) {
+        if let Err(e) = node.insert(doc::NodeKey::Type, i64::from(BlockType::Paragraph.code())) {
             return Self::err_write(&format!("{e:?}"));
         }
-        if let Err(e) = node.delete(doc::K_ATTRS) {
+        if let Err(e) = node.delete(doc::NodeKey::Attrs) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_with(Vec::new())

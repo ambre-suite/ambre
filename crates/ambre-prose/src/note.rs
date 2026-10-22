@@ -9,7 +9,7 @@
 use std::collections::HashSet;
 
 use ambre_core::FootnoteId;
-use loro::{Container, LoroDoc, LoroMap, LoroText, LoroValue, TreeID, ValueOrContainer};
+use loro::{Container, LoroDoc, LoroText, LoroValue, TreeID, ValueOrContainer};
 
 use crate::doc;
 use crate::events::FootnoteEntry;
@@ -20,13 +20,14 @@ pub(crate) const KIND_FOOTNOTE: &str = "footnote";
 
 /// The entry of footnote `id`, when `annots` holds one of that kind.
 #[must_use]
-pub(crate) fn entry(document: &LoroDoc, id: &FootnoteId) -> Option<LoroMap> {
-    let annots = document.get_map(doc::ANNOTS);
+pub(crate) fn entry(document: &LoroDoc, id: &FootnoteId) -> Option<doc::Fields<doc::AnnotKey>> {
+    let annots = doc::annots(document);
     let Some(ValueOrContainer::Container(Container::Map(map))) = annots.get(&id.to_hyphenated())
     else {
         return None;
     };
-    let kind = map.get(doc::ANNOT_KIND);
+    let map = doc::Fields::of(map);
+    let kind = map.get(doc::AnnotKey::Kind);
     let is_note = matches!(
         kind,
         Some(ValueOrContainer::Value(LoroValue::String(kind))) if kind.as_str() == KIND_FOOTNOTE
@@ -38,7 +39,7 @@ pub(crate) fn entry(document: &LoroDoc, id: &FootnoteId) -> Option<LoroMap> {
 /// one (`PROSE-FEAT-305`).
 #[must_use]
 pub(crate) fn block(document: &LoroDoc, id: &FootnoteId) -> Option<TreeID> {
-    let named = doc::read_string(&entry(document, id)?, doc::ANNOT_NOTE_BLOCK)?;
+    let named = doc::read_string(&entry(document, id)?, doc::AnnotKey::NoteBlock)?;
     let block = TreeID::try_from(named.as_str()).ok()?;
     let tree = doc::blocks_read(document)?;
     doc::is_note(&tree, &block).then_some(block)
@@ -53,7 +54,7 @@ pub(crate) fn body(document: &LoroDoc, id: &FootnoteId) -> Option<LoroText> {
 /// Every footnote the document holds, whether a call reaches it or not.
 #[must_use]
 pub(crate) fn all(document: &LoroDoc) -> Vec<FootnoteId> {
-    let annots = document.get_map(doc::ANNOTS);
+    let annots = doc::annots(document);
     let mut ids: Vec<FootnoteId> = annots
         .keys()
         .filter_map(|key| FootnoteId::parse_str(&key).ok())

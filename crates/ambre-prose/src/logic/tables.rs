@@ -13,7 +13,7 @@
 //! every peer keeps the same regions without exchanging anything more.
 
 use ambre_core::StepDirection;
-use loro::{LoroDoc, LoroMap, LoroTree, LoroValue, TreeID, TreeParentId};
+use loro::{LoroDoc, LoroTree, LoroValue, TreeID, TreeParentId};
 
 use crate::doc::{self, Region};
 use crate::events::{
@@ -272,16 +272,16 @@ impl ProseState {
     }
 
     /// The attribute map of a live table, minted when it has none.
-    fn table_attrs(&self, table: &TreeID) -> Option<LoroMap> {
+    fn table_attrs(&self, table: &TreeID) -> Option<doc::Fields<doc::AttrKey>> {
         let tree = doc::blocks(&self.doc);
-        doc::map_at(&doc::node_of(&tree, table)?, doc::K_ATTRS)
+        doc::attrs_at(&doc::node_of(&tree, table)?)
     }
 
     /// Drop one region record.
     fn drop_region(&self, table: &TreeID, anchor: &TreeID) -> Result<(), String> {
         let Some(map) = self
             .table_attrs(table)
-            .and_then(|attrs| doc::map_at(&attrs, doc::A_MERGED))
+            .and_then(|attrs| doc::map_at(&attrs, doc::AttrKey::Merged))
         else {
             return Err("the region map refused a container".to_owned());
         };
@@ -344,7 +344,7 @@ impl ProseState {
         let Some(attrs) = self.table_attrs(&table) else {
             return Err(Self::err_write("the attribute map refused a container"));
         };
-        let Some(widths) = doc::movable_list_at(&attrs, doc::A_COL_WIDTHS) else {
+        let Some(widths) = doc::movable_list_at(&attrs, doc::AttrKey::ColWidths) else {
             return Err(Self::err_write("the width list refused a container"));
         };
         for _ in 0..cols {
@@ -352,7 +352,7 @@ impl ProseState {
                 return Err(Self::err_write(&format!("{e:?}")));
             }
         }
-        if doc::map_at(&attrs, doc::A_MERGED).is_none() {
+        if doc::map_at(&attrs, doc::AttrKey::Merged).is_none() {
             return Err(Self::err_write("the region map refused a container"));
         }
         let cols = usize::try_from(cols).unwrap_or(usize::MAX);
@@ -594,18 +594,18 @@ impl ProseState {
         }
         let Some(map) = self
             .table_attrs(table)
-            .and_then(|attrs| doc::map_at(&attrs, doc::A_MERGED))
+            .and_then(|attrs| doc::map_at(&attrs, doc::AttrKey::Merged))
         else {
             return Self::err_write("the region map refused a container");
         };
         let record = LoroValue::Map(
             [
                 (
-                    doc::R_EXTENT.to_owned(),
+                    doc::RegionKey::Extent.as_str().to_owned(),
                     LoroValue::from(extent.to_string()),
                 ),
                 (
-                    doc::R_STAMP.to_owned(),
+                    doc::RegionKey::Stamp.as_str().to_owned(),
                     LoroValue::I64(stamp.to_i64_saturating()),
                 ),
             ]
@@ -657,15 +657,15 @@ impl ProseState {
         if doc::block_type_of(&tree, cell) != Some(BlockType::TableCell) {
             return Self::err_no_block(cell);
         }
-        let mut writes: Vec<(&str, LoroValue)> = Vec::new();
+        let mut writes: Vec<(doc::AttrKey, LoroValue)> = Vec::new();
         if let Some(bg) = bg {
             let Some(hex) = hex_colour(bg) else {
                 return Self::err_table(format!("the colour {bg:#x}"));
             };
-            writes.push((doc::A_CELL_BG, hex.into()));
+            writes.push((doc::AttrKey::CellBg, hex.into()));
         }
         if let Some(valign) = valign {
-            writes.push((doc::A_VALIGN, i64::from(valign.code()).into()));
+            writes.push((doc::AttrKey::VAlign, i64::from(valign.code()).into()));
         }
         if let Some(border) = border {
             if !usable(border.width_pt, Floor::ZeroAllowed) {
@@ -675,26 +675,25 @@ impl ProseState {
                 return Self::err_table(format!("the colour {:#x}", border.color));
             };
             for key in [
-                doc::A_EDGE_TOP,
-                doc::A_EDGE_BOTTOM,
-                doc::A_EDGE_LEFT,
-                doc::A_EDGE_RIGHT,
+                doc::AttrKey::EdgeTop,
+                doc::AttrKey::EdgeBottom,
+                doc::AttrKey::EdgeLeft,
+                doc::AttrKey::EdgeRight,
             ] {
                 writes.push((key, f64::from(border.width_pt).into()));
             }
-            writes.push((doc::A_EDGE_COLOR, hex.into()));
+            writes.push((doc::AttrKey::EdgeColor, hex.into()));
         }
         if let Some(padding) = padding_pt {
             if !usable(padding, Floor::ZeroAllowed) {
                 return Self::err_table(format!("a padding of {padding} pt"));
             }
-            writes.push((doc::A_PADDING, f64::from(padding).into()));
+            writes.push((doc::AttrKey::Padding, f64::from(padding).into()));
         }
         if writes.is_empty() {
             return ProseOutcome::nothing();
         }
-        let Some(attrs) = doc::node_of(&tree, cell).and_then(|n| doc::map_at(&n, doc::K_ATTRS))
-        else {
+        let Some(attrs) = doc::node_of(&tree, cell).and_then(|n| doc::attrs_at(&n)) else {
             return Self::err_write("the attribute map refused a container");
         };
         for (key, value) in writes {
@@ -991,7 +990,13 @@ pub(crate) mod tests {
         };
         let mut keys: Vec<&str> = record.keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(keys, vec![doc::R_EXTENT, doc::R_STAMP]);
+        assert_eq!(
+            keys,
+            vec![
+                doc::RegionKey::Extent.as_str(),
+                doc::RegionKey::Stamp.as_str()
+            ]
+        );
     }
 
     #[test]
@@ -1350,12 +1355,14 @@ pub(crate) mod tests {
         let tree = doc::blocks(state.document());
         let attrs = doc::attrs_read(&tree, &styled).expect("the cell carries its style");
         assert_eq!(
-            attrs.get(doc::A_CELL_BG).and_then(|v| v.into_value().ok()),
+            attrs
+                .get(doc::AttrKey::CellBg)
+                .and_then(|v| v.into_value().ok()),
             Some(LoroValue::from("#ff8800"))
         );
         assert_eq!(
             attrs
-                .get(doc::A_EDGE_COLOR)
+                .get(doc::AttrKey::EdgeColor)
                 .and_then(|v| v.into_value().ok()),
             Some(LoroValue::from("#123456"))
         );
@@ -1503,15 +1510,18 @@ pub(crate) mod tests {
             + 10;
         let map = state
             .table_attrs(&table)
-            .and_then(|attrs| doc::map_at(&attrs, doc::A_MERGED))
+            .and_then(|attrs| doc::map_at(&attrs, doc::AttrKey::Merged))
             .expect("the region map");
         let record = LoroValue::Map(
             [
                 (
-                    doc::R_EXTENT.to_owned(),
+                    doc::RegionKey::Extent.as_str().to_owned(),
                     LoroValue::from(extent.to_string()),
                 ),
-                (doc::R_STAMP.to_owned(), LoroValue::I64(later)),
+                (
+                    doc::RegionKey::Stamp.as_str().to_owned(),
+                    LoroValue::I64(later),
+                ),
             ]
             .into_iter()
             .collect::<std::collections::HashMap<_, _>>()
@@ -1538,16 +1548,19 @@ pub(crate) mod tests {
         let (anchor, extent) = (cell_at(&state, table, 0, 1), cell_at(&state, table, 1, 1));
         let map = state
             .table_attrs(&table)
-            .and_then(|attrs| doc::map_at(&attrs, doc::A_MERGED))
+            .and_then(|attrs| doc::map_at(&attrs, doc::AttrKey::Merged))
             .expect("the region map");
         let earlier = first.stamp.to_i64_saturating() - 1;
         let record = LoroValue::Map(
             [
                 (
-                    doc::R_EXTENT.to_owned(),
+                    doc::RegionKey::Extent.as_str().to_owned(),
                     LoroValue::from(extent.to_string()),
                 ),
-                (doc::R_STAMP.to_owned(), LoroValue::I64(earlier)),
+                (
+                    doc::RegionKey::Stamp.as_str().to_owned(),
+                    LoroValue::I64(earlier),
+                ),
             ]
             .into_iter()
             .collect::<std::collections::HashMap<_, _>>()
