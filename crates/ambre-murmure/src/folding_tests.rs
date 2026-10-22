@@ -2,6 +2,7 @@
 //! They hold when the fold lease is asked, the fold snapshot the holder
 //! builds, the check another member runs, and the fold every member settles.
 
+use ambre_bus::CharSpan;
 use std::collections::HashMap;
 
 use ambre_bus::{
@@ -30,7 +31,7 @@ fn at(ms: u64) -> Timestamp {
 fn bold() -> StyleMark {
     StyleMark {
         style: TextStyle::Bold,
-        range: 1..3,
+        range: CharSpan::from_usize_range(1..3),
     }
 }
 

@@ -515,6 +515,7 @@ impl ProseState {
 mod tests {
     use crate::events::{BlockInit, BlockType, ProseCommand};
     use crate::logic::ProseState;
+    use ambre_bus::app::prose::DocOffset;
 
     #[test]
     fn a_table_row_is_refused_at_the_root() {
@@ -558,7 +559,7 @@ mod tests {
         let second = state.root_blocks()[1];
         state.handle_command(ProseCommand::InsertText {
             block_id: second,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "carried".to_owned(),
         });
         state.handle_command(ProseCommand::MoveBlock {
@@ -588,7 +589,7 @@ mod tests {
         let carried = state.root_blocks()[1];
         state.handle_command(ProseCommand::InsertText {
             block_id: carried,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "carried".to_owned(),
         });
 
@@ -658,7 +659,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "a title".to_owned(),
         });
 
@@ -693,7 +694,7 @@ mod tests {
         let neighbour = state.root_blocks()[1];
         state.handle_command(ProseCommand::InsertText {
             block_id: first,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "kept".to_owned(),
         });
 
@@ -874,7 +875,7 @@ mod tests {
         let second = state.root_blocks()[1];
         state.handle_command(ProseCommand::InsertText {
             block_id: second,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "Kept".to_owned(),
         });
         state.handle_command(ProseCommand::DeleteBlock { block_id: second });

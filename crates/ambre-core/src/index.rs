@@ -64,8 +64,9 @@ pub mod __private {
 /// `Step` reaches stable, implement it for every position type, replace each
 /// span type with `Range`, and delete the span types.
 ///
-/// The difference type must hold every position: `$delta_inner` implements
-/// `From<$inner>`.
+/// The difference type should hold every position. A `u32` axis on `i64`
+/// does. A `usize` axis on `isize` holds every position an allocation
+/// reaches, and a position past `isize::MAX` saturates there.
 #[macro_export]
 macro_rules! define_index {
     (
@@ -147,13 +148,13 @@ macro_rules! define_index {
 
             /// The position `delta` away, `None` off either end of the axis.
             pub fn checked_offset(self, delta: $delta) -> Option<Self> {
-                let moved = <$delta_inner>::from(self.0).checked_add(delta.0)?;
+                let moved = self.widen().checked_add(delta.0)?;
                 <$inner>::try_from(moved).ok().map(Self)
             }
 
             /// The position `delta` away, clamped to the axis.
             pub fn saturating_offset(self, delta: $delta) -> Self {
-                let moved = <$delta_inner>::from(self.0).saturating_add(delta.0);
+                let moved = self.widen().saturating_add(delta.0);
                 match <$inner>::try_from(moved) {
                     Ok(value) => Self(value),
                     Err(_) if moved < 0 => Self::ZERO,
@@ -185,6 +186,24 @@ macro_rules! define_index {
             /// the platform addresses.
             pub fn to_index(self) -> Option<usize> {
                 usize::try_from(self.0).ok()
+            }
+
+            /// The position at `index` of a slice, saturating at
+            /// [`Self::MAX`]: for the value a foreign API hands back.
+            pub fn from_usize(index: usize) -> Self {
+                Self(<$inner>::try_from(index).unwrap_or(<$inner>::MAX))
+            }
+
+            /// The position as a slice index, saturating at `usize::MAX`:
+            /// for the call into a foreign API that takes a `usize`.
+            pub fn to_usize(self) -> usize {
+                usize::try_from(self.0).unwrap_or(usize::MAX)
+            }
+
+            /// The position in the signed type of the difference, saturating
+            /// at its top.
+            fn widen(self) -> $delta_inner {
+                <$delta_inner>::try_from(self.0).unwrap_or(<$delta_inner>::MAX)
             }
         }
 
@@ -219,6 +238,12 @@ macro_rules! define_index {
                 Self(<$inner>::try_from(len).unwrap_or(<$inner>::MAX))
             }
 
+            /// The count as a `usize`, saturating at `usize::MAX`: for the
+            /// call into a foreign API that takes a length.
+            pub fn to_usize(self) -> usize {
+                usize::try_from(self.0).unwrap_or(usize::MAX)
+            }
+
             /// The position this count reaches from the start of the axis:
             /// the first position past `count` items.
             pub const fn as_end(self) -> $pos {
@@ -247,7 +272,32 @@ macro_rules! define_index {
 
             /// The forward move of `count` positions.
             pub fn from_count(count: $count) -> Self {
-                Self(<$delta_inner>::from(count.0))
+                Self($pos(count.0).widen())
+            }
+
+            /// Whether the move goes back.
+            pub const fn is_negative(self) -> bool {
+                self.0 < 0
+            }
+
+            /// How many positions the move covers, either way, saturating
+            /// past the axis.
+            pub fn magnitude(self) -> $count {
+                $count(<$inner>::try_from(self.0.unsigned_abs()).unwrap_or(<$inner>::MAX))
+            }
+        }
+
+        impl std::ops::Add for $delta {
+            type Output = $delta;
+
+            fn add(self, other: $delta) -> $delta {
+                $delta(self.0.saturating_add(other.0))
+            }
+        }
+
+        impl std::iter::Sum for $delta {
+            fn sum<I: Iterator<Item = $delta>>(iter: I) -> $delta {
+                iter.fold(Self::ZERO, |sum, delta| sum + delta)
             }
         }
 
@@ -275,6 +325,18 @@ macro_rules! define_index {
             /// Whether the span holds `pos`.
             pub const fn contains(self, pos: $pos) -> bool {
                 self.start.0 <= pos.0 && pos.0 < self.end.0
+            }
+
+            /// The span of the slice indices `range`, saturating at
+            /// the end of the axis: for the range a foreign API hands back.
+            pub fn from_usize_range(range: std::ops::Range<usize>) -> Self {
+                Self::new($pos::from_usize(range.start), $pos::from_usize(range.end))
+            }
+
+            /// The span as slice indices, saturating at `usize::MAX`: for
+            /// the call into a foreign API that takes a range.
+            pub fn to_usize_range(self) -> std::ops::Range<usize> {
+                self.start.to_usize()..self.end.to_usize()
             }
 
             /// The last position the span holds, `None` when it is empty.
@@ -338,7 +400,7 @@ macro_rules! define_index {
             type Output = $delta;
 
             fn sub(self, other: $pos) -> $delta {
-                $delta(<$delta_inner>::from(self.0) - <$delta_inner>::from(other.0))
+                $delta(self.widen().saturating_sub(other.widen()))
             }
         }
 
@@ -389,8 +451,11 @@ macro_rules! define_index {
                 pos
             }
 
-            /// Inserts `item` at `pos`, shifting the items after it. Returns
-            /// the item back when `pos` lies past the end.
+            /// Inserts `item` at `pos`, shifting the items after it.
+            ///
+            /// # Errors
+            ///
+            /// Returns the item back when `pos` lies past the end.
             pub fn insert(&mut self, pos: $pos, item: T) -> Result<(), T> {
                 match pos.to_index() {
                     Some(index) if index <= self.0.len() => {
@@ -588,6 +653,18 @@ mod tests {
     fn the_bracket_panics_past_the_end() {
         let items: LineVec<char> = vec!['a'].into();
         let _ = items[Line::new(1)];
+    }
+
+    #[test]
+    fn a_delta_covers_its_magnitude_either_way() {
+        assert_eq!(LineDelta::new(-3).magnitude(), LineCount::new(3));
+        assert_eq!(
+            LineDelta::new(i64::MIN).magnitude(),
+            LineCount::new(u32::MAX)
+        );
+        assert!(LineDelta::new(-1).is_negative() && !LineDelta::ZERO.is_negative());
+        let sum: LineDelta = [LineDelta::new(4), LineDelta::new(-6)].into_iter().sum();
+        assert_eq!(sum, LineDelta::new(-2));
     }
 
     #[test]

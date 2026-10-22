@@ -17,7 +17,8 @@ use loro::{
 };
 
 use ambre_bus::app::prose::{
-    Align, BlockType, LineHeight, LineHeightMode, ListStyle, OrderedStyle, ParagraphStyle,
+    Align, BlockType, DocCount, DocOffset, DocSpan, LineHeight, LineHeightMode, ListStyle,
+    OrderedStyle, ParagraphStyle,
 };
 
 // -----------------------------------------------------------------------------
@@ -1246,7 +1247,7 @@ pub(crate) fn flow(tree: &LoroTree) -> Vec<TreeID> {
 pub(crate) struct Anchor {
     pub block: TreeID,
     /// A count of code points into the block's body.
-    pub offset: u32,
+    pub offset: DocOffset,
     pub value: String,
 }
 
@@ -1259,12 +1260,12 @@ pub(crate) fn anchors(document: &LoroDoc, key: &str) -> Vec<Anchor> {
         if !block_type_of(&tree, &id).is_some_and(BlockType::has_body) {
             continue;
         }
-        let mut offset: u32 = 0;
+        let mut offset = DocOffset::ZERO;
         for span in get_block_text(document, &id).to_delta() {
             let loro::TextDelta::Insert { insert, attributes } = span else {
                 continue;
             };
-            let length = u32::try_from(insert.chars().count()).unwrap_or(u32::MAX);
+            let length = DocCount::of(&insert);
             let value = attributes
                 .as_ref()
                 .and_then(|attributes| attributes.get(key))
@@ -1273,15 +1274,15 @@ pub(crate) fn anchors(document: &LoroDoc, key: &str) -> Vec<Anchor> {
                     _ => None,
                 });
             if let Some(value) = value {
-                for step in 0..length {
+                for at in DocSpan::from_count(offset, length) {
                     out.push(Anchor {
                         block: id,
-                        offset: offset.saturating_add(step),
+                        offset: at,
                         value: value.clone(),
                     });
                 }
             }
-            offset = offset.saturating_add(length);
+            offset += length;
         }
     }
     out

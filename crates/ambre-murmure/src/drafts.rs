@@ -17,6 +17,7 @@ use std::rc::Rc;
 use ambre_bus::{
     ChannelId, Mention, MentionTarget, MessageDraft, MessageId, StyleMark, TextStyle, UserId,
 };
+use ambre_core::{CharOffset, CharSpan};
 use serde::{Deserialize, Serialize};
 
 use crate::composer::DraftOf;
@@ -222,8 +223,8 @@ struct Row {
 #[derive(Serialize, Deserialize)]
 struct RowMention {
     user: Option<UserId>,
-    start: usize,
-    end: usize,
+    start: CharOffset,
+    end: CharOffset,
 }
 
 /// A style of a row, by name, with the address of a link.
@@ -231,8 +232,8 @@ struct RowMention {
 struct RowStyle {
     style: String,
     link: Option<String>,
-    start: usize,
-    end: usize,
+    start: CharOffset,
+    end: CharOffset,
 }
 
 /// The row that keeps `draft`.
@@ -289,7 +290,7 @@ fn decode(row: &str) -> Option<MessageDraft> {
             target: mention
                 .user
                 .map_or(MentionTarget::Channel, MentionTarget::User),
-            range: mention.start..mention.end,
+            range: CharSpan::new(mention.start, mention.end),
         })
         .collect();
     let styles = row
@@ -310,7 +311,7 @@ fn decode(row: &str) -> Option<MessageDraft> {
             };
             Some(StyleMark {
                 style,
-                range: mark.start..mark.end,
+                range: CharSpan::new(mark.start, mark.end),
             })
         })
         .collect();
@@ -353,11 +354,11 @@ mod tests {
             mentions: vec![
                 Mention {
                     target: MentionTarget::User(ada),
-                    range: 3..7,
+                    range: CharSpan::from_usize_range(3..7),
                 },
                 Mention {
                     target: MentionTarget::Channel,
-                    range: 8..16,
+                    range: CharSpan::from_usize_range(8..16),
                 },
             ],
             styles: [
@@ -370,7 +371,10 @@ mod tests {
                 TextStyle::List,
             ]
             .into_iter()
-            .map(|style| StyleMark { style, range: 0..2 })
+            .map(|style| StyleMark {
+                style,
+                range: CharSpan::from_usize_range(0..2),
+            })
             .collect(),
         };
         assert_eq!(decode(&encode(&full)), Some(full));

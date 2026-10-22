@@ -6,7 +6,7 @@
 //! the text (`MURMURE-103`).
 
 use ambre_bus::{Mention, MentionTarget, MessageDraft};
-use ambre_core::{ChannelId, UserId};
+use ambre_core::{ChannelId, CharOffset, CharSpan, UserId, char_len};
 use loro::{LoroDoc, LoroText, LoroValue, TextDelta};
 
 use crate::error::MurmureError;
@@ -35,7 +35,7 @@ fn target_of(value: &LoroValue, channel: ChannelId) -> Option<MentionTarget> {
 
 /// Whether every range of `mentions` holds chars of `text`.
 pub(crate) fn fits(mentions: &[Mention], text: &str) -> bool {
-    let len = text.chars().count();
+    let len = char_len(text).as_end();
     mentions
         .iter()
         .all(|m| !m.range.is_empty() && m.range.end <= len)
@@ -58,7 +58,7 @@ pub(crate) fn write(
     style::configure(doc);
     for mention in mentions {
         content.mark(
-            mention.range.clone(),
+            mention.range.to_usize_range(),
             MENTION,
             value_of(mention.target, channel),
         )?;
@@ -70,12 +70,12 @@ pub(crate) fn write(
 /// never a write (`MURMURE-152`).
 pub(crate) fn read(content: &LoroText, channel: ChannelId) -> Vec<Mention> {
     let mut mentions = Vec::new();
-    let mut at = 0;
+    let mut at = CharOffset::ZERO;
     for span in content.to_delta() {
         let TextDelta::Insert { insert, attributes } = span else {
             continue;
         };
-        let len = insert.chars().count();
+        let len = char_len(&insert);
         let target = attributes
             .as_ref()
             .and_then(|attributes| attributes.get(MENTION))
@@ -83,7 +83,7 @@ pub(crate) fn read(content: &LoroText, channel: ChannelId) -> Vec<Mention> {
         if let Some(target) = target {
             mentions.push(Mention {
                 target,
-                range: at..at + len,
+                range: CharSpan::from_count(at, len),
             });
         }
         at += len;

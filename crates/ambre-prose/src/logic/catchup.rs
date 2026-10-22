@@ -11,6 +11,8 @@
 
 use std::collections::VecDeque;
 
+use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset, DocSpan};
+
 use crate::events::{ProseCommand, ProseEvent, ProseOutcome, TextEdit};
 use crate::rebase;
 
@@ -90,19 +92,19 @@ impl CatchUp {
     }
 
     /// A position the view sent, moved through what it had not seen.
-    fn position(&self, pos: u32, block: crate::events::BlockId) -> u32 {
+    fn position(&self, pos: DocOffset, block: crate::events::BlockId) -> DocOffset {
         rebase::through_all(pos, block, &self.unseen())
     }
 
     /// The end of a range the view sent: an insertion at it stays outside.
-    fn end(&self, pos: u32, block: crate::events::BlockId) -> u32 {
+    fn end(&self, pos: DocOffset, block: crate::events::BlockId) -> DocOffset {
         rebase::end_through_all(pos, block, &self.unseen())
     }
 
     /// A range the view sent, both ends moved through what it had not seen.
-    fn range(&self, block: crate::events::BlockId, (a, b): (u32, u32)) -> (u32, u32) {
-        let (start, end) = (a.min(b), a.max(b));
-        (self.position(start, block), self.end(end, block))
+    fn range(&self, block: crate::events::BlockId, range: DocSpan) -> DocSpan {
+        let (start, end) = (range.start.min(range.end), range.start.max(range.end));
+        DocSpan::new(self.position(start, block), self.end(end, block))
     }
 
     /// Stamp a change of the text: whether the view drew it, its number, and
@@ -166,16 +168,17 @@ impl ProseState {
                 text,
             } => {
                 sync.acked = sync.acked.next();
-                let n = crate::ui::chars(&text);
+                let n = DocCount::of(&text);
                 let drawn = TextEdit {
                     block_id,
                     at: pos,
-                    delta: i64::from(n),
+                    delta: DocDelta::from_count(n),
                 };
                 let Some(edit) = sync.rebase(drawn) else {
                     return Err(ProseOutcome::nothing());
                 };
-                sync.predicting = Prediction::Text(if n == 0 { Vec::new() } else { vec![edit] });
+                sync.predicting =
+                    Prediction::Text(if n.is_zero() { Vec::new() } else { vec![edit] });
                 ProseCommand::InsertText {
                     block_id,
                     pos: edit.at,
@@ -184,7 +187,7 @@ impl ProseState {
             }
             ProseCommand::DeleteText { block_id, range } => {
                 sync.acked = sync.acked.next();
-                let (start, end) = (range.0.min(range.1), range.0.max(range.1));
+                let (start, end) = (range.start.min(range.end), range.start.max(range.end));
                 if start == end {
                     sync.predicting = Prediction::Text(Vec::new());
                     return Ok(ProseCommand::DeleteText { block_id, range });
@@ -192,17 +195,16 @@ impl ProseState {
                 let drawn = TextEdit {
                     block_id,
                     at: start,
-                    delta: -i64::from(end - start),
+                    delta: DocDelta::from_count(end.count_from(start)).reversed(),
                 };
                 // Everything it was to delete is gone already.
                 let Some(edit) = sync.rebase(drawn) else {
                     return Err(ProseOutcome::nothing());
                 };
                 sync.predicting = Prediction::Text(vec![edit]);
-                let len = u32::try_from(edit.delta.unsigned_abs()).unwrap_or(u32::MAX);
                 ProseCommand::DeleteText {
                     block_id,
-                    range: (edit.at, edit.at.saturating_add(len)),
+                    range: DocSpan::from_count(edit.at, edit.delta.magnitude()),
                 }
             }
             ProseCommand::SplitBlock { block_id, pos } => {
@@ -266,8 +268,8 @@ impl ProseState {
                 // The view sends the selection head first, so its tail is an
                 // end: text typed there stays outside.
                 let (anchor, focus) = if anchor.0 == focus.0 {
-                    let (a, b) = sync.range(anchor.0, (anchor.1, focus.1));
-                    ((anchor.0, a), (focus.0, b))
+                    let span = sync.range(anchor.0, DocSpan::new(anchor.1, focus.1));
+                    ((anchor.0, span.start), (focus.0, span.end))
                 } else {
                     (
                         (anchor.0, sync.position(anchor.1, anchor.0)),
@@ -335,8 +337,8 @@ mod tests {
     fn run(at: u32, delta: i64) -> TextEdit {
         TextEdit {
             block_id: A,
-            at,
-            delta,
+            at: DocOffset::new(at),
+            delta: DocDelta::new(delta),
         }
     }
 

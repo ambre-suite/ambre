@@ -17,6 +17,7 @@
 
 use std::collections::HashMap;
 
+use ambre_bus::app::prose::DocOffset;
 use ambre_core::FootnoteId;
 use loro::{LoroValue, TreeID};
 
@@ -26,7 +27,7 @@ use ambre_bus::app::prose::{
 
 use super::ProseState;
 use super::tables::Grid;
-use super::text::{MarkedRun, marked_runs, write_runs};
+use super::text::{MarkedRun, body_span, marked_runs, write_runs};
 use crate::doc;
 use crate::events::{ProseEvent, ProseOutcome, ProseRefusal};
 use crate::interop::{
@@ -346,7 +347,7 @@ impl ProseState {
         let mut footnotes = Vec::new();
         for (id, ordinal) in crate::note::ordinals(&self.doc) {
             if let Some(body) = crate::note::body(&self.doc, &id) {
-                let runs = marked_runs(&body, 0, body.len_unicode())
+                let runs = marked_runs(&body, body_span(&body))
                     .into_iter()
                     .map(|run| ir_run(run, &notes))
                     .collect();
@@ -389,7 +390,7 @@ impl ProseState {
         let runs = || -> Vec<IrRun> {
             self.body_of(&id)
                 .map(|body| {
-                    marked_runs(&body, 0, body.len_unicode())
+                    marked_runs(&body, body_span(&body))
                         .into_iter()
                         .map(|run| ir_run(run, notes))
                         .collect()
@@ -564,7 +565,11 @@ impl ProseState {
                     .first()
                     .copied()
             {
-                if let Err(e) = write_runs(&doc::get_block_text(&self.doc, &first), 0, runs) {
+                if let Err(e) = write_runs(
+                    &doc::get_block_text(&self.doc, &first),
+                    DocOffset::ZERO,
+                    runs,
+                ) {
                     return Err(Self::err_write(&e));
                 }
                 last.insert(parent, first);
@@ -579,7 +584,8 @@ impl ProseState {
                         return Err(Self::err_write(&e));
                     }
                     if init.block_type().has_body()
-                        && let Err(e) = write_runs(&doc::get_block_text(&self.doc, &id), 0, runs)
+                        && let Err(e) =
+                            write_runs(&doc::get_block_text(&self.doc, &id), DocOffset::ZERO, runs)
                     {
                         return Err(Self::err_write(&e));
                     }

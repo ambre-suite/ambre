@@ -19,8 +19,9 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
-use ambre_core::DocumentId;
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, DocumentId, char_to_byte};
 
+use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset};
 use ambre_bus::logic::{AppCommand, LogicCommand};
 use ambre_bus::{Outbox, SendOutcome};
 
@@ -29,7 +30,7 @@ use crate::events::{
     ProseCommand, ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents,
     TextEdit, WordCount,
 };
-use crate::layout::run::{ShapedLayout, ShapedRun};
+use crate::layout::run::{RunOffset, ShapedLayout, ShapedRun};
 use crate::rebase;
 use crate::view::Highlight;
 use crate::view::cache::RunCache;
@@ -43,16 +44,6 @@ pub use crate::view::column::Viewport;
 /// A fast typist then pays for one recount per pause rather than one per
 /// keystroke (`features/ambre-spec-prose-word-count.md section 4`).
 pub const RECOUNT_DELAY_MS: f64 = 500.0;
-
-/// A code-point offset of a block as the layout in force counts it, without
-/// the text the view drafted since (`PROSE-UI-201`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct LaidOffset(pub u32);
-
-/// A code-point offset of a block as the document counts it, the text the
-/// view drafted included. A caret and a selection end count this way.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DocOffset(pub u32);
 
 /// What this view drew and the layout in force does not carry yet: the text
 /// typed and the text deleted. It is held apart from the document, never
@@ -79,7 +70,7 @@ struct DraftEdit {
     /// The number the Logic thread acknowledges this command by.
     seq: ambre_bus::app::prose::TextAck,
     block: BlockId,
-    at: u32,
+    at: DocOffset,
     change: Change,
     /// Taken as drawn: the document holds it, and the next layout will.
     confirmed: bool,
@@ -88,7 +79,7 @@ struct DraftEdit {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Change {
     Insert(String),
-    Delete(u32),
+    Delete(DocCount),
 }
 
 impl DraftBuffer {
@@ -117,7 +108,7 @@ impl DraftBuffer {
         seq: ambre_bus::app::prose::TextAck,
         text: &str,
         block_id: &BlockId,
-        pos: u32,
+        pos: DocOffset,
     ) {
         self.push(seq, *block_id, pos, Change::Insert(text.to_owned()));
     }
@@ -128,12 +119,12 @@ impl DraftBuffer {
         &mut self,
         seq: ambre_bus::app::prose::TextAck,
         block_id: &BlockId,
-        start: u32,
-        end: u32,
+        start: DocOffset,
+        end: DocOffset,
     ) {
         let (start, end) = (start.min(end), start.max(end));
         if end > start {
-            self.push(seq, *block_id, start, Change::Delete(end - start));
+            self.push(seq, *block_id, start, Change::Delete(end.count_from(start)));
         }
     }
 
@@ -141,7 +132,7 @@ impl DraftBuffer {
         &mut self,
         seq: ambre_bus::app::prose::TextAck,
         block: BlockId,
-        at: u32,
+        at: DocOffset,
         change: Change,
     ) {
         self.edits.push(DraftEdit {
@@ -219,12 +210,12 @@ impl DraftBuffer {
     pub fn text_of(&self, block: BlockId, laid: &str) -> String {
         let mut text = laid.to_owned();
         for edit in self.of(block) {
-            let start = byte_at(&text, edit.at);
+            let start = char_to_byte(&text, edit.at.as_char());
             match &edit.change {
-                Change::Insert(inserted) => text.insert_str(start, inserted),
+                Change::Insert(inserted) => text.insert_str(start.to_usize(), inserted),
                 Change::Delete(len) => {
-                    let end = byte_at(&text, edit.at.saturating_add(*len));
-                    text.replace_range(start..end, "");
+                    let end = char_to_byte(&text, (edit.at + *len).as_char());
+                    text.replace_range(ByteSpan::new(start, end).to_usize_range(), "");
                 }
             }
         }
@@ -243,10 +234,10 @@ impl DraftBuffer {
         let mut text = laid.to_owned();
         let mut marks = marks.to_vec();
         for edit in self.of(block) {
-            let start = byte_at(&text, edit.at);
+            let start = char_to_byte(&text, edit.at.as_char());
             match &edit.change {
                 Change::Insert(inserted) => {
-                    let n = inserted.len();
+                    let n = ByteCount::from_len(inserted.len());
                     // A mark expands after its range: text typed at its end
                     // joins it, text typed at its start does not.
                     for mark in &mut marks {
@@ -257,12 +248,12 @@ impl DraftBuffer {
                             mark.end += n;
                         }
                     }
-                    text.insert_str(start, inserted);
+                    text.insert_str(start.to_usize(), inserted);
                 }
                 Change::Delete(len) => {
-                    let end = byte_at(&text, edit.at.saturating_add(*len));
-                    let gone = end - start;
-                    let squeeze = |at: usize| {
+                    let end = char_to_byte(&text, (edit.at + *len).as_char());
+                    let gone = end.count_from(start);
+                    let squeeze = |at: ByteOffset| {
                         if at <= start {
                             at
                         } else if at >= end {
@@ -276,7 +267,7 @@ impl DraftBuffer {
                         mark.end = squeeze(mark.end);
                     }
                     marks.retain(|mark| mark.end > mark.start);
-                    text.replace_range(start..end, "");
+                    text.replace_range(ByteSpan::new(start, end).to_usize_range(), "");
                 }
             }
         }
@@ -286,11 +277,11 @@ impl DraftBuffer {
     /// How many code points `block` holds past the layout in force, negative
     /// when the draft deleted more than it typed.
     #[must_use]
-    pub fn delta(&self, block: BlockId) -> i64 {
+    pub fn delta(&self, block: BlockId) -> DocDelta {
         self.of(block)
             .map(|edit| match &edit.change {
-                Change::Insert(text) => i64::from(chars(text)),
-                Change::Delete(len) => -i64::from(*len),
+                Change::Insert(text) => DocDelta::from_count(DocCount::of(text)),
+                Change::Delete(len) => DocDelta::from_count(*len).reversed(),
             })
             .sum()
     }
@@ -298,29 +289,28 @@ impl DraftBuffer {
     /// An offset of the layout in force, as the view's text counts it. An
     /// offset at an insertion stays before it.
     #[must_use]
-    pub fn to_doc(&self, block: BlockId, laid: LaidOffset) -> DocOffset {
-        DocOffset(self.of(block).fold(laid.0, |at, edit| match &edit.change {
-            Change::Insert(text) if at > edit.at => at.saturating_add(chars(text)),
-            Change::Delete(len) if at > edit.at => at.saturating_sub(*len).max(edit.at),
+    pub fn to_doc(&self, block: BlockId, laid: RunOffset) -> DocOffset {
+        let start = DocOffset::new(laid.get());
+        self.of(block).fold(start, |at, edit| match &edit.change {
+            Change::Insert(text) if at > edit.at => at + DocCount::of(text),
+            Change::Delete(len) if at > edit.at => (at - *len).max(edit.at),
             _ => at,
-        }))
+        })
     }
 
     /// An offset of the view's text, as the layout in force counts it.
     /// Inside text the layout lacks, it lands where that text goes.
     #[must_use]
-    pub fn to_laid(&self, block: BlockId, offset: DocOffset) -> LaidOffset {
-        LaidOffset(
-            self.of(block)
-                .rev()
-                .fold(offset.0, |at, edit| match &edit.change {
-                    Change::Insert(text) if at > edit.at => {
-                        at.saturating_sub(chars(text)).max(edit.at)
-                    }
-                    Change::Delete(len) if at > edit.at => at.saturating_add(*len),
-                    _ => at,
-                }),
-        )
+    pub fn to_laid(&self, block: BlockId, offset: DocOffset) -> RunOffset {
+        let laid = self
+            .of(block)
+            .rev()
+            .fold(offset, |at, edit| match &edit.change {
+                Change::Insert(text) if at > edit.at => (at - DocCount::of(text)).max(edit.at),
+                Change::Delete(len) if at > edit.at => at + *len,
+                _ => at,
+            });
+        RunOffset::new(laid.get())
     }
 
     pub fn clear(&mut self) {
@@ -329,18 +319,6 @@ impl DraftBuffer {
             self.bump();
         }
     }
-}
-
-/// How many code points a string holds.
-pub(crate) fn chars(text: &str) -> u32 {
-    u32::try_from(text.chars().count()).unwrap_or(u32::MAX)
-}
-
-/// The byte a code-point offset starts at, the length past the end.
-fn byte_at(text: &str, offset: u32) -> usize {
-    text.char_indices()
-        .nth(offset as usize)
-        .map_or(text.len(), |(at, _)| at)
 }
 
 /// The UI thread's whole state for one open Prose document.
@@ -430,7 +408,7 @@ pub struct ProseUiState {
     /// (`PROSE-UI-033`).
     pub(crate) band_page: Option<u32>,
     /// A drag in flight: its anchor is frozen while it lasts (`PROSE-UI-152`).
-    pub(crate) dragging: Option<(BlockId, u32)>,
+    pub(crate) dragging: Option<(BlockId, DocOffset)>,
     /// The last pointer of the drag in flight, and its autoscroll
     /// (`PROSE-UI-038`). Both go with the drag.
     pub(crate) drag_pointer: Option<(f32, f32)>,
@@ -642,7 +620,7 @@ impl ProseUiState {
                 }
             }
             ProseEvent::DocUpdated { .. } => self.changed = true,
-            ProseEvent::CellEntered { block, .. } => self.place_caret(*block, 0),
+            ProseEvent::CellEntered { block, .. } => self.place_caret(*block, DocOffset::ZERO),
             ProseEvent::WordCountUpdated { count } => self.word_count = *count,
             ProseEvent::SelectionMarks {
                 anchor,
@@ -684,7 +662,7 @@ impl ProseUiState {
                 if let Some(split) = self.splitting.as_mut() {
                     split.new_block = Some(*new_block);
                 }
-                self.place_caret(*new_block, 0);
+                self.place_caret(*new_block, DocOffset::ZERO);
             }
             ProseEvent::FindResults { matches, current } => {
                 self.find_matches = matches.clone();
@@ -720,7 +698,7 @@ impl ProseUiState {
     }
 
     /// A caret the document placed: no selection, no column kept.
-    fn place_caret(&mut self, block_id: BlockId, offset: u32) {
+    fn place_caret(&mut self, block_id: BlockId, offset: DocOffset) {
         self.cursor = Some(CursorPosition {
             block_id,
             offset,
@@ -818,10 +796,13 @@ impl ProseUiState {
     fn nearest_confirmed(&self, gone: BlockId) -> Option<CursorPosition> {
         let index = self.flow_index(&crate::events::tree_id(gone))?;
         let text = |(_, block): (usize, &crate::layout::place::BlockLayout)| {
-            self.shaped
-                .blocks
-                .get(&block.block_id)
-                .map(|run| (crate::events::block_id(block.block_id), run.data().len()))
+            self.shaped.blocks.get(&block.block_id).map(|run| {
+                let len = run.data().len();
+                (
+                    crate::events::block_id(block.block_id),
+                    DocOffset::new(len.get()),
+                )
+            })
         };
         let before = self
             .shaped
@@ -836,7 +817,7 @@ impl ProseUiState {
                 .window_blocks()
                 .filter(|(at, _)| *at > index)
                 .find_map(text)
-                .map(|(block, _)| (block, 0)),
+                .map(|(block, _)| (block, DocOffset::ZERO)),
         };
         place.map(|(block_id, offset)| CursorPosition {
             block_id,
@@ -956,6 +937,7 @@ mod tests {
     }
 
     use super::*;
+    use ambre_bus::app::prose::DocSpan;
 
     fn a_document() -> DocumentId {
         DocumentId::from_bytes([7; 16])
@@ -1010,15 +992,18 @@ mod tests {
         let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(4);
         let block = BlockId::new(ambre_core::PeerId(1), 0);
         let mut state = ProseUiState::default();
-        state
-            .draft
-            .push_str(ambre_bus::app::prose::TextAck(1), "hel", &block, 0);
+        state.draft.push_str(
+            ambre_bus::app::prose::TextAck(1),
+            "hel",
+            &block,
+            DocOffset::ZERO,
+        );
         send_command(
             &tx,
             a_document(),
             ProseCommand::InsertText {
                 block_id: block,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: "hel".to_owned(),
             },
         );
@@ -1039,16 +1024,19 @@ mod tests {
     fn a_confirming_change_clears_the_draft_it_covers() {
         let block = BlockId::new(ambre_core::PeerId(1), 0);
         let mut state = ProseUiState::default();
-        state
-            .draft
-            .push_str(ambre_bus::app::prose::TextAck(1), "hel", &block, 0);
+        state.draft.push_str(
+            ambre_bus::app::prose::TextAck(1),
+            "hel",
+            &block,
+            DocOffset::ZERO,
+        );
         // A change alone keeps the draft: the text is not laid out yet.
         state.apply_event(&ProseEvent::DocUpdated { delta: vec![1] });
         assert_eq!(state.draft.text_of(block, ""), "hel");
         let typed = TextEdit {
             block_id: block,
-            at: 0,
-            delta: 3,
+            at: DocOffset::ZERO,
+            delta: DocDelta::new(3),
         };
         state.inflight.push_back(typed);
         state.apply_event(&ProseEvent::TextChanged {
@@ -1068,9 +1056,12 @@ mod tests {
     fn an_event_carrying_no_change_leaves_the_draft_alone() {
         let block = BlockId::new(ambre_core::PeerId(1), 0);
         let mut state = ProseUiState::default();
-        state
-            .draft
-            .push_str(ambre_bus::app::prose::TextAck(1), "hel", &block, 0);
+        state.draft.push_str(
+            ambre_bus::app::prose::TextAck(1),
+            "hel",
+            &block,
+            DocOffset::ZERO,
+        );
         state.apply_event(&ProseEvent::MediaArrived {
             content_hash: ambre_core::ContentHash("abc".to_owned()),
             blocks: Vec::new(),
@@ -1086,7 +1077,7 @@ mod tests {
         state.apply_event(&ProseEvent::BlockSplit { source, new_block });
         let cursor = state.cursor.expect("the caret moved");
         assert_eq!(cursor.block_id, new_block);
-        assert_eq!(cursor.offset, 0);
+        assert_eq!(cursor.offset, DocOffset::ZERO);
     }
 
     #[test]
@@ -1094,15 +1085,30 @@ mod tests {
         let block = BlockId::new(ambre_core::PeerId(1), 0);
         let other = BlockId::new(ambre_core::PeerId(1), 1);
         let mut draft = DraftBuffer::default();
-        draft.push_str(ambre_bus::app::prose::TextAck(1), "he", &block, 0);
-        draft.push_str(ambre_bus::app::prose::TextAck(2), "llo", &block, 2);
-        draft.push_delete(ambre_bus::app::prose::TextAck(3), &block, 1, 3);
+        draft.push_str(
+            ambre_bus::app::prose::TextAck(1),
+            "he",
+            &block,
+            DocOffset::ZERO,
+        );
+        draft.push_str(
+            ambre_bus::app::prose::TextAck(2),
+            "llo",
+            &block,
+            DocOffset::new(2),
+        );
+        draft.push_delete(
+            ambre_bus::app::prose::TextAck(3),
+            &block,
+            DocOffset::new(1),
+            DocOffset::new(3),
+        );
         assert_eq!(draft.text_of(block, "!"), "hlo!");
-        assert_eq!(draft.delta(block), 3);
+        assert_eq!(draft.delta(block), DocDelta::new(3));
         assert_eq!(draft.text_of(other, "ab"), "ab");
         // An offset of the laid text, and back.
-        assert_eq!(draft.to_doc(block, LaidOffset(1)), DocOffset(4));
-        assert_eq!(draft.to_laid(block, DocOffset(4)), LaidOffset(1));
+        assert_eq!(draft.to_doc(block, RunOffset::new(1)), DocOffset::new(4));
+        assert_eq!(draft.to_laid(block, DocOffset::new(4)), RunOffset::new(1));
     }
 
     #[test]
@@ -1137,7 +1143,7 @@ mod tests {
         let mut ui = ProseUiState::default();
         let hit = FindMatch {
             block_id: BlockId::new(ambre_core::PeerId(1), 0),
-            range: (0, 3),
+            range: DocSpan::from_usize_range(0..3),
         };
         ui.apply_event(&ProseEvent::FindResults {
             matches: vec![hit],

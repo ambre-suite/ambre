@@ -17,8 +17,11 @@ use std::sync::Arc;
 use crate::events::{BlockId, tree_id};
 use crate::input::ProseInput;
 use crate::layout::measure::{MarkedSpan, reshape_paragraph, shape_paragraph};
-use crate::layout::run::{ShapedRun, TableShape};
-use crate::ui::{ProseUiState, chars};
+use ambre_bus::app::prose::DocOffset;
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, char_len, char_to_byte};
+
+use crate::layout::run::{RunOffset, ShapedRun, TableShape};
+use crate::ui::ProseUiState;
 use crate::view::hit::{Fragment, fragment};
 
 /// A split sent and not yet laid out. It names the block it parts and the
@@ -26,7 +29,7 @@ use crate::view::hit::{Fragment, fragment};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Splitting {
     pub block: BlockId,
-    pub at: u32,
+    pub at: DocOffset,
     pub new_block: Option<BlockId>,
 }
 
@@ -56,7 +59,7 @@ pub(crate) struct Ghost {
     pub below: BlockId,
     pub run: ShapedRun,
     /// Where the caret is drawn in it, while the document has not named it.
-    pub caret: Option<u32>,
+    pub caret: Option<RunOffset>,
 }
 
 /// One block a page shows, where the view draws it.
@@ -70,21 +73,14 @@ pub(crate) struct Piece {
     pub provisional: bool,
 }
 
-/// The byte a code-point offset starts at, the length past the end.
-fn byte_at(text: &str, offset: u32) -> usize {
-    text.char_indices()
-        .nth(offset as usize)
-        .map_or(text.len(), |(at, _)| at)
-}
-
-/// The marks of `text[from..to]`, counted from `from`.
-fn clip_marks(marks: &[MarkedSpan], from: usize, to: usize) -> Vec<MarkedSpan> {
+/// The marks over `bytes` of a text, counted from its start.
+fn clip_marks(marks: &[MarkedSpan], bytes: ByteSpan) -> Vec<MarkedSpan> {
     marks
         .iter()
-        .filter(|mark| mark.end > from && mark.start < to)
+        .filter(|mark| mark.end > bytes.start && mark.start < bytes.end)
         .map(|mark| MarkedSpan {
-            start: mark.start.max(from) - from,
-            end: mark.end.min(to) - from,
+            start: ByteOffset::ZERO + mark.start.max(bytes.start).count_from(bytes.start),
+            end: ByteOffset::ZERO + mark.end.min(bytes.end).count_from(bytes.start),
             ..*mark
         })
         .collect()
@@ -241,11 +237,12 @@ impl ProseUiState {
             let mut text = self.draft.text_of(block, laid.text());
             let mut marks = self.draft.marks_of(block, laid.text(), laid.marks());
             if let Some(split) = self.splitting.filter(|split| split.block == block) {
-                let cut = byte_at(&text, split.at);
-                let tail = text.get(cut..).unwrap_or("").to_owned();
-                let tail_marks = clip_marks(&marks, cut, text.len());
-                text.truncate(cut);
-                marks = clip_marks(&marks, 0, cut);
+                let cut = char_to_byte(&text, split.at.as_char());
+                let end = ByteCount::from_len(text.len()).as_end();
+                let tail = text.get(cut.to_usize()..).unwrap_or("").to_owned();
+                let tail_marks = clip_marks(&marks, ByteSpan::new(cut, end));
+                text.truncate(cut.to_usize());
+                marks = clip_marks(&marks, ByteSpan::new(ByteOffset::ZERO, cut));
                 let (ghost_text, ghost_marks, caret) = match split.new_block {
                     Some(new_block) => (
                         self.draft.text_of(new_block, &tail),
@@ -254,25 +251,26 @@ impl ProseUiState {
                     ),
                     None => {
                         let held = self.held_text();
-                        let n = held.len();
+                        let n = ByteCount::from_len(held.len());
                         let mut ghost_marks = tail_marks;
                         for mark in &mut ghost_marks {
                             mark.start += n;
                             mark.end += n;
                         }
                         // The text held takes the marks before the split.
-                        let before = laid.marks_before(laid.len());
-                        if n > 0 {
+                        let before = laid.marks_before(laid.len().as_end());
+                        if !n.is_zero() {
                             ghost_marks.insert(
                                 0,
                                 MarkedSpan {
-                                    start: 0,
-                                    end: n,
+                                    start: ByteOffset::ZERO,
+                                    end: n.as_end(),
                                     ..before
                                 },
                             );
                         }
-                        (format!("{held}{tail}"), ghost_marks, Some(chars(&held)))
+                        let caret = RunOffset::new(char_len(&held).get());
+                        (format!("{held}{tail}"), ghost_marks, Some(caret))
                     }
                 };
                 let layout = shape_paragraph(

@@ -1749,6 +1749,7 @@ impl MurmureView {
 
 #[cfg(test)]
 mod tests {
+    use ambre_bus::{ByteSpan, CharSpan};
     use std::cell::Cell;
 
     use ambre_bus::conduit::local;
@@ -2225,8 +2226,16 @@ mod tests {
             sent
         };
         let messages = vec![
-            link("bad x", "javascript:alert(1)", 0..3),
-            link("see site now", "https://ambre.dev", 4..8),
+            link(
+                "bad x",
+                "javascript:alert(1)",
+                CharSpan::from_usize_range(0..3),
+            ),
+            link(
+                "see site now",
+                "https://ambre.dev",
+                CharSpan::from_usize_range(4..8),
+            ),
         ];
         let segment = SegmentId::new();
         send(&page, channel, MurmureEvent::Messages { segment, messages });
@@ -3956,7 +3965,7 @@ mod tests {
         let at = MessageAt::Segment(SegmentId::new());
         let ada = ambre_bus::Mention {
             target: ambre_bus::MentionTarget::User(UserId::new()),
-            range: 3..7,
+            range: CharSpan::from_usize_range(3..7),
         };
         *page.editing.borrow_mut() = Some(PendingEdit {
             channel,
@@ -4962,7 +4971,7 @@ mod tests {
         let mentions: Vec<_> = sent[0]
             .mentions
             .iter()
-            .map(|m| (m.target, m.range.clone()))
+            .map(|m| (m.target, m.range.to_usize_range()))
             .collect();
         let (bob, carol) = (MentionTarget::User(bob), MentionTarget::User(carol));
         assert_eq!(mentions, vec![(bob, 0..4), (carol, 9..15)]);
@@ -5002,13 +5011,16 @@ mod tests {
         let mentions: Vec<_> = sent[0]
             .mentions
             .iter()
-            .map(|m| (m.target, m.range.clone()))
+            .map(|m| (m.target, m.range.to_usize_range()))
             .collect();
         assert_eq!(mentions, vec![(MentionTarget::User(bob), 2..6)]);
     }
 
     fn styled(style: ambre_bus::TextStyle, range: std::ops::Range<usize>) -> ambre_bus::StyleMark {
-        ambre_bus::StyleMark { style, range }
+        ambre_bus::StyleMark {
+            style,
+            range: CharSpan::from_usize_range(range),
+        }
     }
 
     /// A marker becomes its mark the moment it closes, and its chars leave
@@ -5077,7 +5089,12 @@ mod tests {
             .into_iter()
             .map(|span| {
                 let look = (span.weight, span.italic, span.family, span.color);
-                (span.range, look, span.underline, span.background)
+                (
+                    span.range.to_usize_range(),
+                    look,
+                    span.underline,
+                    span.background,
+                )
             })
             .collect();
         let code = Some("Monospace".to_owned());
@@ -5102,7 +5119,7 @@ mod tests {
         type_slowly(&mut page, " _e_");
         let spans = page.view.composer().spans(channel);
         assert_eq!(spans.len(), 4);
-        assert!(spans[3].italic && spans[3].range == (9..10));
+        assert!(spans[3].italic && spans[3].range == ByteSpan::from_usize_range(9..10));
         // A draft with no mark draws none.
         for _ in 0.."é b c d e".chars().count() {
             key(&mut page, "Backspace", false, ambre_bus::PageTime(0.0));
@@ -5633,11 +5650,11 @@ mod tests {
             mentions: vec![
                 Mention {
                     target: MentionTarget::Channel,
-                    range: 0..8,
+                    range: CharSpan::from_usize_range(0..8),
                 },
                 Mention {
                     target: MentionTarget::User(bob),
-                    range: 9..13,
+                    range: CharSpan::from_usize_range(9..13),
                 },
             ],
         };

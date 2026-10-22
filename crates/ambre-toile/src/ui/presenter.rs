@@ -12,6 +12,8 @@
 // No DOM, no Loro: this stays in `ui` and is host-tested, like `ui::find`.
 // ============================================================================
 
+use ambre_core::{CharCount, CharOffset, Utf16Offset, char_len, char_to_utf16, utf16_to_char};
+
 use crate::logic::command::{SlidePosition, TextDelta};
 
 /// The presenter panel's slide counter, `1`-based for humans: `"3 / 10"`. An
@@ -57,8 +59,8 @@ pub fn notes_delta(old: &str, new: &str) -> Option<TextDelta> {
         .take(new.len() - prefix - suffix)
         .collect();
     Some(TextDelta {
-        at: prefix,
-        delete,
+        at: CharOffset::from_usize(prefix),
+        delete: CharCount::from_len(delete),
         insert,
     })
 }
@@ -68,20 +70,12 @@ pub fn notes_delta(old: &str, new: &str) -> Option<TextDelta> {
 /// units, as a `<textarea>` counts them. A caret before the change stays, a
 /// caret after it shifts with it, and one inside a removed run lands after
 /// what replaced it.
-pub fn caret_through(before: &str, caret: u32, after: &str) -> u32 {
+pub fn caret_through(before: &str, caret: Utf16Offset, after: &str) -> Utf16Offset {
     let Some(delta) = notes_delta(before, after) else {
         return caret;
     };
-    // UTF-16 to codepoints over `before`, then back over `after`.
-    let mut units = 0u32;
-    let pos = before
-        .chars()
-        .take_while(|c| {
-            units += c.len_utf16() as u32;
-            units <= caret
-        })
-        .count();
-    let inserted = delta.insert.chars().count();
+    let pos = utf16_to_char(before, caret);
+    let inserted = char_len(&delta.insert);
     let moved = if pos <= delta.at {
         pos
     } else if pos >= delta.at + delta.delete {
@@ -89,11 +83,7 @@ pub fn caret_through(before: &str, caret: u32, after: &str) -> u32 {
     } else {
         delta.at + inserted
     };
-    after
-        .chars()
-        .take(moved)
-        .map(|c| c.len_utf16() as u32)
-        .sum()
+    char_to_utf16(after, moved)
 }
 
 #[cfg(test)]
@@ -103,13 +93,28 @@ mod tests {
     #[test]
     fn a_caret_keeps_its_place_under_a_peer_write() {
         // A prefix before the caret shifts it; a suffix after it does not.
-        assert_eq!(caret_through("Hello world", 5, "Dear Hello world"), 10);
-        assert_eq!(caret_through("Hello world", 5, "Hello world!"), 5);
+        assert_eq!(
+            caret_through("Hello world", Utf16Offset::new(5), "Dear Hello world"),
+            Utf16Offset::new(10)
+        );
+        assert_eq!(
+            caret_through("Hello world", Utf16Offset::new(5), "Hello world!"),
+            Utf16Offset::new(5)
+        );
         // A caret inside a removed run lands after its replacement.
-        assert_eq!(caret_through("Hello world", 8, "Hello you"), 9);
+        assert_eq!(
+            caret_through("Hello world", Utf16Offset::new(8), "Hello you"),
+            Utf16Offset::new(9)
+        );
         // Offsets count UTF-16 units: an astral emoji is two.
-        assert_eq!(caret_through("\u{1f600}ab", 3, "x\u{1f600}ab"), 4);
-        assert_eq!(caret_through("same", 2, "same"), 2);
+        assert_eq!(
+            caret_through("\u{1f600}ab", Utf16Offset::new(3), "x\u{1f600}ab"),
+            Utf16Offset::new(4)
+        );
+        assert_eq!(
+            caret_through("same", Utf16Offset::new(2), "same"),
+            Utf16Offset::new(2)
+        );
     }
 
     #[test]
@@ -145,8 +150,8 @@ mod tests {
         assert_eq!(
             notes_delta("abc", "abcd"),
             Some(TextDelta {
-                at: 3,
-                delete: 0,
+                at: CharOffset::new(3),
+                delete: CharCount::ZERO,
                 insert: "d".to_owned()
             })
         );
@@ -158,8 +163,8 @@ mod tests {
         assert_eq!(
             notes_delta("bc", "abc"),
             Some(TextDelta {
-                at: 0,
-                delete: 0,
+                at: CharOffset::ZERO,
+                delete: CharCount::ZERO,
                 insert: "a".to_owned()
             })
         );
@@ -171,8 +176,8 @@ mod tests {
         assert_eq!(
             notes_delta("abcd", "abd"),
             Some(TextDelta {
-                at: 2,
-                delete: 1,
+                at: CharOffset::new(2),
+                delete: CharCount::new(1),
                 insert: String::new()
             })
         );
@@ -184,8 +189,8 @@ mod tests {
         assert_eq!(
             notes_delta("abXYcd", "abZcd"),
             Some(TextDelta {
-                at: 2,
-                delete: 2,
+                at: CharOffset::new(2),
+                delete: CharCount::new(2),
                 insert: "Z".to_owned()
             })
         );
@@ -196,8 +201,8 @@ mod tests {
         assert_eq!(
             notes_delta("", "hi"),
             Some(TextDelta {
-                at: 0,
-                delete: 0,
+                at: CharOffset::ZERO,
+                delete: CharCount::ZERO,
                 insert: "hi".to_owned()
             })
         );
@@ -208,8 +213,8 @@ mod tests {
         assert_eq!(
             notes_delta("hi", ""),
             Some(TextDelta {
-                at: 0,
-                delete: 2,
+                at: CharOffset::ZERO,
+                delete: CharCount::new(2),
                 insert: String::new()
             })
         );
@@ -222,8 +227,8 @@ mod tests {
         assert_eq!(
             notes_delta("\u{e9}\u{e9}", "\u{e9}\u{e9}!"),
             Some(TextDelta {
-                at: 2,
-                delete: 0,
+                at: CharOffset::new(2),
+                delete: CharCount::ZERO,
                 insert: "!".to_owned()
             })
         );
@@ -237,8 +242,8 @@ mod tests {
         assert_eq!(
             notes_delta("x\u{e9}y", "x\u{fc}y"),
             Some(TextDelta {
-                at: 1,
-                delete: 1,
+                at: CharOffset::new(1),
+                delete: CharCount::new(1),
                 insert: "\u{fc}".to_owned()
             })
         );
@@ -251,8 +256,8 @@ mod tests {
         assert_eq!(
             notes_delta("aaa", "aa"),
             Some(TextDelta {
-                at: 2,
-                delete: 1,
+                at: CharOffset::new(2),
+                delete: CharCount::new(1),
                 insert: String::new()
             })
         );

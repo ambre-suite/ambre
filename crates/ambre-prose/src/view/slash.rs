@@ -7,8 +7,9 @@
 //! was typed after it, and writes none of that (`PROSE-UI-087`).
 
 use crate::events::{BlockInit, BlockType, ListStyle, OrderedStyle, ProseCommand, tree_id};
-use crate::ui::{DocOffset, ProseUiState};
+use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
+use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
 
 /// The rows and columns of the table the menu inserts.
 const TABLE_SIZE: u32 = 3;
@@ -153,9 +154,9 @@ pub(crate) struct SlashMenu {
 
 impl SlashMenu {
     /// The range the slash and the query take in the origin block.
-    pub(crate) fn span(&self) -> (u32, u32) {
+    pub(crate) fn span(&self) -> DocSpan {
         let start = self.origin.1;
-        (start, start + 1 + crate::ui::chars(&self.query))
+        DocSpan::new(start, start + DocCount::ONE + DocCount::of(&self.query))
     }
 }
 
@@ -196,7 +197,7 @@ impl ProseUiState {
     /// start of a paragraph or a heading of the flow, where a block command
     /// is legal (`PROSE-UI-058`).
     pub(crate) fn opens_menu(&self, spot: Spot) -> bool {
-        if spot.1 != 0 || self.is_band(spot.0) {
+        if spot.1 != DocOffset::ZERO || self.is_band(spot.0) {
             return false;
         }
         self.flow_index(&tree_id(spot.0))
@@ -226,7 +227,7 @@ impl ProseUiState {
     /// The bottom of the line holding a place, on the canvas.
     fn under(&self, (block, offset): Spot) -> Option<(f32, f32)> {
         let run = self.run_of(block)?;
-        let caret = run.caret_box_at(self.to_laid(block, DocOffset(offset)).0, false);
+        let caret = run.caret_box_at(self.to_laid(block, offset), false);
         let (x, y0, y1) = (caret.x0 as f32, caret.y0 as f32, caret.y1 as f32);
         let (page, piece) = self.fragment_at(block, y0)?;
         Some(self.to_screen(block, page, piece, x, y1))

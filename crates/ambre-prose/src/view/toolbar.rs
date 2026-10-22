@@ -10,7 +10,8 @@
 use ambre_commands::CommandId;
 
 use crate::events::{ActiveMarks, ProseCommand, TriState};
-use crate::ui::{DocOffset, ProseUiState};
+use crate::layout::run::RunSpan;
+use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
 
 /// What the format bar shows, rebuilt on every frame from the selection.
@@ -126,13 +127,16 @@ impl ProseUiState {
         ((start, start_off), (end, end_off)): (Spot, Spot),
     ) -> Option<(f32, f32)> {
         let run = self.run_of(start)?;
-        let from = self.to_laid(start, DocOffset(start_off)).0;
+        let from = self.to_laid(start, start_off);
         let to = if start == end {
-            self.to_laid(end, DocOffset(end_off)).0
+            self.to_laid(end, end_off)
         } else {
-            run.len()
+            run.len().as_end()
         };
-        let first = run.range_boxes(from, to.max(from)).into_iter().next();
+        let first = run
+            .range_boxes(RunSpan::new(from, to.max(from)))
+            .into_iter()
+            .next();
         let (x0, x1, y0) = match first {
             Some(part) => (part.x0 as f32, part.x1 as f32, part.y0 as f32),
             // The selection starts at the end of its block: the caret's box.

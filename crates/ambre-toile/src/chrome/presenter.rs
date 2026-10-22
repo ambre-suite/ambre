@@ -14,10 +14,12 @@
 
 use ambre_bus::UserId;
 use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
+use ambre_core::Utf16Offset;
 use leptos::html;
 use leptos::prelude::*;
 
 use crate::logic::command::TextDelta;
+
 use crate::ui::presenter::{caret_through, notes_delta, slide_counter_label};
 
 /// An intent emitted by the presenter panel. The launcher maps each variant to a
@@ -75,9 +77,9 @@ pub fn PresenterPanel(
                 let end = area.selection_end().ok().flatten();
                 area.set_value(&next);
                 if let (Some(start), Some(end)) = (start, end) {
-                    let start = caret_through(&shown, start, &next);
-                    let end = caret_through(&shown, end, &next);
-                    let _ = area.set_selection_range(start, end);
+                    let start = caret_through(&shown, Utf16Offset::new(start), &next);
+                    let end = caret_through(&shown, Utf16Offset::new(end), &next);
+                    let _ = area.set_selection_range(start.get(), end.get());
                 }
             }
         }

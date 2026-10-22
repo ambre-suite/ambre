@@ -11,6 +11,8 @@ use crate::events::{
 };
 use crate::logic::ProseState;
 use crate::logic::tables::tests::{cell_at, document_with_table, texts, type_in};
+use ambre_bus::app::prose::{DocCount, DocOffset};
+use ambre_bus::app::prose::{DocDelta, DocSpan};
 
 /// Two peers over one seeded document, so both start from the same block ids.
 ///
@@ -46,7 +48,7 @@ fn two_peers_typing_in_one_paragraph_keep_both_sentences() {
     let from_alice = alice
         .handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "Alice writes.".to_owned(),
         })
         .update
@@ -54,7 +56,7 @@ fn two_peers_typing_in_one_paragraph_keep_both_sentences() {
     let from_bob = bob
         .handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "Bob writes.".to_owned(),
         })
         .update
@@ -107,7 +109,7 @@ fn two_peers_writing_one_size_merge_to_one_value() {
     let seed = alice
         .handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "sized".to_owned(),
         })
         .update
@@ -120,7 +122,7 @@ fn two_peers_writing_one_size_merge_to_one_value() {
     let from_alice = alice
         .handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
             key: "fs".to_owned(),
             value: Some("11.0".to_owned()),
         })
@@ -129,7 +131,7 @@ fn two_peers_writing_one_size_merge_to_one_value() {
     let from_bob = bob
         .handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
             key: "fs".to_owned(),
             value: Some("11".to_owned()),
         })
@@ -190,7 +192,7 @@ fn a_block_a_peer_moved_keeps_every_reference_to_it() {
     let from_bob = bob
         .handle_command(ProseCommand::InsertText {
             block_id: second,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "typed".to_owned(),
         })
         .update
@@ -243,8 +245,7 @@ fn an_offline_edit_and_a_concurrent_one_both_land() {
                     block_id: block,
                     pos: alice
                         .text_of(&block)
-                        .map(|t| t.chars().count())
-                        .unwrap_or(0) as u32,
+                        .map_or(DocOffset::ZERO, |t| DocCount::of(&t).as_end()),
                     text: text.to_owned(),
                 })
                 .update
@@ -254,7 +255,7 @@ fn an_offline_edit_and_a_concurrent_one_both_land() {
     let from_bob = bob
         .handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "meanwhile ".to_owned(),
         })
         .update
@@ -276,7 +277,7 @@ fn a_remote_change_is_never_re_broadcast() {
     let from_alice = alice
         .handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "hello".to_owned(),
         })
         .update
@@ -293,7 +294,7 @@ fn a_remote_change_is_never_re_broadcast() {
     let from_bob = bob
         .handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 5,
+            pos: DocOffset::new(5),
             text: "!".to_owned(),
         })
         .update
@@ -311,7 +312,7 @@ fn the_confirmed_change_carries_the_bytes_that_were_applied() {
     let (mut alice, mut bob, block) = two_peers();
     let outcome = alice.handle_command(ProseCommand::InsertText {
         block_id: block,
-        pos: 0,
+        pos: DocOffset::ZERO,
         text: "carried".to_owned(),
     });
     let update = outcome.update.clone().expect("a delta");
@@ -343,7 +344,7 @@ fn a_split_and_a_concurrent_insertion_both_survive() {
     let seed = alice
         .handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "hello world".to_owned(),
         })
         .update
@@ -353,14 +354,14 @@ fn a_split_and_a_concurrent_insertion_both_survive() {
     let from_alice = alice
         .handle_command(ProseCommand::SplitBlock {
             block_id: block,
-            pos: 5,
+            pos: DocOffset::new(5),
         })
         .update
         .expect("a delta");
     let from_bob = bob
         .handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "oh ".to_owned(),
         })
         .update
@@ -389,7 +390,7 @@ fn a_join_and_a_concurrent_edit_converge() {
         let delta = alice
             .handle_command(ProseCommand::InsertText {
                 block_id: id,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: text.to_owned(),
             })
             .update
@@ -399,15 +400,15 @@ fn a_join_and_a_concurrent_edit_converge() {
 
     let from_alice = alice
         .handle_command(ProseCommand::DeleteRange {
-            anchor: (first, 4),
-            focus: (second, 0),
+            anchor: (first, DocOffset::new(4)),
+            focus: (second, DocOffset::ZERO),
         })
         .update
         .expect("a delta");
     let from_bob = bob
         .handle_command(ProseCommand::InsertText {
             block_id: second,
-            pos: 4,
+            pos: DocOffset::new(4),
             text: "!".to_owned(),
         })
         .update
@@ -551,7 +552,7 @@ fn seed(alice: &mut ProseState, bob: &mut ProseState, block: crate::events::Bloc
     let typed = alice
         .handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: text.to_owned(),
         })
         .update
@@ -570,7 +571,7 @@ fn mark(
     state
         .handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range,
+            range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
             key: key.to_owned(),
             value: value.map(str::to_owned),
         })
@@ -795,7 +796,7 @@ fn a_change_tells_the_view_what_it_did_to_the_text() {
     let (mut alice, mut bob, block) = two_peers();
     let typed = alice.handle_command(ProseCommand::InsertText {
         block_id: block,
-        pos: 0,
+        pos: DocOffset::ZERO,
         text: "\u{e9}t\u{e9}".to_owned(),
     });
     let (local, edits, removed) = moved(&typed.display).expect("the text moved");
@@ -803,23 +804,29 @@ fn a_change_tells_the_view_what_it_did_to_the_text() {
     assert_eq!(edits.len(), 1);
     assert_eq!(
         (edits[0].block_id, edits[0].at, edits[0].delta),
-        (block, 0, 3)
+        (block, DocOffset::ZERO, DocDelta::new(3))
     );
     assert!(removed.is_empty());
 
     let answered = bob.apply_remote(&typed.update.expect("a delta"));
     let (local, edits, _) = moved(&answered).expect("the text moved");
     assert!(!local, "the change came from a peer");
-    assert_eq!((edits[0].at, edits[0].delta), (0, 3));
+    assert_eq!(
+        (edits[0].at, edits[0].delta),
+        (DocOffset::ZERO, DocDelta::new(3))
+    );
 
     // A deletion after the accented run counts code points, not bytes.
     let cut = alice.handle_command(ProseCommand::DeleteText {
         block_id: block,
-        range: (2, 3),
+        range: DocSpan::from_usize_range(2..3),
     });
     let answered = bob.apply_remote(&cut.update.expect("a delta"));
     let (_, edits, _) = moved(&answered).expect("the text moved");
-    assert_eq!((edits[0].at, edits[0].delta), (2, -1));
+    assert_eq!(
+        (edits[0].at, edits[0].delta),
+        (DocOffset::new(2), DocDelta::new(-1))
+    );
 
     let gone = alice.handle_command(ProseCommand::DeleteBlock { block_id: block });
     let answered = bob.apply_remote(&gone.update.expect("a delta"));
@@ -833,7 +840,7 @@ fn an_echo_of_this_peers_own_change_answers_nothing() {
     let own = alice
         .handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "hello".to_owned(),
         })
         .update

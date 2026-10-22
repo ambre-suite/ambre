@@ -11,6 +11,7 @@ use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
+use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset};
 use loro::TextDelta;
 use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{ContainerID, Index, LoroDoc, Subscription, TreeExternalDiff, TreeID, TreeParentId};
@@ -27,7 +28,7 @@ type Moved = Arc<Mutex<TextMoves>>;
 pub(crate) struct TextMoves {
     /// A block, where a run starts in the text the runs before it left, and
     /// its signed length in code points.
-    pub(crate) edits: Vec<(TreeID, u32, i64)>,
+    pub(crate) edits: Vec<(TreeID, DocOffset, DocDelta)>,
     pub(crate) removed: Vec<TreeID>,
 }
 
@@ -121,7 +122,11 @@ impl Touched {
             return false;
         }
         let moved = self.moved.lock().unwrap_or_else(PoisonError::into_inner);
-        moved.removed.is_empty() && moved.edits.iter().all(|&(_, _, delta)| delta > 0)
+        moved.removed.is_empty()
+            && moved
+                .edits
+                .iter()
+                .all(|&(_, _, delta)| delta > DocDelta::ZERO)
     }
 }
 
@@ -163,20 +168,22 @@ fn record(change: &ContainerDiff<'_>, moves: &mut TextMoves) {
             };
             // The walk counts positions in the text as the runs before
             // leave it, so each run reads after the previous one.
-            let mut at: u32 = 0;
+            let mut at = DocOffset::ZERO;
             for item in delta {
                 match item {
                     TextDelta::Retain { retain, .. } => {
-                        at = at.saturating_add(u32::try_from(*retain).unwrap_or(u32::MAX));
+                        at += DocCount::from_len(*retain);
                     }
                     TextDelta::Insert { insert, .. } => {
-                        let len = u32::try_from(insert.chars().count()).unwrap_or(u32::MAX);
-                        moves.edits.push((block, at, i64::from(len)));
-                        at = at.saturating_add(len);
+                        let len = DocCount::of(insert);
+                        moves.edits.push((block, at, DocDelta::from_count(len)));
+                        at += len;
                     }
                     TextDelta::Delete { delete } => {
-                        let len = u32::try_from(*delete).unwrap_or(u32::MAX);
-                        moves.edits.push((block, at, -i64::from(len)));
+                        let len = DocCount::from_len(*delete);
+                        moves
+                            .edits
+                            .push((block, at, DocDelta::from_count(len).reversed()));
                     }
                 }
             }

@@ -157,6 +157,7 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, BlockInit, OrderedStyle, ProseCommand, ProseEvent};
+    use ambre_bus::app::prose::DocOffset;
 
     /// Every live block in document order, with what a list gesture is allowed
     /// to leave alone: its type, its marker, its text and its parent.
@@ -258,7 +259,7 @@ mod tests {
         let second = item(&mut state, ListStyle::Bullet);
         state.handle_command(ProseCommand::InsertText {
             block_id: first,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "kept".to_owned(),
         });
         let before = census(&state);
@@ -295,7 +296,7 @@ mod tests {
         let second = item(&mut state, DECIMAL);
         state.handle_command(ProseCommand::InsertText {
             block_id: second,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "kept".to_owned(),
         });
         state.handle_command(ProseCommand::InsertBlock {
@@ -350,7 +351,7 @@ mod tests {
         state.handle_command(ProseCommand::IndentList { block_id: third });
         state.handle_command(ProseCommand::InsertText {
             block_id: third,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "kept".to_owned(),
         });
         assert_eq!(state.parent_of(&third), Some(second));
@@ -372,7 +373,7 @@ mod tests {
         let neighbour = item(&mut state, DECIMAL);
         state.handle_command(ProseCommand::InsertText {
             block_id: only,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "kept".to_owned(),
         });
 

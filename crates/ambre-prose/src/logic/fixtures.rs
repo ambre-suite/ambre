@@ -12,6 +12,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use ambre_bus::app::prose::{DocOffset, DocSpan};
 use ambre_core::{
     DocType, FixtureGen, FixtureShape, ShapeBody, UserId, fixture_peer_count, seeded_document_id,
 };
@@ -349,7 +350,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         &mut state,
         ProseCommand::InsertText {
             block_id: block_id(title),
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "Quarterly report".to_owned(),
         },
     )?;
@@ -376,7 +377,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         &mut state,
         ProseCommand::InsertText {
             block_id: block_id(body),
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: text.to_owned(),
         },
     )?;
@@ -384,7 +385,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         &mut state,
         ProseCommand::ApplyMark {
             block_id: block_id(body),
-            range: (0, 7),
+            range: DocSpan::from_usize_range(0..7),
             key: "b".to_owned(),
             value: None,
         },
@@ -393,7 +394,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         &mut state,
         ProseCommand::ApplyMark {
             block_id: block_id(body),
-            range: (16, 30),
+            range: DocSpan::from_usize_range(16..30),
             key: "i".to_owned(),
             value: None,
         },
@@ -425,7 +426,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
             &mut state,
             ProseCommand::InsertText {
                 block_id: block_id(paragraph),
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: cell_text.to_owned(),
             },
         )?;
@@ -438,7 +439,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         &mut state,
         ProseCommand::InsertText {
             block_id: header,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "Confidential".to_owned(),
         },
     )?;
@@ -447,7 +448,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         ProseCommand::InsertFooterField {
             field: HeaderField::PageNumber,
             target: HfTarget::Regular,
-            pos: 0,
+            pos: DocOffset::ZERO,
         },
     )?;
 
@@ -456,7 +457,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         &mut state,
         ProseCommand::InsertFootnote {
             block_id: block_id(body),
-            pos: end,
+            pos: DocOffset::new(end),
             note_text: "Against the same quarter last year.".to_owned(),
         },
     )?;
@@ -464,7 +465,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         &mut state,
         ProseCommand::AddComment {
             block_id: block_id(body),
-            range: (0, 7),
+            range: DocSpan::from_usize_range(0..7),
             text: "Is this net or gross?".to_owned(),
             now_ms: ambre_core::Timestamp(COMMENT_AT_MS),
         },
@@ -487,6 +488,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
 
 #[cfg(test)]
 mod tests {
+    use ambre_bus::app::prose::DocOffset;
     use ambre_core::FixtureGen;
 
     use super::{ProseFixture, build_styled_document};
@@ -499,7 +501,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "hello".to_owned(),
         });
         let shape = state.fixture_shape();
@@ -521,7 +523,7 @@ mod tests {
             let block = state.root_blocks()[0];
             state.handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: "one route".to_owned(),
             });
         }

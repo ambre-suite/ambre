@@ -577,7 +577,7 @@ impl ProseState {
                 } => return self.suggest_insert(&tree_id(block_id), pos, &text),
                 ProseCommand::DeleteText { block_id, range } => {
                     let block = tree_id(block_id);
-                    return self.suggest_delete((block, range.0), (block, range.1));
+                    return self.suggest_delete((block, range.start), (block, range.end));
                 }
                 ProseCommand::DeleteRange { anchor, focus } => {
                     return self.suggest_delete(
@@ -1318,6 +1318,8 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, BlockInit, CursorPosition};
+    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocSpan;
 
     #[test]
     fn a_fresh_document_holds_one_paragraph_and_a_version() {
@@ -1342,7 +1344,7 @@ mod tests {
         let absent = BlockId::new(ambre_core::PeerId(9), 9);
         let outcome = state.handle_command(ProseCommand::DeleteText {
             block_id: absent,
-            range: (0, 1),
+            range: DocSpan::from_usize_range(0..1),
         });
         let error = refusal(&outcome);
         assert_eq!(error.refused, "deleting text");
@@ -1358,11 +1360,11 @@ mod tests {
         let absent = BlockId::new(ambre_core::PeerId(9), 9);
         let deleting = state.handle_command(ProseCommand::DeleteText {
             block_id: absent,
-            range: (0, 1),
+            range: DocSpan::from_usize_range(0..1),
         });
         let splitting = state.handle_command(ProseCommand::SplitBlock {
             block_id: absent,
-            pos: 0,
+            pos: DocOffset::ZERO,
         });
         assert_eq!(refusal(&deleting).reason, refusal(&splitting).reason);
         assert_ne!(refusal(&deleting).refused, refusal(&splitting).refused);
@@ -1377,12 +1379,12 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "text".to_owned(),
         });
         let outcome = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 4),
+            range: DocSpan::from_usize_range(0..4),
             key: "fs".to_owned(),
             value: Some("huge".to_owned()),
         });
@@ -1412,7 +1414,7 @@ mod tests {
         let first = state
             .handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: "hello".to_owned(),
             })
             .update
@@ -1473,7 +1475,7 @@ mod tests {
         let block = author.root_blocks()[0];
         author.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "a paragraph".to_owned(),
         });
         let mut reader = ProseState::new().expect("a document is built");
@@ -1489,7 +1491,7 @@ mod tests {
         let delta = author
             .handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: "Still ".to_owned(),
             })
             .update
@@ -1511,7 +1513,7 @@ mod tests {
         let mine = reader.root_blocks()[0];
         reader.handle_command(ProseCommand::InsertText {
             block_id: mine,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "mine".to_owned(),
         });
         reader
@@ -1527,7 +1529,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "a paragraph that is measured, never stored".to_owned(),
         });
         let before = state.doc.get_deep_value();
@@ -1546,7 +1548,7 @@ mod tests {
         let block = source.root_blocks()[0];
         source.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "a long paragraph ".repeat(400),
         });
         let snapshot = source.export_snapshot();
@@ -1571,7 +1573,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "a paragraph".to_owned(),
         });
         state.handle_command(ProseCommand::InsertBlock {
@@ -1595,7 +1597,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "x".to_owned(),
         });
         let before = state.last_exported_vv.clone();
@@ -1610,7 +1612,7 @@ mod tests {
         let block = source.root_blocks()[0];
         source.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "x".to_owned(),
         });
         let snapshot = source.export_snapshot();
@@ -1682,7 +1684,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "same text".to_owned(),
         });
         let before = state.export_snapshot();
@@ -1731,7 +1733,7 @@ mod tests {
         let block = state.root_blocks()[0];
         let insert = ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "text".to_owned(),
         };
         assert_eq!(history_of(&state.handle_command(insert)), [(true, false)]);
@@ -1750,13 +1752,13 @@ mod tests {
             ProseCommand::UpdateCursor {
                 pos: CursorPosition {
                     block_id: block,
-                    offset: 1,
+                    offset: DocOffset::new(1),
                     anchor: None,
                 },
             },
             ProseCommand::DeleteText {
                 block_id: block,
-                range: (0, 0),
+                range: DocSpan::from_usize_range(0..0),
             },
         ] {
             let outcome = state.handle_command(no_op);
@@ -1780,7 +1782,7 @@ mod tests {
         undo_on_nothing(&mut state);
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "text".to_owned(),
         });
         assert!(state.handle_command(ProseCommand::Undo).update.is_some());
@@ -1800,7 +1802,7 @@ mod tests {
             state
                 .handle_command(ProseCommand::InsertText {
                     block_id: block,
-                    pos: 0,
+                    pos: DocOffset::ZERO,
                     text: text.to_owned(),
                 })
                 .update
@@ -1819,7 +1821,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "mine".to_owned(),
         });
         let doc = LoroDoc::new();
@@ -1841,7 +1843,7 @@ mod tests {
         let block = origin.root_blocks()[0];
         origin.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "an imported paragraph".to_owned(),
         });
         let snapshot = origin.export_snapshot();
@@ -1852,7 +1854,7 @@ mod tests {
         let delta = peer
             .handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: "mine".to_owned(),
             })
             .update

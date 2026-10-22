@@ -5,6 +5,7 @@
 //! reads the list to show the link cursor and to follow a target; nothing in
 //! it writes to the document.
 
+use ambre_bus::app::prose::{DocCount, DocOffset};
 use loro::{LoroDoc, LoroValue, TextDelta};
 
 use crate::comment::text_blocks;
@@ -21,13 +22,13 @@ pub fn links(document: &LoroDoc) -> Vec<LinkSpan> {
     let mut out: Vec<LinkSpan> = Vec::new();
     for id in text_blocks(document) {
         let block = block_id(id);
-        let mut offset: u32 = 0;
+        let mut offset = DocOffset::ZERO;
         for delta in doc::get_block_text(document, &id).to_delta() {
             let TextDelta::Insert { insert, attributes } = delta else {
                 continue;
             };
-            let length = u32::try_from(insert.chars().count()).unwrap_or(u32::MAX);
-            let end = offset.saturating_add(length);
+            let length = DocCount::of(&insert);
+            let end = offset + length;
             let url = attributes
                 .as_ref()
                 .and_then(|attributes| attributes.get(LINK_KEY))
@@ -85,6 +86,7 @@ mod tests {
     use crate::events::{BlockInit, LinkSpan, ProseCommand, ProseEvent};
     use crate::logic::ProseState;
     use crate::view::tests::append;
+    use ambre_bus::app::prose::{DocOffset, DocSpan};
 
     fn mark(
         state: &mut ProseState,
@@ -96,7 +98,7 @@ mod tests {
         state
             .handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range,
+                range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
                 key: key.to_owned(),
                 value: Some(value.to_owned()),
             })
@@ -110,8 +112,8 @@ mod tests {
         let events = mark(&mut state, block, (4, 12), "a", "https://example.org/");
         let expected = vec![LinkSpan {
             block_id: block,
-            start: 4,
-            end: 12,
+            start: DocOffset::new(4),
+            end: DocOffset::new(12),
             url: "https://example.org/".to_owned(),
         }];
         assert!(events.contains(&ProseEvent::LinksUpdated {

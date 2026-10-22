@@ -1,6 +1,7 @@
 //! The engine core against its contract rows: the documents a channel holds,
 //! the header check, the routing of a remote delta, and the send.
 
+use ambre_bus::CharSpan;
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
@@ -519,19 +520,19 @@ fn a_sent_message_carries_a_content_summary_with_its_mentions() {
         mentions: vec![
             Mention {
                 target: MentionTarget::User(bob),
-                range: 0..4,
+                range: CharSpan::from_usize_range(0..4),
             },
             Mention {
                 target: MentionTarget::User(carol),
-                range: 5..11,
+                range: CharSpan::from_usize_range(5..11),
             },
             Mention {
                 target: MentionTarget::User(bob),
-                range: 12..16,
+                range: CharSpan::from_usize_range(12..16),
             },
             Mention {
                 target: MentionTarget::Channel,
-                range: 17..25,
+                range: CharSpan::from_usize_range(17..25),
             },
         ],
     };

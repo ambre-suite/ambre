@@ -6,6 +6,7 @@
 //! mention over it rides with the message (`MURMURE-552`).
 
 use ambre_bus::{MentionTarget, UserId};
+use ambre_core::ByteOffset;
 
 /// The word an `@channel` writes, after its `@`.
 pub const AT_CHANNEL: &str = "channel";
@@ -41,8 +42,8 @@ pub struct MentionList {
 /// The query an `@` opens before the byte `caret` of `text`: the offset of
 /// its `@`, and what follows it. The `@` starts the text or follows a space,
 /// and no space comes after it.
-pub fn query_at(text: &str, caret: usize) -> Option<(usize, &str)> {
-    let before = text.get(..caret)?;
+pub fn query_at(text: &str, caret: ByteOffset) -> Option<(ByteOffset, &str)> {
+    let before = text.get(..caret.get())?;
     let at = before.rfind(|c: char| c == '@' || c.is_whitespace())?;
     if !before[at..].starts_with('@') {
         return None;
@@ -51,7 +52,7 @@ pub fn query_at(text: &str, caret: usize) -> Option<(usize, &str)> {
         .chars()
         .next_back()
         .is_none_or(char::is_whitespace);
-    starts_word.then(|| (at, &before[at + 1..]))
+    starts_word.then(|| (ByteOffset::new(at), &before[at + 1..]))
 }
 
 /// Whether a word of `name` starts with `query`, case folded.
@@ -93,14 +94,38 @@ mod tests {
     /// to the caret until a space ends it (`MURMURE-551`).
     #[test]
     fn an_at_that_starts_a_word_opens_a_query_up_to_the_caret() {
-        assert_eq!(query_at("@", 1), Some((0, "")));
-        assert_eq!(query_at("hi @bo", 6), Some((3, "bo")));
-        assert_eq!(query_at("hi @bo", 5), Some((3, "b")));
-        assert_eq!(query_at("é\n@x", "é\n@x".len()), Some((3, "x")));
-        assert_eq!(query_at("mail@bo", 7), None, "inside a word");
-        assert_eq!(query_at("@bo b", 5), None, "a space ended it");
-        assert_eq!(query_at("hi", 2), None);
-        assert_eq!(query_at("é", 1), None, "off a char boundary");
+        assert_eq!(
+            query_at("@", ByteOffset::new(1)),
+            Some((ByteOffset::new(0), ""))
+        );
+        assert_eq!(
+            query_at("hi @bo", ByteOffset::new(6)),
+            Some((ByteOffset::new(3), "bo"))
+        );
+        assert_eq!(
+            query_at("hi @bo", ByteOffset::new(5)),
+            Some((ByteOffset::new(3), "b"))
+        );
+        assert_eq!(
+            query_at("é\n@x", ByteOffset::new("é\n@x".len())),
+            Some((ByteOffset::new(3), "x"))
+        );
+        assert_eq!(
+            query_at("mail@bo", ByteOffset::new(7)),
+            None,
+            "inside a word"
+        );
+        assert_eq!(
+            query_at("@bo b", ByteOffset::new(5)),
+            None,
+            "a space ended it"
+        );
+        assert_eq!(query_at("hi", ByteOffset::new(2)), None);
+        assert_eq!(
+            query_at("é", ByteOffset::new(1)),
+            None,
+            "off a char boundary"
+        );
     }
 
     /// `@channel` leads while the query can still spell it. Members follow

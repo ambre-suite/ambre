@@ -202,6 +202,12 @@ pub enum CopyOutcome {
     Deferred,
 }
 // Re-export core types so that users don't need to depend on ambre-core directly.
+/// The text offsets, one family per unit, for a crate that reaches the core
+/// through this one (`ambre-canvas`).
+pub use ambre_core::text_offset::{
+    ByteCount, ByteDelta, ByteOffset, ByteSpan, CharCount, CharDelta, CharOffset, CharSpan,
+    Utf16Offset, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte,
+};
 pub use ambre_core::{
     ApiFailure, CategoryId, ChannelDocumentKind, ChannelId, CommentId, DocType, DocumentId, Email,
     FootnoteId, HttpStatus, KeyFingerprint, LeaseId, MeetingId, MessageId, MetaId, Millis,

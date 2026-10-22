@@ -12,8 +12,7 @@
 //! [`LogicCommand::App`](crate::LogicCommand::App), whose address is a
 //! document (`BUS-027`).
 
-use std::ops::Range;
-
+use ambre_core::{ByteOffset, CharCount, CharOffset, CharSpan, CharVec};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -181,7 +180,7 @@ pub enum MentionTarget {
 pub struct Mention {
     pub target: MentionTarget,
     /// In chars of the body, as the composer drew the name.
-    pub range: Range<usize>,
+    pub range: CharSpan,
 }
 
 /// How a run of a message body reads (`MURMURE-194`).
@@ -207,7 +206,7 @@ pub enum TextStyle {
 pub struct StyleMark {
     pub style: TextStyle,
     /// In chars of the body.
-    pub range: Range<usize>,
+    pub range: CharSpan,
 }
 
 /// A message the view hands the engine to send.
@@ -548,16 +547,20 @@ impl MessageView {
     /// The body as [`shown`](Self::shown) writes it, and the byte of it
     /// where each char of the text starts, one past the last included. A
     /// char a name took the place of starts past that name (`MURMURE-565`).
-    pub fn shown_at(&self, name_of: impl Fn(UserId) -> Option<String>) -> (String, Vec<usize>) {
+    pub fn shown_at(
+        &self,
+        name_of: impl Fn(UserId) -> Option<String>,
+    ) -> (String, CharVec<ByteOffset>) {
         let mut shown = String::with_capacity(self.text.len());
-        let mut bytes = Vec::with_capacity(self.text.len() + 1);
-        let mut at = 0;
-        for (i, c) in self.text.chars().enumerate() {
+        let mut bytes = CharVec::new();
+        let mut at = CharOffset::ZERO;
+        let chars = self.text.chars().enumerate();
+        for (i, c) in chars.map(|(i, c)| (CharCount::from_len(i).as_end(), c)) {
             if i < at {
-                bytes.push(shown.len());
+                bytes.push(ByteOffset::new(shown.len()));
                 continue;
             }
-            bytes.push(shown.len());
+            bytes.push(ByteOffset::new(shown.len()));
             let mention = self.mentions.iter().find(|m| m.range.start == i);
             let named = mention.and_then(|m| match m.target {
                 MentionTarget::User(user) => name_of(user).map(|name| (m, name)),
@@ -572,7 +575,7 @@ impl MessageView {
                 None => shown.push(c),
             }
         }
-        bytes.push(shown.len());
+        bytes.push(ByteOffset::new(shown.len()));
         (shown, bytes)
     }
 }

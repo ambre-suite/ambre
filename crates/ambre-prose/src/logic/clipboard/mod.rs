@@ -15,7 +15,7 @@ mod sink;
 use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};
 
-use ambre_bus::app::prose::{BlockInit, ListStyle, OrderedStyle};
+use ambre_bus::app::prose::{BlockInit, DocCount, DocOffset, DocSpan, ListStyle, OrderedStyle};
 
 use super::ProseState;
 use super::text::{MarkedRun, marked_runs, write_runs};
@@ -143,12 +143,11 @@ fn marked(block: &ClipBlock) -> Vec<MarkedRun> {
     block.runs.iter().map(ClipRun::marked).collect()
 }
 
-fn len_of(block: &ClipBlock) -> u32 {
+fn len_of(block: &ClipBlock) -> DocCount {
     block
         .runs
         .iter()
-        .map(|run| crate::ui::chars(&run.text))
-        .sum()
+        .fold(DocCount::ZERO, |sum, run| sum + DocCount::of(&run.text))
 }
 
 impl ProseState {
@@ -173,15 +172,19 @@ impl ProseState {
 
     /// The payload of a whole selection, whatever the view shows of it
     /// (`PROSE-UI-040`). It writes nothing (`PROSE-UI-109`).
-    pub(super) fn copy_range(&self, anchor: (BlockId, u32), focus: (BlockId, u32)) -> ProseOutcome {
+    pub(super) fn copy_range(
+        &self,
+        anchor: (BlockId, DocOffset),
+        focus: (BlockId, DocOffset),
+    ) -> ProseOutcome {
         let mut blocks = Vec::new();
         let mut text = String::new();
-        for (block, (start, end)) in self.selected_spans(anchor, focus) {
+        for (block, span) in self.selected_spans(anchor, focus) {
             let id = tree_id(block);
             let Some(body) = self.body_of(&id) else {
                 continue;
             };
-            let runs: Vec<ClipRun> = marked_runs(&body, start as usize, end as usize)
+            let runs: Vec<ClipRun> = marked_runs(&body, span)
                 .into_iter()
                 .map(ClipRun::of)
                 .collect();
@@ -213,7 +216,7 @@ impl ProseState {
 
     /// Write plain text of several lines at `at`, one paragraph per line,
     /// the way a rich payload of paragraphs lands (`PROSE-UI-042`).
-    fn paste_text(&mut self, at: (TreeID, u32), text: &str) -> ProseOutcome {
+    fn paste_text(&mut self, at: (TreeID, DocOffset), text: &str) -> ProseOutcome {
         let blocks = text
             .split('\n')
             .map(|line| ClipBlock {
@@ -245,7 +248,7 @@ impl ProseState {
     /// through to the next half.
     pub(super) fn paste(
         &mut self,
-        at: (TreeID, u32),
+        at: (TreeID, DocOffset),
         text: &str,
         html: Option<&str>,
         bytes: Option<&[u8]>,
@@ -270,19 +273,19 @@ impl ProseState {
         self.paste_text(at, text)
     }
 
-    fn paste_blocks(&mut self, at: (TreeID, u32), payload: Payload) -> ProseOutcome {
+    fn paste_blocks(&mut self, at: (TreeID, DocOffset), payload: Payload) -> ProseOutcome {
         let Some(body) = self.body_of(&at.0) else {
             return Self::err_no_block(&at.0);
         };
-        let pos = at.1 as usize;
-        let len = body.len_unicode();
+        let pos = at.1;
+        let len = DocCount::from_len(body.len_unicode()).as_end();
         if pos > len {
             return Self::err_bad_range();
         }
         let Some((first, rest)) = payload.blocks.split_first() else {
             return ProseOutcome::nothing();
         };
-        if len == 0
+        if len == DocOffset::ZERO
             && let Err(refused) = self.adopt(&at.0, first)
         {
             return refused;
@@ -300,9 +303,9 @@ impl ProseState {
         if doc::is_aside(&doc::blocks(&self.doc), &at.0) {
             return Self::err_nesting();
         }
-        let tail = marked_runs(&body, pos, len);
+        let tail = marked_runs(&body, DocSpan::new(pos, len));
         if pos < len
-            && let Err(e) = body.delete(pos, len - pos)
+            && let Err(e) = body.delete(pos.to_usize(), len.count_from(pos).to_usize())
         {
             return Self::err_write(&format!("{e:?}"));
         }
@@ -320,14 +323,14 @@ impl ProseState {
                 return Self::err_write(&e);
             }
             let text = doc::get_block_text(&self.doc, &id);
-            if let Err(e) = write_runs(&text, 0, &marked(block)) {
+            if let Err(e) = write_runs(&text, DocOffset::ZERO, &marked(block)) {
                 return Self::err_write(&e);
             }
             previous = id;
         }
         let text = doc::get_block_text(&self.doc, &previous);
-        let offset = len_of(last);
-        if let Err(e) = write_runs(&text, offset as usize, &tail) {
+        let offset = len_of(last).as_end();
+        if let Err(e) = write_runs(&text, offset, &tail) {
             return Self::err_write(&e);
         }
         self.commit_with(vec![ProseEvent::CaretPlaced {
@@ -375,12 +378,17 @@ mod tests {
     use crate::events::{BlockInit, ProseCommand};
     use crate::view::tests::append;
     use ambre_bus::app::prose::OrderedStyle;
+    use ambre_bus::app::prose::{DocOffset, DocSpan};
 
     fn copied(
         state: &mut ProseState,
         anchor: (BlockId, u32),
         focus: (BlockId, u32),
     ) -> (String, Vec<u8>, bool) {
+        let (anchor, focus) = (
+            (anchor.0, DocOffset::new(anchor.1)),
+            (focus.0, DocOffset::new(focus.1)),
+        );
         let outcome = state.handle_command(ProseCommand::CopyRange { anchor, focus });
         let wrote = outcome.update.is_some();
         let Some(ProseEvent::Clipboard { text, payload, .. }) = outcome.display.into_iter().next()
@@ -422,7 +430,7 @@ mod tests {
         let bold = append(&mut state, BlockInit::Paragraph, "bold text");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: bold,
-            range: (0, 4),
+            range: DocSpan::from_usize_range(0..4),
             key: "b".to_owned(),
             value: None,
         });
@@ -436,7 +444,7 @@ mod tests {
         let (text, payload, _) = copied(&mut state, (heading, 0), (item, 4));
         let target = append(&mut state, BlockInit::Paragraph, "");
         state.handle_command(ProseCommand::Paste {
-            at: (target, 0),
+            at: (target, DocOffset::ZERO),
             text,
             html: None,
             payload: Some(payload),
@@ -457,7 +465,7 @@ mod tests {
     fn foreign_bytes_paste_as_plain_text() {
         let (mut state, first) = document();
         state.handle_command(ProseCommand::Paste {
-            at: (first, 0),
+            at: (first, DocOffset::ZERO),
             text: "one\ntwo".to_owned(),
             html: None,
             payload: Some(b"not a payload".to_vec()),
@@ -476,7 +484,7 @@ mod tests {
         let middle = append(&mut state, BlockInit::Paragraph, "headtail");
         let after = append(&mut state, BlockInit::Paragraph, "after");
         let outcome = state.handle_command(ProseCommand::Paste {
-            at: (middle, 4),
+            at: (middle, DocOffset::new(4)),
             text: "A\nB".to_owned(),
             html: None,
             payload: None,
@@ -499,6 +507,10 @@ mod tests {
         anchor: (BlockId, u32),
         focus: (BlockId, u32),
     ) -> ProseEvent {
+        let (anchor, focus) = (
+            (anchor.0, DocOffset::new(anchor.1)),
+            (focus.0, DocOffset::new(focus.1)),
+        );
         let outcome = state.handle_command(ProseCommand::CopyRange { anchor, focus });
         outcome.display.into_iter().next().expect("a copy answers")
     }
@@ -531,7 +543,7 @@ mod tests {
         ] {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: body,
-                range,
+                range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
                 key: key.to_owned(),
                 value: value.map(str::to_owned),
             });
@@ -561,7 +573,7 @@ mod tests {
         let count = state.root_blocks().len();
         let rich = append(&mut state, BlockInit::Paragraph, "");
         state.handle_command(ProseCommand::Paste {
-            at: (rich, 0),
+            at: (rich, DocOffset::ZERO),
             text: text.clone(),
             html: None,
             payload: Some(payload),
@@ -569,7 +581,7 @@ mod tests {
         let middle = state.root_blocks().len();
         let from_html = append(&mut state, BlockInit::Paragraph, "");
         state.handle_command(ProseCommand::Paste {
-            at: (from_html, 0),
+            at: (from_html, DocOffset::ZERO),
             text,
             html: Some(html),
             payload: None,
@@ -587,7 +599,7 @@ mod tests {
         let (mut state, first) = document();
         state.handle_command(ProseCommand::InsertText {
             block_id: first,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "own".to_owned(),
         });
         let ProseEvent::Clipboard { payload, .. } = clipboard(&mut state, (first, 0), (first, 3))
@@ -597,7 +609,7 @@ mod tests {
         let paste = |state: &mut ProseState, html: Option<&str>, payload: Option<Vec<u8>>| {
             let target = append(state, BlockInit::Paragraph, "");
             state.handle_command(ProseCommand::Paste {
-                at: (target, 0),
+                at: (target, DocOffset::ZERO),
                 text: "plain".to_owned(),
                 html: html.map(str::to_owned),
                 payload,
@@ -683,7 +695,7 @@ mod tests {
                 .expect("the fixture is committed");
             let (mut state, first) = document();
             state.handle_command(ProseCommand::Paste {
-                at: (first, 0),
+                at: (first, DocOffset::ZERO),
                 text: String::new(),
                 html: Some(html),
                 payload: None,

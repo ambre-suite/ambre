@@ -7,11 +7,10 @@
 //! once it is sent (`MURMURE-565`). No token is new: the tint and the ink are
 //! the palette's.
 
-use std::ops::Range;
-
 use ambre_bus::TextStyle;
 use ambre_canvas::theme::SPACE_6;
 use ambre_canvas::{Palette, SpanShape};
+use ambre_core::ByteSpan;
 use ambre_draw::{Affinity, Color, Cursor, Layout, ParleyBrush, Rect, Selection};
 
 /// The family label an inline code run draws in.
@@ -32,7 +31,7 @@ const LIST_DOT: f64 = 3.0;
 const BOLD_WEIGHT: u16 = 700;
 
 /// What `style` shapes over the bytes `range`.
-pub(crate) fn shape(style: &TextStyle, range: Range<usize>) -> SpanShape {
+pub(crate) fn shape(style: &TextStyle, range: ByteSpan) -> SpanShape {
     let mut shape = SpanShape {
         range,
         ..SpanShape::default()
@@ -55,8 +54,9 @@ pub(crate) fn margin(
     layout: &Layout<ParleyBrush>,
     text: &str,
     style: &TextStyle,
-    bytes: Range<usize>,
+    bytes: ByteSpan,
 ) -> Vec<Rect> {
+    let bytes = bytes.to_usize_range();
     let line = |at: usize| {
         let cursor = Cursor::from_byte_index(layout, at, Affinity::Downstream);
         let bb = cursor.geometry(layout, 1.0);

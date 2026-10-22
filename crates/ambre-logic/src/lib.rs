@@ -1256,7 +1256,7 @@ mod pass_tests {
             document_id: rig.document_id,
             command: AppCommand::Prose(ProseCommand::InsertText {
                 block_id: rig.block,
-                pos,
+                pos: ambre_bus::app::prose::DocOffset::new(pos),
                 text: "a".to_owned(),
             }),
         }

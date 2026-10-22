@@ -806,6 +806,7 @@ impl ProseState {
 pub(crate) mod tests {
     use super::*;
     use crate::events::{ProseCommand, tree_id};
+    use ambre_bus::app::prose::DocOffset;
 
     /// The first table at the root of the document.
     pub(crate) fn the_table(state: &ProseState) -> TreeID {
@@ -853,7 +854,7 @@ pub(crate) mod tests {
         state
             .handle_command(ProseCommand::InsertText {
                 block_id: block_id(block),
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: text.to_owned(),
             })
             .update

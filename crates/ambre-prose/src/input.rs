@@ -6,8 +6,10 @@
 //! function in. Every mutation leaves through that function (`PROSE-UI-004`);
 //! the view writes its draft and its caret, and nothing else.
 
+use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset, DocSpan};
+
 use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
-use crate::ui::{ProseUiState, SendResult, chars};
+use crate::ui::{ProseUiState, SendResult};
 use crate::view::caret::{Direction, Spot};
 
 /// Two presses closer than this in time, and in place, count as one gesture.
@@ -144,17 +146,17 @@ impl Sent {
                 TextEdit {
                     block_id: *block_id,
                     at: *pos,
-                    delta: i64::from(chars(text)),
+                    delta: DocDelta::from_count(DocCount::of(text)),
                 },
                 Some(text.clone()),
             ),
             ProseCommand::DeleteText { block_id, range } => {
-                let (start, end) = (range.0.min(range.1), range.0.max(range.1));
+                let (start, end) = (range.start.min(range.end), range.start.max(range.end));
                 Self::Text(
                     TextEdit {
                         block_id: *block_id,
                         at: start,
-                        delta: -i64::from(end - start),
+                        delta: DocDelta::from_count(end.count_from(start)).reversed(),
                     },
                     None,
                 )
@@ -232,7 +234,7 @@ impl ProseUiState {
                     match text {
                         Some(text) => self.draft.push_str(seq, &text, &edit.block_id, edit.at),
                         None => {
-                            let len = u32::try_from(edit.delta.unsigned_abs()).unwrap_or(0);
+                            let len = edit.delta.magnitude();
                             self.draft
                                 .push_delete(seq, &edit.block_id, edit.at, edit.at + len);
                         }
@@ -575,10 +577,9 @@ impl ProseUiState {
             self.slash = Some(menu);
             return true;
         };
-        let (start, end) = menu.span();
         let erase = ProseCommand::DeleteText {
             block_id: menu.origin.0,
-            range: (start, end),
+            range: menu.span(),
         };
         if !send(erase).accepted() {
             return true;
@@ -609,7 +610,7 @@ impl ProseUiState {
             text: text.clone(),
         };
         if send(command).accepted() {
-            self.advance_cursor(chars(&text));
+            self.advance_cursor(DocCount::of(&text));
         }
         true
     }
@@ -630,7 +631,7 @@ impl ProseUiState {
         let command = if start.0 == end.0 {
             ProseCommand::DeleteText {
                 block_id: start.0,
-                range: (start.1, end.1),
+                range: DocSpan::new(start.1, end.1),
             }
         } else {
             ProseCommand::DeleteRange {
@@ -715,14 +716,14 @@ impl ProseUiState {
             Some(other) if forward => (
                 ProseCommand::DeleteText {
                     block_id: here.0,
-                    range: (here.1, other),
+                    range: DocSpan::new(here.1, other),
                 },
                 here,
             ),
             Some(other) => (
                 ProseCommand::DeleteText {
                     block_id: here.0,
-                    range: (other, here.1),
+                    range: DocSpan::new(other, here.1),
                 },
                 (here.0, other),
             ),
@@ -730,7 +731,14 @@ impl ProseUiState {
                 let Some(next) = self.neighbour(here.0, forward) else {
                     return true;
                 };
-                let edge = (next, if forward { 0 } else { self.block_len(next) });
+                let edge = (
+                    next,
+                    if forward {
+                        DocOffset::ZERO
+                    } else {
+                        self.block_len(next).as_end()
+                    },
+                );
                 let (first, second) = if forward { (here, edge) } else { (edge, here) };
                 (
                     ProseCommand::DeleteRange {
@@ -750,13 +758,13 @@ impl ProseUiState {
 
     /// The grapheme boundary beside a place, in document offsets, reading the
     /// text the view shows. `None` at the edge of the block.
-    fn grapheme_beside(&self, spot: Spot, forward: bool) -> Option<u32> {
+    fn grapheme_beside(&self, spot: Spot, forward: bool) -> Option<DocOffset> {
         use unicode_segmentation::UnicodeSegmentation;
         let text = self.shown_text(spot.0)?;
         let boundaries = text
             .grapheme_indices(true)
-            .map(|(byte, _)| chars(text.get(..byte).unwrap_or("")))
-            .chain(std::iter::once(chars(&text)));
+            .map(|(byte, _)| DocCount::of(text.get(..byte).unwrap_or("")).as_end())
+            .chain(std::iter::once(DocCount::of(&text).as_end()));
         if forward {
             boundaries.into_iter().find(|b| *b > spot.1)
         } else {
@@ -878,7 +886,7 @@ impl ProseUiState {
             .map(|(_, block)| crate::events::block_id(block.block_id));
         if let Some(block) = first {
             self.awaiting_block = false;
-            self.set_caret((block, 0));
+            self.set_caret((block, DocOffset::ZERO));
         }
     }
 }

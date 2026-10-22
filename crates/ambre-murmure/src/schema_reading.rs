@@ -507,7 +507,7 @@ fn style_reading(stored: &Stored, styles: &[StyleMark]) -> Option<String> {
         _ if stored.value == LoroValue::Bool(true) => mark.to_owned(),
         _ => return None,
     };
-    Some(format!("chars {:?} {words}", run.range))
+    Some(format!("chars {:?} {words}", run.range.to_usize_range()))
 }
 
 /// The reading of one amendment field, through the messages the view is

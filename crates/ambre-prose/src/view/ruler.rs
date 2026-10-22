@@ -208,6 +208,7 @@ mod tests {
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
     use crate::view::tests::{append, laid_out};
+    use ambre_bus::app::prose::DocOffset;
 
     /// A document of two paragraphs, the second indented, and a view on it.
     fn indented() -> (ProseState, ProseUiState, [crate::events::BlockId; 2]) {
@@ -232,7 +233,7 @@ mod tests {
     fn caret_in(ui: &mut ProseUiState, block_id: crate::events::BlockId) {
         ui.cursor = Some(CursorPosition {
             block_id,
-            offset: 0,
+            offset: DocOffset::ZERO,
             anchor: None,
         });
     }

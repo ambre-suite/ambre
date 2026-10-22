@@ -170,6 +170,7 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_bus::app::prose::DocOffset;
     use ambre_bus::conduit::Receiver;
 
     fn drain<T>(rx: &Receiver<T>) -> Vec<T> {
@@ -344,7 +345,7 @@ mod tests {
                 document_id,
                 command: AppCommand::Prose(ProseCommand::InsertText {
                     block_id,
-                    pos: 0,
+                    pos: DocOffset::ZERO,
                     text: "a".to_owned(),
                 }),
             });

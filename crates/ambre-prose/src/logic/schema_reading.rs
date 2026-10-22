@@ -27,6 +27,7 @@
 //! shape belt's, so the two belts read the same document. Its values are
 //! frozen here, so a command added to it lands with a raised version.
 
+use ambre_bus::app::prose::DocOffset;
 use ambre_core::Rgba;
 use std::collections::BTreeSet;
 
@@ -458,8 +459,8 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         return Some(match field {
             doc::ANNOT_KIND => "a comment thread".to_owned(),
             doc::ANNOT_ANCHOR_BLOCK => format!("on {}", block_name(reader, &anchor?)),
-            doc::ANNOT_ANCHOR_START => format!("from character {}", thread.anchor_start),
-            doc::ANNOT_ANCHOR_END => format!("to character {}", thread.anchor_end),
+            doc::ANNOT_ANCHOR_START => format!("from character {}", thread.anchor_start.get()),
+            doc::ANNOT_ANCHOR_END => format!("to character {}", thread.anchor_end.get()),
             doc::ANNOT_RESOLVED => format!("resolved {}", thread.resolved),
             doc::ANNOT_REPLIES => {
                 let at = stored.at(2)?;
@@ -568,10 +569,9 @@ fn mark_reading(
         }
     } else if mark == doc::K_CROSS_REF {
         let resolved = crate::xref::resolve_all(&reader.doc, reader.full_layout());
-        match resolved
-            .into_iter()
-            .find(|r| crate::events::tree_id(r.block_id) == *block && r.offset == at)
-        {
+        match resolved.into_iter().find(|r| {
+            crate::events::tree_id(r.block_id) == *block && r.offset == DocOffset::new(at)
+        }) {
             Some(found) => format!(
                 "refers to {} showing {:?}",
                 block_name(reader, &crate::events::tree_id(found.target)),
@@ -588,7 +588,8 @@ fn mark_reading(
         {
             Some(thread) => format!(
                 "anchors a thread over characters {}..{}",
-                thread.anchor_start, thread.anchor_end
+                thread.anchor_start.get(),
+                thread.anchor_end.get()
             ),
             None => "anchors no thread".to_owned(),
         }

@@ -18,6 +18,8 @@ use loro::{ContainerTrait, TreeID};
 
 use ambre_core::UserId;
 
+use ambre_bus::app::prose::DocOffset;
+
 use crate::doc;
 use crate::events::{
     BlockId, CursorPosition, PresencePayload, ProseEvent, ProseOutcome, RemoteCursor, tree_id,
@@ -71,7 +73,7 @@ impl ProseState {
         let first = *self.root_blocks().first()?;
         self.update_cursor(&CursorPosition {
             block_id: first,
-            offset: 0,
+            offset: DocOffset::ZERO,
             anchor: None,
         })
         .ephemeral
@@ -173,19 +175,19 @@ impl ProseState {
     }
 
     /// One encoded cursor, resolved against this replica's own document.
-    fn resolve_one(&self, block: BlockId, encoded: &[u8]) -> Option<u32> {
+    fn resolve_one(&self, block: BlockId, encoded: &[u8]) -> Option<DocOffset> {
         // A block this peer has not received, or one already tombstoned, is not
         // a place a caret can sit.
         self.body_of(&tree_id(block))?;
         let cursor = Cursor::decode(encoded).ok()?;
         let resolved = self.doc.get_cursor_pos(&cursor).ok()?;
-        u32::try_from(resolved.current.pos).ok()
+        u32::try_from(resolved.current.pos).ok().map(DocOffset::new)
     }
 
     /// The encoded cursor for a local offset in a live block.
-    fn cursor_at(&self, block_id: &TreeID, offset: u32) -> Option<Cursor> {
+    fn cursor_at(&self, block_id: &TreeID, offset: DocOffset) -> Option<Cursor> {
         let body = self.body_of(block_id)?;
-        let offset = offset as usize;
+        let offset = offset.to_usize();
         if offset > body.len_unicode() {
             return None;
         }
@@ -219,14 +221,14 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "hello".to_owned(),
         });
         let before = state.export_snapshot();
         let outcome = state.handle_command(ProseCommand::UpdateCursor {
             pos: CursorPosition {
                 block_id: block,
-                offset: 3,
+                offset: DocOffset::new(3),
                 anchor: None,
             },
         });
@@ -246,7 +248,7 @@ mod tests {
         let hello = alice
             .handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: "hello".to_owned(),
             })
             .update
@@ -257,7 +259,7 @@ mod tests {
             .handle_command(ProseCommand::UpdateCursor {
                 pos: CursorPosition {
                     block_id: block,
-                    offset: 5,
+                    offset: DocOffset::new(5),
                     anchor: None,
                 },
             })
@@ -268,7 +270,7 @@ mod tests {
         let shove = bob
             .handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: "oh ".to_owned(),
             })
             .update
@@ -276,7 +278,7 @@ mod tests {
         alice.apply_remote(&shove);
         bob.apply_ephemeral(a_user(1), &frame);
         let bob_view = bob.presence_of(a_user(1)).expect("Alice's caret");
-        assert_eq!(bob_view.offset, 8);
+        assert_eq!(bob_view.offset, DocOffset::new(8));
     }
 
     #[test]
@@ -287,7 +289,7 @@ mod tests {
         let root = alice.root_blocks()[0];
         alice.handle_command(ProseCommand::SplitBlock {
             block_id: root,
-            pos: 0,
+            pos: DocOffset::ZERO,
         });
         let block = alice
             .root_blocks()
@@ -298,7 +300,7 @@ mod tests {
             .handle_command(ProseCommand::UpdateCursor {
                 pos: CursorPosition {
                     block_id: block,
-                    offset: 0,
+                    offset: DocOffset::ZERO,
                     anchor: None,
                 },
             })

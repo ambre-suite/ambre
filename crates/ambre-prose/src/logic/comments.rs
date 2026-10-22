@@ -8,6 +8,7 @@
 
 use std::collections::HashMap;
 
+use ambre_bus::app::prose::DocSpan;
 use ambre_core::{CommentId, ReplyId};
 use loro::{LoroList, LoroMap, LoroText, TreeID, UpdateOptions};
 
@@ -30,7 +31,7 @@ impl ProseState {
     pub(super) fn add_comment(
         &mut self,
         block: &TreeID,
-        range: (u32, u32),
+        range: DocSpan,
         text: &str,
         now_ms: ambre_core::Timestamp,
     ) -> ProseOutcome {
@@ -44,8 +45,8 @@ impl ProseState {
         let Some(body) = self.body_of(block) else {
             return Self::err_no_block(block);
         };
-        let (start, end) = range;
-        if start >= end || end as usize > body.len_unicode() {
+        let (start, end) = (range.start, range.end);
+        if start >= end || end.to_usize() > body.len_unicode() {
             return Self::err_bad_range();
         }
         if self.my_user_id.is_none() {
@@ -65,7 +66,7 @@ impl ProseState {
             return Self::err_write(&e);
         }
         let key = comment::mark_key(&id);
-        if let Err(e) = body.mark(start as usize..end as usize, &key, id.to_hyphenated()) {
+        if let Err(e) = body.mark(start.to_usize()..end.to_usize(), &key, id.to_hyphenated()) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_comments()
@@ -253,10 +254,10 @@ impl ProseState {
             .insert(doc::ANNOT_ANCHOR_BLOCK, span.block.to_string())
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::ANNOT_ANCHOR_START, i64::from(span.start))
+            .insert(doc::ANNOT_ANCHOR_START, i64::from(span.start.get()))
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::ANNOT_ANCHOR_END, i64::from(span.end))
+            .insert(doc::ANNOT_ANCHOR_END, i64::from(span.end.get()))
             .map_err(|e| format!("{e:?}"))
     }
 
@@ -325,7 +326,7 @@ impl ProseState {
         let runs = comment::runs(&self.doc, &comment::text_blocks(&self.doc));
         for (_, span) in runs.iter().filter(|(thread, _)| thread == id) {
             doc::get_block_text(&self.doc, &span.block)
-                .unmark(span.start as usize..span.end as usize, &key)
+                .unmark(span.start.to_usize()..span.end.to_usize(), &key)
                 .map_err(|e| format!("{e:?}"))?;
         }
         self.doc
@@ -347,6 +348,7 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, CommentThread, ProseCommand};
+    use ambre_bus::app::prose::DocOffset;
     use ambre_core::UserId;
     use proptest::prelude::*;
 
@@ -368,7 +370,7 @@ mod tests {
         let id = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: id,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: text.to_owned(),
         });
         (state, id)
@@ -396,7 +398,7 @@ mod tests {
         let before: Vec<CommentId> = state.comments().iter().map(|t| t.comment_id).collect();
         state.handle_command(ProseCommand::AddComment {
             block_id: block,
-            range,
+            range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
             text: text.to_owned(),
             now_ms: ambre_core::Timestamp(10),
         });
@@ -418,7 +420,7 @@ mod tests {
 
     fn span(state: &ProseState, id: CommentId) -> (u32, u32) {
         let t = thread(state, id);
-        (t.anchor_start, t.anchor_end)
+        (t.anchor_start.get(), t.anchor_end.get())
     }
 
     fn reply(
@@ -455,7 +457,7 @@ mod tests {
         let runs: Vec<(u32, u32)> = comment::runs(&state.doc, &comment::text_blocks(&state.doc))
             .into_iter()
             .filter(|(thread, _)| *thread == id)
-            .map(|(_, s)| (s.start, s.end))
+            .map(|(_, s)| (s.start.get(), s.end.get()))
             .collect();
         assert_eq!(runs, vec![(6, 11)]);
         assert_eq!(comment::all(&state.doc), vec![id]);
@@ -490,28 +492,34 @@ mod tests {
                 now_ms: ambre_core::Timestamp(0),
             }))
         };
-        assert_eq!(add(&mut state, block, (2, 2)), Some(ProseRefusal::BadRange));
-        assert_eq!(add(&mut state, block, (2, 9)), Some(ProseRefusal::BadRange));
+        assert_eq!(
+            add(&mut state, block, DocSpan::from_usize_range(2..2)),
+            Some(ProseRefusal::BadRange)
+        );
+        assert_eq!(
+            add(&mut state, block, DocSpan::from_usize_range(2..9)),
+            Some(ProseRefusal::BadRange)
+        );
         state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
         let header = state.bands().header.expect("a header");
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "Title".to_owned(),
         });
         assert_eq!(
-            add(&mut state, header, (0, 2)),
+            add(&mut state, header, DocSpan::from_usize_range(0..2)),
             Some(ProseRefusal::CommentInBand)
         );
         let mut anonymous = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document");
         let root = anonymous.root_blocks()[0];
         anonymous.handle_command(ProseCommand::InsertText {
             block_id: root,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "Hello".to_owned(),
         });
         assert_eq!(
-            add(&mut anonymous, root, (0, 2)),
+            add(&mut anonymous, root, DocSpan::from_usize_range(0..2)),
             Some(ProseRefusal::NoIdentity)
         );
         assert!(state.comments().is_empty() && anonymous.comments().is_empty());
@@ -580,7 +588,10 @@ mod tests {
         let t = thread(&state, id);
         assert!(!t.resolved);
         assert_eq!(texts(&state, id), vec!["One."]);
-        assert_eq!((t.anchor_start, t.anchor_end), (0, 5));
+        assert_eq!(
+            (t.anchor_start, t.anchor_end),
+            (DocOffset::ZERO, DocOffset::new(5))
+        );
         assert_eq!(thread(&state, other), before);
     }
 
@@ -626,7 +637,10 @@ mod tests {
         let t = thread(&alice, id);
         assert_eq!(texts(&alice, id), vec!["One.", "Deux."]);
         assert!(t.resolved);
-        assert_eq!((t.anchor_start, t.anchor_end), (0, 5));
+        assert_eq!(
+            (t.anchor_start, t.anchor_end),
+            (DocOffset::ZERO, DocOffset::new(5))
+        );
         assert_eq!(t.replies[1].user_id, ALICE);
         assert_eq!(t.replies[1].created_at, ambre_bus::Timestamp(11));
     }
@@ -656,7 +670,10 @@ mod tests {
         let t = thread(&alice, id);
         assert_eq!(texts(&alice, id), vec!["One.", "Three."]);
         assert!(t.resolved);
-        assert_eq!((t.anchor_start, t.anchor_end), (0, 5));
+        assert_eq!(
+            (t.anchor_start, t.anchor_end),
+            (DocOffset::ZERO, DocOffset::new(5))
+        );
     }
 
     /// Deleting the opening reply deletes the thread (`PROSE-FEAT-081`).
@@ -703,13 +720,13 @@ mod tests {
         let id = open(&mut state, block, (6, 11), "World.");
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "Oh, ".to_owned(),
         });
         let moved = Span {
             block: crate::events::tree_id(block),
-            start: 10,
-            end: 15,
+            start: DocOffset::new(10),
+            end: DocOffset::new(15),
         };
         assert_eq!(cache(&state, id), Some(moved));
         assert_eq!(span(&state, id), (10, 15));
@@ -732,13 +749,16 @@ mod tests {
         let before = thread(&state, other);
         state.handle_command(ProseCommand::DeleteText {
             block_id: block,
-            range: (5, 11),
+            range: DocSpan::from_usize_range(5..11),
         });
         let t = thread(&state, id);
         assert!(t.orphaned);
         assert!(t.resolved);
         assert_eq!(texts(&state, id), vec!["Brave?"]);
-        assert_eq!((t.anchor_start, t.anchor_end), (6, 11));
+        assert_eq!(
+            (t.anchor_start, t.anchor_end),
+            (DocOffset::new(6), DocOffset::new(11))
+        );
         assert_eq!(span(&state, other), (6, 11));
         assert_eq!(thread(&state, other).replies, before.replies);
     }
@@ -755,7 +775,7 @@ mod tests {
             &mut bob,
             ProseCommand::InsertText {
                 block_id: block,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: "Oh ".to_owned(),
             },
         );
@@ -784,13 +804,13 @@ mod tests {
         let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
         let mine = alice.handle_command(ProseCommand::AddComment {
             block_id: block,
-            range: (0, 11),
+            range: DocSpan::from_usize_range(0..11),
             text: "Alice.".to_owned(),
             now_ms: ambre_core::Timestamp(1),
         });
         let theirs = bob.handle_command(ProseCommand::AddComment {
             block_id: block,
-            range: (6, 17),
+            range: DocSpan::from_usize_range(6..17),
             text: "Bob.".to_owned(),
             now_ms: ambre_core::Timestamp(1),
         });
@@ -800,7 +820,7 @@ mod tests {
             let mut out: Vec<(u32, u32)> = state
                 .comments()
                 .iter()
-                .map(|t| (t.anchor_start, t.anchor_end))
+                .map(|t| (t.anchor_start.get(), t.anchor_end.get()))
                 .collect();
             out.sort_unstable();
             out
@@ -810,7 +830,7 @@ mod tests {
         let alices = alice
             .comments()
             .into_iter()
-            .find(|t| t.anchor_start == 0)
+            .find(|t| t.anchor_start == DocOffset::ZERO)
             .expect("Alice's thread")
             .comment_id;
         send(
@@ -871,14 +891,14 @@ mod tests {
                 let command = if insert || body == 0 {
                     ProseCommand::InsertText {
                         block_id: block,
-                        pos: at.min(body),
+                        pos: DocOffset::new(at.min(body)),
                         text: "x".repeat(len as usize),
                     }
                 } else {
                     let start = at.min(body - 1);
                     ProseCommand::DeleteText {
                         block_id: block,
-                        range: (start, (start + len).min(body)),
+                        range: DocSpan::new(DocOffset::new(start), DocOffset::new((start + len).min(body))),
                     }
                 };
                 if let Some(delta) = state.handle_command(command).update {
@@ -899,8 +919,8 @@ mod tests {
             if !here.orphaned {
                 prop_assert_eq!(span(&alice, id), span(&bob, id));
                 let text: String = whole.chars()
-                    .skip(here.anchor_start as usize)
-                    .take((here.anchor_end - here.anchor_start) as usize)
+                    .skip(here.anchor_start.to_usize())
+                    .take(here.anchor_end.count_from(here.anchor_start).to_usize())
                     .collect();
                 // Typing inside the passage joins it, and no text around it
                 // ever does.

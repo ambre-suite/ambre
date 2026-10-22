@@ -12,6 +12,7 @@
 use std::collections::HashSet;
 
 use ambre_bus::UserId;
+use ambre_core::{CharCount, char_len};
 use loro::{LoroDoc, LoroMap, LoroMovableList, LoroText, LoroValue};
 
 #[cfg(feature = "pdf")]
@@ -394,7 +395,7 @@ impl ToileState {
         }
         // Skip a pure no-op so an empty delta produces neither a commit nor an
         // undo item.
-        if delta.delete == 0 && delta.insert.is_empty() {
+        if delta.delete.is_zero() && delta.insert.is_empty() {
             return ToileOutcome::display_only(Vec::new());
         }
         let Some(text) = notes_text_or_seed(&em) else {
@@ -421,14 +422,12 @@ impl ToileState {
         }
         // Clamp to the current length: `at` and the deletion span never run past
         // the end of the buffer.
-        let len = text.len_unicode();
-        let at = delta.at.min(len);
-        let del = delta.delete.min(len - at);
-        if del > 0 {
-            let _ = text.delete(at, del);
+        let (at, del) = delta.clamped(CharCount::from_len(text.len_unicode()));
+        if !del.is_zero() {
+            let _ = text.delete(at.to_usize(), del.to_usize());
         }
         if !delta.insert.is_empty() {
-            let _ = text.insert(at, &delta.insert);
+            let _ = text.insert(at.to_usize(), &delta.insert);
         }
         self.doc.commit();
         self.emit_with_update(Vec::new())
@@ -586,12 +585,10 @@ pub(crate) fn seed_presentation_config(doc: &LoroDoc) {
 /// `base` with `delta` applied, its offsets clamped to `base` the way the
 /// handler clamps them to the stored note.
 fn splice(base: &str, delta: &TextDelta) -> String {
-    let len = base.chars().count();
-    let at = delta.at.min(len);
-    let del = delta.delete.min(len - at);
-    let mut out: String = base.chars().take(at).collect();
+    let (at, del) = delta.clamped(char_len(base));
+    let mut out: String = base.chars().take(at.to_usize()).collect();
     out.push_str(&delta.insert);
-    out.extend(base.chars().skip(at + del));
+    out.extend(base.chars().skip((at + del).to_usize()));
     out
 }
 

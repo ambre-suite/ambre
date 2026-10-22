@@ -2,6 +2,7 @@
 //! where a late change writes, what a member reads over the segment, and the
 //! step of the authorship check that guards the document.
 
+use ambre_bus::CharSpan;
 use std::collections::HashMap;
 
 use ambre_bus::{
@@ -265,7 +266,7 @@ fn a_member_reads_the_amendments_over_the_segment() {
     // `MURMURE-562`: the amendment carries the styles of the edit.
     let bold = StyleMark {
         style: TextStyle::Bold,
-        range: 0..2,
+        range: CharSpan::from_usize_range(0..2),
     };
     let styled = MessageDraft {
         styles: vec![bold.clone()],
@@ -616,7 +617,7 @@ fn a_change_refused_by_the_lock_is_replayed() {
     let styled = MessageDraft {
         styles: vec![StyleMark {
             style: TextStyle::Italic,
-            range: 1..3,
+            range: CharSpan::from_usize_range(1..3),
         }],
         ..draft("uno")
     };

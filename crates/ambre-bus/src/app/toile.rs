@@ -720,9 +720,22 @@ pub struct FindResults {
 /// only, where the spec demands char-CRDT convergence (`toile-text-editing`).
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct TextDelta {
-    pub at: usize,
-    pub delete: usize,
+    pub at: ambre_core::CharOffset,
+    pub delete: ambre_core::CharCount,
     pub insert: String,
+}
+
+impl TextDelta {
+    /// Where the delta lands in a text of `len` code points, and how many it
+    /// removes there. Both are clamped to that text, so neither runs past its
+    /// end.
+    pub fn clamped(
+        &self,
+        len: ambre_core::CharCount,
+    ) -> (ambre_core::CharOffset, ambre_core::CharCount) {
+        let at = self.at.min(len.as_end());
+        (at, self.delete.min(len.as_end().count_from(at)))
+    }
 }
 
 /// One user's persisted reaction on a target (`toile-reactions`): an

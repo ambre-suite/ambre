@@ -11,7 +11,7 @@
 // shaping cost. Only new or changed strings trigger a shape call.
 // ============================================================================
 
-use std::ops::Range;
+use ambre_bus::ByteSpan;
 
 use ambre_draw::{Brush, Color};
 use parley::style::{
@@ -61,7 +61,7 @@ struct CacheKey {
 /// they stay out of the cache key (`CANVAS-081`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct SpanShape {
-    pub range: Range<usize>,
+    pub range: ByteSpan,
     pub weight: Option<u16>,
     pub italic: bool,
     pub family: Option<String>,
@@ -80,7 +80,7 @@ pub(crate) fn break_indented<B: parley::Brush>(
     layout: &mut Layout<B>,
     text: &str,
     width: f32,
-    indents: &[(Range<usize>, f32)],
+    indents: &[(ByteSpan, f32)],
 ) {
     if !indents.iter().any(|(_, indent)| *indent > 0.0) {
         layout.break_all_lines(Some(width));
@@ -90,7 +90,7 @@ pub(crate) fn break_indented<B: parley::Brush>(
         .map(|held| {
             indents
                 .iter()
-                .filter(|(range, _)| range.start < range.end)
+                .filter(|(range, _)| !range.is_empty())
                 .filter(|(range, _)| range.start <= held.end && held.start < range.end)
                 .map(|(_, indent)| *indent)
                 .fold(0.0, f32::max)
@@ -123,7 +123,7 @@ pub(crate) fn break_indented<B: parley::Brush>(
 /// The byte ranges of the paragraphs of `text`, each break left out. A break
 /// is a mandatory one of UAX #14, the set parley ends a paragraph on, and a
 /// CR LF is one break.
-fn paragraphs(text: &str) -> impl Iterator<Item = Range<usize>> + '_ {
+fn paragraphs(text: &str) -> impl Iterator<Item = ByteSpan> + '_ {
     let mut start = 0;
     let mut chars = text.char_indices().peekable();
     std::iter::from_fn(move || {
@@ -140,12 +140,12 @@ fn paragraphs(text: &str) -> impl Iterator<Item = Range<usize>> + '_ {
                 if c == '\r' && chars.next_if(|(_, c)| *c == '\n').is_some() {
                     next += 1;
                 }
-                let held = start..at;
+                let held = ByteSpan::from_usize_range(start..at);
                 start = next;
                 return Some(held);
             }
         }
-        let held = start..text.len();
+        let held = ByteSpan::from_usize_range(start..text.len());
         start = text.len() + 1;
         Some(held)
     })
@@ -159,10 +159,9 @@ pub(crate) fn push_shape(
     text: &str,
     shape: &SpanShape,
 ) -> bool {
-    let range = &shape.range;
-    let placed = range.start < range.end
-        && text.is_char_boundary(range.start)
-        && text.is_char_boundary(range.end);
+    let range = shape.range.to_usize_range();
+    let placed =
+        !range.is_empty() && text.is_char_boundary(range.start) && text.is_char_boundary(range.end);
     if !placed {
         return false;
     }
@@ -494,7 +493,7 @@ impl TextCache {
         let mut indents = Vec::new();
         for shape in spans {
             if push_shape(&mut builder, text, shape) && shape.indent > 0 {
-                indents.push((shape.range.clone(), f32::from(shape.indent)));
+                indents.push((shape.range, f32::from(shape.indent)));
             }
         }
         let mut layout = builder.build(text);
@@ -507,6 +506,7 @@ impl TextCache {
 #[cfg(test)]
 mod tests {
     use super::{SpanShape, TextCache, registered_family_name};
+    use ambre_bus::ByteSpan;
     use parley::{Alignment, FontContext};
 
     /// A context holding the shipped Noto Sans face, read from the tree.
@@ -543,7 +543,7 @@ mod tests {
         let mut cx = crate::fonts::font_context_from_bytes(faces);
         let mut cache = TextCache::new(1.0);
         let bold = SpanShape {
-            range: 0..4,
+            range: ByteSpan::from_usize_range(0..4),
             weight: Some(700),
             ..SpanShape::default()
         };
@@ -572,7 +572,7 @@ mod tests {
         assert_eq!(faces_of(spanned), 2, "the span shaped no face of its own");
         assert!(spanned.width() > plain_width);
         let off = SpanShape {
-            range: 0..40,
+            range: ByteSpan::from_usize_range(0..40),
             ..bold.clone()
         };
         let off = cache.get_or_build_spans(&mut cx, "wide text", 14.0, 400.0, &[off]);
@@ -594,7 +594,7 @@ mod tests {
         let long = "word ".repeat(20);
         let text = format!("top\r\n{long}\r\nend");
         let indent = SpanShape {
-            range: 5..5 + long.len() + 2,
+            range: ByteSpan::from_usize_range(5..5 + long.len() + 2),
             indent: 12,
             ..SpanShape::default()
         };
@@ -619,7 +619,9 @@ mod tests {
                 .all(|(start, end)| *start == 12.0 && *end <= 200.0),
             "each of its lines starts past the indent, within the width: {held:?}"
         );
-        let paragraphs: Vec<_> = super::paragraphs("a\r\nb\n\u{2029}").collect();
+        let paragraphs: Vec<_> = super::paragraphs("a\r\nb\n\u{2029}")
+            .map(ByteSpan::to_usize_range)
+            .collect();
         assert_eq!(paragraphs, [0..1, 3..4, 5..5, 8..8]);
     }
 

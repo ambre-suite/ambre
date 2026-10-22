@@ -11,7 +11,7 @@
 
 use std::hint::black_box;
 
-use ambre_bus::app::prose::ProseCommand;
+use ambre_bus::app::prose::{DocOffset, ProseCommand};
 use ambre_prose::events::ProseEvent;
 use ambre_prose::logic::ProseState;
 use criterion::{Criterion, criterion_group, criterion_main};
@@ -47,7 +47,7 @@ fn document() -> (ProseState, ambre_bus::app::prose::BlockId, u32) {
     };
     let text = vec![PARAGRAPH.repeat(26); 40].join("\n");
     let pasted = state.handle_view_command(ProseCommand::Paste {
-        at: (first, 0),
+        at: (first, DocOffset::ZERO),
         text,
         html: None,
         payload: None,
@@ -76,7 +76,7 @@ fn document() -> (ProseState, ambre_bus::app::prose::BlockId, u32) {
 fn key(block_id: ambre_bus::app::prose::BlockId, pos: u32) -> ProseCommand {
     ProseCommand::InsertText {
         block_id,
-        pos,
+        pos: DocOffset::new(pos),
         // Words of five letters, as a person types, and not one word
         // growing without end.
         text: if pos % 6 == 5 { " " } else { "a" }.to_owned(),

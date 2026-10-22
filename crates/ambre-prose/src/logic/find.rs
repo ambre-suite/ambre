@@ -6,6 +6,7 @@
 //! (`PROSE-FEAT-035`). Every offset is a count of code points, the unit a
 //! block's text is indexed in (`PROSE-045`).
 
+use ambre_bus::app::prose::DocSpan;
 use loro::TreeID;
 
 use crate::doc;
@@ -29,7 +30,7 @@ pub(super) struct FindSession {
 /// The case fold maps one code point to one, so a span in the folded text is
 /// the same span in the original. A code point whose lower case is longer
 /// than one is compared as it is.
-pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<(u32, u32)> {
+pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan> {
     let fold = |c: char| -> char {
         if query.case_sensitive {
             return c;
@@ -60,7 +61,7 @@ pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<(u32, u32)> {
                 .is_some_and(is_word)
                 && !hay.get(end).is_some_and(is_word));
         if hit && bounded {
-            found.push((code_point(at), code_point(end)));
+            found.push(DocSpan::from_usize_range(at..end));
             // Past the whole match: the next one starts after it.
             at = end;
         } else {
@@ -68,12 +69,6 @@ pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<(u32, u32)> {
         }
     }
     found
-}
-
-/// A code-point index as the `u32` a command carries. A block's body is far
-/// below four billion code points, and the cap keeps the cast total.
-fn code_point(index: usize) -> u32 {
-    u32::try_from(index).unwrap_or(u32::MAX)
 }
 
 impl ProseState {
@@ -120,7 +115,7 @@ impl ProseState {
         let Some(session) = self.find.as_mut() else {
             return Self::err_no_search();
         };
-        let count = code_point(session.matches.len());
+        let count = u32::try_from(session.matches.len()).unwrap_or(u32::MAX);
         session.current = session.current.filter(|_| count > 0).map(|at| {
             if backwards {
                 at.checked_sub(1).unwrap_or(count - 1)
@@ -201,13 +196,13 @@ impl ProseState {
     fn replace_range(
         &mut self,
         id: &TreeID,
-        (start, end): (u32, u32),
+        range: DocSpan,
         replacement: &str,
     ) -> Result<(), ProseOutcome> {
         let Some(body) = self.body_of(id) else {
             return Err(Self::err_no_block(id));
         };
-        let (start, end) = (start as usize, end as usize);
+        let (start, end) = (range.start.to_usize(), range.end.to_usize());
         if end > body.len_unicode() || start > end {
             return Err(Self::err_bad_range());
         }
@@ -229,7 +224,7 @@ impl ProseState {
             return Vec::new();
         };
         let matches = self.find_all(&query);
-        let count = code_point(matches.len());
+        let count = u32::try_from(matches.len()).unwrap_or(u32::MAX);
         let current = match keep {
             Some(at) if at < count => Some(at),
             _ if count > 0 => Some(0),
@@ -265,8 +260,16 @@ impl ProseState {
 
 #[cfg(test)]
 mod tests {
+    fn pairs(spans: Vec<ambre_bus::app::prose::DocSpan>) -> Vec<(u32, u32)> {
+        spans
+            .into_iter()
+            .map(|span| (span.start.get(), span.end.get()))
+            .collect()
+    }
+
     use super::*;
     use crate::events::{BlockId, BlockInit, ProseCommand};
+    use ambre_bus::app::prose::DocOffset;
 
     fn query(text: &str) -> FindQuery {
         FindQuery {
@@ -292,7 +295,7 @@ mod tests {
         for (id, text) in ids.iter().zip(paragraphs) {
             state.handle_command(ProseCommand::InsertText {
                 block_id: *id,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: (*text).to_owned(),
             });
         }
@@ -319,25 +322,34 @@ mod tests {
 
     #[test]
     fn matches_never_overlap_and_resume_past_the_end() {
-        assert_eq!(match_offsets("aaaa", &query("aa")), vec![(0, 2), (2, 4)]);
-        assert_eq!(match_offsets("aaa", &query("aa")), vec![(0, 2)]);
+        assert_eq!(
+            pairs(match_offsets("aaaa", &query("aa"))),
+            vec![(0, 2), (2, 4)]
+        );
+        assert_eq!(pairs(match_offsets("aaa", &query("aa"))), vec![(0, 2)]);
     }
 
     #[test]
     fn case_and_whole_word_narrow_the_match() {
         let mut q = query("Cat");
-        assert_eq!(match_offsets("cat Cat scatter", &q).len(), 3);
+        assert_eq!(pairs(match_offsets("cat Cat scatter", &q)).len(), 3);
         q.case_sensitive = true;
-        assert_eq!(match_offsets("cat Cat scatter", &q), vec![(4, 7)]);
+        assert_eq!(pairs(match_offsets("cat Cat scatter", &q)), vec![(4, 7)]);
         q.case_sensitive = false;
         q.whole_word = true;
-        assert_eq!(match_offsets("cat Cat scatter", &q), vec![(0, 3), (4, 7)]);
+        assert_eq!(
+            pairs(match_offsets("cat Cat scatter", &q)),
+            vec![(0, 3), (4, 7)]
+        );
     }
 
     #[test]
     fn offsets_count_code_points() {
         assert_eq!(
-            match_offsets("\u{e9}t\u{e9} \u{e9}t\u{e9}", &query("\u{c9}T\u{c9}")),
+            pairs(match_offsets(
+                "\u{e9}t\u{e9} \u{e9}t\u{e9}",
+                &query("\u{c9}T\u{c9}")
+            )),
             vec![(0, 3), (4, 7)]
         );
     }
@@ -351,15 +363,15 @@ mod tests {
         let expected = vec![
             FindMatch {
                 block_id: ids[0],
-                range: (0, 3),
+                range: DocSpan::from_usize_range(0..3),
             },
             FindMatch {
                 block_id: ids[0],
-                range: (8, 11),
+                range: DocSpan::from_usize_range(8..11),
             },
             FindMatch {
                 block_id: ids[1],
-                range: (4, 7),
+                range: DocSpan::from_usize_range(4..7),
             },
         ];
         assert_eq!(matches, expected);
@@ -394,7 +406,7 @@ mod tests {
             .expect("the cell's paragraph");
         state.handle_command(ProseCommand::InsertText {
             block_id: cell_text,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "needle".to_owned(),
         });
         let outcome = state.handle_command(ProseCommand::FindStart {
@@ -460,7 +472,7 @@ mod tests {
         for id in &ids[1..] {
             state.handle_command(ProseCommand::DeleteText {
                 block_id: *id,
-                range: (0, 6),
+                range: DocSpan::from_usize_range(0..6),
             });
         }
         let outcome = state.handle_command(ProseCommand::ReplaceOne {
@@ -564,7 +576,7 @@ mod tests {
         let header = state.bands().header.expect("the header");
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "needle".to_owned(),
         });
         let outcome = state.handle_command(ProseCommand::FindStart {

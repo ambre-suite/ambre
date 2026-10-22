@@ -34,6 +34,9 @@ use ambre_bus::{
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
 use ambre_commands::Modifiers;
+use ambre_core::{
+    ByteCount, ByteOffset, CharSpan, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes,
+};
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::PendingEdit;
@@ -112,20 +115,10 @@ fn body_style(color: Color) -> TextEditorStyle {
     }
 }
 
-/// The bytes of `text` the chars `range` cover.
-fn bytes_of(text: &str, range: &std::ops::Range<usize>) -> std::ops::Range<usize> {
-    let byte = |chars: usize| {
-        text.char_indices()
-            .nth(chars)
-            .map_or(text.len(), |(at, _)| at)
-    };
-    byte(range.start)..byte(range.end)
-}
-
 /// The span the style `mark` draws over `text`, its chars turned to bytes,
 /// in the look the list draws it in too (`MURMURE-564`).
 fn span_of(text: &str, mark: &StyleMark, palette: &Palette) -> TextSpan {
-    let shape = look::shape(&mark.style, bytes_of(text, &mark.range));
+    let shape = look::shape(&mark.style, char_span_to_bytes(text, mark.range));
     TextSpan {
         range: shape.range,
         weight: shape.weight,
@@ -305,7 +298,7 @@ impl Marks {
 struct Asking {
     of: DraftOf,
     /// The byte of its `@`, and what follows it up to the caret.
-    at: usize,
+    at: ByteOffset,
     query: String,
     /// The entries of the members the view last offered.
     offers: Vec<Offer>,
@@ -389,14 +382,14 @@ fn kept_mentions(old: &str, new: &str, mentions: &[Mention]) -> Vec<Mention> {
     mentions
         .iter()
         .filter_map(|mention| {
-            let range = &mention.range;
+            let range = mention.range;
             if range.end <= head {
                 Some(mention.clone())
             } else if range.start >= old_end {
-                let start = range.start - old_end + new_end;
+                let start = range.start + (new_end - old_end);
                 Some(Mention {
                     target: mention.target,
-                    range: start..start + range.len(),
+                    range: CharSpan::from_count(start, range.len()),
                 })
             } else {
                 None
@@ -443,7 +436,7 @@ pub struct Composer {
     asking: Option<Asking>,
     /// The `@` Escape closed the list of: it stays closed while its query
     /// lasts (`MURMURE-554`).
-    dismissed: Option<(DraftOf, usize)>,
+    dismissed: Option<(DraftOf, ByteOffset)>,
     /// The entry picked, which the next paint writes into the draft.
     picked: Option<(DraftOf, usize)>,
     /// A key that can close a marker was typed in this draft: the next paint
@@ -973,8 +966,9 @@ impl Composer {
         let editor = self.drafts.get(&of)?;
         let bytes = editor.selection()?;
         let text = editor.text();
-        let range =
-            text.get(..bytes.start)?.chars().count()..text.get(..bytes.end)?.chars().count();
+        text.get(..bytes.start.get())?;
+        text.get(..bytes.end.get())?;
+        let range = byte_span_to_chars(&text, bytes);
         let styles = self
             .marks
             .get(&of)
@@ -982,7 +976,7 @@ impl Composer {
             .unwrap_or_default();
         let controls = markers::MARK_BAR
             .iter()
-            .map(|(style, _)| (style.clone(), markers::cover(styles, style, &range)))
+            .map(|(style, _)| (style.clone(), markers::cover(styles, style, range)))
             .collect();
         Some(MarkBar {
             controls,
@@ -1025,11 +1019,11 @@ impl Composer {
         let written = offer.written();
         editor.push(EditIntent::Replace {
             start: at,
-            end: at + 1 + query.len(),
+            end: at + ByteCount::from_len(1 + query.len()),
             text: format!("{written} "),
         });
         editor.flush(font_cx, wrap, 1.0);
-        let start = text[..at].chars().count();
+        let start = byte_to_char(&text, at);
         let marks = self.marks.entry(of).or_insert_with(|| Marks {
             text: text.clone(),
             ..Marks::default()
@@ -1038,7 +1032,7 @@ impl Composer {
         marks.follow(&editor.text());
         marks.mentions.push(Mention {
             target: offer.target,
-            range: start..start + written.chars().count(),
+            range: CharSpan::from_count(start, char_len(&written)),
         });
         marks.mentions.sort_by_key(|mention| mention.range.start);
     }
@@ -1083,7 +1077,7 @@ impl Composer {
         editor: &mut TextEditor,
         font_cx: &mut FontContext,
         wrap: f32,
-        found: impl FnOnce(&str, &[std::ops::Range<usize>]) -> Option<markers::Closed>,
+        found: impl FnOnce(&str, &[CharSpan]) -> Option<markers::Closed>,
     ) {
         let text = editor.text();
         let marks = self.marks.entry(of).or_insert_with(|| Marks {
@@ -1095,7 +1089,7 @@ impl Composer {
             .styles
             .iter()
             .filter(|mark| matches!(mark.style, TextStyle::Code | TextStyle::CodeBlock))
-            .map(|mark| mark.range.clone())
+            .map(|mark| mark.range)
             .collect();
         let Some(closed) = found(&text, &code) else {
             return;
@@ -1105,12 +1099,12 @@ impl Composer {
         editor.push(EditIntent::Replace {
             start: closed.span.start,
             end: closed.span.end,
-            text: text[closed.inner.clone()].to_owned(),
+            text: text[closed.inner.to_usize_range()].to_owned(),
         });
         // Text typed past the marker in the same frame keeps the caret after
         // it: an empty replace puts the caret back.
         if let Some(caret) = caret.filter(|caret| *caret > closed.span.end) {
-            let at = caret - (closed.span.len() - closed.inner.len());
+            let at = caret - closed.span.len().saturating_sub(closed.inner.len());
             editor.push(EditIntent::Replace {
                 start: at,
                 end: at,
@@ -1144,14 +1138,14 @@ impl Composer {
             return;
         };
         let text = editor.text();
-        let range = text[..bytes.start].chars().count()..text[..bytes.end].chars().count();
+        let range = byte_span_to_chars(&text, bytes);
         let marks = self.marks.entry(of).or_insert_with(|| Marks {
             text: text.clone(),
             ..Marks::default()
         });
         marks.follow(&text);
         for (_, style) in toggles.into_iter().filter(|(to, _)| *to == of) {
-            marks.styles = markers::toggled(&marks.styles, &style, range.clone());
+            marks.styles = markers::toggled(&marks.styles, &style, range);
         }
     }
 
@@ -1482,7 +1476,7 @@ impl Composer {
         if let (Some(layout), Some(marks)) = (editor.layout(), self.marks.get(&shown)) {
             let text = editor.text();
             for mark in crate::style::normalized(&marks.styles) {
-                let bytes = bytes_of(&text, &mark.range);
+                let bytes = char_span_to_bytes(&text, mark.range);
                 for at in look::margin(layout, &text, &mark.style, bytes) {
                     let at = Rect::new(
                         at.x0 + origin.x,
@@ -1579,7 +1573,7 @@ mod tests {
     fn an_edit_keeps_the_mentions_it_leaves_whole() {
         let at = |range: std::ops::Range<usize>| Mention {
             target: ambre_bus::MentionTarget::Channel,
-            range,
+            range: CharSpan::from_usize_range(range),
         };
         // "@a hi @b": "hi" becomes "hello".
         let mentions = [at(0..2), at(6..8)];

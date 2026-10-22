@@ -9,7 +9,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use ambre_bus::app::prose::{BlockType, ParagraphStyle};
+use ambre_bus::app::prose::{BlockType, DocOffset, ParagraphStyle};
 use ambre_core::FootnoteId;
 use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroMap, LoroTree, LoroValue, TreeID};
@@ -173,7 +173,7 @@ pub(crate) struct NotePlan {
     /// still holds.
     pub(crate) key: Vec<NoteKey>,
     /// The calls of each block: the code-point offset and the note.
-    calls: HashMap<TreeID, Vec<(u32, FootnoteId)>>,
+    calls: HashMap<TreeID, Vec<(DocOffset, FootnoteId)>>,
     /// Each note's ordinal, shaped height and block.
     notes: HashMap<FootnoteId, (u32, f32, TreeID)>,
     /// Each note's number as it was shaped.
@@ -236,7 +236,7 @@ impl NotePlan {
             texts.push((block, run));
             notes.insert(*id, (*ordinal, height, block));
         }
-        let mut calls: HashMap<TreeID, Vec<(u32, FootnoteId)>> = HashMap::new();
+        let mut calls: HashMap<TreeID, Vec<(DocOffset, FootnoteId)>> = HashMap::new();
         for anchor in doc::anchors(document, doc::K_FOOTNOTE) {
             let Ok(id) = FootnoteId::parse_str(&anchor.value) else {
                 continue;
@@ -264,7 +264,7 @@ impl NotePlan {
     }
 
     /// The calls of `block`, the line of each still to find.
-    fn calls_of(&self, block: &TreeID) -> &[(u32, FootnoteId)] {
+    fn calls_of(&self, block: &TreeID) -> &[(DocOffset, FootnoteId)] {
         self.calls.get(block).map_or(&[], Vec::as_slice)
     }
 
@@ -585,7 +585,7 @@ fn measure_one(
             let (text, marks) =
                 crate::layout::measure::marked_text(&doc::get_block_text(document, id));
             let calls = scope.notes.calls_of(id);
-            let offsets: Vec<u32> = calls.iter().map(|(offset, _)| *offset).collect();
+            let offsets: Vec<DocOffset> = calls.iter().map(|(offset, _)| *offset).collect();
             let previous = scope.previous.get(id).and_then(|block| block.run.as_ref());
             let (metrics, lines, shaped) = measurer.measure_with_lines(
                 (&text, &marks),

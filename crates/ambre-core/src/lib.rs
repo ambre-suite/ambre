@@ -66,6 +66,7 @@ pub mod serde_enums;
 pub mod serde_id;
 pub mod span;
 pub mod status;
+pub mod text_offset;
 pub mod uuid;
 pub mod version;
 
@@ -116,6 +117,12 @@ pub use seq::Seq;
 pub use span::{LamportStamp, Millis, PageTime, Seconds, Timestamp, UnixMillis, UnixSeconds};
 pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError, WriteStatus,
+};
+pub use text_offset::{
+    ByteCount, ByteDelta, ByteOffset, ByteSpan, ByteVec, CharCount, CharDelta, CharOffset,
+    CharSpan, CharVec, Utf16Count, Utf16Delta, Utf16Offset, Utf16Span, Utf16Vec,
+    byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte, char_to_utf16,
+    utf16_to_char,
 };
 pub use uuid::Uuid;
 pub use version::Version;

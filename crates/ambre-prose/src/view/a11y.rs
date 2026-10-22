@@ -57,6 +57,7 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
+    use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::prose::{BlockInit, CursorPosition};
 
     use crate::logic::ProseState;
@@ -81,7 +82,7 @@ mod tests {
 
         ui.cursor = Some(CursorPosition {
             block_id: title,
-            offset: 3,
+            offset: DocOffset::new(3),
             anchor: None,
         });
         assert_eq!(
@@ -90,7 +91,7 @@ mod tests {
         );
         ui.cursor = Some(CursorPosition {
             block_id: body,
-            offset: 0,
+            offset: DocOffset::ZERO,
             anchor: None,
         });
         assert_eq!(

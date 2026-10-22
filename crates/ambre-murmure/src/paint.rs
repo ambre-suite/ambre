@@ -6,11 +6,11 @@
 //! recording surface of a host test.
 
 use std::collections::HashMap;
-use std::ops::Range;
 
 use ambre_bus::{Attachment, Emoji, MediaRef, MessageId, TextStyle, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan};
 use ambre_draw::{
     Affine, Affinity, Alignment, Brush, Color, Cursor, DrawSurface, FontContext, ImageSource,
     Layout, ParleyBrush, PositionedLayoutItem, Rect, Selection,
@@ -201,11 +201,12 @@ pub fn paint_list<S: DrawSurface>(
         let Some((row, line)) = words.get(&i) else {
             continue;
         };
-        let band = selection.and_then(|s| s.range_in(&keys, i, row.body.len()));
-        let tints: Vec<(Range<usize>, Color)> = row
+        let band =
+            selection.and_then(|s| s.range_in(&keys, i, ByteCount::from_len(row.body.len())));
+        let tints: Vec<(ByteSpan, Color)> = row
             .marks
             .iter()
-            .filter_map(|mark| look::tint(&mark.style, palette).map(|c| (mark.bytes.clone(), c)))
+            .filter_map(|mark| look::tint(&mark.style, palette).map(|c| (mark.bytes, c)))
             .collect();
         let blocks = row
             .marks
@@ -220,14 +221,14 @@ pub fn paint_list<S: DrawSurface>(
             }
             let (x, y) = (f64::from(SPACE_8), f64::from(body_y));
             for mark in &row.marks {
-                for at in look::margin(layout, &row.body, &mark.style, mark.bytes.clone()) {
+                for at in look::margin(layout, &row.body, &mark.style, mark.bytes) {
                     let at = Rect::new(at.x0 + x, at.y0 + y, at.x1 + x, at.y1 + y);
                     surface.fill_rect(at, look::margin_ink(palette));
                 }
             }
-            if let Some((start, end)) = band {
+            if let Some(band) = band {
                 let tint = palette.selection.with_alpha(SELECTION_ALPHA);
-                fill_bytes(surface, layout, start..end, body_y, tint);
+                fill_bytes(surface, layout, band, body_y, tint);
             }
         }
         let bottom = top + tall;
@@ -487,8 +488,8 @@ fn link_at(
         let TextStyle::Link(address) = &mark.style else {
             return None;
         };
-        let from = Cursor::from_byte_index(layout, mark.bytes.start, Affinity::Downstream);
-        let to = Cursor::from_byte_index(layout, mark.bytes.end, Affinity::Upstream);
+        let from = Cursor::from_byte_index(layout, mark.bytes.start.get(), Affinity::Downstream);
+        let to = Cursor::from_byte_index(layout, mark.bytes.end.get(), Affinity::Upstream);
         let hit = Selection::new(from, to)
             .geometry(layout)
             .iter()
@@ -519,7 +520,7 @@ fn spot_at(
     let cursor = Cursor::from_point(layout, x - SPACE_8, y - body_y);
     Some(Spot {
         row: *keys.get(i)?,
-        byte: cursor.index(),
+        byte: ByteOffset::from_usize(cursor.index()),
     })
 }
 
@@ -643,7 +644,7 @@ fn body<'c>(
     let spans: Vec<SpanShape> = row
         .marks
         .iter()
-        .map(|mark| look::shape(&mark.style, mark.bytes.clone()))
+        .map(|mark| look::shape(&mark.style, mark.bytes))
         .collect();
     cache.get_or_build_spans(font_cx, &row.body, FONT_BODY, width, &spans)
 }
@@ -652,12 +653,12 @@ fn body<'c>(
 fn fill_bytes<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
-    bytes: Range<usize>,
+    bytes: ByteSpan,
     body_y: f32,
     color: Color,
 ) {
-    let from = Cursor::from_byte_index(layout, bytes.start, Affinity::Downstream);
-    let to = Cursor::from_byte_index(layout, bytes.end, Affinity::Upstream);
+    let from = Cursor::from_byte_index(layout, bytes.start.get(), Affinity::Downstream);
+    let to = Cursor::from_byte_index(layout, bytes.end.get(), Affinity::Upstream);
     let (x, y) = (f64::from(SPACE_8), f64::from(body_y));
     for (bb, _) in Selection::new(from, to).geometry(layout) {
         surface.fill_rect(Rect::new(bb.x0 + x, bb.y0 + y, bb.x1 + x, bb.y1 + y), color);
@@ -884,6 +885,7 @@ fn draw_body<S: DrawSurface>(
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use ambre_bus::CharSpan;
     use ambre_bus::{
         DocumentId, Mention, MentionTarget, SegmentId, StyleMark, TextStyle, ThreadHead,
     };
@@ -1384,13 +1386,16 @@ pub(crate) mod tests {
         let mut sent = message(UserId::new(), ambre_bus::Timestamp(0), "@bo hi bold c d");
         sent.mentions = vec![Mention {
             target: MentionTarget::User(UserId::new()),
-            range: 0..3,
+            range: CharSpan::from_usize_range(0..3),
         }];
         let mark = |style, range| StyleMark { style, range };
         sent.styles = vec![
-            mark(TextStyle::Link("https://ambre.dev".to_owned()), 14..15),
-            mark(TextStyle::Bold, 7..11),
-            mark(TextStyle::Code, 12..13),
+            mark(
+                TextStyle::Link("https://ambre.dev".to_owned()),
+                CharSpan::from_usize_range(14..15),
+            ),
+            mark(TextStyle::Bold, CharSpan::from_usize_range(7..11)),
+            mark(TextStyle::Code, CharSpan::from_usize_range(12..13)),
         ];
         let mut list = MessageList::default();
         list.absorb(SegmentId::new(), vec![sent]);
@@ -1401,7 +1406,7 @@ pub(crate) mod tests {
         let mut marks: Vec<(usize, usize)> = row
             .marks
             .iter()
-            .map(|m| (m.bytes.start, m.bytes.end))
+            .map(|m| (m.bytes.start.get(), m.bytes.end.get()))
             .collect();
         marks.sort_unstable();
         assert_eq!(marks, [(8, 12), (13, 14), (15, 16)]);
@@ -1455,9 +1460,12 @@ pub(crate) mod tests {
             (marks, tints)
         };
         let mark = |style, range| StyleMark { style, range };
-        let blocks = vec![mark(TextStyle::Quote, 0..5), mark(TextStyle::List, 5..12)];
+        let blocks = vec![
+            mark(TextStyle::Quote, CharSpan::from_usize_range(0..5)),
+            mark(TextStyle::List, CharSpan::from_usize_range(5..12)),
+        ];
         assert_eq!(margin("said\none\ntwo", blocks), (3, 0), "a rule, two dots");
-        let code = vec![mark(TextStyle::CodeBlock, 0..4)];
+        let code = vec![mark(TextStyle::CodeBlock, CharSpan::from_usize_range(0..4))];
         assert_eq!(margin("fn a", code), (0, 1), "a tint, no margin mark");
     }
 
@@ -1475,7 +1483,7 @@ pub(crate) mod tests {
             );
             sent.styles = vec![StyleMark {
                 style,
-                range: 0..long.len() + 1,
+                range: CharSpan::from_usize_range(0..long.len() + 1),
             }];
             let mut list = MessageList::default();
             list.absorb(SegmentId::new(), vec![sent]);
@@ -1615,14 +1623,14 @@ pub(crate) mod tests {
             selection.anchor,
             Spot {
                 row: keys[0],
-                byte: 0
+                byte: ByteOffset::ZERO
             }
         );
         assert_eq!(
             selection.focus,
             Spot {
                 row: keys[1],
-                byte: 5
+                byte: ByteOffset::new(5)
             }
         );
         let tint = LIGHT.selection.with_alpha(SELECTION_ALPHA);
@@ -1639,7 +1647,7 @@ pub(crate) mod tests {
             focus,
             Spot {
                 row: keys[2],
-                byte: 5
+                byte: ByteOffset::new(5)
             }
         );
         let (_, none) = paint_from(drag(press, press), 600.0);

@@ -11,35 +11,37 @@
 //! deletion of `-delta` code points when it is negative. A list of edits is
 //! sequential: each one counts positions in the text the previous one left.
 
+use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset};
+
 use crate::events::{BlockId, TextEdit};
 
 /// The code points an edit covers.
-fn len(edit: &TextEdit) -> u32 {
-    u32::try_from(edit.delta.unsigned_abs()).unwrap_or(u32::MAX)
+fn len(edit: &TextEdit) -> DocCount {
+    edit.delta.magnitude()
 }
 
-fn insertion(block_id: BlockId, at: u32, n: u32) -> TextEdit {
+fn insertion(block_id: BlockId, at: DocOffset, n: DocCount) -> TextEdit {
     TextEdit {
         block_id,
         at,
-        delta: i64::from(n),
+        delta: DocDelta::from_count(n),
     }
 }
 
 /// A deletion of `n` code points, or `None` when there is nothing to delete.
-fn deletion(block_id: BlockId, at: u32, n: u32) -> Option<TextEdit> {
-    (n > 0).then(|| TextEdit {
+fn deletion(block_id: BlockId, at: DocOffset, n: DocCount) -> Option<TextEdit> {
+    (!n.is_zero()).then(|| TextEdit {
         block_id,
         at,
-        delta: -i64::from(n),
+        delta: DocDelta::from_count(n).reversed(),
     })
 }
 
 /// Where a position lands once a deletion of `[at, at + n)` applied.
-fn through_deletion(pos: u32, at: u32, n: u32) -> u32 {
+fn through_deletion(pos: DocOffset, at: DocOffset, n: DocCount) -> DocOffset {
     if pos <= at {
         pos
-    } else if pos >= at.saturating_add(n) {
+    } else if pos >= at + n {
         pos - n
     } else {
         at
@@ -49,13 +51,13 @@ fn through_deletion(pos: u32, at: u32, n: u32) -> u32 {
 /// Where a position of `block` lands once `edit` applied. An insertion at the
 /// position goes before it.
 #[must_use]
-pub(crate) fn through(pos: u32, block: BlockId, edit: &TextEdit) -> u32 {
+pub(crate) fn through(pos: DocOffset, block: BlockId, edit: &TextEdit) -> DocOffset {
     if edit.block_id != block {
         return pos;
     }
-    if edit.delta >= 0 {
+    if !edit.delta.is_negative() {
         if edit.at <= pos {
-            return pos.saturating_add(len(edit));
+            return pos + len(edit);
         }
         return pos;
     }
@@ -64,7 +66,7 @@ pub(crate) fn through(pos: u32, block: BlockId, edit: &TextEdit) -> u32 {
 
 /// Where a position lands once a run of edits applied, one after another.
 #[must_use]
-pub(crate) fn through_all(pos: u32, block: BlockId, edits: &[TextEdit]) -> u32 {
+pub(crate) fn through_all(pos: DocOffset, block: BlockId, edits: &[TextEdit]) -> DocOffset {
     edits
         .iter()
         .fold(pos, |pos, edit| through(pos, block, edit))
@@ -73,9 +75,9 @@ pub(crate) fn through_all(pos: u32, block: BlockId, edits: &[TextEdit]) -> u32 {
 /// Where the end of a range lands once `edits` applied. An insertion at the
 /// end stays outside the range.
 #[must_use]
-pub(crate) fn end_through_all(pos: u32, block: BlockId, edits: &[TextEdit]) -> u32 {
+pub(crate) fn end_through_all(pos: DocOffset, block: BlockId, edits: &[TextEdit]) -> DocOffset {
     edits.iter().fold(pos, |pos, edit| {
-        if edit.block_id == block && edit.delta >= 0 && edit.at == pos {
+        if edit.block_id == block && !edit.delta.is_negative() && edit.at == pos {
             pos
         } else {
             through(pos, block, edit)
@@ -96,7 +98,7 @@ pub(crate) fn transform(c: &TextEdit, o: &TextEdit) -> (Option<TextEdit>, Vec<Te
     let block = c.block_id;
     let (p, n) = (c.at, len(c));
     let (q, m) = (o.at, len(o));
-    match (c.delta >= 0, o.delta >= 0) {
+    match (!c.delta.is_negative(), !o.delta.is_negative()) {
         (true, true) => {
             if q <= p {
                 (Some(insertion(block, p + m, n)), vec![*o])
@@ -112,8 +114,8 @@ pub(crate) fn transform(c: &TextEdit, o: &TextEdit) -> (Option<TextEdit>, Vec<Te
             } else {
                 // The insertion survives where the deletion was, and the
                 // deletion goes around it.
-                let before = deletion(block, q, p - q);
-                let after = deletion(block, q + n, q + m - p);
+                let before = deletion(block, q, p.count_from(q));
+                let after = deletion(block, q + n, (q + m).count_from(p));
                 (
                     Some(insertion(block, q, n)),
                     before.into_iter().chain(after).collect(),
@@ -132,9 +134,17 @@ pub(crate) fn transform(c: &TextEdit, o: &TextEdit) -> (Option<TextEdit>, Vec<Te
         }
         (false, false) => {
             let start = through_deletion(p, q, m);
-            let c_after = deletion(block, start, through_deletion(p + n, q, m) - start);
+            let c_after = deletion(
+                block,
+                start,
+                through_deletion(p + n, q, m).count_from(start),
+            );
             let start = through_deletion(q, p, n);
-            let o_after = deletion(block, start, through_deletion(q + m, p, n) - start);
+            let o_after = deletion(
+                block,
+                start,
+                through_deletion(q + m, p, n).count_from(start),
+            );
             (c_after, o_after.into_iter().collect())
         }
     }
@@ -179,7 +189,7 @@ pub(crate) fn inverse(edits: &[TextEdit]) -> Vec<TextEdit> {
         .iter()
         .rev()
         .map(|edit| TextEdit {
-            delta: -edit.delta,
+            delta: edit.delta.reversed(),
             ..*edit
         })
         .collect()
@@ -193,14 +203,14 @@ mod tests {
     const B: BlockId = BlockId::new(ambre_core::PeerId(1), 1);
 
     fn ins(at: u32, n: u32) -> TextEdit {
-        insertion(A, at, n)
+        insertion(A, DocOffset::new(at), DocCount::new(n))
     }
 
     fn del(at: u32, n: u32) -> TextEdit {
         TextEdit {
             block_id: A,
-            at,
-            delta: -i64::from(n),
+            at: DocOffset::new(at),
+            delta: DocDelta::new(-i64::from(n)),
         }
     }
 
@@ -208,13 +218,14 @@ mod tests {
     fn apply(text: &str, edits: &[TextEdit], tag: char) -> String {
         let mut chars: Vec<char> = text.chars().collect();
         for edit in edits {
-            let at = edit.at as usize;
-            if edit.delta >= 0 {
-                for _ in 0..edit.delta {
+            let at = edit.at.to_usize();
+            let n = edit.delta.magnitude().to_usize();
+            if edit.delta.is_negative() {
+                chars.drain(at..at + n);
+            } else {
+                for _ in 0..n {
                     chars.insert(at, tag);
                 }
-            } else {
-                chars.drain(at..at + edit.delta.unsigned_abs() as usize);
             }
         }
         chars.into_iter().collect()
@@ -258,17 +269,17 @@ mod tests {
         let (c_after, o_after) = transform(&ins(4, 2), &ins(4, 3));
         assert_eq!(c_after, Some(ins(7, 2)));
         assert_eq!(o_after, vec![ins(4, 3)]);
-        assert_eq!(through(4, A, &ins(4, 3)), 7);
+        assert_eq!(through(DocOffset::new(4), A, &ins(4, 3)), DocOffset::new(7));
     }
 
     #[test]
     fn another_block_is_left_alone() {
-        let other = insertion(B, 0, 5);
+        let other = insertion(B, DocOffset::ZERO, DocCount::new(5));
         assert_eq!(
             transform(&ins(2, 1), &other),
             (Some(ins(2, 1)), vec![other])
         );
-        assert_eq!(through(2, A, &other), 2);
+        assert_eq!(through(DocOffset::new(2), A, &other), DocOffset::new(2));
     }
 
     #[test]

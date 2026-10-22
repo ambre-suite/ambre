@@ -751,6 +751,7 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::toile::ToileCommand;
     use ambre_bus::{Col, Row};
     use ambre_bus::{DocumentId, RequestId, RestCommand, RestEvent, TrameCommand};
@@ -865,7 +866,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::InsertText {
                 block_id: block,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: "typed".to_owned(),
             }),
         });
@@ -914,7 +915,7 @@ mod tests {
         };
         state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "typed".to_owned(),
         }));
         state.answer_pass();
@@ -953,7 +954,7 @@ mod tests {
         state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
             pos: ambre_bus::app::prose::CursorPosition {
                 block_id: block,
-                offset: 1,
+                offset: DocOffset::new(1),
                 anchor: None,
             },
         }));
@@ -981,7 +982,7 @@ mod tests {
             command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
                 pos: ambre_bus::app::prose::CursorPosition {
                     block_id: block,
-                    offset: 0,
+                    offset: DocOffset::ZERO,
                     anchor: None,
                 },
             }),

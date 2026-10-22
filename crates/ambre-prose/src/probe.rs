@@ -202,6 +202,7 @@ pub fn percentiles(samples: &[f64]) -> Option<(f64, f64)> {
 mod tests {
     use super::*;
     use ambre_bus::app::prose::BlockId;
+    use ambre_bus::app::prose::DocOffset;
 
     fn block() -> BlockId {
         BlockId {
@@ -216,7 +217,12 @@ mod tests {
     fn a_typed_key_echoes_confirms_and_is_drawn() {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
-        draft.push_str(ambre_bus::app::prose::TextAck(7), "a", &block(), 0);
+        draft.push_str(
+            ambre_bus::app::prose::TextAck(7),
+            "a",
+            &block(),
+            DocOffset::ZERO,
+        );
         let echo = probe.handled(
             ambre_core::PageTime(10.0),
             ambre_core::PageTime(10.5),
@@ -277,7 +283,12 @@ mod tests {
     fn a_confirmed_entry_is_counted_once() {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
-        draft.push_str(ambre_bus::app::prose::TextAck(1), "a", &block(), 0);
+        draft.push_str(
+            ambre_bus::app::prose::TextAck(1),
+            "a",
+            &block(),
+            DocOffset::ZERO,
+        );
         probe.handled(
             ambre_core::PageTime(0.0),
             ambre_core::PageTime(0.1),
@@ -291,7 +302,12 @@ mod tests {
                 .len(),
             1
         );
-        draft.push_str(ambre_bus::app::prose::TextAck(2), "b", &block(), 1);
+        draft.push_str(
+            ambre_bus::app::prose::TextAck(2),
+            "b",
+            &block(),
+            DocOffset::new(1),
+        );
         probe.handled(
             ambre_core::PageTime(1.0),
             ambre_core::PageTime(1.1),
@@ -321,14 +337,24 @@ mod tests {
     fn a_burst_laid_at_once_ends_every_measure() {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
-        draft.push_str(ambre_bus::app::prose::TextAck(1), "a", &block(), 0);
+        draft.push_str(
+            ambre_bus::app::prose::TextAck(1),
+            "a",
+            &block(),
+            DocOffset::ZERO,
+        );
         probe.handled(
             ambre_core::PageTime(0.0),
             ambre_core::PageTime(0.1),
             &draft,
             true,
         );
-        draft.push_str(ambre_bus::app::prose::TextAck(2), "b", &block(), 1);
+        draft.push_str(
+            ambre_bus::app::prose::TextAck(2),
+            "b",
+            &block(),
+            DocOffset::new(1),
+        );
         probe.handled(
             ambre_core::PageTime(1.0),
             ambre_core::PageTime(1.1),
@@ -367,7 +393,12 @@ mod tests {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
         probe.frame();
-        draft.push_str(ambre_bus::app::prose::TextAck(1), "a", &block(), 0);
+        draft.push_str(
+            ambre_bus::app::prose::TextAck(1),
+            "a",
+            &block(),
+            DocOffset::ZERO,
+        );
         probe.handled(
             ambre_core::PageTime(0.0),
             ambre_core::PageTime(0.1),

@@ -5,8 +5,8 @@
 //! header and the words of each row. Pure, so the host tests hold it. The painter in
 //! `paint` lays the rows out and draws them.
 
+use ambre_core::{ByteOffset, ByteSpan, CharOffset, CharVec};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::ops::Range;
 
 use ambre_bus::{
     Attachment, ChannelId, DocumentId, LogicCommand, MessageId, MessageView, MurmureCommand,
@@ -262,7 +262,7 @@ pub enum RowKey {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BodyMark {
     pub style: TextStyle,
-    pub bytes: Range<usize>,
+    pub bytes: ByteSpan,
 }
 
 /// What a row shows, in words.
@@ -425,13 +425,13 @@ fn band_words(band: &Band, time_of: impl Fn(Timestamp) -> String) -> RowWords {
 /// The style marks of `message` over the bytes of its shown body, `bytes`
 /// giving where each char of its text starts there. A mark the shown body
 /// leaves empty, such as one inside a renamed mention, is dropped.
-fn body_marks(message: &MessageView, bytes: &[usize]) -> Vec<BodyMark> {
-    let byte = |chars: usize| bytes.get(chars).copied();
+fn body_marks(message: &MessageView, bytes: &CharVec<ByteOffset>) -> Vec<BodyMark> {
+    let byte = |chars: CharOffset| bytes.get(chars).copied();
     crate::style::normalized(&message.styles)
         .into_iter()
         .filter_map(|mark| {
-            let range = byte(mark.range.start)?..byte(mark.range.end)?;
-            (range.start < range.end).then_some(BodyMark {
+            let range = ByteSpan::new(byte(mark.range.start)?, byte(mark.range.end)?);
+            (!range.is_empty()).then_some(BodyMark {
                 style: mark.style,
                 bytes: range,
             })

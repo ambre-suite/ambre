@@ -279,7 +279,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef.0 | field | Stri
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef::as_str() | ret | &str	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef::parse(word) | param | &str	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MemberView.display_name | field | String	debt	finding: display_name as String while ambre_core::DisplayName exists (medium, confirmed)
-ambre-bus | src/app/murmure.rs | crate::app::murmure | Mention.range | field | Range<usize>	debt	finding: Char, byte and UTF-16 offsets in usize, Toile notes and Murmure bodies (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MentionCount.0 | field | u32	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageDraft.text | field | String	free-text	message body
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView.deleted | field | bool	generic	fact flag
@@ -287,7 +286,7 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView.edited | fiel
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView.text | field | String	free-text	message body
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown() | ret | String	free-text	rendered message body
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown(name_of) | param | impl Fn(UserId)->Option<String>	debt	finding: display_name as String while ambre_core::DisplayName exists (medium, confirmed)
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown_at() | ret | (String,Vec<usize>)	debt	finding: Char, byte and UTF-16 offsets in usize, Toile notes and Murmure bodies (medium, confirmed)
+ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown_at() | ret | (String,CharVec<ByteOffset>)	free-text	the text shown, beside its typed byte offsets
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown_at(name_of) | param | impl Fn(UserId)->Option<String>	debt	finding: display_name as String while ambre_core::DisplayName exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::Name.name | field | Option<String>	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::Reply.also_in_channel | field | bool	generic	fact flag
@@ -313,7 +312,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceCommand::AddCategory
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::Catalogue.name | field | Option<String>	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
-ambre-bus | src/app/murmure.rs | crate::app::murmure | StyleMark.range | field | Range<usize>	debt	finding: Char, byte and UTF-16 offsets in usize, Toile notes and Murmure bodies (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | TextStyle::Link.0 | field | String	debt	finding: Addresses not listed in lot C bis 5 (low, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | ThreadHead.replies | field | u32	math	count
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic.0 | field | String	newtype-inner	newtype
@@ -341,8 +339,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | CellBorder.color | field | u3
 ambre-bus | src/app/prose.rs | crate::app::prose | CellBorder.width_pt | field | f32	math	paragraph / table geometry in points
 ambre-bus | src/app/prose.rs | crate::app::prose | CommentReply.author | field | String	debt	finding: display_name as String while ambre_core::DisplayName exists (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | CommentReply.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | CommentThread.anchor_end | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | CommentThread.anchor_start | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | CommentThread.orphaned | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | CommentThread.resolved | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ConversionWarning::BlockLifted.block | field | &'static str	free-text	static diagnostic label
@@ -352,10 +348,8 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ConversionWarning::ElementDro
 ambre-bus | src/app/prose.rs | crate::app::prose | ConversionWarning::FeatureNotSupported.count | field | u32	math	count
 ambre-bus | src/app/prose.rs | crate::app::prose | ConversionWarning::FeatureNotSupported.feature | field | &'static str	free-text	static diagnostic label
 ambre-bus | src/app/prose.rs | crate::app::prose | CrossRefKind::CustomText.0 | field | String	free-text	cross-reference display text
-ambre-bus | src/app/prose.rs | crate::app::prose | CursorPosition.anchor | field | Option<(BlockId,u32)>	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | CursorPosition.offset | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
+ambre-bus | src/app/prose.rs | crate::app::prose | DocCount::of(text) | param | &str	free-text	text content / label / parser input
 ambre-bus | src/app/prose.rs | crate::app::prose | ExportFormat::media_type() | ret | &'static str	debt	planned: lot B bis 10: MediaType
-ambre-bus | src/app/prose.rs | crate::app::prose | FindMatch.range | field | (u32,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | FindQuery.case_sensitive | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | FindQuery.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | FindQuery.use_regex | field | bool	generic	named setting or fact flag, selects no mode
@@ -367,8 +361,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | InteropError::TooLarge.0 | fi
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight.value | field | f32	debt	finding: Prose LineHeight.value: one f32, two units (low-medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeightMode::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeightMode::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | LinkSpan.end | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | LinkSpan.start | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | LinkSpan.url | field | String	debt	planned: lot C bis 5: LinkUrl (bus carrier of prose link.rs)
 ambre-bus | src/app/prose.rs | crate::app::prose | ListStyle::Todo.0 | field | bool	generic	todo checkbox ticked, a fact inside the enum variant
 ambre-bus | src/app/prose.rs | crate::app::prose | OrderedStyle::code() | ret | u8	newtype-inner	closed-set enum codec
@@ -384,50 +376,30 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle::is_empty() | 
 ambre-bus | src/app/prose.rs | crate::app::prose | PresencePayload.anchor | field | Option<(BlockId,Vec<u8>)>	debt	finding: Prose presence cursor as Vec<u8> (low, suspected)
 ambre-bus | src/app/prose.rs | crate::app::prose | PresencePayload.cursor | field | Vec<u8>	debt	finding: Prose presence cursor as Vec<u8> (low, suspected)
 ambre-bus | src/app/prose.rs | crate::app::prose | PresencePayload.display_name | field | String	debt	finding: display_name as String while ambre_core::DisplayName exists (medium, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::AddComment.range | field | (u32,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::AddComment.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ApplyMark.key | field | String	debt	planned: lot C bis 8: MarkKey (bus carriers of the mark key)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ApplyMark.range | field | (u32,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ApplyMark.value | field | Option<String>	free-text	mark value, grammar owned by the mark registry per key
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ClearInlineMarks.range | field | (u32,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::CopyRange.anchor | field | (BlockId,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::CopyRange.focus | field | (BlockId,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::DeleteRange.anchor | field | (BlockId,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::DeleteRange.focus | field | (BlockId,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::DeleteTableCol.col_index | field | u32	debt	finding: Prose table row/col as u32 (medium, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::DeleteText.range | field | (u32,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditCommentReply.new_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditFootnote.new_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EnableTrackChanges.enabled | field | bool	generic	named setting or fact flag, selects no mode
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::FollowCrossRef.pos | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::FormatSelection.anchor | field | (BlockId,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::FormatSelection.apply | field | bool	debt	finding: Boolean mode selectors (low-medium, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::FormatSelection.focus | field | (BlockId,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::FormatSelection.key | field | String	debt	planned: lot C bis 8: MarkKey (bus carriers of the mark key)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ImportDocument.data | field | Vec<u8>	generic	imported file bytes
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertCrossRef.pos | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertFooterField.pos | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertFootnote.note_text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertFootnote.pos | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertHeaderField.pos | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertTable.cols | field | u32	debt	finding: Prose table row/col as u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertTable.rows | field | u32	debt	finding: Prose table row/col as u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertTableCol.at_col | field | u32	debt	finding: Prose table row/col as u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertTableCol.width_pt | field | Option<f32>	math	paragraph / table geometry in points
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertText.pos | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertText.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertToc.max_level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertToc.numbered | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::MergeTableCells.end | field | (u32,u32)	debt	finding: Prose table row/col as u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::MergeTableCells.start | field | (u32,u32)	debt	finding: Prose table row/col as u32 (medium, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::Paste.at | field | (BlockId,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::Paste.html | field | Option<String>	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::Paste.payload | field | Option<Vec<u8>>	generic	opaque app clipboard bytes
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::Paste.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReadMarks.anchor | field | (BlockId,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReadMarks.focus | field | (BlockId,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::RemoveMark.key | field | String	debt	planned: lot C bis 8: MarkKey (bus carriers of the mark key)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::RemoveMark.range | field | (u32,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplaceAll.replacement | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplaceOne.replacement | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplyToComment.text | field | String	free-text	user content
@@ -442,7 +414,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetHeaderEnable
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetHeadingLevel.level | field | Option<u8>	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ShowPages.first | field | u32	debt	finding: Prose page index: zero-based and one-based in one u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ShowPages.last | field | u32	debt	finding: Prose page index: zero-based and one-based in one u32 (medium, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SplitBlock.pos | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::StepTableCell.backwards | field | bool	debt	finding: Boolean mode selectors (low-medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::UpdateTocConfig.max_level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::UpdateTocConfig.numbered | field | bool	generic	named setting or fact flag, selects no mode
@@ -450,7 +421,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::is_mutating() |
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::name() | ret | &'static str	generic	command name, the static label ProseCommand::name gives
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseError.refused | field | &'static str	generic	command name, the static label ProseCommand::name gives
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseError::new(refused) | param | &'static str	generic	command name, the static label ProseCommand::name gives
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::CaretPlaced.offset | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.html | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.payload | field | Vec<u8>	generic	opaque app clipboard bytes
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.text | field | String	free-text	user content
@@ -462,8 +432,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.media
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::FindResults.current | field | Option<u32>	math	index into the match list
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::FindUpdated.current | field | Option<u32>	math	index into the match list
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::RevealBlock.page | field | u32	debt	finding: Prose page index: zero-based and one-based in one u32 (medium, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::SelectionMarks.anchor | field | (BlockId,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::SelectionMarks.focus | field | (BlockId,u32)	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::SuggestionsUpdated.suggesting | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::TextChanged.local | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::UndoState.can_redo | field | bool	generic	named setting or fact flag, selects no mode
@@ -476,19 +444,14 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::FindRefused.0 |
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::UnknownMark.0 | field | String	debt	planned: lot C bis 8: MarkKey (bus carriers of the mark key)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::WriteFailed.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | RemoteCursor.display_name | field | String	debt	finding: display_name as String while ambre_core::DisplayName exists (medium, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ResolvedCrossRef.offset | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ResolvedCrossRef.shown | field | Option<String>	free-text	cross-reference display text
 ambre-bus | src/app/prose.rs | crate::app::prose | StyleId.0 | field | String	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | Suggestion.author | field | String	debt	finding: display_name as String while ambre_core::DisplayName exists (medium, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | SuggestionSpan.end | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | SuggestionSpan.start | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | TableOfContents.max_level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | TableOfContents.numbered | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | TextAck.0 | field | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | TextAck::plus(n) | param | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | TextChangeSeq.0 | field | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
-ambre-bus | src/app/prose.rs | crate::app::prose | TextEdit.at | field | u32	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | TextEdit.delta | field | i64	debt	finding: Prose block-local code-point offsets as u32 (high, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.page | field | u32	debt	finding: Prose page index: zero-based and one-based in one u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.section_number | field | Option<Vec<u32>>	math	section number components
@@ -603,8 +566,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | SnapElement.rotation | field 
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.pressure | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.x | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.y | field | f32	math	board geometry, style metric, opacity or pressure
-ambre-bus | src/app/toile.rs | crate::app::toile | TextDelta.at | field | usize	debt	finding: Char, byte and UTF-16 offsets in usize, Toile notes and Murmure bodies (medium, confirmed)
-ambre-bus | src/app/toile.rs | crate::app::toile | TextDelta.delete | field | usize	debt	finding: Char, byte and UTF-16 offsets in usize, Toile notes and Murmure bodies (medium, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | TextDelta.insert | field | String	free-text	inserted text of the splice
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::BooleanOp.keep_sources | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::CreateComment.body | field | String	free-text	user text
@@ -991,8 +952,6 @@ ambre-canvas | src/editor.rs | crate::editor | EditIntent::PointerDown.x | field
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::PointerDown.y | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::PointerDrag.x | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::PointerDrag.y | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/editor.rs | crate::editor | EditIntent::Replace.end | field | usize	debt	finding: Unnamed byte offsets in the canvas text editor (confirmed risk, no bug found)
-ambre-canvas | src/editor.rs | crate::editor | EditIntent::Replace.start | field | usize	debt	finding: Unnamed byte offsets in the canvas text editor (confirmed risk, no bug found)
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Replace.text | field | String	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Right.select | field | bool	math	named state or style flag, local
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Right.word | field | bool	math	named state or style flag, local
@@ -1007,8 +966,6 @@ ambre-canvas | src/editor.rs | crate::editor | TextEditor.seeded | field | bool	
 ambre-canvas | src/editor.rs | crate::editor | TextEditor.wrap_w | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | TextEditor.zoom | field | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::base_styles(zoom) | param | f64	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/editor.rs | crate::editor | TextEditor::caret() | ret | Option<usize>	debt	finding: Unnamed byte offsets in the canvas text editor (confirmed risk, no bug found)
-ambre-canvas | src/editor.rs | crate::editor | TextEditor::caret_line() | ret | Option<std::ops::Range<usize>>	debt	finding: Unnamed byte offsets in the canvas text editor (confirmed risk, no bug found)
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::commit_compose(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::committed_text() | ret | Option<String>	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::flush(wrap_w) | param | f32	math	geometry, layout, GPU or count arithmetic
@@ -1024,7 +981,6 @@ ambre-canvas | src/editor.rs | crate::editor | TextEditor::point_drag(y) | param
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::queued() | ret | bool	generic	predicate result
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::render(show_caret) | param | bool	math	named state or style flag, local
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::selected_text() | ret | Option<String>	free-text	text, label or message
-ambre-canvas | src/editor.rs | crate::editor | TextEditor::selection() | ret | Option<std::ops::Range<usize>>	debt	finding: Unnamed byte offsets in the canvas text editor (confirmed risk, no bug found)
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::set_compose(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::set_text(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::text() | ret | String	free-text	text, label or message
@@ -1039,10 +995,8 @@ ambre-canvas | src/editor.rs | crate::editor | TextEditorStyle.weight | field | 
 ambre-canvas | src/editor.rs | crate::editor | TextSpan.family | field | Option<String>	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextSpan.indent | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | TextSpan.italic | field | bool	math	named state or style flag, local
-ambre-canvas | src/editor.rs | crate::editor | TextSpan.range | field | Range<usize>	debt	finding: Unnamed byte offsets in the canvas text editor (confirmed risk, no bug found)
 ambre-canvas | src/editor.rs | crate::editor | TextSpan.underline | field | bool	math	named state or style flag, local
 ambre-canvas | src/editor.rs | crate::editor | TextSpan.weight | field | Option<u16>	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/editor.rs | crate::editor | covered(range) | param | &Range<usize>	debt	finding: Unnamed byte offsets in the canvas text editor (confirmed risk, no bug found)
 ambre-canvas | src/editor.rs | crate::editor | offset_box(dx) | param | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | offset_box(dy) | param | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | reads_geometry() | ret | bool	generic	predicate result
@@ -1297,7 +1251,6 @@ ambre-canvas | src/text_cache.rs | crate::text_cache | Look.max_width | field | 
 ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.family | field | Option<String>	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.indent | field | u16	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.italic | field | bool	math	named state or style flag, local
-ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.range | field | Range<usize>	debt	finding: Unnamed byte offsets in the canvas text editor (confirmed risk, no bug found)
 ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.underline | field | bool	math	named state or style flag, local
 ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.weight | field | Option<u16>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache.frame_hits | field | usize	math	geometry, layout, GPU or count arithmetic
@@ -1328,10 +1281,9 @@ ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::hit_rate() | r
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::lazy_fonts_requested() | ret | usize	math	count of font loads, read by tests and diagnostics
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::new(scale) | param | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::poll_lazy_fonts() | ret | Vec<Vec<u8>>	generic	bytes
-ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(indents) | param | &[(Range<usize>,f32)]	debt	finding: Unnamed byte offsets in the canvas text editor (confirmed risk, no bug found)
+ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(indents) | param | &[(ByteSpan,f32)]	math	local geometry / pixel arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(width) | param | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/text_cache.rs | crate::text_cache | paragraphs() | ret | impl Iterator<Item=Range<usize>>+'_	debt	finding: Unnamed byte offsets in the canvas text editor (confirmed risk, no bug found)
 ambre-canvas | src/text_cache.rs | crate::text_cache | paragraphs(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | push_shape() | ret | bool	generic	predicate result
 ambre-canvas | src/text_cache.rs | crate::text_cache | push_shape(text) | param | &str	free-text	text, label or message
@@ -1828,6 +1780,13 @@ ambre-core | src/status.rs | crate::status | HttpStatus.0 | field | u16	newtype-
 ambre-core | src/status.rs | crate::status | HttpStatus::is_success() | ret | bool	newtype-inner	HttpStatus field or accessor
 ambre-core | src/status.rs | crate::status | SnapshotStatus::as_str() | ret | &'static str	newtype-inner	SnapshotStatus codec / StatusError
 ambre-core | src/status.rs | crate::status | StatusError.0 | field | String	newtype-inner	SnapshotStatus codec / StatusError
+ambre-core | src/text_offset.rs | crate::text_offset | byte_span_to_chars(text) | param | &str	free-text	the text an offset counts into
+ambre-core | src/text_offset.rs | crate::text_offset | byte_to_char(text) | param | &str	free-text	the text an offset counts into
+ambre-core | src/text_offset.rs | crate::text_offset | char_len(text) | param | &str	free-text	the text an offset counts into
+ambre-core | src/text_offset.rs | crate::text_offset | char_span_to_bytes(text) | param | &str	free-text	the text an offset counts into
+ambre-core | src/text_offset.rs | crate::text_offset | char_to_byte(text) | param | &str	free-text	the text an offset counts into
+ambre-core | src/text_offset.rs | crate::text_offset | char_to_utf16(text) | param | &str	free-text	the text an offset counts into
+ambre-core | src/text_offset.rs | crate::text_offset | utf16_to_char(text) | param | &str	free-text	the text an offset counts into
 ambre-core | src/uuid.rs | crate::uuid | Uuid.0 | field | [u8;16]	newtype-inner	Uuid newtype
 ambre-core | src/uuid.rs | crate::uuid | Uuid::as_bytes() | ret | &[u8;16]	newtype-inner	Uuid newtype
 ambre-core | src/uuid.rs | crate::uuid | Uuid::from_bytes(bytes) | param | [u8;16]	newtype-inner	Uuid newtype
@@ -2511,7 +2470,6 @@ ambre-murmure | src/commands.rs | crate::commands | search_title() | ret | Strin
 ambre-murmure | src/composer.rs | crate::composer | ALSO_CHORD | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | ALSO_IN_CHANNEL | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | ALSO_PX | const | f32	math	layout geometry in logical px
-ambre-murmure | src/composer.rs | crate::composer | Asking.at | field | usize	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/composer.rs | crate::composer | Asking.chosen | field | usize	math	local count/index/counter
 ambre-murmure | src/composer.rs | crate::composer | Asking.query | field | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | BOX_PX | const | f32	math	layout geometry in logical px
@@ -2520,7 +2478,6 @@ ambre-murmure | src/composer.rs | crate::composer | Composer.also_row | field | 
 ambre-murmure | src/composer.rs | crate::composer | Composer.band | field | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Composer.chords | field | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer.composing | field | bool	math	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer.dismissed | field | Option<(DraftOf,usize)>	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/composer.rs | crate::composer | Composer.dragging | field | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer.file_chips | field | Vec<(Rect,usize)>	math	local count/index/counter
 ambre-murmure | src/composer.rs | crate::composer | Composer.focused | field | bool	math	state flag/predicate
@@ -2533,7 +2490,7 @@ ambre-murmure | src/composer.rs | crate::composer | Composer::also_in_channel() 
 ambre-murmure | src/composer.rs | crate::composer | Composer::band() | ret | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Composer::blank() | ret | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::close_marker(wrap) | param | f32	math	layout geometry in logical px
-ambre-murmure | src/composer.rs | crate::composer | Composer::close_with(found) | param | impl FnOnce(&str,&[std::ops::Range<usize>])->Option<markers::Closed>	debt	finding: Byte and char offsets share bare `usize`
+ambre-murmure | src/composer.rs | crate::composer | Composer::close_with(found) | param | impl FnOnce(&str,&[CharSpan])->Option<markers::Closed>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::close_with(wrap) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Composer::compose(end) | param | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/composer.rs | crate::composer | Composer::compose(text) | param | &str	free-text	text, label or user content
@@ -2604,9 +2561,6 @@ ambre-murmure | src/composer.rs | crate::composer | TYPING_PX | const | f32	math
 ambre-murmure | src/composer.rs | crate::composer | UPLOADING | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | also_said() | ret | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | also_said(checked) | param | bool	debt	finding: Bools that select a mode
-ambre-murmure | src/composer.rs | crate::composer | bytes_of() | ret | std::ops::Range<usize>	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/composer.rs | crate::composer | bytes_of(range) | param | &std::ops::Range<usize>	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/composer.rs | crate::composer | bytes_of(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/composer.rs | crate::composer | kept_mentions(new) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | kept_mentions(old) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | span_of(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
@@ -2644,11 +2598,7 @@ ambre-murmure | src/drafts.rs | crate::drafts | DraftWrite::DeleteRange.upper | 
 ambre-murmure | src/drafts.rs | crate::drafts | DraftWrite::Put.key | field | String	debt	planned: lot C7 DraftKey
 ambre-murmure | src/drafts.rs | crate::drafts | DraftWrite::Put.row | field | String	debt	planned: lot C7 DraftKey
 ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
-ambre-murmure | src/drafts.rs | crate::drafts | RowMention.end | field | usize	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/drafts.rs | crate::drafts | RowMention.start | field | usize	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/drafts.rs | crate::drafts | RowStyle.end | field | usize	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/drafts.rs | crate::drafts | RowStyle.link | field | Option<String>	debt	finding: Link addresses as `String`
-ambre-murmure | src/drafts.rs | crate::drafts | RowStyle.start | field | usize	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/drafts.rs | crate::drafts | RowStyle.style | field | String	debt	finding: `RowStyle.style` stores a `TextStyle` name as a String
 ambre-murmure | src/drafts.rs | crate::drafts | SEPARATOR | const | char	generic	draft row encoder/decoder over &str
 ambre-murmure | src/drafts.rs | crate::drafts | Shelf.version | field | u64	math	local count/index/counter
@@ -2670,7 +2620,6 @@ ambre-murmure | src/list.rs | crate::list | BAND_DAMAGED | const | &str	free-tex
 ambre-murmure | src/list.rs | crate::list | BAND_KEYS | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | BAND_RETRY | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | Band::retries() | ret | bool	math	state flag/predicate
-ambre-murmure | src/list.rs | crate::list | BodyMark.bytes | field | Range<usize>	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/list.rs | crate::list | Conversations::absorb() | ret | bool	math	state flag/predicate
 ambre-murmure | src/list.rs | crate::list | DELETED | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | EDITED | const | &str	free-text	UI text/label const
@@ -2702,7 +2651,6 @@ ambre-murmure | src/list.rs | crate::list | at_bottom(count) | param | usize	mat
 ambre-murmure | src/list.rs | crate::list | at_bottom(height) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/list.rs | crate::list | at_bottom(tall) | param | &mut impl FnMut(usize)->f32	math	layout geometry in logical px
 ambre-murmure | src/list.rs | crate::list | band_words(time_of) | param | impl Fn(Timestamp)->String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | body_marks(bytes) | param | &[usize]	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/list.rs | crate::list | chip_label() | ret | String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | file_label() | ret | String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | fill_down((count,height)) | param | (usize,f32)	math	layout geometry in logical px
@@ -2724,14 +2672,9 @@ ambre-murmure | src/look.rs | crate::look | BOLD_WEIGHT | const | u16	math	local
 ambre-murmure | src/look.rs | crate::look | CODE_FAMILY | const | &str	free-text	UI text/label const
 ambre-murmure | src/look.rs | crate::look | LIST_DOT | const | f64	math	layout geometry in logical px
 ambre-murmure | src/look.rs | crate::look | QUOTE_RULE | const | (f64,f64)	math	layout geometry in logical px
-ambre-murmure | src/look.rs | crate::look | margin(bytes) | param | Range<usize>	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/look.rs | crate::look | margin(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/look.rs | crate::look | shape(range) | param | Range<usize>	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/markers.rs | crate::markers | Closed.inner | field | Range<usize>	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/markers.rs | crate::markers | Closed.span | field | Range<usize>	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | Closed::apply() | ret | (String,String)	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | Closed::apply(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | Closed::range() | ret | Range<usize>	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | Closed::range(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | FENCE | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | LIST_MARKER | const | &str	free-text	UI text/label const
@@ -2741,35 +2684,24 @@ ambre-murmure | src/markers.rs | crate::markers | MarkBar.at | field | (f32,f32)
 ambre-murmure | src/markers.rs | crate::markers | MarkBar.in_thread | field | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/markers.rs | crate::markers | QUOTE_MARKER | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | bold(line) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | change() | ret | (usize,usize,usize)	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | change(new) | param | &[char]	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | change(old) | param | &[char]	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | chord_style(key) | param | &str	debt	finding: DOM key names passed as `&str`
-ambre-murmure | src/markers.rs | crate::markers | closed(caret) | param | usize	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/markers.rs | crate::markers | closed(code) | param | &[Range<usize>]	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | closed(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | closed_at_send(code) | param | &[Range<usize>]	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | closed_at_send(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | closed_by_break(caret) | param | usize	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/markers.rs | crate::markers | closed_by_break(code) | param | &[Range<usize>]	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | closed_by_break(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | closes() | ret | bool	math	state flag/predicate
 ambre-murmure | src/markers.rs | crate::markers | closes(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | code_block(before) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | cover(range) | param | &Range<usize>	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | holds() | ret | bool	math	state flag/predicate
 ambre-murmure | src/markers.rs | crate::markers | holds(inner) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | inline_code(line) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | italic(line) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | kept_styles(new) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | kept_styles(old) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | line_marker(end) | param | usize	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/markers.rs | crate::markers | line_marker(start) | param | usize	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | line_marker(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | link(line) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | outside(code) | param | &[Range<usize>]	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | outside(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | toggled(range) | param | Range<usize>	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/members.rs | crate::members | ONLINE | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/members.rs | crate::members | PRESENCE_EXPIRY_MS | const | u64	debt	planned: lot B4 Millis
 ambre-murmure | src/members.rs | crate::members | REFRESH_PERIOD_MS | const | u64	debt	planned: lot B4 Millis
@@ -2802,8 +2734,7 @@ ambre-murmure | src/mention_list.rs | crate::mention_list | matches(name) | para
 ambre-murmure | src/mention_list.rs | crate::mention_list | matches(query) | param | &str	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | offers(members) | param | &[(UserId,String)]	debt	finding: Display names are `(UserId, String)` and `Fn(UserId) -> Option<String>`
 ambre-murmure | src/mention_list.rs | crate::mention_list | offers(query) | param | &str	free-text	text, label or user content
-ambre-murmure | src/mention_list.rs | crate::mention_list | query_at() | ret | Option<(usize,&str)>	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(caret) | param | usize	debt	finding: Byte and char offsets share bare `usize`
+ambre-murmure | src/mention_list.rs | crate::mention_list | query_at() | ret | Option<(ByteOffset,&str)>	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::expects() | ret | bool	math	state flag/predicate
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::receive() | ret | bool	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -2867,7 +2798,6 @@ ambre-murmure | src/paint.rs | crate::paint | file_at(words) | param | &HashMap<
 ambre-murmure | src/paint.rs | crate::paint | file_chips() | ret | (Vec<Rect>,f32)	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | file_chips(width) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | fill_bytes(body_y) | param | f32	math	layout geometry in logical px
-ambre-murmure | src/paint.rs | crate::paint | fill_bytes(bytes) | param | Range<usize>	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/paint.rs | crate::paint | header_height() | ret | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | header_height(width) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | line_height() | ret | f32	math	layout geometry in logical px
@@ -2921,16 +2851,12 @@ ambre-murmure | src/read_aloud.rs | crate::read_aloud | char_name(c) | param | O
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | clipped() | ret | String	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | clipped(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | line_at() | ret | Option<&str>	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | line_at(at) | param | usize	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | line_at(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | removed() | ret | Option<&'a str>	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | removed(after) | param | &str	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | removed(before) | param | &'a str	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | said() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | said(before) | param | &str	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | said(caret) | param | Option<usize>	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | said(drawn) | param | Option<Range<usize>>	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | said(selection) | param | Option<Range<usize>>	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | said(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | spoken() | ret | String	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | spoken(text) | param | &str	free-text	text, label or user content
@@ -3029,14 +2955,11 @@ ambre-murmure | src/search.rs | crate::search | is_mark(c) | param | char	free-t
 ambre-murmure | src/select.rs | crate::select | Selecting.click | field | Option<(f32,f32)>	math	layout geometry in logical px
 ambre-murmure | src/select.rs | crate::select | Selecting.drag | field | Option<(f32,f32)>	math	layout geometry in logical px
 ambre-murmure | src/select.rs | crate::select | Selecting.press | field | Option<(f32,f32)>	math	layout geometry in logical px
-ambre-murmure | src/select.rs | crate::select | Spot.byte | field | usize	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied(name_of) | param | &dyn Fn(UserId)->Option<String>	debt	finding: Display names are `(UserId, String)` and `Fn(UserId) -> Option<String>`
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied(time_of) | param | &dyn Fn(Timestamp)->String	free-text	text, label or user content
-ambre-murmure | src/select.rs | crate::select | TextSelection::ordered() | ret | Option<((usize,usize),(usize,usize))>	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/select.rs | crate::select | TextSelection::range_in() | ret | Option<(usize,usize)>	debt	finding: Byte and char offsets share bare `usize`
+ambre-murmure | src/select.rs | crate::select | TextSelection::ordered() | ret | Option<((usize,ByteOffset),(usize,ByteOffset))>	math	count, size or local index
 ambre-murmure | src/select.rs | crate::select | TextSelection::range_in(i) | param | usize	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/select.rs | crate::select | TextSelection::range_in(len) | param | usize	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/sequence.rs | crate::sequence | FRAME_MAGIC | const | &[u8;4]	debt	finding: Two schema-version spaces, and a duplicated frame magic
 ambre-murmure | src/sequence.rs | crate::sequence | Framed.loro | field | &'a[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/sequence.rs | crate::sequence | Framed.rows | field | &'a[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -3315,8 +3238,6 @@ ambre-prose | src/commands.rs | crate::commands | strikethrough_title() | ret | 
 ambre-prose | src/commands.rs | crate::commands | underline_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | undo_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/comment.rs | crate::comment | KIND_COMMENT | const | &str	debt	finding: annotation kind strings (confirmed)
-ambre-prose | src/comment.rs | crate::comment | Span.end | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/comment.rs | crate::comment | Span.start | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/comment.rs | crate::comment | mark_key() | ret | String	debt	planned: lot C8 MarkKey
 ambre-prose | src/comment.rs | crate::comment | reply_at(index) | param | usize	math	count, size or local index
 ambre-prose | src/comment.rs | crate::comment | thread_of_key(key) | param | &str	debt	planned: lot C8 MarkKey
@@ -3351,7 +3272,6 @@ ambre-prose | src/doc.rs | crate::doc | A_PADDING | const | &str	debt	finding: L
 ambre-prose | src/doc.rs | crate::doc | A_SPELLING | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | A_TICKED | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | A_VALIGN | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | Anchor.offset | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/doc.rs | crate::doc | Anchor.value | field | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | BAND_BLOCK | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | BAND_ENABLED | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
@@ -3497,7 +3417,6 @@ ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text() | ret | bo
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseUiState::grapheme_beside() | ret | Option<u32>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::grapheme_beside(forward) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::handle_input() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::key() | ret | bool	generic	independent flag or predicate
@@ -3641,9 +3560,7 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle::t
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle::text_width_px(content_width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MAX_SEGMENTS | const | usize	math	count, size or local index
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.bold | field | bool	generic	independent flag or predicate
-ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.end | field | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.italic | field | bool	generic	independent flag or predicate
-ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.start | field | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.strike | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.underline | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer.shaped | field | u64	math	count, size or local index
@@ -3656,7 +3573,6 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure_run(width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure_with_lines((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure_with_lines() | ret | (TextMetrics,Vec<u32>,ShapedRun)	math	count, size or local index
-ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure_with_lines(offsets) | param | &[u32]	math	count, size or local index
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure_with_lines(width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::register_faces(bytes) | param | Vec<u8>	math	count, size or local index
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::shape(text) | param | &str	free-text	text content / label / parser input
@@ -3679,8 +3595,6 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | at_least_floor_of
 ambre-prose | src/layout/measure.rs | crate::layout::measure | build((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | build(family) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | build(width_px) | param | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/layout/measure.rs | crate::layout::measure | clip(from) | param | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/layout/measure.rs | crate::layout::measure | clip(to) | param | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/measure.rs | crate::layout::measure | marked_text() | ret | (String,Vec<MarkedSpan>)	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/measure.rs | crate::layout::measure | px() | ret | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/layout/measure.rs | crate::layout::measure | px(points) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
@@ -3704,10 +3618,8 @@ ambre-prose | src/layout/pass.rs | crate::layout::pass | BandHeights::body_heigh
 ambre-prose | src/layout/pass.rs | crate::layout::pass | BandHeights::measure(content_width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NOTE_GAP_PX | const | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NoteKey | alias | (FootnoteId,u32,String,Vec<crate::layout::measure::MarkedSpan>,)	free-text	text content / label / parser input
-ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan.calls | field | HashMap<TreeID,Vec<(u32,FootnoteId)>>	math	count, size or local index
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan.notes | field | HashMap<FootnoteId,(u32,f32,TreeID)>	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan::call(line) | param | u32	math	count, size or local index
-ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan::calls_of() | ret | &[(u32,FootnoteId)]	math	count, size or local index
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan::read(content_width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan::touches() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.content_height_px | field | f32	math	layout geometry local to algorithm
@@ -3842,87 +3754,52 @@ ambre-prose | src/layout/run.rs | crate::layout::run | LineAt.local | field | us
 ambre-prose | src/layout/run.rs | crate::layout::run | LineAt.segment | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | LineAt.shift | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | LineAt.top | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.char_starts | field | Vec<u32>	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.height | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.indent_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.width_px | field | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::at_line() | ret | (u32,bool)	debt	finding: caret affinity as a bool (confirmed)
+ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::at_line() | ret | (RunOffset,bool)	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::at_line(line) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::at_line(x) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::byte_of() | ret | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::byte_of(offset) | param | u32	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::caret_box(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::caret_box_at(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::caret_box_at(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::cursor() | ret | (usize,Cursor)	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::cursor(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::cursor(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::full_width() | ret | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::grapheme_after() | ret | Option<u32>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::grapheme_after(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::grapheme_before() | ret | Option<u32>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::grapheme_before(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::height() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::indent_px() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::is_empty() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::len() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line() | ret | Option<(parley::Line<'_,ParleyBrush>,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line(index) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_at_byte() | ret | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_at_byte(byte) | param | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_count() | ret | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_edge() | ret | (u32,bool)	debt	finding: caret affinity as a bool (confirmed)
+ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_edge() | ret | (RunOffset,bool)	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_edge(end) | param | bool	debt	finding: caret affinity as a bool (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_edge(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_edge(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_of() | ret | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_of(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_of(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_start() | ret | Option<usize>	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_start(line) | param | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_tops() | ret | Vec<f32>	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_under(index) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::lines() | ret | impl Iterator<Item=(parley::Line<'_,ParleyBrush>,f32)>+'_	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::marks_before(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::new(indent_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::new(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::offset_at() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::offset_at(x) | param | f32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::offset_at(y) | param | f32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::offset_of_byte() | ret | u32	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::offset_of_byte(byte) | param | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::on_line() | ret | Option<(&Segment,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::on_line(index) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::on_line(y) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::range_boxes(end) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::range_boxes(start) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::segment_count() | ret | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::segment_end() | ret | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::segment_end(index) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::shaped_in(width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::text() | ret | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::width_px() | ret | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::with_window((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::with_window(cut) | param | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::word_after() | ret | Option<u32>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::word_after(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::word_around() | ret | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::word_around(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::word_before() | ret | Option<u32>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::word_before(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | Resume.delta | field | isize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | Resume.kept | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | Resume.line | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | Segment.first_line | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | Segment.lines | field | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | Segment.local_start | field | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | Segment.skip | field | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | Segment.start | field | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | Segment::to_local() | ret | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | Segment::to_local(byte) | param | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | Segment::to_run() | ret | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | Segment::to_run(local) | param | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout.first_index | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout.order | field | Arc<HashMap<TreeID,usize>>	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout.page_blocks | field | Vec<Vec<usize>>	math	count, size or local index
@@ -3942,7 +3819,6 @@ ambre-prose | src/layout/run.rs | crate::layout::run | ShapedRun::new(indent_px)
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedRun::new(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedRun::styled(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | TableShape.row_tops | field | Vec<f32>	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | TextEnds.last_len | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | Window.first_index | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | Window.order | field | Arc<HashMap<TreeID,usize>>	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | Window.pages | field | (u32,u32)	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
@@ -3954,7 +3830,6 @@ ambre-prose | src/link.rs | crate::link | openable() | ret | bool	debt	planned: 
 ambre-prose | src/link.rs | crate::link | openable(url) | param | &str	debt	planned: lot C5 LinkUrl
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	free-text	text content / label / parser input
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::ensure_band(register) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::insert_field(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::register(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_different_first_page(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_side_enabled(enabled) | param | bool	generic	independent flag or predicate
@@ -3975,12 +3850,6 @@ ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::write_att
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::write_init() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | clamp_level() | ret | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | clamp_level(level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
-ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::end() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::end(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::position() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::position(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::range((a,b)) | param | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::range() | ret | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::stamp() | ret | (bool,ambre_bus::app::prose::TextChangeSeq,ambre_bus::app::prose::TextAck,Vec<TextEdit>,)	generic	independent flag or predicate
 ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::stamp(from_command) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
@@ -4064,16 +3933,10 @@ ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Text.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | MAGIC | const | [u8;4]	math	count, size or local index
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | Payload.magic | field | [u8;4]	math	count, size or local index
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::copy_range(anchor) | param | (BlockId,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::copy_range(focus) | param | (BlockId,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(at) | param | (TreeID,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(bytes) | param | Option<&[u8]>	math	count, size or local index
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(html) | param | Option<&str>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_blocks(at) | param | (TreeID,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_text(at) | param | (TreeID,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_text(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | len_of() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::parse_error(_msg) | param | Cow<'static,str>	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::same_node() | ret | bool	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena.templates | field | RefCell<HashMap<usize,usize>>	math	count, size or local index
@@ -4087,7 +3950,6 @@ ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Hand
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Node.children | field | Vec<usize>	math	count, size or local index
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Node.parent | field | Option<usize>	math	count, size or local index
 ambre-prose | src/logic/comments.rs | crate::logic::comments | COMMENT_ORIGIN | const | &str	debt	finding: commit origins as a closed set of &str (confirmed, no collision)
-ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::add_comment(range) | param | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::add_comment(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::edit_reply(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::own_reply() | ret | Result<(LoroList,usize),ProseOutcome>	math	count, size or local index
@@ -4115,11 +3977,7 @@ ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::find_step(bac
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::refresh_matches(keep) | param | Option<u32>	math	count, size or local index
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_all(replacement) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_one(replacement) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_range((start,end)) | param | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_range(replacement) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/find.rs | crate::logic::find | code_point() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/find.rs | crate::logic::find | code_point(index) | param | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/find.rs | crate::logic::find | match_offsets() | ret | Vec<(u32,u32)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/find.rs | crate::logic::find | match_offsets(hay) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | <ProseFixture as FixtureGen>::build() | ret | Vec<u8>	trait	signature fixed by foreign trait
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | <ProseFixture as FixtureGen>::generator_version() | ret | u32	trait	signature fixed by foreign trait
@@ -4142,8 +4000,6 @@ ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render_delta() | 
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render_delta(names) | param | &HashMap<String,String>	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | root_after() | ret | Result<TreeID,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | run() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/history.rs | crate::logic::history | edit_point() | ret | Option<(BlockId,u32)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/history.rs | crate::logic::history | text_point() | ret | Option<u32>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/ids.rs | crate::logic::ids | IdSource::Seeded.next | field | Cell<u64>	math	count, size or local index
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack() | ret | u128	generic	generic primitive API
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack(counter) | param | u64	math	count, size or local index
@@ -4171,26 +4027,14 @@ ambre-prose | src/logic/marks.rs | crate::logic::marks | BAR_KEYS | const | [&st
 ambre-prose | src/logic/marks.rs | crate::logic::marks | MarkFold.counts | field | [(u32,u32);5]	math	count, size or local index
 ambre-prose | src/logic/marks.rs | crate::logic::marks | MarkFold.link | field | Option<Option<String>>	debt	planned: lot C5 LinkUrl
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(key) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(range) | param | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::clear_inline_marks(range) | param | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::format_selection(anchor) | param | (BlockId,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::format_selection(apply) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::format_selection(focus) | param | (BlockId,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::format_selection(key) | param | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::links_touched(key) | param | Option<&str>	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::read_marks(anchor) | param | (BlockId,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::read_marks(focus) | param | (BlockId,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::remove_mark(key) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::remove_mark(range) | param | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_runs() | ret | Vec<(String,ResolvedStyle)>	free-text	text content / label / parser input
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::selected_spans() | ret | Vec<(BlockId,(u32,u32))>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::selected_spans(anchor) | param | (BlockId,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::selected_spans(focus) | param | (BlockId,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ordered() | ret | (usize,usize)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ordered(range) | param | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(key) | param | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/mod.rs | crate::logic | LOAD_ORIGIN | const | &str	debt	finding: commit origins as a closed set of &str (confirmed, no collision)
@@ -4228,10 +4072,8 @@ ambre-prose | src/logic/mod.rs | crate::logic | ProseState::text_changed(from_co
 ambre-prose | src/logic/mod.rs | crate::logic | WINDOW_MARGIN | const | u32	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | WINDOW_PAGES | const | u32	math	count, size or local index
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::edit_footnote(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::insert_footnote(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::insert_footnote(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier(at) | param | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier(key) | param | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier(value) | param | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_note() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
@@ -4240,30 +4082,15 @@ ambre-prose | src/logic/notes.rs | crate::logic::notes | write_note_block() | re
 ambre-prose | src/logic/notes.rs | crate::logic::notes | write_note_block(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::announce() | ret | Option<Vec<u8>>	debt	finding: ephemeral payloads as Vec<u8> (confirmed)
 ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::apply_ephemeral(payload) | param | &[u8]	debt	finding: ephemeral payloads as Vec<u8> (confirmed)
-ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::cursor_at(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::is_live() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::resolve_one() | ret | Option<u32>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::resolve_one(encoded) | param | &[u8]	debt	finding: ephemeral payloads as Vec<u8> (confirmed)
 ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::take_greeting() | ret | Option<Vec<u8>>	debt	finding: ephemeral payloads as Vec<u8> (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | Burst.end | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | Burst.start | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::after_delete(plan) | param | &[(TreeID,u32,u32,Treatment)]	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::enable_track_changes(enabled) | param | bool	generic	independent flag or predicate
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::extend_burst(end) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::extend_burst(start) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::is_suggesting() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::joining(end) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::joining(start) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::pieces() | ret | Result<Vec<(TreeID,u32,u32)>,ProseOutcome>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::pieces(anchor) | param | (TreeID,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::pieces(focus) | param | (TreeID,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::resolve_all(accept) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::resolve_suggestion(accept) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::settle_suggestion() | ret | Result<bool,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::settle_suggestion(accept) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::suggest_delete(anchor) | param | (TreeID,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::suggest_delete(focus) | param | (TreeID,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::suggest_insert(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::suggest_insert(text) | param | &str	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::write_entry() | ret | Result<SuggestionId,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | passes_while_suggesting() | ret | bool	generic	independent flag or predicate
@@ -4311,29 +4138,13 @@ ambre-prose | src/logic/tables.rs | crate::logic::tables | usable(value) | param
 ambre-prose | src/logic/tables.rs | crate::logic::tables | usable(zero_allowed) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/text.rs | crate::logic::text | MarkedRun.marks | field | Vec<(String,loro::LoroValue)>	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/text.rs | crate::logic::text | MarkedRun.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::delete_range(anchor) | param | (TreeID,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::delete_range(focus) | param | (TreeID,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::delete_text(range) | param | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::insert_text(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::insert_text(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::split_block(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::text_of() | ret | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/logic/text.rs | crate::logic::text | marked_runs(end) | param | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/text.rs | crate::logic::text | marked_runs(start) | param | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/text.rs | crate::logic::text | normalize() | ret | (usize,usize)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/text.rs | crate::logic::text | normalize(range) | param | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/text.rs | crate::logic::text | whole_graphemes() | ret | (usize,usize)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/text.rs | crate::logic::text | whole_graphemes(end) | param | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/text.rs | crate::logic::text | whole_graphemes(start) | param | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/text.rs | crate::logic::text | whole_graphemes(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/text.rs | crate::logic::text | write_runs() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/text.rs | crate::logic::text | write_runs(dest) | param | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/touched.rs | crate::logic::touched | TextMoves.edits | field | Vec<(TreeID,u32,i64)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched::only_typed() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched::take_structural() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/touched.rs | crate::logic::touched | plain_text() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/xrefs.rs | crate::logic::xrefs | ProseState::follow_cross_ref(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/xrefs.rs | crate::logic::xrefs | ProseState::insert_cross_ref(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/mark.rs | crate::mark | ANCHOR_KEYS | const | [&str;6]	debt	planned: lot C8 MarkKey
 ambre-prose | src/mark.rs | crate::mark | COLOR_KEYS | const | [&str;2]	debt	planned: lot C8 MarkKey
 ambre-prose | src/mark.rs | crate::mark | FIELD_ROOT | const | &str	debt	planned: lot C8 MarkKey
@@ -4397,21 +4208,6 @@ ambre-prose | src/probe.rs | crate::probe | Undrawn.needs_layout | field | bool	
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | percentiles() | ret | Option<(f64,f64)>	math	layout geometry local to algorithm
 ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	layout geometry local to algorithm
-ambre-prose | src/rebase.rs | crate::rebase | deletion(at) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | deletion(n) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | end_through_all() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | end_through_all(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | insertion(at) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | insertion(n) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | len() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | through() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | through(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | through_all() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | through_all(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | through_deletion() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | through_deletion(at) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | through_deletion(n) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/rebase.rs | crate::rebase | through_deletion(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/schema.rs | crate::schema | SCHEMA_VERSION | const | u32	debt	finding: schema version as a bare integer (confirmed)
 ambre-prose | src/schema.rs | crate::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	debt	finding: snapshot payloads as Vec<u8> (confirmed)
 ambre-prose | src/schema.rs | crate::schema | gate(payload) | param | &[u8]	debt	finding: snapshot payloads as Vec<u8> (confirmed)
@@ -4435,42 +4231,26 @@ ambre-prose | src/style.rs | crate::style | ResolvedStyle.underline | field | bo
 ambre-prose | src/suggest.rs | crate::suggest | KIND_SUGGESTION | const | &str	debt	finding: annotation kind strings (confirmed)
 ambre-prose | src/suggest.rs | crate::suggest | ROOT_DELETE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/suggest.rs | crate::suggest | ROOT_INSERT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/suggest.rs | crate::suggest | Run.end | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/suggest.rs | crate::suggest | Run.start | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/suggest.rs | crate::suggest | mark_key() | ret | String	debt	planned: lot C8 MarkKey
 ambre-prose | src/suggest.rs | crate::suggest | of_key(key) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/suggest.rs | crate::suggest | runs(end) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/suggest.rs | crate::suggest | runs(start) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/suggest.rs | crate::suggest | spans() | ret | Vec<(SuggestionId,SuggestionKind,TreeID,u32,u32)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/suggest.rs | crate::suggest | strip_inherited() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/suggest.rs | crate::suggest | strip_inherited(end) | param | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/suggest.rs | crate::suggest | strip_inherited(start) | param | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/toc.rs | crate::toc | MAX_LEVELS | const | std::ops::RangeInclusive<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/toc.rs | crate::toc | build(pages) | param | &HashMap<TreeID,u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/toc.rs | crate::toc | clamp_level() | ret | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/toc.rs | crate::toc | clamp_level(level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/toc.rs | crate::toc | heading_pages() | ret | HashMap<TreeID,u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/toc.rs | crate::toc | lines() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/ui.rs | crate::ui | Change::Delete.0 | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/ui.rs | crate::ui | Change::Insert.0 | field | String	newtype-inner	newtype inner field
-ambre-prose | src/ui.rs | crate::ui | DocOffset.0 | field | u32	newtype-inner	offset newtype field or constructor
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer.generation | field | u64	math	count, size or local index
-ambre-prose | src/ui.rs | crate::ui | DraftBuffer::delta() | ret | i64	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::entries() | ret | impl Iterator<Item=(ambre_bus::app::prose::TextAck,bool)>+'_	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::generation() | ret | u64	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::is_empty() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::marks_of(laid) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/ui.rs | crate::ui | DraftBuffer::push(at) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/ui.rs | crate::ui | DraftBuffer::push_delete(end) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/ui.rs | crate::ui | DraftBuffer::push_delete(start) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/ui.rs | crate::ui | DraftBuffer::push_str(pos) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::push_str(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::text_of() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::text_of(laid) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::touches() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/ui.rs | crate::ui | DraftEdit.at | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/ui.rs | crate::ui | DraftEdit.confirmed | field | bool	generic	independent flag or predicate
-ambre-prose | src/ui.rs | crate::ui | LaidOffset.0 | field | u32	newtype-inner	offset newtype field or constructor
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.asked_pages | field | Option<(u32,u32)>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.awaiting_block | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.band_page | field | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
@@ -4479,7 +4259,6 @@ ambre-prose | src/ui.rs | crate::ui | ProseUiState.changed | field | bool	generi
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.compose_shape | field | Option<(String,ShapedRun)>	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.composing | field | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.drag_pointer | field | Option<(f32,f32)>	math	layout geometry local to algorithm
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.dragging | field | Option<(BlockId,u32)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.find_current | field | Option<u32>	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.followed | field | Option<String>	debt	planned: lot C5 LinkUrl
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.highlights_walked | field | u64	math	count, size or local index
@@ -4490,7 +4269,6 @@ ambre-prose | src/ui.rs | crate::ui | ProseUiState.reveal_page | field | Option<
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.suggesting | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.syncs | field | VecDeque<bool>	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.x_goal | field | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/ui.rs | crate::ui | ProseUiState::place_caret(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState::take_acked(as_drawn) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState::take_export() | ret | Option<(String,&'static str,Vec<u8>)>	debt	planned: lot B10 MediaType
 ambre-prose | src/ui.rs | crate::ui | ProseUiState::take_text_change(local) | param | bool	debt	finding: mode-selecting bools (confirmed)
@@ -4502,11 +4280,6 @@ ambre-prose | src/ui.rs | crate::ui | StatusFigures.paragraphs | field | String	
 ambre-prose | src/ui.rs | crate::ui | StatusFigures.with_spaces | field | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | StatusFigures.words | field | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | StatusFigures::labels() | ret | [&str;5]	free-text	text content / label / parser input
-ambre-prose | src/ui.rs | crate::ui | byte_at() | ret | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/ui.rs | crate::ui | byte_at(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/ui.rs | crate::ui | byte_at(text) | param | &str	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/ui.rs | crate::ui | chars() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/ui.rs | crate::ui | chars(text) | param | &str	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/a11y.rs | crate::view::a11y | ProseUiState::caret_announcement() | ret | Option<(BlockId,String)>	free-text	text content / label / parser input
 ambre-prose | src/view/a11y.rs | crate::view::a11y | TEXT_LIMIT | const | usize	math	count, size or local index
 ambre-prose | src/view/annotate.rs | crate::view::annotate | AnnotationIntent::Reply.text | field | String	free-text	text content / label / parser input
@@ -4523,7 +4296,6 @@ ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::lost_
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::page_under() | ret | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::page_under(x_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::page_under(y_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::span_under((start,end)) | param | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::span_under((x_px,y_px)) | param | (f32,f32)	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::span_under(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::suggestion_at(x_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
@@ -4558,22 +4330,17 @@ ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::is_empty() | re
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::len() | ret | usize	math	count, size or local index
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::with_capacity(capacity) | param | usize	math	count, size or local index
 ambre-prose | src/view/cache.rs | crate::view::cache | RunDrawState.glyph_runs | field | Vec<(usize,usize,f32)>	math	layout geometry local to algorithm
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::advance_cursor(n) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::apply_caret(extend) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::apply_caret(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::apply_caret(x_goal) | param | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::band_caret_span() | ret | Option<(f32,f32)>	math	layout geometry local to algorithm
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::band_caret_span(laid) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::block_len() | ret | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::caret_span() | ret | Option<(f32,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::end_drag() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::flow_span() | ret | Option<(f32,f32)>	math	layout geometry local to algorithm
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::flow_span(offset) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::flow_span(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::joins() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step() | ret | (BlockId,u32,bool)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
+ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step() | ret | (BlockId,RunOffset,bool)	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step(down) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step(laid) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step(x_goal) | param | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::move_cursor(extend) | param | bool	debt	finding: mode-selecting bools (confirmed)
@@ -4583,15 +4350,12 @@ ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::place_at(y)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::reveal_span((top,bottom)) | param | (f32,f32)	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::select_around(paragraph) | param | bool	debt	bug: laid and document offset spaces confused at the hit-test edge (confirmed for hit_test, suspected for select_around)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::shown_text() | ret | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::step() | ret | (BlockId,u32,bool)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
+ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::step() | ret | (BlockId,RunOffset,bool)	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::step(forward) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::step(laid) | param | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::step(word) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::text_ends() | ret | Option<(BlockId,BlockId,u32)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::tick_autoscroll() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::update_drag(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::update_drag(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | Spot | alias | (BlockId,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | DocPos::OnPage.page | field | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | DocPos::OnPage.x_in_page | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | DocPos::OnPage.y_in_page | field | f32	math	layout geometry local to algorithm
@@ -4628,7 +4392,6 @@ ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_move(
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_move(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_start(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_start(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/hit.rs | crate::view::hit | <ProseUiState as HitTest>::hit_test() | ret | Option<(BlockId,u32)>	debt	bug: laid and document offset spaces confused at the hit-test edge (confirmed for hit_test, suspected for select_around)
 ambre-prose | src/view/hit.rs | crate::view::hit | <ProseUiState as HitTest>::hit_test(x) | param | f64	trait	signature fixed by foreign trait
 ambre-prose | src/view/hit.rs | crate::view::hit | <ProseUiState as HitTest>::hit_test(y) | param | f64	trait	signature fixed by foreign trait
 ambre-prose | src/view/hit.rs | crate::view::hit | BandSlot.bottom | field | f32	math	layout geometry local to algorithm
@@ -4642,10 +4405,8 @@ ambre-prose | src/view/hit.rs | crate::view::hit | CellFrame.y1 | field | f32	ma
 ambre-prose | src/view/hit.rs | crate::view::hit | Fragment.height | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | Fragment.run_top | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | Fragment.top | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/hit.rs | crate::view::hit | HitOffset::of(offset) | param | u32	newtype-inner	offset newtype field or constructor
 ambre-prose | src/view/hit.rs | crate::view::hit | NoteSlot.bottom | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | NoteSlot.top | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::band_hit() | ret | Option<(BlockId,u32)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::band_hit(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::band_hit(x_in_page) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::band_hit(y_in_page) | param | f32	math	layout geometry local to algorithm
@@ -4661,8 +4422,6 @@ ambre-prose | src/view/hit.rs | crate::view::hit | cell_hit(x) | param | f32	mat
 ambre-prose | src/view/hit.rs | crate::view::hit | cell_hit(y) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | fragment(line_tops) | param | &[f32]	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | fragment(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/view/mod.rs | crate::view | Highlight.end | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/view/mod.rs | crate::view | Highlight.start | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/mod.rs | crate::view | ProseUiState::apply_layout() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/mod.rs | crate::view | ProseUiState::flow_index() | ret | Option<usize>	math	count, size or local index
 ambre-prose | src/view/mod.rs | crate::view | ProseUiState::resize(height_px) | param | f32	math	layout geometry local to algorithm
@@ -4678,7 +4437,7 @@ ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::local_caret
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::local_caret(local) | param | bool	generic	independent flag or predicate
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::reshape() | ret | Option<(String,ShapedRun)>	free-text	text content / label / parser input
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::reshape(kept) | param | Option<(String,ShapedRun)>	free-text	text content / label / parser input
-ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::reshape(wanted) | param | Option<(BlockId,u32,String)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
+ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::reshape(wanted) | param | Option<(BlockId,RunOffset,String)>	free-text	text, label or user content
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::resolve_page(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::resolve_page(top) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::table_cells((left,top_y)) | param | (f64,f64)	math	layout geometry local to algorithm
@@ -4687,17 +4446,12 @@ ambre-prose | src/view/paint.rs | crate::view::paint | SHADOW_OFFSET_PX | const 
 ambre-prose | src/view/paint.rs | crate::view::paint | ScreenBlock.local | field | bool	generic	independent flag or predicate
 ambre-prose | src/view/paint.rs | crate::view::paint | ScreenBlock.remote_carets | field | bool	generic	independent flag or predicate
 ambre-prose | src/view/paint.rs | crate::view::paint | ScreenBlock.top | field | f64	math	layout geometry local to algorithm
-ambre-prose | src/view/paint.rs | crate::view::paint | covered() | ret | Option<(u32,u32)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/view/paint.rs | crate::view::paint | covered(ends) | param | ((BlockId,u32),(BlockId,u32))	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/view/paint.rs | crate::view::paint | covered(len) | param | u32	math	count, size or local index
-ambre-prose | src/view/paint.rs | crate::view::paint | ordered() | ret | Option<((BlockId,u32),(BlockId,u32))>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/paint.rs | crate::view::paint | paint_sheet(height) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/paint.rs | crate::view::paint | paint_sheet(top) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/paint.rs | crate::view::paint | paint_sheet(width) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/paint.rs | crate::view::paint | place(body_top) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/paint.rs | crate::view::paint | place(content_width) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/paint.rs | crate::view::paint | place(left) | param | f64	math	layout geometry local to algorithm
-ambre-prose | src/view/provisional.rs | crate::view::provisional | Ghost.caret | field | Option<u32>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/provisional.rs | crate::view::provisional | Key | alias | (u64,u64,Option<Splitting>,String)	free-text	text content / label / parser input
 ambre-prose | src/view/provisional.rs | crate::view::provisional | Piece.index | field | usize	math	count, size or local index
 ambre-prose | src/view/provisional.rs | crate::view::provisional | Piece.provisional | field | bool	generic	independent flag or predicate
@@ -4707,12 +4461,6 @@ ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState:
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_drawn() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_fresh() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_table() | ret | (TableShape,f32)	math	layout geometry local to algorithm
-ambre-prose | src/view/provisional.rs | crate::view::provisional | Splitting.at | field | u32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/view/provisional.rs | crate::view::provisional | byte_at() | ret | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/view/provisional.rs | crate::view::provisional | byte_at(offset) | param | u32	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/view/provisional.rs | crate::view::provisional | byte_at(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/view/provisional.rs | crate::view::provisional | clip_marks(from) | param | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/view/provisional.rs | crate::view::provisional | clip_marks(to) | param | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/view/ruler.rs | crate::view::ruler | MIN_TEXT_PT | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerDrag.at_px | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerDrag::move_to(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
@@ -4736,7 +4484,6 @@ ambre-prose | src/view/slash.rs | crate::view::slash | SlashCommand::Heading.0 |
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashItem.label | field | &'static str	free-text	text content / label / parser input
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenu.query | field | String	free-text	text content / label / parser input
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenu.selected | field | usize	math	count, size or local index
-ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenu::span() | ret | (u32,u32)	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.anchor | field | Option<(f32,f32)>	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | Vec<&'static str>	free-text	text content / label / parser input
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.query | field | String	free-text	text content / label / parser input
@@ -6132,10 +5879,8 @@ ambre-toile | src/ui/presence.rs | crate::ui::presence | short_handle() | ret | 
 ambre-toile | src/ui/present.rs | crate::ui::present | Transition.cam_to_zoom | field | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/present.rs | crate::ui::present | Transition::new(cam_to_zoom) | param | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/present.rs | crate::ui::present | TransitionFrame.done | field | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through() | ret | u32	debt	finding: The UTF-16 caret and the codepoint splice are both raw integers (confirmed, consistent today): UTF-16 caret offset (u32) beside codepoint TextDelta (usize), both raw
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(after) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(before) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(caret) | param | u32	debt	finding: The UTF-16 caret and the codepoint splice are both raw integers (confirmed, consistent today): UTF-16 caret offset (u32) beside codepoint TextDelta (usize), both raw
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | notes_delta(new) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | notes_delta(old) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | slide_counter_label() | ret | String	free-text	label, message or user text

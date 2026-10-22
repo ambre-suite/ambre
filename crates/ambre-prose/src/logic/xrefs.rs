@@ -7,6 +7,8 @@
 
 use loro::TreeID;
 
+use ambre_bus::app::prose::DocOffset;
+
 use crate::doc;
 use crate::events::{CrossRefKind, ProseEvent, ProseOutcome, ProseRefusal, block_id};
 use crate::xref;
@@ -18,7 +20,7 @@ impl ProseState {
     pub(super) fn insert_cross_ref(
         &mut self,
         block: &TreeID,
-        pos: u32,
+        pos: DocOffset,
         target: &TreeID,
         kind: &CrossRefKind,
     ) -> ProseOutcome {
@@ -28,8 +30,8 @@ impl ProseState {
         let Some(body) = self.body_of(block) else {
             return Self::err_no_block(block);
         };
-        let at = pos as usize;
-        if at > body.len_unicode() {
+        let at = pos;
+        if at.to_usize() > body.len_unicode() {
             return Self::err_bad_range();
         }
         let value = xref::encode(*target, kind);
@@ -43,7 +45,7 @@ impl ProseState {
 
     /// Bring the target of the reference at `pos` in `block` into view
     /// (`PROSE-UI-085`). A broken reference has nowhere to go and says so.
-    pub(super) fn follow_cross_ref(&mut self, block: &TreeID, pos: u32) -> ProseOutcome {
+    pub(super) fn follow_cross_ref(&mut self, block: &TreeID, pos: DocOffset) -> ProseOutcome {
         let found = doc::anchors(&self.doc, doc::K_CROSS_REF)
             .into_iter()
             .find(|anchor| anchor.block == *block && anchor.offset == pos)
@@ -79,6 +81,7 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, BlockInit, ProseCommand, ResolvedCrossRef, tree_id};
+    use ambre_bus::app::prose::DocSpan;
 
     /// A heading "Intro", a paragraph, and a second heading "Details".
     fn document() -> (ProseState, Vec<BlockId>) {
@@ -101,7 +104,7 @@ mod tests {
         for (id, text) in ids.iter().zip(["Intro", "See ", "Details"]) {
             state.handle_command(ProseCommand::InsertText {
                 block_id: *id,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: text.to_owned(),
             });
         }
@@ -111,7 +114,7 @@ mod tests {
     fn refer(state: &mut ProseState, at: BlockId, target: BlockId, kind: CrossRefKind) {
         state.handle_command(ProseCommand::InsertCrossRef {
             block_id: at,
-            pos: 4,
+            pos: DocOffset::new(4),
             target_block_id: target,
             kind,
         });
@@ -142,7 +145,7 @@ mod tests {
         );
         state.handle_command(ProseCommand::InsertText {
             block_id: ids[2],
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "More ".to_owned(),
         });
         assert_eq!(shown(&mut state), vec![Some("2".to_owned())]);
@@ -256,7 +259,7 @@ mod tests {
         assert_eq!(state.text_of(&ids[1]).as_deref(), Some("See \u{fffc}"));
         state.handle_command(ProseCommand::DeleteText {
             block_id: ids[1],
-            range: (4, 5),
+            range: DocSpan::from_usize_range(4..5),
         });
         assert!(doc::anchors(state.document(), doc::K_CROSS_REF).is_empty());
     }
@@ -268,7 +271,7 @@ mod tests {
         let before = state.document().oplog_vv();
         let outcome = state.handle_command(ProseCommand::FollowCrossRef {
             block_id: ids[1],
-            pos: 4,
+            pos: DocOffset::new(4),
         });
         assert_eq!(
             outcome.display,
@@ -291,7 +294,7 @@ mod tests {
             ProseEvent::CrossRefsUpdated {
                 refs: vec![ResolvedCrossRef {
                     block_id: ids[1],
-                    offset: 4,
+                    offset: DocOffset::new(4),
                     target: ids[2],
                     shown: Some("2".to_owned()),
                 }]

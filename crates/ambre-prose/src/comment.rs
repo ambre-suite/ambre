@@ -8,6 +8,7 @@
 
 use std::collections::HashMap;
 
+use ambre_bus::app::prose::{DocCount, DocOffset};
 use ambre_core::{CommentId, ReplyId, UserId};
 use loro::{Container, LoroDoc, LoroList, LoroMap, LoroValue, TreeID, ValueOrContainer};
 
@@ -36,8 +37,8 @@ fn thread_of_key(key: &str) -> Option<CommentId> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Span {
     pub block: TreeID,
-    pub start: u32,
-    pub end: u32,
+    pub start: DocOffset,
+    pub end: DocOffset,
 }
 
 /// The entry of thread `id`, when `annots` holds one of that kind.
@@ -120,8 +121,8 @@ pub(crate) fn all(document: &LoroDoc) -> Vec<CommentId> {
 pub(crate) fn cached(entry: &LoroMap) -> Option<Span> {
     let block =
         TreeID::try_from(doc::read_string(entry, doc::ANNOT_ANCHOR_BLOCK)?.as_str()).ok()?;
-    let start = u32::try_from(doc::read_i64(entry, doc::ANNOT_ANCHOR_START)?).ok()?;
-    let end = u32::try_from(doc::read_i64(entry, doc::ANNOT_ANCHOR_END)?).ok()?;
+    let start = DocOffset::new(u32::try_from(doc::read_i64(entry, doc::ANNOT_ANCHOR_START)?).ok()?);
+    let end = DocOffset::new(u32::try_from(doc::read_i64(entry, doc::ANNOT_ANCHOR_END)?).ok()?);
     Some(Span { block, start, end })
 }
 
@@ -131,13 +132,13 @@ pub(crate) fn cached(entry: &LoroMap) -> Option<Span> {
 pub(crate) fn runs(document: &LoroDoc, blocks: &[TreeID]) -> Vec<(CommentId, Span)> {
     let mut out = Vec::new();
     for id in blocks {
-        let mut offset: u32 = 0;
+        let mut offset = DocOffset::ZERO;
         for delta in doc::get_block_text(document, id).to_delta() {
             let loro::TextDelta::Insert { insert, attributes } = delta else {
                 continue;
             };
-            let length = u32::try_from(insert.chars().count()).unwrap_or(u32::MAX);
-            let end = offset.saturating_add(length);
+            let length = DocCount::of(&insert);
+            let end = offset + length;
             for key in attributes.iter().flat_map(|attributes| attributes.keys()) {
                 if let Some(thread) = thread_of_key(key) {
                     out.push((
@@ -212,8 +213,8 @@ pub fn threads(document: &LoroDoc) -> Vec<CommentThread> {
             Some(CommentThread {
                 comment_id: id,
                 anchor_block: anchor.map(|span| block_id(span.block)),
-                anchor_start: anchor.map_or(0, |span| span.start),
-                anchor_end: anchor.map_or(0, |span| span.end),
+                anchor_start: anchor.map_or(DocOffset::ZERO, |span| span.start),
+                anchor_end: anchor.map_or(DocOffset::ZERO, |span| span.end),
                 orphaned: live.is_none(),
                 resolved: doc::read_bool(&entry, doc::ANNOT_RESOLVED) == Some(true),
                 replies: replies(&entry),

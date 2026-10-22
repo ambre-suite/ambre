@@ -262,6 +262,7 @@ mod tests {
     use super::*;
     use crate::events::ProseCommand;
     use crate::logic::ProseState;
+    use ambre_bus::app::prose::DocOffset;
 
     /// A snapshot carrying `version` in its register. A `None` version writes no
     /// register at all.
@@ -324,7 +325,7 @@ mod tests {
         let root = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: root,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "kept".to_owned(),
         });
         let before = state.export_snapshot();

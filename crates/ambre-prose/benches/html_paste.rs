@@ -8,7 +8,7 @@
 
 use std::hint::black_box;
 
-use ambre_bus::app::prose::ProseCommand;
+use ambre_bus::app::prose::{DocOffset, ProseCommand};
 use ambre_prose::logic::ProseState;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
@@ -33,7 +33,7 @@ fn paste(html: &str) -> impl FnMut() -> (ProseState, ProseCommand) + '_ {
             panic!("a document holds a block");
         };
         let command = ProseCommand::Paste {
-            at: (first, 0),
+            at: (first, DocOffset::ZERO),
             text: String::new(),
             html: Some(html.to_owned()),
             payload: None,

@@ -1,6 +1,7 @@
 //! The edit and the delete of a message against their contract rows
 //! (`features/ambre-spec-murmure-messages.md`).
 
+use ambre_bus::CharSpan;
 use ambre_bus::{
     ActivityKind, Mention, MentionTarget, MessageDraft, MessageView, Reaction, Timestamp,
 };
@@ -130,7 +131,7 @@ fn an_edit_changes_the_body_and_marks_the_message_edited() {
         styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::User(carol),
-            range: 0..6,
+            range: CharSpan::from_usize_range(0..6),
         }],
     });
     assert!(!alice.only_message().edited);
@@ -139,7 +140,7 @@ fn an_edit_changes_the_body_and_marks_the_message_edited() {
         styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::User(dave),
-            range: 15..20,
+            range: CharSpan::from_usize_range(15..20),
         }],
     };
 
@@ -179,7 +180,7 @@ fn an_edit_with_a_mention_past_its_body_is_refused() {
         styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::Channel,
-            range: 0..9,
+            range: CharSpan::from_usize_range(0..9),
         }],
     };
     let refused = alice

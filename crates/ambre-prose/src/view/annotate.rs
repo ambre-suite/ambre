@@ -7,9 +7,11 @@
 
 use std::collections::HashMap;
 
+use ambre_bus::app::prose::DocSpan;
 use ambre_core::{CommentId, SuggestionId};
 
 use crate::events::{BlockId, CommentThread, LinkSpan, ProseCommand, SuggestionKind, tree_id};
+use crate::layout::run::{RunOffset, RunSpan};
 use crate::ui::ProseUiState;
 use crate::view::column::DocPos;
 use crate::view::hit::{Fragment, fragment};
@@ -143,7 +145,7 @@ impl ProseUiState {
     fn span_under(
         &self,
         block: BlockId,
-        (start, end): (u32, u32),
+        span: DocSpan,
         page: u32,
         (x_px, y_px): (f32, f32),
     ) -> Option<ScreenRect> {
@@ -152,7 +154,11 @@ impl ProseUiState {
         let run = self.shaped.blocks.get(&layout.block_id)?.data();
         let piece = fragment(layout, page, &run.line_tops())?;
         let bottom = piece.run_top + piece.height;
-        run.range_boxes(start, end).into_iter().find_map(|part| {
+        let laid = RunSpan::new(
+            RunOffset::new(span.start.get()),
+            RunOffset::new(span.end.get()),
+        );
+        run.range_boxes(laid).into_iter().find_map(|part| {
             let (y0, y1) = (part.y0 as f32, part.y1 as f32);
             if y1 <= piece.run_top || y0 >= bottom {
                 return None;
@@ -183,8 +189,12 @@ impl ProseUiState {
         let page = self.page_under(x_px, y_px)?;
         self.suggestions.iter().find_map(|suggestion| {
             suggestion.spans.iter().find_map(|span| {
-                let rect =
-                    self.span_under(span.block_id, (span.start, span.end), page, (x_px, y_px))?;
+                let rect = self.span_under(
+                    span.block_id,
+                    DocSpan::new(span.start, span.end),
+                    page,
+                    (x_px, y_px),
+                )?;
                 Some(HoveredSuggestion {
                     suggestion_id: suggestion.suggestion_id,
                     kind: suggestion.kind,
@@ -200,8 +210,13 @@ impl ProseUiState {
     pub fn link_at(&self, x_px: f32, y_px: f32) -> Option<&LinkSpan> {
         let page = self.page_under(x_px, y_px)?;
         self.links.iter().find(|link| {
-            self.span_under(link.block_id, (link.start, link.end), page, (x_px, y_px))
-                .is_some()
+            self.span_under(
+                link.block_id,
+                DocSpan::new(link.start, link.end),
+                page,
+                (x_px, y_px),
+            )
+            .is_some()
         })
     }
 
@@ -312,7 +327,7 @@ impl ProseUiState {
                     .blocks
                     .get(&layout.block_id)?
                     .data()
-                    .caret_box(thread.anchor_start);
+                    .caret_box(RunOffset::new(thread.anchor_start.get()));
                 let (page, piece) = self.fragment_at(block, caret.y0 as f32)?;
                 let (_, y_px) = self.to_screen(block, page, piece, 0.0, caret.y0 as f32);
                 Some(ThreadAnchor {
@@ -327,6 +342,8 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
+    use crate::layout::run::{RunOffset, RunSpan};
+    use ambre_bus::app::prose::DocOffset;
     use ambre_core::{CommentId, SuggestionId, UserId};
 
     use crate::events::{
@@ -363,8 +380,8 @@ mod tests {
             user_id: UserId::from_bytes([3; 16]),
             spans: vec![SuggestionSpan {
                 block_id: block,
-                start,
-                end,
+                start: DocOffset::new(start),
+                end: DocOffset::new(end),
             }],
         }
     }
@@ -376,7 +393,7 @@ mod tests {
             .expect("laid out");
         let layout = &ui.shaped.layout.blocks[index];
         let run = ui.shaped.blocks[&layout.block_id].data();
-        let part = run.range_boxes(start, end)[0];
+        let part = run.range_boxes(RunSpan::new(RunOffset::new(start), RunOffset::new(end)))[0];
         let piece = crate::view::hit::fragment(layout, layout.page_start, &run.line_tops())
             .expect("a fragment");
         ui.to_screen(
@@ -424,8 +441,8 @@ mod tests {
         let thread = |block, resolved| CommentThread {
             comment_id: CommentId::new(),
             anchor_block: Some(block),
-            anchor_start: 4,
-            anchor_end: 9,
+            anchor_start: DocOffset::new(4),
+            anchor_end: DocOffset::new(9),
             orphaned: false,
             resolved,
             replies: Vec::new(),
@@ -461,8 +478,8 @@ mod tests {
         let thread = |block| CommentThread {
             comment_id: CommentId::new(),
             anchor_block: Some(block),
-            anchor_start: 0,
-            anchor_end: 3,
+            anchor_start: DocOffset::ZERO,
+            anchor_end: DocOffset::new(3),
             orphaned: false,
             resolved: false,
             replies: Vec::new(),
@@ -490,8 +507,8 @@ mod tests {
             threads: vec![CommentThread {
                 comment_id: id,
                 anchor_block: Some(far),
-                anchor_start: 0,
-                anchor_end: 3,
+                anchor_start: DocOffset::ZERO,
+                anchor_end: DocOffset::new(3),
                 orphaned: false,
                 resolved: false,
                 replies: Vec::new(),
@@ -562,8 +579,8 @@ mod tests {
         let thread = || CommentThread {
             comment_id: CommentId::new(),
             anchor_block: Some(a),
-            anchor_start: 4,
-            anchor_end: 9,
+            anchor_start: DocOffset::new(4),
+            anchor_end: DocOffset::new(9),
             orphaned: false,
             resolved: false,
             replies: Vec::new(),
@@ -592,7 +609,7 @@ mod tests {
         // A scroll and a peer's text above move the thread: its draft stays.
         ui.scroll_by(down(120.0));
         let mut shifted = all.clone();
-        shifted[0].anchor_start = 7;
+        shifted[0].anchor_start = DocOffset::new(7);
         ui.apply_event(&ProseEvent::CommentsUpdated { threads: shifted });
         assert!(ui.lost_drafts(&drafts).is_empty(), "a move keeps the draft");
 

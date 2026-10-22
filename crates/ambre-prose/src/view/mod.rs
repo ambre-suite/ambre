@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use loro::TreeID;
 
-use ambre_bus::app::prose::ProseCommand;
+use ambre_bus::app::prose::{DocOffset, ProseCommand};
 use ambre_draw::kinetic::ScrollStep;
 
 use crate::events::{BlockId, TocEntry, tree_id};
@@ -50,8 +50,8 @@ pub enum HighlightKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Highlight {
     pub kind: HighlightKind,
-    pub start: u32,
-    pub end: u32,
+    pub start: DocOffset,
+    pub end: DocOffset,
 }
 
 impl ProseUiState {
@@ -191,7 +191,7 @@ impl ProseUiState {
     /// the highlights of the blocks it draws and no other (`PROSE-UI-020`).
     pub(crate) fn index_highlights(&mut self) {
         let mut marks: HashMap<BlockId, Vec<Highlight>> = HashMap::new();
-        let mut push = |block: BlockId, kind: HighlightKind, start: u32, end: u32| {
+        let mut push = |block: BlockId, kind: HighlightKind, start: DocOffset, end: DocOffset| {
             if start < end {
                 marks
                     .entry(block)
@@ -225,8 +225,8 @@ impl ProseUiState {
             push(
                 found.block_id,
                 HighlightKind::Find,
-                found.range.0,
-                found.range.1,
+                found.range.start,
+                found.range.end,
             );
         }
         self.highlights = marks;
@@ -236,6 +236,7 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod tests {
+    use crate::layout::run::RunCount;
     use std::sync::Arc;
 
     use super::*;
@@ -263,7 +264,7 @@ pub(crate) mod tests {
         if !text.is_empty() {
             state.handle_command(ProseCommand::InsertText {
                 block_id: id,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: text.to_owned(),
             });
         }
@@ -405,7 +406,7 @@ pub(crate) mod tests {
         let in_view = |ui: &ProseUiState| {
             let hit = ui.find_matches[ui.find_current.expect("a current match") as usize];
             let (top, bottom) = ui
-                .flow_span(hit.block_id, hit.range.0, false)
+                .flow_span(hit.block_id, hit.range.start, false)
                 .expect("the match is laid out");
             let scroll = ui.viewport.scroll_y;
             top >= scroll && bottom <= scroll + ui.viewport.visible_height()
@@ -472,7 +473,7 @@ pub(crate) mod tests {
         let first = Arc::downgrade(&ui.shaped);
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "a".to_owned(),
         });
         hand(&mut state, &mut ui);
@@ -482,7 +483,7 @@ pub(crate) mod tests {
         );
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "b".to_owned(),
         });
         hand(&mut state, &mut ui);
@@ -620,7 +621,7 @@ pub(crate) mod tests {
         let edited = *state.root_blocks().last().expect("a block");
         state.handle_command(ProseCommand::InsertText {
             block_id: edited,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "more ".to_owned(),
         });
         // No caller names the block: the document reports what it was written.
@@ -640,7 +641,7 @@ pub(crate) mod tests {
         bob.import_snapshot(&alice.export_snapshot())
             .expect("the seed imports");
         let edited = *alice.root_blocks().last().expect("a block");
-        let type_one = |alice: &mut ProseState, bob: &mut ProseState, pos: u32| {
+        let type_one = |alice: &mut ProseState, bob: &mut ProseState, pos: DocOffset| {
             let delta = alice
                 .handle_command(ProseCommand::InsertText {
                     block_id: edited,
@@ -653,23 +654,23 @@ pub(crate) mod tests {
         };
         // Each peer grew a paragraph on opening. Until Alice holds Bob's
         // removal of his, every import rewinds the tree and names each block.
-        type_one(&mut alice, &mut bob, 1);
+        type_one(&mut alice, &mut bob, DocOffset::new(1));
         let back = bob
             .handle_command(ProseCommand::InsertText {
                 block_id: edited,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: "y".to_owned(),
             })
             .update
             .expect("the edit exports");
         alice.apply_remote(&back);
-        type_one(&mut alice, &mut bob, 2);
+        type_one(&mut alice, &mut bob, DocOffset::new(2));
         let before = bob.shaped_layout();
-        type_one(&mut alice, &mut bob, 3);
+        type_one(&mut alice, &mut bob, DocOffset::new(3));
         let after = bob.shaped_layout();
         let edited = crate::events::tree_id(edited);
         let old = before.blocks[&edited].data().len();
-        assert_eq!(after.blocks[&edited].data().len(), old + 1);
+        assert_eq!(after.blocks[&edited].data().len(), old + RunCount::new(1));
         for (id, run) in &before.blocks {
             if *id != edited {
                 assert!(after.blocks.get(id) == Some(run), "block {id:?}");

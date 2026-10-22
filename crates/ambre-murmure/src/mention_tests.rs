@@ -1,6 +1,7 @@
 //! The mentions of a message against their contract rows
 //! (`features/ambre-spec-murmure-mentions.md`).
 
+use ambre_bus::CharSpan;
 use ambre_bus::{Mention, MentionCount, MentionTarget, MessageDraft, MessageView, Timestamp};
 use ambre_core::{ChannelId, Seq, UserId};
 use loro::{Container, LoroValue, TextDelta, ValueOrContainer};
@@ -41,7 +42,10 @@ fn open_from(state: &ChannelState) -> ChannelState {
 }
 
 fn at(target: MentionTarget, range: std::ops::Range<usize>) -> Mention {
-    Mention { target, range }
+    Mention {
+        target,
+        range: CharSpan::from_usize_range(range),
+    }
 }
 
 fn draft(text: &str, mentions: Vec<Mention>) -> MessageDraft {

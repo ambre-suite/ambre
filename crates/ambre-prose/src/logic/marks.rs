@@ -7,6 +7,8 @@
 //! refused here rather than left to the CRDT engine, so the refusal names the
 //! registry.
 
+use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
+
 use loro::TreeID;
 
 use loro::LoroValue;
@@ -31,7 +33,7 @@ impl ProseState {
     pub(super) fn apply_mark(
         &mut self,
         id: &TreeID,
-        range: (u32, u32),
+        range: DocSpan,
         key: &str,
         value: Option<&str>,
     ) -> ProseOutcome {
@@ -41,7 +43,8 @@ impl ProseState {
         if mark::is_owned_anchor(key) {
             return ProseOutcome::refused(ProseRefusal::AnchorKey(key.to_owned()));
         }
-        let (start, end) = ordered(range);
+        let span = ordered(range);
+        let (start, end) = (span.start.to_usize(), span.end.to_usize());
         if end > body.len_unicode() || start == end {
             return Self::err_bad_range();
         }
@@ -69,12 +72,7 @@ impl ProseState {
     }
 
     /// Remove one mark from a range.
-    pub(super) fn remove_mark(
-        &mut self,
-        id: &TreeID,
-        range: (u32, u32),
-        key: &str,
-    ) -> ProseOutcome {
+    pub(super) fn remove_mark(&mut self, id: &TreeID, range: DocSpan, key: &str) -> ProseOutcome {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
@@ -84,7 +82,8 @@ impl ProseState {
         if mark::is_owned_anchor(key) {
             return ProseOutcome::refused(ProseRefusal::AnchorKey(key.to_owned()));
         }
-        let (start, end) = ordered(range);
+        let span = ordered(range);
+        let (start, end) = (span.start.to_usize(), span.end.to_usize());
         if end > body.len_unicode() || start == end {
             return Self::err_bad_range();
         }
@@ -99,11 +98,12 @@ impl ProseState {
     /// The formatting keys alone (`ambre-spec-prose-schema.md section 3`). A
     /// comment, a suggestion, a footnote and a cross reference are anchors
     /// rather than formatting, and each has a feature that owns its removal.
-    pub(super) fn clear_inline_marks(&mut self, id: &TreeID, range: (u32, u32)) -> ProseOutcome {
+    pub(super) fn clear_inline_marks(&mut self, id: &TreeID, range: DocSpan) -> ProseOutcome {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
-        let (start, end) = ordered(range);
+        let span = ordered(range);
+        let (start, end) = (span.start.to_usize(), span.end.to_usize());
         if end > body.len_unicode() || start == end {
             return Self::err_bad_range();
         }
@@ -163,13 +163,17 @@ impl ProseState {
     ///
     /// A key carried by some of the selected text and not all of it is
     /// mixed, whichever end carries it (`PROSE-UI-096`).
-    pub(super) fn read_marks(&self, anchor: (BlockId, u32), focus: (BlockId, u32)) -> ProseOutcome {
+    pub(super) fn read_marks(
+        &self,
+        anchor: (BlockId, DocOffset),
+        focus: (BlockId, DocOffset),
+    ) -> ProseOutcome {
         let mut fold = MarkFold::default();
-        for (block, (start, end)) in self.selected_spans(anchor, focus) {
+        for (block, span) in self.selected_spans(anchor, focus) {
             let Some(LoroValue::List(runs)) = self.marks_of(&block) else {
                 continue;
             };
-            let mut at = 0u32;
+            let mut at = DocOffset::ZERO;
             for run in runs.iter() {
                 let LoroValue::Map(fields) = run else {
                     continue;
@@ -177,9 +181,9 @@ impl ProseState {
                 let Some(LoroValue::String(text)) = fields.get(RUN_TEXT) else {
                     continue;
                 };
-                let len = crate::ui::chars(text);
-                let covered = end.min(at + len).saturating_sub(start.max(at));
-                if covered > 0 {
+                let len = DocCount::of(text);
+                let covered = span.end.min(at + len).count_from(span.start.max(at));
+                if !covered.is_zero() {
                     fold.take(&marks_of_run(run));
                 }
                 at += len;
@@ -201,8 +205,8 @@ impl ProseState {
     /// refused, since only a presence mark needs no value.
     pub(super) fn format_selection(
         &mut self,
-        anchor: (BlockId, u32),
-        focus: (BlockId, u32),
+        anchor: (BlockId, DocOffset),
+        focus: (BlockId, DocOffset),
         key: &str,
         apply: bool,
     ) -> ProseOutcome {
@@ -212,13 +216,14 @@ impl ProseState {
         let spans: Vec<_> = self
             .selected_spans(anchor, focus)
             .into_iter()
-            .filter(|(_, (start, end))| start < end)
+            .filter(|(_, span)| !span.is_empty())
             .collect();
         if spans.is_empty() {
             return Self::err_bad_range();
         }
         for (block, range) in spans {
-            let (start, end) = ordered(range);
+            let span = ordered(range);
+            let (start, end) = (span.start.to_usize(), span.end.to_usize());
             let Some(body) = self.body_of(&tree_id(block)) else {
                 return Self::err_no_block(&tree_id(block));
             };
@@ -239,15 +244,15 @@ impl ProseState {
 
     pub(super) fn selected_spans(
         &self,
-        anchor: (BlockId, u32),
-        focus: (BlockId, u32),
-    ) -> Vec<(BlockId, (u32, u32))> {
+        anchor: (BlockId, DocOffset),
+        focus: (BlockId, DocOffset),
+    ) -> Vec<(BlockId, DocSpan)> {
         if anchor.0 == focus.0 {
             let (a, b) = (anchor.1.min(focus.1), anchor.1.max(focus.1));
-            return vec![(anchor.0, (a, b))];
+            return vec![(anchor.0, DocSpan::new(a, b))];
         }
         let order = self.document_order();
-        let at = |spot: (BlockId, u32)| order.iter().position(|id| *id == tree_id(spot.0));
+        let at = |spot: (BlockId, DocOffset)| order.iter().position(|id| *id == tree_id(spot.0));
         let (Some(a), Some(f)) = (at(anchor), at(focus)) else {
             return Vec::new();
         };
@@ -261,11 +266,15 @@ impl ProseState {
             .unwrap_or_default()
             .iter()
             .filter_map(|id| {
-                let len = crate::ui::chars(&self.body_of(id)?.to_string());
+                let len = DocCount::from_len(self.body_of(id)?.len_unicode()).as_end();
                 let block = crate::events::block_id(*id);
-                let start = if block == head.0 { head.1 } else { 0 };
+                let start = if block == head.0 {
+                    head.1
+                } else {
+                    DocOffset::ZERO
+                };
                 let end = if block == tail.0 { tail.1 } else { len };
-                Some((block, (start, end.min(len))))
+                Some((block, DocSpan::new(start, end.min(len))))
             })
             .collect()
     }
@@ -364,22 +373,24 @@ fn marks_of_run(fields: &LoroValue) -> MarkSet {
 }
 
 /// The two ends of a range, smaller first.
-fn ordered(range: (u32, u32)) -> (usize, usize) {
-    let (a, b) = (range.0 as usize, range.1 as usize);
-    if a <= b { (a, b) } else { (b, a) }
+fn ordered(range: DocSpan) -> DocSpan {
+    let (a, b) = (range.start, range.end);
+    if a <= b { range } else { DocSpan::new(b, a) }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::events::{Align, ParagraphStyle, ProseCommand, ProseEvent};
     use crate::logic::ProseState;
+    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocSpan;
 
     fn document_with_text(text: &str) -> (ProseState, crate::events::BlockId) {
         let mut state = ProseState::new().expect("a document is built");
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: text.to_owned(),
         });
         (state, block)
@@ -416,7 +427,7 @@ pub(crate) mod tests {
         for key in ["b", "i"] {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: (0, 4),
+                range: DocSpan::from_usize_range(0..4),
                 key: key.to_owned(),
                 value: None,
             });
@@ -424,7 +435,7 @@ pub(crate) mod tests {
             assert!((marked - plain).abs() > 0.5, "{key} changes the glyphs");
             state.handle_command(ProseCommand::RemoveMark {
                 block_id: block,
-                range: (0, 4),
+                range: DocSpan::from_usize_range(0..4),
                 key: key.to_owned(),
             });
             let back = laid_width(&mut state, block);
@@ -437,7 +448,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
             key: "fs".to_owned(),
             value: Some("11.0".to_owned()),
         });
@@ -450,7 +461,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         let outcome = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
             key: "no-such-key".to_owned(),
             value: None,
         });
@@ -462,14 +473,14 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
             key: "b".to_owned(),
             value: None,
         });
         anchor(&mut state, &block, 0..5);
         state.handle_command(ProseCommand::ClearInlineMarks {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
         });
         assert!(carries_mark(&state, &block, "cm"));
         assert!(!carries_mark(&state, &block, "\"b\""));
@@ -480,7 +491,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         let outcome = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (2, 2),
+            range: DocSpan::from_usize_range(2..2),
             key: "b".to_owned(),
             value: None,
         });
@@ -528,7 +539,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("one two");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 3),
+            range: DocSpan::from_usize_range(0..3),
             key: "b".to_owned(),
             value: None,
         });
@@ -547,7 +558,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
             key: "fg".to_owned(),
             // The opaque eight-digit spelling of the same colour.
             value: Some("#3366CCFF".to_owned()),
@@ -591,7 +602,7 @@ pub(crate) mod tests {
         ] {
             let outcome = state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: (0, 5),
+                range: DocSpan::from_usize_range(0..5),
                 key: key.to_owned(),
                 value: value.map(str::to_owned),
             });
@@ -611,7 +622,7 @@ pub(crate) mod tests {
         for key in ["cm", thread.as_str(), "si", "sd", "fn", "ref", "f:pn"] {
             let outcome = state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: (0, 5),
+                range: DocSpan::from_usize_range(0..5),
                 key: key.to_owned(),
                 value: Some("x".to_owned()),
             });
@@ -626,7 +637,7 @@ pub(crate) mod tests {
         assert_eq!(state.export_snapshot(), before);
         let link = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
             key: "a".to_owned(),
             value: Some("https://example.org".to_owned()),
         });
@@ -640,13 +651,13 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::InsertFootnote {
             block_id: block,
-            pos: 5,
+            pos: DocOffset::new(5),
             note_text: "A note.".to_owned(),
         });
         let before = state.export_snapshot();
         let outcome = state.handle_command(ProseCommand::RemoveMark {
             block_id: block,
-            range: (0, 6),
+            range: DocSpan::from_usize_range(0..6),
             key: "fn".to_owned(),
         });
         assert!(matches!(
@@ -663,7 +674,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
             key: "b".to_owned(),
             value: None,
         });
@@ -677,7 +688,7 @@ pub(crate) mod tests {
 
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
             key: "i".to_owned(),
             value: None,
         });
@@ -697,7 +708,7 @@ pub(crate) mod tests {
         for key in ["b", "i"] {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: (0, 7),
+                range: DocSpan::from_usize_range(0..7),
                 key: key.to_owned(),
                 value: None,
             });
@@ -705,7 +716,7 @@ pub(crate) mod tests {
 
         state.handle_command(ProseCommand::RemoveMark {
             block_id: block,
-            range: (0, 3),
+            range: DocSpan::from_usize_range(0..3),
             key: "b".to_owned(),
         });
 
@@ -738,7 +749,7 @@ pub(crate) mod tests {
         ] {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: (0, 5),
+                range: DocSpan::from_usize_range(0..5),
                 key: key.to_owned(),
                 value: value.map(str::to_owned),
             });
@@ -747,7 +758,7 @@ pub(crate) mod tests {
         anchor(&mut state, &block, 0..5);
         state.handle_command(ProseCommand::ClearInlineMarks {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
         });
 
         assert_eq!(state.text_of(&block).unwrap_or_default(), "hello");
@@ -768,7 +779,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: (0, 5),
+            range: DocSpan::from_usize_range(0..5),
             key: "b".to_owned(),
             value: None,
         });
@@ -823,13 +834,13 @@ pub(crate) mod tests {
             let (mut state, block) = document_with_text("one");
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: (0, 3),
+                range: DocSpan::from_usize_range(0..3),
                 key: key.to_owned(),
                 value: value.map(str::to_owned),
             });
             state.handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: 3,
+                pos: DocOffset::new(3),
                 text: "X".to_owned(),
             });
             let covered: String = runs(&state, &block)

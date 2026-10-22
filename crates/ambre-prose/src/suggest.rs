@@ -7,6 +7,7 @@
 //! never share a value. A span can carry an insertion and a deletion at once
 //! (`PROSE-FEAT-258`). Nothing in this module writes.
 
+use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
 use ambre_core::{SuggestionId, UserId};
 use loro::{Container, LoroDoc, LoroMap, LoroText, LoroValue, TreeID, ValueOrContainer};
 
@@ -68,8 +69,8 @@ pub(crate) fn owner(entry: &LoroMap) -> Option<UserId> {
 /// One run of text under the marks it carries, in its block's own offsets.
 #[derive(Clone, Debug)]
 pub(crate) struct Run {
-    pub start: u32,
-    pub end: u32,
+    pub start: DocOffset,
+    pub end: DocOffset,
     /// Every suggestion mark on the run.
     pub marks: Vec<(SuggestionKind, SuggestionId)>,
 }
@@ -77,15 +78,20 @@ pub(crate) struct Run {
 /// The runs of one block, clipped to `start..end`, each with the suggestion
 /// marks it carries. A run with no suggestion mark is listed too, with none.
 #[must_use]
-pub(crate) fn runs(document: &LoroDoc, block: &TreeID, start: u32, end: u32) -> Vec<Run> {
+pub(crate) fn runs(
+    document: &LoroDoc,
+    block: &TreeID,
+    start: DocOffset,
+    end: DocOffset,
+) -> Vec<Run> {
     let mut out = Vec::new();
-    let mut offset: u32 = 0;
+    let mut offset = DocOffset::ZERO;
     for delta in doc::get_block_text(document, block).to_delta() {
         let loro::TextDelta::Insert { insert, attributes } = delta else {
             continue;
         };
-        let length = u32::try_from(insert.chars().count()).unwrap_or(u32::MAX);
-        let run_end = offset.saturating_add(length);
+        let length = DocCount::of(&insert);
+        let run_end = offset + length;
         let (from, to) = (offset.max(start), run_end.min(end));
         if from < to {
             let mut marks: Vec<(SuggestionKind, SuggestionId)> = attributes
@@ -114,7 +120,8 @@ pub(crate) fn runs(document: &LoroDoc, block: &TreeID, start: u32, end: u32) -> 
 /// its expansion. Typed text would then grow a suggestion its typist never
 /// made (`PROSE-FEAT-266`). Only the inserted range is read, so a keystroke
 /// pays for its own characters and not for the block.
-pub(crate) fn strip_inherited(body: &LoroText, start: usize, end: usize) -> Result<(), String> {
+pub(crate) fn strip_inherited(body: &LoroText, span: DocSpan) -> Result<(), String> {
+    let (start, end) = (span.start.to_usize(), span.end.to_usize());
     let delta = body
         .slice_delta(start, end, loro::cursor::PosType::Unicode)
         .map_err(|e| format!("{e:?}"))?;
@@ -143,10 +150,10 @@ pub(crate) fn strip_inherited(body: &LoroText, start: usize, end: usize) -> Resu
 pub(crate) fn spans(
     document: &LoroDoc,
     blocks: &[TreeID],
-) -> Vec<(SuggestionId, SuggestionKind, TreeID, u32, u32)> {
-    let mut out: Vec<(SuggestionId, SuggestionKind, TreeID, u32, u32)> = Vec::new();
+) -> Vec<(SuggestionId, SuggestionKind, TreeID, DocOffset, DocOffset)> {
+    let mut out: Vec<(SuggestionId, SuggestionKind, TreeID, DocOffset, DocOffset)> = Vec::new();
     for block in blocks {
-        for run in runs(document, block, 0, u32::MAX) {
+        for run in runs(document, block, DocOffset::ZERO, DocOffset::MAX) {
             for (kind, id) in run.marks {
                 let joined = out
                     .iter_mut()

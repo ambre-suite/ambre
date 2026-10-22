@@ -1,6 +1,7 @@
 //! The style marks of a message body against their contract rows
 //! (`features/ambre-spec-murmure-composer.md`).
 
+use ambre_bus::CharSpan;
 use ambre_bus::{MessageDraft, MessageView, StyleMark, TextStyle, Timestamp};
 use ambre_core::{ChannelId, Seq, UserId};
 use loro::{Container, LoroText, LoroValue, TextDelta, ValueOrContainer};
@@ -38,7 +39,10 @@ fn open_from(state: &ChannelState) -> ChannelState {
 }
 
 fn mark(style: TextStyle, range: std::ops::Range<usize>) -> StyleMark {
-    StyleMark { style, range }
+    StyleMark {
+        style,
+        range: CharSpan::from_usize_range(range),
+    }
 }
 
 fn link(address: &str) -> TextStyle {

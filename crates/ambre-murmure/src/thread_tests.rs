@@ -2,6 +2,7 @@
 //! reply writes, what a root shows of its thread, and the one field of a
 //! root another member may write.
 
+use ambre_bus::CharSpan;
 use std::collections::HashMap;
 
 use ambre_bus::{
@@ -694,7 +695,7 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
         styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::User(alice),
-            range: 0..6,
+            range: CharSpan::from_usize_range(0..6),
         }],
     };
     let replied = state

@@ -7,6 +7,7 @@
 //! to compare, only state and derived structures.
 
 use ambre_core::Argb;
+use ambre_core::{CharCount, CharOffset};
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
 
@@ -2631,8 +2632,8 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
         frame: frame.clone(),
         base: String::new(),
         delta: TextDelta {
-            at: 0,
-            delete: 0,
+            at: CharOffset::ZERO,
+            delete: CharCount::ZERO,
             insert: "open on the budget".into(),
         },
     });
@@ -2662,8 +2663,8 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
             frame: pasted[0].clone(),
             base: "open on the budget".into(),
             delta: TextDelta {
-                at: 0,
-                delete: 0,
+                at: CharOffset::ZERO,
+                delete: CharCount::ZERO,
                 insert: "A: ".into(),
             },
         })
@@ -2674,8 +2675,8 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
             frame: pasted[0].clone(),
             base: "open on the budget".into(),
             delta: TextDelta {
-                at: 18,
-                delete: 0,
+                at: CharOffset::new(18),
+                delete: CharCount::ZERO,
                 insert: " (B)".into(),
             },
         })
@@ -3811,8 +3812,8 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
             frame: frame.clone(),
             base: String::new(),
             delta: TextDelta {
-                at: 0,
-                delete: 0,
+                at: CharOffset::ZERO,
+                delete: CharCount::ZERO,
                 insert: "open on the budget".into(),
             },
         })
@@ -4071,8 +4072,8 @@ fn follow_state_is_not_synced() {
 /// A single-splice insertion at `at` (no deletion), the common editor edit.
 fn insert_notes(at: usize, s: &str) -> TextDelta {
     TextDelta {
-        at,
-        delete: 0,
+        at: CharOffset::from_usize(at),
+        delete: CharCount::ZERO,
         insert: s.to_owned(),
     }
 }
@@ -4201,8 +4202,8 @@ fn edit_notes_clamps_out_of_range_splice() {
         frame: f.clone(),
         base: "abcZ".into(),
         delta: TextDelta {
-            at: 0,
-            delete: 999,
+            at: CharOffset::ZERO,
+            delete: CharCount::new(999),
             insert: String::new(),
         },
     });
@@ -5431,8 +5432,8 @@ fn correcting_a_message_leaves_its_neighbours_as_they_read() {
         thread: t.clone(),
         message: 1,
         delta: TextDelta {
-            at: 3,
-            delete: 0,
+            at: CharOffset::new(3),
+            delete: CharCount::ZERO,
             insert: "o".to_owned(),
         },
     });

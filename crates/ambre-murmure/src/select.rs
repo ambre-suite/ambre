@@ -7,6 +7,7 @@
 //! since only the layout knows which byte lies under it.
 
 use ambre_bus::{Timestamp, UserId};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan};
 
 use crate::list::{MessageList, RowKey, UNKNOWN_MEMBER};
 
@@ -14,7 +15,7 @@ use crate::list::{MessageList, RowKey, UNKNOWN_MEMBER};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Spot {
     pub row: RowKey,
-    pub byte: usize,
+    pub byte: ByteOffset,
 }
 
 /// A selection: the anchor stays where the drag began, and the focus
@@ -42,7 +43,7 @@ pub struct Selecting {
 impl TextSelection {
     /// The ends in the order of the list, as a row index and a byte each.
     /// `None` once a row of an end left the list.
-    fn ordered(&self, keys: &[RowKey]) -> Option<((usize, usize), (usize, usize))> {
+    fn ordered(&self, keys: &[RowKey]) -> Option<((usize, ByteOffset), (usize, ByteOffset))> {
         let at = |spot: Spot| {
             let row = keys.iter().position(|k| *k == spot.row)?;
             Some((row, spot.byte))
@@ -57,14 +58,24 @@ impl TextSelection {
 
     /// The bytes it selects of row `i`, whose body is `len` bytes long.
     /// `None` when it selects none of them.
-    pub fn range_in(&self, keys: &[RowKey], i: usize, len: usize) -> Option<(usize, usize)> {
+    pub fn range_in(&self, keys: &[RowKey], i: usize, len: ByteCount) -> Option<ByteSpan> {
         let ((first, from), (last, to)) = self.ordered(keys)?;
         if i < first || i > last {
             return None;
         }
-        let start = if i == first { from.min(len) } else { 0 };
-        let end = if i == last { to.min(len) } else { len };
-        (start < end).then_some((start, end))
+        let end_of_body = len.as_end();
+        let start = if i == first {
+            from.min(end_of_body)
+        } else {
+            ByteOffset::ZERO
+        };
+        let end = if i == last {
+            to.min(end_of_body)
+        } else {
+            end_of_body
+        };
+        let span = ByteSpan::new(start, end);
+        (!span.is_empty()).then_some(span)
     }
 
     /// The text a copy puts on the clipboard: each message it reaches under
@@ -89,9 +100,10 @@ impl TextSelection {
             // The body may end on the edited mark, which is no text of its.
             let body = row.words(name_of, time_of).body;
             let text = message.shown(name_of).len();
-            let Some((start, end)) = self.range_in(&keys, i, body.len()) else {
+            let Some(span) = self.range_in(&keys, i, ByteCount::from_len(body.len())) else {
                 continue;
             };
+            let (start, end) = (span.start.get(), span.end.get());
             let Some(words) = body.get(start..end.min(text)).filter(|w| !w.is_empty()) else {
                 continue;
             };
@@ -124,7 +136,7 @@ mod tests {
     fn spot(list: &MessageList, row: usize, byte: usize) -> Spot {
         Spot {
             row: list.keys()[row],
-            byte,
+            byte: ByteOffset::new(byte),
         }
     }
 
@@ -149,16 +161,29 @@ mod tests {
             focus: down.anchor,
         };
         for selection in [down, up] {
-            assert_eq!(selection.range_in(&keys, 0, 5), Some((2, 5)));
-            assert_eq!(selection.range_in(&keys, 1, 5), Some((0, 5)));
-            assert_eq!(selection.range_in(&keys, 2, 5), Some((0, 3)));
+            assert_eq!(
+                selection.range_in(&keys, 0, ByteCount::new(5)),
+                Some(ByteSpan::from_usize_range(2..5))
+            );
+            assert_eq!(
+                selection.range_in(&keys, 1, ByteCount::new(5)),
+                Some(ByteSpan::from_usize_range(0..5))
+            );
+            assert_eq!(
+                selection.range_in(&keys, 2, ByteCount::new(5)),
+                Some(ByteSpan::from_usize_range(0..3))
+            );
         }
         let none = TextSelection {
             anchor: spot(&list, 1, 2),
             focus: spot(&list, 1, 2),
         };
-        assert_eq!(none.range_in(&keys, 1, 5), None, "a collapsed one");
-        assert_eq!(none.range_in(&keys, 0, 5), None);
+        assert_eq!(
+            none.range_in(&keys, 1, ByteCount::new(5)),
+            None,
+            "a collapsed one"
+        );
+        assert_eq!(none.range_in(&keys, 0, ByteCount::new(5)), None);
     }
 
     /// `MURMURE-426`: a copy puts each message under its author and its
@@ -205,7 +230,7 @@ mod tests {
         let stale = TextSelection {
             anchor: Spot {
                 row: RowKey::Band(SegmentId::new()),
-                byte: 0,
+                byte: ByteOffset::ZERO,
             },
             focus: all.focus,
         };

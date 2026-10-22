@@ -2086,6 +2086,7 @@ mod tests {
         Mention, MentionTarget, MessageDraft, MurmureEvent, RestCommand, RestEvent, SegmentId,
         Timestamp,
     };
+    use ambre_core::CharSpan;
     use ambre_murmure::ChannelType;
 
     const NOW: Timestamp = Timestamp(1_700_000_000_000);
@@ -2165,7 +2166,7 @@ mod tests {
                 "hi @bob",
                 vec![Mention {
                     target: MentionTarget::User(bob),
-                    range: 3..7,
+                    range: CharSpan::from_usize_range(3..7),
                 }],
             ),
         });
@@ -2374,7 +2375,7 @@ mod tests {
             let mentions = if mention {
                 vec![Mention {
                     target: MentionTarget::User(bob_id),
-                    range: 3..7,
+                    range: CharSpan::from_usize_range(3..7),
                 }]
             } else {
                 Vec::new()
@@ -3653,8 +3654,11 @@ mod tests {
                 text: "lunch @bob @eve?".to_owned(),
                 styles: Vec::new(),
                 mentions: vec![
-                    mention(MentionTarget::User(bob), 6..10),
-                    mention(MentionTarget::User(UserId::new()), 11..15),
+                    mention(MentionTarget::User(bob), CharSpan::from_usize_range(6..10)),
+                    mention(
+                        MentionTarget::User(UserId::new()),
+                        CharSpan::from_usize_range(11..15),
+                    ),
                 ],
             },
             now: Timestamp(1),
@@ -3707,7 +3711,10 @@ mod tests {
         );
         assert_eq!(
             edited[0].mentions,
-            [mention(MentionTarget::User(bob), 6..10)],
+            [mention(
+                MentionTarget::User(bob),
+                CharSpan::from_usize_range(6..10)
+            )],
             "no mark for a user outside the channel"
         );
         assert_eq!((deleted[0].text.as_str(), deleted[0].deleted), ("", true));
@@ -4264,8 +4271,8 @@ mod tests {
         let draft = send(
             "@bob @eve",
             vec![
-                mention(MentionTarget::User(bob), 0..4),
-                mention(MentionTarget::User(eve), 5..9),
+                mention(MentionTarget::User(bob), CharSpan::from_usize_range(0..4)),
+                mention(MentionTarget::User(eve), CharSpan::from_usize_range(5..9)),
             ],
         );
         command(&mut state, channel_id, draft);
@@ -4294,7 +4301,7 @@ mod tests {
         drain(&sync);
         let all = vec![Mention {
             target: MentionTarget::Channel,
-            range: 0..8,
+            range: CharSpan::from_usize_range(0..8),
         }];
 
         command(&mut state, channel_id, send("@channel", all.clone()));
@@ -6130,7 +6137,7 @@ mod tests {
             styles: Vec::new(),
             mentions: vec![ambre_bus::Mention {
                 target: ambre_bus::MentionTarget::User(bob),
-                range: 0..4,
+                range: CharSpan::from_usize_range(0..4),
             }],
         };
         m.alice

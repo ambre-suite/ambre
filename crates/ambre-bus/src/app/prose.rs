@@ -32,6 +32,38 @@ use serde::{Deserialize, Serialize};
 
 use ambre_core::{CommentId, FootnoteId, ReplyId, SuggestionId, UserId};
 
+ambre_core::define_index! {
+    /// A code-point offset into the body of one block, as the CRDT counts it
+    /// (`PROSE-FEAT-006`). Every offset this plane carries is one. The view
+    /// lays a pending draft out in its own space, and converts at its edge.
+    pub struct DocOffset(u32);
+    /// A number of code points in one block's body.
+    pub struct DocCount;
+    /// The signed gap between two offsets of one block's body: code points
+    /// inserted when positive, deleted when negative.
+    pub struct DocDelta(i64);
+    /// A run of code points in one block's body.
+    pub struct DocSpan;
+    /// A list indexed by offset in one block's body.
+    pub struct DocVec;
+}
+
+impl DocOffset {
+    /// The same offset, as a code-point offset of the block's text.
+    #[must_use]
+    pub fn as_char(self) -> ambre_core::CharOffset {
+        ambre_core::CharOffset::new(self.get())
+    }
+}
+
+impl DocCount {
+    /// The code points `text` holds, as a block's body counts them.
+    #[must_use]
+    pub fn of(text: &str) -> Self {
+        Self::from_len(text.chars().count())
+    }
+}
+
 /// The number of a text change the view did not draw: a remote one, or a
 /// local one the Logic thread rewrote. The view hands back the last it
 /// applied in [`ProseCommand::Sync`].
@@ -381,9 +413,9 @@ impl ParagraphStyle {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CursorPosition {
     pub block_id: BlockId,
-    pub offset: u32,
+    pub offset: DocOffset,
     /// The other end of a selection, when the caret has one.
-    pub anchor: Option<(BlockId, u32)>,
+    pub anchor: Option<(BlockId, DocOffset)>,
 }
 
 /// The peer-authored presence sample.
@@ -563,7 +595,7 @@ pub struct FindQuery {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FindMatch {
     pub block_id: BlockId,
-    pub range: (u32, u32),
+    pub range: DocSpan,
 }
 
 /// One footnote as the view lists it (`features/ambre-spec-prose-footnotes.md`).
@@ -599,8 +631,8 @@ pub struct CommentReply {
 pub struct CommentThread {
     pub comment_id: CommentId,
     pub anchor_block: Option<BlockId>,
-    pub anchor_start: u32,
-    pub anchor_end: u32,
+    pub anchor_start: DocOffset,
+    pub anchor_end: DocOffset,
     pub orphaned: bool,
     pub resolved: bool,
     pub replies: Vec<CommentReply>,
@@ -619,8 +651,8 @@ pub enum SuggestionKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SuggestionSpan {
     pub block_id: BlockId,
-    pub start: u32,
-    pub end: u32,
+    pub start: DocOffset,
+    pub end: DocOffset,
 }
 
 /// One run of a link mark, in its block's own offsets, and the target it
@@ -628,8 +660,8 @@ pub struct SuggestionSpan {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinkSpan {
     pub block_id: BlockId,
-    pub start: u32,
-    pub end: u32,
+    pub start: DocOffset,
+    pub end: DocOffset,
     pub url: String,
 }
 
@@ -662,7 +694,7 @@ pub enum CrossRefKind {
 pub struct ResolvedCrossRef {
     /// Where the reference sits: its block and its code-point offset.
     pub block_id: BlockId,
-    pub offset: u32,
+    pub offset: DocOffset,
     pub target: BlockId,
     /// The value drawn. `None` is the broken mark (`PROSE-FEAT-014`).
     pub shown: Option<String>,
@@ -720,25 +752,25 @@ pub enum ProseCommand {
     /// One committed run of text, at one position in one block.
     InsertText {
         block_id: BlockId,
-        pos: u32,
+        pos: DocOffset,
         text: String,
     },
     /// A range inside one block.
     DeleteText {
         block_id: BlockId,
-        range: (u32, u32),
+        range: DocSpan,
     },
     /// One arbitrary, possibly cross-block, selection deleted in one command.
     /// The endpoints arrive in either order and the handler normalizes them. It
     /// is also the single join primitive (`PROSE-037`, `PROSE-039`).
     DeleteRange {
-        anchor: (BlockId, u32),
-        focus: (BlockId, u32),
+        anchor: (BlockId, DocOffset),
+        focus: (BlockId, DocOffset),
     },
     /// The inverse of the join case above (`PROSE-038`).
     SplitBlock {
         block_id: BlockId,
-        pos: u32,
+        pos: DocOffset,
     },
 
     // -- Inline marks (`features/ambre-spec-prose-inline-styles.md`) --
@@ -748,18 +780,18 @@ pub enum ProseCommand {
     /// value of a key whose presence alone is meaningful.
     ApplyMark {
         block_id: BlockId,
-        range: (u32, u32),
+        range: DocSpan,
         key: String,
         value: Option<String>,
     },
     RemoveMark {
         block_id: BlockId,
-        range: (u32, u32),
+        range: DocSpan,
         key: String,
     },
     ClearInlineMarks {
         block_id: BlockId,
-        range: (u32, u32),
+        range: DocSpan,
     },
 
     // -- Block structure --
@@ -919,8 +951,8 @@ pub enum ProseCommand {
     /// Read the marks a selection carries. The endpoints arrive in either
     /// order; it writes nothing (`PROSE-UI-099`).
     ReadMarks {
-        anchor: (BlockId, u32),
-        focus: (BlockId, u32),
+        anchor: (BlockId, DocOffset),
+        focus: (BlockId, DocOffset),
     },
 
     // -- Clipboard (`features/ambre-spec-prose-clipboard.md`) --
@@ -928,8 +960,8 @@ pub enum ProseCommand {
     /// arrive in either order; it writes nothing (`PROSE-UI-040`,
     /// `PROSE-UI-109`).
     CopyRange {
-        anchor: (BlockId, u32),
-        focus: (BlockId, u32),
+        anchor: (BlockId, DocOffset),
+        focus: (BlockId, DocOffset),
     },
     /// Insert what the clipboard held at one place, in one commit. The
     /// Logic thread takes the richest half it can read (`PROSE-UI-042`).
@@ -938,7 +970,7 @@ pub enum ProseCommand {
     /// then the plain text, one paragraph per line. The view only carries the halves
     /// (`PROSE-UI-105`).
     Paste {
-        at: (BlockId, u32),
+        at: (BlockId, DocOffset),
         text: String,
         html: Option<String>,
         payload: Option<Vec<u8>>,
@@ -947,8 +979,8 @@ pub enum ProseCommand {
     /// block the selection covers changes in one commit, so one undo takes
     /// the whole gesture back.
     FormatSelection {
-        anchor: (BlockId, u32),
-        focus: (BlockId, u32),
+        anchor: (BlockId, DocOffset),
+        focus: (BlockId, DocOffset),
         key: String,
         apply: bool,
     },
@@ -972,12 +1004,12 @@ pub enum ProseCommand {
     InsertHeaderField {
         field: HeaderField,
         target: HfTarget,
-        pos: u32,
+        pos: DocOffset,
     },
     InsertFooterField {
         field: HeaderField,
         target: HfTarget,
-        pos: u32,
+        pos: DocOffset,
     },
     /// Align the band whose block is `block_id`, the one the caret is in
     /// (`PROSE-FEAT-171`). Justified is not a band alignment and is refused.
@@ -1016,7 +1048,7 @@ pub enum ProseCommand {
     /// A note, and one call to it at `pos` in `block_id` (`PROSE-FEAT-099`).
     InsertFootnote {
         block_id: BlockId,
-        pos: u32,
+        pos: DocOffset,
         note_text: String,
     },
     /// Rewrite a note's body.
@@ -1034,7 +1066,7 @@ pub enum ProseCommand {
     /// `now_ms` is the display stamp: the Logic thread reads no clock.
     AddComment {
         block_id: BlockId,
-        range: (u32, u32),
+        range: DocSpan,
         text: String,
         now_ms: ambre_core::Timestamp,
     },
@@ -1093,7 +1125,7 @@ pub enum ProseCommand {
     /// (`PROSE-FEAT-134`).
     InsertCrossRef {
         block_id: BlockId,
-        pos: u32,
+        pos: DocOffset,
         target_block_id: BlockId,
         kind: CrossRefKind,
     },
@@ -1101,7 +1133,7 @@ pub enum ProseCommand {
     /// writes nothing (`PROSE-UI-086`).
     FollowCrossRef {
         block_id: BlockId,
-        pos: u32,
+        pos: DocOffset,
     },
 
     // -- Presence (`1-Foundations/ambre-spec-presence.md`) --
@@ -1417,8 +1449,8 @@ pub enum ProseEvent {
     /// The marks of the selection a [`ProseCommand::ReadMarks`] named, with
     /// that selection as it was sent (`PROSE-UI-057`).
     SelectionMarks {
-        anchor: (BlockId, u32),
-        focus: (BlockId, u32),
+        anchor: (BlockId, DocOffset),
+        focus: (BlockId, DocOffset),
         marks: ActiveMarks,
     },
     /// The clipboard payload of the selection a [`ProseCommand::CopyRange`]
@@ -1439,7 +1471,7 @@ pub enum ProseEvent {
     /// put back (`PROSE-UI-045`). After a paste, it lands after the text
     /// pasted. The view collapses any selection to it
     /// (`PROSE-UI-073`) and writes nothing back (`PROSE-UI-074`).
-    CaretPlaced { block: BlockId, offset: u32 },
+    CaretPlaced { block: BlockId, offset: DocOffset },
     /// Every footnote, in the order of its calls, orphans last
     /// (`PROSE-FEAT-013`, `PROSE-FEAT-098`).
     FootnotesUpdated { notes: Vec<FootnoteEntry> },
@@ -1639,7 +1671,7 @@ mod tests {
     fn presence_is_not_a_mutation() {
         let pos = CursorPosition {
             block_id: BlockId::new(ambre_core::PeerId(1), 0),
-            offset: 0,
+            offset: DocOffset::ZERO,
             anchor: None,
         };
         assert!(!ProseCommand::UpdateCursor { pos }.is_mutating());
@@ -1647,7 +1679,7 @@ mod tests {
         assert!(
             ProseCommand::SplitBlock {
                 block_id: BlockId::new(ambre_core::PeerId(1), 0),
-                pos: 0
+                pos: DocOffset::ZERO
             }
             .is_mutating()
         );
@@ -1659,9 +1691,9 @@ mod tests {
 pub struct TextEdit {
     pub block_id: BlockId,
     /// Where the run starts, in the text as it stood before this edit.
-    pub at: u32,
+    pub at: DocOffset,
     /// The code points inserted, positive, or deleted, negative.
-    pub delta: i64,
+    pub delta: DocDelta,
 }
 
 /// A value handed from the Logic thread to the UI thread over the shared heap,

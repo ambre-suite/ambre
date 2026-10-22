@@ -10,7 +10,8 @@ use parley::{
     LayoutContext, LineHeight, StyleProperty,
 };
 
-use ambre_bus::app::prose::{Align, LineHeightMode, ParagraphStyle};
+use ambre_bus::app::prose::{Align, DocOffset, LineHeightMode, ParagraphStyle};
+use ambre_core::{ByteDelta, ByteOffset, ByteSpan, char_to_byte};
 use ambre_draw::{ParleyBrush, ScriptSet};
 use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
@@ -34,8 +35,8 @@ pub(crate) const PX_PER_PT: f32 = ambre_core::PX_PER_PT;
 /// across them (`PROSE-UI-209`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MarkedSpan {
-    pub start: usize,
-    pub end: usize,
+    pub start: ByteOffset,
+    pub end: ByteOffset,
     pub bold: bool,
     pub italic: bool,
     pub underline: bool,
@@ -61,8 +62,8 @@ pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
                 .is_some_and(|value| !matches!(value, LoroValue::Null))
         };
         let span = MarkedSpan {
-            start: out.len(),
-            end: out.len() + insert.len(),
+            start: ByteOffset::from_usize(out.len()),
+            end: ByteOffset::from_usize(out.len() + insert.len()),
             bold: on("b"),
             italic: on("i"),
             underline: on("u"),
@@ -362,7 +363,7 @@ impl Measurer {
         (text, marks): (&str, &[MarkedSpan]),
         style: &EffectiveStyle,
         width_px: f32,
-        offsets: &[u32],
+        offsets: &[DocOffset],
         previous: Option<&ShapedRun>,
     ) -> (TextMetrics, Vec<u32>, ShapedRun) {
         let run = previous
@@ -376,10 +377,7 @@ impl Measurer {
         let lines = offsets
             .iter()
             .map(|offset| {
-                let byte = text
-                    .char_indices()
-                    .nth(*offset as usize)
-                    .map_or(text.len(), |(at, _)| at);
+                let byte = char_to_byte(text, offset.as_char());
                 u32::try_from(run.data().line_at_byte(byte)).unwrap_or(u32::MAX)
             })
             .collect();
@@ -566,27 +564,34 @@ pub(crate) fn reshape_window(
         .sum::<usize>()
         .min(old.len() - prefix)
         .min(text.len() - prefix);
-    let delta = isize::try_from(text.len()).ok()? - isize::try_from(old.len()).ok()?;
+    let delta =
+        ByteDelta::new(isize::try_from(text.len()).ok()? - isize::try_from(old.len()).ok()?);
     let (old_suffix, new_suffix) = (old.len() - suffix, text.len() - suffix);
     let cut = previous
-        .line_at_byte(prefix.saturating_sub(1))
+        .line_at_byte(ByteOffset::from_usize(prefix.saturating_sub(1)))
         .saturating_sub(1);
-    let start = previous.line_start(cut)?;
+    let start = previous.line_start(cut)?.to_usize();
     if start > prefix || !text.is_char_boundary(start) {
         return None;
     }
-    if clip(previous.marks(), 0, start) != clip(marks, 0, start) {
+    if clip(previous.marks(), ByteSpan::from_usize_range(0..start))
+        != clip(marks, ByteSpan::from_usize_range(0..start))
+    {
         return None;
     }
     // The lines of `previous` a window may meet again: past the edit, and
     // with the same marks after it. Each with where it starts now.
-    let same_after =
-        clip(previous.marks(), old_suffix, old.len()) == clip(marks, new_suffix, text.len());
+    let same_after = clip(
+        previous.marks(),
+        ByteSpan::from_usize_range(old_suffix..old.len()),
+    ) == clip(marks, ByteSpan::from_usize_range(new_suffix..text.len()));
     let meets: Vec<(usize, usize)> = if same_after {
         (cut + 1..previous.line_count())
             .filter_map(|line| {
-                let at = previous.line_start(line).filter(|at| *at >= old_suffix)?;
-                Some((line, at.checked_add_signed(delta)?))
+                let at = previous
+                    .line_start(line)
+                    .filter(|at| at.to_usize() >= old_suffix)?;
+                Some((line, at.checked_offset(delta)?.to_usize()))
             })
             .collect()
     } else {
@@ -604,7 +609,7 @@ pub(crate) fn reshape_window(
     {
         let window = shape(
             text.get(start..end)?,
-            &clip(marks, start, end),
+            &clip(marks, ByteSpan::from_usize_range(start..end)),
             &window_style,
         );
         // The window's last line ends where its text ends, not where the
@@ -625,21 +630,21 @@ pub(crate) fn reshape_window(
     }
     let window = shape(
         text.get(start..)?,
-        &clip(marks, start, text.len()),
+        &clip(marks, ByteSpan::from_usize_range(start..text.len())),
         &window_style,
     );
     ParleyRunData::with_window(previous, cut, (text, marks), window, None)
 }
 
-/// The spans of `spans` over the bytes `from..to`, cut to them and counted
-/// from `from`.
-fn clip(spans: &[MarkedSpan], from: usize, to: usize) -> Vec<MarkedSpan> {
+/// The spans of `spans` over `bytes`, cut to them and counted from its
+/// start.
+fn clip(spans: &[MarkedSpan], bytes: ByteSpan) -> Vec<MarkedSpan> {
     spans
         .iter()
-        .filter(|span| span.start < to && span.end > from)
+        .filter(|span| span.start < bytes.end && span.end > bytes.start)
         .map(|span| MarkedSpan {
-            start: span.start.max(from) - from,
-            end: span.end.min(to) - from,
+            start: ByteOffset::ZERO + span.start.max(bytes.start).count_from(bytes.start),
+            end: ByteOffset::ZERO + span.end.min(bytes.end).count_from(bytes.start),
             ..*span
         })
         .collect()
@@ -691,7 +696,7 @@ fn build(
         builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
     }
     for span in marks {
-        let range = span.start..span.end;
+        let range = ByteSpan::new(span.start, span.end).to_usize_range();
         if span.bold {
             builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
         }
@@ -783,6 +788,8 @@ fn alignment_of(align: Align) -> Alignment {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::layout::run::RunCount;
+    use crate::layout::run::{RunOffset, RunSpan};
     use parley::BoundingBox;
 
     fn style() -> EffectiveStyle {
@@ -812,21 +819,25 @@ mod tests {
         let data = run.data();
         let starts = (0..data.line_count())
             .filter_map(|line| data.line_start(line))
+            .map(ByteOffset::to_usize)
             .collect();
         let baselines = data
             .lines()
             .map(|(line, shift)| line.metrics().baseline + shift)
             .collect();
-        let carets = (0..=data.len())
+        let carets = (0..=data.len().get())
             .map(|offset| {
-                let caret = data.caret_box_at(offset, offset % 2 == 0);
+                let caret = data.caret_box_at(RunOffset::new(offset), offset % 2 == 0);
                 let back =
                     data.offset_at(caret.x0 as f32 + 0.1, ((caret.y0 + caret.y1) / 2.0) as f32);
-                (offset, rounded(caret), back)
+                (offset, rounded(caret), back.get())
             })
             .collect();
         let boxes = data
-            .range_boxes(1, data.len().saturating_sub(1))
+            .range_boxes(RunSpan::new(
+                RunOffset::new(1),
+                data.len().saturating_sub(RunCount::ONE).as_end(),
+            ))
             .into_iter()
             .map(rounded)
             .collect();
@@ -853,8 +864,8 @@ mod tests {
         centered.align = Align::Center;
         let bold = |text: &str| {
             vec![MarkedSpan {
-                start: 20,
-                end: text.len() / 2,
+                start: ByteOffset::new(20),
+                end: ByteOffset::from_usize(text.len() / 2),
                 bold: true,
                 ..MarkedSpan::default()
             }]
@@ -924,8 +935,8 @@ mod tests {
         let base = LONG.repeat(12);
         let bold = |text: &str| {
             vec![MarkedSpan {
-                start: text.len() - 200,
-                end: text.len() - 100,
+                start: ByteOffset::from_usize(text.len() - 200),
+                end: ByteOffset::from_usize(text.len() - 100),
                 bold: true,
                 ..MarkedSpan::default()
             }]
@@ -973,8 +984,8 @@ mod tests {
         let (_, _, run) = measurer.measure_with_lines((&text, &[]), &style, 300.0, &[], None);
         let edited = format!("x{text}");
         let marks = [MarkedSpan {
-            start: edited.len() - 300,
-            end: edited.len() - 10,
+            start: ByteOffset::from_usize(edited.len() - 300),
+            end: ByteOffset::from_usize(edited.len() - 10),
             bold: true,
             ..MarkedSpan::default()
         }];

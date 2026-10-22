@@ -4,6 +4,7 @@
 //! Driven through the engine: a note is written by its command, and the
 //! layout read back is the one the view is handed.
 
+use ambre_bus::app::prose::DocOffset;
 use ambre_core::FootnoteId;
 use loro::TreeID;
 
@@ -35,14 +36,14 @@ fn document(texts: &[String]) -> (ProseState, Vec<BlockId>) {
     for (id, text) in ids.iter().zip(texts) {
         state.handle_command(ProseCommand::InsertText {
             block_id: *id,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: text.clone(),
         });
     }
     (state, ids)
 }
 
-fn add(state: &mut ProseState, block: BlockId, pos: u32, text: &str) -> FootnoteId {
+fn add(state: &mut ProseState, block: BlockId, pos: DocOffset, text: &str) -> FootnoteId {
     let before: Vec<FootnoteId> = note::ordinals(state.document())
         .into_iter()
         .map(|(id, _)| id)
@@ -118,8 +119,8 @@ fn nothing_runs_into_the_notes(layout: &PageLayout) {
 #[test]
 fn every_note_is_numbered_from_its_call_before_any_block_is_placed() {
     let (mut state, ids) = document(&["first".to_owned(), "second".to_owned()]);
-    let later = add(&mut state, ids[1], 6, "later");
-    let earlier = add(&mut state, ids[0], 5, "earlier");
+    let later = add(&mut state, ids[1], DocOffset::new(6), "later");
+    let earlier = add(&mut state, ids[0], DocOffset::new(5), "earlier");
     let layout = shipped_paginator().full(state.document()).clone();
     let ordinals: Vec<(FootnoteId, u32)> =
         placed(&layout).iter().map(|(id, n, _)| (*id, *n)).collect();
@@ -130,8 +131,8 @@ fn every_note_is_numbered_from_its_call_before_any_block_is_placed() {
 #[test]
 fn a_note_moved_to_another_page_keeps_its_ordinal() {
     let (mut state, ids) = document(&["intro".to_owned(), "body".to_owned()]);
-    let first = add(&mut state, ids[0], 5, "one");
-    let second = add(&mut state, ids[1], 4, "two");
+    let first = add(&mut state, ids[0], DocOffset::new(5), "one");
+    let second = add(&mut state, ids[1], DocOffset::new(4), "two");
     let before = placed(&shipped_paginator().full(state.document()).clone());
     assert_eq!(before, vec![(first, 1, 0), (second, 2, 0)]);
     state.handle_command(ProseCommand::InsertBlock {
@@ -149,8 +150,8 @@ fn a_note_sits_on_the_page_of_the_line_that_calls_it() {
     let text = long_text();
     let end = u32::try_from(text.chars().count()).expect("a short text");
     let (mut state, ids) = document(&[text]);
-    let early = add(&mut state, ids[0], 3, "early");
-    let late = add(&mut state, ids[0], end, "late");
+    let early = add(&mut state, ids[0], DocOffset::new(3), "early");
+    let late = add(&mut state, ids[0], DocOffset::new(end), "late");
     let block = tree_id(ids[0]);
     let check = |state: &mut ProseState| {
         let layout = state.paginate(&[block]).clone();
@@ -211,9 +212,9 @@ fn a_note_sits_on_the_page_of_the_line_that_calls_it() {
 #[test]
 fn a_call_added_or_removed_lays_out_what_a_full_recomputation_would() {
     let (mut state, ids) = document(&["alpha".to_owned(), "beta".to_owned(), "gamma".to_owned()]);
-    let _ = add(&mut state, ids[2], 5, "last");
+    let _ = add(&mut state, ids[2], DocOffset::new(5), "last");
     let _ = state.paginate(&[]);
-    let first = add(&mut state, ids[0], 5, "first");
+    let first = add(&mut state, ids[0], DocOffset::new(5), "first");
     let reflowed = state.paginate(&[tree_id(ids[0])]).clone();
     let full = shipped_paginator().full(state.document()).clone();
     assert_eq!(placed(&reflowed), placed(&full));
@@ -228,14 +229,14 @@ fn a_call_added_or_removed_lays_out_what_a_full_recomputation_would() {
 #[test]
 fn text_typed_anywhere_lays_out_what_a_full_recomputation_would() {
     let (mut state, ids) = document(&[long_text(), "beta".to_owned(), long_text()]);
-    let call = add(&mut state, ids[1], 2, "a note");
+    let call = add(&mut state, ids[1], DocOffset::new(2), "a note");
     let _ = state.paginate(&[]);
     let body = note::block(state.document(), &call).expect("a note block");
     let typed_in = [ids[0], ids[1], crate::events::block_id(body), ids[2]];
     for block in typed_in {
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: 0,
+            pos: DocOffset::ZERO,
             text: "Typed at the head, long enough to push a line further on. ".repeat(3),
         });
         let reflowed = state.paginate(&[]).clone();

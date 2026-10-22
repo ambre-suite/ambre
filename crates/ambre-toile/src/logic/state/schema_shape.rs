@@ -33,6 +33,7 @@
 //! from a text container moves a line.
 
 use ambre_core::Argb;
+use ambre_core::{CharCount, CharOffset};
 use std::collections::BTreeSet;
 
 use kurbo::{BezPath, Point, Size};
@@ -539,8 +540,8 @@ pub(super) fn board_of_every_key() -> ToileState {
         frame: frame.clone(),
         base: String::new(),
         delta: TextDelta {
-            at: 0,
-            delete: 0,
+            at: CharOffset::ZERO,
+            delete: CharCount::ZERO,
             insert: "say this".to_owned(),
         },
     });

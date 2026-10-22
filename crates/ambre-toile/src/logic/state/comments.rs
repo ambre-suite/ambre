@@ -40,6 +40,7 @@ use std::collections::HashSet;
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
 use ambre_bus::UserId;
+use ambre_core::CharCount;
 
 use crate::logic::command::{
     CommentAnchor, CommentMessage, CommentPin, CommentSummary, CommentThread, TextDelta,
@@ -181,7 +182,7 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         };
         // A pure no-op produces neither a commit nor a delta.
-        if delta.delete == 0 && delta.insert.is_empty() {
+        if delta.delete.is_zero() && delta.insert.is_empty() {
             return ToileOutcome::display_only(Vec::new());
         }
         let Some(map) = self.message_map(thread, message) else {
@@ -195,14 +196,12 @@ impl ToileState {
         };
         // Clamp to the current length: `at` and the deletion span never run past
         // the end of the buffer.
-        let len = text.len_unicode();
-        let at = delta.at.min(len);
-        let del = delta.delete.min(len - at);
-        if del > 0 {
-            let _ = text.delete(at, del);
+        let (at, del) = delta.clamped(CharCount::from_len(text.len_unicode()));
+        if !del.is_zero() {
+            let _ = text.delete(at.to_usize(), del.to_usize());
         }
         if !delta.insert.is_empty() {
-            let _ = text.insert(at, &delta.insert);
+            let _ = text.insert(at.to_usize(), &delta.insert);
         }
         self.doc.set_next_commit_origin(COMMENT_ORIGIN);
         self.doc.commit();

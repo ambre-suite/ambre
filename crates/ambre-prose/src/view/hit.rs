@@ -10,10 +10,10 @@ use loro::TreeID;
 
 use crate::events::{BlockId, block_id, tree_id};
 use crate::layout::place::BlockLayout;
-use crate::layout::run::{CellShape, TableShape};
-use crate::ui::{DocOffset, LaidOffset, ProseUiState};
+use crate::layout::run::{CellShape, RunOffset, TableShape};
+use crate::ui::ProseUiState;
 use crate::view::column::DocPos;
-use ambre_bus::app::prose::VAlign;
+use ambre_bus::app::prose::{DocOffset, VAlign};
 
 /// The part of a block one page shows.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -65,17 +65,17 @@ pub(crate) enum HitOffset {
     /// Read off a provisional run, which holds the draft: a document offset.
     Drawn(DocOffset),
     /// Read off the run of the layout in force, which lacks the draft.
-    Laid(LaidOffset),
+    Laid(RunOffset),
 }
 
 impl HitOffset {
     /// The offset read off the run drawn for `block`, in the space that run
     /// counts.
-    fn of(ui: &ProseUiState, block: BlockId, offset: u32) -> Self {
+    fn of(ui: &ProseUiState, block: BlockId, offset: RunOffset) -> Self {
         if ui.provisional_run(block).is_some() {
-            Self::Drawn(DocOffset(offset))
+            Self::Drawn(DocOffset::new(offset.get()))
         } else {
-            Self::Laid(LaidOffset(offset))
+            Self::Laid(offset)
         }
     }
 }
@@ -148,11 +148,11 @@ pub(crate) struct NoteSlot {
 /// last on the last. `None` for a layout with no page, or a page that shows
 /// no block.
 impl HitTest for ProseUiState {
-    type Target = (BlockId, u32);
+    type Target = (BlockId, DocOffset);
 
-    fn hit_test(&self, x: f64, y: f64) -> Option<(BlockId, u32)> {
+    fn hit_test(&self, x: f64, y: f64) -> Option<(BlockId, DocOffset)> {
         let (block, offset) = self.hit(x as f32, y as f32)?;
-        Some((block, self.doc_of_hit(block, offset).0))
+        Some((block, self.doc_of_hit(block, offset)))
     }
 }
 
@@ -236,7 +236,7 @@ impl ProseUiState {
 
     /// The text of a band or a note under a point of `page`, when the point
     /// is in one.
-    fn band_hit(&self, page: u32, x_in_page: f32, y_in_page: f32) -> Option<(BlockId, u32)> {
+    fn band_hit(&self, page: u32, x_in_page: f32, y_in_page: f32) -> Option<(BlockId, RunOffset)> {
         let bands = self
             .band_slots(page)
             .into_iter()
@@ -302,7 +302,7 @@ impl ProseUiState {
             let x = x_in_page - layout.margin_left_px - run.indent_px();
             return Some((
                 new_block,
-                HitOffset::Drawn(DocOffset(run.offset_at(x, y_body - at.top))),
+                HitOffset::Drawn(DocOffset::new(run.offset_at(x, y_body - at.top).get())),
             ));
         }
         let mut chosen: Option<&crate::view::provisional::Piece> = None;
@@ -334,12 +334,12 @@ impl ProseUiState {
                 let y = (y_body - piece.top).clamp(0.0, piece.height.max(0.0)) + piece.run_top;
                 run.offset_at(x, y)
             }
-            None => 0,
+            None => RunOffset::ZERO,
         };
         let offset = if chosen.provisional {
-            HitOffset::Drawn(DocOffset(offset))
+            HitOffset::Drawn(DocOffset::new(offset.get()))
         } else {
-            HitOffset::Laid(LaidOffset(offset))
+            HitOffset::Laid(offset)
         };
         Some((block_id(block.block_id), offset))
     }
@@ -348,6 +348,8 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
+    use crate::layout::run::RunOffset;
+    use ambre_bus::app::prose::DocOffset;
     use ambre_draw::HitTest;
 
     use crate::events::block_id;
@@ -360,7 +362,7 @@ mod tests {
         let layout = &ui.shaped.layout;
         let block = &layout.blocks[index];
         let run = ui.shaped.blocks[&block.block_id].data();
-        let caret = run.caret_box(offset);
+        let caret = run.caret_box(RunOffset::new(offset));
         let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
         let y_doc = ui.column.page_top_y(block.page_start)
             + layout.body_top_px()
@@ -388,7 +390,7 @@ mod tests {
             let (x, y) = drawn_at(&ui, far, offset);
             let hit = ui.hit_test(f64::from(x), f64::from(y));
             let expected = block_id(ui.shaped.layout.blocks[far].block_id);
-            assert_eq!(hit, Some((expected, offset)));
+            assert_eq!(hit, Some((expected, DocOffset::new(offset))));
         }
         // Resolving built nothing: the drawing state is a paint's alone.
         assert_eq!(ui.runs.built(), 0);

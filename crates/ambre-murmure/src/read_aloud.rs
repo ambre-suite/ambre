@@ -5,7 +5,7 @@
 //! composer says what its last key did, through the polite live region
 //! (`MURMURE-571` to `MURMURE-574`).
 
-use std::ops::Range;
+use ambre_core::{ByteOffset, ByteSpan};
 
 /// The longest text one announcement carries. A long draft is said by its
 /// start, as a Prose block is.
@@ -34,15 +34,15 @@ pub fn said(
     say: Say,
     before: &str,
     text: &str,
-    caret: Option<usize>,
-    selection: Option<Range<usize>>,
-    drawn: Option<Range<usize>>,
+    caret: Option<ByteOffset>,
+    selection: Option<ByteSpan>,
+    drawn: Option<ByteSpan>,
 ) -> Option<String> {
     let moved = matches!(say, Say::Char | Say::Word | Say::Line);
-    if moved && let Some(selected) = selection.and_then(|range| text.get(range)) {
+    if moved && let Some(selected) = selection.and_then(|range| text.get(range.to_usize_range())) {
         return Some(format!("{}, selected", clipped(selected)));
     }
-    let after = caret.and_then(|at| text.get(at..));
+    let after = caret.and_then(|at| text.get(at.get()..));
     match say {
         Say::Char => after.map(|rest| char_name(rest.chars().next())),
         Say::Word => after.map(|rest| {
@@ -56,7 +56,7 @@ pub fn said(
         // The line drawn, a wrapped one on a narrow screen. With no layout
         // to read, the line between two breaks.
         Say::Line => drawn
-            .and_then(|range| text.get(range))
+            .and_then(|range| text.get(range.to_usize_range()))
             .or_else(|| caret.and_then(|at| line_at(text, at)))
             .map(spoken),
         Say::Removed => removed(before, text).map(|gone| {
@@ -71,7 +71,8 @@ pub fn said(
 }
 
 /// The logical line of `text` that holds the byte `at`.
-fn line_at(text: &str, at: usize) -> Option<&str> {
+fn line_at(text: &str, at: ByteOffset) -> Option<&str> {
+    let at = at.get();
     let start = text.get(..at)?.rfind('\n').map_or(0, |n| n + 1);
     let end = text.get(at..)?.find('\n').map_or(text.len(), |n| at + n);
     text.get(start..end)
@@ -136,7 +137,7 @@ mod tests {
     #[test]
     fn a_move_says_the_char_or_the_word_after_the_caret() {
         let text = "one two\nthree";
-        let say = |say, at| said(say, text, text, Some(at), None, None);
+        let say = |say, at| said(say, text, text, Some(ByteOffset::new(at)), None, None);
         assert_eq!(say(Say::Char, 0).as_deref(), Some("o"));
         assert_eq!(say(Say::Char, 3).as_deref(), Some("space"));
         assert_eq!(say(Say::Char, 7).as_deref(), Some("new line"));
@@ -160,7 +161,7 @@ mod tests {
     #[test]
     fn a_line_move_says_the_line_of_the_caret() {
         let text = "one\n\nthree";
-        let say = |at| said(Say::Line, text, text, Some(at), None, None);
+        let say = |at| said(Say::Line, text, text, Some(ByteOffset::new(at)), None, None);
         assert_eq!(say(1).as_deref(), Some("one"));
         assert_eq!(say(4).as_deref(), Some("blank"));
         assert_eq!(say(text.len()).as_deref(), Some("three"));
@@ -171,7 +172,10 @@ mod tests {
     #[test]
     fn a_line_move_says_the_line_drawn() {
         let text = "one two three\nfour";
-        let say = |drawn| said(Say::Line, text, text, Some(5), None, drawn);
+        let say = |drawn: Option<std::ops::Range<usize>>| {
+            let drawn = drawn.map(ByteSpan::from_usize_range);
+            said(Say::Line, text, text, Some(ByteOffset::new(5)), None, drawn)
+        };
         assert_eq!(say(Some(4..8)).as_deref(), Some("two"));
         assert_eq!(say(None).as_deref(), Some("one two three"), "no layout");
         assert_eq!(
@@ -201,7 +205,14 @@ mod tests {
     #[test]
     fn a_selection_says_its_text() {
         let text = "one two";
-        let said = said(Say::Char, text, text, None, Some(4..7), None);
+        let said = said(
+            Say::Char,
+            text,
+            text,
+            None,
+            Some(ByteSpan::from_usize_range(4..7)),
+            None,
+        );
         assert_eq!(said.as_deref(), Some("two, selected"));
     }
 

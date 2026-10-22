@@ -5,6 +5,7 @@
 //! `annots` naming its author. An intercepted edit is one commit, so an undo
 //! takes back the text, the mark and the entry together.
 
+use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
 use ambre_core::SuggestionId;
 use loro::{LoroMap, TreeID};
 
@@ -22,8 +23,8 @@ pub(super) struct Burst {
     id: SuggestionId,
     kind: SuggestionKind,
     block: TreeID,
-    start: u32,
-    end: u32,
+    start: DocOffset,
+    end: DocOffset,
 }
 
 /// What an intercepted delete does to one segment (`PROSE-FEAT-267`).
@@ -105,18 +106,23 @@ impl ProseState {
     /// Typing while suggesting: the text goes in, marked as a suggested
     /// insertion (`PROSE-FEAT-265`), stamped with the session's identity
     /// (`PROSE-FEAT-262`).
-    pub(super) fn suggest_insert(&mut self, block: &TreeID, pos: u32, text: &str) -> ProseOutcome {
+    pub(super) fn suggest_insert(
+        &mut self,
+        block: &TreeID,
+        pos: DocOffset,
+        text: &str,
+    ) -> ProseOutcome {
         if let Some(refused) = self.refuse_suggesting_in(block) {
             return refused;
         }
         let Some(body) = self.body_of(block) else {
             return Self::err_no_block(block);
         };
-        if pos as usize > body.len_unicode() {
+        if pos.to_usize() > body.len_unicode() {
             return Self::err_bad_range();
         }
-        let length = u32::try_from(text.chars().count()).unwrap_or(u32::MAX);
-        if length == 0 {
+        let length = DocCount::of(text);
+        if length.is_zero() {
             return ProseOutcome::nothing();
         }
         let id = match self.joining(SuggestionKind::Insertion, block, pos, pos) {
@@ -126,16 +132,16 @@ impl ProseState {
                 Err(e) => return Self::err_write(&e),
             },
         };
-        let end = pos.saturating_add(length);
-        let inserted = pos as usize..end as usize;
-        if let Err(e) = body.insert(pos as usize, text) {
+        let end = pos + length;
+        let inserted = DocSpan::new(pos, end);
+        if let Err(e) = body.insert(pos.to_usize(), text) {
             return Self::err_write(&format!("{e:?}"));
         }
-        if let Err(e) = suggest::strip_inherited(&body, inserted.start, inserted.end) {
+        if let Err(e) = suggest::strip_inherited(&body, inserted) {
             return Self::err_write(&e);
         }
         let key = suggest::mark_key(SuggestionKind::Insertion, &id);
-        if let Err(e) = body.mark(inserted, &key, id.to_hyphenated()) {
+        if let Err(e) = body.mark(inserted.to_usize_range(), &key, id.to_hyphenated()) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.extend_burst(id, SuggestionKind::Insertion, block, pos, end);
@@ -148,8 +154,8 @@ impl ProseState {
     /// stays until someone accepts.
     pub(super) fn suggest_delete(
         &mut self,
-        anchor: (TreeID, u32),
-        focus: (TreeID, u32),
+        anchor: (TreeID, DocOffset),
+        focus: (TreeID, DocOffset),
     ) -> ProseOutcome {
         let pieces = match self.pieces(anchor, focus) {
             Ok(pieces) => pieces,
@@ -159,14 +165,14 @@ impl ProseState {
             return ProseOutcome::nothing();
         }
         let me = self.my_user_id;
-        let mut plan: Vec<(TreeID, u32, u32, Treatment)> = Vec::new();
+        let mut plan: Vec<(TreeID, DocOffset, DocOffset, Treatment)> = Vec::new();
         for (block, start, end) in &pieces {
             for run in suggest::runs(&self.doc, block, *start, *end) {
                 let treatment = self.treatment(&run, me);
                 plan.push((*block, run.start, run.end, treatment));
             }
         }
-        let marked: Vec<&(TreeID, u32, u32, Treatment)> = plan
+        let marked: Vec<&(TreeID, DocOffset, DocOffset, Treatment)> = plan
             .iter()
             .filter(|(.., treatment)| *treatment == Treatment::Mark)
             .collect();
@@ -185,7 +191,7 @@ impl ProseState {
         // Back to front, so a removal never moves an offset still to come.
         for (block, start, end, treatment) in plan.iter().rev() {
             let body = doc::get_block_text(&self.doc, block);
-            let range = *start as usize..*end as usize;
+            let range = DocSpan::new(*start, *end).to_usize_range();
             let written = match (treatment, id) {
                 (Treatment::Remove, _) => body.delete(range.start, range.len()),
                 (Treatment::Mark, Some(id)) => body.mark(
@@ -261,7 +267,7 @@ impl ProseState {
         }
         for (_, kind, block, start, end) in spans.iter().rev() {
             let body = doc::get_block_text(&self.doc, block);
-            let range = *start as usize..*end as usize;
+            let range = DocSpan::new(*start, *end).to_usize_range();
             let removes = matches!(
                 (kind, accept),
                 (SuggestionKind::Insertion, false) | (SuggestionKind::Deletion, true)
@@ -297,17 +303,17 @@ impl ProseState {
     /// document order.
     fn pieces(
         &self,
-        anchor: (TreeID, u32),
-        focus: (TreeID, u32),
-    ) -> Result<Vec<(TreeID, u32, u32)>, ProseOutcome> {
+        anchor: (TreeID, DocOffset),
+        focus: (TreeID, DocOffset),
+    ) -> Result<Vec<(TreeID, DocOffset, DocOffset)>, ProseOutcome> {
         for (block, _) in [anchor, focus] {
             if let Some(refused) = self.refuse_suggesting_in(&block) {
                 return Err(refused);
             }
         }
-        let length_of = |block: &TreeID| -> Option<u32> {
+        let length_of = |block: &TreeID| -> Option<DocOffset> {
             let body = self.body_of(block)?;
-            Some(u32::try_from(body.len_unicode()).unwrap_or(u32::MAX))
+            Some(DocCount::from_len(body.len_unicode()).as_end())
         };
         if anchor.0 == focus.0 {
             let length = length_of(&anchor.0).ok_or_else(|| Self::err_no_block(&anchor.0))?;
@@ -333,7 +339,11 @@ impl ProseState {
             let Some(length) = length_of(block) else {
                 continue;
             };
-            let start = if *block == head { head_off } else { 0 };
+            let start = if *block == head {
+                head_off
+            } else {
+                DocOffset::ZERO
+            };
             let end = if *block == tail { tail_off } else { length };
             if start > length || end > length {
                 return Err(Self::err_bad_range());
@@ -376,8 +386,8 @@ impl ProseState {
         &self,
         kind: SuggestionKind,
         block: &TreeID,
-        start: u32,
-        end: u32,
+        start: DocOffset,
+        end: DocOffset,
     ) -> Option<SuggestionId> {
         let burst = self.burst?;
         let touches =
@@ -390,15 +400,15 @@ impl ProseState {
         id: SuggestionId,
         kind: SuggestionKind,
         block: &TreeID,
-        start: u32,
-        end: u32,
+        start: DocOffset,
+        end: DocOffset,
     ) {
         self.burst = Some(match self.burst {
             Some(burst) if burst.id == id => Burst {
                 start: burst.start.min(start),
                 end: match kind {
                     // Typed text pushes the end of the burst along with it.
-                    SuggestionKind::Insertion => burst.end.saturating_add(end - start),
+                    SuggestionKind::Insertion => burst.end + end.count_from(start),
                     SuggestionKind::Deletion => burst.end.max(end),
                 },
                 ..burst
@@ -416,12 +426,17 @@ impl ProseState {
     /// The burst after a delete: a marked deletion extends or opens one, and
     /// removing the caller's own typed text shrinks the insertion it came
     /// from.
-    fn after_delete(&mut self, plan: &[(TreeID, u32, u32, Treatment)], id: Option<SuggestionId>) {
-        let removed: u32 = plan
+    fn after_delete(
+        &mut self,
+        plan: &[(TreeID, DocOffset, DocOffset, Treatment)],
+        id: Option<SuggestionId>,
+    ) {
+        let removed = plan
             .iter()
             .filter(|(.., treatment)| *treatment == Treatment::Remove)
-            .map(|(_, start, end, _)| end - start)
-            .sum();
+            .fold(DocCount::ZERO, |sum, (_, start, end, _)| {
+                sum + end.count_from(*start)
+            });
         match id {
             Some(id) => {
                 let first = plan.iter().find(|(.., t)| *t == Treatment::Mark);
@@ -497,7 +512,7 @@ mod tests {
             let at = state.text_of(&last).unwrap_or_default().chars().count() as u32;
             let outcome = state.handle_command(ProseCommand::SplitBlock {
                 block_id: last,
-                pos: at,
+                pos: DocOffset::new(at),
             });
             let new = outcome
                 .display
@@ -512,7 +527,7 @@ mod tests {
         for (id, text) in ids.iter().zip(texts) {
             state.handle_command(ProseCommand::InsertText {
                 block_id: *id,
-                pos: 0,
+                pos: DocOffset::ZERO,
                 text: (*text).to_owned(),
             });
         }
@@ -532,7 +547,7 @@ mod tests {
         state.handle_command(ProseCommand::EnableTrackChanges { enabled: true });
     }
 
-    fn type_at(state: &mut ProseState, block: BlockId, pos: u32, text: &str) -> ProseOutcome {
+    fn type_at(state: &mut ProseState, block: BlockId, pos: DocOffset, text: &str) -> ProseOutcome {
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
             pos,
@@ -543,7 +558,7 @@ mod tests {
     fn delete(state: &mut ProseState, block: BlockId, range: (u32, u32)) -> ProseOutcome {
         state.handle_command(ProseCommand::DeleteText {
             block_id: block,
-            range,
+            range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
         })
     }
 
@@ -558,7 +573,10 @@ mod tests {
     }
 
     fn spans(s: &Suggestion) -> Vec<(u32, u32)> {
-        s.spans.iter().map(|span| (span.start, span.end)).collect()
+        s.spans
+            .iter()
+            .map(|span| (span.start.get(), span.end.get()))
+            .collect()
     }
 
     fn exchange(
@@ -581,7 +599,7 @@ mod tests {
     fn typed_text_becomes_a_suggested_insertion_by_its_author() {
         let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
         suggest(&mut state);
-        type_at(&mut state, ids[0], 5, " world");
+        type_at(&mut state, ids[0], DocOffset::new(5), " world");
         assert_eq!(text(&state, ids[0]), "Hello world");
         let s = only(&state);
         assert_eq!(s.kind, SuggestionKind::Insertion);
@@ -596,7 +614,7 @@ mod tests {
     fn a_suggestion_is_a_mark_over_the_text_itself() {
         let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["ab"]);
         suggest(&mut state);
-        type_at(&mut state, ids[0], 1, "X");
+        type_at(&mut state, ids[0], DocOffset::new(1), "X");
         assert_eq!(text(&state, ids[0]), "aXb");
         assert_eq!(state.root_blocks().len(), 1);
         let marks = format!("{:?}", state.marks_of(&ids[0]));
@@ -609,11 +627,11 @@ mod tests {
     fn turning_the_mode_off_leaves_the_pending_ones_and_marks_nothing_new() {
         let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
         suggest(&mut state);
-        type_at(&mut state, ids[0], 5, "!");
+        type_at(&mut state, ids[0], DocOffset::new(5), "!");
         let before = state.suggestions();
         state.handle_command(ProseCommand::EnableTrackChanges { enabled: false });
         assert_eq!(state.suggestions(), before);
-        type_at(&mut state, ids[0], 0, ">");
+        type_at(&mut state, ids[0], DocOffset::ZERO, ">");
         assert_eq!(text(&state, ids[0]), ">Hello!");
         assert_eq!(state.suggestions().len(), 1);
         assert_eq!(spans(&only(&state)), vec![(6, 7)]);
@@ -625,10 +643,10 @@ mod tests {
     fn a_keystroke_away_from_the_burst_starts_a_new_suggestion() {
         let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello world"]);
         suggest(&mut state);
-        type_at(&mut state, ids[0], 5, ",");
-        type_at(&mut state, ids[0], 6, " my");
+        type_at(&mut state, ids[0], DocOffset::new(5), ",");
+        type_at(&mut state, ids[0], DocOffset::new(6), " my");
         assert_eq!(state.suggestions().len(), 1);
-        type_at(&mut state, ids[0], 0, ">");
+        type_at(&mut state, ids[0], DocOffset::ZERO, ">");
         assert_eq!(state.suggestions().len(), 2);
     }
 
@@ -640,9 +658,9 @@ mod tests {
         let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
         suggest(&mut alice);
         suggest(&mut bob);
-        let typed = type_at(&mut alice, ids[0], 1, "XYZ");
+        let typed = type_at(&mut alice, ids[0], DocOffset::new(1), "XYZ");
         bob.apply_remote(&typed.update.expect("a delta"));
-        type_at(&mut bob, ids[0], 2, "q");
+        type_at(&mut bob, ids[0], DocOffset::new(2), "q");
         let all = bob.suggestions();
         let alices = all.iter().find(|s| s.user_id == ALICE).expect("Alice's");
         let bobs = all.iter().find(|s| s.user_id == BOB).expect("Bob's");
@@ -657,9 +675,9 @@ mod tests {
     fn plain_typing_inside_a_suggestion_joins_none() {
         let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["ab"]);
         suggest(&mut state);
-        type_at(&mut state, ids[0], 1, "XY");
+        type_at(&mut state, ids[0], DocOffset::new(1), "XY");
         state.handle_command(ProseCommand::EnableTrackChanges { enabled: false });
-        type_at(&mut state, ids[0], 2, "q");
+        type_at(&mut state, ids[0], DocOffset::new(2), "q");
         assert_eq!(text(&state, ids[0]), "aXqYb");
         assert_eq!(spans(&only(&state)), vec![(1, 2), (3, 4)]);
         let id = only(&state).suggestion_id;
@@ -674,7 +692,7 @@ mod tests {
     fn a_delete_removes_its_own_suggestion_and_marks_the_rest() {
         let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
         suggest(&mut state);
-        type_at(&mut state, ids[0], 5, "XY");
+        type_at(&mut state, ids[0], DocOffset::new(5), "XY");
         delete(&mut state, ids[0], (3, 7));
         assert_eq!(text(&state, ids[0]), "Hello");
         let s = only(&state);
@@ -702,7 +720,7 @@ mod tests {
         let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
         suggest(&mut alice);
         suggest(&mut bob);
-        let typed = type_at(&mut alice, ids[0], 1, "XY");
+        let typed = type_at(&mut alice, ids[0], DocOffset::new(1), "XY");
         bob.apply_remote(&typed.update.expect("a delta"));
         delete(&mut bob, ids[0], (1, 3));
         assert_eq!(text(&bob, ids[0]), "aXYb");
@@ -742,8 +760,8 @@ mod tests {
         let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello", "world"]);
         suggest(&mut state);
         state.handle_command(ProseCommand::DeleteRange {
-            anchor: (ids[0], 3),
-            focus: (ids[1], 2),
+            anchor: (ids[0], DocOffset::new(3)),
+            focus: (ids[1], DocOffset::new(2)),
         });
         let s = only(&state);
         assert_eq!(s.spans.len(), 2);
@@ -763,8 +781,8 @@ mod tests {
         let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello", "world"]);
         suggest(&mut state);
         state.handle_command(ProseCommand::DeleteRange {
-            anchor: (ids[1], 2),
-            focus: (ids[0], 3),
+            anchor: (ids[1], DocOffset::new(2)),
+            focus: (ids[0], DocOffset::new(3)),
         });
         let id = only(&state).suggestion_id;
         state.handle_command(ProseCommand::RejectSuggestion { suggestion_id: id });
@@ -789,7 +807,7 @@ mod tests {
             let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
             suggest(&mut state);
             if insertion {
-                type_at(&mut state, ids[0], 5, " world");
+                type_at(&mut state, ids[0], DocOffset::new(5), " world");
             } else {
                 delete(&mut state, ids[0], (3, 5));
             }
@@ -855,7 +873,7 @@ mod tests {
             let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
             suggest(&mut alice);
             suggest(&mut bob);
-            let typed = type_at(&mut alice, ids[0], 1, "XY");
+            let typed = type_at(&mut alice, ids[0], DocOffset::new(1), "XY");
             bob.apply_remote(&typed.update.expect("a delta"));
             delete(&mut bob, ids[0], (1, 3));
             let kind = if resolve_insertion {
@@ -888,9 +906,9 @@ mod tests {
                 let (mut state, ids) =
                     document(ambre_core::PeerId(1), ALICE, &["one two three", "four"]);
                 suggest(&mut state);
-                type_at(&mut state, ids[0], 0, ">");
+                type_at(&mut state, ids[0], DocOffset::ZERO, ">");
                 delete(&mut state, ids[0], (5, 8));
-                type_at(&mut state, ids[1], 4, "!");
+                type_at(&mut state, ids[1], DocOffset::new(4), "!");
                 (state, ids)
             };
             let (mut all, ids) = build();
@@ -931,11 +949,11 @@ mod tests {
         let (mut alice, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
         let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
         suggest(&mut alice);
-        let typed = type_at(&mut alice, ids[0], 5, " world");
+        let typed = type_at(&mut alice, ids[0], DocOffset::new(5), " world");
         bob.apply_remote(&typed.update.expect("a delta"));
         let id = only(&alice).suggestion_id;
         assert_eq!(only(&bob).suggestion_id, id);
-        let edit = type_at(&mut bob, ids[0], 0, ">");
+        let edit = type_at(&mut bob, ids[0], DocOffset::ZERO, ">");
         alice.apply_remote(&edit.update.expect("a delta"));
         assert_eq!(only(&alice).suggestion_id, id);
     }
@@ -949,7 +967,7 @@ mod tests {
             let (mut alice, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
             suggest(&mut alice);
             if insertion {
-                type_at(&mut alice, ids[0], 5, " world");
+                type_at(&mut alice, ids[0], DocOffset::new(5), " world");
             } else {
                 delete(&mut alice, ids[0], (1, 4));
             }
@@ -973,11 +991,11 @@ mod tests {
         for command in [
             ProseCommand::SplitBlock {
                 block_id: ids[0],
-                pos: 2,
+                pos: DocOffset::new(2),
             },
             ProseCommand::ApplyMark {
                 block_id: ids[0],
-                range: (0, 2),
+                range: DocSpan::from_usize_range(0..2),
                 key: "b".to_owned(),
                 value: None,
             },
@@ -1003,7 +1021,7 @@ mod tests {
     fn an_undo_takes_back_the_whole_suggestion() {
         let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
         suggest(&mut state);
-        type_at(&mut state, ids[0], 5, "!");
+        type_at(&mut state, ids[0], DocOffset::new(5), "!");
         state.handle_command(ProseCommand::Undo);
         assert_eq!(text(&state, ids[0]), "Hello");
         assert!(state.suggestions().is_empty());
@@ -1032,8 +1050,8 @@ mod tests {
                     let real = visible.get(at as usize).copied()
                         .unwrap_or_else(|| text(&tracked, ids[0]).chars().count() as u32);
                     let typed = "x".repeat(len as usize);
-                    type_at(&mut tracked, ids[0], real, &typed);
-                    type_at(&mut plain, plain_ids[0], at, &typed);
+                    type_at(&mut tracked, ids[0], DocOffset::new(real), &typed);
+                    type_at(&mut plain, plain_ids[0], DocOffset::new(at), &typed);
                 } else {
                     let start = at.min(body - 1);
                     let end = (start + 1).min(body);
@@ -1051,14 +1069,19 @@ mod tests {
 
     /// The offsets of the characters no deletion covers, in order.
     fn visible_positions(state: &ProseState, block: BlockId) -> Vec<u32> {
-        crate::suggest::runs(&state.doc, &crate::events::tree_id(block), 0, u32::MAX)
-            .into_iter()
-            .filter(|run| {
-                run.marks
-                    .iter()
-                    .all(|(kind, _)| *kind != SuggestionKind::Deletion)
-            })
-            .flat_map(|run| run.start..run.end)
-            .collect()
+        crate::suggest::runs(
+            &state.doc,
+            &crate::events::tree_id(block),
+            DocOffset::ZERO,
+            DocOffset::MAX,
+        )
+        .into_iter()
+        .filter(|run| {
+            run.marks
+                .iter()
+                .all(|(kind, _)| *kind != SuggestionKind::Deletion)
+        })
+        .flat_map(|run| run.start.get()..run.end.get())
+        .collect()
     }
 }

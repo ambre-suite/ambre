@@ -7,6 +7,7 @@
 //! the truth: nothing here parses the text.
 
 use ambre_bus::{StyleMark, TextStyle};
+use ambre_core::{CharOffset, CharSpan, char_len};
 use loro::{ExpandType, LoroDoc, LoroText, LoroValue, StyleConfig, StyleConfigMap, TextDelta};
 
 use crate::error::MurmureError;
@@ -47,7 +48,7 @@ pub fn linkable(address: &str) -> bool {
 /// Whether every range of `styles` holds chars of `text`, every link holds
 /// an address [`linkable`] takes, and no two links share a char.
 pub(crate) fn fits(styles: &[StyleMark], text: &str) -> bool {
-    let len = text.chars().count();
+    let len = char_len(text).as_end();
     let placed = styles
         .iter()
         .all(|mark| !mark.range.is_empty() && mark.range.end <= len);
@@ -110,7 +111,7 @@ pub(crate) fn write(
             | TextStyle::Quote
             | TextStyle::List => LoroValue::Bool(true),
         };
-        content.mark(mark.range.clone(), key(&mark.style), value)?;
+        content.mark(mark.range.to_usize_range(), key(&mark.style), value)?;
     }
     Ok(())
 }
@@ -166,12 +167,12 @@ pub(crate) fn read(content: &LoroText) -> Vec<StyleMark> {
     let mut styles: Vec<StyleMark> = Vec::new();
     // The run each key holds open, as an index into `styles`.
     let mut open: [Option<usize>; KEYS.len()] = [None; KEYS.len()];
-    let mut at = 0;
+    let mut at = CharOffset::ZERO;
     for span in content.to_delta() {
         let TextDelta::Insert { insert, attributes } = span else {
             continue;
         };
-        let len = insert.chars().count();
+        let len = char_len(&insert);
         for (slot, key) in open.iter_mut().zip(KEYS) {
             let style = attributes
                 .as_ref()
@@ -187,7 +188,7 @@ pub(crate) fn read(content: &LoroText) -> Vec<StyleMark> {
                     *slot = Some(styles.len());
                     styles.push(StyleMark {
                         style,
-                        range: at..at + len,
+                        range: CharSpan::from_count(at, len),
                     });
                 }
             }

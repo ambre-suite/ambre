@@ -39,6 +39,7 @@ use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
 use ambre_chrome::{ToastHost, Toasts, ZoomFactor};
 use ambre_commands::CommandId;
+use ambre_core::{CharCount, CharOffset};
 use ambre_toile::chrome::{
     CommentComposer, CommentDraft, CommentIntent, CommentsPanel, DeckIntent, DeckMove, DeckPanel,
     EditingSurfaces, FloatBar, PresenterIntent, PresenterPanel, REDO, SelStats, SelectionToolbar,
@@ -657,8 +658,8 @@ fn presenter_notes_edit_fires_minimal_delta() {
         Some(PresenterIntent::EditNotes {
             base: "abc".to_owned(),
             delta: TextDelta {
-                at: 3,
-                delete: 0,
+                at: CharOffset::new(3),
+                delete: CharCount::ZERO,
                 insert: "d".to_owned(),
             },
         })
@@ -1265,8 +1266,8 @@ fn a_note_edit_with_no_frame_on_screen_is_refused() {
         ToileIntent::Present(PresenterIntent::EditNotes {
             base: String::new(),
             delta: TextDelta {
-                at: 0,
-                delete: 0,
+                at: CharOffset::ZERO,
+                delete: CharCount::ZERO,
                 insert: "hi".to_owned(),
             },
         })
