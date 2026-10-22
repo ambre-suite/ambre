@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ambre_core::{ApiFailure, HttpStatus, RefusalCode, Seq};
+use ambre_core::{ApiFailure, HttpStatus, RefusalCode, Seq, UnreadableCause};
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -411,9 +411,8 @@ pub(crate) enum HttpError {
         /// The code its body named, on a status that may carry one.
         code: Option<RefusalCode>,
     },
-    /// A successful answer whose body did not read. `unknown_word` marks one
-    /// that names a word of a closed set this build does not know, which only
-    /// a newer relay writes (`SYNC-152`).
+    /// A successful answer whose body did not read, for `cause`. An unknown
+    /// word is one only a newer relay writes (`SYNC-152`).
     Unreadable {
         /// The method.
         method: Method,
@@ -421,8 +420,9 @@ pub(crate) enum HttpError {
         url: String,
         /// What the parser said.
         reason: String,
-        /// Whether the answer named a word this build does not know.
-        unknown_word: bool,
+        /// Whether the body was malformed, or named a word this build does
+        /// not know.
+        cause: UnreadableCause,
     },
 }
 
@@ -488,9 +488,7 @@ impl HttpError {
                 status: *status,
                 code: *code,
             },
-            Self::Unreadable { unknown_word, .. } => ApiFailure::Unreadable {
-                unknown_word: *unknown_word,
-            },
+            Self::Unreadable { cause, .. } => ApiFailure::Unreadable { cause: *cause },
         }
     }
 }
@@ -520,10 +518,10 @@ impl std::fmt::Display for HttpError {
                 method,
                 url,
                 reason,
-                unknown_word,
+                cause,
             } => {
                 write!(f, "{} {url}: parse error: {reason}", method.as_str())?;
-                if *unknown_word {
+                if *cause == UnreadableCause::UnknownWord {
                     write!(f, ": {UNKNOWN_WORD}")?;
                 }
                 Ok(())
@@ -646,7 +644,11 @@ fn read_json<R: serde::de::DeserializeOwned>(
         url: request.url.clone(),
         // A word of a closed set this build does not know means the relay is
         // newer (`SYNC-152`).
-        unknown_word: e.is_data() && e.to_string().starts_with("unknown variant `"),
+        cause: if e.is_data() && e.to_string().starts_with("unknown variant `") {
+            UnreadableCause::UnknownWord
+        } else {
+            UnreadableCause::Malformed
+        },
         reason: e.to_string(),
     })
 }
@@ -1931,7 +1933,10 @@ mod tests {
     }
 
     fn is_unknown_word(error: &HttpError) -> bool {
-        error.failure() == ApiFailure::Unreadable { unknown_word: true }
+        error.failure()
+            == ApiFailure::Unreadable {
+                cause: UnreadableCause::UnknownWord,
+            }
     }
 
     /// The `Authorization` value a request carried, if any.

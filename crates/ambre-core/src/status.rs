@@ -269,6 +269,18 @@ impl fmt::Display for HttpStatus {
     }
 }
 
+/// Why an answer of the relay did not read. Variant 0 is the value that was
+/// `false`, so the bus frame reads the same.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum UnreadableCause {
+    /// The body is not the shape the request expects.
+    #[default]
+    Malformed,
+    /// The body names a word of a closed set this build does not know, which
+    /// only a newer relay writes.
+    UnknownWord,
+}
+
 /// Why a request the user's action asked for failed. The relay's own answer
 /// carries its status and the refusal code its body named. Every other case
 /// is named without a status, so no code stands for an answer that never came.
@@ -284,11 +296,11 @@ pub enum ApiFailure {
     },
     /// No answer arrived: the transport failed, or the deadline passed.
     NoAnswer,
-    /// The answer did not read. `unknown_word` marks one that names a word
-    /// of a closed set this build does not know, which a newer relay writes.
+    /// The answer did not read, for `cause`.
     Unreadable {
-        /// Whether the answer named a word this build does not know.
-        unknown_word: bool,
+        /// Whether the body was malformed, or named a word this build does not
+        /// know.
+        cause: UnreadableCause,
     },
     /// The request was refused or failed on this device, not by the relay.
     /// Examples are a name too long or a key that does not decode.

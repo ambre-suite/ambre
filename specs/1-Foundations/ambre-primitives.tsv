@@ -1732,7 +1732,6 @@ ambre-core | src/span.rs | crate::span | UnixMillis.0 | field | u64	newtype-inne
 ambre-core | src/span.rs | crate::span | UnixSeconds.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | UnixSeconds::to_i64_saturating() | ret | i64	newtype-inner	time newtype accessor
 ambre-core | src/status.rs | crate::status | <SnapshotStatus as FromStr>::from_str(word) | param | &str	trait	signature fixed by the trait
-ambre-core | src/status.rs | crate::status | ApiFailure::Unreadable.unknown_word | field | bool	debt	a bool carried by an error: an enum would name both cases
 ambre-core | src/status.rs | crate::status | HttpStatus.0 | field | u16	newtype-inner	HttpStatus field or accessor
 ambre-core | src/status.rs | crate::status | HttpStatus::is_success() | ret | bool	newtype-inner	HttpStatus field or accessor
 ambre-core | src/status.rs | crate::status | SnapshotStatus::as_str() | ret | &'static str	newtype-inner	SnapshotStatus codec / StatusError
@@ -4802,7 +4801,6 @@ ambre-sync | src/http.rs | crate::http | HttpError::NoAnswer.reason | field | St
 ambre-sync | src/http.rs | crate::http | HttpError::NoAnswer.url | field | String	debt	a URL as a bare String: RelayUrl exists
 ambre-sync | src/http.rs | crate::http | HttpError::Refused.url | field | String	debt	a URL as a bare String: RelayUrl exists
 ambre-sync | src/http.rs | crate::http | HttpError::Unreadable.reason | field | String	free-text	error message text
-ambre-sync | src/http.rs | crate::http | HttpError::Unreadable.unknown_word | field | bool	debt	a bool carried by an error: an enum would name both cases
 ambre-sync | src/http.rs | crate::http | HttpError::Unreadable.url | field | String	debt	a URL as a bare String: RelayUrl exists
 ambre-sync | src/http.rs | crate::http | HttpError::at(step) | param | &str	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::is() | ret | bool	generic	predicate

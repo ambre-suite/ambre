@@ -128,7 +128,9 @@ fn step_owed(failure: ApiFailure) -> Option<LogicEvent> {
             code: Some(ambre_core::RefusalCode::SetupRequired),
             ..
         } => Some(LogicEvent::SetupRequired),
-        ApiFailure::Unreadable { unknown_word: true } => Some(LogicEvent::UpdateRequired),
+        ApiFailure::Unreadable {
+            cause: ambre_core::UnreadableCause::UnknownWord,
+        } => Some(LogicEvent::UpdateRequired),
         _ => None,
     }
 }
@@ -1839,13 +1841,14 @@ mod setup_tests {
     #[test]
     fn an_answer_with_an_unknown_word_reaches_logic_as_an_update() {
         let (sink, rx) = LogicSink::channel();
-        let unreadable = |unknown_word| http::HttpError::Unreadable {
+        use ambre_core::UnreadableCause;
+        let unreadable = |cause| http::HttpError::Unreadable {
             method: http::Method::Get,
             url: "https://relay.example/api/documents/d/members".into(),
             reason: "unknown variant `auditor`".into(),
-            unknown_word,
+            cause,
         };
-        let unknown = unreadable(true);
+        let unknown = unreadable(UnreadableCause::UnknownWord);
         let _ = sink.send(LogicEvent::ApiError {
             id: None,
             request: ApiRequest::ListDocumentMembers,
@@ -1853,7 +1856,7 @@ mod setup_tests {
             message: unknown.to_string(),
         });
         let _ = sink.send(auth_failed(unknown));
-        let other = unreadable(false);
+        let other = unreadable(UnreadableCause::Malformed);
         let _ = sink.send(LogicEvent::ApiError {
             id: None,
             request: ApiRequest::ListDocumentMembers,
@@ -1867,7 +1870,7 @@ mod setup_tests {
             told[2],
             LogicEvent::ApiError {
                 failure: ApiFailure::Unreadable {
-                    unknown_word: false
+                    cause: UnreadableCause::Malformed
                 },
                 ..
             }

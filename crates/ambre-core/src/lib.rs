@@ -119,7 +119,8 @@ pub use schema::{
 pub use seq::Seq;
 pub use span::{LamportStamp, Millis, PageTime, Seconds, Timestamp, UnixMillis, UnixSeconds};
 pub use status::{
-    ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError, WriteStatus,
+    ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
+    UnreadableCause, WriteStatus,
 };
 pub use text_offset::{
     ByteCount, ByteDelta, ByteOffset, ByteSpan, ByteVec, CharCount, CharDelta, CharOffset,
