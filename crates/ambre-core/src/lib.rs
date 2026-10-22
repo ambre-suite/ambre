@@ -42,6 +42,9 @@ pub mod fixtures;
 /// Font attributes every application shares: [`FontSize`].
 pub mod font;
 pub mod id;
+/// Index families: a position, a count, a difference and a span, written by
+/// [`define_index!`].
+pub mod index;
 pub mod key_hex;
 pub mod key_id;
 pub mod media;
