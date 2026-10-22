@@ -294,7 +294,13 @@ fn reply_in_thread(state: &mut ChannelState, segment: SegmentId, root: MessageId
         styles: Vec::new(),
     };
     state
-        .reply(root, &reply, AUTHOR, Timestamp(1_700_000_000_005), true)
+        .reply(
+            root,
+            &reply,
+            AUTHOR,
+            Timestamp(1_700_000_000_005),
+            ambre_bus::ReplyEcho::AlsoInChannel,
+        )
         .expect("reply");
 }
 
@@ -323,7 +329,12 @@ pub(crate) fn scenario_thread(state: &ChannelState) -> DocumentId {
 fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
     let successor = SegmentId::new();
     state
-        .close_into(segment, successor, true, Timestamp(1_700_000_000_006))
+        .close_into(
+            segment,
+            successor,
+            crate::Successor::Created,
+            Timestamp(1_700_000_000_006),
+        )
         .expect("close");
     state
         .adopt_session(

@@ -1301,7 +1301,7 @@ pub(crate) mod tests {
         assert_eq!(images(&surface), 0, "not decoded yet");
         assert!(tall(&waiting) >= tall(&chip_only) + PREVIEW_TALL);
 
-        shelf.begin_paint(crate::pictures::Screen::Channel);
+        shelf.begin_paint(crate::Region::Channel);
         assert!(shelf.want(&file.media_ref));
         let frame = |delay_ms| PictureFrame {
             pixels: vec![0; 2 * 4],

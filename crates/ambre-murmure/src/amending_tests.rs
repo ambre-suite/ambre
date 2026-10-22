@@ -43,7 +43,7 @@ fn closing_with(texts: &[&str], author: UserId) -> (ChannelState, SegmentId) {
     let closing = state.active_id();
     let successor = SegmentId::new();
     state
-        .close_into(closing, successor, true, NOW)
+        .close_into(closing, successor, crate::Successor::Created, NOW)
         .expect("close");
     let peer = next_peer();
     state
@@ -473,7 +473,13 @@ fn a_thread_of_a_locked_root_is_recorded_in_its_amendments() {
         "recorded once"
     );
     alice
-        .reply(root, &draft("late"), author, NOW, false)
+        .reply(
+            root,
+            &draft("late"),
+            author,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
         .expect("reply");
     let head = alice.messages(segment).expect("held")[0]
         .thread

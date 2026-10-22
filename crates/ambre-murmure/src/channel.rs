@@ -41,7 +41,7 @@ mod relocating;
 mod threading;
 
 pub use amending::{ChangeTarget, Linked};
-pub use closing::{Closed, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS};
+pub use closing::{Closed, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS, Successor};
 pub use finalizing::{FINALIZE_RETRY_MS, FinalSnapshot};
 pub use folding::{FOLD_DELAY_MS, FoldSnapshot, Settled};
 pub use relocating::{Relocated, Replay};

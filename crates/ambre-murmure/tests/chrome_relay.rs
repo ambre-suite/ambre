@@ -30,7 +30,7 @@ use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
     NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REACT, REPLY, SEARCH, key_list,
 };
-use ambre_murmure::{MessageRef, MurmurePane};
+use ambre_murmure::{MessageRef, MurmurePane, Region};
 use leptos::prelude::*;
 use wasm_bindgen_test::*;
 
@@ -929,9 +929,13 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         mentions: Vec::new(),
         styles: Vec::new(),
     };
-    assert_eq!(relay.take_edit(true), None, "the thread's region leaves it");
-    assert_eq!(relay.take_edit(false), Some(asked.clone()));
-    assert_eq!(relay.take_edit(false), None, "taken once");
+    assert_eq!(
+        relay.take_edit(Region::Thread),
+        None,
+        "the thread's region leaves it"
+    );
+    assert_eq!(relay.take_edit(Region::Channel), Some(asked.clone()));
+    assert_eq!(relay.take_edit(Region::Channel), None, "taken once");
 
     // A reply goes to the thread's region alone (`MURMURE-526`).
     let reply = PendingEdit {
@@ -940,11 +944,11 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
     };
     relay.editing.set(Some(reply.clone()));
     assert_eq!(
-        relay.take_edit(false),
+        relay.take_edit(Region::Channel),
         None,
         "the channel's region leaves it"
     );
-    assert_eq!(relay.take_edit(true), Some(reply));
+    assert_eq!(relay.take_edit(Region::Thread), Some(reply));
 }
 
 /// The member's own message offers its deletion, last. The action sends
@@ -1185,7 +1189,7 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
             && *t == now
     ));
 
-    relay.ask_emoji(true);
+    relay.ask_emoji(Region::Thread);
     settle().await;
     assert!(dialog.open());
     assert_eq!(search.value(), "", "the search starts blank");
@@ -1202,9 +1206,9 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
         1,
         "a composer pick sends nothing"
     );
-    assert_eq!(relay.take_emoji(false), None, "not the channel's");
-    assert!(relay.take_emoji(true).is_some());
-    assert_eq!(relay.take_emoji(true), None, "taken once");
+    assert_eq!(relay.take_emoji(Region::Channel), None, "not the channel's");
+    assert!(relay.take_emoji(Region::Thread).is_some());
+    assert_eq!(relay.take_emoji(Region::Thread), None, "taken once");
     // The table is compiled in and the grid is text: the picker loads
     // nothing (`MURMURE-141`).
     let dialog_html = dialog.inner_html();
@@ -1482,9 +1486,9 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
         entries,
         chosen: 0,
         at: (10.0, 20.0),
-        in_thread: false,
+        region: Region::Channel,
     };
-    relay.show_mentions(false, Some(list));
+    relay.show_mentions(Region::Channel, Some(list));
     leptos::task::tick().await;
     let options = root.query_selector_all("[role=option]").unwrap();
     assert_eq!(options.length(), 3);
@@ -1501,14 +1505,22 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
 
     let press = web_sys::MouseEvent::new("mousedown").unwrap();
     bob.dispatch_event(&press).unwrap();
-    assert_eq!(relay.take_pick(true), None, "the thread picked nothing");
-    assert_eq!(relay.take_pick(false), Some(1));
-    assert_eq!(relay.take_pick(false), None, "a pick is taken once");
+    assert_eq!(
+        relay.take_pick(Region::Thread),
+        None,
+        "the thread picked nothing"
+    );
+    assert_eq!(relay.take_pick(Region::Channel), Some(1));
+    assert_eq!(
+        relay.take_pick(Region::Channel),
+        None,
+        "a pick is taken once"
+    );
 
-    relay.show_mentions(true, None);
+    relay.show_mentions(Region::Thread, None);
     leptos::task::tick().await;
     assert!(root.query_selector("[role=listbox]").unwrap().is_some());
-    relay.show_mentions(false, None);
+    relay.show_mentions(Region::Channel, None);
     leptos::task::tick().await;
     assert!(root.query_selector("[role=listbox]").unwrap().is_none());
     root.remove();
@@ -1537,9 +1549,9 @@ async fn the_format_bar_shows_the_murmure_marks_and_a_press_toggles_one() {
             (TextStyle::Code, Cover::None),
         ],
         at: (10.0, 20.0),
-        in_thread: false,
+        region: Region::Channel,
     };
-    relay.show_bar(false, Some(bar));
+    relay.show_bar(Region::Channel, Some(bar));
     leptos::task::tick().await;
     let buttons = root.query_selector_all("[role=toolbar] button").unwrap();
     let shown: Vec<(String, String)> = (0..buttons.length())
@@ -1561,14 +1573,22 @@ async fn the_format_bar_shows_the_murmure_marks_and_a_press_toggles_one() {
     italic
         .dispatch_event(&web_sys::MouseEvent::new("click").unwrap())
         .unwrap();
-    assert_eq!(relay.take_press(true), None, "the thread pressed nothing");
-    assert_eq!(relay.take_press(false), Some(TextStyle::Italic));
-    assert_eq!(relay.take_press(false), None, "a press is taken once");
+    assert_eq!(
+        relay.take_press(Region::Thread),
+        None,
+        "the thread pressed nothing"
+    );
+    assert_eq!(relay.take_press(Region::Channel), Some(TextStyle::Italic));
+    assert_eq!(
+        relay.take_press(Region::Channel),
+        None,
+        "a press is taken once"
+    );
 
-    relay.show_bar(true, None);
+    relay.show_bar(Region::Thread, None);
     leptos::task::tick().await;
     assert!(root.query_selector("[role=toolbar]").unwrap().is_some());
-    relay.show_bar(false, None);
+    relay.show_bar(Region::Channel, None);
     leptos::task::tick().await;
     assert!(root.query_selector("[role=toolbar]").unwrap().is_none());
     root.remove();
@@ -1622,7 +1642,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
     let root_id = MessageId::new();
     relay.absorb(&ask(Some(HeldReply {
         root: root_id,
-        also_in_channel: true,
+        also_in_channel: ambre_bus::ReplyEcho::AlsoInChannel,
     })));
     settle().await;
     assert!(dialog.open(), "the question opens");
@@ -1638,13 +1658,15 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
     assert!(!dialog.open());
     assert!(sent.get_untracked().is_empty(), "a cancel sends nothing");
     assert_eq!(
-        relay.take_returned(false),
+        relay.take_returned(Region::Channel),
         None,
         "the channel takes no reply"
     );
-    let back = relay.take_returned(true).expect("the thread takes it");
+    let back = relay
+        .take_returned(Region::Thread)
+        .expect("the thread takes it");
     assert_eq!(back.held.draft, draft);
-    assert_eq!(relay.take_returned(true), None, "taken once");
+    assert_eq!(relay.take_returned(Region::Thread), None, "taken once");
 
     // A message asks, and Send sends it once, confirmed.
     relay.absorb(&ask(None));
@@ -1662,7 +1684,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
         }] if *channel_id == direct && *d == draft && *t == now
     ));
     assert_eq!(
-        relay.take_returned(false),
+        relay.take_returned(Region::Channel),
         None,
         "a send gives nothing back"
     );

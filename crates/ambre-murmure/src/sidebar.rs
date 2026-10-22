@@ -11,7 +11,7 @@ use ambre_bus::{
     CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace, DirectPeers,
     MemberChannel, MentionCount, UnreadCount,
 };
-use ambre_core::{CategoryId, ChannelId, SpaceId};
+use ambre_core::{CategoryId, ChannelId, SpaceId, StepDirection};
 
 /// The section of the sidebar an entry sits in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -391,14 +391,18 @@ impl Sidebar {
     /// sidebar order, or the previous one, wrapping round (`MURMURE-176`).
     /// A channel to join is never one, so a jump joins nothing. `None` when
     /// no other channel has activity.
-    pub fn next_with_activity(&self, from: Option<ChannelId>, forward: bool) -> Option<ChannelId> {
+    pub fn next_with_activity(
+        &self,
+        from: Option<ChannelId>,
+        direction: StepDirection,
+    ) -> Option<ChannelId> {
         let mut order: Vec<SidebarEntry> = self
             .sections()
             .into_iter()
             .filter(|s| s.group != SidebarGroup::ToJoin)
             .flat_map(|s| s.entries)
             .collect();
-        if !forward {
+        if direction == StepDirection::Backward {
             order.reverse();
         }
         let start = from
@@ -912,27 +916,48 @@ mod tests {
             unread: None,
             mentions: None,
         };
-        assert_eq!(sidebar.next_with_activity(None, true), None);
+        assert_eq!(
+            sidebar.next_with_activity(None, StepDirection::Forward),
+            None
+        );
 
         sidebar.set_activity(&[active(a), active(c), active(open)]);
-        assert_eq!(sidebar.next_with_activity(None, true), Some(a));
-        assert_eq!(sidebar.next_with_activity(Some(a), true), Some(c));
-        assert_eq!(sidebar.next_with_activity(Some(b), true), Some(c));
         assert_eq!(
-            sidebar.next_with_activity(Some(c), true),
+            sidebar.next_with_activity(None, StepDirection::Forward),
+            Some(a)
+        );
+        assert_eq!(
+            sidebar.next_with_activity(Some(a), StepDirection::Forward),
+            Some(c)
+        );
+        assert_eq!(
+            sidebar.next_with_activity(Some(b), StepDirection::Forward),
+            Some(c)
+        );
+        assert_eq!(
+            sidebar.next_with_activity(Some(c), StepDirection::Forward),
             Some(a),
             "it wraps"
         );
-        assert_eq!(sidebar.next_with_activity(Some(a), false), Some(c));
-        assert_eq!(sidebar.next_with_activity(Some(c), false), Some(a));
-        assert_eq!(sidebar.next_with_activity(None, false), Some(c));
+        assert_eq!(
+            sidebar.next_with_activity(Some(a), StepDirection::Backward),
+            Some(c)
+        );
+        assert_eq!(
+            sidebar.next_with_activity(Some(c), StepDirection::Backward),
+            Some(a)
+        );
+        assert_eq!(
+            sidebar.next_with_activity(None, StepDirection::Backward),
+            Some(c)
+        );
 
         sidebar.set_activity(&[ChannelActivity {
             active: false,
             ..active(c)
         }]);
         assert_eq!(
-            sidebar.next_with_activity(Some(a), true),
+            sidebar.next_with_activity(Some(a), StepDirection::Forward),
             None,
             "the channel it starts from is not a jump"
         );

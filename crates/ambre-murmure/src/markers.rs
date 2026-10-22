@@ -9,6 +9,7 @@
 use ambre_bus::{StyleMark, TextStyle};
 use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharSpan, byte_to_char, char_len};
 
+use crate::Region;
 use crate::style::linkable;
 
 /// The chord of each style, `Ctrl` with this key, the one Prose binds to the
@@ -42,8 +43,8 @@ pub struct MarkBar {
     pub controls: Vec<(TextStyle, Cover)>,
     /// The top-left of the caret, in pixels of the region.
     pub at: (f32, f32),
-    /// The bar hangs over the thread's region, not the channel's.
-    pub in_thread: bool,
+    /// The region the bar hangs over.
+    pub region: Region,
 }
 
 /// How much of the chars `range` the runs of `style` in `styles` cover.

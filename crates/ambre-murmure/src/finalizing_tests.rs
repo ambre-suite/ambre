@@ -41,7 +41,7 @@ fn closed_with(texts: &[&str]) -> (ChannelState, SegmentId) {
     let closing = state.wants_close().expect("full");
     let successor = SegmentId::new();
     state
-        .close_into(closing, successor, true, NOW)
+        .close_into(closing, successor, crate::Successor::Created, NOW)
         .expect("close");
     let peer = next_peer();
     state
@@ -354,7 +354,7 @@ fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, Vec<u
     }
     let closing = alice.wants_close().expect("full");
     alice
-        .close_into(closing, SegmentId::new(), true, NOW)
+        .close_into(closing, SegmentId::new(), crate::Successor::Created, NOW)
         .expect("close");
     assert_eq!(alice.lease_to_ask(NOW), Some(closing));
     alice.lease_granted(

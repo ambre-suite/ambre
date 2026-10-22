@@ -22,7 +22,7 @@ use crate::markers::{Cover, MarkBar};
 use crate::mention_list::MentionList;
 use crate::uploads::PickedFile;
 use crate::{
-    Activity, MessageRef, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
+    Activity, MessageRef, MurmurePane, Region, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
 };
 use ambre_bus::AppCommand;
 use ambre_bus::{
@@ -35,7 +35,7 @@ use ambre_chrome::{
     ShellAction, ShellRegion, Toasts,
 };
 use ambre_commands::{CommandId, Locale};
-use ambre_core::{ChannelId, SpaceId, UserId};
+use ambre_core::{ChannelId, SpaceId, StepDirection, UserId};
 use leptos::prelude::*;
 
 /// What the user reads when the root of a copy could not be reached. Replying
@@ -362,14 +362,13 @@ pub struct MurmureRelay {
     /// (`MURMURE-555`).
     pub mentions: RwSignal<Option<MentionList>>,
     /// The entry a click picked in the `@` list, until its region takes it.
-    /// The flag names the thread's region.
-    picked: RwSignal<Option<(bool, usize)>>,
+    picked: RwSignal<Option<(Region, usize)>>,
     /// The format bar a region of the page shows, `None` while nothing is
     /// selected (`MURMURE-432`).
     pub mark_bar: RwSignal<Option<MarkBar>>,
     /// The style a press on the format bar asked for, until its region takes
-    /// it. The flag names the thread's region.
-    pressed_mark: RwSignal<Option<(bool, TextStyle)>>,
+    /// it.
+    pressed_mark: RwSignal<Option<(Region, TextStyle)>>,
     /// The other members who watch each open channel, as the Logic thread
     /// last heard them (`MURMURE-126`). A channel nobody watches has no entry.
     watching: RwSignal<HashMap<ChannelId, HashSet<UserId>>>,
@@ -396,8 +395,8 @@ pub struct MurmureRelay {
     /// What the emoji picker is open for, `None` while it is closed.
     pub picking: RwSignal<Option<Picking>>,
     /// The emoji the picker picked for a composer, until its region takes
-    /// it (`MURMURE-139`). The flag names the thread's region.
-    picked_emoji: RwSignal<Option<(bool, String)>>,
+    /// it (`MURMURE-139`).
+    picked_emoji: RwSignal<Option<(Region, String)>>,
     /// The files dropped on the channel's canvas, until its region takes
     /// them to upload (`MURMURE-132`).
     dropped_files: RwSignal<Vec<PickedFile>>,
@@ -511,10 +510,9 @@ impl MurmureRelay {
             .unwrap_or_default()
     }
 
-    /// Open the emoji picker on the composer of the region `in_thread`
-    /// (`MURMURE-139`).
-    pub fn ask_emoji(&self, in_thread: bool) {
-        self.picking.set(Some(Picking::Composer { in_thread }));
+    /// Open the emoji picker on the composer of `region` (`MURMURE-139`).
+    pub fn ask_emoji(&self, region: Region) {
+        self.picking.set(Some(Picking::Composer { region }));
     }
 
     /// The member picked `emoji`, stamped `now`, and the picker closes. A
@@ -525,19 +523,18 @@ impl MurmureRelay {
         let picking = self.picking.get_untracked()?;
         self.picking.set(None);
         match picking {
-            Picking::Composer { in_thread } => {
-                self.picked_emoji.set(Some((in_thread, emoji.to_owned())));
+            Picking::Composer { region } => {
+                self.picked_emoji.set(Some((region, emoji.to_owned())));
                 None
             }
             Picking::Reaction(pending) => Some(pending.command(ambre_bus::Emoji::from(emoji), now)),
         }
     }
 
-    /// The emoji picked for the composer of the region `in_thread`, taken
-    /// once.
-    pub fn take_emoji(&self, in_thread: bool) -> Option<String> {
-        let (region, emoji) = self.picked_emoji.get_untracked()?;
-        if region != in_thread {
+    /// The emoji picked for the composer of `region`, taken once.
+    pub fn take_emoji(&self, region: Region) -> Option<String> {
+        let (picked, emoji) = self.picked_emoji.get_untracked()?;
+        if picked != region {
             return None;
         }
         self.picked_emoji.set(None);
@@ -612,9 +609,9 @@ impl MurmureRelay {
 
     /// The cancelled send, which one region takes once: the thread's region
     /// a reply, the channel's region a message (`MURMURE-558`).
-    pub fn take_returned(&self, in_thread: bool) -> Option<AskedAll> {
+    pub fn take_returned(&self, region: Region) -> Option<AskedAll> {
         let asked = self.returned.get_untracked()?;
-        if asked.in_thread() != in_thread {
+        if asked.region() != region {
             return None;
         }
         self.returned.set(None);
@@ -624,9 +621,9 @@ impl MurmureRelay {
     /// The edit the member asked for, which one region takes once
     /// (`MURMURE-203`). The thread's region takes a reply, and the channel's
     /// region the rest (`MURMURE-526`). `None` with none asked there.
-    pub fn take_edit(&self, in_thread: bool) -> Option<PendingEdit> {
+    pub fn take_edit(&self, region: Region) -> Option<PendingEdit> {
         let pending = self.editing.get_untracked()?;
-        if matches!(pending.at, MessageAt::Thread(_)) != in_thread {
+        if matches!(pending.at, MessageAt::Thread(_)) != (region == Region::Thread) {
             return None;
         }
         self.editing.set(None);
@@ -1205,10 +1202,10 @@ impl MurmureRelay {
 
     /// Show the `@` list a region handed over, or close it. A region closes
     /// only its own list, so the other region's stays (`MURMURE-555`).
-    pub fn show_mentions(&self, in_thread: bool, list: Option<MentionList>) {
+    pub fn show_mentions(&self, region: Region, list: Option<MentionList>) {
         let theirs = self
             .mentions
-            .with_untracked(|shown| shown.as_ref().is_some_and(|s| s.in_thread != in_thread));
+            .with_untracked(|shown| shown.as_ref().is_some_and(|s| s.region != region));
         if list.is_some() || !theirs {
             self.mentions.set(list);
         }
@@ -1217,18 +1214,18 @@ impl MurmureRelay {
     /// A click on the entry `index` of the `@` list shown: its region takes
     /// the pick at its next frame (`MURMURE-555`).
     pub fn pick_mention(&self, index: usize) {
-        if let Some(in_thread) = self
+        if let Some(region) = self
             .mentions
-            .with_untracked(|m| m.as_ref().map(|m| m.in_thread))
+            .with_untracked(|m| m.as_ref().map(|m| m.region))
         {
-            self.picked.set(Some((in_thread, index)));
+            self.picked.set(Some((region, index)));
         }
     }
 
-    /// The pick of the region `in_thread`, taken once.
-    pub fn take_pick(&self, in_thread: bool) -> Option<usize> {
-        let (region, index) = self.picked.get_untracked()?;
-        if region != in_thread {
+    /// The pick of `region`, taken once.
+    pub fn take_pick(&self, region: Region) -> Option<usize> {
+        let (picked, index) = self.picked.get_untracked()?;
+        if picked != region {
             return None;
         }
         self.picked.set(None);
@@ -1237,10 +1234,10 @@ impl MurmureRelay {
 
     /// Show the format bar a region handed over, or close it. A region
     /// closes only its own bar (`MURMURE-432`).
-    pub fn show_bar(&self, in_thread: bool, bar: Option<MarkBar>) {
+    pub fn show_bar(&self, region: Region, bar: Option<MarkBar>) {
         let theirs = self
             .mark_bar
-            .with_untracked(|shown| shown.as_ref().is_some_and(|s| s.in_thread != in_thread));
+            .with_untracked(|shown| shown.as_ref().is_some_and(|s| s.region != region));
         if bar.is_some() || !theirs {
             self.mark_bar.set(bar);
         }
@@ -1249,18 +1246,18 @@ impl MurmureRelay {
     /// A press on the control of `style` in the format bar shown: its region
     /// takes it at its next frame (`MURMURE-432`).
     pub fn press_mark(&self, style: TextStyle) {
-        if let Some(in_thread) = self
+        if let Some(region) = self
             .mark_bar
-            .with_untracked(|bar| bar.as_ref().map(|bar| bar.in_thread))
+            .with_untracked(|bar| bar.as_ref().map(|bar| bar.region))
         {
-            self.pressed_mark.set(Some((in_thread, style)));
+            self.pressed_mark.set(Some((region, style)));
         }
     }
 
-    /// The press on the bar of the region `in_thread`, taken once.
-    pub fn take_press(&self, in_thread: bool) -> Option<TextStyle> {
-        let (region, style) = self.pressed_mark.get_untracked()?;
-        if region != in_thread {
+    /// The press on the bar of `region`, taken once.
+    pub fn take_press(&self, region: Region) -> Option<TextStyle> {
+        let (pressed, style) = self.pressed_mark.get_untracked()?;
+        if pressed != region {
             return None;
         }
         self.pressed_mark.set(None);
@@ -1302,11 +1299,11 @@ impl MurmureRelay {
     /// Open the next channel with activity after the shown one, or the
     /// previous one (`MURMURE-176`). It sends no read cursor: the channel
     /// opens as a click opens it (`MURMURE-177`).
-    pub fn jump(&self, forward: bool) -> Option<LogicCommand> {
+    pub fn jump(&self, direction: StepDirection) -> Option<LogicCommand> {
         let from = self.pane.get_untracked().shown_channel();
         let to = self
             .sidebar
-            .with_untracked(|s| s.next_with_activity(from, forward))?;
+            .with_untracked(|s| s.next_with_activity(from, direction))?;
         self.select(to)
     }
 
@@ -1343,8 +1340,8 @@ impl MurmureHandler {
     /// Run the command `id`. `false` for an id Murmure did not declare.
     fn run(&self, id: CommandId) -> bool {
         let command = match id {
-            NEXT_ACTIVITY => self.relay.jump(true),
-            PREVIOUS_ACTIVITY => self.relay.jump(false),
+            NEXT_ACTIVITY => self.relay.jump(StepDirection::Forward),
+            PREVIOUS_ACTIVITY => self.relay.jump(StepDirection::Backward),
             // The command of the unread feature, which the relay answers for
             // every channel of the user (`MURMURE-180`).
             MARK_ALL_READ => Some(LogicCommand::MarkAllRead),
@@ -1573,11 +1570,10 @@ pub fn ChannelMentionConfirm(
 
 /// The top-left of the canvas a region paints, in the viewport, `(0, 0)`
 /// with no such canvas in the page.
-fn canvas_origin(in_thread: bool) -> (f64, f64) {
-    let id = if in_thread {
-        crate::view::THREAD_CANVAS
-    } else {
-        crate::view::CHANNEL_CANVAS
+fn canvas_origin(region: Region) -> (f64, f64) {
+    let id = match region {
+        Region::Thread => crate::view::THREAD_CANVAS,
+        Region::Channel => crate::view::CHANNEL_CANVAS,
     };
     leptos::web_sys::window()
         .and_then(|w| w.document())
@@ -1596,7 +1592,7 @@ fn canvas_origin(in_thread: bool) -> (f64, f64) {
 pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
     move || {
         relay.mentions.get().map(|list| {
-            let (left, top) = canvas_origin(list.in_thread);
+            let (left, top) = canvas_origin(list.region);
             let (x, y) = (left + f64::from(list.at.0), top + f64::from(list.at.1));
             let entries = list
                 .entries
@@ -1636,7 +1632,7 @@ pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
 pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
     move || {
         relay.mark_bar.get().map(|bar| {
-            let (left, top) = canvas_origin(bar.in_thread);
+            let (left, top) = canvas_origin(bar.region);
             let anchor = (left + f64::from(bar.at.0), top + f64::from(bar.at.1));
             let controls = bar
                 .controls

@@ -118,12 +118,12 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
         Ok(ThreadTarget::Write(thread))
     );
     assert!(matches!(
-        state.reply(root, &draft("early"), alice, NOW, false),
+        state.reply(root, &draft("early"), alice, NOW, ambre_bus::ReplyEcho::ThreadOnly),
         Err(MurmureError::NoSession(id)) if id == thread
     ));
     let other = message_at(&state, 1).id;
     assert!(matches!(
-        state.reply(other, &draft("lost"), alice, NOW, false),
+        state.reply(other, &draft("lost"), alice, NOW, ambre_bus::ReplyEcho::ThreadOnly),
         Err(MurmureError::NoThread(id)) if id == other
     ));
     assert!(matches!(
@@ -143,7 +143,13 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
     );
     for text in ["one", "two"] {
         let replied = state
-            .reply(root, &draft(text), alice, NOW, false)
+            .reply(
+                root,
+                &draft(text),
+                alice,
+                NOW,
+                ambre_bus::ReplyEcho::ThreadOnly,
+            )
             .expect("reply");
         assert_eq!(replied.reply.document, thread);
         assert!(replied.copy.is_none());
@@ -176,7 +182,7 @@ fn a_failed_link_drops_the_own_thread_and_a_locked_root_waits() {
     let segment = state.active_id();
     let successor = SegmentId::new();
     state
-        .close_into(segment, successor, true, NOW)
+        .close_into(segment, successor, crate::Successor::Created, NOW)
         .expect("close");
     let peer = next_peer();
     state
@@ -202,10 +208,22 @@ fn the_root_reads_its_reply_count_and_last_replier_from_its_thread() {
     let root = message_at(&state, 0).id;
     let (thread, _, _) = threaded(&mut state, root);
     state
-        .reply(root, &draft("first"), alice, NOW, false)
+        .reply(
+            root,
+            &draft("first"),
+            alice,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
         .expect("reply");
     let replied = state
-        .reply(root, &draft("second"), bob, NOW, false)
+        .reply(
+            root,
+            &draft("second"),
+            bob,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
         .expect("reply");
     let MurmureEvent::Messages { messages, .. } = &replied.head else {
         panic!("the head moves");
@@ -317,7 +335,13 @@ fn a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread() {
     let root = message_at(&state, 0).id;
     let (thread, _, _) = threaded(&mut state, root);
     let replied = state
-        .reply(root, &draft("also here"), alice, NOW, true)
+        .reply(
+            root,
+            &draft("also here"),
+            alice,
+            NOW,
+            ambre_bus::ReplyEcho::AlsoInChannel,
+        )
         .expect("reply");
     let copy = replied.copy.expect("a copy");
     assert_eq!(copy.document, state.active_id().document_id());
@@ -340,10 +364,22 @@ fn a_copy_is_found_from_its_reply() {
     let root = message_at(&state, 0).id;
     let (thread, _, _) = threaded(&mut state, root);
     state
-        .reply(root, &draft("also here"), alice, NOW, true)
+        .reply(
+            root,
+            &draft("also here"),
+            alice,
+            NOW,
+            ambre_bus::ReplyEcho::AlsoInChannel,
+        )
         .expect("reply");
     state
-        .reply(root, &draft("here alone"), alice, NOW, false)
+        .reply(
+            root,
+            &draft("here alone"),
+            alice,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
         .expect("reply");
     let Some(MurmureEvent::ThreadMessages { messages, .. }) = state.thread_view(thread) else {
         panic!("the thread is held");
@@ -428,7 +464,13 @@ fn a_reply_takes_no_thread_field_from_another_member() {
     let root = message_at(&alice, 0).id;
     let (thread, first, named) = threaded(&mut alice, root);
     let replied = alice
-        .reply(root, &draft("reply"), alice_user, NOW, false)
+        .reply(
+            root,
+            &draft("reply"),
+            alice_user,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
         .expect("reply");
     let mut bob = peer_of(&alice);
     assert_eq!(bob.threads_to_open(), [thread]);
@@ -506,7 +548,13 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
     let root = message_at(&state, 0).id;
     let (thread, _, _) = threaded(&mut state, root);
     state
-        .reply(root, &draft("hi"), alice, NOW, false)
+        .reply(
+            root,
+            &draft("hi"),
+            alice,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
         .expect("reply");
     let reply = replies_of(&state, thread)[0].id;
     let at = MessageAt::Thread(root);
@@ -577,7 +625,13 @@ fn another_member_reacts_to_a_reply_and_never_edits_it() {
     let root = message_at(&alice, 0).id;
     let (thread, first, _) = threaded(&mut alice, root);
     let replied = alice
-        .reply(root, &draft("hi"), alice_user, NOW, false)
+        .reply(
+            root,
+            &draft("hi"),
+            alice_user,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
         .expect("reply");
     let mut bob = peer_with_thread(&alice, thread, &[&first, &replied.reply.delta], alice_user);
     let reply = replies_of(&bob, thread)[0].id;
@@ -635,7 +689,13 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
     };
     assert_eq!(messages[0].thread.map(|head| head.replies), Some(0));
     let replied = alice
-        .reply(root, &draft("hi"), alice_user, NOW, false)
+        .reply(
+            root,
+            &draft("hi"),
+            alice_user,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
         .expect("reply");
     let events = bob
         .apply_signed(
@@ -699,10 +759,22 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
         }],
     };
     let replied = state
-        .reply(root, &mentioning, bob, NOW, false)
+        .reply(
+            root,
+            &mentioning,
+            bob,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
         .expect("reply");
     state
-        .reply(root, &draft("plain"), bob, NOW, false)
+        .reply(
+            root,
+            &draft("plain"),
+            bob,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
         .expect("reply");
     // The relay numbers the mention with its echo.
     state

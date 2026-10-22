@@ -316,12 +316,22 @@ pub struct HeldSend {
     pub reply: Option<HeldReply>,
 }
 
+/// Where a reply goes besides its thread (`MURMURE-109`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ReplyEcho {
+    /// The reply stays in its thread.
+    #[default]
+    ThreadOnly,
+    /// The reply also goes to the channel, as a copy that names its thread.
+    AlsoInChannel,
+}
+
 /// The thread of a held reply.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeldReply {
     pub root: MessageId,
-    /// The reply also goes to the channel (`MURMURE-109`).
-    pub also_in_channel: bool,
+    /// Whether the reply also goes to the channel (`MURMURE-109`).
+    pub also_in_channel: ReplyEcho,
 }
 
 /// A command for an open channel, UI thread -> Logic thread.
@@ -409,7 +419,7 @@ pub enum MurmureCommand {
         draft: MessageDraft,
         /// The reply also goes to the channel, as a copy that names its
         /// thread (`MURMURE-109`).
-        also_in_channel: bool,
+        also_in_channel: ReplyEcho,
         /// The instant the author replied, stamped by the view.
         now: Timestamp,
         /// The author confirmed the `@channel` the Logic thread asked about

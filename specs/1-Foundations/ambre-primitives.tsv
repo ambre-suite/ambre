@@ -260,7 +260,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | DirectPeers.names | field
 ambre-bus | src/app/murmure.rs | crate::app::murmure | DocumentActivity.active | field | bool	generic	fact flag
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji.0 | field | String	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji::as_str() | ret | &str	newtype-inner	newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | HeldReply.also_in_channel | field | bool	generic	fact flag
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef.0 | field | String	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef::as_str() | ret | &str	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef::parse(word) | param | &str	newtype-inner	newtype
@@ -275,7 +274,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown(name_o
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown_at() | ret | (String,CharVec<ByteOffset>)	free-text	the text shown, beside its typed byte offsets
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown_at(name_of) | param | impl Fn(UserId)->Option<String>	debt	finding: display_name as String while ambre_core::DisplayName exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::Name.name | field | Option<String>	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::Reply.also_in_channel | field | bool	generic	fact flag
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::Reply.confirmed | field | bool	generic	confirmation flag of a two-step send, a fact of the gesture
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::SendMessage.confirmed | field | bool	generic	confirmation flag of a two-step send, a fact of the gesture
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::UploadFile.data | field | Vec<u8>	generic	uploaded file bytes
@@ -2319,7 +2317,6 @@ ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelStat
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | Linked.meta | field | Option<Vec<u8>>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | Linked.open | field | bool	math	state flag/predicate
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | Pending.session | field | Option<(ambre_core::PeerId,Vec<u8>)>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::close_into(created) | param | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::is_successor() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::note_successor_session() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::note_successor_session(entry) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -2353,7 +2350,6 @@ ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelSt
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::is_thread() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::note_thread_session() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::note_thread_session(entry) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::reply(also_in_channel) | param | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::thread_failed() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::thread_reacted(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | Pending.session | field | Option<(ambre_core::PeerId,Vec<u8>)>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -2372,30 +2368,20 @@ ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::choose(key) | pa
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::run() | ret | bool	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.channel_members | field | RwSignal<HashMap<ChannelId,HashMap<UserId,String>>>	debt	finding: Display names are `(UserId, String)` and `Fn(UserId) -> Option<String>`
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.keys | field | RwSignal<bool>	math	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.picked | field | RwSignal<Option<(bool,usize)>>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.picked_emoji | field | RwSignal<Option<(bool,String)>>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.pressed_mark | field | RwSignal<Option<(bool,TextStyle)>>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::ask_emoji(in_thread) | param | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
+ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.picked | field | RwSignal<Option<(Region,usize)>>	debt	finding: the region is typed; the picked entry is still a bare usize index
+ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.picked_emoji | field | RwSignal<Option<(Region,String)>>	debt	finding: the region is typed; the picked emoji is still a bare String
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::channel_name() | ret | Signal<Option<String>>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::choose(key) | param | [u8;16]	debt	finding: The palette key `[u8; 16]` is an untagged union of `UserId` and `ChannelId`
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::has_members() | ret | Signal<bool>	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::in_channel() | ret | bool	math	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::jump(forward) | param | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::member_name() | ret | Option<String>	debt	finding: Display names are `(UserId, String)` and `Fn(UserId) -> Option<String>`
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::members_of() | ret | Vec<(UserId,String)>	debt	finding: Display names are `(UserId, String)` and `Fn(UserId) -> Option<String>`
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::notice(visible) | param | bool	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::pick_emoji(emoji) | param | &str	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::pick_mention(index) | param | usize	math	local count/index/counter
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::show_bar(in_thread) | param | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::show_mentions(in_thread) | param | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::take_edit(in_thread) | param | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::take_emoji() | ret | Option<String>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::take_emoji(in_thread) | param | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::take_pick() | ret | Option<usize>	math	local count/index/counter
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::take_pick(in_thread) | param | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::take_press(in_thread) | param | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::take_returned(in_thread) | param | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/chrome.rs | crate::chrome | Notice.title | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | ROOT_LOST | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | SPACE_NOT_OPENED | const | &str	free-text	UI text/label const
@@ -2405,7 +2391,6 @@ ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.coverage | field | S
 ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.matches | field | Vec<(MessageRef,String)>	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.name | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | canvas_origin() | ret | (f64,f64)	math	layout geometry in logical px
-ambre-murmure | src/chrome.rs | crate::chrome | canvas_origin(in_thread) | param | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/chrome.rs | crate::chrome | coverage() | ret | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | entry_view(unnamed) | param | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | member_view(choose) | param | Option<(Callback<()>,&'static str)>	free-text	text, label or user content
@@ -2415,7 +2400,6 @@ ambre-murmure | src/chrome.rs | crate::chrome | panel_open() | ret | bool	math	s
 ambre-murmure | src/chrome.rs | crate::chrome | segments() | ret | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | segments(count) | param | usize	math	local count/index/counter
 ambre-murmure | src/commands.rs | crate::commands | AskedAll.members | field | usize	math	local count/index/counter
-ambre-murmure | src/commands.rs | crate::commands | AskedAll::in_thread() | ret | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/commands.rs | crate::commands | EMOJI_KEY | const | char	debt	bug: The composer reads raw `ctrl` and drops `meta`, so the primary chords are dead on macOS
 ambre-murmure | src/commands.rs | crate::commands | KeyPlace::words() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
 ambre-murmure | src/commands.rs | crate::commands | KeyRow.action | field | String	free-text	text, label or user content
@@ -2426,7 +2410,6 @@ ambre-murmure | src/commands.rs | crate::commands | MessageTarget.notice | field
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.pressed | field | Option<(f32,f32)>	math	layout geometry in logical px
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.text | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | PendingEdit.text | field | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | Picking::Composer.in_thread | field | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/commands.rs | crate::commands | RegionKey.action | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | asked_all_title() | ret | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | asked_all_title(members) | param | usize	math	local count/index/counter
@@ -2462,13 +2445,11 @@ ambre-murmure | src/composer.rs | crate::composer | Composer.origin | field | (f
 ambre-murmure | src/composer.rs | crate::composer | Composer.picked | field | Option<(DraftOf,usize)>	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/composer.rs | crate::composer | Composer.said | field | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer.typed | field | bool	math	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::also_in_channel() | ret | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/composer.rs | crate::composer | Composer::band() | ret | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Composer::blank() | ret | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::close_marker(wrap) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Composer::close_with(found) | param | impl FnOnce(&str,&[CharSpan])->Option<markers::Closed>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::close_with(wrap) | param | f32	math	layout geometry in logical px
-ambre-murmure | src/composer.rs | crate::composer | Composer::compose(end) | param | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/composer.rs | crate::composer | Composer::compose(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::cut() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::draft() | ret | Option<String>	free-text	text, label or user content
@@ -2486,11 +2467,8 @@ ambre-murmure | src/composer.rs | crate::composer | Composer::key() | ret | bool
 ambre-murmure | src/composer.rs | crate::composer | Composer::key(key) | param | &str	debt	finding: DOM key names passed as `&str`
 ambre-murmure | src/composer.rs | crate::composer | Composer::list_key() | ret | bool	debt	finding: DOM key names passed as `&str`
 ambre-murmure | src/composer.rs | crate::composer | Composer::list_key(key) | param | &str	debt	finding: DOM key names passed as `&str`
-ambre-murmure | src/composer.rs | crate::composer | Composer::load(also_in_channel) | param | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/composer.rs | crate::composer | Composer::mark_bar(at) | param | (f32,f32)	math	layout geometry in logical px
-ambre-murmure | src/composer.rs | crate::composer | Composer::mark_bar(in_thread) | param | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/composer.rs | crate::composer | Composer::mention_list(at) | param | (f32,f32)	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/composer.rs | crate::composer | Composer::mention_list(in_thread) | param | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/composer.rs | crate::composer | Composer::offer(members) | param | &[(UserId,String)]	debt	finding: Display names are `(UserId, String)` and `Fn(UserId) -> Option<String>`
 ambre-murmure | src/composer.rs | crate::composer | Composer::on_also() | ret | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::on_also(y) | param | f32	math	layout geometry in logical px
@@ -2504,7 +2482,6 @@ ambre-murmure | src/composer.rs | crate::composer | Composer::press(x) | param |
 ambre-murmure | src/composer.rs | crate::composer | Composer::press(y) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Composer::release() | ret | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::restore() | ret | bool	math	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::restore(also_in_channel) | param | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/composer.rs | crate::composer | Composer::selected() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::show_chords() | ret | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::show_chords(on) | param | bool	math	state flag/predicate
@@ -2530,11 +2507,9 @@ ambre-murmure | src/composer.rs | crate::composer | Marks.text | field | String	
 ambre-murmure | src/composer.rs | crate::composer | Marks::draft(text) | param | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Marks::follow(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | REMOVE_MARK | const | &str	free-text	UI text/label const
-ambre-murmure | src/composer.rs | crate::composer | Sent::Message.also_in_channel | field | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/composer.rs | crate::composer | TYPING_PX | const | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | UPLOADING | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | also_said() | ret | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | also_said(checked) | param | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/composer.rs | crate::composer | kept_mentions(new) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | kept_mentions(old) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | span_of(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
@@ -2655,7 +2630,6 @@ ambre-murmure | src/markers.rs | crate::markers | LIST_MARKER | const | &str	fre
 ambre-murmure | src/markers.rs | crate::markers | MARK_BAR | const | [(TextStyle,&str);3]	newtype-inner	table keyed by TextStyle enum
 ambre-murmure | src/markers.rs | crate::markers | MARK_CHORDS | const | [(char,TextStyle);3]	newtype-inner	table keyed by TextStyle enum
 ambre-murmure | src/markers.rs | crate::markers | MarkBar.at | field | (f32,f32)	math	layout geometry in logical px
-ambre-murmure | src/markers.rs | crate::markers | MarkBar.in_thread | field | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/markers.rs | crate::markers | QUOTE_MARKER | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | bold(line) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | change(new) | param | &[char]	debt	finding: Byte and char offsets share bare `usize`
@@ -2700,7 +2674,6 @@ ambre-murmure | src/mention_list.rs | crate::mention_list | AT_CHANNEL | const |
 ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.at | field | (f32,f32)	math	layout geometry in logical px
 ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.chosen | field | usize	math	local count/index/counter
 ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.entries | field | Vec<String>	free-text	text, label or user content
-ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.in_thread | field | bool	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/mention_list.rs | crate::mention_list | Offer.name | field | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | Offer::written() | ret | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | matches() | ret | bool	math	state flag/predicate
@@ -2959,7 +2932,6 @@ ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar.peers | field | HashMa
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_direct() | ret | bool	math	state flag/predicate
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_member() | ret | bool	math	state flag/predicate
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::name_of() | ret | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
-ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::next_with_activity(forward) | param | bool	debt	finding: Bools that select a mode
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::set_catalogue(name) | param | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::set_name(name) | param | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/sidebar.rs | crate::sidebar | SidebarEntry.name | field | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
@@ -3070,18 +3042,12 @@ ambre-murmure | src/view.rs | crate::view | MurmureView::touch_move(y) | param |
 ambre-murmure | src/view.rs | crate::view | MurmureView::touch_up() | ret | Option<(f32,f32)>	math	layout geometry in logical px
 ambre-murmure | src/view.rs | crate::view | PRIMARY_BUTTON | const | i16	debt	finding: `SECONDARY_BUTTON` and `PRIMARY_BUTTON` as `i16`
 ambre-murmure | src/view.rs | crate::view | PageReads.announce | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | PageReads.ask_emoji | field | Rc<dyn Fn(bool)>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/view.rs | crate::view | PageReads.members_of | field | Rc<dyn Fn(ChannelId)->Vec<(UserId,String)>>	debt	finding: Display names are `(UserId, String)` and `Fn(UserId) -> Option<String>`
 ambre-murmure | src/view.rs | crate::view | PageReads.name_of | field | Rc<dyn Fn(UserId)->Option<String>>	debt	finding: Display names are `(UserId, String)` and `Fn(UserId) -> Option<String>`
 ambre-murmure | src/view.rs | crate::view | PageReads.open_link | field | Rc<dyn Fn(&str)>	debt	finding: Link addresses as `String`
-ambre-murmure | src/view.rs | crate::view | PageReads.show_bar | field | Rc<dyn Fn(bool,Option<MarkBar>)>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/view.rs | crate::view | PageReads.show_mentions | field | Rc<dyn Fn(bool,Option<MentionList>)>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/view.rs | crate::view | PageReads.still | field | Rc<dyn Fn()->bool>	math	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | PageReads.take_edit | field | Rc<dyn Fn(bool)->Option<PendingEdit>>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/view.rs | crate::view | PageReads.take_emoji | field | Rc<dyn Fn(bool)->Option<String>>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/view.rs | crate::view | PageReads.take_pick | field | Rc<dyn Fn(bool)->Option<usize>>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/view.rs | crate::view | PageReads.take_press | field | Rc<dyn Fn(bool)->Option<TextStyle>>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
-ambre-murmure | src/view.rs | crate::view | PageReads.take_returned | field | Rc<dyn Fn(bool)->Option<AskedAll>>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
+ambre-murmure | src/view.rs | crate::view | PageReads.take_emoji | field | Rc<dyn Fn(Region)->Option<String>>	debt	finding: the region is typed; the picked emoji is still a bare String
+ambre-murmure | src/view.rs | crate::view | PageReads.take_pick | field | Rc<dyn Fn(Region)->Option<usize>>	debt	finding: the region is typed; the picked entry is still a bare usize index
 ambre-murmure | src/view.rs | crate::view | PageReads.time_of | field | Rc<dyn Fn(Timestamp)->String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.warn | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | REVEAL_SLACK_PX | const | f32	math	layout geometry in logical px

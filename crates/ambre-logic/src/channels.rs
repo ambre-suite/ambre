@@ -4337,7 +4337,7 @@ mod tests {
         let reply = MurmureCommand::Reply {
             root,
             draft: draft.clone(),
-            also_in_channel: true,
+            also_in_channel: ambre_bus::ReplyEcho::AlsoInChannel,
             now: NOW,
             confirmed: false,
         };
@@ -4347,7 +4347,7 @@ mod tests {
             attachments: Vec::new(),
             reply: Some(HeldReply {
                 root,
-                also_in_channel: true,
+                also_in_channel: ambre_bus::ReplyEcho::AlsoInChannel,
             }),
         };
         let asked = MurmureEvent::ConfirmChannelMention {
@@ -5481,7 +5481,7 @@ mod tests {
         );
         let successor = SegmentId::new();
         let closed = bob
-            .close_into(old, successor, true, NOW)
+            .close_into(old, successor, ambre_murmure::Successor::Created, NOW)
             .expect("bob closes");
         drain(&sync);
 
@@ -5512,7 +5512,7 @@ mod tests {
         );
         let successor = SegmentId::new();
         let closed = bob
-            .close_into(old, successor, true, NOW)
+            .close_into(old, successor, ambre_murmure::Successor::Created, NOW)
             .expect("bob closes");
         assert!(state.apply_channel_remote(meta.document_id(), &[(None, &closed.meta)]));
         drain(&sync);
@@ -5607,7 +5607,11 @@ mod tests {
                 mentions: Vec::new(),
                 styles: Vec::new(),
             },
-            also_in_channel,
+            also_in_channel: if also_in_channel {
+                ambre_bus::ReplyEcho::AlsoInChannel
+            } else {
+                ambre_bus::ReplyEcho::ThreadOnly
+            },
             now: at(1),
             confirmed: false,
         }
@@ -5943,7 +5947,13 @@ mod tests {
             styles: Vec::new(),
         };
         m.alice
-            .reply(root, &draft, m.author, NOW, false)
+            .reply(
+                root,
+                &draft,
+                m.author,
+                NOW,
+                ambre_bus::ReplyEcho::ThreadOnly,
+            )
             .expect("reply");
         let document_id = m.active.document_id();
         m.bob.handle_logic_event(LogicEvent::RemoteUpdate {
@@ -6141,7 +6151,13 @@ mod tests {
             }],
         };
         m.alice
-            .reply(root, &draft, m.author, NOW, false)
+            .reply(
+                root,
+                &draft,
+                m.author,
+                NOW,
+                ambre_bus::ReplyEcho::ThreadOnly,
+            )
             .expect("reply");
         let document_id = m.active.document_id();
         m.bob.handle_logic_event(LogicEvent::RemoteUpdate {

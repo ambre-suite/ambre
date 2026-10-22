@@ -52,7 +52,7 @@ fn close_created(state: &mut ChannelState) -> (SegmentId, Vec<u8>, Vec<u8>) {
     let closing = state.active_id();
     let successor = SegmentId::new();
     let closed = state
-        .close_into(closing, successor, true, NOW)
+        .close_into(closing, successor, crate::Successor::Created, NOW)
         .expect("close");
     assert_eq!(closed.fetch, None, "the creator fetches nothing");
     let peer = next_peer();
@@ -255,11 +255,11 @@ fn a_close_while_a_segment_is_closing_is_refused() {
     alice.send(&draft("two"), UserId::new(), NOW).expect("send");
     assert_eq!(alice.wants_close(), None, "a segment is still closing");
     assert!(matches!(
-        alice.close_into(old, SegmentId::new(), true, NOW),
+        alice.close_into(old, SegmentId::new(), crate::Successor::Created, NOW),
         Err(MurmureError::NotActive(_))
     ));
     assert!(matches!(
-        alice.close_into(successor, SegmentId::new(), true, NOW),
+        alice.close_into(successor, SegmentId::new(), crate::Successor::Created, NOW),
         Err(MurmureError::StillClosing(_))
     ));
 }
@@ -277,7 +277,7 @@ fn two_writers_of_one_close_converge_on_one_successor() {
     let old = alice.active_id();
     let (successor, alice_meta, _) = close_created(&mut alice);
     let bob_close = bob
-        .close_into(old, successor, false, NOW)
+        .close_into(old, successor, crate::Successor::Fetched, NOW)
         .expect("the loser writes the same answer");
     assert_eq!(bob_close.fetch, Some(successor));
 

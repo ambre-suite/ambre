@@ -29,7 +29,7 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
     Attachment, ChannelId, LogicCommand, Mention, MessageAt, MessageDraft, MessageId,
-    MurmureCommand, StyleMark, TextStyle, Timestamp, UserId,
+    MurmureCommand, ReplyEcho, StyleMark, TextStyle, Timestamp, UserId,
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
@@ -40,6 +40,7 @@ use ambre_core::{
 };
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
+use crate::Region;
 use crate::commands::PendingEdit;
 use crate::drafts::{DraftShelf, Loss};
 use crate::look;
@@ -86,9 +87,22 @@ pub const UPLOADING: &str = "uploading";
 /// The side of the box.
 const BOX_PX: f32 = FONT_UI;
 
+/// How far an input method has come with its word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Composition {
+    /// The word is a preview the method may still change.
+    Preview,
+    /// The method ended, and the word is final.
+    Final,
+}
+
 /// What a screen reader hears when a key turns the box (`MURMURE-535`).
-pub fn also_said(checked: bool) -> String {
-    let state = if checked { "checked" } else { "unchecked" };
+pub fn also_said(echo: ReplyEcho) -> String {
+    let state = if echo == ReplyEcho::AlsoInChannel {
+        "checked"
+    } else {
+        "unchecked"
+    };
     format!("{ALSO_IN_CHANNEL}, {state}")
 }
 
@@ -316,7 +330,7 @@ pub enum Sent {
         draft: MessageDraft,
         /// The files the draft carries, every one uploaded (`MURMURE-132`).
         attachments: Vec<Attachment>,
-        also_in_channel: bool,
+        also_in_channel: ReplyEcho,
     },
     /// An edit of a message of the member (`MURMURE-203`).
     Edit {
@@ -540,8 +554,12 @@ impl Composer {
 
     /// Whether the box of the thread `of` asks for the reply in the channel
     /// too (`MURMURE-531`).
-    pub fn also_in_channel(&self, of: DraftOf) -> bool {
-        self.also.contains(&of)
+    pub fn also_in_channel(&self, of: DraftOf) -> ReplyEcho {
+        if self.also.contains(&of) {
+            ReplyEcho::AlsoInChannel
+        } else {
+            ReplyEcho::ThreadOnly
+        }
     }
 
     /// Check the box of the thread `of`, or uncheck it. A channel's draft
@@ -625,17 +643,17 @@ impl Composer {
     /// Give back a draft its author did not send, with its mentions and the
     /// box of its thread, and the caret at its end. A composer that holds a
     /// draft typed since keeps it (`MURMURE-558`). Answers whether it took it.
-    pub fn restore(&mut self, of: DraftOf, draft: MessageDraft, also_in_channel: bool) -> bool {
+    pub fn restore(&mut self, of: DraftOf, draft: MessageDraft, echo: ReplyEcho) -> bool {
         if !self.blank(of) {
             return false;
         }
-        self.load(of, draft, also_in_channel);
+        self.load(of, draft, echo);
         self.focused = true;
         true
     }
 
     /// Hold `draft` as the draft `of`, the caret at its end.
-    fn load(&mut self, of: DraftOf, draft: MessageDraft, also_in_channel: bool) {
+    fn load(&mut self, of: DraftOf, draft: MessageDraft, echo: ReplyEcho) {
         let editor = TextEditor::new(&draft.text, body_style(Color::BLACK));
         self.drafts.insert(of, editor);
         let history = History {
@@ -649,7 +667,7 @@ impl Composer {
             styles: draft.styles,
         };
         self.marks.insert(of, marks);
-        if also_in_channel && matches!(of, DraftOf::Thread(..)) {
+        if (echo == ReplyEcho::AlsoInChannel) && matches!(of, DraftOf::Thread(..)) {
             self.also.insert(of);
         }
     }
@@ -677,7 +695,7 @@ impl Composer {
             && self.blank(of)
             && let Some(draft) = shelf.get(of)
         {
-            self.load(of, draft, false);
+            self.load(of, draft, ReplyEcho::ThreadOnly);
         }
     }
 
@@ -751,8 +769,9 @@ impl Composer {
         self.editor(of).insert(text);
     }
 
-    /// The preview of an input method, or its final word once `end`.
-    pub fn compose(&mut self, of: DraftOf, text: &str, end: bool) {
+    /// The preview of an input method, or its final word once it ends.
+    pub fn compose(&mut self, of: DraftOf, text: &str, stage: Composition) {
+        let end = stage == Composition::Final;
         self.composing = !end && !text.is_empty();
         self.typed |= !text.is_empty();
         self.history(of).edit();
@@ -944,13 +963,13 @@ impl Composer {
     /// What the page draws of the `@` list, from the caret `at` of the last
     /// paint. `None` while no list is open or no entry matches
     /// (`MURMURE-555`).
-    pub fn mention_list(&self, at: (f32, f32), in_thread: bool) -> Option<MentionList> {
+    pub fn mention_list(&self, at: (f32, f32), region: Region) -> Option<MentionList> {
         let asking = self.asking.as_ref().filter(|a| !a.offers.is_empty())?;
         Some(MentionList {
             entries: asking.offers.iter().map(Offer::written).collect(),
             chosen: asking.chosen,
             at,
-            in_thread,
+            region,
         })
     }
 
@@ -966,7 +985,7 @@ impl Composer {
     /// What the page draws of the format bar of the draft `of`, from the
     /// caret `at` of the last paint. `None` while nothing is selected
     /// (`MURMURE-432`).
-    pub fn mark_bar(&self, of: DraftOf, at: (f32, f32), in_thread: bool) -> Option<MarkBar> {
+    pub fn mark_bar(&self, of: DraftOf, at: (f32, f32), region: Region) -> Option<MarkBar> {
         let editor = self.drafts.get(&of)?;
         let bytes = editor.selection()?;
         let text = editor.text();
@@ -985,7 +1004,7 @@ impl Composer {
         Some(MarkBar {
             controls,
             at,
-            in_thread,
+            region,
         })
     }
 
@@ -1307,7 +1326,11 @@ impl Composer {
                     to: asked,
                     draft,
                     attachments: self.uploads.take(asked),
-                    also_in_channel: self.also.remove(&asked),
+                    also_in_channel: if self.also.remove(&asked) {
+                        ReplyEcho::AlsoInChannel
+                    } else {
+                        ReplyEcho::ThreadOnly
+                    },
                 });
             }
         }

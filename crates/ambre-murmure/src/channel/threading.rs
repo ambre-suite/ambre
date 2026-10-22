@@ -6,7 +6,7 @@
 //! (`MURMURE-107`), the one field of it another member may write
 //! (`MURMURE-255`).
 
-use ambre_bus::{MessageDraft, MessageView, MurmureEvent, ThreadHead, Timestamp};
+use ambre_bus::{MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead, Timestamp};
 use ambre_core::{DocumentId, MessageId, SegmentId, UserId};
 use loro::{Container, LoroDoc, ValueOrContainer};
 
@@ -635,7 +635,7 @@ impl ChannelState {
         draft: &MessageDraft,
         author: UserId,
         now: Timestamp,
-        also_in_channel: bool,
+        echo: ReplyEcho,
     ) -> Result<Replied, MurmureError> {
         if !mention::fits(&draft.mentions, &draft.text) {
             return Err(MurmureError::BadMention);
@@ -645,7 +645,7 @@ impl ChannelState {
         }
         // Checked before the first write, so a reply never lands without
         // the copy it was sent with.
-        if also_in_channel && self.active.session.is_none() {
+        if (echo == ReplyEcho::AlsoInChannel) && self.active.session.is_none() {
             return Err(MurmureError::NoSession(self.active.id));
         }
         let channel = self.channel_id;
@@ -668,7 +668,7 @@ impl ChannelState {
             summary: summary_of(&mentions),
             event,
         };
-        let copy = if also_in_channel {
+        let copy = if echo == ReplyEcho::AlsoInChannel {
             Some(self.send_from(draft, &[], author, now, Some((document, id)))?)
         } else {
             None

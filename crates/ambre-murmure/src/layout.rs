@@ -14,6 +14,16 @@ pub struct MessageRef {
     pub message: MessageId,
 }
 
+/// A region of the page that shows a list: the channel in the content
+/// canvas, or the thread in the panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Region {
+    /// The channel the pane shows, in the content canvas.
+    Channel,
+    /// The thread the pane shows, in the panel.
+    Thread,
+}
+
 /// The pane the user is in. A narrow window shows it alone, and a wide one
 /// shows it beside the others.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

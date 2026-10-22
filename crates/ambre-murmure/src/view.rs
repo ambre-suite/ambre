@@ -17,8 +17,8 @@ use std::rc::Rc;
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
     Attachment, ByteSize, ChannelId, DocumentId, Emoji, LogicCommand, MessageAt, MessageId,
-    MessageView, MurmureCommand, MurmureEvent, RequestId, RestEvent, SegmentId, TextStyle,
-    Timestamp, UiEvent, UserId,
+    MessageView, MurmureCommand, MurmureEvent, ReplyEcho, RequestId, RestEvent, SegmentId,
+    TextStyle, Timestamp, UiEvent, UserId,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, TextInput,
@@ -32,17 +32,17 @@ use crate::commands::{
     AskedAll, EDIT, EMOJI_KEY, FromThread, MessageAction, MessageTarget, PendingEdit,
     message_action,
 };
-use crate::composer::{Composer, DraftOf, EDITING_LINE, also_said, typing_line};
+use crate::composer::{Composer, Composition, DraftOf, EDITING_LINE, also_said, typing_line};
 use crate::drafts::DraftShelf;
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::markers::MarkBar;
 use crate::mention_list::MentionList;
 use crate::paint::{Painted, Pictured, Shown, paint_jump, paint_list};
-use crate::pictures::{Pictures, Screen};
+use crate::pictures::Pictures;
 use crate::select::Selecting;
 use crate::uploads::{PickedFile, Uploaded};
 use crate::watchers::TICK_MS;
-use crate::{MessageRef, MurmurePane};
+use crate::{MessageRef, MurmurePane, Region};
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the
 /// host binds a cell to it while it is in the page.
@@ -76,7 +76,7 @@ pub struct PageReads {
     /// Take the edit the member asked for from the actions of a message,
     /// which the channel's composer loads (`MURMURE-203`). Given `true`, it
     /// takes a reply alone, for the thread's composer (`MURMURE-526`).
-    pub take_edit: Rc<dyn Fn(bool) -> Option<PendingEdit>>,
+    pub take_edit: Rc<dyn Fn(Region) -> Option<PendingEdit>>,
     /// Go to the pane before this one, as the back control of the header
     /// does: Escape in a thread's list closes it (`MURMURE-528`).
     pub back: Rc<dyn Fn()>,
@@ -91,20 +91,20 @@ pub struct PageReads {
     pub members_of: Rc<dyn Fn(ChannelId) -> Vec<(UserId, String)>>,
     /// Hand the page the `@` list to draw, or `None` to close it. The flag
     /// names the thread's region (`MURMURE-555`).
-    pub show_mentions: Rc<dyn Fn(bool, Option<MentionList>)>,
+    pub show_mentions: Rc<dyn Fn(Region, Option<MentionList>)>,
     /// Take the entry a click picked in the `@` list. Given `true`, it takes
     /// a pick in the thread's list alone (`MURMURE-555`).
-    pub take_pick: Rc<dyn Fn(bool) -> Option<usize>>,
+    pub take_pick: Rc<dyn Fn(Region) -> Option<usize>>,
     /// Hand the page the format bar to draw over a selection, or `None` to
     /// close it. The flag names the thread's region (`MURMURE-432`).
-    pub show_bar: Rc<dyn Fn(bool, Option<MarkBar>)>,
+    pub show_bar: Rc<dyn Fn(Region, Option<MarkBar>)>,
     /// Take the style a press on the format bar asked for. Given `true`, it
     /// takes a press on the thread's bar alone (`MURMURE-432`).
-    pub take_press: Rc<dyn Fn(bool) -> Option<TextStyle>>,
+    pub take_press: Rc<dyn Fn(Region) -> Option<TextStyle>>,
     /// Take the send its author cancelled at the `@channel` question, which
     /// the composer gets back. Given `true`, it takes a reply alone
     /// (`MURMURE-558`).
-    pub take_returned: Rc<dyn Fn(bool) -> Option<AskedAll>>,
+    pub take_returned: Rc<dyn Fn(Region) -> Option<AskedAll>>,
     /// Open the address of a link a click landed on, in a fresh tab with no
     /// opener (`MURMURE-567`).
     pub open_link: Rc<dyn Fn(&str)>,
@@ -113,10 +113,10 @@ pub struct PageReads {
     pub drafts: DraftShelf,
     /// Open the emoji picker on the composer of a region. The flag names
     /// the thread's region (`MURMURE-139`).
-    pub ask_emoji: Rc<dyn Fn(bool)>,
+    pub ask_emoji: Rc<dyn Fn(Region)>,
     /// Take the emoji the picker picked for the composer. Given `true`, it
     /// takes a pick for the thread's composer alone (`MURMURE-139`).
-    pub take_emoji: Rc<dyn Fn(bool) -> Option<String>>,
+    pub take_emoji: Rc<dyn Fn(Region) -> Option<String>>,
     /// Take the files the member dropped on the channel's canvas since the
     /// last frame. The channel's composer uploads them (`MURMURE-132`).
     pub take_files: Rc<dyn Fn() -> Vec<PickedFile>>,
@@ -162,15 +162,6 @@ enum Rest {
 struct Lists {
     conversations: Conversations,
     revision: u64,
-}
-
-/// Which list a region shows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Region {
-    /// The channel the pane shows, in the content canvas.
-    Channel,
-    /// The thread the pane shows, in the panel.
-    Thread,
 }
 
 /// The list a region shows: a channel, or the thread under one of its
@@ -264,10 +255,10 @@ impl Drop for MurmureView {
     /// gives it to the next thread's region (`MURMURE-530`).
     fn drop(&mut self) {
         if self.listed.is_some() {
-            (self.reads.show_mentions)(self.region == Region::Thread, None);
+            (self.reads.show_mentions)(self.region, None);
         }
         if self.barred.is_some() {
-            (self.reads.show_bar)(self.region == Region::Thread, None);
+            (self.reads.show_bar)(self.region, None);
         }
         if self.region == Region::Thread {
             let mut composer = std::mem::take(&mut self.composer);
@@ -1060,14 +1051,14 @@ impl MurmureView {
         // An edit asked from the actions of a message loads the channel's
         // composer, or the thread's for a reply, which takes the keys
         // (`MURMURE-203`, `MURMURE-526`).
-        if let Some(edit) = (self.reads.take_edit)(self.region == Region::Thread) {
+        if let Some(edit) = (self.reads.take_edit)(self.region) {
             self.composer.start_edit(edit);
             self.reads.pipe.focus();
             self.dirty = true;
         }
         // A click in the `@` list picks its entry, and the keys stay in the
         // composer (`MURMURE-555`).
-        if let Some(index) = (self.reads.take_pick)(self.region == Region::Thread)
+        if let Some(index) = (self.reads.take_pick)(self.region)
             && let Some(of) = self.writes_in()
         {
             self.composer.pick(of, index);
@@ -1076,7 +1067,7 @@ impl MurmureView {
         }
         // An emoji picked for the composer lands at its caret, as a paste
         // does, and the keys come back to it (`MURMURE-139`).
-        if let Some(emoji) = (self.reads.take_emoji)(self.region == Region::Thread)
+        if let Some(emoji) = (self.reads.take_emoji)(self.region)
             && let Some(of) = self.writes_in()
         {
             self.composer.text(of, &emoji);
@@ -1086,7 +1077,7 @@ impl MurmureView {
         }
         // A press on the format bar toggles its style as its chord does, and
         // the keys stay in the composer (`MURMURE-432`).
-        if let Some(style) = (self.reads.take_press)(self.region == Region::Thread)
+        if let Some(style) = (self.reads.take_press)(self.region)
             && let Some(of) = self.writes_in()
         {
             self.composer.toggle(of, style);
@@ -1098,12 +1089,16 @@ impl MurmureView {
         self.upload_files();
         // A cancelled `@channel` gives its draft back, mentions and all
         // (`MURMURE-558`).
-        if let Some(asked) = (self.reads.take_returned)(self.region == Region::Thread) {
+        if let Some(asked) = (self.reads.take_returned)(self.region) {
             let of = match &asked.held.reply {
                 Some(reply) => DraftOf::Thread(asked.channel, reply.root),
                 None => DraftOf::Channel(asked.channel),
             };
-            let also = asked.held.reply.as_ref().is_some_and(|r| r.also_in_channel);
+            let also = asked
+                .held
+                .reply
+                .as_ref()
+                .map_or(ReplyEcho::ThreadOnly, |r| r.also_in_channel);
             let mut held = asked.held;
             self.composer
                 .uploads_mut()
@@ -1179,11 +1174,7 @@ impl MurmureView {
         if focus.is_none() {
             self.focus = None;
         }
-        let screen = match self.region {
-            Region::Channel => Screen::Channel,
-            Region::Thread => Screen::Thread,
-        };
-        self.pictures.borrow_mut().begin_paint(screen);
+        self.pictures.borrow_mut().begin_paint(self.region);
         let shelf = Rc::clone(&self.pictures);
         let shelf = shelf.borrow();
         let painted = paint_list(
@@ -1266,13 +1257,12 @@ impl MurmureView {
         }
         self.list_mentions(caret.map(|(x, y, _)| (x, y)));
         // The format bar hangs over a selection, and leaves with it.
-        let bar = caret.zip(writes_in).and_then(|((x, y, _), of)| {
-            self.composer
-                .mark_bar(of, (x, y), self.region == Region::Thread)
-        });
+        let bar = caret
+            .zip(writes_in)
+            .and_then(|((x, y, _), of)| self.composer.mark_bar(of, (x, y), self.region));
         if bar != self.barred {
             self.barred.clone_from(&bar);
-            (self.reads.show_bar)(self.region == Region::Thread, bar);
+            (self.reads.show_bar)(self.region, bar);
         }
         if higher_up && !shown_before {
             // The control shows: End reaches it from the keyboard
@@ -1338,8 +1328,7 @@ impl MurmureView {
             let members = (self.reads.members_of)(channel);
             self.composer.offer(&members, (self.reads.me)());
         }
-        let in_thread = self.region == Region::Thread;
-        let list = caret.and_then(|at| self.composer.mention_list(at, in_thread));
+        let list = caret.and_then(|at| self.composer.mention_list(at, self.region));
         if list == self.listed {
             return;
         }
@@ -1353,7 +1342,7 @@ impl MurmureView {
             (self.reads.announce)(text);
         }
         self.listed.clone_from(&list);
-        (self.reads.show_mentions)(in_thread, list);
+        (self.reads.show_mentions)(self.region, list);
     }
 
     /// Hand `command` to the Logic thread. A full channel drops it, and the
@@ -1628,9 +1617,11 @@ impl MurmureView {
         match *ev {
             InputEvent::Text { ref text } => self.composer.text(channel, text),
             InputEvent::CompositionUpdate { ref text } => {
-                self.composer.compose(channel, text, false);
+                self.composer.compose(channel, text, Composition::Preview);
             }
-            InputEvent::CompositionEnd { ref text } => self.composer.compose(channel, text, true),
+            InputEvent::CompositionEnd { ref text } => {
+                self.composer.compose(channel, text, Composition::Final)
+            }
             // A press on the box under a thread's field checks it, and
             // leaves the keys where they were (`MURMURE-531`).
             InputEvent::PointerDown { y, button, .. }
@@ -1692,7 +1683,7 @@ impl MurmureView {
                     return Some(true);
                 }
                 if mods == Modifiers::PRIMARY && key.chars().eq([EMOJI_KEY]) {
-                    (self.reads.ask_emoji)(self.region == Region::Thread);
+                    (self.reads.ask_emoji)(self.region);
                     return Some(true);
                 }
                 if !self.composer.key(channel, key, mods) {
@@ -1790,7 +1781,7 @@ mod tests {
         /// Each `@` list the view handed the page, oldest first.
         lists: Rc<RefCell<Vec<Listed>>>,
         /// The entry a click picked, for the region it names.
-        picked: Rc<Cell<Option<(bool, usize)>>>,
+        picked: Rc<Cell<Option<(Region, usize)>>>,
         /// The send a cancelled `@channel` question gives back.
         returned: Rc<RefCell<Option<AskedAll>>>,
         /// Each address the view opened, oldest first.
@@ -1798,11 +1789,11 @@ mod tests {
         /// Each format bar the view handed the page, oldest first.
         bars: Rc<RefCell<Vec<Barred>>>,
         /// The style a press on the bar asked for, for the region it names.
-        press: Rc<RefCell<Option<(bool, TextStyle)>>>,
+        press: Rc<RefCell<Option<(Region, TextStyle)>>>,
         /// Each region the view opened the emoji picker for, oldest first.
-        asked_emoji: Rc<RefCell<Vec<bool>>>,
+        asked_emoji: Rc<RefCell<Vec<Region>>>,
         /// The emoji the picker picked, for the region it names.
-        emoji: Rc<RefCell<Option<(bool, String)>>>,
+        emoji: Rc<RefCell<Option<(Region, String)>>>,
         /// The files dropped on the canvas, for the view to take.
         dropped: Rc<RefCell<Vec<PickedFile>>>,
         /// Each file the view opened or saved, and its bytes, oldest first.
@@ -1816,11 +1807,11 @@ mod tests {
 
     /// A format bar the view handed the page, and whether the thread's
     /// region shows it.
-    type Barred = (bool, Option<MarkBar>);
+    type Barred = (Region, Option<MarkBar>);
 
     /// An `@` list the view handed the page, and whether the thread's region
     /// shows it.
-    type Listed = (bool, Option<MentionList>);
+    type Listed = (Region, Option<MentionList>);
 
     fn page() -> Page {
         let (events, from_logic) = local(64);
@@ -1847,7 +1838,7 @@ mod tests {
         let listed = Rc::clone(&members);
         let lists = Rc::new(RefCell::new(Vec::new()));
         let shown_lists = Rc::clone(&lists);
-        let picked = Rc::new(Cell::new(None::<(bool, usize)>));
+        let picked = Rc::new(Cell::new(None::<(Region, usize)>));
         let pick = Rc::clone(&picked);
         let returned = Rc::new(RefCell::new(None::<AskedAll>));
         let given = Rc::clone(&returned);
@@ -1855,11 +1846,11 @@ mod tests {
         let opens = Rc::clone(&opened);
         let bars = Rc::new(RefCell::new(Vec::new()));
         let shown_bars = Rc::clone(&bars);
-        let press = Rc::new(RefCell::new(None::<(bool, TextStyle)>));
+        let press = Rc::new(RefCell::new(None::<(Region, TextStyle)>));
         let pressed = Rc::clone(&press);
         let asked_emoji = Rc::new(RefCell::new(Vec::new()));
         let asks = Rc::clone(&asked_emoji);
-        let emoji = Rc::new(RefCell::new(None::<(bool, String)>));
+        let emoji = Rc::new(RefCell::new(None::<(Region, String)>));
         let picked_emoji = Rc::clone(&emoji);
         let dropped = Rc::new(RefCell::new(Vec::new()));
         let taken = Rc::clone(&dropped);
@@ -1882,7 +1873,7 @@ mod tests {
             take_edit: Rc::new(move |in_thread| {
                 let mut asked = asked.borrow_mut();
                 let reply = matches!(asked.as_ref()?.at, MessageAt::Thread(_));
-                if reply == in_thread {
+                if reply == (in_thread == Region::Thread) {
                     asked.take()
                 } else {
                     None
@@ -1913,7 +1904,7 @@ mod tests {
             }),
             take_returned: Rc::new(move |in_thread| {
                 let mut given = given.borrow_mut();
-                if given.as_ref()?.in_thread() == in_thread {
+                if given.as_ref()?.region() == in_thread {
                     given.take()
                 } else {
                     None
@@ -2362,11 +2353,11 @@ mod tests {
         type_slowly(&mut page, "ab");
         key(&mut page, "ArrowLeft", false, ambre_bus::PageTime(0.0));
         assert!(key(&mut page, ";", true, ambre_bus::PageTime(0.0)));
-        assert_eq!(*page.asked_emoji.borrow(), [false]);
-        *page.emoji.borrow_mut() = Some((true, "\u{1F680}".to_owned()));
+        assert_eq!(*page.asked_emoji.borrow(), [Region::Channel]);
+        *page.emoji.borrow_mut() = Some((Region::Thread, "\u{1F680}".to_owned()));
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().draft(channel).as_deref(), Some("ab"));
-        *page.emoji.borrow_mut() = Some((false, "\u{1F680}".to_owned()));
+        *page.emoji.borrow_mut() = Some((Region::Channel, "\u{1F680}".to_owned()));
         frame_with_fonts(&mut page.view);
         assert_eq!(
             page.view.composer().draft(channel).as_deref(),
@@ -3863,7 +3854,7 @@ mod tests {
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
 
         assert!(command(&mut page, ";"), "the composer takes Cmd+;");
-        assert_eq!(*page.asked_emoji.borrow(), [false]);
+        assert_eq!(*page.asked_emoji.borrow(), [Region::Channel]);
     }
 
     /// Type `text` one key per frame, as a member does.
@@ -4493,7 +4484,10 @@ mod tests {
                     now,
                     confirmed,
                 } => {
-                    assert!(!also_in_channel, "the reply stays in its thread");
+                    assert!(
+                        also_in_channel == ReplyEcho::ThreadOnly,
+                        "the reply stays in its thread"
+                    );
                     assert!(!confirmed, "a plain reply asks no confirmation");
                     replies.push((root, draft.text, now.0));
                 }
@@ -4692,7 +4686,7 @@ mod tests {
                 ..
             } = command
             {
-                copies.push(also_in_channel);
+                copies.push(also_in_channel == ReplyEcho::AlsoInChannel);
             }
         }
         copies
@@ -4709,13 +4703,16 @@ mod tests {
         let bottom = page.view.size().1 - ALSO_PX / 2.0;
         assert!(press_composer(&mut page));
         assert!(press_at(&mut page, bottom), "the press on the box is taken");
-        assert!(page.view.composer().also_in_channel(of));
+        assert!(page.view.composer().also_in_channel(of) == ReplyEcho::AlsoInChannel);
         assert!(page.view.composer().focused(), "the field keeps the keys");
         type_slowly(&mut page, "ok");
         key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(copies(&page), [true]);
-        assert!(!page.view.composer().also_in_channel(of), "unchecked");
+        assert!(
+            page.view.composer().also_in_channel(of) == ReplyEcho::ThreadOnly,
+            "unchecked"
+        );
         type_slowly(&mut page, "again");
         key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
@@ -4738,7 +4735,10 @@ mod tests {
                 None,
                 "the tap is taken"
             );
-            assert_eq!(page.view.composer().also_in_channel(of), checked);
+            assert_eq!(
+                page.view.composer().also_in_channel(of) == ReplyEcho::AlsoInChannel,
+                checked
+            );
         }
     }
 
@@ -4764,14 +4764,17 @@ mod tests {
         type_slowly(&mut page, "ok");
         assert!(alt_enter(&mut page));
         frame_with_fonts(&mut page.view);
-        assert!(page.view.composer().also_in_channel(of));
+        assert!(page.view.composer().also_in_channel(of) == ReplyEcho::AlsoInChannel);
         assert!(copies(&page).is_empty(), "nothing sent");
         key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(copies(&page), [true]);
         assert!(alt_enter(&mut page));
         assert!(alt_enter(&mut page));
-        assert!(!page.view.composer().also_in_channel(of), "unchecked");
+        assert!(
+            page.view.composer().also_in_channel(of) == ReplyEcho::ThreadOnly,
+            "unchecked"
+        );
     }
 
     /// Every run of glyphs the view paints, as glyph counts.
@@ -4835,7 +4838,13 @@ mod tests {
         page.said.borrow_mut().clear();
         alt_enter(&mut page);
         alt_enter(&mut page);
-        assert_eq!(*page.said.borrow(), [also_said(true), also_said(false)]);
+        assert_eq!(
+            *page.said.borrow(),
+            [
+                also_said(ReplyEcho::AlsoInChannel),
+                also_said(ReplyEcho::ThreadOnly)
+            ]
+        );
     }
 
     /// The reply action on a reply also sent to the channel opens its
@@ -4938,7 +4947,7 @@ mod tests {
         let all = ["@channel", "@Bob", "@Carol"].map(str::to_owned);
         assert_eq!(listed(&page), Some(all.to_vec()));
         let (in_thread, list) = page.lists.borrow().last().cloned().expect("a list");
-        assert!(!in_thread, "the channel's region hangs it");
+        assert_eq!(in_thread, Region::Channel, "the channel's region hangs it");
         assert!(list.expect("open").at.0 > 0.0, "it hangs from the caret");
         type_text(&mut page, "c");
         frame_with_fonts(&mut page.view);
@@ -5342,21 +5351,21 @@ mod tests {
         frame_with_fonts(&mut page.view);
         let (in_thread, bar) = last(&page).expect("a bar was handed over");
         let bar = bar.expect("the selection shows it");
-        assert!(!in_thread);
+        assert_eq!(in_thread, Region::Channel);
         let none = [
             (Bold, Cover::None),
             (Italic, Cover::None),
             (Code, Cover::None),
         ];
         assert_eq!(bar.controls, none);
-        *page.press.borrow_mut() = Some((true, Bold));
+        *page.press.borrow_mut() = Some((Region::Thread, Bold));
         frame_with_fonts(&mut page.view);
         assert_eq!(
             page.view.composer().styles(channel),
             [],
             "the thread's press stays"
         );
-        *page.press.borrow_mut() = Some((false, Bold));
+        *page.press.borrow_mut() = Some((Region::Channel, Bold));
         frame_with_fonts(&mut page.view);
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().styles(channel), [styled(Bold, 4..7)]);
@@ -5371,7 +5380,7 @@ mod tests {
         frame_with_fonts(&mut page.view);
         assert_eq!(
             last(&page),
-            Some((false, None)),
+            Some((Region::Channel, None)),
             "the bar leaves with the selection"
         );
         let shown = page.bars.borrow().len();
@@ -5632,11 +5641,11 @@ mod tests {
         let (mut page, ..) = mentioning(channel);
         type_text(&mut page, "@");
         frame_with_fonts(&mut page.view);
-        page.picked.set(Some((true, 1)));
+        page.picked.set(Some((Region::Thread, 1)));
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().draft(channel).as_deref(), Some("@"));
         assert!(page.picked.get().is_some(), "the thread's pick waits");
-        page.picked.set(Some((false, 1)));
+        page.picked.set(Some((Region::Channel, 1)));
         frame_with_fonts(&mut page.view);
         frame_with_fonts(&mut page.view);
         assert_eq!(
@@ -5696,7 +5705,7 @@ mod tests {
             held: HeldSend {
                 reply: Some(HeldReply {
                     root: MessageId::new(),
-                    also_in_channel: false,
+                    also_in_channel: ReplyEcho::ThreadOnly,
                 }),
                 ..asked.held.clone()
             },

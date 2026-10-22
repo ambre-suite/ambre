@@ -17,7 +17,7 @@ use ambre_commands::{
 };
 use ambre_core::{DocumentId, UserId};
 
-use crate::{MessageRef, MurmurePane};
+use crate::{MessageRef, MurmurePane, Region};
 
 /// Commands that belong to the application shell rather than a channel.
 const GENERAL: CommandCategory = CommandCategory("general");
@@ -299,8 +299,8 @@ impl PendingReaction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Picking {
     /// The composer of a region, which inserts the pick at its caret
-    /// (`MURMURE-139`). The flag names the thread's region.
-    Composer { in_thread: bool },
+    /// (`MURMURE-139`).
+    Composer { region: Region },
     /// A message, which the pick reacts to (`MURMURE-140`).
     Reaction(PendingReaction),
 }
@@ -395,9 +395,13 @@ impl AskedAll {
         }
     }
 
-    /// Whether the send was a reply, which the thread's region takes back.
-    pub fn in_thread(&self) -> bool {
-        self.held.reply.is_some()
+    /// The region that takes the send back: the thread's for a reply.
+    pub fn region(&self) -> Region {
+        if self.held.reply.is_some() {
+            Region::Thread
+        } else {
+            Region::Channel
+        }
     }
 }
 
@@ -643,7 +647,7 @@ pub fn key_list(locale: &Locale) -> Vec<KeyRow> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::SegmentId;
+    use ambre_bus::{ReplyEcho, SegmentId};
     use ambre_commands::shared;
 
     fn target(at: MessageAt, text: &str, notice: bool) -> MessageTarget {
@@ -682,7 +686,7 @@ mod tests {
                 reply: None,
             },
         };
-        assert!(!asked.in_thread());
+        assert_eq!(asked.region(), Region::Channel);
         assert!(matches!(
             asked.clone().command(Timestamp(7)),
             LogicCommand::Channel {
@@ -697,12 +701,12 @@ mod tests {
                 attachments: Vec::new(),
                 reply: Some(HeldReply {
                     root,
-                    also_in_channel: true,
+                    also_in_channel: ReplyEcho::AlsoInChannel,
                 }),
             },
             ..asked
         };
-        assert!(reply.in_thread());
+        assert_eq!(reply.region(), Region::Thread);
         assert!(matches!(
             reply.command(Timestamp(8)),
             LogicCommand::Channel {
@@ -710,7 +714,7 @@ mod tests {
                 command: MurmureCommand::Reply {
                     root: r,
                     draft: d,
-                    also_in_channel: true,
+                    also_in_channel: ReplyEcho::AlsoInChannel,
                     now: Timestamp(8),
                     confirmed: true,
                 },

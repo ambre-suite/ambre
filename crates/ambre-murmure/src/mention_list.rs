@@ -8,6 +8,8 @@
 use ambre_bus::{MentionTarget, UserId};
 use ambre_core::ByteOffset;
 
+use crate::Region;
+
 /// The word an `@channel` writes, after its `@`.
 pub const AT_CHANNEL: &str = "channel";
 
@@ -35,8 +37,8 @@ pub struct MentionList {
     pub chosen: usize,
     /// The top-left of the caret, in pixels of the region.
     pub at: (f32, f32),
-    /// The list hangs from the thread's region, not the channel's.
-    pub in_thread: bool,
+    /// The region the list hangs from.
+    pub region: Region,
 }
 
 /// The query an `@` opens before the byte `caret` of `text`: the offset of

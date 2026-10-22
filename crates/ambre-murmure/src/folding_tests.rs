@@ -88,7 +88,7 @@ fn amended() -> Amended {
     let segment = alice.wants_close().expect("full");
     let successor = SegmentId::new();
     alice
-        .close_into(segment, successor, true, NOW)
+        .close_into(segment, successor, crate::Successor::Created, NOW)
         .expect("close");
     let peer = next_peer();
     alice

@@ -266,7 +266,7 @@ fn a_style_outside_the_body_or_a_bad_link_is_refused() {
         );
         assert!(
             matches!(
-                alice.reply(id, &bad, author, NOW, false),
+                alice.reply(id, &bad, author, NOW, ambre_bus::ReplyEcho::ThreadOnly),
                 Err(MurmureError::BadStyle)
             ),
             "reply {styles:?}"

@@ -69,7 +69,12 @@ impl LogicState {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
-        let closed = match channel.close_into(closing, active, created, now) {
+        let successor = if created {
+            ambre_murmure::Successor::Created
+        } else {
+            ambre_murmure::Successor::Fetched
+        };
+        let closed = match channel.close_into(closing, active, successor, now) {
             Ok(closed) => closed,
             Err(error) => {
                 channel.close_refused();

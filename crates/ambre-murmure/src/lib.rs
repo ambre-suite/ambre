@@ -86,11 +86,11 @@ mod unread_tests;
 pub use channel::{
     ChangeTarget, ChannelState, Closed, FINALIZE_RETRY_MS, FOLD_DELAY_MS, FinalSnapshot,
     FoldSnapshot, Linked, Named, Relocated, Replay, Replied, SEGMENT_BYTES, SEGMENT_MESSAGES,
-    SUCCESSOR_RETRY_MS, SeekStep, Sent, Settled, ThreadLinked, ThreadTarget,
+    SUCCESSOR_RETRY_MS, SeekStep, Sent, Settled, Successor, ThreadLinked, ThreadTarget,
 };
 pub use delta::{JSON_SCHEMA_VERSION, Refusal, Signer};
 pub use error::MurmureError;
-pub use layout::{MessageRef, MurmurePane};
+pub use layout::{MessageRef, MurmurePane, Region};
 pub use members::{
     PRESENCE_EXPIRY_MS, REFRESH_PERIOD_MS, Roster, find_members, is_presence_sample,
     presence_sample,

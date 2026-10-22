@@ -42,6 +42,16 @@ pub(super) struct Retry {
     at: Option<Timestamp>,
 }
 
+/// Who registered the segment a close moves to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Successor {
+    /// Another member won the race: the successor is fetched as they wrote
+    /// it.
+    Fetched,
+    /// This client registered it: the channel holds it at once.
+    Created,
+}
+
 /// What writing a close produced: the `meta` delta to send, and the successor
 /// to fetch when another client created it.
 #[derive(Debug)]
@@ -138,10 +148,10 @@ impl ChannelState {
     /// Write the relay's answer to a close of `closing` into `meta`: the
     /// segment is `closing`, and `active` follows it (`MURMURE-065`).
     ///
-    /// `created` says this client registered `active`: the channel then
-    /// holds it at once, and writes its header under its PeerID once the
-    /// session lands. Otherwise the close lost its race, and the successor is
-    /// fetched as another member wrote it. No message moves: each stays in
+    /// A `Created` successor says this client registered `active`. The
+    /// channel then holds it at once, and writes its header under its PeerID
+    /// once the session lands. A `Fetched` one lost the race, and is fetched
+    /// as another member wrote it. No message moves: each stays in
     /// the segment it was sent to (`MURMURE-066`).
     ///
     /// # Errors
@@ -154,7 +164,7 @@ impl ChannelState {
         &mut self,
         closing: SegmentId,
         active: SegmentId,
-        created: bool,
+        successor: Successor,
         now: Timestamp,
     ) -> Result<Closed, MurmureError> {
         if closing != self.active_id() {
@@ -168,7 +178,7 @@ impl ChannelState {
         let meta = session.export(doc)?;
         self.close_asked = false;
         self.key_rotated = false;
-        if !created {
+        if successor == Successor::Fetched {
             return Ok(Closed {
                 meta,
                 fetch: self.await_successor(active),

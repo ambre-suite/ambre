@@ -12,6 +12,8 @@ use std::collections::HashMap;
 use ambre_bus::{MediaRef, MediaType, Picture};
 use ambre_draw::ImageKey;
 
+use crate::Region;
+
 /// The bytes the page holds decoded (`ambre-spec-budgets.md section 6`).
 /// Past it, the pictures painted longest ago go, never one on screen.
 pub const PICTURES_BYTES: usize = 16 * 1024 * 1024;
@@ -33,14 +35,6 @@ enum Held {
     Shown { picture: Picture, painted: u64 },
     /// Neither fetched nor decoded: its chip stands alone.
     Failed,
-}
-
-/// A region that paints pictures. The two regions share one shelf, and
-/// what either drew last stays.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Screen {
-    Channel,
-    Thread,
 }
 
 /// The pictures of the page, by the file they decode.
@@ -74,12 +68,12 @@ impl Pictures {
 
     /// A new paint of `screen` starts: what it draws is on screen, in place
     /// of what its last paint drew.
-    pub fn begin_paint(&mut self, screen: Screen) {
+    pub fn begin_paint(&mut self, screen: Region) {
         self.paint += 1;
         let [channel, thread] = &mut self.screens;
         match screen {
-            Screen::Channel => *channel = self.paint,
-            Screen::Thread => *thread = self.paint,
+            Region::Channel => *channel = self.paint,
+            Region::Thread => *thread = self.paint,
         }
     }
 
@@ -267,7 +261,7 @@ mod tests {
     #[test]
     fn a_picture_is_asked_once_and_lands_once() {
         let mut shelf = Pictures::new(1024);
-        shelf.begin_paint(Screen::Channel);
+        shelf.begin_paint(Region::Channel);
         let (a, b) = (file('a'), file('b'));
         assert!(shelf.want(&a));
         assert!(!shelf.want(&a), "asked already");
@@ -289,10 +283,10 @@ mod tests {
     fn past_the_cap_the_coldest_picture_goes_and_none_on_screen() {
         let mut shelf = Pictures::new(10);
         let (a, b, c, d) = (file('a'), file('b'), file('c'), file('d'));
-        shelf.begin_paint(Screen::Channel);
+        shelf.begin_paint(Region::Channel);
         shelf.want(&a);
         shelf.land(a.clone(), Some(picture(&[0], 6)));
-        shelf.begin_paint(Screen::Channel);
+        shelf.begin_paint(Region::Channel);
         shelf.want(&b);
         shelf.land(b.clone(), Some(picture(&[0], 6)));
         assert!(shelf.get(&a).is_none(), "the coldest went");
@@ -305,7 +299,7 @@ mod tests {
         );
         assert!(shelf.want(&a), "a dropped picture is asked again");
 
-        shelf.begin_paint(Screen::Thread);
+        shelf.begin_paint(Region::Thread);
         shelf.want(&d);
         shelf.land(d.clone(), Some(picture(&[0], 6)));
         assert!(shelf.get(&b).is_some(), "the channel still shows it");
