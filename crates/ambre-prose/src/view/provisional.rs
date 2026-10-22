@@ -69,7 +69,8 @@ pub(crate) struct Piece {
     pub fragment: Fragment,
     pub run: Option<ShapedRun>,
     pub table: Option<Arc<TableShape>>,
-    /// Whether `run` is provisional: its offsets are then the document's.
+    /// Whether `run` is provisional, or `table` holds the provisional runs of
+    /// its cell blocks: their offsets are then the document's.
     pub provisional: bool,
 }
 
@@ -117,6 +118,14 @@ impl ProseUiState {
     /// replayed since has made them stale.
     fn provisional_drawn(&self) -> bool {
         self.provisional.key.as_ref().map(|key| key.1) == Some(self.layout_version)
+    }
+
+    /// The provisional run a frame draws for `block`, fresh or not.
+    pub(crate) fn drawn_provisional_run(&self, block: BlockId) -> Option<&ShapedRun> {
+        self.provisional
+            .runs
+            .get(&block)
+            .filter(|_| self.provisional_drawn())
     }
 
     /// The provisional run of `block`, while it is fresh.
@@ -332,12 +341,14 @@ impl ProseUiState {
                 };
                 piece.top += shift;
                 let mut table = Arc::clone(table);
+                let mut provisional = false;
                 if drawn && page == *block.page_span().end() {
                     let (grown_table, grown) = self.provisional_table(&table);
                     if grown > 0.0 || grown_table.cells != table.cells {
                         piece.height += grown;
                         shift += grown;
                         table = Arc::new(grown_table);
+                        provisional = true;
                     }
                 }
                 if piece.top >= body {
@@ -349,7 +360,7 @@ impl ProseUiState {
                     fragment: piece,
                     run: None,
                     table: Some(table),
-                    provisional: false,
+                    provisional,
                 });
                 continue;
             }

@@ -1837,6 +1837,42 @@ mod tests {
         );
     }
 
+    /// `PROSE-UI-216`: a press in a cell reads the provisional run drawn
+    /// there as a document offset. A stale run still counts so.
+    #[test]
+    fn a_press_in_a_stale_cell_draft_lands_where_it_was_drawn() {
+        use crate::logic::tables::tests::{cell_at, document_with_table, first_block_of, type_in};
+        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 1, 1);
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        let cell = cell_at(&state, table, 0, 0);
+        type_in(&mut state, cell, "abcdef");
+        let cell = block_id(first_block_of(&state, cell));
+        let mut ui = view_of(&mut state);
+        ui.draft.push_str(
+            ambre_bus::app::prose::TextAck(1),
+            "xy",
+            &cell,
+            DocOffset::ZERO,
+        );
+        shape(&mut ui);
+        let point = cell_point(&ui, cell, 1);
+        assert_eq!(
+            ui.place_at(point.0, point.1),
+            Some((cell, DocOffset::new(1)))
+        );
+        // A keystroke replayed before the next frame, after the point.
+        ui.draft.push_str(
+            ambre_bus::app::prose::TextAck(2),
+            "z",
+            &cell,
+            DocOffset::new(2),
+        );
+        assert_eq!(
+            ui.place_at(point.0, point.1),
+            Some((cell, DocOffset::new(1)))
+        );
+    }
+
     fn thread(block: BlockId, start: u32, end: u32) -> crate::events::CommentThread {
         crate::events::CommentThread {
             comment_id: ambre_core::CommentId::new(),

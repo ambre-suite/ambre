@@ -70,7 +70,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-116` | `POST` | A mark covering the point the paragraph parts MUST cover, on each half, exactly the characters it covered before. | this spec section 3 | `ambre_prose::logic::text::tests::a_mark_across_the_cut_reaches_both_halves` | none | verified |
 | `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, marks included, or the identity of the source paragraph. | this spec section 3 | `ambre_prose::logic::text::tests::a_split_leaves_the_text_the_two_paragraphs_carry_between_them`; `::a_split_carries_the_marks_of_the_text_it_moves`; `ambre_prose::logic::convergence_tests::a_split_and_a_concurrent_insertion_both_survive` | none | verified |
 | `PROSE-UI-214` | `POST` | A press in the paragraph a split opens MUST land in it once the document has named it, before a layout carries it. | this spec section 3 | `ambre_prose::view::paint::tests::a_press_in_the_paragraph_a_split_opens_lands_in_it` | none | verified |
-| `PROSE-UI-216` | `POST` | A press in a table cell MUST land in that cell's text, at the offset under the pointer, whether the run drawn there is laid or provisional. | this spec section 3 | `ambre_prose::view::paint::tests::a_press_in_a_cell_lands_in_its_text` | none | verified |
+| `PROSE-UI-216` | `POST` | A press in a table cell MUST land in that cell's text, at the offset under the pointer, whether the run drawn there is laid or provisional. | this spec section 3 | `ambre_prose::view::paint::tests::a_press_in_a_cell_lands_in_its_text`; `::a_press_in_a_stale_cell_draft_lands_where_it_was_drawn` -- a draft replayed since the frame | none | verified |
 
 ### 1.6 Compose with an input method
 

@@ -8139,6 +8139,7 @@
   {"edge": "verified-by", "from": "PROSE-UI-214", "to": "ambre_prose::view::paint::tests::a_press_in_the_paragraph_a_split_opens_lands_in_it"},
   {"edge": "cites-section", "from": "PROSE-UI-216", "section": "3", "to": "4-Prose/features/ambre-spec-prose-text-editing.md"},
   {"edge": "verified-by", "from": "PROSE-UI-216", "to": "ambre_prose::view::paint::tests::a_press_in_a_cell_lands_in_its_text"},
+  {"edge": "verified-by", "from": "PROSE-UI-216", "to": "::a_press_in_a_stale_cell_draft_lands_where_it_was_drawn"},
   {"edge": "cites-section", "from": "PROSE-UI-029", "section": "3", "to": "4-Prose/features/ambre-spec-prose-text-editing.md"},
   {"edge": "verified-by", "from": "PROSE-UI-029", "to": "ambre_prose::input_tests::a_composition_ends_in_one_insertion"},
   {"edge": "verified-by", "from": "PROSE-UI-029", "to": "::a_remote_insertion_during_a_composition_moves_its_landing"},

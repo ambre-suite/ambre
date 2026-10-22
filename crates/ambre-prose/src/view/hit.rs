@@ -81,8 +81,8 @@ impl HitOffset {
 }
 
 /// The block and the offset under `(x, y)` in `table`, both from its
-/// top-left corner.
-fn cell_hit(ui: &ProseUiState, table: &TableShape, x: f32, y: f32) -> Option<(BlockId, HitOffset)> {
+/// top-left corner, the offset counted in the run held there.
+fn cell_hit(table: &TableShape, x: f32, y: f32) -> Option<(BlockId, RunOffset)> {
     let (cell, frame) = table.cells.iter().find_map(|cell| {
         let frame = cell_frame(table, cell)?;
         (x >= frame.x0 && x < frame.x1 && y >= frame.y0 && y < frame.y1).then_some((cell, frame))
@@ -99,7 +99,7 @@ fn cell_hit(ui: &ProseUiState, table: &TableShape, x: f32, y: f32) -> Option<(Bl
     let data = run.data();
     let x = x - frame.text_x - data.indent_px();
     let y = (y - top).clamp(0.0, data.height().max(0.0));
-    Some((id, HitOffset::of(ui, id, data.offset_at(x, y))))
+    Some((id, data.offset_at(x, y)))
 }
 
 /// The fragment of `block` on `page`, or `None` when the block shows nothing
@@ -323,8 +323,16 @@ impl ProseUiState {
         if let Some(table) = &chosen.table {
             let x = x_in_page - layout.margin_left_px;
             let y = (y_body - piece.top).clamp(0.0, piece.height.max(0.0)) + piece.run_top;
-            if let Some(hit) = cell_hit(self, table, x, y) {
-                return Some(hit);
+            if let Some((id, offset)) = cell_hit(table, x, y) {
+                // A table drawn with its provisional runs counts the document
+                // in them, even once an input replayed since made them stale.
+                let drawn = chosen.provisional && self.drawn_provisional_run(id).is_some();
+                let offset = if drawn {
+                    HitOffset::Drawn(DocOffset::new(offset.get()))
+                } else {
+                    HitOffset::Laid(offset)
+                };
+                return Some((id, offset));
             }
         }
         let offset = match &chosen.run {
