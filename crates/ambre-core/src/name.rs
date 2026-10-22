@@ -105,6 +105,15 @@ impl DisplayName {
         Ok(Self(text.to_owned()))
     }
 
+    /// The display name `text` gives once trimmed and cut to its first
+    /// [`NAME_MAX_CHARS`] characters. It serves a name the user did not type
+    /// here, such as an identity provider's. `None` when only blanks remain.
+    #[must_use]
+    pub fn cut_to_fit(text: &str) -> Option<Self> {
+        let cut: String = text.trim().chars().take(NAME_MAX_CHARS).collect();
+        Self::new(&cut).ok()
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -136,6 +145,15 @@ impl<'de> Deserialize<'de> for DisplayName {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_name_past_the_cap_is_cut_to_it() {
+        let long = format!("  {}b  ", "\u{1F600}".repeat(NAME_MAX_CHARS));
+        let cut = DisplayName::cut_to_fit(&long).unwrap();
+        assert_eq!(cut.as_str(), "\u{1F600}".repeat(NAME_MAX_CHARS));
+        assert_eq!(DisplayName::cut_to_fit(" ada ").unwrap().as_str(), "ada");
+        assert_eq!(DisplayName::cut_to_fit("   "), None);
+    }
 
     #[test]
     fn a_name_fits_up_to_its_cap_in_characters() {

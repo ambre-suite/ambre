@@ -130,7 +130,7 @@ pub async fn get_user_by_email(
 pub async fn create_user(
     pool: &PgPool,
     email: &ambre_core::Email,
-    display_name: &str,
+    display_name: &ambre_core::DisplayName,
     master_key_enc: &ambre_core::WrappedMasterKey,
     master_key_salt: &ambre_core::MasterKeySalt,
     signing_pubkey: &ambre_core::PublicKey,
@@ -140,7 +140,7 @@ pub async fn create_user(
         "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey"
     )
     .bind(email.as_str())
-    .bind(display_name)
+    .bind(display_name.as_str())
     .bind(master_key_enc.as_bytes())
     .bind(master_key_salt.as_bytes())
     .bind(signing_pubkey.as_slice())
@@ -192,7 +192,7 @@ pub async fn upsert_user_from_oidc(
     oidc_provider: &str,
     oidc_subject: &str,
     email: &ambre_core::Email,
-    display_name: &str,
+    display_name: &ambre_core::DisplayName,
 ) -> Result<UserRow, AppError> {
     let mut tx = pool.begin().await?;
 
@@ -220,7 +220,7 @@ pub async fn upsert_user_from_oidc(
     .bind(oidc_provider)
     .bind(oidc_subject)
     .bind(email.as_str())
-    .bind(display_name)
+    .bind(display_name.as_str())
     .fetch_one(&mut *tx)
     .await
     .map_err(map_email_conflict)?;
@@ -252,7 +252,7 @@ pub async fn upsert_user_from_oidc(
     Ok(user)
 }
 
-/// Dev-only: upserts a user identified by a `?user=<username>` parameter.
+/// Dev-only: upserts a user identified by the name it signs in under.
 ///
 /// Stored under `oidc_provider = 'dev'`, `oidc_subject = username` so it shares
 /// the OIDC unique index and is idempotent across refreshes. The supplied
@@ -262,7 +262,7 @@ pub async fn upsert_user_from_oidc(
 /// server. Gated by `Config::dev_mode` at the call site.
 pub async fn dev_upsert_user(
     pool: &PgPool,
-    username: &str,
+    username: &ambre_core::DisplayName,
     signing_pubkey: &ambre_core::PublicKey,
     exchange_pubkey: &ambre_core::ExchangePublicKey,
 ) -> Result<UserRow, AppError> {
@@ -272,7 +272,7 @@ pub async fn dev_upsert_user(
     let row = sqlx::query(
         "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = $3, exchange_pubkey = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
     )
-    .bind(username)
+    .bind(username.as_str())
     .bind(&email)
     .bind(signing_pubkey.as_slice())
     .bind(exchange_pubkey.as_slice())
@@ -406,7 +406,7 @@ mod tests {
         let squatter = create_user(
             &pool,
             &ambre_core::Email::from("alice@example.com"),
-            "Alice",
+            &ambre_core::DisplayName::new("Alice").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &ambre_core::PublicKey::from_array([3u8; 32]),
@@ -421,7 +421,7 @@ mod tests {
             "google",
             "sub-123",
             &ambre_core::Email::from("Alice@example.com"),
-            "Alice",
+            &ambre_core::DisplayName::new("Alice").unwrap(),
         )
         .await
         .expect("verified login must reclaim the squatted email");
@@ -457,7 +457,7 @@ mod tests {
             "google",
             "sub-1",
             &ambre_core::Email::from("dave@example.com"),
-            "Dave",
+            &ambre_core::DisplayName::new("Dave").unwrap(),
         )
         .await
         .expect("verified login");
@@ -465,7 +465,7 @@ mod tests {
         let err = create_user(
             &pool,
             &ambre_core::Email::from("DAVE@example.com"),
-            "Impostor",
+            &ambre_core::DisplayName::new("Impostor").unwrap(),
             &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([8u8; 16].to_vec()),
             &ambre_core::PublicKey::from_array([7u8; 32]),
@@ -487,7 +487,7 @@ mod tests {
             "google",
             "sub-a",
             &ambre_core::Email::from("erin@example.com"),
-            "Erin",
+            &ambre_core::DisplayName::new("Erin").unwrap(),
         )
         .await
         .expect("first verified login");
@@ -497,7 +497,7 @@ mod tests {
             "github",
             "sub-b",
             &ambre_core::Email::from("erin@example.com"),
-            "Erin",
+            &ambre_core::DisplayName::new("Erin").unwrap(),
         )
         .await
         .expect_err("a second verified identity must not steal the email");
@@ -514,7 +514,7 @@ mod tests {
             "google",
             "sub-x",
             &ambre_core::Email::from("frank@example.com"),
-            "Frank",
+            &ambre_core::DisplayName::new("Frank").unwrap(),
         )
         .await
         .expect("first login");
@@ -523,7 +523,7 @@ mod tests {
             "google",
             "sub-x",
             &ambre_core::Email::from("frank@example.com"),
-            "Frank",
+            &ambre_core::DisplayName::new("Frank").unwrap(),
         )
         .await
         .expect("re-login must not self-conflict");
@@ -538,7 +538,7 @@ mod tests {
         create_user(
             &pool,
             &ambre_core::Email::from("bob@example.com"),
-            "Bob",
+            &ambre_core::DisplayName::new("Bob").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &ambre_core::PublicKey::from_array([3u8; 32]),
@@ -550,7 +550,7 @@ mod tests {
         let err = create_user(
             &pool,
             &ambre_core::Email::from("BOB@example.com"),
-            "Impostor",
+            &ambre_core::DisplayName::new("Impostor").unwrap(),
             &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([8u8; 16].to_vec()),
             &ambre_core::PublicKey::from_array([7u8; 32]),
@@ -569,7 +569,7 @@ mod tests {
         let created = create_user(
             &pool,
             &ambre_core::Email::from("carol@example.com"),
-            "Carol",
+            &ambre_core::DisplayName::new("Carol").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &ambre_core::PublicKey::from_array([3u8; 32]),

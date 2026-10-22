@@ -235,7 +235,7 @@ mod tests {
         let user = create_user(
             &pool,
             &ambre_core::Email::from("snap@test.dev"),
-            "Snap",
+            &ambre_core::DisplayName::new("Snap").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &ambre_core::PublicKey::from_array([3u8; 32]),
@@ -306,7 +306,7 @@ mod tests {
         let user = create_user(
             &pool,
             &ambre_core::Email::from("purge@test.dev"),
-            "Purge",
+            &ambre_core::DisplayName::new("Purge").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &ambre_core::PublicKey::from_array([3u8; 32]),
@@ -382,7 +382,7 @@ mod tests {
         let user = create_user(
             &pool,
             &ambre_core::Email::from("horizon@test.dev"),
-            "Horizon",
+            &ambre_core::DisplayName::new("Horizon").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
             &ambre_core::PublicKey::from_array([3u8; 32]),

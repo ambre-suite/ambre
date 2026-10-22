@@ -1610,6 +1610,36 @@ mod handler_tests {
         assert!(!access_token_of(resp).await.is_empty());
     }
 
+    /// `SRV-234`: a development sign-in stores its name trimmed, and one past
+    /// the cap is refused before any row is written.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_dev_sign_in_stores_a_display_name_that_fits(pool: sqlx::PgPool) {
+        let state = test_app_state_dev(pool.clone()).await;
+        let app = build_test_router(state);
+        let login = |name: String| {
+            Request::post("/api/auth/dev/login")
+                .header("content-type", "application/json")
+                .body(Body::from(dev_login_body(&name).to_string()))
+                .unwrap()
+        };
+        let resp = app.clone().oneshot(login("  ada  ".into())).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let stored: String = sqlx::query_scalar("SELECT display_name FROM users")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(stored, "ada");
+        let long = "a".repeat(ambre_core::NAME_MAX_CHARS + 1);
+        let resp = app.oneshot(login(long)).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(rows, 1, "the refused name wrote no row");
+    }
+
     fn store_master_keys_body() -> serde_json::Value {
         serde_json::json!({
             "master_key_enc": base64_encode(&[1u8; 72]),
@@ -1785,7 +1815,7 @@ mod handler_tests {
             "google",
             "sub-1",
             &ambre_core::Email::from("new@example.com"),
-            "New",
+            &ambre_core::DisplayName::new("New").unwrap(),
         )
         .await
         .unwrap();
@@ -1868,7 +1898,7 @@ mod handler_tests {
             "google",
             "sub-2",
             &ambre_core::Email::from("keyless@example.com"),
-            "Keyless",
+            &ambre_core::DisplayName::new("Keyless").unwrap(),
         )
         .await
         .unwrap();
@@ -1955,7 +1985,7 @@ mod handler_tests {
             "google",
             "sub-3",
             &ambre_core::Email::from("c@example.com"),
-            "C",
+            &ambre_core::DisplayName::new("C").unwrap(),
         )
         .await
         .unwrap();
@@ -1979,7 +2009,7 @@ mod handler_tests {
             "google",
             "sub-4",
             &ambre_core::Email::from("d@example.com"),
-            "D",
+            &ambre_core::DisplayName::new("D").unwrap(),
         )
         .await
         .unwrap();

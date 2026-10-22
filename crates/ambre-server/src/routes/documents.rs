@@ -75,7 +75,7 @@ pub async fn setup_account(
     let user = db::create_user(
         &state.db,
         &ambre_core::Email::from(req.email.as_str().trim()),
-        display_name.as_str(),
+        &display_name,
         &mk_enc,
         &mk_salt,
         &spk,

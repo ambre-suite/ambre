@@ -1075,7 +1075,7 @@ mod tests {
         let row = db::create_user(
             &state.db,
             &ambre_core::Email::from(email),
-            display_name,
+            &ambre_core::DisplayName::new(display_name).unwrap(),
             &ambre_core::WrappedMasterKey::new([1; 32].to_vec()),
             &ambre_core::MasterKeySalt::new([2; 16].to_vec()),
             &signing,

@@ -72,9 +72,10 @@ pub async fn dev_login(
     if !state.config.dev_mode {
         return Err(AppError::Unauthorized);
     }
-    if req.username.is_empty() {
-        return Err(AppError::BadRequest("username must not be empty".into()));
-    }
+    // The name is the account's display name, so it obeys the same bound
+    // (`SRV-234`).
+    let username = ambre_core::DisplayName::new(&req.username)
+        .map_err(|e| AppError::BadRequest(format!("invalid username: {e}")))?;
 
     // A key of the wrong length is refused before any row is written
     // (`SRV-232`).
@@ -89,8 +90,7 @@ pub async fn dev_login(
         })
         .map_err(|e| AppError::BadRequest(format!("invalid exchange_pub_key: {e}")))?;
 
-    let user =
-        db::dev_upsert_user(&state.db, &req.username, &signing_pubkey, &exchange_pubkey).await?;
+    let user = db::dev_upsert_user(&state.db, &username, &signing_pubkey, &exchange_pubkey).await?;
 
     let user_id = user.id;
     // The upsert above writes both keys, so a dev account always holds one.
@@ -219,16 +219,16 @@ pub async fn oidc_callback(
         ));
     }
     let email = ambre_core::Email(claims.email().map(|e| e.to_string()).unwrap_or_default());
-    let display_name = claims
-        .name()
-        .and_then(|l| l.get(None).map(|s| s.to_string()))
-        .filter(|s| !s.is_empty())
-        .or_else(|| {
-            claims
-                .given_name()
-                .and_then(|l| l.get(None).map(|s| s.to_string()))
-        })
-        .unwrap_or_else(|| email.as_str().to_owned());
+    let display_name = provider_display_name(
+        claims.name().and_then(|l| l.get(None)).map(|s| s.as_str()),
+        claims
+            .given_name()
+            .and_then(|l| l.get(None))
+            .map(|s| s.as_str()),
+        &email,
+        &oidc_subject,
+    )
+    .ok_or_else(|| AppError::BadRequest("OIDC provider returned a blank subject".into()))?;
 
     let user =
         db::upsert_user_from_oidc(&state.db, &provider, &oidc_subject, &email, &display_name)
@@ -243,7 +243,7 @@ pub async fn oidc_callback(
     Ok(axum::Json(CallbackResponse {
         user_id,
         email,
-        display_name,
+        display_name: display_name.into_string(),
         is_new_user: user.master_key_enc.is_none(),
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
@@ -251,9 +251,43 @@ pub async fn oidc_callback(
     }))
 }
 
+/// The display name a provider's claims give. It is the first of the full
+/// name, the given name, the address and the subject that holds more than
+/// blanks. A name past the cap is cut to it (`SRV-234`). `None` only for a
+/// blank subject, which a provider never sends.
+fn provider_display_name(
+    name: Option<&str>,
+    given_name: Option<&str>,
+    email: &ambre_core::Email,
+    subject: &str,
+) -> Option<ambre_core::DisplayName> {
+    [name, given_name, Some(email.as_str()), Some(subject)]
+        .into_iter()
+        .flatten()
+        .find_map(ambre_core::DisplayName::cut_to_fit)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `SRV-234`: a provider's name is trimmed and cut to the cap, and a blank
+    /// one falls through to the next claim.
+    #[test]
+    fn a_provider_name_is_trimmed_and_cut_to_the_cap() {
+        let email = ambre_core::Email::from("ada@example.com");
+        let long = "a".repeat(ambre_core::NAME_MAX_CHARS + 40);
+        let cut = provider_display_name(Some(&long), None, &email, "sub").unwrap();
+        assert_eq!(cut.as_str().chars().count(), ambre_core::NAME_MAX_CHARS);
+        let padded = provider_display_name(Some("  Ada  "), None, &email, "sub").unwrap();
+        assert_eq!(padded.as_str(), "Ada");
+        let blank = provider_display_name(Some("  "), Some(" Ada "), &email, "sub").unwrap();
+        assert_eq!(blank.as_str(), "Ada");
+        let bare = ambre_core::Email::from("");
+        let subject = provider_display_name(None, None, &bare, "sub-1").unwrap();
+        assert_eq!(subject.as_str(), "sub-1");
+        assert_eq!(provider_display_name(None, None, &bare, " "), None);
+    }
 
     #[test]
     fn a_stored_key_that_does_not_parse_mints_no_session() {
