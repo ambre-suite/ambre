@@ -21,7 +21,7 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{Dfs, EdgeRef};
 
 use super::compile::SheetIndices;
-use super::types::{CellId, EngineSheet, RangeId};
+use super::types::{AxisId, CellId, EngineSheet, RangeId};
 
 // -----------------------------------------------------------------------------
 // CycleError
@@ -184,8 +184,12 @@ impl DependencyGraph {
     /// whose uids the edited cell's index knows nothing about.
     pub fn collect_dirty(&self, changed: CellId, indices: &SheetIndices) -> HashSet<CellId> {
         let mut dirty = HashSet::new();
+        // A reference typed past the used range kept its position, and the
+        // line it named exists now. The edit reaches it under that position
+        // too, else the formula keeps the value it read as empty (`TRAME-233`).
         let mut queue = vec![changed];
-        let mut seen: HashSet<CellId> = HashSet::from([changed]);
+        queue.extend(position_aliases(changed, indices));
+        let mut seen: HashSet<CellId> = queue.iter().copied().collect();
 
         while let Some(cur) = queue.pop() {
             // Level 1: DFS descendants in cell_dag (cells that depend on `cur`).
@@ -243,6 +247,27 @@ impl DependencyGraph {
     pub fn node_count(&self) -> usize {
         self.cell_to_node.len()
     }
+}
+
+/// The ids a reference may hold for the bound cell `cell`: each axis kept as
+/// the position it sits at today. Empty for a cell with a virtual axis, or one
+/// whose lines its sheet index does not hold.
+fn position_aliases(cell: CellId, indices: &SheetIndices) -> Vec<CellId> {
+    let (Some(row), Some(col)) = (cell.row_uid(), cell.col_uid()) else {
+        return Vec::new();
+    };
+    let Some(index) = indices.get(&cell.sheet) else {
+        return Vec::new();
+    };
+    let at = |pos: Option<usize>| pos.and_then(|p| u32::try_from(p).ok()).map(AxisId::Virtual);
+    let (Some(row_at), Some(col_at)) = (at(index.row_pos(&row)), at(index.col_pos(&col))) else {
+        return Vec::new();
+    };
+    vec![
+        CellId::new(cell.sheet, AxisId::Bound(row), col_at),
+        CellId::new(cell.sheet, row_at, AxisId::Bound(col)),
+        CellId::new(cell.sheet, row_at, col_at),
+    ]
 }
 
 impl Default for DependencyGraph {

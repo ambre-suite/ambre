@@ -273,3 +273,29 @@ fn a_whole_column_range_over_itself_is_a_cycle() {
     assert_eq!(read_cell(&mut state, 2, 0), "#CIRCULAR!");
     assert_eq!(read_cell(&mut state, 0, 0), "1");
 }
+
+/// A formula typed before the cell it reads exists must pick that cell up
+/// once it is written. `B5` lies past the used range when `A1` reads it, so
+/// the reference is still a position when the value lands (`TRAME-233`).
+#[test]
+fn a_formula_typed_before_its_cell_reads_the_cell_once_written() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "=B5*2".to_owned(),
+    });
+    assert_eq!(read_cell(&mut state, 0, 0), "0");
+    state.handle_command(TrameCommand::SetCellText {
+        row: 4,
+        col: 1,
+        text: "7".to_owned(),
+    });
+    assert_eq!(read_cell(&mut state, 0, 0), "14");
+    state.handle_command(TrameCommand::SetCellText {
+        row: 4,
+        col: 1,
+        text: "8".to_owned(),
+    });
+    assert_eq!(read_cell(&mut state, 0, 0), "16");
+}

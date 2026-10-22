@@ -51,6 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-211` | `PRE` | A sheet a formula qualifies MUST already exist when the formula is typed. | this spec section 3 | `ambre_trame::logic::tests::group3::formula_naming_a_missing_sheet_is_refused` | none | verified |
 | `TRAME-011` | `POST` | Typing into a cell MUST compile that cell again. | this spec section 3 | `ambre_trame::formula::cache::tests::stale_cell_recompiled`; `::non_formula_clears_cache` | none | verified |
 | `TRAME-040` | `POST` | An edit MUST update every cell that reads it, directly or through a range. | this spec section 3 | `ambre_trame::formula::dag::tests::simple_dependency_propagation`; `::range_dirty_collection`; `::collect_dirty_reaches_a_fixpoint_over_chained_ranges`; `ambre_trame::formula::engine::tests::cascade_after_edit`; `::range_dependency_propagates_through_a_chain` | none | verified |
+| `TRAME-233` | `POST` | Writing a cell MUST update every formula that read it while it lay past the used range. | this spec section 3; `TRAME-006` | `ambre_trame::logic::tests::group8::a_formula_typed_before_its_cell_reads_the_cell_once_written` | none | verified |
 | `TRAME-041` | `FRAME` | An edit MUST NOT recompute a cell that reads nothing it changed. | this spec section 3 | `ambre_trame::formula::dag::tests::range_outside_no_dirty`; `ambre_trame::formula::cache::tests::not_stale_no_recompile` | none | verified |
 | `TRAME-212` | `FRAME` | Retyping the text a cell already holds MUST NOT recompile it. | this spec section 6 | `ambre_trame::formula::engine::tests::retyping_the_same_text_does_not_recompile` | none | verified |
 | `TRAME-012` | `FAIL` | A formula that reads itself through other cells MUST be refused with its culprits named. | this spec section 3 | `ambre_trame::formula::dag::tests::static_cycle_detected`; `::cycle_detection_kosaraju_returns_culprits`; `::rejected_cycle_leaves_no_stale_range_deps` | none | verified |
@@ -91,7 +92,7 @@ status values are normative in `ambre-spec-template.md`.
   **None of the four has a mechanism**: no recipe runs a Trame benchmark.
 * **Boundary.** none of its own. `TRAME-010` keeps computed values out of the document, so only
   the raw source travels, and `ZK-001` seals it before it leaves the client.
-* **Verification.** 44 `verified`. What holds is the graph and its recompute, the best-covered
+* **Verification.** 45 `verified`. What holds is the graph and its recompute, the best-covered
   engine of the workspace, and the stored form a structural edit carries. A range buffer is sized by
   a grant that only the caps make, so a range over them allocates nothing.
 
@@ -158,7 +159,8 @@ and the formula bar render it back to `A1`, and a typed formula is turned into i
 (`identity::bind`). So a formula and its references stay one register, and one write replaces
 both. The sheet qualifier works the same way (`TRAME-034`).
 
-A position past the used range names no line and stays a position (`TRAME-006`). A workbook that
+A position past the used range names no line and stays a position (`TRAME-006`). A later write at
+that position dirties the formula through the position it kept (`TRAME-233`). A workbook that
 stored positions converts each one to the uid at that position in the `2 -> 3`
 schema step (`TRAME-226`). A range of whole lines writes `*` for the axis it takes whole: `A:C` is
 stored `{*|col}:{*|col}`, and `2:5` is `{row|*}:{row|*}` (`TRAME-048`).
