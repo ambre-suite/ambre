@@ -73,7 +73,7 @@ impl ToileRelay {
                     base,
                     delta,
                 },
-                PresenterIntent::ToggleBroadcast(on) => ToileCommand::SetPresentBroadcast(on),
+                PresenterIntent::ToggleBroadcast(b) => ToileCommand::SetPresentBroadcast(b),
                 PresenterIntent::Follow(who) => ToileCommand::FollowPresenter(who),
             },
         };

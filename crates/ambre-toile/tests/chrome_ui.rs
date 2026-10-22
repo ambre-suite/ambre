@@ -676,7 +676,7 @@ fn presenter_broadcast_button_fires_toggle() {
     assert!(click_by_aria(&root, "Broadcast position"));
     assert_eq!(
         fired.get_untracked(),
-        Some(PresenterIntent::ToggleBroadcast(true))
+        Some(PresenterIntent::ToggleBroadcast(Broadcast::Broadcasting))
     );
     root.remove();
 }

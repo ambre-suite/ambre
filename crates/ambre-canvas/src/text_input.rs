@@ -29,6 +29,18 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use web_sys::{Document, Element, HtmlTextAreaElement};
 
+/// Whether a view stands alone or sits in another document. The standalone
+/// view takes the text pipe on construction; an embedded one leaves it to its
+/// host until the user clicks in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Embedding {
+    /// A top-level view: it owns the pipe from the start.
+    #[default]
+    Standalone,
+    /// A `doc_embed` child: the document around it owns the pipe.
+    Embedded,
+}
+
 /// The kind of document the content holds. It names the pipe to assistive
 /// technology, so each application describes its own content (`CHROME-024`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -74,8 +74,8 @@ use ambre_core::HistoryStep;
 use ambre_core::schema::SchemaError;
 
 use crate::logic::command::{
-    PresencePayload, SelectionStats, StatsRequestKind, ToileCommand, ToileError, ToileEvent,
-    ToileOutcome,
+    Broadcast, PresencePayload, PresentMode, SelectionStats, StatsRequestKind, ToileCommand,
+    ToileError, ToileEvent, ToileOutcome,
 };
 use crate::logic::index::{SpatialIndex, Viewport};
 use crate::logic::model::{ConnectorId, ElementId, ElementStyle, FrameId, NodeId, PlaybackState};
@@ -186,7 +186,7 @@ pub struct ToileState {
     now_ms: ambre_core::PageTime,
     /// Presentation (focus) mode toggle (`toile-presentation`). Local/per-viewer,
     /// never in Loro and never synced -- only the slide sequence travels.
-    present: bool,
+    present: PresentMode,
     /// Local playback cursor + focus flag. Momentary-gesture state, like
     /// [`present`](Self::present); reset on `EnterPresent`, clamped by
     /// `SetSlideOrder`.
@@ -194,7 +194,7 @@ pub struct ToileState {
     /// "Follow presenter" broadcast toggle: when set, the playback commands
     /// additionally emit a presence sample carrying the active slide index so
     /// followers glide along. Local role, never in Loro and never synced.
-    broadcasting: bool,
+    broadcasting: Broadcast,
     /// The presenter this viewer is following, or `None`. When `Some(u)`,
     /// an inbound presence sample from `u` that carries a `present_slide` moves this
     /// viewer's active slide; a manual navigation clears it ("take control").
@@ -387,9 +387,9 @@ impl ToileState {
             my_name: None,
             presence: HashMap::new(),
             now_ms: ambre_core::PageTime(0.0),
-            present: false,
+            present: PresentMode::Editing,
             playback: PlaybackState::default(),
-            broadcasting: false,
+            broadcasting: Broadcast::Private,
             following: None,
             pending_imports: Vec::new(),
             import_job: None,
@@ -452,9 +452,9 @@ impl ToileState {
         self.my_name = Some(name);
     }
 
-    /// Whether this viewer is broadcasting its playback position. Test /
-    /// integration accessor.
-    pub fn is_broadcasting(&self) -> bool {
+    /// Whether this viewer shares its playback position. Test / integration
+    /// accessor.
+    pub fn broadcast(&self) -> Broadcast {
         self.broadcasting
     }
 
@@ -598,11 +598,7 @@ impl ToileState {
                 self.resolve_thread(&thread, resolved)
             }
             ToileCommand::ReadComments { thread } => self.read_comments(thread.as_ref()),
-            ToileCommand::BooleanOp {
-                op,
-                ids,
-                keep_sources,
-            } => self.boolean_op(op, &ids, keep_sources),
+            ToileCommand::BooleanOp { op, ids, sources } => self.boolean_op(op, &ids, sources),
             ToileCommand::ReadDeck => self.read_deck(),
             // One answer per address the document resolves. An address it does
             // not carry earns no answer, so the element keeps the placeholder it

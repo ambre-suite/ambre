@@ -64,7 +64,7 @@ impl Rig {
             1200.0,
             800.0,
             TextInput::detached(),
-            false,
+            ambre_canvas::Embedding::Standalone,
             AnchorPublisher::new(),
             PerfPublisher::new(),
             BusyPublisher::new(),

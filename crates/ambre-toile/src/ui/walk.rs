@@ -110,9 +110,9 @@ impl DocumentWalk for BoardWalk<'_> {
             let DisplayNode::Element(e) = node else {
                 continue;
             };
-            let (text, is_sticky) = match &e.geom {
-                DisplayGeom::Sticky(t) => (t, true),
-                DisplayGeom::Text(t) => (t, false),
+            let (text, host) = match &e.geom {
+                DisplayGeom::Sticky(t) => (t, TextHost::Sticky),
+                DisplayGeom::Text(t) => (t, TextHost::Text),
                 _ => continue,
             };
             if view.muted_body == Some(&e.id) {
@@ -122,7 +122,7 @@ impl DocumentWalk for BoardWalk<'_> {
                 surface,
                 e,
                 text,
-                is_sticky,
+                host,
                 view.palette,
                 self,
                 view.anim.get(&e.id),
@@ -203,18 +203,23 @@ pub(crate) fn sticky_font_size(bounds: Rect) -> f32 {
     (shorter * 0.16).clamp(8.0, 48.0)
 }
 
+/// The element a body of text belongs to.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TextHost {
+    /// A free text element: its `fill` is its glyph colour.
+    Text,
+    /// A sticky note: its `fill` is the card, and the body auto-sizes.
+    Sticky,
+}
+
 /// The effective body font size (world units) for a sticky / text element. A sticky
 /// auto-sizes from its bounds while `style.font.size` is the auto sentinel
 /// (`STICKY_AUTO_FONT_SIZE`, that is, not positive). A positive size set from the
 /// style inspector overrides it. A text element always uses its style size. The
 /// style holds points, and a world unit is a CSS pixel at zoom 1, so the style
 /// size goes through [`FontSize::to_px`](ambre_core::FontSize::to_px).
-pub(crate) fn sticky_or_style_font_size(
-    is_sticky: bool,
-    style: &ElementStyle,
-    bounds: Rect,
-) -> f32 {
-    if is_sticky && style.font.size <= ambre_bus::app::toile::STICKY_AUTO_FONT_SIZE {
+pub(crate) fn sticky_or_style_font_size(host: TextHost, style: &ElementStyle, bounds: Rect) -> f32 {
+    if host == TextHost::Sticky && style.font.size <= ambre_bus::app::toile::STICKY_AUTO_FONT_SIZE {
         sticky_font_size(bounds)
     } else {
         style.font.size.to_px()
@@ -228,14 +233,14 @@ pub(crate) fn sticky_or_style_font_size(
 /// then, if unset, the theme colour. Pure and host-tested; shared with the inline
 /// editor via the same precedence in `edit.rs`.
 pub(crate) fn resolved_text_ink(
-    is_sticky: bool,
+    host: TextHost,
     text_color: Option<Argb>,
     fill: Option<Argb>,
 ) -> Option<Argb> {
-    match (text_color, is_sticky) {
+    match (text_color, host) {
         (Some(tc), _) => Some(tc),
-        (None, true) => Some(sticky_ink(fill)),
-        (None, false) => fill,
+        (None, TextHost::Sticky) => Some(sticky_ink(fill)),
+        (None, TextHost::Text) => fill,
     }
 }
 
@@ -569,7 +574,7 @@ fn paint_text<S: DrawSurface>(
     surface: &mut S,
     e: &DisplayElement,
     text: &str,
-    is_sticky: bool,
+    host: TextHost,
     palette: &Palette,
     walk: &mut BoardWalk<'_>,
     anim: Option<&AnimatedElement>,
@@ -584,14 +589,14 @@ fn paint_text<S: DrawSurface>(
     let fill = anim.map(|a| a.fill).unwrap_or(e.style.fill);
     // A sticky's font tracks the note size unless the style carries an explicit
     // override (size > 0); a text element uses its own style size.
-    let font_size = sticky_or_style_font_size(is_sticky, &e.style, bounds);
+    let font_size = sticky_or_style_font_size(host, &e.style, bounds);
     // Body inset: the same padding the inline editor applies, so the static text
     // and the in-edit text share one origin + wrap width. The body does not jump
     // / re-wrap when entering or leaving edit.
     let wrap_w = (bounds.width() - 2.0 * TEXT_PAD).max(1.0) as f32;
     // Text (foreground) colour, (see `resolved_text_ink`): `None` means "use
     // the theme text colour" (only a text element with neither text_color nor fill).
-    let color = resolved_text_ink(is_sticky, e.style.text_color, fill)
+    let color = resolved_text_ink(host, e.style.text_color, fill)
         .map(|c| argb(c, opacity))
         .unwrap_or(palette.cell_text);
     let layout = walk.text_cache.get_or_build_font(

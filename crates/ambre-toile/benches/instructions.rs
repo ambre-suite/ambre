@@ -206,7 +206,7 @@ fn walk(
         None,
         &ImageStore::new(),
         &HashMap::new(),
-        false,
+        ambre_bus::app::toile::PresentMode::Editing,
     );
     surface.ops().len()
 }

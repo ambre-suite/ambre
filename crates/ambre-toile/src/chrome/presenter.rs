@@ -39,7 +39,7 @@ pub enum PresenterIntent {
         delta: TextDelta,
     },
     /// Toggle whether this viewer broadcasts its playback position to peers.
-    ToggleBroadcast(bool),
+    ToggleBroadcast(Broadcast),
     /// Follow the given presenter (`Some`) or stop following (`None`).
     Follow(Option<UserId>),
 }
@@ -124,8 +124,12 @@ pub fn PresenterPanel(
                             class:active=move || broadcasting.get().is_on()
                             aria-label="Broadcast position"
                             on:click=move |_| {
-                                let on = !broadcasting.get().is_on();
-                                on_intent.run(PresenterIntent::ToggleBroadcast(on))
+                                let next = if broadcasting.get().is_on() {
+                                    Broadcast::Private
+                                } else {
+                                    Broadcast::Broadcasting
+                                };
+                                on_intent.run(PresenterIntent::ToggleBroadcast(next))
                             }
                         >
                             "Broadcast"

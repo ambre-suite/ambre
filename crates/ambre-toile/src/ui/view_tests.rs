@@ -37,7 +37,7 @@ impl Rig {
             1200.0,
             800.0,
             TextInput::detached(),
-            false,
+            ambre_canvas::Embedding::Standalone,
             PerfPublisher::new(),
             BusyPublisher::new(),
             notices.clone(),
@@ -2044,7 +2044,7 @@ fn a_plain_click_selects_a_linked_element_and_a_modified_click_follows() {
     assert!(rig.view.selection.is_empty(), "and selects nothing");
 
     let mut rig = linked_to_a_frame();
-    rig.view.present = true;
+    rig.view.present = PresentMode::Presenting;
     rig.click(50.0, 50.0);
     assert!(
         asks_for_the_frame(&rig.sent()),

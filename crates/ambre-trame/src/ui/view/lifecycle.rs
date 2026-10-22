@@ -17,8 +17,8 @@ impl TrameView {
         // When embedded as a `doc_embed` child (`toile-embeds`), the child view
         // must not grab the shared text pipe on construction. The top-level
         // document owns the caret until the user clicks into the embed. A
-        // top-level view passes `false` and focuses immediately, as before.
-        embedded: bool,
+        // top-level view passes `Standalone` and focuses immediately.
+        embedding: ambre_canvas::Embedding,
         anchor: AnchorPublisher,
         perf_pub: PerfPublisher,
         busy_pub: BusyPublisher,
@@ -40,7 +40,7 @@ impl TrameView {
         // Focus the pipe up front so the keyboard works without a click. Park it
         // on the active cell so a first keystroke or IME opens there. Skipped for
         // an embedded child, which must not steal the caret from its host board.
-        if !embedded {
+        if embedding == ambre_canvas::Embedding::Standalone {
             text_input.name_content(ambre_canvas::ContentKind::Spreadsheet);
             text_input.focus();
         }

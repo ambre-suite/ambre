@@ -109,19 +109,16 @@ fn text_matches(haystack: &str, needle: &str, options: FindOptions) -> bool {
         return false;
     }
     if options.match_case {
-        contains_match(haystack, needle, options.whole_word)
+        contains_match(haystack, needle, options)
     } else {
-        contains_match(
-            &haystack.to_lowercase(),
-            &needle.to_lowercase(),
-            options.whole_word,
-        )
+        contains_match(&haystack.to_lowercase(), &needle.to_lowercase(), options)
     }
 }
 
-/// `haystack.contains(needle)`, refined to word boundaries when `whole_word`.
-fn contains_match(haystack: &str, needle: &str, whole_word: bool) -> bool {
-    if !whole_word {
+/// `haystack.contains(needle)`, refined to word boundaries when the options
+/// ask for `whole_word`. The case folding is the caller's.
+fn contains_match(haystack: &str, needle: &str, options: FindOptions) -> bool {
+    if !options.whole_word {
         return haystack.contains(needle);
     }
     let mut from = 0;

@@ -551,7 +551,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.pressure | field 
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.x | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.y | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | TextDelta.insert | field | String	free-text	inserted text of the splice
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::BooleanOp.keep_sources | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::CreateComment.body | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::CreateElement.correlate | field | u64	debt	finding: Toile `correlate: u64` where 0 is a sentinel (medium, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EditComment.message | field | usize	math	index of a message in its thread
@@ -571,7 +570,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ResolveThread.r
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::RotateElement.radians | field | f64	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetConnectorLabel.base | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetConnectorLabel.text | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetPresentBroadcast.0 | field | bool	debt	finding: SetPresentBroadcast(bool) while the Broadcast enum exists (low, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetText.base | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetText.text | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::is_mutating() | ret | bool	generic	predicate
@@ -5236,7 +5234,6 @@ ambre-toile | src/chrome/handler.rs | crate::chrome::handler | label() | ret | S
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | label(mime) | param | &str	debt	planned: lot B item 10 MediaType
 ambre-toile | src/chrome/mod.rs | crate::chrome | new_doc_label() | ret | &'static str	free-text	label, message or user text
 ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterIntent::EditNotes.base | field | String	free-text	label, message or user text
-ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterIntent::ToggleBroadcast.0 | field | bool	debt	finding: Present and broadcast modes are bools, though the enums already exist (confirmed): present/broadcast mode as bool though bus PresentMode/Broadcast exist
 ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterPanel(notes) | param | RwSignal<String>	free-text	label, message or user text
 ambre-toile | src/chrome/relay.rs | crate::chrome::relay | ToileRelay.presenter_notes | field | RwSignal<String>	free-text	label, message or user text
 ambre-toile | src/logic/align.rs | crate::logic::align | Axis.delta | field | fn(f64)->Vec2	math	geometry, layout, count or size local to the algorithm
@@ -5364,7 +5361,6 @@ ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_styles() | re
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_styles(rewrite) | param | impl Fn(&[u8])->Option<Vec<u8>>	generic	byte rewrite callback of the migration
 ambre-toile | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-toile | src/logic/schema.rs | crate::logic::schema | style_version_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
-ambre-toile | src/logic/state/boolean.rs | crate::logic::state::boolean | ToileState::boolean_op(keep_sources) | param | bool	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.layers | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.unplaced | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	math	geometry, layout, count or size local to the algorithm
@@ -5446,7 +5442,6 @@ ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match(haystack) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match(needle) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match(whole_word) | param | bool	debt	finding: The find direction is a bool (confirmed): find direction as bool backward
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(haystack) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(needle) | param | &str	free-text	label, message or user text
@@ -5503,11 +5498,9 @@ ambre-toile | src/logic/state/mod.rs | crate::logic::state | PRESENTATION_CONFIG
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | PRESENTATION_ORDER | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | REACTIONS | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.board_walks | field | Cell<u64>	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.broadcasting | field | bool	debt	finding: Present and broadcast modes are bools, though the enums already exist (confirmed): present/broadcast mode as bool though bus PresentMode/Broadcast exist
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.counter | field | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.entry_end | field | Option<i32>	generic	Loro Counter (i32) as Loro defines it
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.my_name | field | Option<String>	debt	finding: The display name is a String (confirmed): display name as String; ambre_core::DisplayName exists
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.present | field | bool	debt	finding: Present and broadcast modes are bools, though the enums already exist (confirmed): present/broadcast mode as bool though bus PresentMode/Broadcast exist
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.undecodable | field | std::cell::Cell<bool>	math	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::active_notes() | ret | Option<(FrameId,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::adopt_session() | ret | bool	generic	predicate or handled-flag result
@@ -5523,7 +5516,6 @@ ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::element
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::export_snapshot() | ret | Vec<u8>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::flush_delta() | ret | Option<Vec<u8>>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::import_snapshot(payload) | param | &[u8]	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::is_broadcasting() | ret | bool	debt	finding: Present and broadcast modes are bools, though the enums already exist (confirmed): present/broadcast mode as bool though bus PresentMode/Broadcast exist
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::note_undecodable(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::notes_change(before) | param | &Option<(FrameId,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::schema_version() | ret | u32	debt	finding: The schema version is a raw u32 (confirmed): schema version as raw u32 (core SchemaMigration too)
@@ -5542,8 +5534,7 @@ ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentatio
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::is_frame() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::manual_nav_outcome(old) | param | usize	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::notes() | ret | String	free-text	label, message or user text
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::playback() | ret | (bool,usize,bool)	debt	finding: Present and broadcast modes are bools, though the enums already exist (confirmed): present/broadcast mode as bool though bus PresentMode/Broadcast exist
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::set_present_broadcast(on) | param | bool	debt	finding: Present and broadcast modes are bools, though the enums already exist (confirmed): present/broadcast mode as bool though bus PresentMode/Broadcast exist
+ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::playback() | ret | (PresentMode,usize,bool)	debt	finding: the playback tuple still carries the slide index as usize and the focus flag as bool; the present mode is typed
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::slide_broadcast_sample() | ret | Option<Vec<u8>>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::slide_change(from_idx) | param | Option<usize>	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::slide_change(to_idx) | param | usize	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
@@ -5651,7 +5642,6 @@ ambre-toile | src/ui/deck.rs | crate::ui::deck | shift(at) | param | usize	debt	
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::committed_text() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::flush(wrap_w) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::flush(zoom) | param | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
-ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open(is_sticky) | param | bool	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_frame_title(base_size) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_frame_title(title) | param | &str	free-text	label, message or user text
@@ -5735,7 +5725,6 @@ ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | coast() | ret | bool	gene
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | finger_pans() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | finger_pans(grabbable) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | pan_by_wheel(delta) | param | (f64,f64)	debt	bug: Toile treats line and page wheel deltas as pixels (confirmed): wheel delta in line/page units used as px; Trame/Murmure normalise, Toile does not
-ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | pan_by_wheel(stepped) | param | bool	debt	bug: Toile treats line and page wheel deltas as pixels (confirmed): wheel delta in line/page units used as px; Trame/Murmure normalise, Toile does not
 ambre-toile | src/ui/label.rs | crate::ui::label | ARCLEN_ACCURACY | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/label.rs | crate::ui::label | LABEL_FONT_SIZE | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/label.rs | crate::ui::label | LABEL_H | const | f64	math	geometry, layout, count or size local to the algorithm
@@ -5748,7 +5737,6 @@ ambre-toile | src/ui/link.rs | crate::ui::link | ShellNav::Url.0 | field | Strin
 ambre-toile | src/ui/link.rs | crate::ui::link | link_at(pick) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/link.rs | crate::ui::link | wants_follow() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/link.rs | crate::ui::link | wants_follow(modified) | param | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/link.rs | crate::ui::link | wants_follow(present) | param | bool	debt	finding: Present and broadcast modes are bools, though the enums already exist (confirmed): present/broadcast mode as bool though bus PresentMode/Broadcast exist
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.any_locked | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.any_unlocked | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.count | field | usize	math	geometry, layout, count or size local to the algorithm
@@ -5817,8 +5805,6 @@ ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label() | ret |
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label(title) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/render.rs | crate::ui::render | missing_media() | ret | Vec<String>	debt	planned: lot B item 8 ContentHash ripple (DisplayContent::Image hash)
 ambre-toile | src/ui/render.rs | crate::ui::render | missing_media(requested) | param | &std::collections::HashSet<String>	debt	planned: lot B item 8 ContentHash ripple (DisplayContent::Image hash)
-ambre-toile | src/ui/render.rs | crate::ui::render | paint_content(present) | param | bool	debt	finding: Present and broadcast modes are bools, though the enums already exist (confirmed): present/broadcast mode as bool though bus PresentMode/Broadcast exist
-ambre-toile | src/ui/render.rs | crate::ui::render | paint_overlay(present) | param | bool	debt	finding: Present and broadcast modes are bools, though the enums already exist (confirmed): present/broadcast mode as bool though bus PresentMode/Broadcast exist
 ambre-toile | src/ui/render.rs | crate::ui::render | selection_rotation() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/status.rs | crate::ui::status | Bounds.h | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/status.rs | crate::ui::status | Bounds.w | field | f64	math	geometry, layout, count or size local to the algorithm
@@ -5898,7 +5884,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.needs_full | field | 
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.next_create_token | field | u64	debt	finding: The create correlation token is a u64 where 0 means none (confirmed): create correlation token u64 with 0 = none sentinel
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.overlay_dirty | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.pending_fit | field | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.present | field | bool	debt	finding: Present and broadcast modes are bools, though the enums already exist (confirmed): present/broadcast mode as bool though bus PresentMode/Broadcast exist
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.select_all_pending | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.selection_stale | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.space_down | field | bool	math	local state flag or value, not a mode selector
@@ -5906,37 +5891,26 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.viewport_changed | fi
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.zoom_published | field | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::blur_embed() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::classify_wheel(px) | param | (f64,f64)	debt	wheel delta as bare floats and a mode bool: WheelDelta exists
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::classify_wheel(step) | param | bool	debt	wheel delta as bare floats and a mode bool: WheelDelta exists
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::drag_arrow_handle() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_geometry() | ret | (Point,f32,Rect)	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_geometry_of() | ret | (Point,f32,Rect)	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_input() | ret | Option<bool>	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_key() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_key(alt) | param | bool	debt	finding: Keyboard modifiers travel as runs of bools (confirmed): modifier bool runs; ambre_commands::Modifiers exists
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_key(ctrl) | param | bool	debt	finding: Keyboard modifiers travel as runs of bools (confirmed): modifier bool runs; ambre_commands::Modifiers exists
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_key(key) | param | &str	generic	DOM KeyboardEvent.key text
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_key(meta) | param | bool	debt	finding: Keyboard modifiers travel as runs of bools (confirmed): modifier bool runs; ambre_commands::Modifiers exists
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_key(shift) | param | bool	debt	finding: Keyboard modifiers travel as runs of bools (confirmed): modifier bool runs; ambre_commands::Modifiers exists
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_target_geometry() | ret | Option<(Point,f32,Rect,f64)>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::float_bar_at(offset) | param | (f64,f64)	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::follow_link_under() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::follow_link_under(ctrl) | param | bool	debt	finding: Keyboard modifiers travel as runs of bools (confirmed): modifier bool runs; ambre_commands::Modifiers exists
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::grab_arrow_handle() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_double_click() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_double_click(x) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_double_click(y) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_input() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key(_alt) | param | bool	debt	finding: Keyboard modifiers travel as runs of bools (confirmed): modifier bool runs; ambre_commands::Modifiers exists
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key(ctrl) | param | bool	debt	finding: Keyboard modifiers travel as runs of bools (confirmed): modifier bool runs; ambre_commands::Modifiers exists
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key(key) | param | &str	generic	DOM KeyboardEvent.key text
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key(meta) | param | bool	debt	finding: Keyboard modifiers travel as runs of bools (confirmed): modifier bool runs; ambre_commands::Modifiers exists
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key(shift) | param | bool	debt	finding: Keyboard modifiers travel as runs of bools (confirmed): modifier bool runs; ambre_commands::Modifiers exists
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key_up() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key_up(key) | param | &str	generic	DOM KeyboardEvent.key text
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_down() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_down(button) | param | i16	debt	finding: The DOM pointer button is an i16 with magic numbers (confirmed): DOM pointer button as i16 magic numbers 0/1/2
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_down(ctrl) | param | bool	debt	finding: Keyboard modifiers travel as runs of bools (confirmed): modifier bool runs; ambre_commands::Modifiers exists
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_down(x) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_down(y) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_move() | ret | bool	generic	predicate or handled-flag result
@@ -5946,12 +5920,10 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_up() 
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_up(x) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_up(y) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_wheel() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_wheel(ctrl_key) | param | bool	debt	finding: Keyboard modifiers travel as runs of bools (confirmed): modifier bool runs; ambre_commands::Modifiers exists
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::is_busy() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::is_text_editable() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::new(canvas_height) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::new(canvas_width) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::new(embedded) | param | bool	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::patch_connector_label(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::patch_connector_label(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::patch_element_text(base) | param | &str	free-text	label, message or user text
@@ -5990,8 +5962,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(data)#2 | para
 ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(filename) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(filename)#2 | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | wheel_device((dx,dy)) | param | (f64,f64)	debt	wheel delta as bare floats and a mode bool: WheelDelta exists
-ambre-toile | src/ui/view.rs | crate::ui::view | wheel_device() | ret | Option<bool>	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
-ambre-toile | src/ui/view.rs | crate::ui::view | wheel_device(step) | param | bool	debt	wheel delta as bare floats and a mode bool: WheelDelta exists
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform.zoom | field | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom() | ret | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
@@ -6021,14 +5991,11 @@ ambre-toile | src/ui/walk.rs | crate::ui::walk | TEXT_PAD | const | f64	math	geo
 ambre-toile | src/ui/walk.rs | crate::ui::walk | argb(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | paint_text(is_sticky) | param | bool	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
 ambre-toile | src/ui/walk.rs | crate::ui::walk | paint_text(text) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/walk.rs | crate::ui::walk | resolved_text_ink(is_sticky) | param | bool	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
 ambre-toile | src/ui/walk.rs | crate::ui::walk | rotate_about(theta) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | roundrect_path(radius) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | sticky_font_size() | ret | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | sticky_or_style_font_size() | ret | f32	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | sticky_or_style_font_size(is_sticky) | param | bool	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
 ambre-toile | src/ui/walk.rs | crate::ui::walk | text_rotation() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-trame | src/chrome/bars.rs | crate::chrome::bars | label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/color.rs | crate::chrome::color | theme_bg_default() | ret | u32	debt	planned: lot D 1 (Trame colour seams -> Rgb)
@@ -6899,7 +6866,6 @@ ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView:
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::is_busy() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(canvas_height) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(canvas_width) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(embedded) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(formula_ref) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(formula_text) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::open_session() | ret | bool	generic	predicate or did-it-change return

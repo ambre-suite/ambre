@@ -16,7 +16,8 @@
 use std::collections::HashMap;
 
 use ambre_bus::app::toile::{
-    ConnectorId, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ShapeKind,
+    ConnectorId, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId, PresentMode,
+    ShapeKind,
 };
 use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
@@ -95,10 +96,10 @@ pub fn paint_content<S: DrawSurface>(
     anim: &HashMap<ElementId, AnimatedElement>,
     // Presentation focus mode: the UI hides the board grid so the audience
     // sees only the slide content.
-    present: bool,
+    mode: PresentMode,
 ) {
     // 1. Background + adaptive grid (screen space). Focus mode drops the grid.
-    if present {
+    if mode.is_presenting() {
         grid::paint_background(surface, cam, palette);
     } else {
         grid::paint_grid(surface, cam, palette, vp.grid_unit);
@@ -126,7 +127,7 @@ pub fn paint_content<S: DrawSurface>(
     // 3. Frame titles, in screen space, so a title reads the same at every
     // zoom. A title is board structure, not content: the page does not print
     // it, and a presentation drops it with the grid (`TOILE-255`).
-    if !present {
+    if !mode.is_presenting() {
         paint_frame_titles(surface, vp, cam, palette, font_cx, text_cache, editing);
     }
 }
@@ -184,9 +185,9 @@ pub fn paint_overlay<S: DrawSurface>(
     // The selected arrow, if one is (`toile-connectors`). Exclusive with
     // `selection`, so at most one of the two boxes is drawn.
     arrow: Option<&ConnectorId>,
-    present: bool,
+    mode: PresentMode,
 ) {
-    if present {
+    if mode.is_presenting() {
         // Navigation only: a badge says a slide carries a link.
         paint_link_badges(surface, vp, cam, palette);
         return;
@@ -591,7 +592,7 @@ fn draw_handle<S: DrawSurface>(surface: &mut S, p: Point, palette: &Palette) {
 mod tests {
     use super::*;
     use crate::ui::walk::{
-        STICKY_INK, STICKY_SHADOW, anim_transform, argb, contrast, resolved_text_ink,
+        STICKY_INK, STICKY_SHADOW, TextHost, anim_transform, argb, contrast, resolved_text_ink,
         sticky_font_size, sticky_or_style_font_size,
     };
     use ambre_bus::app::toile::{
@@ -715,7 +716,7 @@ mod tests {
             None,
             &ImageStore::new(),
             &HashMap::new(),
-            false,
+            PresentMode::Editing,
         );
 
         // Transform stack must be balanced.
@@ -779,7 +780,7 @@ mod tests {
             None,
             &ImageStore::new(),
             &anim,
-            true, // focus mode: grid suppressed
+            PresentMode::Presenting, // focus mode: grid suppressed
         );
 
         // The overridden element fills with the tweened blue at half alpha
@@ -836,7 +837,7 @@ mod tests {
             None,
             &ImageStore::new(),
             &HashMap::new(),
-            false,
+            PresentMode::Editing,
         );
         surface
     }
@@ -962,7 +963,7 @@ mod tests {
         };
         // Sticky with the auto sentinel -> size derived from the card.
         assert_eq!(
-            sticky_or_style_font_size(true, &auto, bounds),
+            sticky_or_style_font_size(TextHost::Sticky, &auto, bounds),
             sticky_font_size(bounds)
         );
         // A positive size overrides the auto-sizing.
@@ -974,9 +975,15 @@ mod tests {
             ..ElementStyle::default()
         };
         // The style holds points: 30 points lay out at 40 px.
-        assert_eq!(sticky_or_style_font_size(true, &manual, bounds), 40.0);
+        assert_eq!(
+            sticky_or_style_font_size(TextHost::Sticky, &manual, bounds),
+            40.0
+        );
         // A text element always uses its style size, never auto.
-        assert_eq!(sticky_or_style_font_size(false, &auto, bounds), 0.0);
+        assert_eq!(
+            sticky_or_style_font_size(TextHost::Text, &auto, bounds),
+            0.0
+        );
     }
 
     #[test]
@@ -984,7 +991,7 @@ mod tests {
         // Explicit text_color always wins, for sticky and text alike.
         assert_eq!(
             resolved_text_ink(
-                true,
+                TextHost::Sticky,
                 Some(Argb::from_bits(0x1234)),
                 Some(Argb::from_bits(0x9999))
             ),
@@ -992,7 +999,7 @@ mod tests {
         );
         assert_eq!(
             resolved_text_ink(
-                false,
+                TextHost::Text,
                 Some(Argb::from_bits(0x1234)),
                 Some(Argb::from_bits(0x9999))
             ),
@@ -1000,15 +1007,15 @@ mod tests {
         );
         // No text_color: a sticky uses its ink; a text element uses its fill.
         assert_eq!(
-            resolved_text_ink(true, None, Some(Argb::from_bits(0x9999))),
+            resolved_text_ink(TextHost::Sticky, None, Some(Argb::from_bits(0x9999))),
             Some(STICKY_INK)
         );
         assert_eq!(
-            resolved_text_ink(false, None, Some(Argb::from_bits(0x9999))),
+            resolved_text_ink(TextHost::Text, None, Some(Argb::from_bits(0x9999))),
             Some(Argb::from_bits(0x9999))
         );
         // A text element with neither falls back to the theme (None).
-        assert_eq!(resolved_text_ink(false, None, None), None);
+        assert_eq!(resolved_text_ink(TextHost::Text, None, None), None);
     }
 
     #[test]
@@ -1140,7 +1147,7 @@ mod tests {
             None,
             &images,
             &HashMap::new(),
-            false,
+            PresentMode::Editing,
         );
 
         // Exactly one real image paint, sized to the element AABB.
@@ -1190,7 +1197,7 @@ mod tests {
             None,
             &HashMap::new(),
             None,
-            false,
+            PresentMode::Editing,
         );
         // 4 corner handles + 1 rotate handle = 5 filled squares (corners-only).
         let handle_fills = surface
@@ -1226,7 +1233,7 @@ mod tests {
             None,
             &HashMap::new(),
             None,
-            false,
+            PresentMode::Editing,
         );
         let handle_fills = surface
             .ops()
@@ -1269,7 +1276,7 @@ mod tests {
             None,
             &HashMap::new(),
             None,
-            false,
+            PresentMode::Editing,
         );
         let count = |f: fn(&DrawOp) -> bool| surface.ops().iter().filter(|o| f(o)).count();
         assert_eq!(count(|o| matches!(o, DrawOp::StrokeRect { .. })), 1);
@@ -1396,7 +1403,7 @@ mod tests {
             None,
             &HashMap::new(),
             None,
-            true,
+            PresentMode::Presenting,
         );
         assert!(
             surface.ops().is_empty(),
@@ -1446,7 +1453,7 @@ mod tests {
             None,
             &gesture,
             None,
-            false,
+            PresentMode::Editing,
         );
         // The selection box is stroked at the preview bounds, not the committed rect.
         let expected = world_rect_to_screen(preview_bounds, &cam);
@@ -1494,7 +1501,7 @@ mod tests {
             None,
             &HashMap::new(),
             Some(&selected),
-            false,
+            PresentMode::Editing,
         );
         let handles = surface
             .ops()
@@ -1549,7 +1556,7 @@ mod tests {
             None,
             &HashMap::new(),
             None,
-            false,
+            PresentMode::Editing,
         );
         let badges = surface
             .ops()
@@ -1584,7 +1591,7 @@ mod tests {
             None,
             &HashMap::new(),
             Some(&selected),
-            false,
+            PresentMode::Editing,
         );
         assert!(surface.ops().is_empty(), "nothing is painted");
     }
@@ -1615,7 +1622,7 @@ mod tests {
             Some(&ElementId("b".into())),
             &HashMap::new(),
             None,
-            false,
+            PresentMode::Editing,
         );
         // No selection => no handles, only the two hit outlines (one per match).
         let strokes = surface
@@ -1655,7 +1662,7 @@ mod tests {
             Some(&ElementId("b".into())),
             &HashMap::new(),
             None,
-            false,
+            PresentMode::Editing,
         );
         let outlines: Vec<(Color, f64)> = surface
             .ops()
@@ -1726,7 +1733,7 @@ mod tests {
             None,
             &HashMap::new(),
             None,
-            false,
+            PresentMode::Editing,
         );
         // The box must NOT be a `stroke_rect` (that degrades to an upright AABB on
         // the WgpuSurface); it is drawn as rotated `stroke_line` edges instead.
@@ -1824,7 +1831,7 @@ mod tests {
         editing: Option<crate::ui::edit::EditTarget>,
         images: ImageStore,
         anim: HashMap<ElementId, AnimatedElement>,
-        present: bool,
+        present: PresentMode,
     }
 
     /// One content pass with the shipped face.
@@ -1958,7 +1965,8 @@ mod tests {
             let vp = board(vec![note("s", "Plan the week", card, bounds)]);
             let painted = runs(&paint_pass(&vp, &cam(), &Pass::default()));
             assert!(!painted.is_empty(), "card {card:08x}: no run was shaped");
-            let ink = resolved_text_ink(true, None, Some(card)).expect("a note has an ink");
+            let ink =
+                resolved_text_ink(TextHost::Sticky, None, Some(card)).expect("a note has an ink");
             assert_ne!(ink, card, "card {card:08x}");
             assert!(contrast(ink, card) >= 4.0, "card {card:08x}");
             for (color, _, _) in painted {
@@ -2208,7 +2216,7 @@ mod tests {
         let lines = |s: &RecordingSurface| {
             s.count(|o| matches!(o, DrawOp::StrokeLine { color, .. } if *color == LIGHT_PALETTE.grid_line))
         };
-        for present in [false, true] {
+        for present in [PresentMode::Editing, PresentMode::Presenting] {
             let surface = paint_pass(
                 &vp,
                 &cam(),
@@ -2223,9 +2231,9 @@ mod tests {
                     rect: canvas,
                     color: LIGHT_PALETTE.content_bg
                 }),
-                "present {present}"
+                "present {present:?}"
             );
-            if present {
+            if present.is_presenting() {
                 assert_eq!(lines(&surface), 0, "focus paints no grid line");
             } else {
                 assert!(lines(&surface) > 0, "the board paints its grid");
@@ -2254,7 +2262,7 @@ mod tests {
             None,
             &HashMap::new(),
             None,
-            false,
+            PresentMode::Editing,
         );
         let union = world_rect_to_screen(Rect::new(0.0, 0.0, 150.0, 120.0), &cam());
         let boxes: Vec<Rect> = surface
@@ -2299,7 +2307,7 @@ mod tests {
             Some(&hits[0]),
             &HashMap::new(),
             None,
-            false,
+            PresentMode::Editing,
         );
         let outlines: Vec<Rect> = surface
             .ops()
@@ -2343,7 +2351,7 @@ mod tests {
                 None,
                 &HashMap::new(),
                 None,
-                false,
+                PresentMode::Editing,
             );
             surface.ops().to_vec()
         };

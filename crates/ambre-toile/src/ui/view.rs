@@ -20,7 +20,8 @@ use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
     ClipboardPayload as ToileClipboardPayload, ConnectorId, DisplayConnector, DisplayElement,
     DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End, LinkTarget,
-    PresencePayload, StatsRequestKind, ThreadId, ToileCommand, ToileError, ToileEvent, Viewport,
+    PresencePayload, PresentMode, StatsRequestKind, ThreadId, ToileCommand, ToileError, ToileEvent,
+    Viewport,
 };
 
 /// What the user is told when an edit is lost with its target
@@ -72,7 +73,7 @@ use super::viewport::ViewportTransform;
 // published selection scope and writes back the chosen `CommandId`. Both ends
 // are leptos signals, so the handles and their access traits are wasm-only.
 use ambre_bus::PasteSource;
-use ambre_commands::{ClipboardWrite, CommandId};
+use ambre_commands::{ClipboardWrite, CommandId, Modifiers};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 
@@ -118,21 +119,29 @@ const ZOOM_PER_WHEEL_PX: f64 = 0.0018;
 /// heuristic's mouse threshold (`toile-tools`).
 const WHEEL_MOUSE_NOTCH_PX: f64 = 40.0;
 
+/// The device a wheel event reads as (`toile-viewport`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum WheelDevice {
+    /// A notched mouse wheel: the wheel zooms.
+    Mouse,
+    /// A trackpad: two fingers pan.
+    Trackpad,
+}
+
 /// Pure device classifier for one wheel event in `Auto` mode
 /// (`toile-viewport`).
-/// `Some(true)` = mouse, `Some(false)` = trackpad, `None` = signal too weak to
-/// change the latched guess. Three signals, strongest first. A line or page
+/// `None` = signal too weak to change the latched guess. Three signals, strongest first. A line or page
 /// step is a classic wheel. A non-zero `dx` is a two-axis trackpad glide. A
 /// large `|dy|` with no `dx` is a discrete mouse notch.
 ///
 /// The deltas are pixels, read from the event's own unit first.
-fn wheel_device(step: bool, (dx, dy): (f64, f64)) -> Option<bool> {
-    if step {
-        Some(true)
+fn wheel_device(delta: WheelDelta, (dx, dy): (f64, f64)) -> Option<WheelDevice> {
+    if delta.is_step() {
+        Some(WheelDevice::Mouse)
     } else if dx != 0.0 {
-        Some(false)
+        Some(WheelDevice::Trackpad)
     } else if dy.abs() >= WHEEL_MOUSE_NOTCH_PX {
-        Some(true)
+        Some(WheelDevice::Mouse)
     } else {
         None
     }
@@ -559,7 +568,7 @@ pub struct ToileView {
     /// Presentation focus mode (`toile-presentation`): driven by
     /// `PresentModeChanged`, it makes the content pass hide the board grid so the
     /// audience sees only the slide. Pure-UI, never synced.
-    present: bool,
+    present: PresentMode,
     /// The in-flight slide transition (`toile-presentation`), built on a
     /// `SlideChanged` event and advanced each `plan_repaint` until done. It
     /// glides the camera to the active frame, and it drives the Smart Animate
@@ -654,8 +663,8 @@ impl ToileView {
         // When embedded as a `doc_embed` child (`toile-embeds`), the child view
         // must not grab the shared text pipe on construction. The top-level
         // document owns the caret until the user clicks into the embed.
-        // A top-level view passes `false` and focuses immediately, as before.
-        embedded: bool,
+        // A top-level view passes `Standalone` and focuses immediately.
+        embedding: ambre_canvas::Embedding,
         perf_pub: PerfPublisher,
         busy_pub: BusyPublisher,
         notices: NoticePublisher,
@@ -683,6 +692,7 @@ impl ToileView {
             Option<ambre_bus::app::toile::FindResults>,
         >,
     ) -> Self {
+        let embedded = embedding == ambre_canvas::Embedding::Embedded;
         if !embedded {
             text_input.name_content(ambre_canvas::ContentKind::Board);
             text_input.focus();
@@ -798,7 +808,7 @@ impl ToileView {
             announce_next_data: false,
             presence: PeerCursors::default(),
             presence_out: PresenceSender::default(),
-            present: false,
+            present: PresentMode::Editing,
             transition: None,
             anim_overrides: HashMap::new(),
             gesture_overrides: HashMap::new(),
@@ -1189,8 +1199,8 @@ impl ToileView {
             ToileEvent::PresentModeChanged(mode) => {
                 #[cfg(target_arch = "wasm32")]
                 self.present_mode.set(mode);
-                self.present = mode.is_presenting();
-                if self.present {
+                self.present = mode;
+                if mode.is_presenting() {
                     self.leave_editing();
                 } else {
                     self.transition = None;
@@ -1291,7 +1301,8 @@ impl ToileView {
 
     // -- Input handling --------------------------------------------------------
 
-    fn handle_wheel(&mut self, delta: WheelDelta, ctrl_key: bool) -> bool {
+    fn handle_wheel(&mut self, delta: WheelDelta, mods: Modifiers) -> bool {
+        let ctrl_key = mods.primary;
         // A line or page delta moves the board by the pixels it is worth, as
         // in every other view (`KINETIC-015`).
         let line = (WHEEL_LINE_PX, WHEEL_LINE_PX);
@@ -1304,7 +1315,7 @@ impl ToileView {
             PointerMode::Mouse => true,
             PointerMode::Trackpad => ctrl_key,
             PointerMode::Auto => {
-                self.classify_wheel(delta.is_step(), (dx, dy));
+                self.classify_wheel(delta, (dx, dy));
                 ctrl_key || self.detected_mouse
             }
         };
@@ -1324,7 +1335,7 @@ impl ToileView {
                 &mut self.cam,
                 &mut self.kinetic,
                 (dx, dy),
-                delta.is_step(),
+                delta.mode(),
                 now,
             );
         }
@@ -1337,9 +1348,9 @@ impl ToileView {
     /// first. A line or page step is a classic wheel, so a mouse. A non-zero `dx` is a two-axis trackpad glide. A large `|dy|` with
     /// no `dx` is a discrete mouse notch. An ambiguous fine glide leaves the
     /// latch unchanged (`toile-viewport`).
-    fn classify_wheel(&mut self, step: bool, px: (f64, f64)) {
-        if let Some(mouse) = wheel_device(step, px) {
-            self.detected_mouse = mouse;
+    fn classify_wheel(&mut self, delta: WheelDelta, px: (f64, f64)) {
+        if let Some(device) = wheel_device(delta, px) {
+            self.detected_mouse = device == WheelDevice::Mouse;
         }
     }
 
@@ -1731,10 +1742,10 @@ impl ToileView {
     /// Follow the link under a primary press, if any (`toile-links`). The badge
     /// always follows. The element follows only when it asks to: a modifier, or
     /// presentation mode, where editing is off.
-    fn follow_link_under(&mut self, screen: Point, ctrl: bool) -> bool {
+    fn follow_link_under(&mut self, screen: Point, mods: Modifiers) -> bool {
         let world = self.cam.screen_to_world() * screen;
         let target = self.badge_at(screen).or_else(|| {
-            link::wants_follow(ctrl, self.present)
+            link::wants_follow(mods.primary, self.present)
                 .then(|| link::link_at(&self.display, world, self.pick()).map(|(_, l)| l))
                 .flatten()
         });
@@ -1765,14 +1776,24 @@ impl ToileView {
     /// ends what began before. Every other input reaches no board handler.
     fn present_input(&mut self, ev: &InputEvent) -> bool {
         match ev {
-            InputEvent::Wheel { delta, ctrl_key } => self.handle_wheel(*delta, *ctrl_key),
+            InputEvent::Wheel { delta, ctrl_key } => self.handle_wheel(
+                *delta,
+                Modifiers::from_event(*ctrl_key, false, false, false),
+            ),
             InputEvent::PointerDown {
-                x, y, button, ctrl, ..
+                x,
+                y,
+                button,
+                shift,
+                ctrl,
             } => {
                 let screen = Point::new(*x, *y);
                 self.last_pointer = screen;
                 if *button == 0 {
-                    self.follow_link_under(screen, *ctrl);
+                    self.follow_link_under(
+                        screen,
+                        Modifiers::from_event(*ctrl, false, *shift, false),
+                    );
                 }
                 true
             }
@@ -1787,7 +1808,7 @@ impl ToileView {
         }
     }
 
-    fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16, ctrl: bool) -> bool {
+    fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16, mods: Modifiers) -> bool {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
         // A press in the canvas returns keyboard focus to the transparent text
@@ -1812,7 +1833,7 @@ impl ToileView {
         // asks to: a modifier, or presentation mode, where editing is off.
         // A plain click with the select tool falls through and selects, which is
         // what keeps a linked element editable (`TOILE-112`).
-        if button == 0 && self.follow_link_under(screen, ctrl) {
+        if button == 0 && self.follow_link_under(screen, mods) {
             return true;
         }
         // Space-drag or Hand tool or middle button: begin a pan.
@@ -2948,8 +2969,9 @@ impl ToileView {
     /// Ctrl+C/X/V are intentionally NOT decoded here -- they ride the native
     /// clipboard events (Phase A). Returns `true` when the key was consumed (host
     /// `preventDefault`).
-    fn handle_key(&mut self, key: &str, ctrl: bool, _alt: bool, shift: bool, meta: bool) -> bool {
-        let cmd = ctrl || meta;
+    fn handle_key(&mut self, key: &str, mods: Modifiers) -> bool {
+        let cmd = mods.primary;
+        let shift = mods.shift;
         // Command chords first, so a bare-key fallthrough never shadows them.
         if cmd {
             match key {
@@ -3321,12 +3343,16 @@ impl ToileView {
             if !matches!(e.kind, ElementKind::Sticky | ElementKind::Text) {
                 return;
             }
-            let is_sticky = matches!(e.kind, ElementKind::Sticky);
+            let host = if matches!(e.kind, ElementKind::Sticky) {
+                super::walk::TextHost::Sticky
+            } else {
+                super::walk::TextHost::Text
+            };
             let text = match &e.geom {
                 DisplayGeom::Sticky(t) | DisplayGeom::Text(t) => t.clone(),
                 _ => String::new(),
             };
-            InlineEditor::open(e, &text, self.theme.palette(), is_sticky)
+            InlineEditor::open(e, &text, self.theme.palette(), host)
         };
         self.editor = Some(editor);
         // The edited element is the selection, so leaving edit (Escape) leaves it
@@ -3450,7 +3476,7 @@ impl ToileView {
                 alt,
                 shift,
                 meta,
-            } => Some(self.edit_key(key, *ctrl, *alt, *shift, *meta)),
+            } => Some(self.edit_key(key, Modifiers::from_event(*ctrl, *alt, *shift, *meta))),
             // The editor holds no key across frames, so a release means nothing
             // to it. Normal handling runs, where the board lowers its pan flag.
             InputEvent::KeyUp { .. } => None,
@@ -3506,8 +3532,9 @@ impl ToileView {
     /// Editing key map. Returns `true` when consumed (host `preventDefault`).
     /// Character-producing keys return `false` so the browser still emits the
     /// `input` event that lands as `InputEvent::Text` (the actual insertion).
-    fn edit_key(&mut self, key: &str, ctrl: bool, alt: bool, shift: bool, meta: bool) -> bool {
-        let cmd = ctrl || meta;
+    fn edit_key(&mut self, key: &str, mods: Modifiers) -> bool {
+        let cmd = mods.primary;
+        let shift = mods.shift;
         // Ctrl/Alt+Arrow jumps by word; Ctrl+A selects all inside the editor.
         if cmd {
             match key {
@@ -3520,7 +3547,7 @@ impl ToileView {
                 _ => return false,
             }
         }
-        let word = alt; // Alt+Arrow = word motion (Ctrl is reserved for chords).
+        let word = mods.alt; // Alt+Arrow = word motion (Ctrl is reserved for chords).
         match key {
             "Escape" => self.request_close_editor(),
             "Enter" => self.push_intent(EditIntent::Newline),
@@ -3958,7 +3985,7 @@ impl ToileView {
         // ghosts, live strokes and laser trails, above content, in each peer's
         // cross-app colour. A presentation shows the slide alone, so the peers'
         // pointers stay off it (`TOILE-UI-083`).
-        if !self.present && !self.presence.is_empty() {
+        if !self.present.is_presenting() && !self.presence.is_empty() {
             self.presence.paint(
                 surface,
                 &self.display,
@@ -4035,7 +4062,7 @@ impl ToileView {
         self.drain_menu_cmd();
         // A presentation shows the slide and nothing to edit (`TOILE-UI-083`).
         // It answers before the editor and the embed, which it closed on entry.
-        if self.present {
+        if self.present.is_presenting() {
             return self.present_input(ev);
         }
         // While an inline editor is open it gets first refusal on input
@@ -4068,10 +4095,22 @@ impl ToileView {
             return true;
         }
         match ev {
-            InputEvent::Wheel { delta, ctrl_key } => self.handle_wheel(*delta, *ctrl_key),
+            InputEvent::Wheel { delta, ctrl_key } => self.handle_wheel(
+                *delta,
+                Modifiers::from_event(*ctrl_key, false, false, false),
+            ),
             InputEvent::PointerDown {
-                x, y, button, ctrl, ..
-            } => self.handle_pointer_down(*x, *y, *button, *ctrl),
+                x,
+                y,
+                button,
+                shift,
+                ctrl,
+            } => self.handle_pointer_down(
+                *x,
+                *y,
+                *button,
+                Modifiers::from_event(*ctrl, false, *shift, false),
+            ),
             InputEvent::PointerMove { x, y } => self.handle_pointer_move(*x, *y),
             InputEvent::PointerUp { x, y, .. } => self.handle_pointer_up(*x, *y),
             InputEvent::Key {
@@ -4080,7 +4119,7 @@ impl ToileView {
                 alt,
                 shift,
                 meta,
-            } => self.handle_key(key, *ctrl, *alt, *shift, *meta),
+            } => self.handle_key(key, Modifiers::from_event(*ctrl, *alt, *shift, *meta)),
             InputEvent::KeyUp { key } => self.handle_key_up(key),
             InputEvent::DoubleClick { x, y } => self.handle_double_click(*x, *y),
             InputEvent::Text { .. }
@@ -4337,7 +4376,7 @@ impl ToileView {
         self.machine.cancel();
         self.presence.clear();
         self.presence_out.reset();
-        self.present = false;
+        self.present = PresentMode::Editing;
         self.transition = None;
         self.anim_overrides.clear();
         self.gesture_overrides.clear();
@@ -4387,29 +4426,41 @@ mod view_tests;
 
 #[cfg(test)]
 mod wheel_tests {
-    use super::{WHEEL_MOUSE_NOTCH_PX, wheel_device};
+    use super::{WHEEL_MOUSE_NOTCH_PX, WheelDevice, wheel_device};
+    use ambre_canvas::{WheelDelta, WheelDeltaMode};
+
+    /// A notched step, in line units.
+    const LINE: WheelDelta = WheelDelta::new(0.0, 1.0, WheelDeltaMode::Line);
+    /// A pixel glide.
+    const GLIDE: WheelDelta = WheelDelta::pixels(0.0, 1.0);
 
     #[test]
     fn line_or_page_delta_mode_is_a_mouse() {
         // A classic wheel reports line (1) or page (2) units.
-        assert_eq!(wheel_device(true, (0.0, 120.0)), Some(true));
-        assert_eq!(wheel_device(true, (0.0, 600.0)), Some(true));
+        assert_eq!(wheel_device(LINE, (0.0, 120.0)), Some(WheelDevice::Mouse));
+        assert_eq!(wheel_device(LINE, (0.0, 600.0)), Some(WheelDevice::Mouse));
     }
 
     #[test]
     fn horizontal_component_is_a_trackpad() {
         // Mice have no horizontal wheel axis; a non-zero dx means two fingers.
-        assert_eq!(wheel_device(false, (4.0, 12.0)), Some(false));
+        assert_eq!(
+            wheel_device(GLIDE, (4.0, 12.0)),
+            Some(WheelDevice::Trackpad)
+        );
     }
 
     #[test]
     fn large_vertical_notch_is_a_mouse() {
-        assert_eq!(wheel_device(false, (0.0, WHEEL_MOUSE_NOTCH_PX)), Some(true));
+        assert_eq!(
+            wheel_device(GLIDE, (0.0, WHEEL_MOUSE_NOTCH_PX)),
+            Some(WheelDevice::Mouse)
+        );
     }
 
     #[test]
     fn fine_vertical_glide_is_ambiguous() {
         // A small pixel-mode dy with no dx could be either; keep the latch.
-        assert_eq!(wheel_device(false, (0.0, 6.0)), None);
+        assert_eq!(wheel_device(GLIDE, (0.0, 6.0)), None);
     }
 }

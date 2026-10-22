@@ -17,8 +17,8 @@ use crate::logic::align::AlignOp;
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
     BoolOp, Broadcast, CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload,
-    PresentMode, Reaction, ReactionKind, StatsRequestKind, TextDelta, ToileCommand, ToileError,
-    ToileEvent, ZTarget,
+    PresentMode, Reaction, ReactionKind, Sources, StatsRequestKind, TextDelta, ToileCommand,
+    ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, LinkTarget, NodeId,
@@ -3580,7 +3580,7 @@ fn present_mode_toggle_is_local() {
         Some(0),
         "EnterPresent resets to slide 0"
     );
-    assert_eq!(st.playback(), (true, 0, true));
+    assert_eq!(st.playback(), (PresentMode::Presenting, 0, true));
 
     let out = st.handle_command(ToileCommand::ExitPresent);
     assert!(out.update.is_none());
@@ -3589,7 +3589,10 @@ fn present_mode_toggle_is_local() {
             .iter()
             .any(|e| matches!(e, ToileEvent::PresentModeChanged(PresentMode::Editing)))
     );
-    assert!(!st.playback().0, "ExitPresent leaves present mode");
+    assert!(
+        !st.playback().0.is_presenting(),
+        "ExitPresent leaves present mode"
+    );
 }
 
 /// `TOILE-FEAT-094`: leaving the presentation stops this viewer's broadcast.
@@ -3600,11 +3603,14 @@ fn leaving_the_presentation_stops_the_broadcast() {
     let mut st = ToileState::new();
     deck_of_three(&mut st);
     st.handle_command(ToileCommand::EnterPresent { focus: true });
-    st.handle_command(ToileCommand::SetPresentBroadcast(true));
-    assert!(st.is_broadcasting());
+    st.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
+    assert!(st.broadcast().is_on());
 
     let out = st.handle_command(ToileCommand::ExitPresent);
-    assert!(!st.is_broadcasting(), "the role outlived the presentation");
+    assert!(
+        !st.broadcast().is_on(),
+        "the role outlived the presentation"
+    );
     assert!(
         out.display
             .iter()
@@ -3671,10 +3677,10 @@ fn playback_is_not_synced() {
             .is_none()
     );
     assert!(a.handle_command(ToileCommand::NextSlide).update.is_none());
-    assert_eq!(a.playback(), (true, 1, false));
+    assert_eq!(a.playback(), (PresentMode::Presenting, 1, false));
     assert_eq!(
         b.playback(),
-        (false, 0, false),
+        (PresentMode::Editing, 0, false),
         "B's playback is untouched by A's presentation"
     );
 }
@@ -3743,7 +3749,7 @@ fn broadcast_sample_carries_active_slide() {
     // carrying the new active index -- and never a CRDT delta.
     let mut st = ToileState::new();
     deck_of_three(&mut st);
-    st.handle_command(ToileCommand::SetPresentBroadcast(true));
+    st.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
 
     let out = st.handle_command(ToileCommand::NextSlide);
     assert_eq!(slide_changed(&out), Some(1), "the local view still glides");
@@ -3855,10 +3861,10 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
 fn stopping_a_broadcast_sends_a_sample_naming_no_slide() {
     let mut st = ToileState::new();
     deck_of_three(&mut st);
-    st.handle_command(ToileCommand::SetPresentBroadcast(true));
+    st.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
 
     let frame = st
-        .handle_command(ToileCommand::SetPresentBroadcast(false))
+        .handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Private))
         .ephemeral
         .expect("stopping broadcasts one last frame");
     let mut rx = ToileState::new();
@@ -3872,7 +3878,7 @@ fn stopping_a_broadcast_sends_a_sample_naming_no_slide() {
 
     // A viewer that was not broadcasting says nothing.
     assert!(
-        st.handle_command(ToileCommand::SetPresentBroadcast(false))
+        st.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Private))
             .ephemeral
             .is_none()
     );
@@ -3884,7 +3890,7 @@ fn follower_adopts_presenter_slide() {
     // without touching the CRDT or its history.
     let mut presenter = ToileState::new();
     deck_of_three(&mut presenter);
-    presenter.handle_command(ToileCommand::SetPresentBroadcast(true));
+    presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
         .handle_command(ToileCommand::GotoSlide(2))
         .ephemeral
@@ -3916,7 +3922,7 @@ fn non_follower_ignores_broadcast() {
     // Not following anyone: a broadcast sample updates presence but never moves us.
     let mut presenter = ToileState::new();
     deck_of_three(&mut presenter);
-    presenter.handle_command(ToileCommand::SetPresentBroadcast(true));
+    presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
         .handle_command(ToileCommand::GotoSlide(2))
         .ephemeral
@@ -3940,7 +3946,7 @@ fn following_other_peer_ignores_broadcast() {
     // UserId).
     let mut presenter = ToileState::new();
     deck_of_three(&mut presenter);
-    presenter.handle_command(ToileCommand::SetPresentBroadcast(true));
+    presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
         .handle_command(ToileCommand::GotoSlide(2))
         .ephemeral
@@ -4032,7 +4038,7 @@ fn present_broadcast_toggle_is_local() {
     // Toggling broadcast is a local role: a CRDT delta is never produced.
     let mut st = ToileState::new();
     deck_of_three(&mut st);
-    let out = st.handle_command(ToileCommand::SetPresentBroadcast(true));
+    let out = st.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     assert!(out.update.is_none(), "the broadcast toggle is never CRDT");
     assert!(
         out.display.iter().any(|e| matches!(
@@ -4041,7 +4047,7 @@ fn present_broadcast_toggle_is_local() {
         )),
         "the toggle is announced to the UI"
     );
-    assert!(st.is_broadcasting());
+    assert!(st.broadcast().is_on());
 }
 
 #[test]
@@ -4060,13 +4066,13 @@ fn follow_state_is_not_synced() {
             .is_none()
     );
     assert!(
-        a.handle_command(ToileCommand::SetPresentBroadcast(true))
+        a.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting))
             .update
             .is_none()
     );
     assert_eq!(
         b.playback(),
-        (false, 0, false),
+        (PresentMode::Editing, 0, false),
         "B's playback is untouched by A's follow / broadcast toggles"
     );
 }
@@ -6606,7 +6612,7 @@ fn a_combined_path_wears_the_first_sources_style() {
     let out = st.handle_command(ToileCommand::BooleanOp {
         op: BoolOp::Union,
         ids: vec![blue.clone(), red],
-        keep_sources: false,
+        sources: Sources::Consume,
     });
     let result = created_id(&out);
     assert_eq!(
@@ -6631,7 +6637,7 @@ fn a_combine_consumes_only_its_sources() {
     st.handle_command(ToileCommand::BooleanOp {
         op: BoolOp::Union,
         ids: vec![locked.clone(), note.clone(), one.clone(), two.clone()],
-        keep_sources: false,
+        sources: Sources::Consume,
     });
     assert!(st.bounds_of(&locked).is_some(), "the locked shape stays");
     assert!(st.bounds_of(&note).is_some(), "the note stays");
@@ -6649,7 +6655,7 @@ fn an_empty_combine_is_refused() {
     let out = st.handle_command(ToileCommand::BooleanOp {
         op: BoolOp::Intersect,
         ids: vec![a, b],
-        keep_sources: false,
+        sources: Sources::Consume,
     });
     assert!(matches!(
         out.display.as_slice(),

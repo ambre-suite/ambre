@@ -185,7 +185,7 @@ impl ToileState {
     /// Enter presentation (focus) mode, resetting to the first slide.
     /// Local only. Broadcasts slide 0 when already broadcasting.
     pub(super) fn enter_present(&mut self, focus: bool) -> ToileOutcome {
-        self.present = true;
+        self.present = PresentMode::Presenting;
         self.playback.focus = focus;
         self.playback.active = 0;
         // No source frame on entry: `from` is empty so slide 0's content fades in.
@@ -206,7 +206,7 @@ impl ToileState {
     /// next cursor sample, which is acceptable (presenters emit cursor / laser
     /// continuously). `None` when not broadcasting or on an encode failure.
     fn slide_broadcast_sample(&self) -> Option<Vec<u8>> {
-        if !self.broadcasting {
+        if !self.broadcasting.is_on() {
             return None;
         }
         let payload = PresencePayload {
@@ -229,22 +229,18 @@ impl ToileState {
     /// Turning it off broadcasts one last sample carrying no slide. The peers
     /// then stop offering this viewer to follow at once, rather than at the
     /// presence timeout (`TOILE-UI-315`).
-    pub(super) fn set_present_broadcast(&mut self, on: bool) -> ToileOutcome {
+    pub(super) fn set_present_broadcast(&mut self, wanted: Broadcast) -> ToileOutcome {
         let was = self.broadcasting;
-        self.broadcasting = on;
-        let ephemeral = if on {
+        self.broadcasting = wanted;
+        let ephemeral = if wanted.is_on() {
             self.slide_broadcast_sample()
-        } else if was {
+        } else if was.is_on() {
             silent_presence_frame()
         } else {
             None
         };
         ToileOutcome::display_and_ephemeral(
-            vec![ToileEvent::PresentBroadcastChanged(if on {
-                Broadcast::Broadcasting
-            } else {
-                Broadcast::Private
-            })],
+            vec![ToileEvent::PresentBroadcastChanged(wanted)],
             ephemeral,
         )
     }
@@ -339,12 +335,12 @@ impl ToileState {
     /// exit (a viewer no longer presenting has no position to share); `following`
     /// is independent of present mode and left untouched.
     pub(super) fn exit_present(&mut self) -> ToileOutcome {
-        self.present = false;
+        self.present = PresentMode::Editing;
         let mut display = vec![ToileEvent::PresentModeChanged(PresentMode::Editing)];
-        if !self.broadcasting {
+        if !self.broadcasting.is_on() {
             return ToileOutcome::display_only(display);
         }
-        self.broadcasting = false;
+        self.broadcasting = Broadcast::Private;
         display.push(ToileEvent::PresentBroadcastChanged(Broadcast::Private));
         // Say so on the wire too: a presenter who left the mode is no longer
         // one to follow (`TOILE-UI-315`).
@@ -360,7 +356,7 @@ impl ToileState {
     }
 
     /// Current playback state: `(present, active, focus)`. Test accessor.
-    pub fn playback(&self) -> (bool, usize, bool) {
+    pub fn playback(&self) -> (PresentMode, usize, bool) {
         (self.present, self.playback.active, self.playback.focus)
     }
 
@@ -829,7 +825,7 @@ mod pdf_tests {
             None,
             &crate::ui::render::ImageStore::new(),
             &std::collections::HashMap::new(),
-            false,
+            ambre_bus::app::toile::PresentMode::Editing,
         );
         let lines = |s: &RecordingSurface| s.count(|op| matches!(op, DrawOp::StrokeLine { .. }));
         assert!(lines(&board) > 0, "the editing walk draws the grid");

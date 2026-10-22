@@ -17,8 +17,8 @@ pub use ambre_bus::app::toile::{
     CommentAnchor, CommentMessage, CommentPin, CommentSummary, CommentThread, DeckFrame, DeckView,
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, FindOptions,
     FindResults, InitContent, PresencePayload, PresenceUpdate, PresentMode, Reaction, ReactionKind,
-    ReactionTally, SelectionStats, SlideChange, SlidePosition, StatsRequestKind, TextDelta,
-    ToileCommand, ToileError, ToileEvent, Viewport, ZTarget,
+    ReactionTally, SelectionStats, SlideChange, SlidePosition, Sources, StatsRequestKind,
+    TextDelta, ToileCommand, ToileError, ToileEvent, Viewport, ZTarget,
 };
 pub use ambre_bus::rest::RequestId;
 

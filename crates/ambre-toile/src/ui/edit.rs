@@ -20,7 +20,7 @@ use ambre_draw::{Alignment, BoundingBox, Color, DrawSurface, FontContext, Point}
 // import path (the enum lives in the shared core now).
 pub use ambre_canvas::EditIntent;
 
-use super::walk::TEXT_PAD;
+use super::walk::{TEXT_PAD, TextHost};
 
 /// What an inline edit is writing into: an element's body, or the caption of a
 /// connector (`toile-connectors`). The two differ in where the box comes from
@@ -73,23 +73,22 @@ pub struct InlineEditor {
 }
 
 impl InlineEditor {
-    /// Open an editor on `elem`, seeded with its current body `text`. `is_sticky`
-    /// switches to the sticky presentation. The body then uses the fixed readable
+    /// Open an editor on `elem`, seeded with its current body `text`. A `Sticky`
+    /// host switches to the sticky presentation. The body then uses the fixed readable
     /// ink: its `fill` is the card colour, not the text. The font size tracks the
     /// note size, matching the static render (`render.rs`).
-    pub fn open(elem: &DisplayElement, text: &str, palette: &Palette, is_sticky: bool) -> Self {
+    pub fn open(elem: &DisplayElement, text: &str, palette: &Palette, host: TextHost) -> Self {
         let font = &elem.style.font;
         // Text colour: same precedence as the static render so the in-edit
         // body matches its committed look. The element opacity is baked into
         // the alpha, as the committed pass does (`TOILE-UI-186`).
-        let color =
-            super::walk::resolved_text_ink(is_sticky, elem.style.text_color, elem.style.fill)
-                .map(|c| argb_text(c, elem.style.opacity))
-                .unwrap_or(palette.cell_text);
+        let color = super::walk::resolved_text_ink(host, elem.style.text_color, elem.style.fill)
+            .map(|c| argb_text(c, elem.style.opacity))
+            .unwrap_or(palette.cell_text);
         // Size: sticky auto-sizes from bounds unless overridden. A zero size is
         // kept, not floored, so an invisible body stays invisible under edit
         // (`TOILE-UI-188`).
-        let base_size = super::walk::sticky_or_style_font_size(is_sticky, &elem.style, elem.bounds);
+        let base_size = super::walk::sticky_or_style_font_size(host, &elem.style, elem.bounds);
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
@@ -291,7 +290,7 @@ mod tests {
             ..ElementStyle::default()
         };
         let e = elem(style, ElementKind::Text);
-        let editor = InlineEditor::open(&e, "hi", palette(), false);
+        let editor = InlineEditor::open(&e, "hi", palette(), TextHost::Text);
         let pinned = editor.style();
         assert!(pinned.underline);
         assert!(pinned.strikethrough);
@@ -311,7 +310,7 @@ mod tests {
             ..ElementStyle::default()
         };
         let e = elem(style, ElementKind::Text);
-        let editor = InlineEditor::open(&e, "hi", palette(), false);
+        let editor = InlineEditor::open(&e, "hi", palette(), TextHost::Text);
         assert_eq!(editor.style().base_size, 0.0);
     }
 }

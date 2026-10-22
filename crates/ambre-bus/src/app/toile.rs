@@ -146,6 +146,16 @@ pub enum BoolOp {
     Exclude,
 }
 
+/// What a [`ToileCommand::BooleanOp`] does to the elements it combines.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Sources {
+    /// The inputs are deleted in the same commit as the result.
+    #[default]
+    Consume,
+    /// The inputs stay beside the result.
+    Keep,
+}
+
 impl ElementKind {
     /// The persisted `"type"` tag (`ambre-spec-toile-schema.md`). A shape stores its
     /// `ShapeKind` separately in the payload, so every shape maps to `"shape"`
@@ -1260,7 +1270,7 @@ pub enum ToileCommand {
     /// (`toile-presentation`, "Follow presenter"). Local role only -- no
     /// CRDT delta. When on, the playback commands additionally emit a presence
     /// sample carrying `present_slide`.
-    SetPresentBroadcast(bool),
+    SetPresentBroadcast(Broadcast),
     /// Follow the given presenter's broadcast playback position, or stop following
     /// with `None` (`toile-presentation`, "Follow presenter"). Local role
     /// only -- no CRDT delta. While following, an inbound presence sample from that
@@ -1357,13 +1367,13 @@ pub enum ToileCommand {
     /// geometry is the result. The inputs are flattened to polygon contours and
     /// combined client-side (kurbo has no path booleans). Needs at least two
     /// eligible (shape or path) elements; other kinds are ignored. If
-    /// `keep_sources` is false the inputs are deleted in the same commit, so the
+    /// `sources` is `Consume` the inputs are deleted in the same commit, so the
     /// whole operation is one undo item. An empty result (fully cancelled
     /// geometry) is a no-op.
     BooleanOp {
         op: BoolOp,
         ids: Vec<ElementId>,
-        keep_sources: bool,
+        sources: Sources,
     },
 
     // -- Undo / redo (local-only, `toile-undo`) --

@@ -13,7 +13,7 @@ use kurbo::{Affine, BezPath, Ellipse, Rect, Shape};
 use loro::{LoroMap, LoroValue};
 
 use crate::logic::boolean::{FLATTEN_TOL, boolean_op};
-use crate::logic::command::{BoolOp, ToileError, ToileEvent, ToileOutcome};
+use crate::logic::command::{BoolOp, Sources, ToileError, ToileEvent, ToileOutcome};
 use crate::logic::model::{ElementId, ElementStyle, NodeId, ShapeKind};
 
 use super::codec::{bin_of, bool_of, f64_of, str_of};
@@ -23,14 +23,14 @@ impl ToileState {
     /// Combine the selected shape / path elements with `op`. Needs at least
     /// two eligible (unlocked shape / path) elements; other kinds and locked
     /// elements are ignored. The result is one new `shape:path` element carrying
-    /// the combined geometry and the first source's style. When `keep_sources` is
-    /// false the inputs are deleted in the same commit. A fully cancelled
+    /// the combined geometry and the first source's style. When `sources` is
+    /// `Consume` the inputs are deleted in the same commit. A fully cancelled
     /// (empty) result is a rejected no-op.
     pub(super) fn boolean_op(
         &mut self,
         op: BoolOp,
         ids: &[ElementId],
-        keep_sources: bool,
+        keep: Sources,
     ) -> ToileOutcome {
         // Resolve the eligible sources to world-space paths, in selection order.
         let mut paths = Vec::new();
@@ -89,7 +89,7 @@ impl ToileState {
             .push(NodeId::Element(id.clone()).encode().as_str());
 
         // Consume the sources in the same commit so the op is one undo item.
-        if !keep_sources {
+        if keep == Sources::Consume {
             self.delete_from_doc(&sources);
         }
         self.doc.commit();
@@ -143,7 +143,9 @@ fn element_world_path(em: &LoroMap) -> Option<BezPath> {
 mod tests {
     use kurbo::{Point, Size};
 
-    use crate::logic::command::{BoolOp, InitContent, ToileCommand, ToileError, ToileEvent};
+    use crate::logic::command::{
+        BoolOp, InitContent, Sources, ToileCommand, ToileError, ToileEvent,
+    };
     use crate::logic::model::{ElementKind, ShapeKind};
     use crate::logic::state::ToileState;
 
@@ -179,7 +181,7 @@ mod tests {
         let out = st.handle_command(ToileCommand::BooleanOp {
             op: BoolOp::Union,
             ids: vec![a, b],
-            keep_sources: false,
+            sources: Sources::Consume,
         });
         // Sources consumed, one result element remains.
         assert_eq!(st.element_count(), 1);
@@ -194,7 +196,7 @@ mod tests {
         st.handle_command(ToileCommand::BooleanOp {
             op: BoolOp::Union,
             ids: vec![a, b],
-            keep_sources: true,
+            sources: Sources::Keep,
         });
         assert_eq!(st.element_count(), 3); // two sources + result
     }
@@ -207,7 +209,7 @@ mod tests {
         st.handle_command(ToileCommand::BooleanOp {
             op: BoolOp::Union,
             ids: vec![a, b],
-            keep_sources: false,
+            sources: Sources::Consume,
         });
         assert_eq!(st.element_count(), 1);
         // One undo restores both sources and removes the result.
@@ -222,7 +224,7 @@ mod tests {
         let out = st.handle_command(ToileCommand::BooleanOp {
             op: BoolOp::Union,
             ids: vec![a],
-            keep_sources: false,
+            sources: Sources::Consume,
         });
         assert_eq!(st.element_count(), 1);
         assert!(matches!(

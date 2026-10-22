@@ -392,7 +392,7 @@ mod tests {
             None,
             &images,
             &HashMap::new(),
-            true,
+            ambre_bus::app::toile::PresentMode::Presenting,
         );
 
         let frame = page.clip.expect("the page has a frame");
@@ -463,7 +463,11 @@ mod tests {
                 None,
                 &images,
                 &anim,
-                present,
+                if present {
+                    ambre_bus::app::toile::PresentMode::Presenting
+                } else {
+                    ambre_bus::app::toile::PresentMode::Editing
+                },
             );
             let view = BoardView {
                 viewport: &page.viewport,

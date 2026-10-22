@@ -9,7 +9,9 @@
 // what following that element means.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayElement, DisplayNode, DisplayViewport, ElementId, LinkTarget};
+use ambre_bus::app::toile::{
+    DisplayElement, DisplayNode, DisplayViewport, ElementId, LinkTarget, PresentMode,
+};
 use ambre_core::{DocType, DocumentId};
 use ambre_draw::{Point, Rect};
 
@@ -96,8 +98,8 @@ impl LinkAction {
 /// would make a linked element uneditable, with no refusal to observe. It
 /// follows on a modifier, or on any click in presentation mode, where editing
 /// is off.
-pub fn wants_follow(modified: bool, present: bool) -> bool {
-    modified || present
+pub fn wants_follow(modified: bool, mode: PresentMode) -> bool {
+    modified || mode.is_presenting()
 }
 
 /// The badge of a linked element, in screen space: a small square just outside
@@ -173,9 +175,18 @@ mod tests {
     /// so does any click once editing is off (`TOILE-112`).
     #[test]
     fn a_plain_click_never_follows_while_editing() {
-        assert!(!wants_follow(false, false), "a plain click selects");
-        assert!(wants_follow(true, false), "a modified click follows");
-        assert!(wants_follow(false, true), "presentation mode follows");
+        assert!(
+            !wants_follow(false, PresentMode::Editing),
+            "a plain click selects"
+        );
+        assert!(
+            wants_follow(true, PresentMode::Editing),
+            "a modified click follows"
+        );
+        assert!(
+            wants_follow(false, PresentMode::Presenting),
+            "presentation mode follows"
+        );
     }
 
     /// The three targets each mean one thing, and the frame is named rather
