@@ -1364,7 +1364,7 @@ impl SyncState {
                     Err(message) => {
                         let _ = tx.send(SyncEvent::DocumentCreateFailed {
                             document_id,
-                            message,
+                            failure: http::Failed::local(message),
                         });
                         return;
                     }
@@ -1386,7 +1386,10 @@ impl SyncState {
                 Err(e) => {
                     let _ = tx.send(SyncEvent::DocumentCreateFailed {
                         document_id,
-                        message: e,
+                        failure: http::Failed {
+                            failure: e.failure(),
+                            message: e.to_string(),
+                        },
                     });
                 }
             }
@@ -1548,9 +1551,8 @@ pub(crate) async fn send_vouch(
             let body = http::ReportSnapshotRequest {
                 signature: ambre_core::SignatureHex(signature.clone()),
             };
-            http::send_json_auth_via(transport, post, &url.join("/report"), &body, auth)
-                .await
-                .map(|()| None)
+            http::send_json_auth_via(transport, post, &url.join("/report"), &body, auth).await?;
+            Ok(None)
         }
     }
 }
@@ -1655,11 +1657,11 @@ impl<T> MembersAnswer<T> {
     /// Classifies the outcome of the members request. Only a `404` is an absent
     /// document; a transport or decoding failure is never read as one.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    pub(crate) fn classify(outcome: Result<Option<T>, String>) -> Self {
+    pub(crate) fn classify(outcome: Result<Option<T>, impl Into<String>>) -> Self {
         match outcome {
             Ok(Some(members)) => Self::Exists(members),
             Ok(None) => Self::Absent,
-            Err(message) => Self::Unreachable(message),
+            Err(message) => Self::Unreachable(message.into()),
         }
     }
 }
@@ -1680,17 +1682,17 @@ mod tests {
 
     #[test]
     fn a_failed_members_request_is_not_an_absent_document() {
-        let failed = MembersAnswer::<()>::classify(Err("GET /members: timeout".into()));
+        let failed = MembersAnswer::<()>::classify(Err::<Option<()>, _>("GET /members: timeout"));
         assert_eq!(
             failed,
             MembersAnswer::Unreachable("GET /members: timeout".into())
         );
         assert_eq!(
-            MembersAnswer::<()>::classify(Ok(None)),
+            MembersAnswer::<()>::classify(Ok::<_, String>(None)),
             MembersAnswer::Absent
         );
         assert_eq!(
-            MembersAnswer::classify(Ok(Some(7))),
+            MembersAnswer::classify(Ok::<_, String>(Some(7))),
             MembersAnswer::Exists(7)
         );
     }

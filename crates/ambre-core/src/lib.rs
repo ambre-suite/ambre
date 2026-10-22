@@ -111,6 +111,8 @@ pub use schema::{
 };
 pub use seq::Seq;
 pub use span::{LamportStamp, Millis, PageTime, Seconds, Timestamp, UnixMillis, UnixSeconds};
-pub use status::{RefusalCode, RotationStatus, SnapshotStatus, StatusError, WriteStatus};
+pub use status::{
+    ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError, WriteStatus,
+};
 pub use uuid::Uuid;
 pub use version::Version;

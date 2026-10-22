@@ -812,8 +812,8 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::ApiError {
             id: Some(RequestId(8)),
-            request: "share".to_owned(),
-            code: 409,
+            request: ambre_bus::ApiRequest::InviteToDocument,
+            failure: ambre_bus::ApiFailure::refused(ambre_bus::RefusalCode::MembersChanged),
             message: "conflict".to_owned(),
         },
         LogicEvent::SetupRequired,

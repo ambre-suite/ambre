@@ -54,7 +54,7 @@ impl SyncState {
                         });
                     }
                     Err(e) => {
-                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                        let _ = tx.send(SyncEvent::http_error(id, e));
                     }
                 }
             });
@@ -128,10 +128,10 @@ impl SyncState {
                 // DocumentKey, seal the name with it, and wrap the key for the
                 // owner (ourselves) via X25519. We can then recover it on open.
                 let (Some(exchange_key), Some(author)) = (exchange_key, author) else {
-                    let _ = tx.send(SyncEvent::HttpError {
+                    let _ = tx.send(SyncEvent::http_error(
                         id,
-                        message: "CreateDocument: session locked (no session keys)".into(),
-                    });
+                        String::from("CreateDocument: session locked (no session keys)"),
+                    ));
                     return;
                 };
                 let doc_key = DocumentKey::generate();
@@ -158,7 +158,7 @@ impl SyncState {
                 let (name_enc, (doc_key_enc, entry)) = match sealed {
                     Ok(pair) => pair,
                     Err(message) => {
-                        let _ = tx.send(SyncEvent::HttpError { id, message });
+                        let _ = tx.send(SyncEvent::http_error(id, message));
                         return;
                     }
                 };
@@ -184,11 +184,11 @@ impl SyncState {
                             });
                         }
                         Err(message) => {
-                            let _ = tx.send(SyncEvent::HttpError { id, message });
+                            let _ = tx.send(SyncEvent::http_error(id, message));
                         }
                     },
                     Err(e) => {
-                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                        let _ = tx.send(SyncEvent::http_error(id, e));
                     }
                 }
             });
@@ -226,7 +226,7 @@ impl SyncState {
                         });
                     }
                     Err(e) => {
-                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                        let _ = tx.send(SyncEvent::http_error(id, e));
                     }
                 }
             });
@@ -258,10 +258,10 @@ impl SyncState {
             let signing_key = self.signing_key.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 let Some(signing_key) = signing_key else {
-                    let _ = tx.send(SyncEvent::HttpError {
+                    let _ = tx.send(SyncEvent::http_error(
                         id,
-                        message: "RenameDocument: session locked (no signing key)".into(),
-                    });
+                        String::from("RenameDocument: session locked (no signing key)"),
+                    ));
                     return;
                 };
                 // E2EE: the new name is sealed with the document key before it
@@ -274,10 +274,10 @@ impl SyncState {
                     Some(k) => k,
                     None => {
                         let Some(ek) = exchange_key else {
-                            let _ = tx.send(SyncEvent::HttpError {
+                            let _ = tx.send(SyncEvent::http_error(
                                 id,
-                                message: "RenameDocument: session locked (no exchange key)".into(),
-                            });
+                                String::from("RenameDocument: session locked (no exchange key)"),
+                            ));
                             return;
                         };
                         let members_url = crate::http::ApiRoot::of(url_scheme, &api_base)
@@ -291,15 +291,15 @@ impl SyncState {
                             Ok(resp) => match Self::unwrap_document_key(&ek, &resp.members) {
                                 Ok(k) => k,
                                 Err(e) => {
-                                    let _ = tx.send(SyncEvent::HttpError {
+                                    let _ = tx.send(SyncEvent::http_error(
                                         id,
-                                        message: format!("RenameDocument: key unwrap failed: {e}"),
-                                    });
+                                        format!("RenameDocument: key unwrap failed: {e}"),
+                                    ));
                                     return;
                                 }
                             },
                             Err(e) => {
-                                let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                                let _ = tx.send(SyncEvent::http_error(id, e));
                                 return;
                             }
                         }
@@ -310,7 +310,7 @@ impl SyncState {
                     Ok(name_enc) => name_enc,
                     Err(e) => {
                         let message = format!("RenameDocument: name seal failed: {e}");
-                        let _ = tx.send(SyncEvent::HttpError { id, message });
+                        let _ = tx.send(SyncEvent::http_error(id, message));
                         return;
                     }
                 };
@@ -327,7 +327,7 @@ impl SyncState {
                         });
                     }
                     Err(e) => {
-                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                        let _ = tx.send(SyncEvent::http_error(id, e));
                     }
                 }
             });

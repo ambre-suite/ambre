@@ -1411,7 +1411,9 @@ impl LogicState {
                     .map(str::to_owned);
                 let name = match name.map(|text| Name::new(text.as_str()).map_err(|_| text)) {
                     Some(Ok(name)) => Some(name),
-                    Some(Err(long)) => return self.refuse_long_name(&long, "NameChannel"),
+                    Some(Err(long)) => {
+                        return self.refuse_long_name(&long, ambre_bus::ApiRequest::NameChannel);
+                    }
                     None => None,
                 };
                 match channel.name_direct(name.as_ref().map(Name::as_str)) {
@@ -1436,8 +1438,8 @@ impl LogicState {
                         tracing::warn!("Logic: name of channel {channel_id} refused: {error}");
                         self.send_to_ui(UiEvent::ApiError {
                             id: None,
-                            request: "NameChannel".to_owned(),
-                            code: 409,
+                            request: ambre_bus::ApiRequest::NameChannel,
+                            failure: ambre_bus::ApiFailure::Local,
                             message: NAME_NOT_CHANGED.to_owned(),
                         });
                     }
@@ -3836,8 +3838,8 @@ mod tests {
         drain(&ui);
         state.handle_logic_event(LogicEvent::ApiError {
             id: Some(first),
-            request: "EraseMedia".into(),
-            code: 0,
+            request: ambre_bus::ApiRequest::EraseMedia,
+            failure: ambre_bus::ApiFailure::NoAnswer,
             message: "offline".into(),
         });
         assert!(drain(&ui).is_empty(), "a failed erase reaches no view");
@@ -3956,8 +3958,11 @@ mod tests {
         };
         state.handle_logic_event(LogicEvent::ApiError {
             id: Some(again),
-            request: "DownloadMedia".into(),
-            code: 404,
+            request: ambre_bus::ApiRequest::DownloadMedia,
+            failure: ambre_bus::ApiFailure::Relay {
+                status: ambre_bus::HttpStatus(404),
+                code: None,
+            },
             message: "gone".into(),
         });
         let got = drain(&ui);

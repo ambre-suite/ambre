@@ -180,8 +180,8 @@ impl LogicState {
         tracing::warn!("Logic: invite refused: {message}");
         self.send_to_ui(UiEvent::ApiError {
             id: Some(id),
-            request: "InviteToDocument".to_owned(),
-            code: 409,
+            request: ambre_bus::ApiRequest::InviteToDocument,
+            failure: ambre_bus::ApiFailure::Local,
             message,
         });
     }
@@ -478,7 +478,7 @@ mod tests {
         assert!(drain(&sync_rx).is_empty(), "no invite leaves");
         assert!(drain(&ui_rx).iter().any(|e| matches!(
             e,
-            UiEvent::ApiError { id: Some(refused), code: 409, .. } if *refused == id
+            UiEvent::ApiError { id: Some(refused), failure: ambre_bus::ApiFailure::Local, .. } if *refused == id
         )));
     }
 
@@ -566,7 +566,7 @@ mod tests {
             .filter_map(|e| match e {
                 UiEvent::ApiError {
                     id: Some(id),
-                    code: 409,
+                    failure: ambre_bus::ApiFailure::Local,
                     ..
                 } => Some(id),
                 _ => None,

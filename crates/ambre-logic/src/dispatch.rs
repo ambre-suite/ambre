@@ -708,7 +708,7 @@ impl LogicState {
             LogicEvent::ApiError {
                 id,
                 request,
-                code,
+                failure,
                 message,
             } => {
                 // A failure correlated to a document's own request
@@ -733,7 +733,7 @@ impl LogicState {
                 self.send_to_ui(UiEvent::ApiError {
                     id,
                     request,
-                    code,
+                    failure,
                     message,
                 });
             }
@@ -1865,8 +1865,11 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::ApiError {
             id: Some(id),
-            request: "UploadMedia".into(),
-            code: 500,
+            request: ambre_bus::ApiRequest::UploadMedia,
+            failure: ambre_bus::ApiFailure::Relay {
+                status: ambre_bus::HttpStatus(500),
+                code: None,
+            },
             message: "boom".into(),
         });
 
@@ -1889,8 +1892,11 @@ mod tests {
         let (mut state, ui_rx, _sync) = harness();
         state.handle_logic_event(LogicEvent::ApiError {
             id: None,
-            request: "ListDocuments".into(),
-            code: 500,
+            request: ambre_bus::ApiRequest::ListDocuments,
+            failure: ambre_bus::ApiFailure::Relay {
+                status: ambre_bus::HttpStatus(500),
+                code: None,
+            },
             message: "boom".into(),
         });
         assert!(matches!(ui_rx.try_recv(), Ok(UiEvent::ApiError { .. })));

@@ -125,12 +125,12 @@ impl SyncState {
                                 });
                             }
                             Err(e) => {
-                                let _ = logic_tx.send(LogicEvent::AuthError { message: e });
+                                let _ = logic_tx.send(auth_failed(e));
                             }
                         }
                     }
                     Err(e) => {
-                        let _ = logic_tx.send(LogicEvent::AuthError { message: e });
+                        let _ = logic_tx.send(auth_failed(e));
                     }
                 }
             });
@@ -215,7 +215,7 @@ impl SyncState {
                         });
                     }
                     Err(e) => {
-                        let _ = logic_tx.send(LogicEvent::AuthError { message: e });
+                        let _ = logic_tx.send(auth_failed(e));
                     }
                 }
             });
@@ -265,7 +265,7 @@ impl SyncState {
                         state: resp.state,
                     },
                 },
-                Err(message) => LogicEvent::AuthError { message },
+                Err(message) => auth_failed(message),
             };
             let _ = logic_tx.send(evt);
         });
@@ -309,7 +309,7 @@ impl SyncState {
                 {
                     Ok(resp) => resp,
                     Err(message) => {
-                        let _ = logic_tx.send(LogicEvent::AuthError { message });
+                        let _ = logic_tx.send(auth_failed(message));
                         return;
                     }
                 };
@@ -330,7 +330,7 @@ impl SyncState {
             {
                 Ok(keys) => keys,
                 Err(message) => {
-                    let _ = logic_tx.send(LogicEvent::AuthError { message });
+                    let _ = logic_tx.send(auth_failed(message));
                     return;
                 }
             };
@@ -432,7 +432,7 @@ impl SyncState {
                         });
                     }
                     Err(e) => {
-                        let _ = logic_tx.send(LogicEvent::AuthError { message: e });
+                        let _ = logic_tx.send(auth_failed(e));
                     }
                 }
             });

@@ -351,8 +351,8 @@ impl SyncState {
             } else {
                 self.send_to_logic(LogicEvent::ApiError {
                     id: None,
-                    request: "websocket".into(),
-                    code: RefusalCode::InternalError.status(),
+                    request: ApiRequest::Websocket,
+                    failure: ApiFailure::refused(RefusalCode::InternalError),
                     message,
                 });
             }
@@ -897,9 +897,9 @@ impl SyncState {
                 }),
                 // A segment no longer closing, or whose snapshot another
                 // member sealed again, needs no lease from this client.
-                Err(message) => {
-                    let withdrawn = crate::http::is_conflict(&message);
-                    self.finalize_failed(channel_id, segment, withdrawn, &message);
+                Err(error) => {
+                    let withdrawn = error.is_conflict();
+                    self.finalize_failed(channel_id, segment, withdrawn, &error.to_string());
                 }
             },
             SyncEvent::SegmentFinalized {
@@ -976,19 +976,23 @@ impl SyncState {
             }
             SyncEvent::DocumentCreateFailed {
                 document_id,
-                message,
+                failure,
             } => {
                 if let Some(doc_state) = self.documents.get_mut(&document_id) {
                     doc_state.creating = false;
                 }
-                tracing::error!("Sync: lazy create failed for {document_id:?}: {message}");
-                self.flush_pending_uploads(document_id, Some(&message));
+                tracing::error!("Sync: lazy create failed for {document_id:?}: {failure}");
+                self.flush_pending_uploads(document_id, Some(&failure));
             }
-            SyncEvent::HttpError { id: _id, message } => {
+            SyncEvent::HttpError {
+                id: _id,
+                failure,
+                message,
+            } => {
                 self.send_to_logic(LogicEvent::ApiError {
                     id: None,
-                    request: "rest".into(),
-                    code: 500,
+                    request: ApiRequest::Rest,
+                    failure,
                     message,
                 });
             }
@@ -1536,8 +1540,8 @@ impl SyncState {
                 tracing::error!("Sync: socket refusal {code} for {document_id:?}");
                 self.send_to_logic(LogicEvent::ApiError {
                     id: None,
-                    request: "websocket".into(),
-                    code: code.status(),
+                    request: ApiRequest::Websocket,
+                    failure: ApiFailure::refused(code),
                     message: format!("socket refusal {code} for {document_id:?}"),
                 });
             }
@@ -2093,7 +2097,18 @@ mod tests {
         }
         let errors = rx
             .try_iter()
-            .filter(|e| matches!(e, LogicEvent::ApiError { code: 500, .. }))
+            .filter(|e| {
+                matches!(
+                    e,
+                    LogicEvent::ApiError {
+                        failure: ambre_bus::ApiFailure::Relay {
+                            status: ambre_core::HttpStatus(500),
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
             .count();
         assert_eq!(errors, 1);
         state.handle_sync_event(retry(id, armed(&state, id)));
@@ -2193,8 +2208,8 @@ mod tests {
             matches!(
                 told[..],
                 [
-                    LogicEvent::ApiError { code: 429, .. },
-                    LogicEvent::ApiError { code: 403, .. },
+                    LogicEvent::ApiError { failure: ambre_bus::ApiFailure::Relay { status: ambre_core::HttpStatus(429), .. }, .. },
+                    LogicEvent::ApiError { failure: ambre_bus::ApiFailure::Relay { status: ambre_core::HttpStatus(403), .. }, .. },
                     LogicEvent::MemberRevoked { document_id, revoked_user_id },
                 ] if document_id == id && revoked_user_id == me
             ),
@@ -2224,7 +2239,7 @@ mod tests {
             matches!(
                 told[..],
                 [
-                    LogicEvent::ApiError { code: 404, .. },
+                    LogicEvent::ApiError { failure: ambre_bus::ApiFailure::Relay { status: ambre_core::HttpStatus(404), .. }, .. },
                     LogicEvent::DocumentGone { document_id },
                 ] if document_id == id
             ),
@@ -2242,6 +2257,15 @@ mod tests {
             code: RefusalCode::PayloadTooLarge,
         }));
         let told: Vec<LogicEvent> = rx.try_iter().collect();
-        assert!(matches!(told[..], [LogicEvent::ApiError { code: 413, .. }]));
+        assert!(matches!(
+            told[..],
+            [LogicEvent::ApiError {
+                failure: ambre_bus::ApiFailure::Relay {
+                    status: ambre_core::HttpStatus(413),
+                    ..
+                },
+                ..
+            }]
+        ));
     }
 }

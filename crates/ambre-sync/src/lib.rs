@@ -44,9 +44,10 @@ use web_sys::{CloseEvent, MessageEvent};
 use ambre_bus::ActivitySummary;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, MetaId, OpenFailure,
-    RequestId, RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotId,
-    SnapshotPurpose, SnapshotVerdict, SpaceId, SyncCommand, UserId, UserInfo,
+    ApiFailure, ApiRequest, ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent,
+    MemberInfo, MetaId, OpenFailure, RequestId, RestCommand, RestEvent, Role, SecretBytes,
+    SecretString, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict, SpaceId, SyncCommand,
+    UserId, UserInfo,
 };
 use ambre_core::{KeyId, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
@@ -115,18 +116,29 @@ impl LogicSink {
 /// [`LogicSink::send`], so this one mapping covers every request.
 fn as_step_owed(event: LogicEvent) -> LogicEvent {
     match &event {
-        LogicEvent::ApiError { message, .. } | LogicEvent::AuthError { message }
-            if http::is_setup_refusal(message) =>
-        {
-            LogicEvent::SetupRequired
-        }
-        LogicEvent::ApiError { message, .. } | LogicEvent::AuthError { message }
-            if http::is_unknown_word(message) =>
-        {
-            LogicEvent::UpdateRequired
-        }
+        LogicEvent::ApiError { failure, .. } => step_owed(*failure).unwrap_or(event),
         _ => event,
     }
+}
+
+/// The step `failure` asks the user for, if it asks for one.
+fn step_owed(failure: ApiFailure) -> Option<LogicEvent> {
+    match failure {
+        ApiFailure::Relay {
+            code: Some(ambre_core::RefusalCode::SetupRequired),
+            ..
+        } => Some(LogicEvent::SetupRequired),
+        ApiFailure::Unreadable { unknown_word: true } => Some(LogicEvent::UpdateRequired),
+        _ => None,
+    }
+}
+
+/// The event a sign-in or an unlock that `error` ended reads as: the step
+/// it asks for, or an authentication error with its text.
+fn auth_failed(error: impl http::Reported) -> LogicEvent {
+    step_owed(error.failure()).unwrap_or_else(|| LogicEvent::AuthError {
+        message: error.to_string(),
+    })
 }
 
 mod auth;
@@ -325,7 +337,7 @@ enum SyncEvent {
         channel_id: ChannelId,
         /// The space whose catalogue the Logic thread said lists the channel.
         listed_in: Option<SpaceId>,
-        result: Result<Vec<ambre_bus::ChannelDocument>, String>,
+        result: Result<Vec<ambre_bus::ChannelDocument>, http::HttpError>,
     },
     /// The open walked the document's log. What it says lands on the session
     /// the open made, for the channels a space lists (the Murmure spaces
@@ -391,7 +403,7 @@ enum SyncEvent {
     FinalizeLeaseAnswered {
         channel_id: ChannelId,
         segment: ambre_bus::SegmentId,
-        result: Result<ambre_bus::LeaseAnswer, String>,
+        result: Result<ambre_bus::LeaseAnswer, http::HttpError>,
     },
     /// The answer to a finalize commit (`SyncCommand::FinalizeSegment`).
     SegmentFinalized {
@@ -460,10 +472,11 @@ enum SyncEvent {
     /// retries; the buffered updates are kept.
     DocumentCreateFailed {
         document_id: DocumentId,
-        message: String,
+        failure: http::Failed,
     },
     HttpError {
         id: RequestId,
+        failure: ApiFailure,
         message: String,
     },
     /// TOFU phase 1 (`ambre-spec-key-verification.md`): the invitee was resolved and
@@ -611,6 +624,18 @@ enum SyncEvent {
         content_hash: ambre_core::ContentHash,
         data: Vec<u8>,
     },
+}
+
+impl SyncEvent {
+    /// The failure of the service-plane request `id`, from a relay's answer
+    /// or from this device.
+    fn http_error(id: RequestId, error: impl http::Reported) -> Self {
+        Self::HttpError {
+            id,
+            failure: error.failure(),
+            message: error.to_string(),
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -1752,31 +1777,58 @@ mod setup_tests {
 
     /// A request refused for a key setup still owed reaches Logic as a setup
     /// to complete, whichever error variant its handler raised it under
-    /// (`SYNC-134`). Any other failure passes through unchanged.
+    /// (`SYNC-134`). The refusal is read from its value: a text that ends
+    /// with the code, or a bare 403, passes through unchanged.
     #[test]
     fn a_request_refused_for_a_setup_owed_reaches_logic_as_a_setup() {
         let (sink, rx) = LogicSink::channel();
-        let refused = "GET https://relay.example/api/documents: SETUP_REQUIRED";
-        assert!(http::is_setup_refusal(refused));
+        let url = "https://relay.example/api/documents";
+        let refused = http::HttpError::refused(
+            http::Method::Get,
+            url,
+            403,
+            Some(ambre_core::RefusalCode::SetupRequired),
+        );
         let _ = sink.send(LogicEvent::ApiError {
             id: None,
-            request: "ListDocuments".into(),
-            code: 500,
-            message: refused.into(),
+            request: ApiRequest::ListDocuments,
+            failure: refused.failure(),
+            message: refused.to_string(),
         });
-        let _ = sink.send(LogicEvent::AuthError {
-            message: refused.into(),
-        });
+        let _ = sink.send(auth_failed(refused.clone()));
         let _ = sink.send(LogicEvent::ApiError {
             id: None,
-            request: "ListDocuments".into(),
-            code: 403,
-            message: "GET https://relay.example/api/documents: HTTP 403".into(),
+            request: ApiRequest::ListDocuments,
+            failure: ApiFailure::NoAnswer,
+            message: format!("{refused}"),
+        });
+        let bare = http::HttpError::refused(http::Method::Get, url, 403, None);
+        let _ = sink.send(LogicEvent::ApiError {
+            id: None,
+            request: ApiRequest::ListDocuments,
+            failure: bare.failure(),
+            message: bare.to_string(),
         });
         let told: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(matches!(told[0], LogicEvent::SetupRequired));
         assert!(matches!(told[1], LogicEvent::SetupRequired));
-        assert!(matches!(told[2], LogicEvent::ApiError { code: 403, .. }));
+        assert!(matches!(
+            told[2],
+            LogicEvent::ApiError {
+                failure: ApiFailure::NoAnswer,
+                ..
+            }
+        ));
+        assert!(matches!(
+            told[3],
+            LogicEvent::ApiError {
+                failure: ApiFailure::Relay {
+                    status: ambre_core::HttpStatus(403),
+                    code: None
+                },
+                ..
+            }
+        ));
     }
 
     /// Holds `SYNC-152`: an answer naming a word this build does not know
@@ -1785,26 +1837,39 @@ mod setup_tests {
     #[test]
     fn an_answer_with_an_unknown_word_reaches_logic_as_an_update() {
         let (sink, rx) = LogicSink::channel();
-        let url = "GET https://relay.example/api/documents/d/members";
-        let unknown = format!("{url}: parse error: unknown variant `auditor`: UNKNOWN_WORD");
-        assert!(http::is_unknown_word(&unknown));
+        let unreadable = |unknown_word| http::HttpError::Unreadable {
+            method: http::Method::Get,
+            url: "https://relay.example/api/documents/d/members".into(),
+            reason: "unknown variant `auditor`".into(),
+            unknown_word,
+        };
+        let unknown = unreadable(true);
         let _ = sink.send(LogicEvent::ApiError {
             id: None,
-            request: "ListDocumentMembers".into(),
-            code: 500,
-            message: unknown.clone(),
+            request: ApiRequest::ListDocumentMembers,
+            failure: unknown.failure(),
+            message: unknown.to_string(),
         });
-        let _ = sink.send(LogicEvent::AuthError { message: unknown });
+        let _ = sink.send(auth_failed(unknown));
+        let other = unreadable(false);
         let _ = sink.send(LogicEvent::ApiError {
             id: None,
-            request: "ListDocumentMembers".into(),
-            code: 500,
-            message: format!("{url}: parse error: missing field `role`"),
+            request: ApiRequest::ListDocumentMembers,
+            failure: other.failure(),
+            message: other.to_string(),
         });
         let told: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(matches!(told[0], LogicEvent::UpdateRequired));
         assert!(matches!(told[1], LogicEvent::UpdateRequired));
-        assert!(matches!(told[2], LogicEvent::ApiError { code: 500, .. }));
+        assert!(matches!(
+            told[2],
+            LogicEvent::ApiError {
+                failure: ApiFailure::Unreadable {
+                    unknown_word: false
+                },
+                ..
+            }
+        ));
     }
 }
 

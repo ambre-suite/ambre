@@ -13,6 +13,7 @@
 //! [`SyncCommand::Rest`]: crate::SyncCommand::Rest
 
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{
@@ -426,7 +427,8 @@ pub enum LogicEvent {
     AuthError { message: String },
 
     /// Generic error for any REST/WS operation. `request` identifies the source command
-    /// (for example, "ListDocuments").
+    /// (for example, [`ApiRequest::ListDocuments`]), and `failure` says whether the relay
+    /// answered and with what.
     ///
     /// `id` echoes the originating [`RequestId`] when the failed command carried one (a
     /// `SyncCommand::Rest`). The dispatcher can then route a correlated failure back to
@@ -435,8 +437,8 @@ pub enum LogicEvent {
     /// request.
     ApiError {
         id: Option<RequestId>,
-        request: String,
-        code: u16,
+        request: ApiRequest,
+        failure: ambre_core::ApiFailure,
         message: String,
     },
 
@@ -544,4 +546,80 @@ pub struct SignedDelta {
     /// What the update says of itself, when its author wrote a summary
     /// (`ambre-spec-sealed-envelope.md`, `SYNC-144`).
     pub summary: Option<crate::ActivitySummary>,
+}
+
+/// The request an [`LogicEvent::ApiError`] or a [`crate::UiEvent::ApiError`]
+/// reports the failure of. A closed set, so a consumer matches the request
+/// and never its spelling. [`fmt::Display`] writes the name a log reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ApiRequest {
+    /// Creating a space.
+    CreateSpace,
+    /// Adding a category to a space.
+    AddCategory,
+    /// Creating a public channel.
+    CreatePublicChannel,
+    /// Creating a private channel.
+    CreatePrivateChannel,
+    /// Renaming a channel.
+    NameChannel,
+    /// Inviting a member to a document.
+    InviteToDocument,
+    /// Revoking a member of a document.
+    RevokeFromDocument,
+    /// Leaving a document.
+    LeaveDocument,
+    /// Changing the role of a member of a document.
+    UpdateDocumentMemberRole,
+    /// Fetching the keys of the user an invitation names.
+    FetchInviteeKey,
+    /// Fetching the keys of a member.
+    FetchMemberKey,
+    /// Listing the user's documents.
+    ListDocuments,
+    /// Listing the members of a document.
+    ListDocumentMembers,
+    /// Uploading a media blob.
+    UploadMedia,
+    /// Downloading a media blob.
+    DownloadMedia,
+    /// Erasing a media blob.
+    EraseMedia,
+    /// The socket, for a refusal it carried.
+    Websocket,
+    /// A request of the service plane.
+    Rest,
+}
+
+impl ApiRequest {
+    /// The name a log and a toast read.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::CreateSpace => "CreateSpace",
+            Self::AddCategory => "AddCategory",
+            Self::CreatePublicChannel => "CreatePublicChannel",
+            Self::CreatePrivateChannel => "CreatePrivateChannel",
+            Self::NameChannel => "NameChannel",
+            Self::InviteToDocument => "InviteToDocument",
+            Self::RevokeFromDocument => "RevokeFromDocument",
+            Self::LeaveDocument => "LeaveDocument",
+            Self::UpdateDocumentMemberRole => "UpdateDocumentMemberRole",
+            Self::FetchInviteeKey => "FetchInviteeKey",
+            Self::FetchMemberKey => "FetchMemberKey",
+            Self::ListDocuments => "ListDocuments",
+            Self::ListDocumentMembers => "ListDocumentMembers",
+            Self::UploadMedia => "UploadMedia",
+            Self::DownloadMedia => "DownloadMedia",
+            Self::EraseMedia => "EraseMedia",
+            Self::Websocket => "websocket",
+            Self::Rest => "rest",
+        }
+    }
+}
+
+impl fmt::Display for ApiRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }

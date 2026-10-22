@@ -67,7 +67,7 @@ impl LogicState {
             return;
         }
         if Name::new(name).is_err() {
-            return self.refuse_long_name(name, "CreateSpace");
+            return self.refuse_long_name(name, ambre_bus::ApiRequest::CreateSpace);
         }
         let state = match SpaceState::create(space_id, name, now) {
             Ok(state) => state,
@@ -306,15 +306,15 @@ impl LogicState {
 
     /// Tell the user why a name no [`Name`] holds was refused, before
     /// anything is written (the Murmure channels spec).
-    pub(crate) fn refuse_long_name(&self, name: &str, request: &str) {
+    pub(crate) fn refuse_long_name(&self, name: &str, request: ambre_bus::ApiRequest) {
         tracing::warn!(
             "Logic: {request} refused a name of {} characters",
             name.chars().count()
         );
         self.send_to_ui(UiEvent::ApiError {
             id: None,
-            request: request.to_owned(),
-            code: 409,
+            request,
+            failure: ambre_bus::ApiFailure::Local,
             message: ambre_core::NAME_TOO_LONG.to_owned(),
         });
     }
@@ -375,7 +375,7 @@ impl LogicState {
                     return;
                 }
                 if Name::new(name.as_str()).is_err() {
-                    return self.refuse_long_name(&name, "AddCategory");
+                    return self.refuse_long_name(&name, ambre_bus::ApiRequest::AddCategory);
                 }
                 match space.state.put_category(category_id, &name, position) {
                     Ok(delta) => {
@@ -399,7 +399,8 @@ impl LogicState {
                     );
                 }
                 if Name::new(draft.name.as_str()).is_err() {
-                    return self.refuse_long_name(&draft.name, "CreatePublicChannel");
+                    return self
+                        .refuse_long_name(&draft.name, ambre_bus::ApiRequest::CreatePublicChannel);
                 }
                 let channel = match ChannelState::create(
                     channel_id,
@@ -418,7 +419,8 @@ impl LogicState {
                 // Any member of the space may: the channel is listed nowhere.
                 let PrivateChannelDraft { channel_id, name } = draft;
                 let Ok(name) = Name::new(name.as_str()) else {
-                    return self.refuse_long_name(&name, "CreatePrivateChannel");
+                    return self
+                        .refuse_long_name(&name, ambre_bus::ApiRequest::CreatePrivateChannel);
                 };
                 match ChannelState::create(
                     channel_id,
@@ -2434,8 +2436,11 @@ mod tests {
         };
         state.handle_logic_event(LogicEvent::ApiError {
             id: Some(change),
-            request: "update role".into(),
-            code: 403,
+            request: ambre_bus::ApiRequest::UpdateDocumentMemberRole,
+            failure: ambre_bus::ApiFailure::Relay {
+                status: ambre_bus::HttpStatus(403),
+                code: None,
+            },
             message: "HTTP 403".into(),
         });
         assert!(drain(&sync).is_empty(), "no leave");

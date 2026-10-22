@@ -3450,8 +3450,11 @@ mod tests {
         let id = drop_file(&mut page, channel, "a.png");
         let failed = UiEvent::ApiError {
             id: Some(id),
-            request: "upload".to_owned(),
-            code: 500,
+            request: ambre_bus::ApiRequest::UploadMedia,
+            failure: ambre_bus::ApiFailure::Relay {
+                status: ambre_bus::HttpStatus(500),
+                code: None,
+            },
             message: "down".to_owned(),
         };
         page.events.try_send(failed).expect("room");

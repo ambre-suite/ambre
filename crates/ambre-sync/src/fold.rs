@@ -64,7 +64,8 @@ pub(crate) async fn commit_fold(
         snapshot_id,
         amendments_seq: reach.amendments_seq,
     };
-    http::send_json_auth_via(transport, http::Method::Post, &url, &body, auth).await
+    http::send_json_auth_via(transport, http::Method::Post, &url, &body, auth).await?;
+    Ok(())
 }
 
 impl SyncState {

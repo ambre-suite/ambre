@@ -18,7 +18,7 @@ pub(crate) async fn take_lease(
     base: &crate::http::ApiRoot,
     channel_id: ChannelId,
     segment: SegmentId,
-) -> Result<LeaseAnswer, String> {
+) -> Result<LeaseAnswer, http::HttpError> {
     let url = base.route(format!("/channels/{channel_id}/segments/{segment}/lease"));
     let answer: http::FinalizeLeaseResponse =
         http::post_json_auth_via(transport, &url, &serde_json::json!({}), auth).await?;
@@ -53,7 +53,8 @@ pub(crate) async fn commit_final(
         lease_id: lease,
         snapshot_id,
     };
-    http::send_json_auth_via(transport, http::Method::Post, &url, &body, auth).await
+    http::send_json_auth_via(transport, http::Method::Post, &url, &body, auth).await?;
+    Ok(())
 }
 
 impl SyncState {

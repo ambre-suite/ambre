@@ -48,7 +48,7 @@ impl SyncState {
         &mut self,
         channel_id: ChannelId,
         listed_in: Option<SpaceId>,
-        result: Result<Vec<ChannelDocument>, String>,
+        result: Result<Vec<ChannelDocument>, http::HttpError>,
     ) {
         match result {
             Ok(documents) => {
@@ -70,17 +70,17 @@ impl SyncState {
                     documents,
                 });
             }
-            Err(message) if http::is_forbidden(&message) => {
+            Err(error) if error.is(ambre_core::RefusalCode::Forbidden) => {
                 // No member of the channel any more: a leave or a delete
                 // whose answer was lost, or one from another client.
                 tracing::info!("Sync: channel {channel_id} refused its listing");
                 self.send_to_logic(LogicEvent::ChannelRefused { channel_id });
             }
-            Err(message) => {
-                tracing::warn!("Sync: listing channel {channel_id} failed: {message}");
+            Err(error) => {
+                tracing::warn!("Sync: listing channel {channel_id} failed: {error}");
                 self.send_to_logic(LogicEvent::ChannelOpenFailed {
                     channel_id,
-                    message,
+                    message: error.to_string(),
                 });
             }
         }
@@ -240,7 +240,10 @@ impl SyncState {
             }
             .await
             .map(|()| sealed);
-            let _ = tx.send(SyncEvent::ChannelCreated { channel_id, result });
+            let _ = tx.send(SyncEvent::ChannelCreated {
+                channel_id,
+                result: result.map_err(String::from),
+            });
         });
     }
 
@@ -320,7 +323,8 @@ impl SyncState {
                     http::get_json_auth::<http::JoinHeadResponse>(&url, auth.clone()).await?;
                 let entry = self_join_entry(&author, &head, key_id)?;
                 let body = http::JoinChannelRequest { doc_key_enc, entry };
-                http::post_json_auth_ok(&url, &body, auth).await
+                http::post_json_auth_ok(&url, &body, auth).await?;
+                Ok::<_, String>(())
             }
             .await;
             let _ = tx.send(SyncEvent::ChannelJoined { channel_id, result });
@@ -502,7 +506,10 @@ impl SyncState {
             let url = crate::http::ApiRoot::of(url_scheme, &api_base)
                 .route(format!("/channels/{channel_id}"));
             let result = http::delete_auth(&url, auth).await;
-            let _ = tx.send(SyncEvent::ChannelDeleted { channel_id, result });
+            let _ = tx.send(SyncEvent::ChannelDeleted {
+                channel_id,
+                result: result.map_err(String::from),
+            });
         });
     }
 
@@ -704,7 +711,9 @@ impl SyncState {
             let result = http::get_json_auth::<http::ActivityResponse>(&url, auth)
                 .await
                 .map(|resp| activity_of(&resp.documents));
-            let _ = tx.send(SyncEvent::ActivityFetched { result });
+            let _ = tx.send(SyncEvent::ActivityFetched {
+                result: result.map_err(String::from),
+            });
         });
     }
 
@@ -733,7 +742,10 @@ impl SyncState {
             let result = http::get_json_auth::<http::SpaceChannelsResponse>(&url, auth)
                 .await
                 .map(|resp| resp.channels);
-            let _ = tx.send(SyncEvent::SpaceChannelsListed { space_id, result });
+            let _ = tx.send(SyncEvent::SpaceChannelsListed {
+                space_id,
+                result: result.map_err(String::from),
+            });
         });
     }
 
@@ -794,7 +806,10 @@ impl SyncState {
                     }
                     Err(message) => Err(message),
                 };
-            let _ = tx.send(SyncEvent::MemberChannelsListed { asked, result });
+            let _ = tx.send(SyncEvent::MemberChannelsListed {
+                asked,
+                result: result.map_err(String::from),
+            });
         });
     }
 
@@ -1507,13 +1522,15 @@ pub(crate) mod tests {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, String::new());
         let channel_id = ChannelId::new();
-        let url = "GET https://relay.example/api/channels/c/documents";
-        for message in [
-            format!("{url}: {}", ambre_core::RefusalCode::Forbidden),
-            format!("{url}: HTTP 403"),
-            format!("{url}: HTTP 500"),
+        let url = "https://relay.example/api/channels/c/documents";
+        for (status, code) in [
+            (403, Some(ambre_core::RefusalCode::Forbidden)),
+            (403, None),
+            (500, None),
         ] {
-            state.channel_listed(channel_id, None, Err(message));
+            let error =
+                crate::http::HttpError::refused(crate::http::Method::Get, url, status, code);
+            state.channel_listed(channel_id, None, Err(error));
         }
         let events: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(

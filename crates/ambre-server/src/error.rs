@@ -165,7 +165,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let code = self.code();
         let status =
-            StatusCode::from_u16(code.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            StatusCode::from_u16(code.status().0).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
         // Log by severity. A 5xx is a genuine server fault (Redis/DB/S3/...) and
         // must be loud. A 4xx is client-caused (bad auth, not found, conflict)

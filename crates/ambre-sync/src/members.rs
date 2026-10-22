@@ -30,8 +30,8 @@ impl SyncState {
             // No transport (test/headless): nothing to fetch, no reply possible.
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
-                request: "FetchInviteeKey".into(),
-                code: 503,
+                request: ApiRequest::FetchInviteeKey,
+                failure: ApiFailure::Local,
                 message: "Sync transport unavailable".into(),
             });
             return;
@@ -57,8 +57,8 @@ impl SyncState {
         let Some(tx) = self.event_tx.clone() else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
-                request: "FetchMemberKey".into(),
-                code: 503,
+                request: ApiRequest::FetchMemberKey,
+                failure: ApiFailure::Local,
                 message: "Sync transport unavailable".into(),
             });
             return;
@@ -111,8 +111,8 @@ impl SyncState {
         let (Some(exchange_key), Some(author)) = (exchange_key, self.author()) else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
-                request: "InviteToDocument".into(),
-                code: 401,
+                request: ApiRequest::InviteToDocument,
+                failure: ApiFailure::Local,
                 message: "Not authenticated".into(),
             });
             return;
@@ -120,8 +120,8 @@ impl SyncState {
         let Some(doc_key) = doc_key else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
-                request: "InviteToDocument".into(),
-                code: 404,
+                request: ApiRequest::InviteToDocument,
+                failure: ApiFailure::Local,
                 message: "Document not open".into(),
             });
             return;
@@ -179,8 +179,8 @@ impl SyncState {
         let (Some(exchange_key), Some(author)) = (exchange_key, self.author()) else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
-                request: "RevokeFromDocument".into(),
-                code: 401,
+                request: ApiRequest::RevokeFromDocument,
+                failure: ApiFailure::Local,
                 message: "Not authenticated".into(),
             });
             return;
@@ -194,8 +194,8 @@ impl SyncState {
         else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
-                request: "RevokeFromDocument".into(),
-                code: 404,
+                request: ApiRequest::RevokeFromDocument,
+                failure: ApiFailure::Local,
                 message: "the document is not open".into(),
             });
             return;
@@ -239,8 +239,8 @@ impl SyncState {
         ) else {
             let _ = self.logic_tx.send(LogicEvent::ApiError {
                 id: None,
-                request: "LeaveDocument".into(),
-                code: 401,
+                request: ApiRequest::LeaveDocument,
+                failure: ApiFailure::Local,
                 message: "Not authenticated".into(),
             });
             return;
@@ -323,8 +323,8 @@ impl SyncState {
             else {
                 let _ = logic_tx.send(LogicEvent::ApiError {
                     id: None,
-                    request: "UpdateDocumentMemberRole".into(),
-                    code: 401,
+                    request: ApiRequest::UpdateDocumentMemberRole,
+                    failure: ApiFailure::Local,
                     message: "Not authenticated".into(),
                 });
                 return;
@@ -388,7 +388,7 @@ impl SyncState {
                         let _ = tx.send(SyncEvent::UserSearchReady { id, users });
                     }
                     Err(e) => {
-                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                        let _ = tx.send(SyncEvent::http_error(id, e));
                     }
                 }
             });

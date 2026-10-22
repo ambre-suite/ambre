@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ambre_core::{RefusalCode, Seq};
+use ambre_core::{ApiFailure, HttpStatus, RefusalCode, Seq};
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -133,32 +133,32 @@ impl AuthContext {
         ApiRoot::of(self.url_scheme, &self.api_base)
     }
 
-    fn access_token(&self) -> Result<SecretToken, String> {
+    fn access_token(&self) -> Result<SecretToken, HttpError> {
         self.tokens
             .borrow()
             .as_ref()
             .map(|t| t.access_token.clone())
-            .ok_or_else(|| "auth required: no access token".to_owned())
+            .ok_or_else(|| HttpError::Local("auth required: no access token".to_owned()))
     }
 
-    fn refresh_token(&self) -> Result<SecretToken, String> {
+    fn refresh_token(&self) -> Result<SecretToken, HttpError> {
         self.tokens
             .borrow()
             .as_ref()
             .map(|t| t.refresh_token.clone())
-            .ok_or_else(|| "auth required: no refresh token".to_owned())
+            .ok_or_else(|| HttpError::Local("auth required: no refresh token".to_owned()))
     }
 
     /// Renews the token pair over the browser's `fetch`. The socket calls it
     /// on its own refusal, which only the wasm build reaches.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    pub(crate) async fn refresh(&self) -> Result<(), String> {
+    pub(crate) async fn refresh(&self) -> Result<(), HttpError> {
         self.refresh_via(&Fetch).await
     }
 
     /// Renews the token pair through `transport`. The refresh token is the
     /// one credential the request carries.
-    async fn refresh_via(&self, transport: &impl Transport) -> Result<(), String> {
+    async fn refresh_via(&self, transport: &impl Transport) -> Result<(), HttpError> {
         let url = self.api_root().route("/auth/refresh");
         let body = RefreshRequest {
             refresh_token: self.refresh_token()?,
@@ -171,7 +171,7 @@ impl AuthContext {
     /// Revokes the session's refresh token at the relay over the browser's
     /// `fetch` (`SRV-026`).
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    pub(crate) async fn revoke(&self) -> Result<(), String> {
+    pub(crate) async fn revoke(&self) -> Result<(), HttpError> {
         self.revoke_via(&Fetch).await
     }
 
@@ -179,7 +179,7 @@ impl AuthContext {
     /// takes the access token, so a refused one is renewed first. The body
     /// is built again after that renewal: the renewal replaced the refresh
     /// token, and revoking the old one would leave the new one alive.
-    async fn revoke_via(&self, transport: &impl Transport) -> Result<(), String> {
+    async fn revoke_via(&self, transport: &impl Transport) -> Result<(), HttpError> {
         let url = self.api_root().route("/auth/logout");
         let send = || async {
             // The same body as a renewal's: the refresh token alone.
@@ -189,7 +189,7 @@ impl AuthContext {
             let mut request = Outgoing::json(Method::Post, url.as_str(), &body)?;
             request.bearer = Some(self.access_token()?);
             let resp = exchange(transport, &request).await?;
-            Ok::<_, String>((request, resp))
+            Ok::<_, HttpError>((request, resp))
         };
         let (mut request, mut resp) = send().await?;
         if resp.status == 401 {
@@ -269,9 +269,10 @@ impl Outgoing {
     }
 
     /// A request carrying `body` as JSON.
-    fn json<T: Serialize>(method: Method, url: &str, body: &T) -> Result<Self, String> {
-        let bytes = serde_json::to_vec(body)
-            .map_err(|e| format!("{} {url}: serialize error: {e}", method.as_str()))?;
+    fn json<T: Serialize>(method: Method, url: &str, body: &T) -> Result<Self, HttpError> {
+        let bytes = serde_json::to_vec(body).map_err(|e| {
+            HttpError::Local(format!("{} {url}: serialize error: {e}", method.as_str()))
+        })?;
         Ok(Self {
             body: Some(("application/json", bytes)),
             ..Self::new(method, url)
@@ -377,76 +378,245 @@ struct RefusalBody {
     error: RefusalCode,
 }
 
-/// The error a refused request reads as. `code` is the relay's error code,
-/// kept only with the status that may carry it. A 403 carries a want of
-/// access or a setup still owed (`SYNC-134`). A 409 carries a membership, a
-/// key or a log that moved under the request (`SYNC-143`, `SRV-104`).
-fn refusal(method: &str, url: &str, status: u16, code: Option<RefusalCode>) -> String {
-    use RefusalCode::{Forbidden, KeyChanged, LogMoved, MembersChanged, SetupRequired};
-    match (status, code) {
-        (403, Some(code @ (SetupRequired | Forbidden)))
-        | (409, Some(code @ (MembersChanged | KeyChanged | LogMoved))) => {
-            format!("{method} {url}: {code}")
+/// Why a request failed, kept as a value so a caller matches the case and
+/// never the text. [`fmt::Display`] writes the text a log and a toast read:
+/// the method and the URL, then the cause.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum HttpError {
+    /// The request failed on this device. No token is held, the body did not
+    /// serialize, or the answer is not the one the request asked for.
+    Local(String),
+    /// The request got no answer: the transport failed, or the deadline
+    /// passed. `reason` is the transport's.
+    NoAnswer {
+        /// The method.
+        method: Method,
+        /// Where it went.
+        url: String,
+        /// What the transport said.
+        reason: String,
+    },
+    /// The relay refused the request with `status`. `code` is the relay's
+    /// error code, kept only with the status that may carry it. A 403
+    /// carries a want of access or a setup still owed (`SYNC-134`). A 409
+    /// carries a membership, a key or a log that moved under the request
+    /// (`SYNC-143`, `SRV-104`).
+    Refused {
+        /// The method.
+        method: Method,
+        /// Where it went.
+        url: String,
+        /// The status the relay answered.
+        status: HttpStatus,
+        /// The code its body named, on a status that may carry one.
+        code: Option<RefusalCode>,
+    },
+    /// A successful answer whose body did not read. `unknown_word` marks one
+    /// that names a word of a closed set this build does not know, which only
+    /// a newer relay writes (`SYNC-152`).
+    Unreadable {
+        /// The method.
+        method: Method,
+        /// Where it went.
+        url: String,
+        /// What the parser said.
+        reason: String,
+        /// Whether the answer named a word this build does not know.
+        unknown_word: bool,
+    },
+}
+
+/// Closes the text of an answer that names a word of a closed set this
+/// build does not know.
+const UNKNOWN_WORD: &str = "UNKNOWN_WORD";
+
+impl HttpError {
+    /// The refusal of `method` to `url` with `status`. The relay's `code` is
+    /// kept only with the status that may carry it.
+    pub(crate) fn refused(
+        method: Method,
+        url: &str,
+        status: u16,
+        code: Option<RefusalCode>,
+    ) -> Self {
+        use RefusalCode::{Forbidden, KeyChanged, LogMoved, MembersChanged, SetupRequired};
+        let code = match (status, code) {
+            (403, Some(code @ (SetupRequired | Forbidden)))
+            | (409, Some(code @ (MembersChanged | KeyChanged | LogMoved))) => Some(code),
+            _ => None,
+        };
+        Self::Refused {
+            method,
+            url: url.to_owned(),
+            status: HttpStatus(status),
+            code,
         }
-        _ => format!("{method} {url}: HTTP {status}"),
+    }
+
+    /// The relay's refusal code, when the relay answered with one.
+    pub(crate) fn code(&self) -> Option<RefusalCode> {
+        match self {
+            Self::Refused { code, .. } => *code,
+            _ => None,
+        }
+    }
+
+    /// Whether the relay refused the request with `code`.
+    pub(crate) fn is(&self, code: RefusalCode) -> bool {
+        self.code() == Some(code)
+    }
+
+    /// Whether the relay refused the request with a bare 409: the state it
+    /// names moved past what the request expects.
+    pub(crate) fn is_conflict(&self) -> bool {
+        matches!(
+            self,
+            Self::Refused {
+                status: HttpStatus(409),
+                code: None,
+                ..
+            }
+        )
+    }
+
+    /// The failure as the bus carries it to Logic and the UI.
+    pub(crate) fn failure(&self) -> ApiFailure {
+        match self {
+            Self::Local(_) => ApiFailure::Local,
+            Self::NoAnswer { .. } => ApiFailure::NoAnswer,
+            Self::Refused { status, code, .. } => ApiFailure::Relay {
+                status: *status,
+                code: *code,
+            },
+            Self::Unreadable { unknown_word, .. } => ApiFailure::Unreadable {
+                unknown_word: *unknown_word,
+            },
+        }
     }
 }
 
-/// Whether `message` closes with the relay's `code`. The code comes after the
-/// URL, so no URL or other status can end with it.
-fn ends_with_code(message: &str, code: RefusalCode) -> bool {
-    message.ends_with(&format!(": {code}"))
+impl std::fmt::Display for HttpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Local(message) => f.write_str(message),
+            Self::NoAnswer {
+                method,
+                url,
+                reason,
+            } => write!(f, "{} {url}: {reason}", method.as_str()),
+            Self::Refused {
+                method,
+                url,
+                code: Some(code),
+                ..
+            } => write!(f, "{} {url}: {code}", method.as_str()),
+            Self::Refused {
+                method,
+                url,
+                status,
+                code: None,
+            } => write!(f, "{} {url}: HTTP {status}", method.as_str()),
+            Self::Unreadable {
+                method,
+                url,
+                reason,
+                unknown_word,
+            } => {
+                write!(f, "{} {url}: parse error: {reason}", method.as_str())?;
+                if *unknown_word {
+                    write!(f, ": {UNKNOWN_WORD}")?;
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
-/// Whether `message` is the error of a request the relay refused for a key
-/// setup still owed.
-pub(crate) fn is_setup_refusal(message: &str) -> bool {
-    ends_with_code(message, RefusalCode::SetupRequired)
+/// An error a task reports to Logic: an answer of the relay, or a failure
+/// on this device, which carries text alone.
+pub(crate) trait Reported: std::fmt::Display {
+    /// The failure as the bus carries it.
+    fn failure(&self) -> ApiFailure;
 }
 
-/// Whether `message` is the error of a request the relay refused for want of
-/// access to what it names.
-pub(crate) fn is_forbidden(message: &str) -> bool {
-    ends_with_code(message, RefusalCode::Forbidden)
+impl Reported for HttpError {
+    fn failure(&self) -> ApiFailure {
+        Self::failure(self)
+    }
 }
 
-/// Whether `message` is a rotation the relay refused because the members
-/// changed since it read them.
-pub(crate) fn is_members_changed(message: &str) -> bool {
-    ends_with_code(message, RefusalCode::MembersChanged)
+impl Reported for String {
+    fn failure(&self) -> ApiFailure {
+        ApiFailure::Local
+    }
 }
 
-/// Whether `message` is an invitation the relay refused because the key it
-/// wraps is no longer the document's.
-pub(crate) fn is_key_changed(message: &str) -> bool {
-    ends_with_code(message, RefusalCode::KeyChanged)
+/// A failure with the text of the step it failed at, such as a media leg's
+/// `upload-url: ...`. The failure stays the one the step met.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Failed {
+    /// The failure as the bus carries it.
+    pub failure: ApiFailure,
+    /// The text a log and a toast read.
+    pub message: String,
 }
 
-/// Whether `message` is a membership entry the relay refused because the log
-/// moved since the writer read it.
-pub(crate) fn is_log_moved(message: &str) -> bool {
-    ends_with_code(message, RefusalCode::LogMoved)
+impl Failed {
+    /// A failure on this device, with its text.
+    pub(crate) fn local(message: String) -> Self {
+        Self {
+            failure: ApiFailure::Local,
+            message,
+        }
+    }
 }
 
-/// Whether `message` is a request the relay refused with a bare 409: the state
-/// it names moved past what the request expects.
-pub(crate) fn is_conflict(message: &str) -> bool {
-    message.ends_with(": HTTP 409")
+impl HttpError {
+    /// This error as the failure of `step`, its text after the step's name.
+    pub(crate) fn at(&self, step: &str) -> Failed {
+        Failed {
+            failure: self.failure(),
+            message: format!("{step}: {self}"),
+        }
+    }
 }
 
-/// Closes the error of an answer that names a word of a closed set this build
-/// does not know.
-const UNKNOWN_WORD: &str = "UNKNOWN_WORD";
+impl std::fmt::Display for Failed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
 
-/// Whether `message` is an answer that names a word of a closed set this
-/// build does not know, which only a newer relay writes (`SYNC-152`).
-pub(crate) fn is_unknown_word(message: &str) -> bool {
-    message.ends_with(&format!(": {UNKNOWN_WORD}"))
+impl Reported for Failed {
+    fn failure(&self) -> ApiFailure {
+        self.failure
+    }
+}
+
+/// A scripted failure with text alone, as a fake transport raises it.
+#[cfg(test)]
+impl From<&str> for HttpError {
+    fn from(message: &str) -> Self {
+        Self::Local(message.to_owned())
+    }
+}
+
+#[cfg(test)]
+impl From<String> for HttpError {
+    fn from(message: String) -> Self {
+        Self::Local(message)
+    }
+}
+
+impl From<HttpError> for String {
+    fn from(error: HttpError) -> Self {
+        error.to_string()
+    }
 }
 
 /// The error a refused answer reads as, or `Ok` for a success. The relay's
 /// code is read from the body only on the statuses that may carry one.
-fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), String> {
+fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), HttpError> {
     if (200..300).contains(&resp.status) {
         return Ok(());
     }
@@ -457,8 +627,8 @@ fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), String> {
     } else {
         None
     };
-    Err(refusal(
-        request.method.as_str(),
+    Err(HttpError::refused(
+        request.method,
         &request.url,
         resp.status,
         code,
@@ -469,22 +639,21 @@ fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), String> {
 fn read_json<R: serde::de::DeserializeOwned>(
     request: &Outgoing,
     resp: &Incoming,
-) -> Result<R, String> {
+) -> Result<R, HttpError> {
     expect_ok(request, resp)?;
-    serde_json::from_slice(&resp.body).map_err(|e| {
-        let method = request.method.as_str();
+    serde_json::from_slice(&resp.body).map_err(|e| HttpError::Unreadable {
+        method: request.method,
+        url: request.url.clone(),
         // A word of a closed set this build does not know means the relay is
-        // newer. The code closes the message, as a refusal's does (`SYNC-152`).
-        if e.is_data() && e.to_string().starts_with("unknown variant `") {
-            return format!("{method} {}: parse error: {e}: {UNKNOWN_WORD}", request.url);
-        }
-        format!("{method} {}: parse error: {e}", request.url)
+        // newer (`SYNC-152`).
+        unknown_word: e.is_data() && e.to_string().starts_with("unknown variant `"),
+        reason: e.to_string(),
     })
 }
 
 /// Sends `request` once. A request that got no answer reads as its method
 /// and its URL, then the transport's reason.
-async fn exchange(transport: &impl Transport, request: &Outgoing) -> Result<Incoming, String> {
+async fn exchange(transport: &impl Transport, request: &Outgoing) -> Result<Incoming, HttpError> {
     use futures_util::future::{Either, select};
 
     // The deadline is raced here, not left to the transport alone, so a
@@ -495,7 +664,11 @@ async fn exchange(transport: &impl Transport, request: &Outgoing) -> Result<Inco
         Either::Left((answer, _)) => answer,
         Either::Right(((), _)) => Err(format!("no answer within {} ms", request.timeout_ms.0)),
     };
-    answer.map_err(|e| format!("{} {}: {e}", request.method.as_str(), request.url))
+    answer.map_err(|reason| HttpError::NoAnswer {
+        method: request.method,
+        url: request.url.clone(),
+        reason,
+    })
 }
 
 /// Sends `request` under the session's access token. A 401 renews the pair
@@ -505,7 +678,7 @@ async fn exchange_auth(
     transport: &impl Transport,
     auth: &AuthContext,
     request: &mut Outgoing,
-) -> Result<Incoming, String> {
+) -> Result<Incoming, HttpError> {
     request.bearer = Some(auth.access_token()?);
     let resp = exchange(transport, request).await?;
     if resp.status != 401 {
@@ -521,7 +694,7 @@ pub(crate) async fn get_json_opt_via<T: serde::de::DeserializeOwned>(
     transport: &impl Transport,
     url: &RelayUrl,
     auth: &AuthContext,
-) -> Result<Option<T>, String> {
+) -> Result<Option<T>, HttpError> {
     let mut request = Outgoing::new(Method::Get, url.as_str());
     let resp = exchange_auth(transport, auth, &mut request).await?;
     if resp.status == 404 {
@@ -535,7 +708,7 @@ pub(crate) async fn get_json_auth_via<T: serde::de::DeserializeOwned>(
     transport: &impl Transport,
     url: &RelayUrl,
     auth: &AuthContext,
-) -> Result<T, String> {
+) -> Result<T, HttpError> {
     let mut request = Outgoing::new(Method::Get, url.as_str());
     let resp = exchange_auth(transport, auth, &mut request).await?;
     read_json(&request, &resp)
@@ -546,7 +719,7 @@ pub(crate) async fn post_json_via<T: Serialize, R: serde::de::DeserializeOwned>(
     transport: &impl Transport,
     url: &str,
     body: &T,
-) -> Result<R, String> {
+) -> Result<R, HttpError> {
     let request = Outgoing::json(Method::Post, url, body)?;
     let resp = exchange(transport, &request).await?;
     read_json(&request, &resp)
@@ -558,7 +731,7 @@ pub(crate) async fn post_json_auth_via<T: Serialize, R: serde::de::DeserializeOw
     url: &RelayUrl,
     body: &T,
     auth: &AuthContext,
-) -> Result<R, String> {
+) -> Result<R, HttpError> {
     let mut request = Outgoing::json(Method::Post, url.as_str(), body)?;
     let resp = exchange_auth(transport, auth, &mut request).await?;
     read_json(&request, &resp)
@@ -572,7 +745,7 @@ pub(crate) async fn send_json_auth_via<T: Serialize>(
     url: &RelayUrl,
     body: &T,
     auth: &AuthContext,
-) -> Result<(), String> {
+) -> Result<(), HttpError> {
     let mut request = Outgoing::json(method, url.as_str(), body)?;
     let resp = exchange_auth(transport, auth, &mut request).await?;
     expect_ok(&request, &resp)
@@ -582,13 +755,13 @@ pub(crate) async fn send_json_auth_via<T: Serialize>(
 pub(crate) async fn get_json_opt_auth<T: serde::de::DeserializeOwned>(
     url: &RelayUrl,
     auth: AuthContext,
-) -> Result<Option<T>, String> {
+) -> Result<Option<T>, HttpError> {
     get_json_opt_via(&Fetch, url, &auth).await
 }
 
 /// HTTP GET to JSON deserialized response.
 #[allow(dead_code)]
-pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
+pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, HttpError> {
     let request = Outgoing::new(Method::Get, url);
     let resp = exchange(&Fetch, &request).await?;
     read_json(&request, &resp)
@@ -597,14 +770,14 @@ pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Resul
 pub(crate) async fn get_json_auth<T: serde::de::DeserializeOwned>(
     url: &RelayUrl,
     auth: AuthContext,
-) -> Result<T, String> {
+) -> Result<T, HttpError> {
     get_json_auth_via(&Fetch, url, &auth).await
 }
 
 pub(crate) async fn post_json<T: Serialize, R: serde::de::DeserializeOwned>(
     url: &str,
     body: &T,
-) -> Result<R, String> {
+) -> Result<R, HttpError> {
     post_json_via(&Fetch, url, body).await
 }
 
@@ -612,7 +785,7 @@ pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>
     url: &RelayUrl,
     body: &T,
     auth: AuthContext,
-) -> Result<R, String> {
+) -> Result<R, HttpError> {
     post_json_auth_via(&Fetch, url, body, &auth).await
 }
 
@@ -634,7 +807,7 @@ pub(crate) async fn download_snapshot(
     fetch_bytes(resp.download_url.expose()).await.ok()
 }
 
-pub(crate) async fn delete_auth(url: &RelayUrl, auth: AuthContext) -> Result<(), String> {
+pub(crate) async fn delete_auth(url: &RelayUrl, auth: AuthContext) -> Result<(), HttpError> {
     let mut request = Outgoing::new(Method::Delete, url.as_str());
     let resp = exchange_auth(&Fetch, &auth, &mut request).await?;
     expect_ok(&request, &resp)
@@ -642,7 +815,10 @@ pub(crate) async fn delete_auth(url: &RelayUrl, auth: AuthContext) -> Result<(),
 
 /// Sends an authenticated `DELETE` and answers the status the relay gave. Only
 /// a request that reached no answer is an error.
-pub(crate) async fn delete_status_auth(url: &RelayUrl, auth: AuthContext) -> Result<u16, String> {
+pub(crate) async fn delete_status_auth(
+    url: &RelayUrl,
+    auth: AuthContext,
+) -> Result<u16, HttpError> {
     let mut request = Outgoing::new(Method::Delete, url.as_str());
     exchange_auth(&Fetch, &auth, &mut request)
         .await
@@ -656,7 +832,7 @@ pub(crate) async fn delete_status_auth(url: &RelayUrl, auth: AuthContext) -> Res
 pub(crate) async fn put_sealed(
     url: &str,
     blob: &crate::pipeline::SealedBlob,
-) -> Result<(), String> {
+) -> Result<(), HttpError> {
     put_sealed_via(&Fetch, url, blob).await
 }
 
@@ -666,7 +842,7 @@ pub(crate) async fn put_sealed_via(
     transport: &impl Transport,
     url: &str,
     blob: &crate::pipeline::SealedBlob,
-) -> Result<(), String> {
+) -> Result<(), HttpError> {
     let request = Outgoing {
         body: Some(("application/octet-stream", blob.as_bytes().to_vec())),
         ..Outgoing::new(Method::Put, url)
@@ -679,7 +855,7 @@ pub(crate) async fn patch_json_auth<T: Serialize>(
     url: &RelayUrl,
     body: &T,
     auth: AuthContext,
-) -> Result<(), String> {
+) -> Result<(), HttpError> {
     send_json_auth_via(&Fetch, Method::Patch, url, body, &auth).await
 }
 
@@ -689,7 +865,7 @@ pub(crate) async fn delete_json_auth<T: Serialize>(
     url: &RelayUrl,
     body: &T,
     auth: AuthContext,
-) -> Result<(), String> {
+) -> Result<(), HttpError> {
     send_json_auth_via(&Fetch, Method::Delete, url, body, &auth).await
 }
 
@@ -698,7 +874,7 @@ pub(crate) async fn put_json_auth<T: Serialize>(
     url: &RelayUrl,
     body: &T,
     auth: AuthContext,
-) -> Result<(), String> {
+) -> Result<(), HttpError> {
     send_json_auth_via(&Fetch, Method::Put, url, body, &auth).await
 }
 
@@ -707,11 +883,11 @@ pub(crate) async fn post_json_auth_ok<T: Serialize>(
     url: &RelayUrl,
     body: &T,
     auth: AuthContext,
-) -> Result<(), String> {
+) -> Result<(), HttpError> {
     send_json_auth_via(&Fetch, Method::Post, url, body, &auth).await
 }
 
-pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
+pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, HttpError> {
     let request = Outgoing::new(Method::Get, url);
     let resp = exchange(&Fetch, &request).await?;
     expect_ok(&request, &resp)?;
@@ -1515,11 +1691,14 @@ pub(crate) struct WriteAnswer {
 impl WriteAnswer {
     /// Whether the relay answered the outcome of the write it was asked.
     /// Another word of the set answers some other write.
-    pub(crate) fn expect(self, asked: ambre_core::WriteStatus) -> Result<(), String> {
+    pub(crate) fn expect(self, asked: ambre_core::WriteStatus) -> Result<(), HttpError> {
         if self.status == asked {
             Ok(())
         } else {
-            Err(format!("answered {:?}, not {asked:?}", self.status))
+            Err(HttpError::Local(format!(
+                "answered {:?}, not {asked:?}",
+                self.status
+            )))
         }
     }
 }
@@ -1689,6 +1868,44 @@ mod tests {
     use super::scripted::{Scripted, renewed, session};
     use super::*;
 
+    /// The refusal of a `GET` or a `POST`, as the relay's answer builds it.
+    fn refusal(method: &str, url: &str, status: u16, code: Option<RefusalCode>) -> HttpError {
+        let method = if method == "GET" {
+            Method::Get
+        } else {
+            Method::Post
+        };
+        HttpError::refused(method, url, status, code)
+    }
+
+    fn is_setup_refusal(error: &HttpError) -> bool {
+        error.is(RefusalCode::SetupRequired)
+    }
+
+    fn is_forbidden(error: &HttpError) -> bool {
+        error.is(RefusalCode::Forbidden)
+    }
+
+    fn is_members_changed(error: &HttpError) -> bool {
+        error.is(RefusalCode::MembersChanged)
+    }
+
+    fn is_key_changed(error: &HttpError) -> bool {
+        error.is(RefusalCode::KeyChanged)
+    }
+
+    fn is_log_moved(error: &HttpError) -> bool {
+        error.is(RefusalCode::LogMoved)
+    }
+
+    fn is_conflict(error: &HttpError) -> bool {
+        error.is_conflict()
+    }
+
+    fn is_unknown_word(error: &HttpError) -> bool {
+        error.failure() == ApiFailure::Unreadable { unknown_word: true }
+    }
+
     /// The `Authorization` value a request carried, if any.
     fn bearer_of(request: &Outgoing) -> Option<String> {
         request
@@ -1700,6 +1917,30 @@ mod tests {
     /// A route the token travels to is built from the session's own API
     /// root, so it names the relay and nothing else. A presigned storage link
     /// is a `&str`, and no `*_auth` helper takes one.
+    /// A refusal keeps the relay's status and code as values, and reads as the
+    /// text it read before. A code the status does not carry is dropped.
+    #[test]
+    fn a_refusal_carries_its_status_and_code() {
+        let url = "https://relay.example/api/documents/d/share";
+        let changed = HttpError::refused(Method::Post, url, 409, Some(RefusalCode::KeyChanged));
+        assert_eq!(
+            changed.failure(),
+            ApiFailure::Relay {
+                status: HttpStatus(409),
+                code: Some(RefusalCode::KeyChanged),
+            }
+        );
+        assert_eq!(changed.to_string(), format!("POST {url}: KEY_CHANGED"));
+        let plain = HttpError::refused(Method::Post, url, 500, Some(RefusalCode::KeyChanged));
+        assert_eq!(plain.code(), None);
+        assert_eq!(plain.failure().status(), Some(HttpStatus(500)));
+        assert_eq!(plain.to_string(), format!("POST {url}: HTTP 500"));
+        assert_eq!(
+            HttpError::Local("no token".into()).failure(),
+            ApiFailure::Local
+        );
+    }
+
     #[tokio::test]
     async fn a_relay_url_is_built_from_the_api_root() {
         let auth = session("access-1", "refresh-1");
@@ -1825,7 +2066,7 @@ mod tests {
         let err = get_json_auth_via::<serde_json::Value>(&refused_twice, url, &auth)
             .await
             .unwrap_err();
-        assert_eq!(err, format!("GET {url}: HTTP 401"));
+        assert_eq!(err.to_string(), format!("GET {url}: HTTP 401"));
         assert_eq!(refused_twice.sent.borrow().len(), 3);
 
         let renewal_refused = Scripted::new([
@@ -1836,7 +2077,10 @@ mod tests {
         let err = get_json_auth_via::<serde_json::Value>(&renewal_refused, url, &auth)
             .await
             .unwrap_err();
-        assert!(err.ends_with("/api/auth/refresh: HTTP 401"), "{err}");
+        assert!(
+            err.to_string().ends_with("/api/auth/refresh: HTTP 401"),
+            "{err}"
+        );
         assert_eq!(
             renewal_refused.sent.borrow().len(),
             2,
@@ -1863,7 +2107,7 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(
-            error,
+            error.to_string(),
             format!("POST {url}: no answer within {} ms", REQUEST_TIMEOUT_MS.0)
         );
         assert_eq!(transport.calls(), [(Method::Post, url.to_string())]);
@@ -1894,11 +2138,14 @@ mod tests {
 
         assert!(is_members_changed(&send().await.unwrap_err()));
         assert!(is_setup_refusal(&send().await.unwrap_err()));
-        assert_eq!(send().await.unwrap_err(), format!("PATCH {url}: HTTP 500"));
+        assert_eq!(
+            send().await.unwrap_err().to_string(),
+            format!("PATCH {url}: HTTP 500")
+        );
         let absent = get_json_opt_via::<serde_json::Value>(&transport, url, &auth).await;
         assert_eq!(absent, Ok(None));
         assert_eq!(
-            send().await.unwrap_err(),
+            send().await.unwrap_err().to_string(),
             format!("PATCH {url}: network down")
         );
         assert_eq!(transport.calls().len(), 5, "one request per answer");
@@ -1919,7 +2166,7 @@ mod tests {
         let confirmed = serde_json::json!({ "status": "confirmed", "content_hash": "ab" });
         assert_eq!(read(confirmed.clone()).expect(Confirmed), Ok(()));
         let error = read(confirmed).expect(Revoked).unwrap_err();
-        assert_eq!(error, "answered Confirmed, not Revoked");
+        assert_eq!(error.to_string(), "answered Confirmed, not Revoked");
     }
 
     /// Holds `SYNC-152`: an answer naming a word this build does not know
@@ -2088,8 +2335,14 @@ mod tests {
         let send = || send_json_auth_via(&transport, Method::Post, url, &body, &auth);
 
         assert!(is_log_moved(&send().await.unwrap_err()));
-        assert_eq!(send().await.unwrap_err(), format!("POST {url}: HTTP 409"));
-        assert_eq!(send().await.unwrap_err(), format!("POST {url}: HTTP 409"));
+        assert_eq!(
+            send().await.unwrap_err().to_string(),
+            format!("POST {url}: HTTP 409")
+        );
+        assert_eq!(
+            send().await.unwrap_err().to_string(),
+            format!("POST {url}: HTTP 409")
+        );
     }
 
     /// An unlock finding no master material reads as a setup owed, not as a

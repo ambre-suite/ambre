@@ -103,8 +103,8 @@ impl SyncState {
         let Some(doc_key) = doc_key else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: Some(id),
-                request: "UploadMedia".into(),
-                code: 404,
+                request: ApiRequest::UploadMedia,
+                failure: ApiFailure::Local,
                 message: "Document not open".into(),
             });
             return;
@@ -124,8 +124,8 @@ impl SyncState {
         let Some(signing_key) = self.signing_key.clone() else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: Some(id),
-                request: "UploadMedia".into(),
-                code: 401,
+                request: ApiRequest::UploadMedia,
+                failure: ApiFailure::Local,
                 message: "Session locked".into(),
             });
             return;
@@ -149,7 +149,11 @@ impl SyncState {
     /// Resumes the uploads that waited for the document's lazy creation
     /// (`SYNC-145`). A creation that failed ends each of them with an error,
     /// so no request waits for good (`SYNC-146`).
-    pub(crate) fn flush_pending_uploads(&mut self, document_id: DocumentId, failure: Option<&str>) {
+    pub(crate) fn flush_pending_uploads(
+        &mut self,
+        document_id: DocumentId,
+        failure: Option<&http::Failed>,
+    ) {
         let pending = self
             .documents
             .get_mut(&document_id)
@@ -158,11 +162,11 @@ impl SyncState {
         for (id, data) in pending {
             match failure {
                 None => self.handle_upload_media(id, document_id, data),
-                Some(message) => self.send_to_logic(LogicEvent::ApiError {
+                Some(failed) => self.send_to_logic(LogicEvent::ApiError {
                     id: Some(id),
-                    request: "UploadMedia".into(),
-                    code: 502,
-                    message: format!("the document was not created: {message}"),
+                    request: ApiRequest::UploadMedia,
+                    failure: failed.failure,
+                    message: format!("the document was not created: {failed}"),
                 }),
             }
         }
@@ -204,8 +208,8 @@ impl SyncState {
         let Some(keyring) = keyring else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: Some(id),
-                request: "DownloadMedia".into(),
-                code: 404,
+                request: ApiRequest::DownloadMedia,
+                failure: ApiFailure::Local,
                 message: "Document not open".into(),
             });
             return;
@@ -258,13 +262,17 @@ pub(crate) trait MediaHttp {
         &self,
         url: &http::RelayUrl,
         body: &B,
-    ) -> Result<R, String>;
+    ) -> Result<R, http::HttpError>;
     /// A sealed blob to a presigned object-storage link.
-    async fn put_sealed(&self, url: &str, blob: &pipeline::SealedBlob) -> Result<(), String>;
+    async fn put_sealed(
+        &self,
+        url: &str,
+        blob: &pipeline::SealedBlob,
+    ) -> Result<(), http::HttpError>;
     /// A blob from a presigned object-storage link.
-    async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, String>;
+    async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, http::HttpError>;
     /// An authenticated `DELETE` to the relay, answering its status.
-    async fn delete(&self, url: &http::RelayUrl) -> Result<u16, String>;
+    async fn delete(&self, url: &http::RelayUrl) -> Result<u16, http::HttpError>;
 }
 
 impl MediaHttp for GlooHttp {
@@ -272,27 +280,31 @@ impl MediaHttp for GlooHttp {
         &self,
         url: &http::RelayUrl,
         body: &B,
-    ) -> Result<R, String> {
+    ) -> Result<R, http::HttpError> {
         http::post_json_auth::<B, R>(url, body, self.auth.clone()).await
     }
-    async fn put_sealed(&self, url: &str, blob: &pipeline::SealedBlob) -> Result<(), String> {
+    async fn put_sealed(
+        &self,
+        url: &str,
+        blob: &pipeline::SealedBlob,
+    ) -> Result<(), http::HttpError> {
         http::put_sealed(url, blob).await
     }
-    async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, String> {
+    async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, http::HttpError> {
         http::fetch_bytes(url).await
     }
-    async fn delete(&self, url: &http::RelayUrl) -> Result<u16, String> {
+    async fn delete(&self, url: &http::RelayUrl) -> Result<u16, http::HttpError> {
         http::delete_status_auth(url, self.auth.clone()).await
     }
 }
 
 /// Reports a failed media leg to the caller that asked for it.
-fn report(logic_tx: &LogicSink, id: RequestId, request: &str, message: String) {
+fn report(logic_tx: &LogicSink, id: RequestId, request: ApiRequest, error: impl http::Reported) {
     let _ = logic_tx.send(LogicEvent::ApiError {
         id: Some(id),
-        request: request.into(),
-        code: 500,
-        message,
+        request,
+        failure: error.failure(),
+        message: error.to_string(),
     });
 }
 
@@ -328,7 +340,7 @@ async fn upload_media(
     let content_hash = ambre_core::ContentHash(hex::encode(address));
     let outcome = match seal_blob(&data, document_id, &address, &doc_key, &signing_key) {
         Ok(blob) => upload_leg(http, base, &content_hash, &blob).await,
-        Err(e) => Err(format!("seal: {e}")),
+        Err(e) => Err(http::Failed::local(format!("seal: {e}"))),
     };
     match outcome {
         Ok(()) => {
@@ -338,7 +350,7 @@ async fn upload_media(
                 content_hash,
             });
         }
-        Err(message) => report(logic_tx, id, "UploadMedia", message),
+        Err(message) => report(logic_tx, id, ApiRequest::UploadMedia, message),
     }
 }
 
@@ -363,7 +375,7 @@ async fn download_media(
                 data,
             });
         }
-        Err(message) => report(logic_tx, id, "DownloadMedia", message),
+        Err(message) => report(logic_tx, id, ApiRequest::DownloadMedia, message),
     }
 }
 
@@ -392,8 +404,17 @@ async fn erase_media(
                 content_hash,
             });
         }
-        Ok(status) => report(logic_tx, id, "EraseMedia", format!("erase: {status}")),
-        Err(message) => report(logic_tx, id, "EraseMedia", message),
+        Ok(status) => {
+            let refused = http::Failed {
+                failure: ApiFailure::Relay {
+                    status: ambre_core::HttpStatus(status),
+                    code: None,
+                },
+                message: format!("erase: {status}"),
+            };
+            report(logic_tx, id, ApiRequest::EraseMedia, refused);
+        }
+        Err(message) => report(logic_tx, id, ApiRequest::EraseMedia, message),
     }
 }
 
@@ -404,7 +425,7 @@ async fn upload_leg(
     base: &http::RelayUrl,
     content_hash: &ambre_core::ContentHash,
     blob: &pipeline::SealedBlob,
-) -> Result<(), String> {
+) -> Result<(), http::Failed> {
     let size = blob.len() as u64;
     let link: http::UploadUrlResponse = http
         .post_json(
@@ -415,11 +436,11 @@ async fn upload_leg(
             },
         )
         .await
-        .map_err(|e| format!("upload-url: {e}"))?;
+        .map_err(|e| e.at("upload-url"))?;
     // The presigned PUT goes straight to object storage, not to the relay.
     http.put_sealed(link.upload_url.expose(), blob)
         .await
-        .map_err(|e| format!("S3 PUT: {e}"))?;
+        .map_err(|e| e.at("S3 PUT"))?;
     http.post_json::<_, http::WriteAnswer>(
         &base.join("/media"),
         &http::ConfirmUploadRequest {
@@ -429,7 +450,7 @@ async fn upload_leg(
     )
     .await
     .and_then(|answer| answer.expect(ambre_core::WriteStatus::Confirmed))
-    .map_err(|e| format!("confirm: {e}"))
+    .map_err(|e| e.at("confirm"))
 }
 
 /// Asks for a link, fetches the blob, then opens it whole (`SYNC-055`). A
@@ -439,7 +460,7 @@ async fn download_leg(
     base: &http::RelayUrl,
     content_hash: &ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, http::Failed> {
     let link: http::DownloadUrlResponse = http
         .post_json(
             &base.join("/media/download-url"),
@@ -448,12 +469,13 @@ async fn download_leg(
             },
         )
         .await
-        .map_err(|e| format!("download-url: {e}"))?;
+        .map_err(|e| e.at("download-url"))?;
     let blob = http
         .fetch_bytes(link.download_url.expose())
         .await
-        .map_err(|e| format!("S3 GET: {e}"))?;
-    open_blob_named(&blob, content_hash, keyring).map_err(|e| format!("Open: {e}"))
+        .map_err(|e| e.at("S3 GET"))?;
+    open_blob_named(&blob, content_hash, keyring)
+        .map_err(|e| http::Failed::local(format!("Open: {e}")))
 }
 
 #[cfg(test)]
@@ -504,9 +526,10 @@ mod tests {
                         evt: RestEvent::MediaUploaded { .. },
                         ..
                     } => Some(Ok(())),
-                    LogicEvent::ApiError { request, .. } if request == "UploadMedia" => {
-                        Some(Err(()))
-                    }
+                    LogicEvent::ApiError {
+                        request: ApiRequest::UploadMedia,
+                        ..
+                    } => Some(Err(())),
                     _ => None,
                 })
                 .collect::<Vec<_>>()
@@ -527,7 +550,7 @@ mod tests {
             } else {
                 SyncEvent::DocumentCreateFailed {
                     document_id,
-                    message: "refused".into(),
+                    failure: http::Failed::local("refused".into()),
                 }
             };
             state.handle_sync_event(event);
@@ -554,10 +577,10 @@ mod tests {
                 steps: Default::default(),
             }
         }
-        fn step(&self, name: &'static str) -> Result<(), String> {
+        fn step(&self, name: &'static str) -> Result<(), http::HttpError> {
             self.steps.borrow_mut().push(name);
             if name == self.fail {
-                return Err(format!("{name} refused"));
+                return Err(format!("{name} refused").into());
             }
             Ok(())
         }
@@ -577,7 +600,7 @@ mod tests {
             &self,
             url: &crate::http::RelayUrl,
             _body: &B,
-        ) -> Result<R, String> {
+        ) -> Result<R, http::HttpError> {
             let name = match url.as_str().rsplit('/').next() {
                 Some("upload-url") => "link",
                 Some("download-url") => "link",
@@ -587,16 +610,20 @@ mod tests {
             let answer = serde_json::json!({
                 "upload_url": "put", "download_url": "get", "s3_key": "k", "status": "confirmed",
             });
-            serde_json::from_value(answer).map_err(|e| e.to_string())
+            serde_json::from_value(answer).map_err(|e| http::HttpError::from(e.to_string()))
         }
-        async fn put_sealed(&self, _url: &str, _blob: &pipeline::SealedBlob) -> Result<(), String> {
+        async fn put_sealed(
+            &self,
+            _url: &str,
+            _blob: &pipeline::SealedBlob,
+        ) -> Result<(), http::HttpError> {
             self.step("put")
         }
-        async fn fetch_bytes(&self, _url: &str) -> Result<Vec<u8>, String> {
+        async fn fetch_bytes(&self, _url: &str) -> Result<Vec<u8>, http::HttpError> {
             self.step("fetch")?;
             Ok(self.served.clone())
         }
-        async fn delete(&self, url: &crate::http::RelayUrl) -> Result<u16, String> {
+        async fn delete(&self, url: &crate::http::RelayUrl) -> Result<u16, http::HttpError> {
             assert!(url.as_str().ends_with("/media/hash"), "{url}");
             self.step("delete")?;
             Ok(self.erase_status)
@@ -646,7 +673,7 @@ mod tests {
         let errors = logic
             .try_iter()
             .filter_map(|event| match event {
-                LogicEvent::ApiError { id, request, .. } => Some((id, request)),
+                LogicEvent::ApiError { id, request, .. } => Some((id, request.to_string())),
                 _ => None,
             })
             .collect();

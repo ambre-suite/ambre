@@ -51,7 +51,8 @@ pub use app::murmure::{
 };
 pub use command::SyncCommand;
 pub use event::{
-    FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, SignedDelta, SnapshotPurpose, SnapshotVerdict,
+    ApiRequest, FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, SignedDelta, SnapshotPurpose,
+    SnapshotVerdict,
 };
 // Trame data plane (command + event + value types) lives under `app::trame`;
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
@@ -201,9 +202,10 @@ pub enum CopyOutcome {
 }
 // Re-export core types so that users don't need to depend on ambre-core directly.
 pub use ambre_core::{
-    CategoryId, ChannelDocumentKind, ChannelId, CommentId, DocType, DocumentId, Email, FootnoteId,
-    KeyFingerprint, LeaseId, MeetingId, MessageId, MetaId, Millis, PageTime, PublicKey, ReplyId,
-    Role, SegmentId, Seq, SnapshotId, SpaceId, SuggestionId, UserId, Uuid,
+    ApiFailure, CategoryId, ChannelDocumentKind, ChannelId, CommentId, DocType, DocumentId, Email,
+    FootnoteId, HttpStatus, KeyFingerprint, LeaseId, MeetingId, MessageId, MetaId, Millis,
+    PageTime, PublicKey, RefusalCode, ReplyId, Role, SegmentId, Seq, SnapshotId, SpaceId,
+    SuggestionId, UserId, Uuid,
 };
 
 #[cfg(test)]
