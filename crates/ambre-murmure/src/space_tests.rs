@@ -172,6 +172,44 @@ fn an_unset_topic_and_category_are_absent_keys() {
     assert_eq!((entry.topic, entry.category), (None, None));
 }
 
+/// Holds `MURMURE-018`: a public channel with no name lists with no `name`
+/// key, never an empty string.
+#[test]
+fn an_unnamed_channel_lists_with_no_name_key() {
+    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW)
+        .expect("create")
+        .identify();
+    let unnamed =
+        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    space
+        .list_channel(
+            &unnamed,
+            &Listing {
+                topic: None,
+                category: None,
+                position: 0,
+                key: sealed(1),
+            },
+        )
+        .expect("list");
+    let doc = LoroDoc::new();
+    doc.import(&space.export_all().expect("export"))
+        .expect("import");
+    let entry = doc
+        .get_map(crate::schema::CATALOGUE)
+        .get_deep_value()
+        .into_map()
+        .expect("a map");
+    let entry = entry
+        .get(&unnamed.channel_id().to_string())
+        .cloned()
+        .and_then(|value| value.into_map().ok())
+        .expect("one entry");
+    assert!(!entry.contains_key(crate::schema::ENTRY_NAME), "{entry:?}");
+    let [listed] = space.catalogue().try_into().expect("one entry");
+    assert_eq!(listed.name, "");
+}
+
 #[test]
 fn a_channel_the_catalogue_does_not_list_has_no_key() {
     let space = SpaceState::create(SpaceId::new(), "Acme", NOW).expect("create");

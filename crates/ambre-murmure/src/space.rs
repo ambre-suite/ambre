@@ -227,7 +227,10 @@ impl SpaceState {
             .doc
             .get_map(CATALOGUE)
             .ensure_mergeable_map(&channel_id.to_string())?;
-        entry.insert(ENTRY_NAME, channel.name().unwrap_or_default())?;
+        match channel.name() {
+            Some(name) => entry.insert(ENTRY_NAME, name)?,
+            None => clear(&entry, ENTRY_NAME)?,
+        }
         match listing.topic {
             Some(topic) => entry.insert(ENTRY_TOPIC, topic.as_str())?,
             None => clear(&entry, ENTRY_TOPIC)?,

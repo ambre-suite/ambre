@@ -8417,6 +8417,7 @@
   {"edge": "verified-by", "from": "MURMURE-017", "to": "ambre_murmure::attachment_tests::a_file_with_no_name_writes_nothing"},
   {"edge": "cites-section", "from": "MURMURE-018", "section": "3", "to": "5-Murmure/ambre-spec-murmure-schema.md"},
   {"edge": "verified-by", "from": "MURMURE-018", "to": "ambre_murmure::channel_tests::an_unset_property_is_an_absent_key"},
+  {"edge": "verified-by", "from": "MURMURE-018", "to": "ambre_murmure::space_tests::an_unnamed_channel_lists_with_no_name_key"},
   {"edge": "cites-section", "from": "MURMURE-019", "section": "7", "to": "5-Murmure/ambre-spec-murmure-schema.md"},
   {"edge": "cites-document", "from": "MURMURE-019", "to": "ambre-spec-schema-version.md"},
   {"edge": "verified-by", "from": "MURMURE-019", "to": "ambre_murmure::channel_tests::a_document_a_newer_client_wrote_is_refused_whole"},
