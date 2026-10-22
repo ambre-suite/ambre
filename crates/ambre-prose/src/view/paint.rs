@@ -561,8 +561,8 @@ impl ProseUiState {
             .map(|cursor| {
                 let laid = self.to_laid(id, cursor.offset);
                 (
-                    data.line_of(laid, self.caret_upstream),
-                    data.caret_box_at(laid, self.caret_upstream),
+                    data.line_of(laid, self.caret_affinity),
+                    data.caret_box_at(laid, self.caret_affinity),
                 )
             })
     }

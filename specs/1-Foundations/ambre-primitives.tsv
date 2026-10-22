@@ -3373,35 +3373,24 @@ ambre-prose | src/input.rs | crate::input | ProseInput::Drag.y | field | f32	deb
 ambre-prose | src/input.rs | crate::input | ProseInput::Drop.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | ProseInput::Drop.x | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseInput::Drop.y | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseInput::Key.ctrl | field | bool	debt	finding: keyboard modifiers as separate bools (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseInput::Key.shift | field | bool	debt	finding: keyboard modifiers as separate bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.html | field | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.rich | field | Option<Vec<u8>>	math	count, size or local index
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/input.rs | crate::input | ProseInput::Press.follow | field | bool	debt	finding: keyboard modifiers as separate bools (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseInput::Press.shift | field | bool	debt	finding: keyboard modifiers as separate bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseInput::Press.x | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseInput::Press.y | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseInput::SlashPick.0 | field | usize	newtype-inner	newtype inner field
 ambre-prose | src/input.rs | crate::input | ProseInput::Text.0 | field | String	newtype-inner	newtype inner field
-ambre-prose | src/input.rs | crate::input | ProseKey::from_name(ctrl) | param | bool	debt	finding: keyboard modifiers as separate bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseKey::from_name(name) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | ProseUiState::act() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::copy() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/input.rs | crate::input | ProseUiState::delete() | ret | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseUiState::delete(forward) | param | bool	debt	finding: mode-selecting bools (confirmed)
+ambre-prose | src/input.rs | crate::input | ProseUiState::delete() | ret | bool	generic	consumed answer
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseUiState::grapheme_beside(forward) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::handle_input() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::key() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/input.rs | crate::input | ProseUiState::key(ctrl) | param | bool	debt	finding: keyboard modifiers as separate bools (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseUiState::key(shift) | param | bool	debt	finding: keyboard modifiers as separate bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::menu_key() | ret | Option<bool>	generic	independent flag or predicate
-ambre-prose | src/input.rs | crate::input | ProseUiState::menu_key(ctrl) | param | bool	debt	finding: keyboard modifiers as separate bools (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseUiState::menu_key(shift) | param | bool	debt	finding: keyboard modifiers as separate bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::paste() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::paste(html) | param | Option<&str>	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | ProseUiState::paste(rich) | param | Option<&[u8]>	math	count, size or local index
@@ -3409,7 +3398,6 @@ ambre-prose | src/input.rs | crate::input | ProseUiState::paste(text) | param | 
 ambre-prose | src/input.rs | crate::input | ProseUiState::pick() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::pick(index) | param | usize	math	count, size or local index
 ambre-prose | src/input.rs | crate::input | ProseUiState::press() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/input.rs | crate::input | ProseUiState::press(shift) | param | bool	debt	finding: keyboard modifiers as separate bools (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::press(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::press(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::replay() | ret | bool	generic	independent flag or predicate
@@ -3734,12 +3722,9 @@ ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.height | fi
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.indent_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.width_px | field | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::at_line() | ret | (RunOffset,bool)	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::at_line(line) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::at_line(x) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::caret_box_at(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::cursor() | ret | (usize,Cursor)	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::cursor(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::full_width() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::height() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::indent_px() | ret | f32	math	layout geometry local to algorithm
@@ -3748,11 +3733,7 @@ ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line() | r
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line(index) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_at_byte() | ret | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_count() | ret | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_edge() | ret | (RunOffset,bool)	debt	finding: caret affinity as a bool (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_edge(end) | param | bool	debt	finding: caret affinity as a bool (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_edge(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_of() | ret | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_of(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_start(line) | param | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_tops() | ret | Vec<f32>	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_under(index) | param | usize	math	count, size or local index
@@ -4227,7 +4208,6 @@ ambre-prose | src/ui.rs | crate::ui | DraftEdit.confirmed | field | bool	generic
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.asked_pages | field | Option<(u32,u32)>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.awaiting_block | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.band_page | field | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.caret_upstream | field | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.changed | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.compose_shape | field | Option<(String,ShapedRun)>	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.composing | field | String	free-text	text content / label / parser input
@@ -4303,29 +4283,17 @@ ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::is_empty() | re
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::len() | ret | usize	math	count, size or local index
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::with_capacity(capacity) | param | usize	math	count, size or local index
 ambre-prose | src/view/cache.rs | crate::view::cache | RunDrawState.glyph_runs | field | Vec<(usize,usize,f32)>	math	layout geometry local to algorithm
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::apply_caret(extend) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::apply_caret(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::apply_caret(x_goal) | param | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::band_caret_span() | ret | Option<(f32,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::caret_span() | ret | Option<(f32,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::end_drag() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::flow_span() | ret | Option<(f32,f32)>	math	layout geometry local to algorithm
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::flow_span(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::joins() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step() | ret | (BlockId,RunOffset,bool)	debt	finding: caret affinity as a bool (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step(down) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step(upstream) | param | bool	debt	finding: caret affinity as a bool (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step(x_goal) | param | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::move_cursor(extend) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::neighbour(after) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::place_at(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::place_at(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::reveal_span((top,bottom)) | param | (f32,f32)	math	layout geometry local to algorithm
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::select_around(paragraph) | param | bool	debt	bug: laid and document offset spaces confused at the hit-test edge (confirmed for hit_test, suspected for select_around)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::shown_text() | ret | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::step() | ret | (BlockId,RunOffset,bool)	debt	finding: caret affinity as a bool (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::step(forward) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::step(word) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::tick_autoscroll() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::update_drag(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::update_drag(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
@@ -4451,7 +4419,6 @@ ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState::handle_x() | 
 ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState::points_at() | ret | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState::points_at(x) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/slash.rs | crate::view::slash | ProseUiState::opens_menu() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/slash.rs | crate::view::slash | ProseUiState::step_menu(down) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | ProseUiState::under() | ret | Option<(f32,f32)>	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashCommand::Heading.0 | field | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashItem.label | field | &'static str	free-text	text content / label / parser input

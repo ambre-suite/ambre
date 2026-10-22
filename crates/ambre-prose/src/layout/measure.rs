@@ -827,7 +827,14 @@ mod tests {
             .collect();
         let carets = (0..=data.len().get())
             .map(|offset| {
-                let caret = data.caret_box_at(RunOffset::new(offset), offset % 2 == 0);
+                let caret = data.caret_box_at(
+                    RunOffset::new(offset),
+                    if offset % 2 == 0 {
+                        crate::layout::run::Affinity::Upstream
+                    } else {
+                        crate::layout::run::Affinity::Downstream
+                    },
+                );
                 let back =
                     data.offset_at(caret.x0 as f32 + 0.1, ((caret.y0 + caret.y1) / 2.0) as f32);
                 (offset, rounded(caret), back.get())

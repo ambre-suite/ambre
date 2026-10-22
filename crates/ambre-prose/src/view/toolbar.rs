@@ -141,7 +141,7 @@ impl ProseUiState {
             Some(part) => (part.x0 as f32, part.x1 as f32, part.y0 as f32),
             // The selection starts at the end of its block: the caret's box.
             None => {
-                let caret = run.caret_box_at(from, false);
+                let caret = run.caret_box_at(from, crate::layout::run::Affinity::Downstream);
                 (caret.x0 as f32, caret.x0 as f32, caret.y0 as f32)
             }
         };

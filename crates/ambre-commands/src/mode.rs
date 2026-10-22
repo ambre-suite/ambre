@@ -7,6 +7,8 @@
 // these, so they sit in the leaf that both already depend on.
 // ============================================================================
 
+use crate::Modifiers;
+
 /// What a clipboard write does to the selection it copies.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum ClipboardWrite {
@@ -25,4 +27,22 @@ pub enum PasteForm {
     Rich,
     /// The plain text alone: the formatting is dropped.
     Plain,
+}
+
+/// What a caret move does to the selection anchor.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum SelectionMode {
+    /// The anchor follows the caret, so the selection collapses.
+    #[default]
+    Move,
+    /// The anchor stays, so the selection grows or shrinks.
+    Extend,
+}
+
+impl SelectionMode {
+    /// The mode a chord picks: Shift extends the selection.
+    #[must_use]
+    pub const fn from_mods(mods: Modifiers) -> Self {
+        if mods.shift { Self::Extend } else { Self::Move }
+    }
 }

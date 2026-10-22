@@ -8,11 +8,13 @@
 
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset, DocSpan};
-use ambre_commands::ClipboardWrite;
+use ambre_commands::{ClipboardWrite, Modifiers, SelectionMode};
+use ambre_core::StepDirection;
 
 use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
+use crate::layout::run::Affinity;
 use crate::ui::{ProseUiState, SendResult};
-use crate::view::caret::{Direction, Spot};
+use crate::view::caret::{Direction, SelectUnit, Spot};
 
 /// Two presses closer than this in time, and in place, count as one gesture.
 pub const MULTI_PRESS_MS: f64 = 500.0;
@@ -49,10 +51,11 @@ pub enum ProseKey {
 }
 
 impl ProseKey {
-    /// The key a browser key name stands for, `ctrl` holding the command key.
+    /// The key a browser key name stands for under the chord's modifiers.
     /// `None` for a key the view leaves to the host.
     #[must_use]
-    pub fn from_name(name: &str, ctrl: bool) -> Option<Self> {
+    pub fn from_name(name: &str, mods: Modifiers) -> Option<Self> {
+        let ctrl = mods.primary;
         Some(match name {
             "ArrowLeft" => Self::Left,
             "ArrowRight" => Self::Right,
@@ -79,18 +82,16 @@ impl ProseKey {
 pub enum ProseInput {
     Key {
         key: ProseKey,
-        shift: bool,
-        ctrl: bool,
+        mods: Modifiers,
     },
     /// Committed text: typing, dictation, a plain paste.
     Text(String),
     Press {
         x: f32,
         y: f32,
-        shift: bool,
-        /// The platform's modifier is held: `Ctrl`, or `Cmd` on a Mac. A press
-        /// with it on a link follows the link (`PROSE-UI-071`).
-        follow: bool,
+        /// The modifiers held. A press with the primary one on a link follows
+        /// the link (`PROSE-UI-071`); one with Shift extends the selection.
+        mods: Modifiers,
         now_ms: ambre_core::PageTime,
     },
     Drag {
@@ -327,11 +328,11 @@ impl ProseUiState {
         }
         match input {
             ProseInput::Text(text) => self.type_into_menu(text, send),
-            ProseInput::Key { key, shift, ctrl } => {
-                if let Some(consumed) = self.menu_key(*key, *shift, *ctrl, send) {
+            ProseInput::Key { key, mods } => {
+                if let Some(consumed) = self.menu_key(*key, *mods, send) {
                     return consumed;
                 }
-                self.key(*key, *shift, *ctrl, send)
+                self.key(*key, *mods, send)
             }
             ProseInput::SlashPick(index) => self.pick(*index, send),
             ProseInput::Compose(text) => {
@@ -348,14 +349,9 @@ impl ProseUiState {
                 self.type_into_menu(text, send);
                 true
             }
-            ProseInput::Press {
-                x,
-                y,
-                shift,
-                follow,
-                now_ms,
-            } => {
-                let target = follow
+            ProseInput::Press { x, y, mods, now_ms } => {
+                let target = mods
+                    .primary
                     .then(|| self.link_at(*x, *y).map(|link| link.url.clone()))
                     .flatten();
                 match target {
@@ -372,7 +368,7 @@ impl ProseUiState {
                     None => {
                         // A press on the canvas is outside the menu.
                         self.slash = None;
-                        self.press(*x, *y, *shift, *now_ms, send)
+                        self.press(*x, *y, SelectionMode::from_mods(*mods), *now_ms, send)
                     }
                 }
             }
@@ -486,7 +482,7 @@ impl ProseUiState {
             offset,
             anchor: None,
         });
-        self.caret_upstream = false;
+        self.caret_affinity = Affinity::Downstream;
         self.x_goal = None;
         let text = text.replace("\r\n", "\n");
         if text.contains('\n') {
@@ -539,14 +535,17 @@ impl ProseUiState {
     fn menu_key(
         &mut self,
         key: ProseKey,
-        shift: bool,
-        ctrl: bool,
+        mods: Modifiers,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> Option<bool> {
         let menu = self.slash.as_mut()?;
         match key {
-            ProseKey::Up | ProseKey::Down if !shift && !ctrl => {
-                self.step_menu(key == ProseKey::Down);
+            ProseKey::Up | ProseKey::Down if !mods.shift && !mods.primary => {
+                self.step_menu(if key == ProseKey::Down {
+                    StepDirection::Forward
+                } else {
+                    StepDirection::Backward
+                });
                 Some(true)
             }
             ProseKey::Enter if !crate::view::slash::filter(&menu.query).is_empty() => {
@@ -559,7 +558,7 @@ impl ProseUiState {
             }
             // The Backspace over the slash closes the menu; one over the
             // query narrows it less. Both delete like any Backspace.
-            ProseKey::Backspace if !ctrl && menu.query.pop().is_some() => {
+            ProseKey::Backspace if !mods.primary && menu.query.pop().is_some() => {
                 menu.selected = 0;
                 None
             }
@@ -654,15 +653,15 @@ impl ProseUiState {
     fn key(
         &mut self,
         key: ProseKey,
-        shift: bool,
-        ctrl: bool,
+        mods: Modifiers,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
+        let ctrl = mods.primary;
         // A history step needs no caret: the engine places it after
         // (`UNDO-010`, `UNDO-011`). The key is the view's whether or not the
         // command was taken, so the pipe never runs its own undo.
         if matches!(key, ProseKey::Undo | ProseKey::Redo) {
-            let redo = key == ProseKey::Redo || shift;
+            let redo = key == ProseKey::Redo || mods.shift;
             send(if redo {
                 ProseCommand::Redo
             } else {
@@ -686,8 +685,8 @@ impl ProseUiState {
             ProseKey::End => Direction::LineEnd,
             ProseKey::PageUp => Direction::PageUp,
             ProseKey::PageDown => Direction::PageDown,
-            ProseKey::Backspace => return self.delete(false, send),
-            ProseKey::Delete => return self.delete(true, send),
+            ProseKey::Backspace => return self.delete(StepDirection::Backward, send),
+            ProseKey::Delete => return self.delete(StepDirection::Forward, send),
             ProseKey::Enter => return self.split(send),
             ProseKey::Escape => {
                 self.escape();
@@ -700,13 +699,18 @@ impl ProseUiState {
             // Taken above, before the caret is asked for.
             ProseKey::Undo | ProseKey::Redo => return true,
         };
-        self.move_cursor(direction, shift);
+        self.move_cursor(direction, SelectionMode::from_mods(mods));
         true
     }
 
-    /// Backspace, or Delete when `forward`: the selection, else the grapheme
-    /// beside the caret, else the join with the paragraph beside it.
-    fn delete(&mut self, forward: bool, send: &mut dyn FnMut(ProseCommand) -> SendResult) -> bool {
+    /// Backspace, or Delete forward: the selection, else the grapheme beside
+    /// the caret, else the join with the paragraph beside it.
+    fn delete(
+        &mut self,
+        direction: StepDirection,
+        send: &mut dyn FnMut(ProseCommand) -> SendResult,
+    ) -> bool {
+        let forward = direction == StepDirection::Forward;
         if self.selection().is_some() {
             self.take_selection(send);
             return true;
@@ -715,7 +719,7 @@ impl ProseUiState {
             return false;
         };
         let here: Spot = (cursor.block_id, cursor.offset);
-        let beside = self.grapheme_beside(here, forward);
+        let beside = self.grapheme_beside(here, direction);
         let (command, caret) = match beside {
             Some(other) if forward => (
                 ProseCommand::DeleteText {
@@ -732,7 +736,7 @@ impl ProseUiState {
                 (here.0, other),
             ),
             None => {
-                let Some(next) = self.neighbour(here.0, forward) else {
+                let Some(next) = self.neighbour(here.0, direction) else {
                     return true;
                 };
                 let edge = (
@@ -762,17 +766,16 @@ impl ProseUiState {
 
     /// The grapheme boundary beside a place, in document offsets, reading the
     /// text the view shows. `None` at the edge of the block.
-    fn grapheme_beside(&self, spot: Spot, forward: bool) -> Option<DocOffset> {
+    fn grapheme_beside(&self, spot: Spot, direction: StepDirection) -> Option<DocOffset> {
         use unicode_segmentation::UnicodeSegmentation;
         let text = self.shown_text(spot.0)?;
         let boundaries = text
             .grapheme_indices(true)
             .map(|(byte, _)| DocCount::of(text.get(..byte).unwrap_or("")).as_end())
             .chain(std::iter::once(DocCount::of(&text).as_end()));
-        if forward {
-            boundaries.into_iter().find(|b| *b > spot.1)
-        } else {
-            boundaries.into_iter().rfind(|b| *b < spot.1)
+        match direction {
+            StepDirection::Forward => boundaries.into_iter().find(|b| *b > spot.1),
+            StepDirection::Backward => boundaries.into_iter().rfind(|b| *b < spot.1),
         }
     }
 
@@ -811,7 +814,7 @@ impl ProseUiState {
         &mut self,
         x: f32,
         y: f32,
-        shift: bool,
+        mode: SelectionMode,
         now_ms: ambre_core::PageTime,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
@@ -862,7 +865,7 @@ impl ProseUiState {
             .as_ref()
             .map_or(spot, |c| c.anchor.unwrap_or((c.block_id, c.offset)));
         match count {
-            1 if shift && self.joins(anchor, spot) => {
+            1 if mode == SelectionMode::Extend && self.joins(anchor, spot) => {
                 self.start_drag(anchor);
                 self.update_drag(x, y);
             }
@@ -871,8 +874,8 @@ impl ProseUiState {
                 self.set_caret(spot);
                 self.start_drag(spot);
             }
-            2 => self.select_around(spot, false),
-            _ => self.select_around(spot, true),
+            2 => self.select_around(spot, SelectUnit::Word),
+            _ => self.select_around(spot, SelectUnit::Paragraph),
         }
         true
     }

@@ -2,7 +2,7 @@
 //! Logic thread's answers fed back (`features/ambre-spec-prose-text-editing.md`,
 //! `features/ambre-spec-prose-selection.md`).
 
-use crate::layout::run::RunOffset;
+use crate::layout::run::{Affinity, RunOffset};
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocOffset;
 use ambre_bus::app::prose::DocSpan;
@@ -69,7 +69,10 @@ impl Rig {
     }
 
     fn key(&mut self, key: ProseKey, shift: bool, ctrl: bool) -> bool {
-        self.input(ProseInput::Key { key, shift, ctrl })
+        self.input(ProseInput::Key {
+            key,
+            mods: ambre_commands::Modifiers::from_event(ctrl, false, shift, false),
+        })
     }
 
     fn type_text(&mut self, text: &str) -> bool {
@@ -80,8 +83,7 @@ impl Rig {
         self.input(ProseInput::Press {
             x,
             y,
-            shift,
-            follow: false,
+            mods: ambre_commands::Modifiers::from_event(false, false, shift, false),
             now_ms,
         })
     }
@@ -690,8 +692,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     let press = ProseInput::Press {
         x: 600.0,
         y: 100.0,
-        shift: false,
-        follow: false,
+        mods: ambre_commands::Modifiers::NONE,
         now_ms: ambre_core::PageTime(0.0),
     };
     assert!(ui.handle_input(&press, &mut |command| {
@@ -737,8 +738,7 @@ fn a_press_on_a_layout_with_no_page_leaves_the_caret() {
         &ProseInput::Press {
             x: 10.0,
             y: 10.0,
-            shift: false,
-            follow: false,
+            mods: ambre_commands::Modifiers::NONE,
             now_ms: ambre_core::PageTime(0.0),
         },
         &mut |_| SendResult::Sent,
@@ -874,14 +874,18 @@ fn home_and_end_honour_the_wrapped_line() {
     rig.key(ProseKey::End, false, false);
     let end = RunOffset::new(rig.caret().offset.get());
     assert!(end < run_len);
-    assert!(rig.ui.caret_upstream, "the caret stays on the line it ends");
+    assert_eq!(
+        rig.ui.caret_affinity,
+        Affinity::Upstream,
+        "the caret stays on the line it ends"
+    );
     let run = rig.ui.run_of(block).expect("a run");
-    assert_eq!(run.line_of(end, true), 1);
+    assert_eq!(run.line_of(end, Affinity::Upstream), 1);
     rig.key(ProseKey::Home, false, false);
     let start = RunOffset::new(rig.caret().offset.get());
     assert!(start > RunOffset::ZERO && start <= second_line);
     let run = rig.ui.run_of(block).expect("a run");
-    assert_eq!(run.line_of(start, false), 1);
+    assert_eq!(run.line_of(start, Affinity::Downstream), 1);
 }
 
 /// `PROSE-UI-035`, `PROSE-UI-158`: every move leaves the caret on screen,
@@ -1088,8 +1092,7 @@ fn press_follow(rig: &mut Rig, (x, y): (f32, f32), follow: bool) -> bool {
     rig.input(ProseInput::Press {
         x,
         y,
-        shift: false,
-        follow,
+        mods: ambre_commands::Modifiers::from_event(follow, false, false, false),
         now_ms: ambre_core::PageTime(0.0),
     })
 }
@@ -2096,7 +2099,11 @@ fn a_copy_leaves_the_document_unchanged() {
 #[test]
 fn a_printable_character_is_not_a_key() {
     for name in ["a", "A", "Z", "é", " ", "1", "="] {
-        assert_eq!(ProseKey::from_name(name, false), None, "{name:?}");
+        assert_eq!(
+            ProseKey::from_name(name, ambre_commands::Modifiers::NONE),
+            None,
+            "{name:?}"
+        );
     }
 }
 
@@ -2576,8 +2583,8 @@ fn key_name(chord: ambre_commands::KeyBinding) -> String {
 
 /// Press one chord the way the host hands it over, and return what it sent.
 fn press_chord(rig: &mut Rig, chord: ambre_commands::KeyBinding) -> Vec<ProseCommand> {
-    let key = ProseKey::from_name(&key_name(chord), chord.mods.primary)
-        .expect("the view decodes the chord");
+    let key =
+        ProseKey::from_name(&key_name(chord), chord.mods).expect("the view decodes the chord");
     let before = rig.sent.len();
     assert!(rig.key(key, chord.mods.shift, chord.mods.primary));
     rig.sent[before..].to_vec()

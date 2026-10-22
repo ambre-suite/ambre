@@ -394,7 +394,7 @@ pub struct ProseUiState {
     pub cursor: Option<CursorPosition>,
     /// The caret sits at the end of the line before a wrap point rather than
     /// at the start of the line after it (`PROSE-UI-159`).
-    pub caret_upstream: bool,
+    pub caret_affinity: crate::layout::run::Affinity,
     /// Where the last paint drew the local caret, in canvas pixels. The host
     /// places the input pipe there (`CHROME-007`).
     pub caret_drawn: Option<ambre_draw::Rect>,
@@ -704,7 +704,7 @@ impl ProseUiState {
             offset,
             anchor: None,
         });
-        self.caret_upstream = false;
+        self.caret_affinity = crate::layout::run::Affinity::Downstream;
         self.x_goal = None;
     }
 
@@ -784,7 +784,7 @@ impl ProseUiState {
                         .iter()
                         .find_map(|block| self.nearest_confirmed(*block))
                 });
-                self.caret_upstream = false;
+                self.caret_affinity = crate::layout::run::Affinity::Downstream;
                 self.x_goal = None;
                 self.dragging = None;
             }

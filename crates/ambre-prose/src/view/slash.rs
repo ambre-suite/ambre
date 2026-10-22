@@ -7,6 +7,7 @@
 //! was typed after it, and writes none of that (`PROSE-UI-087`).
 
 use crate::events::{BlockInit, BlockType, ListStyle, OrderedStyle, ProseCommand, tree_id};
+use crate::layout::run::Affinity;
 use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
 use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
@@ -209,7 +210,7 @@ impl ProseUiState {
 
     /// Move the menu's selection by one, wrapping. Nothing is sent
     /// (`PROSE-UI-089`).
-    pub(crate) fn step_menu(&mut self, down: bool) {
+    pub(crate) fn step_menu(&mut self, direction: ambre_core::StepDirection) {
         let Some(menu) = &mut self.slash else {
             return;
         };
@@ -217,7 +218,7 @@ impl ProseUiState {
         if count == 0 {
             return;
         }
-        menu.selected = if down {
+        menu.selected = if direction == ambre_core::StepDirection::Forward {
             (menu.selected + 1) % count
         } else {
             (menu.selected + count - 1) % count
@@ -227,7 +228,7 @@ impl ProseUiState {
     /// The bottom of the line holding a place, on the canvas.
     fn under(&self, (block, offset): Spot) -> Option<(f32, f32)> {
         let run = self.run_of(block)?;
-        let caret = run.caret_box_at(self.to_laid(block, offset), false);
+        let caret = run.caret_box_at(self.to_laid(block, offset), Affinity::Downstream);
         let (x, y0, y1) = (caret.x0 as f32, caret.y0 as f32, caret.y1 as f32);
         let (page, piece) = self.fragment_at(block, y0)?;
         Some(self.to_screen(block, page, piece, x, y1))

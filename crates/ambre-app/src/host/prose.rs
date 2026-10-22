@@ -30,7 +30,7 @@ use ambre_canvas::{
     BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, NoticePublisher,
     OverlayRepaint, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
-use ambre_chrome::commands::ClipboardWrite;
+use ambre_chrome::commands::{ClipboardWrite, Modifiers};
 use ambre_draw::{DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::events::BlockId;
@@ -609,11 +609,10 @@ impl ProseView {
                 shift,
                 meta,
             } if !alt => {
-                let ctrl = *ctrl || *meta;
+                let mods = Modifiers::from_event(*ctrl, false, *shift, *meta);
                 ProseInput::Key {
-                    key: ProseKey::from_name(key, ctrl)?,
-                    shift: *shift,
-                    ctrl,
+                    key: ProseKey::from_name(key, mods)?,
+                    mods,
                 }
             }
             InputEvent::Text { text } => ProseInput::Text(text.clone()),
@@ -629,9 +628,8 @@ impl ProseView {
             } => ProseInput::Press {
                 x: *x as f32,
                 y: *y as f32,
-                shift: *shift,
                 // The canvas folds `Cmd` into `ctrl`.
-                follow: *ctrl,
+                mods: Modifiers::from_event(*ctrl, false, *shift, false),
                 now_ms: self.now_ms,
             },
             InputEvent::PointerMove { x, y } => ProseInput::Drag {
@@ -717,8 +715,7 @@ impl ProseView {
                     self.feed(&ProseInput::Press {
                         x,
                         y,
-                        shift: false,
-                        follow: false,
+                        mods: Modifiers::NONE,
                         now_ms,
                     });
                     self.feed(&ProseInput::Release);

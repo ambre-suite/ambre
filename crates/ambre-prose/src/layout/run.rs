@@ -14,7 +14,7 @@ use std::sync::Arc;
 use ambre_core::{ByteCount, ByteDelta, ByteOffset, ByteSpan, FootnoteId};
 use ambre_draw::{BoundingBox, Layout, ParleyBrush};
 use loro::TreeID;
-use parley::{Affinity, Cursor, Selection};
+use parley::{Affinity as ParleyAffinity, Cursor, Selection};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::layout::measure::{EffectiveStyle, MarkedSpan};
@@ -34,6 +34,42 @@ ambre_core::define_index! {
     pub struct RunSpan;
     /// A list indexed by code-point offset in one run.
     pub struct RunVec;
+}
+
+/// The side of a wrap point a caret stands on. One offset at a soft wrap
+/// is both the end of one line and the start of the next.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Affinity {
+    /// The caret stands at the start of the line after the offset.
+    #[default]
+    Downstream,
+    /// The caret stands at the end of the line before the offset.
+    Upstream,
+}
+
+/// One end of a wrapped line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LineEdge {
+    Start,
+    End,
+}
+
+impl Affinity {
+    /// The affinity parley answers, read into this crate's own type.
+    fn of(affinity: ParleyAffinity) -> Self {
+        match affinity {
+            ParleyAffinity::Upstream => Self::Upstream,
+            ParleyAffinity::Downstream => Self::Downstream,
+        }
+    }
+
+    /// The affinity parley takes, at the one call into it.
+    fn to_parley(self) -> ParleyAffinity {
+        match self {
+            Self::Upstream => ParleyAffinity::Upstream,
+            Self::Downstream => ParleyAffinity::Downstream,
+        }
+    }
 }
 
 ambre_core::define_index! {
@@ -440,7 +476,7 @@ impl ParleyRunData {
     /// Where a code-point offset sits inside the run: the caret's box.
     #[must_use]
     pub fn caret_box(&self, offset: RunOffset) -> BoundingBox {
-        self.caret_box_at(offset, false)
+        self.caret_box_at(offset, Affinity::Downstream)
     }
 
     /// The boxes a code-point range covers, one per line it crosses. Empty
@@ -462,12 +498,12 @@ impl ParleyRunData {
             let anchor = Cursor::from_byte_index(
                 &segment.layout,
                 segment.to_local(local_from).to_usize(),
-                Affinity::Downstream,
+                ParleyAffinity::Downstream,
             );
             let focus = Cursor::from_byte_index(
                 &segment.layout,
                 segment.to_local(local_to).to_usize(),
-                Affinity::Upstream,
+                ParleyAffinity::Upstream,
             );
             for (rect, _) in Selection::new(anchor, focus).geometry(&segment.layout) {
                 if let Some(line) = self.line_under(index, &rect) {
@@ -481,8 +517,8 @@ impl ParleyRunData {
     /// Where a code-point offset sits, on the side of a wrap point the
     /// affinity names: the caret's box.
     #[must_use]
-    pub fn caret_box_at(&self, offset: RunOffset, upstream: bool) -> BoundingBox {
-        let (index, cursor) = self.cursor(offset, upstream);
+    pub fn caret_box_at(&self, offset: RunOffset, affinity: Affinity) -> BoundingBox {
+        let (index, cursor) = self.cursor(offset, affinity);
         let Some(segment) = self.segments.get(index) else {
             return BoundingBox::default();
         };
@@ -518,8 +554,8 @@ impl ParleyRunData {
 
     /// The line a caret sits on, the first one being zero.
     #[must_use]
-    pub fn line_of(&self, offset: RunOffset, upstream: bool) -> usize {
-        let caret = self.caret_box_at(offset, upstream);
+    pub fn line_of(&self, offset: RunOffset, affinity: Affinity) -> usize {
+        let caret = self.caret_box_at(offset, affinity);
         let middle = ((caret.y0 + caret.y1) / 2.0) as f32;
         self.lines
             .partition_point(|at| at.top <= middle)
@@ -535,16 +571,16 @@ impl ParleyRunData {
 
     /// The caret on line `line` nearest to `x`, and its affinity.
     #[must_use]
-    pub fn at_line(&self, line: usize, x: f32) -> (RunOffset, bool) {
+    pub fn at_line(&self, line: usize, x: f32) -> (RunOffset, Affinity) {
         let index = line.min(self.lines.len().saturating_sub(1));
         let Some(at) = self.lines.get(index) else {
-            return (RunOffset::ZERO, false);
+            return (RunOffset::ZERO, Affinity::Downstream);
         };
         let Some(segment) = self.segments.get(at.segment) else {
-            return (RunOffset::ZERO, false);
+            return (RunOffset::ZERO, Affinity::Downstream);
         };
         let Some(local) = segment.layout.get(at.local) else {
-            return (RunOffset::ZERO, false);
+            return (RunOffset::ZERO, Affinity::Downstream);
         };
         let metrics = local.metrics();
         let cursor = Cursor::from_point(
@@ -554,28 +590,32 @@ impl ParleyRunData {
         );
         (
             self.offset_of_byte(segment.to_run(LocalByte::from_usize(cursor.index()))),
-            cursor.affinity() == Affinity::Upstream,
+            Affinity::of(cursor.affinity()),
         )
     }
 
     /// The start or the end of the wrapped line under a caret, and the
     /// affinity that keeps the caret on it (`PROSE-UI-159`).
     #[must_use]
-    pub fn line_edge(&self, offset: RunOffset, upstream: bool, end: bool) -> (RunOffset, bool) {
-        let (index, cursor) = self.cursor(offset, upstream);
+    pub fn line_edge(
+        &self,
+        offset: RunOffset,
+        affinity: Affinity,
+        edge: LineEdge,
+    ) -> (RunOffset, Affinity) {
+        let (index, cursor) = self.cursor(offset, affinity);
         let Some(segment) = self.segments.get(index) else {
-            return (offset, upstream);
+            return (offset, affinity);
         };
         let here = Selection::new(cursor, cursor);
-        let moved = if end {
-            here.line_end(&segment.layout, false)
-        } else {
-            here.line_start(&segment.layout, false)
+        let moved = match edge {
+            LineEdge::End => here.line_end(&segment.layout, false),
+            LineEdge::Start => here.line_start(&segment.layout, false),
         };
         let focus = moved.focus();
         (
             self.offset_of_byte(segment.to_run(LocalByte::from_usize(focus.index()))),
-            focus.affinity() == Affinity::Upstream,
+            Affinity::of(focus.affinity()),
         )
     }
 
@@ -648,12 +688,8 @@ impl ParleyRunData {
     /// The segment a caret falls in, and the caret there. A byte where one
     /// segment ends and the next starts is the end of the first upstream,
     /// and the start of the second downstream.
-    fn cursor(&self, offset: RunOffset, upstream: bool) -> (usize, Cursor) {
-        let affinity = if upstream {
-            Affinity::Upstream
-        } else {
-            Affinity::Downstream
-        };
+    fn cursor(&self, offset: RunOffset, affinity: Affinity) -> (usize, Cursor) {
+        let upstream = affinity == Affinity::Upstream;
         let byte = self.byte_of(offset);
         let mut index = self
             .segments
@@ -670,7 +706,7 @@ impl ParleyRunData {
         let local = segment.to_local(byte);
         (
             index,
-            Cursor::from_byte_index(&segment.layout, local.to_usize(), affinity),
+            Cursor::from_byte_index(&segment.layout, local.to_usize(), affinity.to_parley()),
         )
     }
 
@@ -1182,7 +1218,15 @@ mod tests {
         assert!(plain.data().caret_box(RunOffset::ZERO).x0.abs() < 1e-3);
         let (_, empty) = measurer.measure_run("", &indented, 120.0);
         assert!((empty.data().caret_box(RunOffset::ZERO).x0 - 40.0).abs() < 1e-3);
-        assert!((empty.data().caret_box_at(RunOffset::ZERO, true).x0 - 40.0).abs() < 1e-3);
+        assert!(
+            (empty
+                .data()
+                .caret_box_at(RunOffset::ZERO, super::Affinity::Upstream)
+                .x0
+                - 40.0)
+                .abs()
+                < 1e-3
+        );
     }
 
     #[test]

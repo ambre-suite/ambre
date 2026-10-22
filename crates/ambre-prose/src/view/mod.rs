@@ -406,7 +406,11 @@ pub(crate) mod tests {
         let in_view = |ui: &ProseUiState| {
             let hit = ui.find_matches[ui.find_current.expect("a current match") as usize];
             let (top, bottom) = ui
-                .flow_span(hit.block_id, hit.range.start, false)
+                .flow_span(
+                    hit.block_id,
+                    hit.range.start,
+                    crate::layout::run::Affinity::Downstream,
+                )
                 .expect("the match is laid out");
             let scroll = ui.viewport.scroll_y;
             top >= scroll && bottom <= scroll + ui.viewport.visible_height()
