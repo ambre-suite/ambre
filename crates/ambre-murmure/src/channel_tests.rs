@@ -12,10 +12,7 @@ use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 
 use crate::channel::push_segment_entry;
-use crate::schema::{
-    self, CHANNEL, CHANNEL_NAME, DocumentKind, HEADER, HEADER_CHANNEL, HEADER_KIND,
-    MESSAGE_CONTENT, MESSAGE_NOTICE, MESSAGES, SEGMENTS, SegmentState,
-};
+use crate::schema::{self, ChannelKey, DocumentKind, HeaderKey, MessageKey, Root, SegmentState};
 use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Query, SCHEMA_VERSION, Signer,
 };
@@ -152,17 +149,20 @@ fn a_channel_is_held_as_its_documents_apart() {
     assert_eq!(
         meta_roots,
         [
-            CHANNEL,
-            HEADER,
+            Root::Channel.as_str(),
+            Root::Header.as_str(),
             ambre_core::crdt::FoundationRoot::Meta.as_str(),
-            SEGMENTS
+            Root::Segments.as_str()
         ]
     );
     let mut active_roots = root_keys(active);
     active_roots.sort();
     assert_eq!(
         active_roots,
-        [HEADER, ambre_core::crdt::FoundationRoot::Meta.as_str()]
+        [
+            Root::Header.as_str(),
+            ambre_core::crdt::FoundationRoot::Meta.as_str()
+        ]
     );
 }
 
@@ -175,19 +175,21 @@ fn every_document_carries_a_header_and_the_foundation_version() {
         (state.active_id().document_id(), DocumentKind::Segment),
     ] {
         let doc = state.doc(id).expect("held");
-        let header = doc.get_map(HEADER);
+        let header = crate::schema::header(doc);
         assert_eq!(
-            schema::string(&header, HEADER_KIND).as_deref(),
+            schema::string(&header, HeaderKey::Kind).as_deref(),
             Some(kind.as_str())
         );
         assert_eq!(
-            schema::string(&header, HEADER_CHANNEL),
+            schema::string(&header, HeaderKey::Channel),
             Some(channel.to_string())
         );
         assert_eq!(
             schema::unsigned(
-                &doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str()),
-                ambre_core::schema::MetaKey::SchemaVersion.as_str()
+                &crate::schema::Fields::of(
+                    doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                ),
+                ambre_core::schema::MetaKey::SchemaVersion
             ),
             Some(u64::from(SCHEMA_VERSION))
         );
@@ -300,11 +302,13 @@ fn a_remote_delta_reaches_the_document_it_names_and_no_other() {
         .import(stored.segments.get(&stored.closing_id).expect("bytes"))
         .expect("import");
     let before = remote.oplog_vv();
-    let map = remote
-        .get_list(MESSAGES)
-        .push_container(loro::LoroMap::new())
-        .expect("push");
-    map.insert("id", "x").expect("insert");
+    let map = crate::schema::Fields::<MessageKey>::of(
+        remote
+            .get_list(Root::Messages.as_str())
+            .push_container(loro::LoroMap::new())
+            .expect("push"),
+    );
+    map.insert(MessageKey::Id, "x").expect("insert");
     remote.commit();
     let delta = remote.export(ExportMode::updates(&before)).expect("delta");
 
@@ -323,7 +327,7 @@ fn a_remote_delta_reaches_the_document_it_names_and_no_other() {
         state
             .doc(stored.closing_id.document_id())
             .expect("closing")
-            .get_list(MESSAGES)
+            .get_list(Root::Messages.as_str())
             .len(),
         1
     );
@@ -461,8 +465,10 @@ fn an_older_document_opens_and_the_walk_writes_nothing() {
     assert_eq!(opened.oplog_vv(), before, "the walk wrote an operation");
     assert_eq!(
         schema::unsigned(
-            &opened.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str()),
-            ambre_core::schema::MetaKey::SchemaVersion.as_str()
+            &crate::schema::Fields::of(
+                opened.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+            ),
+            ambre_core::schema::MetaKey::SchemaVersion
         ),
         Some(1)
     );
@@ -472,8 +478,8 @@ fn an_older_document_opens_and_the_walk_writes_nothing() {
 fn a_document_with_no_version_finds_no_migration_and_is_refused() {
     let stored = stored_channel();
     let bare = LoroDoc::new();
-    bare.get_map(HEADER)
-        .insert(HEADER_KIND, "meta")
+    crate::schema::header(&bare)
+        .insert(HeaderKey::Kind, "meta")
         .expect("kind");
     bare.commit();
     let refused = ChannelState::open(
@@ -579,7 +585,7 @@ fn sending_a_message_changes_no_other_message() {
     let list = state
         .doc(state.active_id().document_id())
         .expect("active")
-        .get_list(MESSAGES);
+        .get_list(Root::Messages.as_str());
     let before: Vec<LoroValue> = (0..list.len())
         .filter_map(|i| list.get(i).map(|v| v.get_deep_value()))
         .collect();
@@ -654,16 +660,16 @@ fn the_body_lives_in_a_text_and_no_map_holds_it() {
     let list = state
         .doc(state.active_id().document_id())
         .expect("active")
-        .get_list(MESSAGES);
-    let Some(ValueOrContainer::Container(Container::Map(message))) = list.get(0) else {
+        .get_list(Root::Messages.as_str());
+    let Some(message) = list.get(0).and_then(crate::schema::fields_of) else {
         panic!("a message is a map container");
     };
     assert!(matches!(
-        message.get(MESSAGE_CONTENT),
+        message.get(MessageKey::Content),
         Some(ValueOrContainer::Container(Container::Text(_)))
     ));
     let mut plain_strings = Vec::new();
-    message.for_each(|_, v| {
+    message.map().for_each(|_, v| {
         if let ValueOrContainer::Value(LoroValue::String(s)) = v {
             plain_strings.push(s.to_string());
         }
@@ -699,13 +705,14 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
                      text: &str|
      -> Vec<u8> {
         let doc = state.doc(segment.document_id()).expect("segment");
-        let Some(ValueOrContainer::Container(Container::Map(message))) =
-            doc.get_list(MESSAGES).get(0)
+        let Some(message) = crate::schema::root_list(doc, Root::Messages)
+            .get(0)
+            .and_then(crate::schema::fields_of)
         else {
             panic!("a message is a map container");
         };
         let Some(ValueOrContainer::Container(Container::Text(content))) =
-            message.get(MESSAGE_CONTENT)
+            message.get(MessageKey::Content)
         else {
             panic!("the content is a text");
         };
@@ -741,10 +748,10 @@ fn meta_holds_no_member_list() {
     assert_eq!(
         roots,
         [
-            CHANNEL,
-            HEADER,
+            Root::Channel.as_str(),
+            Root::Header.as_str(),
             ambre_core::crdt::FoundationRoot::Meta.as_str(),
-            SEGMENTS
+            Root::Segments.as_str()
         ]
     );
 }
@@ -753,19 +760,14 @@ fn meta_holds_no_member_list() {
 fn an_unset_property_is_an_absent_key() {
     let unnamed =
         ChannelState::create(ChannelId::new(), ChannelType::Direct, None, NOW).expect("create");
-    let channel = unnamed
-        .doc(unnamed.meta_id().document_id())
-        .expect("meta")
-        .get_map(CHANNEL);
-    assert!(channel.get(CHANNEL_NAME).is_none());
+    let channel =
+        crate::schema::channel(unnamed.doc(unnamed.meta_id().document_id()).expect("meta"));
+    assert!(channel.get(ChannelKey::Name).is_none());
     let named = ChannelState::create(ChannelId::new(), ChannelType::Public, Some("general"), NOW)
         .expect("create");
-    let channel = named
-        .doc(named.meta_id().document_id())
-        .expect("meta")
-        .get_map(CHANNEL);
+    let channel = crate::schema::channel(named.doc(named.meta_id().document_id()).expect("meta"));
     assert_eq!(
-        schema::string(&channel, CHANNEL_NAME).as_deref(),
+        schema::string(&channel, ChannelKey::Name).as_deref(),
         Some("general")
     );
 }
@@ -857,12 +859,14 @@ fn a_notice_of_a_kind_no_build_wrote_is_skipped() {
         .announce(UserId::new(), UserId::new(), NOW)
         .expect("announce");
     let doc = alice.doc(alice.active_id().document_id()).expect("held");
-    let Some(ValueOrContainer::Container(Container::Map(message))) = doc.get_list(MESSAGES).get(0)
+    let Some(message) = crate::schema::root_list(doc, Root::Messages)
+        .get(0)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("the notice is a map");
     };
     message
-        .insert(MESSAGE_NOTICE, "member_renamed")
+        .insert(MessageKey::Notice, "member_renamed")
         .expect("insert");
     assert!(alice.messages(alice.active_id()).expect("held").is_empty());
 }
@@ -880,8 +884,11 @@ fn clearing_a_name_removes_its_key() {
         assert_eq!(named.event, MurmureEvent::Named { name: None });
         bob.apply_remote(meta, &named.delta).expect("apply");
         for state in [&alice, &bob] {
-            let channel = state.doc(meta).expect("meta").get_map(CHANNEL);
-            assert!(channel.get(CHANNEL_NAME).is_none(), "no key, no empty name");
+            let channel = crate::schema::channel(state.doc(meta).expect("meta"));
+            assert!(
+                channel.get(ChannelKey::Name).is_none(),
+                "no key, no empty name"
+            );
             assert_eq!(state.name(), None);
         }
     }
@@ -967,7 +974,9 @@ fn a_malformed_message_is_skipped_and_the_rest_still_reads() {
         .expect("create")
         .identify();
     let doc = state.doc(state.active_id().document_id()).expect("active");
-    doc.get_list(MESSAGES).push("not a message").expect("push");
+    crate::schema::root_list(doc, Root::Messages)
+        .push("not a message")
+        .expect("push");
     doc.commit();
     state
         .send(&draft("fine"), UserId::new(), NOW)
@@ -1025,9 +1034,8 @@ fn a_meta_delta_during_the_opening_reaches_the_open_channel() {
     let editor = LoroDoc::new();
     editor.import(&stored.meta).expect("import");
     let before = editor.oplog_vv();
-    editor
-        .get_map(CHANNEL)
-        .insert(CHANNEL_NAME, "renamed")
+    crate::schema::channel(&editor)
+        .insert(ChannelKey::Name, "renamed")
         .expect("rename");
     editor.commit();
     let delta = editor.export(ExportMode::updates(&before)).expect("delta");
@@ -1049,7 +1057,7 @@ fn a_meta_delta_during_the_opening_reaches_the_open_channel() {
     };
     let meta = state.doc(stored.meta_id.document_id()).expect("meta");
     assert_eq!(
-        schema::string(&meta.get_map(CHANNEL), CHANNEL_NAME).as_deref(),
+        schema::string(&crate::schema::channel(meta), ChannelKey::Name).as_deref(),
         Some("renamed")
     );
 }

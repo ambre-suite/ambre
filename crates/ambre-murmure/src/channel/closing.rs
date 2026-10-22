@@ -7,14 +7,12 @@
 
 use ambre_bus::{MurmureEvent, Timestamp};
 use ambre_core::SegmentId;
-use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
+use loro::{ExportMode, LoroDoc};
 
 use super::{ChannelState, Created, Held, live_segments, push_segment_entry, read_messages};
 use crate::delta::{self, Arrival};
 use crate::error::MurmureError;
-use crate::schema::{
-    self, DocumentKind, MESSAGES, SEGMENT_DOCUMENT, SEGMENT_STATE, SEGMENTS, SegmentState,
-};
+use crate::schema::{self, DocumentKind, Root, SegmentKey, SegmentState};
 use crate::session::Session;
 
 /// The messages past which an active segment asks to close: the segment size
@@ -93,7 +91,7 @@ impl ChannelState {
         if self.close_asked || self.closing.is_some() || self.successor.is_some() {
             return None;
         }
-        let messages = self.active.doc.get_list(MESSAGES).len();
+        let messages = crate::schema::root_list(&self.active.doc, Root::Messages).len();
         if !self.key_rotated && messages < self.segment_size && !self.passes_bytes(messages) {
             return None;
         }
@@ -332,16 +330,16 @@ fn record_close(
     active: SegmentId,
     now: Timestamp,
 ) -> Result<(), MurmureError> {
-    let list = meta.get_list(SEGMENTS);
+    let list = crate::schema::root_list(meta, Root::Segments);
     let mut listed = false;
     for index in 0..list.len() {
-        let Some(ValueOrContainer::Container(Container::Map(entry))) = list.get(index) else {
+        let Some(entry) = list.get(index).and_then(crate::schema::fields_of) else {
             continue;
         };
-        let id =
-            schema::string(&entry, SEGMENT_DOCUMENT).and_then(|s| SegmentId::parse_str(&s).ok());
+        let id = schema::string(&entry, SegmentKey::Document)
+            .and_then(|s| SegmentId::parse_str(&s).ok());
         if id == Some(closing) {
-            entry.insert(SEGMENT_STATE, SegmentState::Closing.as_str())?;
+            entry.insert(SegmentKey::State, SegmentState::Closing.as_str())?;
         } else if id == Some(active) {
             listed = true;
         }

@@ -11,10 +11,10 @@ use ambre_bus::{
 };
 use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
 use loro::json::{JsonOpContent, MapOp};
-use loro::{Container, ExportMode, LoroDoc, ValueOrContainer, VersionVector};
+use loro::{ExportMode, LoroDoc, VersionVector};
 
 use crate::channel::push_segment_entry;
-use crate::schema::{self, DocumentKind, MESSAGE_EDITED, MESSAGE_THREAD, MESSAGES, SegmentState};
+use crate::schema::{self, DocumentKind, MessageKey, Root, SegmentState};
 use crate::session::next_peer;
 use crate::{
     ChannelState, ChannelType, MurmureError, Refusal, SeekStep, Sent, Signer, ThreadTarget,
@@ -233,11 +233,13 @@ fn the_root_reads_its_reply_count_and_last_replier_from_its_thread() {
     assert_eq!((head.replies, head.last_replier), (2, Some(bob)));
     // A reply deleted in the thread no longer counts.
     let doc = state.doc(thread).expect("held");
-    let Some(ValueOrContainer::Container(Container::Map(last))) = doc.get_list(MESSAGES).get(1)
+    let Some(last) = crate::schema::root_list(doc, Root::Messages)
+        .get(1)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("a reply");
     };
-    last.insert(crate::schema::MESSAGE_DELETED, true)
+    last.insert(crate::schema::MessageKey::Deleted, true)
         .expect("delete");
     doc.commit();
     let head = message_at(&state, 0).thread.expect("a head");
@@ -281,7 +283,7 @@ fn the_link_sets_the_root_thread_field_and_nothing_else() {
     assert_eq!(ops.len(), 1, "one write of the root");
     assert!(matches!(
         ops[0],
-        JsonOpContent::Map(MapOp::Insert { key, .. }) if key == MESSAGE_THREAD
+        JsonOpContent::Map(MapOp::Insert { key, .. }) if MessageKey::parse(key) == Some(MessageKey::Thread)
     ));
     let linked = state
         .thread_linked(state.active_id(), before.id, thread)
@@ -437,11 +439,13 @@ fn the_check_lets_another_member_set_an_absent_thread_field_alone() {
     // Bob writes another field of Alice's message.
     let bob_doc = bob.doc(doc).expect("held");
     let before = bob_doc.oplog_vv();
-    let Some(ValueOrContainer::Container(Container::Map(map))) = bob_doc.get_list(MESSAGES).get(0)
+    let Some(map) = crate::schema::root_list(bob_doc, Root::Messages)
+        .get(0)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("the root");
     };
-    map.insert(MESSAGE_EDITED, true).expect("write");
+    map.insert(MessageKey::Edited, true).expect("write");
     assert_eq!(
         alice.apply_signed(
             doc,
@@ -489,11 +493,13 @@ fn a_reply_takes_no_thread_field_from_another_member() {
         .expect("adopt");
     let bob_doc = bob.doc(thread).expect("held");
     let before = bob_doc.oplog_vv();
-    let Some(ValueOrContainer::Container(Container::Map(map))) = bob_doc.get_list(MESSAGES).get(0)
+    let Some(map) = crate::schema::root_list(bob_doc, Root::Messages)
+        .get(0)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("the reply");
     };
-    map.insert(MESSAGE_THREAD, DocumentId::new().to_string())
+    map.insert(MessageKey::Thread, DocumentId::new().to_string())
         .expect("write");
     assert_eq!(
         alice.apply_signed(

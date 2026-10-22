@@ -18,9 +18,7 @@ use super::{ChannelState, Created, Held, Sent};
 use crate::delta::{self, Arrival, Rules, Signer};
 use crate::error::MurmureError;
 use crate::schema::{
-    self, AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS,
-    DeletedBy, DocumentKind, HEADER, HEADER_SEGMENT, MENTION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT,
-    SEGMENT_FOLDED, SEGMENTS,
+    self, AmendmentKey, DeletedBy, DocumentKind, Fields, HeaderKey, Mark, Root, SegmentKey,
 };
 use crate::sequence::Sequence;
 use crate::session::Session;
@@ -228,11 +226,11 @@ impl ChannelState {
             return Ok(None);
         };
         let id = amendments.to_string();
-        if schema::string(&entry, SEGMENT_AMENDMENTS).as_deref() == Some(id.as_str()) {
+        if schema::string(&entry, SegmentKey::Amendments).as_deref() == Some(id.as_str()) {
             return Ok(None);
         }
         let (doc, session) = self.meta.session()?;
-        entry.insert(SEGMENT_AMENDMENTS, id)?;
+        entry.insert(SegmentKey::Amendments, id)?;
         Ok(Some(session.export(doc)?))
     }
 
@@ -296,7 +294,7 @@ impl ChannelState {
             document_id,
             |doc| delta::import_arrivals(doc, pending.arrivals, document_id, rules),
         )?;
-        let named = schema::string(&doc.get_map(HEADER), HEADER_SEGMENT)
+        let named = schema::string(&crate::schema::header(&doc), HeaderKey::Segment)
             .and_then(|s| SegmentId::parse_str(&s).ok());
         if named != Some(segment) {
             return Err(MurmureError::ForeignSegment(document_id));
@@ -414,12 +412,12 @@ impl ChannelState {
             .ok_or(MurmureError::NoAmendments(segment))?;
         let amendments = held.id;
         let (doc, session) = held.session()?;
-        let root = doc.get_map(AMENDMENTS);
+        let root = crate::schema::root_map(doc, Root::Amendments);
         let key = message.to_string();
-        let entry = match root.get(&key) {
+        let entry = Fields::<AmendmentKey>::of(match root.get(&key) {
             Some(ValueOrContainer::Container(Container::Map(entry))) => entry,
             _ => root.insert_container(&key, LoroMap::new())?,
-        };
+        });
         match change {
             Change::Edit(draft) => write_edit(doc, &entry, draft, channel)?,
             Change::Delete => {
@@ -429,8 +427,8 @@ impl ChannelState {
                         content.delete(0, len)?;
                     }
                 }
-                entry.insert(AMENDMENT_DELETED, true)?;
-                entry.insert(AMENDMENT_BY, DeletedBy::Author.as_str())?;
+                entry.insert(AmendmentKey::Deleted, true)?;
+                entry.insert(AmendmentKey::By, DeletedBy::Author.as_str())?;
             }
         }
         let delta = session.export_json(doc)?;
@@ -444,7 +442,7 @@ impl ChannelState {
 /// the difference alone, and its marks are written again from the draft.
 fn write_edit(
     doc: &LoroDoc,
-    entry: &LoroMap,
+    entry: &Fields<AmendmentKey>,
     draft: &MessageDraft,
     channel: ChannelId,
 ) -> Result<(), MurmureError> {
@@ -452,11 +450,11 @@ fn write_edit(
     // container by the operation that created it.
     let content = match entry_content(entry) {
         Some(content) => content,
-        None => entry.insert_container(AMENDMENT_CONTENT, LoroText::new())?,
+        None => entry.insert_container(AmendmentKey::Content, LoroText::new())?,
     };
     let len = content.len_unicode();
     if len > 0 {
-        content.unmark(0..len, MENTION)?;
+        content.unmark(0..len, Mark::Mention.as_str())?;
     }
     style::clear(&content)?;
     content
@@ -467,8 +465,8 @@ fn write_edit(
 }
 
 /// The edited body of one amendment entry, `None` when it has none.
-pub(super) fn entry_content(entry: &LoroMap) -> Option<LoroText> {
-    match entry.get(AMENDMENT_CONTENT) {
+pub(super) fn entry_content(entry: &Fields<AmendmentKey>) -> Option<LoroText> {
+    match entry.get(AmendmentKey::Content) {
         Some(ValueOrContainer::Container(Container::Text(content))) => Some(content),
         _ => None,
     }
@@ -479,17 +477,18 @@ pub(super) fn entry_content(entry: &LoroMap) -> Option<LoroText> {
 /// and marks it edited. A message deleted in its segment stays deleted.
 pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channel: ChannelId) {
     overlay_named_threads(amendments, messages);
-    let root = amendments.get_map(AMENDMENTS);
+    let root = crate::schema::root_map(amendments, Root::Amendments);
     if root.is_empty() {
         return;
     }
     for view in messages.iter_mut().filter(|view| !view.deleted) {
-        let Some(ValueOrContainer::Container(Container::Map(entry))) =
-            root.get(&view.id.to_string())
+        let Some(entry) = root
+            .get(&view.id.to_string())
+            .and_then(crate::schema::fields_of)
         else {
             continue;
         };
-        if schema::flag(&entry, AMENDMENT_DELETED) {
+        if schema::flag(&entry, AmendmentKey::Deleted) {
             view.text.clear();
             view.mentions.clear();
             view.styles.clear();
@@ -507,7 +506,7 @@ pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channe
 /// Read each thread `amendments` records over the root that names none, a
 /// deleted one included (`MURMURE-484`). Its count waits for the thread.
 fn overlay_named_threads(amendments: &LoroDoc, messages: &mut [MessageView]) {
-    let threads = amendments.get_map(AMENDMENT_THREADS);
+    let threads = crate::schema::root_map(amendments, Root::Threads);
     if threads.is_empty() {
         return;
     }
@@ -522,15 +521,15 @@ fn overlay_named_threads(amendments: &LoroDoc, messages: &mut [MessageView]) {
 
 /// The thread `amendments` records for `root`, `None` when it records none.
 pub(super) fn recorded_thread(amendments: &LoroDoc, root: MessageId) -> Option<DocumentId> {
-    let threads = amendments.get_map(AMENDMENT_THREADS);
-    DocumentId::parse_str(&schema::string(&threads, &root.to_string())?).ok()
+    let threads = crate::schema::root_map(amendments, Root::Threads);
+    DocumentId::parse_str(&schema::string_value(threads.get(&root.to_string()))?).ok()
 }
 
 /// Every root `amendments` records a thread for, with that thread.
 pub(super) fn recorded_threads(amendments: &LoroDoc) -> Vec<(MessageId, DocumentId)> {
     let mut recorded = Vec::new();
     amendments
-        .get_map(AMENDMENT_THREADS)
+        .get_map(Root::Threads.as_str())
         .for_each(|key, value| {
             let ValueOrContainer::Value(LoroValue::String(value)) = value else {
                 return;
@@ -545,16 +544,13 @@ pub(super) fn recorded_threads(amendments: &LoroDoc) -> Vec<(MessageId, Document
 }
 
 /// The first entry of `meta.segments` that lists `segment`.
-pub(super) fn segment_entry(meta: &LoroDoc, segment: SegmentId) -> Option<LoroMap> {
+pub(super) fn segment_entry(meta: &LoroDoc, segment: SegmentId) -> Option<Fields<SegmentKey>> {
     let wanted = segment.to_string();
-    let list: LoroList = meta.get_list(SEGMENTS);
-    (0..list.len()).find_map(|index| match list.get(index) {
-        Some(ValueOrContainer::Container(Container::Map(entry)))
-            if schema::string(&entry, SEGMENT_DOCUMENT).as_deref() == Some(wanted.as_str()) =>
-        {
-            Some(entry)
-        }
-        _ => None,
+    let list: LoroList = crate::schema::root_list(meta, Root::Segments);
+    (0..list.len()).find_map(|index| {
+        let entry = list.get(index).and_then(schema::fields_of::<SegmentKey>)?;
+        (schema::string(&entry, SegmentKey::Document).as_deref() == Some(wanted.as_str()))
+            .then_some(entry)
     })
 }
 
@@ -565,9 +561,9 @@ pub(super) fn named_amendments(meta: &LoroDoc, segment: SegmentId) -> Option<Doc
 }
 
 /// The amendments document a segment entry names, unless a fold erased it.
-fn live_amendments(entry: &LoroMap) -> Option<DocumentId> {
-    let named = schema::string(entry, SEGMENT_AMENDMENTS)?;
-    if schema::string(entry, SEGMENT_FOLDED).as_deref() == Some(named.as_str()) {
+fn live_amendments(entry: &Fields<SegmentKey>) -> Option<DocumentId> {
+    let named = schema::string(entry, SegmentKey::Amendments)?;
+    if schema::string(entry, SegmentKey::Folded).as_deref() == Some(named.as_str()) {
         return None;
     }
     DocumentId::parse_str(&named).ok()
@@ -576,20 +572,20 @@ fn live_amendments(entry: &LoroMap) -> Option<DocumentId> {
 /// The amendments document `meta` marks folded for `segment`.
 pub(crate) fn folded_amendments(meta: &LoroDoc, segment: SegmentId) -> Option<DocumentId> {
     let entry = segment_entry(meta, segment)?;
-    DocumentId::parse_str(&schema::string(&entry, SEGMENT_FOLDED)?).ok()
+    DocumentId::parse_str(&schema::string(&entry, SegmentKey::Folded)?).ok()
 }
 
 /// Every segment `meta` names an amendments document for, with that
 /// document, in list order.
 fn amendments_entries(meta: &LoroDoc) -> Vec<(SegmentId, DocumentId)> {
-    let list: LoroList = meta.get_list(SEGMENTS);
+    let list: LoroList = crate::schema::root_list(meta, Root::Segments);
     let mut entries: Vec<(SegmentId, DocumentId)> = Vec::new();
     list.for_each(|item| {
-        let ValueOrContainer::Container(Container::Map(entry)) = item else {
+        let Some(entry) = crate::schema::fields_of(item) else {
             return;
         };
-        let segment =
-            schema::string(&entry, SEGMENT_DOCUMENT).and_then(|s| SegmentId::parse_str(&s).ok());
+        let segment = schema::string(&entry, SegmentKey::Document)
+            .and_then(|s| SegmentId::parse_str(&s).ok());
         let amendments = live_amendments(&entry);
         if let (Some(segment), Some(amendments)) = (segment, amendments)
             && !entries.iter().any(|(listed, _)| *listed == segment)

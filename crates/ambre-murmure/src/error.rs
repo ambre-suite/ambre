@@ -54,10 +54,10 @@ pub enum MurmureError {
     },
 
     /// A header key is absent or holds a value this build cannot read.
-    #[error("the header of document {document_id} has no readable `{key}`")]
+    #[error("the header of document {document_id} has no readable `{}`", .key.as_str())]
     HeaderMalformed {
         document_id: DocumentId,
-        key: &'static str,
+        key: crate::schema::HeaderKey,
     },
 
     /// The `meta` document lists no active segment, so no message can go

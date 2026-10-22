@@ -2263,7 +2263,7 @@ ambre-murmure | src/channel.rs | crate::channel | ChannelState::cancel_older() |
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::changed(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::changed_at(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in() | ret | Result<u32,MurmureError>	math	local count/index/counter
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in(counts) | param | impl Fn(&LoroMap)->bool	math	state flag/predicate
+ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in(counts) | param | impl Fn(&Fields<MessageKey>)->bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::create(name) | param | Option<&str>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::export_all() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::holds() | ret | bool	math	state flag/predicate
@@ -2283,7 +2283,6 @@ ambre-murmure | src/channel.rs | crate::channel | Created::Meta.name | field | O
 ambre-murmure | src/channel.rs | crate::channel | Held.probe_at | field | usize	math	local count/index/counter
 ambre-murmure | src/channel.rs | crate::channel | Named.delta | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | Sent.delta | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | document_of(key) | param | &str	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/channel.rs | crate::channel | fitting(name) | param | Option<&str>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::amendable() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::amendments_failed() | ret | bool	math	state flag/predicate
@@ -2506,7 +2505,6 @@ ambre-murmure | src/delta.rs | crate::delta | check_amendments(author_of) | para
 ambre-murmure | src/delta.rs | crate::delta | check_amendments(thread_of) | param | impl Fn(&str)->Option<String>	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | encode() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/delta.rs | crate::delta | is_root() | ret | bool	math	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | is_root(root) | param | &str	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | names() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | read(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/delta.rs | crate::delta | read::Version.schema_version | field | u8	debt	schema version as a bare integer
@@ -2540,7 +2538,6 @@ ambre-murmure | src/emoji.rs | crate::emoji | name_of(emoji) | param | &str	debt
 ambre-murmure | src/emoji.rs | crate::emoji | search() | ret | Vec<&'static str>	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/emoji.rs | crate::emoji | search(query) | param | &str	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/error.rs | crate::error | MurmureError::Crdt.0 | field | String	free-text	untrusted word / Loro error text (not Eq)
-ambre-murmure | src/error.rs | crate::error | MurmureError::HeaderMalformed.key | field | &'static str	newtype-inner	schema key const
 ambre-murmure | src/error.rs | crate::error | MurmureError::WrongKind.expected | field | &'static str	debt	finding: `WrongKind.expected` is `&'static str`
 ambre-murmure | src/error.rs | crate::error | MurmureError::WrongKind.found | field | String	free-text	untrusted word / Loro error text (not Eq)
 ambre-murmure | src/list.rs | crate::list | BAND_DAMAGED | const | &str	free-text	UI text/label const
@@ -2765,11 +2762,12 @@ ambre-murmure | src/pictures.rs | crate::pictures | frame_at(still) | param | bo
 ambre-murmure | src/pictures.rs | crate::pictures | frame_key(index) | param | usize	math	local count/index/counter
 ambre-murmure | src/pictures.rs | crate::pictures | previews() | ret | bool	math	state flag/predicate
 ambre-murmure | src/reaction.rs | crate::reaction | EMOJI_MAX_BYTES | const | usize	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
+ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey.0 | field | String	newtype-inner	newtype inner, accessor or constructor
+ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::as_str() | ret | &str	foreign-api	the reaction key as the Loro map stores it
+ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::read(stored) | param | &str	foreign-api	a reaction key the Loro map returns
 ambre-murmure | src/reaction.rs | crate::reaction | is_emoji() | ret | bool	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/reaction.rs | crate::reaction | is_emoji(emoji) | param | &str	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/reaction.rs | crate::reaction | is_map() | ret | bool	math	state flag/predicate
-ambre-murmure | src/reaction.rs | crate::reaction | key() | ret | String	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
-ambre-murmure | src/reaction.rs | crate::reaction | user_of(key) | param | &str	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | TEXT_LIMIT | const | usize	math	local count/index/counter
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | char_name() | ret | String	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | char_name(c) | param | Option<char>	free-text	text, label or user content
@@ -2785,86 +2783,24 @@ ambre-murmure | src/read_aloud.rs | crate::read_aloud | said(before) | param | &
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | said(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | spoken() | ret | String	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | spoken(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/schema.rs | crate::schema | AMENDMENTS | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | AMENDMENT_BY | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | AMENDMENT_CONTENT | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | AMENDMENT_DELETED | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | AMENDMENT_THREADS | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | ATTACHMENT_MEDIA | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | ATTACHMENT_NAME | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | ATTACHMENT_SIZE | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | ATTACHMENT_TYPE | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | BOLD | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | BULLETS | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | CATALOGUE | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | CATEGORIES | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | CATEGORY_NAME | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | CATEGORY_POSITION | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | CHANNEL | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | CHANNEL_NAME | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | CHANNEL_TYPE | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | CODE | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | CODE_BLOCK | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
 ambre-murmure | src/schema.rs | crate::schema | ChannelType::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | ChannelType::parse(word) | param | &str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | DeletedBy::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | DocumentKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
-ambre-murmure | src/schema.rs | crate::schema | ENTRY_CATEGORY | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | ENTRY_KEY | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | ENTRY_NAME | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | ENTRY_POSITION | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | ENTRY_TOPIC | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | HEADER | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | HEADER_CHANNEL | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | HEADER_CREATED_AT | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | HEADER_FOLDED | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | HEADER_FOLDED_SEQ | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | HEADER_KIND | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | HEADER_ROOT | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | HEADER_SEGMENT | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | HEADER_SPACE | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | ITALIC | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | LINK | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MENTION | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGES | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_ALSO_IN_THREAD | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_ATTACHMENTS | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_AUTHOR | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_CONTENT | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_DELETED | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_EDITED | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_ID | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_MEMBER | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_NOTICE | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_REACTIONS | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_THREAD | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | MESSAGE_TS | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::parse(word) | param | &str	newtype-inner	enum/newtype own accessor or constructor
-ambre-murmure | src/schema.rs | crate::schema | QUOTE | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
 ambre-murmure | src/schema.rs | crate::schema | SCHEMA_VERSION | const | u32	debt	finding: Two schema-version spaces, and a duplicated frame magic
-ambre-murmure | src/schema.rs | crate::schema | SEGMENTS | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | SEGMENT_AMENDMENTS | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | SEGMENT_DOCUMENT | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | SEGMENT_FOLDED | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | SEGMENT_FROM | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | SEGMENT_STATE | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | SPACE | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | SPACE_NAME | const | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
 ambre-murmure | src/schema.rs | crate::schema | admit(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/schema.rs | crate::schema | admit_all(payloads) | param | &[&[u8]]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/schema.rs | crate::schema | admit_space(payloads) | param | &[&[u8]]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/schema.rs | crate::schema | flag() | ret | bool	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | flag(key) | param | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
 ambre-murmure | src/schema.rs | crate::schema | import_bytes(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/schema.rs | crate::schema | read_as_it_is() | ret | Result<(),String>	trait	signature dictated by SchemaMigration.apply
 ambre-murmure | src/schema.rs | crate::schema | read_version() | ret | Result<u32,SchemaError>	debt	finding: Two schema-version spaces, and a duplicated frame magic
-ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | string(key) | param | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
+ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
+ambre-murmure | src/schema.rs | crate::schema | string_value() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
 ambre-murmure | src/schema.rs | crate::schema | ts_value() | ret | i64	newtype-inner	Loro storage adapter for Timestamp
-ambre-murmure | src/schema.rs | crate::schema | unsigned() | ret | Option<u64>	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | unsigned(key) | param | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | value(key) | param | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
+ambre-murmure | src/schema.rs | crate::schema | unsigned() | ret | Option<u64>	foreign-api	a scalar the document stores, typed by the caller
 ambre-murmure | src/search.rs | crate::search | Query.words | field | Vec<String>	free-text	text, label or user content
 ambre-murmure | src/search.rs | crate::search | Query::matches() | ret | bool	math	state flag/predicate
 ambre-murmure | src/search.rs | crate::search | Query::matches(text) | param | &str	free-text	text, label or user content
@@ -2934,18 +2870,12 @@ ambre-murmure | src/space.rs | crate::space | SpaceState::put_category(position)
 ambre-murmure | src/space.rs | crate::space | SpaceState::reseal_channel() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::snapshot() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::unlist_channel() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | child_map(key) | param | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/space.rs | crate::space | clear(key) | param | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
 ambre-murmure | src/space.rs | crate::space | position_of() | ret | u32	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
-ambre-murmure | src/space.rs | crate::space | position_of(key) | param | &str	debt	finding: Loro map key names are bare `&str` consts and parameters
 ambre-murmure | src/space.rs | crate::space | write_created(name) | param | &str	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
-ambre-murmure | src/style.rs | crate::style | KEYS | const | [&str;7]	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/style.rs | crate::style | fits() | ret | bool	math	state flag/predicate
 ambre-murmure | src/style.rs | crate::style | fits(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/style.rs | crate::style | key() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/style.rs | crate::style | linkable() | ret | bool	debt	finding: Link addresses as `String`
 ambre-murmure | src/style.rs | crate::style | linkable(address) | param | &str	debt	finding: Link addresses as `String`
-ambre-murmure | src/style.rs | crate::style | style_of(key) | param | &str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/uploads.rs | crate::uploads | OPENS | const | [&str;5]	debt	finding: Media types as `&str`
 ambre-murmure | src/uploads.rs | crate::uploads | Pending.name | field | String	free-text	text, label or user content
 ambre-murmure | src/uploads.rs | crate::uploads | PickedFile.data | field | Vec<u8>	generic	opaque file content bytes

@@ -8,7 +8,7 @@ use ambre_bus::{MessageDraft, MurmureEvent, SnapshotVerdict, Timestamp};
 use ambre_core::{ChannelId, LeaseId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
-use crate::schema::{MESSAGE_CONTENT, MESSAGES};
+use crate::schema::{MessageKey, Root};
 use crate::session::next_peer;
 use crate::{ChannelState, ChannelType, FINALIZE_RETRY_MS, Order, Signer};
 
@@ -70,12 +70,13 @@ fn peer_of(state: &ChannelState) -> ChannelState {
 /// before the finalization would.
 fn erase_body(state: &ChannelState, segment: SegmentId, index: usize) {
     let doc = state.doc(segment.document_id()).expect("held");
-    let Some(ValueOrContainer::Container(Container::Map(message))) =
-        doc.get_list(MESSAGES).get(index)
+    let Some(message) = crate::schema::root_list(doc, Root::Messages)
+        .get(index)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("no message at {index}");
     };
-    let Some(ValueOrContainer::Container(Container::Text(body))) = message.get(MESSAGE_CONTENT)
+    let Some(ValueOrContainer::Container(Container::Text(body))) = message.get(MessageKey::Content)
     else {
         panic!("no body");
     };
@@ -417,7 +418,9 @@ fn a_final_snapshot_at_odds_with_the_deltas_is_refused() {
     let document_id = closing.document_id();
     let added = forged(&alice, closing, |doc| {
         doc.set_peer_id(next_peer().0).expect("peer");
-        doc.get_list(MESSAGES).push("planted").expect("push");
+        crate::schema::root_list(doc, Root::Messages)
+            .push("planted")
+            .expect("push");
     });
     assert_eq!(
         bob.check_snapshot(document_id, ambre_core::Seq(2), &added)

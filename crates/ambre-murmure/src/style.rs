@@ -11,10 +11,18 @@ use ambre_core::{CharOffset, CharSpan, char_len};
 use loro::{ExpandType, LoroDoc, LoroText, LoroValue, StyleConfig, StyleConfigMap, TextDelta};
 
 use crate::error::MurmureError;
-use crate::schema::{BOLD, BULLETS, CODE, CODE_BLOCK, ITALIC, LINK, MENTION, QUOTE};
+use crate::schema::Mark;
 
 /// Every key a style mark takes, in the order a read lists them.
-const KEYS: [&str; 7] = [BOLD, ITALIC, CODE, LINK, CODE_BLOCK, QUOTE, BULLETS];
+const KEYS: [Mark; 7] = [
+    Mark::Bold,
+    Mark::Italic,
+    Mark::Code,
+    Mark::Link,
+    Mark::CodeBlock,
+    Mark::Quote,
+    Mark::List,
+];
 
 /// Set the expansion of every mark a body takes. The config is local to the
 /// document and read at the mark: a receiver takes it from the op itself.
@@ -23,9 +31,15 @@ const KEYS: [&str; 7] = [BOLD, ITALIC, CODE, LINK, CODE_BLOCK, QUOTE, BULLETS];
 /// them stays out. Bold and italic grow with text typed at their end.
 pub(crate) fn configure(doc: &LoroDoc) {
     let mut styles = StyleConfigMap::default_rich_text_config();
-    for key in [MENTION, CODE, CODE_BLOCK, QUOTE, BULLETS] {
+    for key in [
+        Mark::Mention,
+        Mark::Code,
+        Mark::CodeBlock,
+        Mark::Quote,
+        Mark::List,
+    ] {
         styles.insert(
-            key.into(),
+            key.as_str().into(),
             StyleConfig {
                 expand: ExpandType::None,
             },
@@ -111,21 +125,25 @@ pub(crate) fn write(
             | TextStyle::Quote
             | TextStyle::List => LoroValue::Bool(true),
         };
-        content.mark(mark.range.to_usize_range(), key(&mark.style), value)?;
+        content.mark(
+            mark.range.to_usize_range(),
+            key(&mark.style).as_str(),
+            value,
+        )?;
     }
     Ok(())
 }
 
 /// The key the mark of `style` sits under.
-pub(crate) fn key(style: &TextStyle) -> &'static str {
+pub(crate) fn key(style: &TextStyle) -> Mark {
     match style {
-        TextStyle::Bold => BOLD,
-        TextStyle::Italic => ITALIC,
-        TextStyle::Code => CODE,
-        TextStyle::Link(_) => LINK,
-        TextStyle::CodeBlock => CODE_BLOCK,
-        TextStyle::Quote => QUOTE,
-        TextStyle::List => BULLETS,
+        TextStyle::Bold => Mark::Bold,
+        TextStyle::Italic => Mark::Italic,
+        TextStyle::Code => Mark::Code,
+        TextStyle::Link(_) => Mark::Link,
+        TextStyle::CodeBlock => Mark::CodeBlock,
+        TextStyle::Quote => Mark::Quote,
+        TextStyle::List => Mark::List,
     }
 }
 
@@ -138,7 +156,7 @@ pub(crate) fn clear(content: &LoroText) -> Result<(), MurmureError> {
     let len = content.len_unicode();
     if len > 0 {
         for key in KEYS {
-            content.unmark(0..len, key)?;
+            content.unmark(0..len, key.as_str())?;
         }
     }
     Ok(())
@@ -146,15 +164,15 @@ pub(crate) fn clear(content: &LoroText) -> Result<(), MurmureError> {
 
 /// The style a mark under `key` holding `value` gives, or `None` for a value
 /// no style takes. A link to an address [`linkable`] refuses reads as text.
-fn style_of(key: &str, value: &LoroValue) -> Option<TextStyle> {
+fn style_of(key: Mark, value: &LoroValue) -> Option<TextStyle> {
     match (key, value) {
-        (BOLD, LoroValue::Bool(true)) => Some(TextStyle::Bold),
-        (ITALIC, LoroValue::Bool(true)) => Some(TextStyle::Italic),
-        (CODE, LoroValue::Bool(true)) => Some(TextStyle::Code),
-        (CODE_BLOCK, LoroValue::Bool(true)) => Some(TextStyle::CodeBlock),
-        (QUOTE, LoroValue::Bool(true)) => Some(TextStyle::Quote),
-        (BULLETS, LoroValue::Bool(true)) => Some(TextStyle::List),
-        (LINK, LoroValue::String(address)) if linkable(address) => {
+        (Mark::Bold, LoroValue::Bool(true)) => Some(TextStyle::Bold),
+        (Mark::Italic, LoroValue::Bool(true)) => Some(TextStyle::Italic),
+        (Mark::Code, LoroValue::Bool(true)) => Some(TextStyle::Code),
+        (Mark::CodeBlock, LoroValue::Bool(true)) => Some(TextStyle::CodeBlock),
+        (Mark::Quote, LoroValue::Bool(true)) => Some(TextStyle::Quote),
+        (Mark::List, LoroValue::Bool(true)) => Some(TextStyle::List),
+        (Mark::Link, LoroValue::String(address)) if linkable(address) => {
             Some(TextStyle::Link(address.to_string()))
         }
         _ => None,
@@ -176,7 +194,7 @@ pub(crate) fn read(content: &LoroText) -> Vec<StyleMark> {
         for (slot, key) in open.iter_mut().zip(KEYS) {
             let style = attributes
                 .as_ref()
-                .and_then(|attributes| attributes.get(key))
+                .and_then(|attributes| attributes.get(key.as_str()))
                 .and_then(|value| style_of(key, value));
             let Some(style) = style else {
                 *slot = None;

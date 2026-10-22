@@ -5,7 +5,7 @@ use ambre_bus::{MessageDraft, Timestamp, UnreadCount};
 use ambre_core::{ChannelId, SegmentId, Seq, UserId};
 use loro::{Container, ValueOrContainer};
 
-use crate::schema::{MESSAGE_CONTENT, MESSAGES};
+use crate::schema::{MessageKey, Root};
 use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Order, Position, Signer,
 };
@@ -192,11 +192,14 @@ fn an_edit_creates_no_message_and_never_counts() {
 
     let doc = alice.doc(segment.document_id()).expect("segment");
     let before = doc.oplog_vv();
-    let Some(ValueOrContainer::Container(Container::Map(message))) = doc.get_list(MESSAGES).get(0)
+    let Some(message) = crate::schema::root_list(doc, Root::Messages)
+        .get(0)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("a message is a map container");
     };
-    let Some(ValueOrContainer::Container(Container::Text(content))) = message.get(MESSAGE_CONTENT)
+    let Some(ValueOrContainer::Container(Container::Text(content))) =
+        message.get(MessageKey::Content)
     else {
         panic!("the content is a text");
     };

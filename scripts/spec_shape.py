@@ -295,6 +295,12 @@ CONST_DEF = re.compile(
 CONTAINER_CALL = re.compile(
     r'(?:get_map|get_movable_list|get_list|get_text|insert_container)\(\s*&?([A-Z][A-Z0-9_]*)\b')
 
+# The third way: a closed set of root names, declared with `crdt_names!` as
+# `enum Root: ContainerName { Header = "header", ... }`. Every variant is a
+# root container the crate opens, so each spelling has to be in the table.
+CONTAINER_ENUM = re.compile(r"enum\s+\w+\s*:\s*ContainerName\s*\{(.*?)^\s*\}", re.S | re.M)
+CONTAINER_SPELLING = re.compile(r'=\s*"([a-z_]+)"')
+
 LIST = re.compile(r"^(?:[-*+]\s|\d+\.\s)")
 
 
@@ -603,6 +609,8 @@ def schema_issues(text: str, source: Path):
     built = set(CONTAINER_FMT.findall(code)) | set(CONTAINER_CONST.findall(code))
     names = dict(CONST_DEF.findall(code))
     built |= {names[c] for c in CONTAINER_CALL.findall(code) if c in names}
+    built |= {name for block in CONTAINER_ENUM.findall(code)
+              for name in CONTAINER_SPELLING.findall(block)}
     declared = declared_containers(text)
     for name in sorted(built - declared):
         where = source.name if source.is_file() else f"{source.parent.name}/{source.name}"

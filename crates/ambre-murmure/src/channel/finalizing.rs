@@ -9,11 +9,11 @@
 
 use ambre_bus::Timestamp;
 use ambre_core::{LeaseId, SegmentId, Seq};
-use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
+use loro::{ExportMode, LoroDoc};
 
 use super::ChannelState;
 use crate::error::MurmureError;
-use crate::schema::{self, SEGMENT_DOCUMENT, SEGMENT_STATE, SEGMENTS, SegmentState};
+use crate::schema::{self, Root, SegmentKey, SegmentState};
 
 /// The delay before a failed lease request or commit is asked again,
 /// doubled at each failure: the row of `ambre-spec-budgets.md section 8`.
@@ -302,15 +302,15 @@ impl ChannelState {
 /// # Errors
 /// [`MurmureError::Crdt`] when Loro refuses a write.
 fn record_final(meta: &LoroDoc, segment: SegmentId) -> Result<(), MurmureError> {
-    let list = meta.get_list(SEGMENTS);
+    let list = crate::schema::root_list(meta, Root::Segments);
     for index in 0..list.len() {
-        let Some(ValueOrContainer::Container(Container::Map(entry))) = list.get(index) else {
+        let Some(entry) = list.get(index).and_then(crate::schema::fields_of) else {
             continue;
         };
-        let id =
-            schema::string(&entry, SEGMENT_DOCUMENT).and_then(|s| SegmentId::parse_str(&s).ok());
+        let id = schema::string(&entry, SegmentKey::Document)
+            .and_then(|s| SegmentId::parse_str(&s).ok());
         if id == Some(segment) {
-            entry.insert(SEGMENT_STATE, SegmentState::Final.as_str())?;
+            entry.insert(SegmentKey::State, SegmentState::Final.as_str())?;
         }
     }
     Ok(())

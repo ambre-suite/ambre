@@ -6,7 +6,7 @@ use ambre_bus::{MessageDraft, MessageView, StyleMark, TextStyle, Timestamp};
 use ambre_core::{ChannelId, Seq, UserId};
 use loro::{Container, LoroText, LoroValue, TextDelta, ValueOrContainer};
 
-use crate::schema::{BOLD, BULLETS, CODE_BLOCK, LINK, MESSAGE_CONTENT, MESSAGES, QUOTE};
+use crate::schema::{Mark, MessageKey, Root};
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Sent, Signer};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
@@ -75,11 +75,14 @@ fn messages(state: &ChannelState) -> Vec<MessageView> {
 /// The body of message `n`, as the segment holds it.
 fn body(state: &ChannelState, n: usize) -> LoroText {
     let doc = state.doc(state.active_id().document_id()).expect("held");
-    let Some(ValueOrContainer::Container(Container::Map(message))) = doc.get_list(MESSAGES).get(n)
+    let Some(message) = crate::schema::root_list(doc, Root::Messages)
+        .get(n)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("a message is a map");
     };
-    let Some(ValueOrContainer::Container(Container::Text(content))) = message.get(MESSAGE_CONTENT)
+    let Some(ValueOrContainer::Container(Container::Text(content))) =
+        message.get(MessageKey::Content)
     else {
         panic!("a body is a text");
     };
@@ -87,14 +90,14 @@ fn body(state: &ChannelState, n: usize) -> LoroText {
 }
 
 /// The value each span of the body of message `n` holds under `key`.
-fn stored(state: &ChannelState, n: usize, key: &str) -> Vec<(String, Option<LoroValue>)> {
+fn stored(state: &ChannelState, n: usize, key: Mark) -> Vec<(String, Option<LoroValue>)> {
     body(state, n)
         .to_delta()
         .into_iter()
         .filter_map(|span| match span {
             TextDelta::Insert { insert, attributes } => Some((
                 insert,
-                attributes.and_then(|attributes| attributes.get(key).cloned()),
+                attributes.and_then(|attributes| attributes.get(key.as_str()).cloned()),
             )),
             _ => None,
         })
@@ -123,15 +126,18 @@ fn a_style_is_a_mark_on_the_body_that_travels_with_it() {
     deliver(&mut bob, &alice, author, &sent, 1);
     assert_eq!(messages(&bob)[0].styles, styles, "the delta carries them");
 
-    let marked = |key: &str, value: LoroValue| -> String {
+    let marked = |key: Mark, value: LoroValue| -> String {
         stored(&alice, 0, key)
             .into_iter()
             .filter(|(_, held)| held.as_ref() == Some(&value))
             .map(|(text, _)| text)
             .collect()
     };
-    assert_eq!(marked(BOLD, LoroValue::Bool(true)), "very");
-    assert_eq!(marked(LINK, LoroValue::from("https://ambre.dev")), "site");
+    assert_eq!(marked(Mark::Bold, LoroValue::Bool(true)), "very");
+    assert_eq!(
+        marked(Mark::Link, LoroValue::from("https://ambre.dev")),
+        "site"
+    );
 }
 
 // --- MURMURE-194 ---
@@ -155,19 +161,23 @@ fn a_block_mark_travels_with_the_body() {
     deliver(&mut bob, &alice, author, &sent, 1);
     assert_eq!(messages(&bob)[0].styles, styles, "the delta carries them");
 
-    let marked = |state: &ChannelState, key: &str| -> String {
+    let marked = |state: &ChannelState, key: Mark| -> String {
         stored(state, 0, key)
             .into_iter()
             .filter(|(_, held)| held == &Some(LoroValue::Bool(true)))
             .map(|(text, _)| text)
             .collect()
     };
-    assert_eq!(marked(&alice, QUOTE), "said\n");
-    assert_eq!(marked(&alice, CODE_BLOCK), "fn a\n");
-    assert_eq!(marked(&alice, BULLETS), "one\n");
+    assert_eq!(marked(&alice, Mark::Quote), "said\n");
+    assert_eq!(marked(&alice, Mark::CodeBlock), "fn a\n");
+    assert_eq!(marked(&alice, Mark::List), "one\n");
     body(&alice, 0).insert(5, "x").expect("an insert");
-    assert_eq!(marked(&alice, QUOTE), "said\n", "a block does not grow");
-    assert_eq!(marked(&alice, CODE_BLOCK), "fn a\n");
+    assert_eq!(
+        marked(&alice, Mark::Quote),
+        "said\n",
+        "a block does not grow"
+    );
+    assert_eq!(marked(&alice, Mark::CodeBlock), "fn a\n");
 }
 
 /// The runs a draft gives that touch or overlap read as one, in text order.
@@ -301,10 +311,14 @@ fn a_link_to_another_scheme_reads_as_text() {
     let doc = alice.doc(alice.active_id().document_id()).expect("held");
     let content = body(&alice, 0);
     content
-        .mark(6..10, LINK, LoroValue::from("javascript:alert(1)"))
+        .mark(
+            6..10,
+            Mark::Link.as_str(),
+            LoroValue::from("javascript:alert(1)"),
+        )
         .expect("mark");
     content
-        .mark(0..5, LINK, LoroValue::Bool(true))
+        .mark(0..5, Mark::Link.as_str(), LoroValue::Bool(true))
         .expect("mark");
     doc.commit();
     assert_eq!(messages(&alice)[0].styles, [mark(TextStyle::Bold, 0..5)]);

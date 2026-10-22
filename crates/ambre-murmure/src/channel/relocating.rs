@@ -18,10 +18,7 @@ use loro::{LoroDoc, LoroMap, LoroText, VersionVector};
 use super::{ChannelState, Sent, read_messages, summary_of};
 use crate::delta;
 use crate::error::MurmureError;
-use crate::schema::{
-    self, MESSAGE_AUTHOR, MESSAGE_CONTENT, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE,
-    MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, NoticeKind,
-};
+use crate::schema::{self, MessageKey, NoticeKind, Root};
 use crate::{mention, reaction, style};
 
 /// What a relocation produced: the send of the moved messages, and the
@@ -206,25 +203,30 @@ pub(super) fn replay_of(
 /// Only the author's own reactions were refused with it, so only theirs are
 /// written.
 fn rewrite(doc: &LoroDoc, channel: ChannelId, view: &MessageView) -> Result<(), MurmureError> {
-    let message = doc.get_list(MESSAGES).push_container(LoroMap::new())?;
-    message.insert(MESSAGE_ID, view.id.to_string())?;
-    message.insert(MESSAGE_AUTHOR, view.author.to_string())?;
-    message.insert(MESSAGE_TS, schema::ts_value(view.ts))?;
-    let content = message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
+    let message = crate::schema::Fields::of(
+        crate::schema::root_list(doc, Root::Messages).push_container(LoroMap::new())?,
+    );
+    message.insert(MessageKey::Id, view.id.to_string())?;
+    message.insert(MessageKey::Author, view.author.to_string())?;
+    message.insert(MessageKey::Ts, schema::ts_value(view.ts))?;
+    let content = message.insert_container(MessageKey::Content, LoroText::new())?;
     if !view.text.is_empty() {
         content.insert(0, &view.text)?;
         mention::write(doc, &content, &view.mentions, channel)?;
         style::write(doc, &content, &view.styles)?;
     }
-    let reactions = message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;
+    let reactions = message.insert_container(MessageKey::Reactions, LoroMap::new())?;
     for kind in &view.reactions {
         for &user in kind.users.iter().filter(|&&user| user == view.author) {
-            reactions.insert(&reaction::key(user, &kind.emoji), schema::ts_value(view.ts))?;
+            reactions.insert(
+                reaction::ReactionKey::of(user, &kind.emoji).as_str(),
+                schema::ts_value(view.ts),
+            )?;
         }
     }
     if let Some(Notice::MemberAdded { member }) = view.notice {
-        message.insert(MESSAGE_NOTICE, NoticeKind::MemberAdded.as_str())?;
-        message.insert(MESSAGE_MEMBER, member.to_string())?;
+        message.insert(MessageKey::Notice, NoticeKind::MemberAdded.as_str())?;
+        message.insert(MessageKey::Member, member.to_string())?;
     }
     Ok(())
 }

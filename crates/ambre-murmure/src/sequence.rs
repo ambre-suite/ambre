@@ -11,9 +11,9 @@
 use std::collections::HashMap;
 
 use ambre_core::{MessageId, Seq};
-use loro::{Container, ContainerID, ContainerTrait, ID, LoroDoc, ValueOrContainer, VersionVector};
+use loro::{ContainerID, ContainerTrait, ID, LoroDoc, VersionVector};
 
-use crate::schema::{self, MESSAGE_ID, MESSAGES};
+use crate::schema::{self, MessageKey, Root};
 
 /// The four bytes a framed snapshot opens with. A Loro blob opens with
 /// `loro`, so the two never read as each other.
@@ -240,16 +240,17 @@ pub(crate) type Created = (MessageId, ID);
 /// Each message of `doc` with the operation that created it. A message with
 /// no readable identifier is skipped: the view skips it too.
 pub(crate) fn created(doc: &LoroDoc) -> Vec<Created> {
-    let list = doc.get_list(MESSAGES);
+    let list = crate::schema::root_list(doc, Root::Messages);
     let mut out = Vec::with_capacity(list.len());
     list.for_each(|item| {
-        let ValueOrContainer::Container(Container::Map(map)) = item else {
+        let Some(map) = crate::schema::fields_of(item) else {
             return;
         };
-        let ContainerID::Normal { peer, counter, .. } = map.id() else {
+        let ContainerID::Normal { peer, counter, .. } = map.map().id() else {
             return;
         };
-        let Some(id) = schema::string(&map, MESSAGE_ID).and_then(|s| MessageId::parse_str(&s).ok())
+        let Some(id) =
+            schema::string(&map, MessageKey::Id).and_then(|s| MessageId::parse_str(&s).ok())
         else {
             return;
         };

@@ -6,9 +6,8 @@ use ambre_bus::{
     ActivityKind, Mention, MentionTarget, MessageDraft, MessageView, Reaction, Timestamp,
 };
 use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId, Seq, UserId};
-use loro::{Container, LoroMap, ValueOrContainer};
 
-use crate::schema::{self, MESSAGES};
+use crate::schema::{self, Root};
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Sent, Signer};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
@@ -55,9 +54,11 @@ impl Member {
     }
 
     /// The map of the one message, read in the segment itself.
-    fn message_map(&self) -> LoroMap {
+    fn message_map(&self) -> crate::schema::Fields<crate::schema::MessageKey> {
         let doc = self.state.doc(self.segment().document_id()).expect("held");
-        let Some(ValueOrContainer::Container(Container::Map(map))) = doc.get_list(MESSAGES).get(0)
+        let Some(map) = crate::schema::root_list(doc, Root::Messages)
+            .get(0)
+            .and_then(crate::schema::fields_of)
         else {
             panic!("a message is a map container");
         };
@@ -310,7 +311,7 @@ fn a_delete_keeps_the_thread_and_the_reactions() {
     let thread = DocumentId::new().to_string();
     alice
         .message_map()
-        .insert("thread", thread.as_str())
+        .insert(crate::schema::MessageKey::Thread, thread.as_str())
         .expect("thread");
 
     let sent = alice
@@ -321,7 +322,7 @@ fn a_delete_keeps_the_thread_and_the_reactions() {
 
     for member in [&alice, &bob] {
         assert_eq!(
-            schema::string(&member.message_map(), "thread").as_deref(),
+            schema::string(&member.message_map(), crate::schema::MessageKey::Thread).as_deref(),
             Some(thread.as_str())
         );
         let shown = member.only_message();

@@ -10,7 +10,8 @@ use ambre_core::{ChannelId, CharOffset, CharSpan, UserId, char_len};
 use loro::{LoroDoc, LoroText, LoroValue, TextDelta};
 
 use crate::error::MurmureError;
-use crate::schema::MENTION;
+use crate::schema::Mark;
+
 use crate::style;
 
 /// The value a mark stores for `target`: the user, or the channel itself.
@@ -59,7 +60,7 @@ pub(crate) fn write(
     for mention in mentions {
         content.mark(
             mention.range.to_usize_range(),
-            MENTION,
+            Mark::Mention.as_str(),
             value_of(mention.target, channel),
         )?;
     }
@@ -78,7 +79,7 @@ pub(crate) fn read(content: &LoroText, channel: ChannelId) -> Vec<Mention> {
         let len = char_len(&insert);
         let target = attributes
             .as_ref()
-            .and_then(|attributes| attributes.get(MENTION))
+            .and_then(|attributes| attributes.get(Mark::Mention.as_str()))
             .and_then(|value| target_of(value, channel));
         if let Some(target) = target {
             mentions.push(Mention {

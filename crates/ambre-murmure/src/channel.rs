@@ -21,11 +21,8 @@ use loro::{
 use crate::delta::{self, Arrival, Refusal, Rules, Signer};
 use crate::error::MurmureError;
 use crate::schema::{
-    self, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, ChannelType, DocumentKind, MENTION,
-    MESSAGE_ALSO_IN_THREAD, MESSAGE_ATTACHMENTS, MESSAGE_AUTHOR, MESSAGE_CONTENT, MESSAGE_DELETED,
-    MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS, MESSAGE_THREAD,
-    MESSAGE_TS, MESSAGES, NoticeKind, SEGMENT_DOCUMENT, SEGMENT_FROM, SEGMENT_STATE, SEGMENTS,
-    SegmentState,
+    self, ChannelKey, ChannelType, DocumentKind, Fields, Mark, MessageKey, NoticeKind, Root,
+    SegmentKey, SegmentState,
 };
 use crate::search::Query;
 use crate::sequence::{self, Order, Position, Sequence};
@@ -144,10 +141,10 @@ impl Created {
                     channel_id,
                     ambre_bus::Timestamp(now.0),
                 )?;
-                let channel = doc.get_map(CHANNEL);
-                channel.insert(CHANNEL_TYPE, channel_type.as_str())?;
+                let channel = crate::schema::channel(doc);
+                channel.insert(ChannelKey::Type, channel_type.as_str())?;
                 if let Some(name) = name {
-                    channel.insert(CHANNEL_NAME, name.as_str())?;
+                    channel.insert(ChannelKey::Name, name.as_str())?;
                 }
                 push_segment_entry(doc, *active, *now, SegmentState::Active)?;
             }
@@ -166,8 +163,8 @@ impl Created {
                     channel_id,
                     ambre_bus::Timestamp(now.0),
                 )?;
-                doc.get_map(schema::HEADER)
-                    .insert(schema::HEADER_SEGMENT, segment.to_string())?;
+                crate::schema::header(doc)
+                    .insert(schema::HeaderKey::Segment, segment.to_string())?;
             }
             Self::Thread { segment, root, now } => {
                 schema::write_header(
@@ -176,9 +173,9 @@ impl Created {
                     channel_id,
                     ambre_bus::Timestamp(now.0),
                 )?;
-                let header = doc.get_map(schema::HEADER);
-                header.insert(schema::HEADER_SEGMENT, segment.to_string())?;
-                header.insert(schema::HEADER_ROOT, root.to_string())?;
+                let header = crate::schema::header(doc);
+                header.insert(schema::HeaderKey::Segment, segment.to_string())?;
+                header.insert(schema::HeaderKey::Root, root.to_string())?;
             }
         }
         doc.commit();
@@ -548,13 +545,13 @@ impl ChannelState {
     /// Who may read the channel, as its `meta` document states it. `None`
     /// for a word no build wrote.
     pub fn channel_type(&self) -> Option<ChannelType> {
-        schema::string(&self.meta.doc.get_map(CHANNEL), CHANNEL_TYPE)
+        schema::string(&crate::schema::channel(&self.meta.doc), ChannelKey::Type)
             .and_then(|word| ChannelType::parse(&word))
     }
 
     /// The name of the channel, absent when it has none (`MURMURE-018`).
     pub fn name(&self) -> Option<String> {
-        schema::string(&self.meta.doc.get_map(CHANNEL), CHANNEL_NAME)
+        schema::string(&crate::schema::channel(&self.meta.doc), ChannelKey::Name)
     }
 
     /// Name a direct message in its `meta`, or clear its name with `None`
@@ -577,10 +574,10 @@ impl ChannelState {
         let name = name.map(str::trim).filter(|n| !n.is_empty());
         fitting(name)?;
         let (doc, session) = self.meta.session()?;
-        let channel = doc.get_map(CHANNEL);
+        let channel = crate::schema::channel(doc);
         match name {
-            Some(name) => channel.insert(CHANNEL_NAME, name)?,
-            None if channel.get(CHANNEL_NAME).is_some() => channel.delete(CHANNEL_NAME)?,
+            Some(name) => channel.insert(ChannelKey::Name, name)?,
+            None if channel.get(ChannelKey::Name).is_some() => channel.delete(ChannelKey::Name)?,
             None => {}
         }
         Ok(Named {
@@ -774,7 +771,7 @@ impl ChannelState {
         document_id: DocumentId,
         read: Seq,
         me: UserId,
-        counts: impl Fn(&LoroMap) -> bool,
+        counts: impl Fn(&Fields<MessageKey>) -> bool,
     ) -> Result<u32, MurmureError> {
         let mut count: u32 = 0;
         self.each_unread(document_id, read, me, |_, message| {
@@ -817,14 +814,14 @@ impl ChannelState {
         document_id: DocumentId,
         read: Seq,
         me: UserId,
-        mut each: impl FnMut(MessageId, &LoroMap),
+        mut each: impl FnMut(MessageId, &Fields<MessageKey>),
     ) -> Result<(), MurmureError> {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
         let sequence = self.sequences.get(&document_id);
-        doc.get_list(MESSAGES).for_each(|item| {
-            let ValueOrContainer::Container(Container::Map(message)) = item else {
+        crate::schema::root_list(doc, Root::Messages).for_each(|item| {
+            let Some(message) = crate::schema::fields_of(item) else {
                 return;
             };
             let Some((id, author)) = identity_of(&message) else {
@@ -1028,14 +1025,16 @@ impl ChannelState {
         let segment = self.active_id();
         let (doc, session) = self.active.session()?;
         let id = MessageId::new();
-        let message = doc.get_list(MESSAGES).push_container(LoroMap::new())?;
-        message.insert(MESSAGE_ID, id.to_string())?;
-        message.insert(MESSAGE_AUTHOR, author.to_string())?;
-        message.insert(MESSAGE_TS, schema::ts_value(now))?;
-        message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
-        message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;
-        message.insert(MESSAGE_NOTICE, NoticeKind::MemberAdded.as_str())?;
-        message.insert(MESSAGE_MEMBER, member.to_string())?;
+        let message = crate::schema::Fields::of(
+            crate::schema::root_list(doc, Root::Messages).push_container(LoroMap::new())?,
+        );
+        message.insert(MessageKey::Id, id.to_string())?;
+        message.insert(MessageKey::Author, author.to_string())?;
+        message.insert(MessageKey::Ts, schema::ts_value(now))?;
+        message.insert_container(MessageKey::Content, LoroText::new())?;
+        message.insert_container(MessageKey::Reactions, LoroMap::new())?;
+        message.insert(MessageKey::Notice, NoticeKind::MemberAdded.as_str())?;
+        message.insert(MessageKey::Member, member.to_string())?;
         let delta = session.export_json(doc)?;
         Ok(Sent {
             segment,
@@ -1084,12 +1083,12 @@ impl ChannelState {
         if !reaction::is_emoji(emoji.as_str()) {
             return Err(MurmureError::NotEmoji);
         }
-        let key = reaction::key(user, emoji);
+        let key = reaction::ReactionKey::of(user, emoji);
         let (doc, session, map) = self.reactions_of(at, message)?;
-        if map.get(&key).is_some() {
+        if map.get(key.as_str()).is_some() {
             return Ok(None);
         }
-        map.insert(&key, schema::ts_value(now))?;
+        map.insert(key.as_str(), schema::ts_value(now))?;
         let delta = session.export_json(doc)?;
         self.reacted_at(at, delta).map(Some)
     }
@@ -1107,12 +1106,12 @@ impl ChannelState {
         user: UserId,
     ) -> Result<Option<Sent>, MurmureError> {
         let at = at.into();
-        let key = reaction::key(user, emoji);
+        let key = reaction::ReactionKey::of(user, emoji);
         let (doc, session, map) = self.reactions_of(at, message)?;
-        if map.get(&key).is_none() {
+        if map.get(key.as_str()).is_none() {
             return Ok(None);
         }
-        map.delete(&key)?;
+        map.delete(key.as_str())?;
         let delta = session.export_json(doc)?;
         self.reacted_at(at, delta).map(Some)
     }
@@ -1128,7 +1127,7 @@ impl ChannelState {
         message: MessageId,
     ) -> Result<(&LoroDoc, &mut Session, LoroMap), MurmureError> {
         let (doc, session, map) = self.live_message(at, message)?;
-        let reactions = match map.get(MESSAGE_REACTIONS) {
+        let reactions = match map.get(MessageKey::Reactions) {
             Some(ValueOrContainer::Container(Container::Map(reactions))) => reactions,
             _ => return Err(MurmureError::NoMessage(message)),
         };
@@ -1148,7 +1147,7 @@ impl ChannelState {
         &mut self,
         at: MessageAt,
         message: MessageId,
-    ) -> Result<(&LoroDoc, &mut Session, LoroMap), MurmureError> {
+    ) -> Result<(&LoroDoc, &mut Session, Fields<MessageKey>), MurmureError> {
         let held = match at {
             MessageAt::Segment(segment) => {
                 let document_id = segment.document_id();
@@ -1183,14 +1182,14 @@ impl ChannelState {
         at: MessageAt,
         message: MessageId,
         user: UserId,
-    ) -> Result<(&LoroDoc, &mut Session, LoroMap), MurmureError> {
+    ) -> Result<(&LoroDoc, &mut Session, Fields<MessageKey>), MurmureError> {
         let (doc, session, map) = self.live_message(at, message)?;
         // The check refuses a foreign change at every receiver, so a local
         // one is refused before it is written (`MURMURE-085`).
         if identity_of(&map).map(|(_, author)| author) != Some(user) {
             return Err(MurmureError::NotAuthor(message));
         }
-        if schema::flag(&map, MESSAGE_DELETED) {
+        if schema::flag(&map, MessageKey::Deleted) {
             return Err(MurmureError::Deleted(message));
         }
         Ok((doc, session, map))
@@ -1243,7 +1242,7 @@ impl ChannelState {
         // the edit took out leaves no mark on the text that stays.
         let len = content.len_unicode();
         if len > 0 {
-            content.unmark(0..len, MENTION)?;
+            content.unmark(0..len, Mark::Mention.as_str())?;
         }
         style::clear(&content)?;
         content
@@ -1251,7 +1250,7 @@ impl ChannelState {
             .map_err(|error| MurmureError::Crdt(error.to_string()))?;
         mention::write(doc, &content, &draft.mentions, channel)?;
         style::write(doc, &content, &draft.styles)?;
-        map.insert(MESSAGE_EDITED, true)?;
+        map.insert(MessageKey::Edited, true)?;
         let delta = session.export_json(doc)?;
         self.changed_at(at, delta).map(Some)
     }
@@ -1291,10 +1290,10 @@ impl ChannelState {
         }
         // The files go with the text: the caller erases them from storage
         // (`MURMURE-240`), and no reference outlives them.
-        if map.get(MESSAGE_ATTACHMENTS).is_some() {
-            map.delete(MESSAGE_ATTACHMENTS)?;
+        if map.get(MessageKey::Attachments).is_some() {
+            map.delete(MessageKey::Attachments)?;
         }
-        map.insert(MESSAGE_DELETED, true)?;
+        map.insert(MessageKey::Deleted, true)?;
         let delta = session.export_json(doc)?;
         self.changed_at(at, delta)
     }
@@ -1867,10 +1866,12 @@ pub(crate) fn push_segment_entry(
     from: Timestamp,
     state: SegmentState,
 ) -> Result<(), MurmureError> {
-    let entry = meta.get_list(SEGMENTS).push_container(LoroMap::new())?;
-    entry.insert(SEGMENT_DOCUMENT, id.to_string())?;
-    entry.insert(SEGMENT_FROM, schema::ts_value(from))?;
-    entry.insert(SEGMENT_STATE, state.as_str())?;
+    let entry = crate::schema::Fields::of(
+        crate::schema::root_list(meta, Root::Segments).push_container(LoroMap::new())?,
+    );
+    entry.insert(SegmentKey::Document, id.to_string())?;
+    entry.insert(SegmentKey::From, schema::ts_value(from))?;
+    entry.insert(SegmentKey::State, state.as_str())?;
     Ok(())
 }
 
@@ -1879,16 +1880,16 @@ pub(crate) fn push_segment_entry(
 /// twice reads as its first entry: two clients writing one close may both
 /// list the successor (`MURMURE-010`).
 fn segment_entries(meta: &LoroDoc) -> Vec<(SegmentId, SegmentState)> {
-    let list: LoroList = meta.get_list(SEGMENTS);
+    let list: LoroList = crate::schema::root_list(meta, Root::Segments);
     let mut entries = Vec::with_capacity(list.len());
     list.for_each(|item| {
-        let ValueOrContainer::Container(Container::Map(entry)) = item else {
+        let Some(entry) = crate::schema::fields_of(item) else {
             tracing::warn!("[Murmure] a segments entry is not a map; skipped");
             return;
         };
-        let id =
-            schema::string(&entry, SEGMENT_DOCUMENT).and_then(|s| SegmentId::parse_str(&s).ok());
-        let state = schema::string(&entry, SEGMENT_STATE).and_then(|s| SegmentState::parse(&s));
+        let id = schema::string(&entry, SegmentKey::Document)
+            .and_then(|s| SegmentId::parse_str(&s).ok());
+        let state = schema::string(&entry, SegmentKey::State).and_then(|s| SegmentState::parse(&s));
         match (id, state) {
             (Some(id), Some(_)) if entries.iter().any(|(listed, _)| *listed == id) => {}
             (Some(id), Some(state)) => entries.push((id, state)),
@@ -1902,19 +1903,19 @@ fn segment_entries(meta: &LoroDoc) -> Vec<(SegmentId, SegmentState)> {
 /// of the segment listed after it. `None` when `meta` lists no final segment
 /// of that identifier, or its `from_ts` is unreadable.
 fn segment_span(meta: &LoroDoc, segment: SegmentId) -> Option<(Timestamp, Option<Timestamp>)> {
-    let list: LoroList = meta.get_list(SEGMENTS);
+    let list: LoroList = crate::schema::root_list(meta, Root::Segments);
     let mut spans: Vec<(SegmentId, SegmentState, Option<u64>)> = Vec::with_capacity(list.len());
     list.for_each(|item| {
-        let ValueOrContainer::Container(Container::Map(entry)) = item else {
+        let Some(entry) = crate::schema::fields_of(item) else {
             return;
         };
-        let id =
-            schema::string(&entry, SEGMENT_DOCUMENT).and_then(|s| SegmentId::parse_str(&s).ok());
-        let state = schema::string(&entry, SEGMENT_STATE).and_then(|s| SegmentState::parse(&s));
+        let id = schema::string(&entry, SegmentKey::Document)
+            .and_then(|s| SegmentId::parse_str(&s).ok());
+        let state = schema::string(&entry, SegmentKey::State).and_then(|s| SegmentState::parse(&s));
         if let (Some(id), Some(state)) = (id, state)
             && !spans.iter().any(|(listed, _, _)| *listed == id)
         {
-            spans.push((id, state, schema::unsigned(&entry, SEGMENT_FROM)));
+            spans.push((id, state, schema::unsigned(&entry, SegmentKey::From)));
         }
     });
     let position = spans.iter().position(|(id, _, _)| *id == segment)?;
@@ -1932,7 +1933,7 @@ fn segment_span(meta: &LoroDoc, segment: SegmentId) -> Option<(Timestamp, Option
 /// The messages of a segment, in list order. A malformed message is skipped
 /// with a warn rather than failing the whole segment.
 pub(crate) fn read_messages(doc: &LoroDoc, channel: ChannelId) -> Vec<MessageView> {
-    let list = doc.get_list(MESSAGES);
+    let list = crate::schema::root_list(doc, Root::Messages);
     let mut messages = Vec::with_capacity(list.len());
     list.for_each(|item| match read_message(item, channel) {
         Some(view) => messages.push(view),
@@ -1943,15 +1944,15 @@ pub(crate) fn read_messages(doc: &LoroDoc, channel: ChannelId) -> Vec<MessageVie
 
 /// The identifier and the author of one message, with no body read: what a
 /// count needs. `None` when either is absent or unreadable.
-fn identity_of(map: &LoroMap) -> Option<(MessageId, UserId)> {
-    let id = MessageId::parse_str(&schema::string(map, MESSAGE_ID)?).ok()?;
-    let author = UserId::parse_str(&schema::string(map, MESSAGE_AUTHOR)?).ok()?;
+fn identity_of(map: &Fields<MessageKey>) -> Option<(MessageId, UserId)> {
+    let id = MessageId::parse_str(&schema::string(map, MessageKey::Id)?).ok()?;
+    let author = UserId::parse_str(&schema::string(map, MessageKey::Author)?).ok()?;
     Some((id, author))
 }
 
 /// The body of one message, `None` when it is absent or not a text.
-fn content_of(map: &LoroMap) -> Option<LoroText> {
-    match map.get(MESSAGE_CONTENT) {
+fn content_of(map: &Fields<MessageKey>) -> Option<LoroText> {
+    match map.get(MessageKey::Content) {
         Some(ValueOrContainer::Container(Container::Text(content))) => Some(content),
         _ => None,
     }
@@ -1959,13 +1960,11 @@ fn content_of(map: &LoroMap) -> Option<LoroText> {
 
 /// One message, or `None` when a field is absent or unreadable.
 fn read_message(item: ValueOrContainer, channel: ChannelId) -> Option<MessageView> {
-    let ValueOrContainer::Container(Container::Map(map)) = item else {
-        return None;
-    };
+    let map = crate::schema::fields_of(item)?;
     let (id, author) = identity_of(&map)?;
-    let ts = Timestamp(schema::unsigned(&map, MESSAGE_TS)?);
+    let ts = Timestamp(schema::unsigned(&map, MessageKey::Ts)?);
     let content = content_of(&map)?;
-    let deleted = schema::flag(&map, MESSAGE_DELETED);
+    let deleted = schema::flag(&map, MessageKey::Deleted);
     Some(MessageView {
         id,
         author,
@@ -1981,22 +1980,22 @@ fn read_message(item: ValueOrContainer, channel: ChannelId) -> Option<MessageVie
         },
         reactions: reaction::read(&map),
         notice: notice_of(&map)?,
-        edited: schema::flag(&map, MESSAGE_EDITED),
+        edited: schema::flag(&map, MessageKey::Edited),
         deleted,
         // The count is read from the thread document, once it is held
         // (`MURMURE-106`).
-        thread: document_of(&map, MESSAGE_THREAD).map(|document| ThreadHead {
+        thread: document_of(&map, MessageKey::Thread).map(|document| ThreadHead {
             document,
             replies: 0,
             last_replier: None,
         }),
-        also_in_thread: document_of(&map, MESSAGE_ALSO_IN_THREAD),
+        also_in_thread: document_of(&map, MessageKey::AlsoInThread),
     })
 }
 
 /// The document identifier under `key`, `None` when it is absent or
 /// unreadable.
-fn document_of(map: &LoroMap, key: &str) -> Option<DocumentId> {
+fn document_of(map: &Fields<MessageKey>, key: MessageKey) -> Option<DocumentId> {
     DocumentId::parse_str(&schema::string(map, key)?).ok()
 }
 
@@ -2020,52 +2019,50 @@ fn write_message(
     copy: Option<(DocumentId, MessageId)>,
 ) -> Result<(MessageId, Vec<Mention>, Vec<StyleMark>), MurmureError> {
     let id = copy.map_or_else(MessageId::new, |(_, reply)| threading::copy_id(reply));
-    let message = doc.get_list(MESSAGES).push_container(LoroMap::new())?;
-    message.insert(MESSAGE_ID, id.to_string())?;
-    message.insert(MESSAGE_AUTHOR, author.to_string())?;
-    message.insert(MESSAGE_TS, schema::ts_value(now))?;
+    let message = crate::schema::Fields::of(
+        crate::schema::root_list(doc, Root::Messages).push_container(LoroMap::new())?,
+    );
+    message.insert(MessageKey::Id, id.to_string())?;
+    message.insert(MessageKey::Author, author.to_string())?;
+    message.insert(MessageKey::Ts, schema::ts_value(now))?;
     if let Some((thread, _)) = copy {
-        message.insert(MESSAGE_ALSO_IN_THREAD, thread.to_string())?;
+        message.insert(MessageKey::AlsoInThread, thread.to_string())?;
     }
     // The body is a char CRDT, so two peers typing in it keep both texts
     // (`MURMURE-004`, `MURMURE-005`).
-    let content = message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
+    let content = message.insert_container(MessageKey::Content, LoroText::new())?;
     content.insert(0, &draft.text)?;
     mention::write(doc, &content, &draft.mentions, channel)?;
     style::write(doc, &content, &draft.styles)?;
     attachment::write(&message, attachments)?;
     // Created empty here, so no reaction ever creates a container, and
     // two first reactors never race for one (`MURMURE-256`).
-    message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;
+    message.insert_container(MessageKey::Reactions, LoroMap::new())?;
     // The summary and the view read the marks as written.
     Ok((id, mention::read(&content, channel), style::read(&content)))
 }
 
 /// The notice a message carries: `Some(None)` for a message a member wrote,
 /// and `None` for a notice this build cannot read, which is skipped.
-fn notice_of(map: &LoroMap) -> Option<Option<Notice>> {
-    let Some(word) = schema::string(map, MESSAGE_NOTICE) else {
+fn notice_of(map: &Fields<MessageKey>) -> Option<Option<Notice>> {
+    let Some(word) = schema::string(map, MessageKey::Notice) else {
         return Some(None);
     };
     match NoticeKind::parse(&word)? {
         NoticeKind::MemberAdded => {
-            let member = UserId::parse_str(&schema::string(map, MESSAGE_MEMBER)?).ok()?;
+            let member = UserId::parse_str(&schema::string(map, MessageKey::Member)?).ok()?;
             Some(Some(Notice::MemberAdded { member }))
         }
     }
 }
 
 /// The map of the message `id` in `doc`, `None` when the segment holds none.
-fn message_map(doc: &LoroDoc, id: MessageId) -> Option<LoroMap> {
+fn message_map(doc: &LoroDoc, id: MessageId) -> Option<Fields<MessageKey>> {
     let wanted = id.to_string();
-    let list = doc.get_list(MESSAGES);
-    (0..list.len()).find_map(|index| match list.get(index) {
-        Some(ValueOrContainer::Container(Container::Map(map)))
-            if schema::string(&map, MESSAGE_ID).as_deref() == Some(wanted.as_str()) =>
-        {
-            Some(map)
-        }
-        _ => None,
+    let list = crate::schema::root_list(doc, Root::Messages);
+    (0..list.len()).find_map(|index| {
+        let map = list.get(index).and_then(schema::fields_of::<MessageKey>)?;
+        (schema::string(&map, MessageKey::Id).as_deref() == Some(wanted.as_str())).then_some(map)
     })
 }
 

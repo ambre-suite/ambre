@@ -178,17 +178,13 @@ macro_rules! loro_fields {
                 self.map.insert_container(key.as_str(), child)
             }
 
-            /// The container under `key`, created as `child` when the key
-            /// holds none.
+            /// The map under `key`, created when the key holds none. Two
+            /// peers creating it at once merge into one map.
             ///
             /// # Errors
             /// Loro's refusal of the write, or a key holding another kind.
-            $vis fn get_or_create_container<C: ::loro::ContainerTrait>(
-                &self,
-                key: K,
-                child: C,
-            ) -> ::loro::LoroResult<C> {
-                self.map.get_or_create_container(key.as_str(), child)
+            $vis fn ensure_mergeable_map(&self, key: K) -> ::loro::LoroResult<::loro::LoroMap> {
+                self.map.ensure_mergeable_map(key.as_str())
             }
 
             /// Removes `key`. Absence is a value, so this is how a property

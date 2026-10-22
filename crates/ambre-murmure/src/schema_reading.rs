@@ -40,19 +40,12 @@ use loro::{Container, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::channel::{folded_amendments, header_fold, read_messages};
 use crate::schema::{
-    AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS,
-    ATTACHMENT_MEDIA, ATTACHMENT_NAME, ATTACHMENT_SIZE, ATTACHMENT_TYPE, CATALOGUE, CATEGORIES,
-    CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, DocumentKind,
-    ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER, HEADER_CHANNEL,
-    HEADER_FOLDED, HEADER_FOLDED_SEQ, HEADER_KIND, HEADER_ROOT, HEADER_SEGMENT, HEADER_SPACE,
-    MENTION, MESSAGE_ALSO_IN_THREAD, MESSAGE_ATTACHMENTS, MESSAGE_AUTHOR, MESSAGE_CONTENT,
-    MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS,
-    MESSAGE_THREAD, MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT,
-    SEGMENT_FOLDED, SEGMENT_STATE, SEGMENTS, SPACE, SPACE_NAME, SegmentState,
+    AmendmentKey, AttachmentKey, CategoryKey, ChannelKey, DocumentKind, EntryKey, HeaderKey, Mark,
+    MessageKey, Root, SCHEMA_VERSION, SegmentKey, SegmentState, SpaceKey,
 };
 use crate::schema_shape::{
-    ANY, AUTHOR, ID, KEYED_BY_ID, MEMBER, SCHEMA_SOURCE, amended, channel_of_every_key,
-    declared_string_consts, scenario_root, scenario_thread, section_of, space_of_every_key,
+    ANY, AUTHOR, ID, KEYED_BY_ID, MEMBER, amended, channel_of_every_key, declared_keys,
+    scenario_root, scenario_thread, section_of, space_of_every_key,
 };
 use crate::{ChannelState, SpaceState, style};
 
@@ -143,20 +136,28 @@ fn stored_values(kind: DocumentKind, doc: &LoroDoc) -> Vec<Stored> {
 /// The marks over each message body and each amended body, which the deep
 /// value drops.
 fn stored_marks(kind: DocumentKind, doc: &LoroDoc, found: &mut Vec<Stored>) {
-    let list = doc.get_list(MESSAGES);
+    let list = crate::schema::root_list(doc, Root::Messages);
     for at in 0..list.len() {
-        let Some(ValueOrContainer::Container(Container::Map(message))) = list.get(at) else {
+        let Some(message) = list.get(at).and_then(crate::schema::fields_of) else {
             continue;
         };
-        body_marks(kind, MESSAGES, Segment::At(at), &message, found);
+        body_marks(
+            kind,
+            Root::Messages,
+            Segment::At(at),
+            &message,
+            MessageKey::Content,
+            found,
+        );
     }
-    doc.get_map(AMENDMENTS).for_each(|key, entry| {
-        if let ValueOrContainer::Container(Container::Map(entry)) = entry {
+    crate::schema::root_map(doc, Root::Amendments).for_each(|key, entry| {
+        if let Some(entry) = crate::schema::fields_of(entry) {
             body_marks(
                 kind,
-                AMENDMENTS,
+                Root::Amendments,
                 Segment::Key(key.to_owned()),
                 &entry,
+                AmendmentKey::Content,
                 found,
             );
         }
@@ -164,18 +165,18 @@ fn stored_marks(kind: DocumentKind, doc: &LoroDoc, found: &mut Vec<Stored>) {
 }
 
 /// The marks over the `content` body of `entry`, found at `at` under `root`.
-fn body_marks(
+fn body_marks<K: ambre_core::crdt::FieldKey>(
     kind: DocumentKind,
-    root: &str,
+    root: Root,
     at: Segment,
-    entry: &loro::LoroMap,
+    entry: &crate::schema::Fields<K>,
+    content: K,
     found: &mut Vec<Stored>,
 ) {
-    let Some(ValueOrContainer::Container(Container::Text(content))) = entry.get(MESSAGE_CONTENT)
-    else {
+    let Some(ValueOrContainer::Container(Container::Text(body))) = entry.get(content) else {
         return;
     };
-    for span in content.to_delta() {
+    for span in body.to_delta() {
         let TextDelta::Insert {
             attributes: Some(attributes),
             ..
@@ -186,10 +187,10 @@ fn body_marks(
         for (mark, value) in attributes {
             found.push(Stored {
                 kind,
-                root: root.to_owned(),
+                root: root.as_str().to_owned(),
                 segments: vec![
                     at.clone(),
-                    Segment::Key(MESSAGE_CONTENT.to_owned()),
+                    Segment::Key(content.as_str().to_owned()),
                     Segment::Mark(mark),
                 ],
                 value,
@@ -300,7 +301,6 @@ fn reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
                 verdict(version, SCHEMA_VERSION)
             ))
         }
-        (HEADER, _) => header_reading(reader, stored, key?),
         (PEERS_ROOT, _) => {
             let read = reader
                 .doc(stored.kind)
@@ -317,52 +317,69 @@ fn reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             };
             Some(format!("an entry of {who}"))
         }
-        (CHANNEL, DocumentKind::Meta) => match key? {
-            CHANNEL_NAME => Some(format!("named {:?}", reader.channel.name()?)),
-            CHANNEL_TYPE => Some(format!("{:?}", reader.channel.channel_type()?)),
-            _ => None,
+        (root, kind) => root_reading(reader, stored, Root::parse(root)?, kind, key),
+    }
+}
+
+/// What `reader` reads a stored value under a Murmure root as.
+fn root_reading(
+    reader: &Reader<'_>,
+    stored: &Stored,
+    root: Root,
+    kind: DocumentKind,
+    key: Option<&str>,
+) -> Option<String> {
+    match (root, kind) {
+        (Root::Header, _) => header_reading(reader, stored, HeaderKey::parse(key?)?),
+        (Root::Channel, DocumentKind::Meta) => match ChannelKey::parse(key?)? {
+            ChannelKey::Name => Some(format!("named {:?}", reader.channel.name()?)),
+            ChannelKey::Type => Some(format!("{:?}", reader.channel.channel_type()?)),
         },
-        (SEGMENTS, DocumentKind::Meta) => segment_reading(reader, stored),
-        (MESSAGES, DocumentKind::Segment | DocumentKind::Thread) => message_reading(reader, stored),
-        (AMENDMENTS, DocumentKind::Amendments) => amendment_reading(reader, stored),
-        (AMENDMENT_THREADS, DocumentKind::Amendments) => recorded_thread_reading(reader, stored),
-        (SPACE, DocumentKind::Space) if key == Some(SPACE_NAME) => {
+        (Root::Segments, DocumentKind::Meta) => segment_reading(reader, stored),
+        (Root::Messages, DocumentKind::Segment | DocumentKind::Thread) => {
+            message_reading(reader, stored)
+        }
+        (Root::Amendments, DocumentKind::Amendments) => amendment_reading(reader, stored),
+        (Root::Threads, DocumentKind::Amendments) => recorded_thread_reading(reader, stored),
+        (Root::Space, DocumentKind::Space)
+            if key.and_then(SpaceKey::parse) == Some(SpaceKey::Name) =>
+        {
             Some(format!("named {:?}", reader.space.name()?))
         }
-        (CATEGORIES, DocumentKind::Space) => category_reading(reader, stored),
-        (CATALOGUE, DocumentKind::Space) => catalogue_reading(reader, stored),
+        (Root::Categories, DocumentKind::Space) => category_reading(reader, stored),
+        (Root::Catalogue, DocumentKind::Space) => catalogue_reading(reader, stored),
         _ => None,
     }
 }
 
 /// The reading of a `header` value: the check every document passes on open.
-fn header_reading(reader: &Reader<'_>, stored: &Stored, key: &str) -> Option<String> {
+fn header_reading(reader: &Reader<'_>, stored: &Stored, key: HeaderKey) -> Option<String> {
     // A fold is read through the check a fold snapshot passes.
-    if key == HEADER_FOLDED_SEQ {
+    if key == HeaderKey::FoldedSeq {
         let (_, seq) = header_fold(reader.doc(stored.kind))?;
         return Some(format!("folds its amendments up to delta {}", seq.0));
     }
     let value = stored.string()?;
     match key {
-        HEADER_KIND if value == stored.kind.as_str() => {
+        HeaderKey::Kind if value == stored.kind.as_str() => {
             Some(format!("admitted as {:?}", stored.kind))
         }
-        HEADER_CHANNEL if value == reader.channel.channel_id().to_string() => {
+        HeaderKey::Channel if value == reader.channel.channel_id().to_string() => {
             Some("the channel it opens as".to_owned())
         }
-        HEADER_SPACE if value == reader.space.space_id().to_string() => {
+        HeaderKey::Space if value == reader.space.space_id().to_string() => {
             Some("the space it opens as".to_owned())
         }
-        HEADER_SEGMENT if value == amended(reader.channel).0.to_string() => {
+        HeaderKey::Segment if value == amended(reader.channel).0.to_string() => {
             Some(match stored.kind {
                 DocumentKind::Thread => "the segment of its root".to_owned(),
                 _ => "the segment it amends".to_owned(),
             })
         }
-        HEADER_ROOT if value == scenario_root(reader.channel)?.to_string() => {
+        HeaderKey::Root if value == scenario_root(reader.channel)?.to_string() => {
             Some("the message it threads".to_owned())
         }
-        HEADER_FOLDED
+        HeaderKey::Folded
             if header_fold(reader.doc(stored.kind))?.0 == amended(reader.channel).1
                 && value == amended(reader.channel).1.to_string() =>
         {
@@ -375,8 +392,8 @@ fn header_reading(reader: &Reader<'_>, stored: &Stored, key: &str) -> Option<Str
 /// The reading of one `segments` entry field.
 fn segment_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
     let entry = stored.at(0)? + 1;
-    match stored.key(1)? {
-        SEGMENT_DOCUMENT => {
+    match SegmentKey::parse(stored.key(1)?)? {
+        SegmentKey::Document => {
             let id = stored.string()?;
             let which = if id == reader.channel.active_id().to_string() {
                 "the active segment"
@@ -391,14 +408,14 @@ fn segment_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             };
             Some(format!("entry {entry} lists {which}"))
         }
-        SEGMENT_STATE => Some(format!(
+        SegmentKey::State => Some(format!(
             "entry {entry} is {:?}",
             SegmentState::parse(stored.string()?)?
         )),
-        SEGMENT_AMENDMENTS if stored.string()? == amended(reader.channel).1.to_string() => {
+        SegmentKey::Amendments if stored.string()? == amended(reader.channel).1.to_string() => {
             Some(format!("entry {entry} names the amendments of its segment"))
         }
-        SEGMENT_FOLDED => {
+        SegmentKey::Folded => {
             let (segment, amendments) = amended(reader.channel);
             let marked = folded_amendments(reader.doc(DocumentKind::Meta), segment)?;
             (marked == amendments && stored.string()? == amendments.to_string())
@@ -416,25 +433,29 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
     let message = messages.get(at)?;
     let n = at + 1;
     let thread = scenario_thread(reader.channel);
-    match stored.key(1)? {
-        MESSAGE_THREAD if message.thread.is_some_and(|head| head.document == thread) => {
+    match MessageKey::parse(stored.key(1)?)? {
+        MessageKey::Thread if message.thread.is_some_and(|head| head.document == thread) => {
             Some(format!("message {n} names its thread"))
         }
-        MESSAGE_THREAD
+        MessageKey::Thread
             if message.thread.is_some_and(|head| {
                 stored.string() == Some(head.document.to_string().as_str())
             }) =>
         {
             Some(format!("message {n} names the thread a fold carried"))
         }
-        MESSAGE_ALSO_IN_THREAD if message.also_in_thread == Some(thread) => {
+        MessageKey::AlsoInThread if message.also_in_thread == Some(thread) => {
             Some(format!("message {n} is a copy of a reply in its thread"))
         }
-        MESSAGE_ID if stored.string()? == message.id.to_string() => Some(format!("message {n}")),
-        MESSAGE_AUTHOR if message.author == AUTHOR => Some(format!("message {n} by the author")),
-        MESSAGE_TS => Some(format!("message {n} sent at {} ms", message.ts.0)),
+        MessageKey::Id if stored.string()? == message.id.to_string() => {
+            Some(format!("message {n}"))
+        }
+        MessageKey::Author if message.author == AUTHOR => {
+            Some(format!("message {n} by the author"))
+        }
+        MessageKey::Ts => Some(format!("message {n} sent at {} ms", message.ts.0)),
         // A mention mark is read through the mentions the view is given.
-        MESSAGE_CONTENT if stored.mark(2) == Some(MENTION) => {
+        MessageKey::Content if stored.mark(2).and_then(Mark::parse) == Some(Mark::Mention) => {
             let named = match message.mentions.first()?.target {
                 MentionTarget::Channel => "the channel",
                 MentionTarget::User(user) if user == AUTHOR => "the author",
@@ -442,14 +463,14 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             };
             Some(format!("message {n} mentions {named}"))
         }
-        MESSAGE_CONTENT if stored.mark(2).is_some() => Some(format!(
+        MessageKey::Content if stored.mark(2).is_some() => Some(format!(
             "message {n} marks {}",
             style_reading(stored, &message.styles)?
         )),
-        MESSAGE_CONTENT => Some(format!("message {n} reads {:?}", message.text)),
+        MessageKey::Content => Some(format!("message {n} reads {:?}", message.text)),
         // The entry is read by its key: the member and the emoji. Its value,
         // the instant, is kept for no reader yet.
-        MESSAGE_REACTIONS => {
+        MessageKey::Reactions => {
             let key = stored.key(2)?;
             let reaction = message
                 .reactions
@@ -463,35 +484,35 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             })
         }
         // A notice is read through the notice the view is given.
-        MESSAGE_NOTICE => match message.notice? {
+        MessageKey::Notice => match message.notice? {
             Notice::MemberAdded { .. } => Some(format!("message {n} announces a member")),
         },
-        MESSAGE_MEMBER => match message.notice? {
+        MessageKey::Member => match message.notice? {
             Notice::MemberAdded { member } if member == MEMBER => {
                 Some(format!("message {n} names the member who joins"))
             }
             Notice::MemberAdded { .. } => None,
         },
-        MESSAGE_EDITED if message.edited => Some(format!("message {n} is edited")),
-        MESSAGE_DELETED if message.deleted => Some(format!("message {n} is deleted")),
+        MessageKey::Edited if message.edited => Some(format!("message {n} is edited")),
+        MessageKey::Deleted if message.deleted => Some(format!("message {n} is deleted")),
         // A file is read through the attachments the view is given.
-        MESSAGE_ATTACHMENTS => {
+        MessageKey::Attachments => {
             let at = stored.at(2)?;
             let file = message.attachments.get(at)?;
             let f = at + 1;
-            match stored.key(3)? {
-                ATTACHMENT_MEDIA if stored.string()? == file.media_ref.as_str() => {
+            match AttachmentKey::parse(stored.key(3)?)? {
+                AttachmentKey::Media if stored.string()? == file.media_ref.as_str() => {
                     Some(format!("message {n} carries file {f} by its address"))
                 }
-                ATTACHMENT_NAME => Some(format!(
+                AttachmentKey::Name => Some(format!(
                     "message {n} carries file {f} named {:?}",
                     file.name
                 )),
-                ATTACHMENT_TYPE => Some(format!(
+                AttachmentKey::Type => Some(format!(
                     "message {n} carries file {f} of type {:?}",
                     file.media_type.0
                 )),
-                ATTACHMENT_SIZE => Some(format!(
+                AttachmentKey::Size => Some(format!(
                     "message {n} carries file {f} of {} bytes",
                     file.size.0
                 )),
@@ -506,7 +527,9 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
 /// holds the chars of the run under the same key, and what it makes of them.
 fn style_reading(stored: &Stored, styles: &[StyleMark]) -> Option<String> {
     let mark = stored.mark(2)?;
-    let run = styles.iter().find(|run| style::key(&run.style) == mark)?;
+    let run = styles
+        .iter()
+        .find(|run| Some(style::key(&run.style)) == Mark::parse(mark))?;
     let words = match &run.style {
         TextStyle::Link(address) if stored.string() == Some(address.as_str()) => {
             format!("a link to {address:?}")
@@ -527,8 +550,8 @@ fn amendment_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
     let at = messages.iter().position(|m| m.id.to_string() == id)?;
     let message = &messages[at];
     let n = at + 1;
-    match stored.key(1)? {
-        AMENDMENT_CONTENT if stored.mark(2) == Some(MENTION) => {
+    match AmendmentKey::parse(stored.key(1)?)? {
+        AmendmentKey::Content if stored.mark(2).and_then(Mark::parse) == Some(Mark::Mention) => {
             match message.mentions.first()?.target {
                 MentionTarget::Channel => {
                     Some(format!("message {n} amended to mention the channel"))
@@ -536,18 +559,20 @@ fn amendment_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
                 MentionTarget::User(_) => None,
             }
         }
-        AMENDMENT_CONTENT if stored.mark(2).is_some() => Some(format!(
+        AmendmentKey::Content if stored.mark(2).is_some() => Some(format!(
             "message {n} amended to mark {}",
             style_reading(stored, &message.styles)?
         )),
-        AMENDMENT_CONTENT if message.edited => {
+        AmendmentKey::Content if message.edited => {
             Some(format!("message {n} amended to read {:?}", message.text))
         }
-        AMENDMENT_CONTENT if message.deleted => {
+        AmendmentKey::Content if message.deleted => {
             Some(format!("message {n} amended to read nothing"))
         }
-        AMENDMENT_DELETED if message.deleted => Some(format!("message {n} deleted by amendment")),
-        AMENDMENT_BY if stored.string()? == "author" && message.author == AUTHOR => {
+        AmendmentKey::Deleted if message.deleted => {
+            Some(format!("message {n} deleted by amendment"))
+        }
+        AmendmentKey::By if stored.string()? == "author" && message.author == AUTHOR => {
             Some(format!("message {n} deleted by its author"))
         }
         _ => None,
@@ -573,10 +598,9 @@ fn category_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
     let rank = categories.iter().position(|c| c.id == id)?;
     let category = &categories[rank];
     let n = rank + 1;
-    match stored.key(1)? {
-        CATEGORY_NAME => Some(format!("category {n} named {:?}", category.name)),
-        CATEGORY_POSITION => Some(format!("category {n} at position {}", category.position)),
-        _ => None,
+    match CategoryKey::parse(stored.key(1)?)? {
+        CategoryKey::Name => Some(format!("category {n} named {:?}", category.name)),
+        CategoryKey::Position => Some(format!("category {n} at position {}", category.position)),
     }
 }
 
@@ -587,28 +611,27 @@ fn catalogue_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
     let rank = catalogue.iter().position(|e| e.channel_id == channel_id)?;
     let entry = &catalogue[rank];
     let n = rank + 1;
-    match stored.key(1)? {
-        ENTRY_NAME => Some(format!("entry {n} named {:?}", entry.name)),
-        ENTRY_TOPIC => Some(format!(
+    match EntryKey::parse(stored.key(1)?)? {
+        EntryKey::Name => Some(format!("entry {n} named {:?}", entry.name)),
+        EntryKey::Topic => Some(format!(
             "entry {n} about {:?}",
             entry.topic.as_ref()?.as_str()
         )),
-        ENTRY_CATEGORY => {
+        EntryKey::Category => {
             let categories = reader.space.categories();
             let rank = categories
                 .iter()
                 .position(|c| Some(c.id) == entry.category)?;
             Some(format!("entry {n} in category {}", rank + 1))
         }
-        ENTRY_POSITION => Some(format!("entry {n} at position {}", entry.position)),
-        ENTRY_KEY => {
+        EntryKey::Position => Some(format!("entry {n} at position {}", entry.position)),
+        EntryKey::Key => {
             let key = reader.space.sealed_key(channel_id).ok()?;
             Some(format!(
                 "entry {n} hands over a sealed key of {} bytes",
                 key.as_bytes().len()
             ))
         }
-        _ => None,
     }
 }
 
@@ -790,7 +813,7 @@ fn every_stored_value_has_a_reading() {
 #[test]
 fn every_declared_key_has_a_reading() {
     let keys = readings_reopened(&Scenario::new()).keys;
-    for key in declared_string_consts(SCHEMA_SOURCE) {
+    for key in declared_keys() {
         assert!(
             keys.contains(&key),
             "`{key}` is declared as a schema key and no reading carries it"
@@ -808,8 +831,8 @@ fn a_stored_value_moving_moves_the_reading() {
         .channel
         .doc(scenario.channel.meta_id().document_id())
         .expect("held");
-    meta.get_map(CHANNEL)
-        .insert(CHANNEL_NAME, "random")
+    crate::schema::channel(meta)
+        .insert(ChannelKey::Name, "random")
         .expect("the register takes a value");
     meta.commit();
     let after = readings_reopened(&scenario).lines;
@@ -826,8 +849,8 @@ fn a_reader_moving_moves_the_reading() {
     let channel = reopened_channel(&scenario.channel);
     let space = reopened_space(&scenario.space);
     let meta = channel.doc(channel.meta_id().document_id()).expect("held");
-    meta.get_map(CHANNEL)
-        .insert(CHANNEL_NAME, "misread")
+    crate::schema::channel(meta)
+        .insert(ChannelKey::Name, "misread")
         .expect("the register takes a value");
     meta.commit();
     let after = readings_of(

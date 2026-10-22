@@ -12,18 +12,14 @@
 
 use ambre_bus::{FoldAnswer, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
 use ambre_core::{ChannelId, DocumentId, LeaseId, SegmentId, Seq};
-use loro::{Container, ExportMode, LoroDoc, UpdateOptions, ValueOrContainer, VersionVector};
+use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};
 
 use super::amending::{entry_content, folded_amendments, segment_entry};
 use super::finalizing::{FINALIZE_RETRY_MS, RETRY_DOUBLINGS};
 use super::relocating::replay_of;
 use super::{ChannelState, Replay, content_of};
 use crate::error::MurmureError;
-use crate::schema::{
-    self, AMENDMENT_DELETED, AMENDMENT_THREADS, AMENDMENTS, HEADER, HEADER_FOLDED,
-    HEADER_FOLDED_SEQ, MENTION, MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGE_THREAD,
-    MESSAGES, SEGMENT_FOLDED,
-};
+use crate::schema::{self, AmendmentKey, HeaderKey, Mark, MessageKey, Root, SegmentKey};
 use crate::sequence::Sequence;
 use crate::{mention, style};
 
@@ -347,7 +343,7 @@ impl ChannelState {
         let entry = segment_entry(&self.meta.doc, segment)
             .ok_or(MurmureError::NotHeld(segment.document_id()))?;
         let (doc, session) = self.meta.session()?;
-        entry.insert(SEGMENT_FOLDED, amendments.to_string())?;
+        entry.insert(SegmentKey::Folded, amendments.to_string())?;
         Ok(Some(session.export(doc)?))
     }
 
@@ -457,11 +453,11 @@ fn unsequenced(segment: SegmentId, folded: &[MessageView], read: Vec<MessageView
 /// The amendments document and the number a snapshot header names, `None`
 /// for a snapshot that folds nothing.
 pub(crate) fn header_fold(doc: &LoroDoc) -> Option<(DocumentId, Seq)> {
-    let header = doc.get_map(HEADER);
-    let amendments = DocumentId::parse_str(&schema::string(&header, HEADER_FOLDED)?).ok()?;
+    let header = crate::schema::header(doc);
+    let amendments = DocumentId::parse_str(&schema::string(&header, HeaderKey::Folded)?).ok()?;
     Some((
         amendments,
-        Seq(schema::unsigned(&header, HEADER_FOLDED_SEQ)?),
+        Seq(schema::unsigned(&header, HeaderKey::FoldedSeq)?),
     ))
 }
 
@@ -483,42 +479,42 @@ fn fold_into(
     amendments_id: DocumentId,
     reached: Seq,
 ) -> Result<(), MurmureError> {
-    let root = amendments.get_map(AMENDMENTS);
-    let threads = amendments.get_map(AMENDMENT_THREADS);
-    let list = segment.get_list(MESSAGES);
+    let root = crate::schema::root_map(amendments, Root::Amendments);
+    let threads = crate::schema::root_map(amendments, Root::Threads);
+    let list = crate::schema::root_list(segment, Root::Messages);
     for index in 0..list.len() {
-        let Some(ValueOrContainer::Container(Container::Map(message))) = list.get(index) else {
+        let Some(message) = list.get(index).and_then(crate::schema::fields_of) else {
             continue;
         };
-        let Some(id) = schema::string(&message, MESSAGE_ID) else {
+        let Some(id) = schema::string(&message, MessageKey::Id) else {
             continue;
         };
         // A deleted root keeps its thread readable (`MURMURE-484`).
-        if schema::string(&message, MESSAGE_THREAD).is_none()
-            && let Some(thread) = schema::string(&threads, &id)
+        if schema::string(&message, MessageKey::Thread).is_none()
+            && let Some(thread) = schema::string_value(threads.get(&id))
         {
-            message.insert(MESSAGE_THREAD, thread)?;
+            message.insert(MessageKey::Thread, thread)?;
         }
-        if schema::flag(&message, MESSAGE_DELETED) {
+        if schema::flag(&message, MessageKey::Deleted) {
             continue;
         }
-        let Some(ValueOrContainer::Container(Container::Map(entry))) = root.get(&id) else {
+        let Some(entry) = root.get(&id).and_then(crate::schema::fields_of) else {
             continue;
         };
         let Some(content) = content_of(&message) else {
             continue;
         };
         let len = content.len_unicode();
-        if schema::flag(&entry, AMENDMENT_DELETED) {
+        if schema::flag(&entry, AmendmentKey::Deleted) {
             if len > 0 {
                 content.delete(0, len)?;
             }
-            message.insert(MESSAGE_DELETED, true)?;
+            message.insert(MessageKey::Deleted, true)?;
         } else if let Some(edited) = entry_content(&entry) {
             let mentions = mention::read(&edited, channel);
             let styles = style::read(&edited);
             if len > 0 {
-                content.unmark(0..len, MENTION)?;
+                content.unmark(0..len, Mark::Mention.as_str())?;
             }
             style::clear(&content)?;
             content
@@ -526,13 +522,13 @@ fn fold_into(
                 .map_err(|error| MurmureError::Crdt(error.to_string()))?;
             mention::write(segment, &content, &mentions, channel)?;
             style::write(segment, &content, &styles)?;
-            message.insert(MESSAGE_EDITED, true)?;
+            message.insert(MessageKey::Edited, true)?;
         }
     }
-    let header = segment.get_map(HEADER);
-    header.insert(HEADER_FOLDED, amendments_id.to_string())?;
+    let header = crate::schema::header(segment);
+    header.insert(HeaderKey::Folded, amendments_id.to_string())?;
     header.insert(
-        HEADER_FOLDED_SEQ,
+        HeaderKey::FoldedSeq,
         i64::try_from(reached.0).unwrap_or(i64::MAX),
     )?;
     Ok(())

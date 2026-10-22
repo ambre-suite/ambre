@@ -48,9 +48,6 @@ const SCAFFOLD: &str = include_str!("../schema/scaffold.txt");
 /// What each migration step writes, one section per `SCHEMA_VERSION`.
 const STEPS: &str = include_str!("../schema/migrations.txt");
 
-/// The source the key declarations are read from.
-pub(crate) const SCHEMA_SOURCE: &str = include_str!("schema.rs");
-
 /// The segment a list index collapses to.
 pub(crate) const ANY: &str = "*";
 
@@ -308,12 +305,10 @@ fn reply_in_thread(state: &mut ChannelState, segment: SegmentId, root: MessageId
 /// is read from the stored list, so a belt that breaks its body finds it.
 pub(crate) fn scenario_root(state: &ChannelState) -> Option<MessageId> {
     let doc = state.doc(amended(state).0.document_id())?;
-    let Some(ValueOrContainer::Container(Container::Map(message))) =
-        doc.get_list(crate::schema::MESSAGES).get(0)
-    else {
-        return None;
-    };
-    let id = crate::schema::string(&message, crate::schema::MESSAGE_ID)?;
+    let message = crate::schema::root_list(doc, crate::schema::Root::Messages)
+        .get(0)
+        .and_then(crate::schema::fields_of)?;
+    let id = crate::schema::string(&message, crate::schema::MessageKey::Id)?;
     MessageId::parse_str(&id).ok()
 }
 
@@ -488,24 +483,33 @@ pub(crate) fn section_of(frozen: &str, version: u32) -> Option<String> {
     inside.then_some(taken)
 }
 
-/// Every `const NAME: &str = "literal";` the schema source declares.
-pub(crate) fn declared_string_consts(source: &str) -> Vec<String> {
-    let mut found = Vec::new();
-    for line in source.lines() {
-        let Some((_, rest)) = line.trim_start().split_once("const ") else {
-            continue;
-        };
-        let Some((_, tail)) = rest.split_once(": &str = ") else {
-            continue;
-        };
-        let Some(literal) = tail.strip_prefix('"').and_then(|t| t.split('"').next()) else {
-            continue;
-        };
-        if !literal.is_empty() && !NOT_SCHEMA_KEYS.contains(&literal) {
-            found.push(literal.to_owned());
-        }
-    }
-    found
+/// Every name the schema declares: each root, each key of each map and each
+/// mark, read from the `ALL` of its set. A name declared without a variant
+/// cannot exist, so no name escapes the belts.
+pub(crate) fn declared_keys() -> Vec<String> {
+    use crate::schema::{
+        AmendmentKey, AttachmentKey, CategoryKey, ChannelKey, EntryKey, HeaderKey, Mark,
+        MessageKey, Root, SegmentKey, SpaceKey,
+    };
+    let names = [
+        Root::ALL.iter().map(|n| n.as_str()).collect::<Vec<_>>(),
+        HeaderKey::ALL.iter().map(|n| n.as_str()).collect(),
+        SpaceKey::ALL.iter().map(|n| n.as_str()).collect(),
+        CategoryKey::ALL.iter().map(|n| n.as_str()).collect(),
+        EntryKey::ALL.iter().map(|n| n.as_str()).collect(),
+        ChannelKey::ALL.iter().map(|n| n.as_str()).collect(),
+        SegmentKey::ALL.iter().map(|n| n.as_str()).collect(),
+        AmendmentKey::ALL.iter().map(|n| n.as_str()).collect(),
+        MessageKey::ALL.iter().map(|n| n.as_str()).collect(),
+        AttachmentKey::ALL.iter().map(|n| n.as_str()).collect(),
+        Mark::ALL.iter().map(|n| n.as_str()).collect(),
+    ];
+    names
+        .into_iter()
+        .flatten()
+        .filter(|name| !NOT_SCHEMA_KEYS.contains(name))
+        .map(str::to_owned)
+        .collect()
 }
 
 #[test]
@@ -599,15 +603,19 @@ fn canonical(from: u32) -> LoroDoc {
             doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
                 .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), from)
                 .expect("the stamp");
-            doc.get_map(crate::schema::HEADER)
-                .insert(crate::schema::HEADER_KIND, DocumentKind::Segment.as_str())
+            crate::schema::header(&doc)
+                .insert(
+                    crate::schema::HeaderKey::Kind,
+                    DocumentKind::Segment.as_str(),
+                )
                 .expect("the kind");
-            let message = doc
-                .get_list(crate::schema::MESSAGES)
-                .insert_container(0, loro::LoroMap::new())
-                .expect("a message");
+            let message = crate::schema::Fields::<crate::schema::MessageKey>::of(
+                crate::schema::root_list(&doc, crate::schema::Root::Messages)
+                    .insert_container(0, loro::LoroMap::new())
+                    .expect("a message"),
+            );
             message
-                .insert_container(crate::schema::MESSAGE_CONTENT, loro::LoroText::new())
+                .insert_container(crate::schema::MessageKey::Content, loro::LoroText::new())
                 .expect("a body")
                 .insert(0, "hi")
                 .expect("its text");
@@ -670,7 +678,7 @@ fn each_migration_step_writes_what_its_version_froze() {
 #[test]
 fn every_declared_key_appears_in_the_shape() {
     let shape = shape_of(&channel_of_every_key());
-    let declared = declared_string_consts(SCHEMA_SOURCE);
+    let declared = declared_keys();
     assert!(!declared.is_empty(), "the declaration reader found no key");
     for key in declared {
         assert!(
@@ -686,13 +694,14 @@ fn a_body_stored_as_a_string_moves_the_shape() {
     let state = channel_of_every_key();
     let before = render(&shape_of(&state));
     let doc = state.doc(amended(&state).0.document_id()).expect("held");
-    let Some(ValueOrContainer::Container(Container::Map(message))) =
-        doc.get_list(crate::schema::MESSAGES).get(0)
+    let Some(message) = crate::schema::root_list(doc, crate::schema::Root::Messages)
+        .get(0)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("a message is a map container");
     };
     message
-        .insert(crate::schema::MESSAGE_CONTENT, "flat")
+        .insert(crate::schema::MessageKey::Content, "flat")
         .expect("overwrite");
     doc.commit();
     assert_ne!(render(&shape_of(&state)), before);

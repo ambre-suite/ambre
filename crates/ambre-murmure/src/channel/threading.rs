@@ -8,7 +8,7 @@
 
 use ambre_bus::{MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead, Timestamp};
 use ambre_core::{DocumentId, MessageId, SegmentId, UserId};
-use loro::{Container, LoroDoc, ValueOrContainer};
+use loro::LoroDoc;
 
 use super::{
     ChannelState, Created, Held, Sent, amending, message_map, reaction_summary, read_messages,
@@ -16,10 +16,7 @@ use super::{
 };
 use crate::delta::{self, Arrival, Rules};
 use crate::error::MurmureError;
-use crate::schema::{
-    self, AMENDMENT_THREADS, DocumentKind, HEADER, HEADER_ROOT, HEADER_SEGMENT,
-    MESSAGE_ALSO_IN_THREAD, MESSAGE_ID, MESSAGE_THREAD, MESSAGES,
-};
+use crate::schema::{self, DocumentKind, HeaderKey, MessageKey, Root};
 use crate::session::Session;
 use crate::{mention, style};
 
@@ -167,7 +164,7 @@ impl ChannelState {
     fn root_slot(&self, root: MessageId) -> Option<(SegmentId, Option<DocumentId>)> {
         self.held_segments().into_iter().find_map(|segment| {
             let map = message_map(self.doc(segment.document_id())?, root)?;
-            let named = schema::string(&map, MESSAGE_THREAD)
+            let named = schema::string(&map, MessageKey::Thread)
                 .and_then(|s| DocumentId::parse_str(&s).ok())
                 .or_else(|| {
                     let amendments = self.amendments.get(&segment)?;
@@ -281,10 +278,10 @@ impl ChannelState {
         let Some(map) = message_map(doc, root) else {
             return Ok(None);
         };
-        if schema::string(&map, MESSAGE_THREAD).is_some() {
+        if schema::string(&map, MessageKey::Thread).is_some() {
             return Ok(None);
         }
-        map.insert(MESSAGE_THREAD, thread.to_string())?;
+        map.insert(MessageKey::Thread, thread.to_string())?;
         let delta = session.export_json(doc)?;
         Ok(Some(self.changed(segment, delta)))
     }
@@ -302,7 +299,7 @@ impl ChannelState {
         let held = self
             .doc(segment.document_id())
             .and_then(|doc| message_map(doc, root));
-        if held.is_none_or(|map| schema::string(&map, MESSAGE_THREAD).is_some()) {
+        if held.is_none_or(|map| schema::string(&map, MessageKey::Thread).is_some()) {
             return Ok(None);
         }
         let Some(amendments) = self.amendments.get_mut(&segment) else {
@@ -310,9 +307,9 @@ impl ChannelState {
         };
         let document = amendments.id;
         let (doc, session) = amendments.session()?;
-        let threads = doc.get_map(AMENDMENT_THREADS);
+        let threads = crate::schema::root_map(doc, Root::Threads);
         let key = root.to_string();
-        if schema::string(&threads, &key).is_some() {
+        if schema::string_value(threads.get(&key)).is_some() {
             return Ok(None);
         }
         threads.insert(&key, thread.to_string())?;
@@ -692,7 +689,7 @@ impl ChannelState {
         let copy = copy_id(reply);
         self.held_segments().into_iter().find_map(|segment| {
             let map = message_map(self.doc(segment.document_id())?, copy)?;
-            (schema::string(&map, MESSAGE_ALSO_IN_THREAD).as_deref() == Some(thread.as_str()))
+            (schema::string(&map, MessageKey::AlsoInThread).as_deref() == Some(thread.as_str()))
                 .then_some((segment, copy))
         })
     }
@@ -743,22 +740,22 @@ fn thread_head(
 /// that document, in list order.
 /// The segment and the root a thread document's header names.
 fn header_root(doc: &LoroDoc) -> (Option<SegmentId>, Option<MessageId>) {
-    let header = doc.get_map(HEADER);
+    let header = crate::schema::header(doc);
     let segment =
-        schema::string(&header, HEADER_SEGMENT).and_then(|s| SegmentId::parse_str(&s).ok());
-    let root = schema::string(&header, HEADER_ROOT).and_then(|s| MessageId::parse_str(&s).ok());
+        schema::string(&header, HeaderKey::Segment).and_then(|s| SegmentId::parse_str(&s).ok());
+    let root = schema::string(&header, HeaderKey::Root).and_then(|s| MessageId::parse_str(&s).ok());
     (segment, root)
 }
 
 fn named_threads(doc: &LoroDoc) -> Vec<(MessageId, DocumentId)> {
     let mut named = Vec::new();
-    doc.get_list(MESSAGES).for_each(|item| {
-        let ValueOrContainer::Container(Container::Map(map)) = item else {
+    crate::schema::root_list(doc, Root::Messages).for_each(|item| {
+        let Some(map) = crate::schema::fields_of(item) else {
             return;
         };
-        let root = schema::string(&map, MESSAGE_ID).and_then(|s| MessageId::parse_str(&s).ok());
+        let root = schema::string(&map, MessageKey::Id).and_then(|s| MessageId::parse_str(&s).ok());
         let thread =
-            schema::string(&map, MESSAGE_THREAD).and_then(|s| DocumentId::parse_str(&s).ok());
+            schema::string(&map, MessageKey::Thread).and_then(|s| DocumentId::parse_str(&s).ok());
         if let (Some(root), Some(thread)) = (root, thread) {
             named.push((root, thread));
         }

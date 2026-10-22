@@ -11,9 +11,7 @@ use ambre_bus::{Attachment, ByteSize, MediaRef, MediaType};
 use loro::{Container, LoroList, LoroMap, ValueOrContainer};
 
 use crate::error::MurmureError;
-use crate::schema::{
-    self, ATTACHMENT_MEDIA, ATTACHMENT_NAME, ATTACHMENT_SIZE, ATTACHMENT_TYPE, MESSAGE_ATTACHMENTS,
-};
+use crate::schema::{self, AttachmentKey, Fields, MessageKey};
 
 /// Whether each attachment names a file: a name that is not blank.
 pub(crate) fn fits(attachments: &[Attachment]) -> bool {
@@ -27,34 +25,38 @@ pub(crate) fn fits(attachments: &[Attachment]) -> bool {
 ///
 /// # Errors
 /// [`MurmureError::Crdt`] when Loro refuses a write.
-pub(crate) fn write(message: &LoroMap, attachments: &[Attachment]) -> Result<(), MurmureError> {
+pub(crate) fn write(
+    message: &Fields<MessageKey>,
+    attachments: &[Attachment],
+) -> Result<(), MurmureError> {
     if attachments.is_empty() {
         return Ok(());
     }
-    let list = message.insert_container(MESSAGE_ATTACHMENTS, LoroList::new())?;
+    let list = message.insert_container(MessageKey::Attachments, LoroList::new())?;
     for attachment in attachments {
-        let entry = list.push_container(LoroMap::new())?;
-        entry.insert(ATTACHMENT_MEDIA, attachment.media_ref.as_str())?;
-        entry.insert(ATTACHMENT_NAME, attachment.name.as_str())?;
-        entry.insert(ATTACHMENT_TYPE, attachment.media_type.0.as_str())?;
+        let entry = Fields::<AttachmentKey>::of(list.push_container(LoroMap::new())?);
+        entry.insert(AttachmentKey::Media, attachment.media_ref.as_str())?;
+        entry.insert(AttachmentKey::Name, attachment.name.as_str())?;
+        entry.insert(AttachmentKey::Type, attachment.media_type.0.as_str())?;
         // Loro has no unsigned integer; a file past `i64::MAX` bytes is not
         // one the relay accepts, so saturating loses nothing real.
         let size = i64::try_from(attachment.size.0).unwrap_or(i64::MAX);
-        entry.insert(ATTACHMENT_SIZE, size)?;
+        entry.insert(AttachmentKey::Size, size)?;
     }
     Ok(())
 }
 
 /// The attachments of one message, in the order they were written. An entry
 /// this build cannot read is skipped.
-pub(crate) fn read(message: &LoroMap) -> Vec<Attachment> {
-    let Some(ValueOrContainer::Container(Container::List(list))) = message.get(MESSAGE_ATTACHMENTS)
+pub(crate) fn read(message: &Fields<MessageKey>) -> Vec<Attachment> {
+    let Some(ValueOrContainer::Container(Container::List(list))) =
+        message.get(MessageKey::Attachments)
     else {
         return Vec::new();
     };
     let mut attachments = Vec::with_capacity(list.len());
     list.for_each(|item| {
-        if let ValueOrContainer::Container(Container::Map(entry)) = item
+        if let Some(entry) = schema::fields_of(item)
             && let Some(attachment) = read_entry(&entry)
         {
             attachments.push(attachment);
@@ -64,11 +66,11 @@ pub(crate) fn read(message: &LoroMap) -> Vec<Attachment> {
 }
 
 /// One attachment, `None` when a field is absent or unreadable.
-fn read_entry(entry: &LoroMap) -> Option<Attachment> {
+fn read_entry(entry: &Fields<AttachmentKey>) -> Option<Attachment> {
     Some(Attachment {
-        media_ref: MediaRef::parse(&schema::string(entry, ATTACHMENT_MEDIA)?)?,
-        name: schema::string(entry, ATTACHMENT_NAME)?,
-        media_type: MediaType(schema::string(entry, ATTACHMENT_TYPE)?),
-        size: ByteSize(schema::unsigned(entry, ATTACHMENT_SIZE)?),
+        media_ref: MediaRef::parse(&schema::string(entry, AttachmentKey::Media)?)?,
+        name: schema::string(entry, AttachmentKey::Name)?,
+        media_type: MediaType(schema::string(entry, AttachmentKey::Type)?),
+        size: ByteSize(schema::unsigned(entry, AttachmentKey::Size)?),
     })
 }

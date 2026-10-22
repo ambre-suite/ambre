@@ -9,27 +9,40 @@
 
 use ambre_bus::{Emoji, Reaction};
 use ambre_core::UserId;
-use loro::{Container, ContainerID, Index, LoroDoc, LoroMap, ValueOrContainer};
+use loro::{Container, ContainerID, Index, LoroDoc, ValueOrContainer};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::schema::{MESSAGE_REACTIONS, MESSAGES};
+use crate::schema::{Fields, MessageKey, Root};
 
 /// The longest emoji a key takes, in bytes. A family or a flag sequence of
 /// Unicode stays well below it.
 const EMOJI_MAX_BYTES: usize = 64;
 
-/// The key of the reaction of `user` with `emoji`.
+/// The key of one reaction in the `reactions` map of a message: its member
+/// and its emoji (`MURMURE-006`).
 ///
 /// The user comes first: a `UserId` is written without a space, so the first
 /// space ends it, whatever the emoji holds.
-pub(crate) fn key(user: UserId, emoji: &Emoji) -> String {
-    format!("{user} {}", emoji.as_str())
-}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ReactionKey(String);
 
-/// The member a reaction key names, `None` for a key no build writes.
-pub(crate) fn user_of(key: &str) -> Option<UserId> {
-    let (user, _) = key.split_once(' ')?;
-    UserId::parse_str(user).ok()
+impl ReactionKey {
+    /// The key of the reaction of `user` with `emoji`.
+    pub(crate) fn of(user: UserId, emoji: &Emoji) -> Self {
+        Self(format!("{user} {}", emoji.as_str()))
+    }
+
+    /// The key as the map stores it, for the call into the map.
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The member and the emoji a stored key names, `None` for a key no
+    /// build writes.
+    pub(crate) fn read(stored: &str) -> Option<(UserId, Emoji)> {
+        let (user, emoji) = stored.split_once(' ')?;
+        Some((UserId::parse_str(user).ok()?, Emoji(emoji.to_owned())))
+    }
 }
 
 /// Whether `emoji` is one emoji: one grapheme, with no space or control
@@ -42,24 +55,21 @@ pub(crate) fn is_emoji(emoji: &str) -> bool {
 
 /// The reactions of one message, one per emoji in emoji order, each member
 /// once in identifier order. An unreadable key is skipped.
-pub(crate) fn read(message: &LoroMap) -> Vec<Reaction> {
-    let Some(ValueOrContainer::Container(Container::Map(map))) = message.get(MESSAGE_REACTIONS)
+pub(crate) fn read(message: &Fields<MessageKey>) -> Vec<Reaction> {
+    let Some(ValueOrContainer::Container(Container::Map(map))) = message.get(MessageKey::Reactions)
     else {
         return Vec::new();
     };
-    // The written identifier sorts as its bytes do.
-    let mut entries: Vec<(Emoji, String, UserId)> = Vec::new();
+    let mut entries: Vec<(Emoji, UserId)> = Vec::new();
     map.for_each(|key, _| {
-        let Some((written, emoji)) = key.split_once(' ') else {
-            return;
-        };
-        if let Ok(user) = UserId::parse_str(written) {
-            entries.push((Emoji(emoji.to_owned()), written.to_owned(), user));
+        if let Some((user, emoji)) = ReactionKey::read(key) {
+            entries.push((emoji, user));
         }
     });
-    entries.sort_unstable_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
+    // The bytes of an identifier sort as its written form does.
+    entries.sort_unstable_by(|a, b| (&a.0, a.1.as_bytes()).cmp(&(&b.0, b.1.as_bytes())));
     let mut reactions: Vec<Reaction> = Vec::new();
-    for (emoji, _, user) in entries {
+    for (emoji, user) in entries {
         match reactions.last_mut() {
             Some(last) if last.emoji == emoji => last.users.push(user),
             _ => reactions.push(Reaction {
@@ -79,8 +89,8 @@ pub(crate) fn is_map(doc: &LoroDoc, id: &ContainerID) -> bool {
     };
     match path.as_slice() {
         [(list, _), (_, Index::Seq(_)), (_, Index::Key(key))] => {
-            key.as_str() == MESSAGE_REACTIONS
-                && matches!(list, ContainerID::Root { name, .. } if name.as_str() == MESSAGES)
+            MessageKey::parse(key) == Some(MessageKey::Reactions)
+                && matches!(list, ContainerID::Root { name, .. } if Root::parse(name) == Some(Root::Messages))
         }
         _ => false,
     }

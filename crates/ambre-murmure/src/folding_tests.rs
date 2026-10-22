@@ -13,7 +13,7 @@ use ambre_core::{ChannelId, DocumentId, LeaseId, MessageId, SegmentId, Seq, User
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::error::MurmureError;
-use crate::schema::{MESSAGE_CONTENT, MESSAGES};
+use crate::schema::{MessageKey, Root};
 use crate::sequence::loro_part;
 use crate::session::next_peer;
 use crate::{
@@ -443,12 +443,13 @@ fn another_member_checks_the_fold_by_folding_its_own_copy() {
 
     let forged = LoroDoc::new();
     forged.import(loro_part(&fold.payload)).expect("import");
-    let Some(ValueOrContainer::Container(Container::Map(message))) =
-        forged.get_list(MESSAGES).get(2)
+    let Some(message) = crate::schema::root_list(&forged, Root::Messages)
+        .get(2)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("a message");
     };
-    let Some(ValueOrContainer::Container(Container::Text(body))) = message.get(MESSAGE_CONTENT)
+    let Some(ValueOrContainer::Container(Container::Text(body))) = message.get(MessageKey::Content)
     else {
         panic!("a body");
     };

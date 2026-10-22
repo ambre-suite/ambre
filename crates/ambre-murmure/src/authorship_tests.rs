@@ -11,7 +11,7 @@ use ambre_core::authorship::{PeerEntry, SessionNonce};
 use ambre_core::{ChannelId, DocumentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroMap, LoroValue, ValueOrContainer, VersionVector};
 
-use crate::schema::{MESSAGE_CONTENT, MESSAGE_ID, MESSAGES};
+use crate::schema::{MessageKey, Root};
 use crate::{
     ChannelState, ChannelType, JSON_SCHEMA_VERSION, MurmureError, Opening, OpeningChannel, Refusal,
     Signer,
@@ -86,9 +86,12 @@ impl Member {
     }
 
     /// The first message of the active segment, to write into it.
-    fn first_message(&self) -> LoroMap {
-        let Some(ValueOrContainer::Container(Container::Map(message))) =
-            self.doc().get_list(MESSAGES).get(0)
+    fn first_message(&self) -> crate::schema::Fields<MessageKey> {
+        let Some(message) = self
+            .doc()
+            .get_list(Root::Messages.as_str())
+            .get(0)
+            .and_then(crate::schema::fields_of)
         else {
             panic!("a message is a map container");
         };
@@ -250,12 +253,14 @@ fn a_message_carries_the_author_who_signed_it_and_no_other() {
 
     // A message with no author names nobody, so it is no signer's either.
     let before = alice.doc().oplog_vv();
-    let bare = alice
-        .doc()
-        .get_list(MESSAGES)
-        .push_container(LoroMap::new())
-        .expect("push");
-    bare.insert(MESSAGE_ID, "no author").expect("insert");
+    let bare = crate::schema::Fields::<MessageKey>::of(
+        alice
+            .doc()
+            .get_list(Root::Messages.as_str())
+            .push_container(LoroMap::new())
+            .expect("push"),
+    );
+    bare.insert(MessageKey::Id, "no author").expect("insert");
     let anonymous = alice.json_since(&before);
     assert_eq!(
         refusal(
@@ -313,7 +318,7 @@ fn an_edit_of_another_authors_message_is_refused_and_changes_nothing() {
 
     let before = bob.doc().oplog_vv();
     let Some(ValueOrContainer::Container(Container::Text(content))) =
-        bob.first_message().get(MESSAGE_CONTENT)
+        bob.first_message().get(MessageKey::Content)
     else {
         panic!("the content is a text");
     };
@@ -354,7 +359,9 @@ fn a_delete_of_another_authors_message_is_refused() {
 
     // A delete marks the message: a write into a map bob did not create.
     let before = bob.doc().oplog_vv();
-    bob.first_message().insert("deleted", true).expect("mark");
+    bob.first_message()
+        .insert(MessageKey::Deleted, true)
+        .expect("mark");
     let marked = bob.json_since(&before);
     assert_eq!(
         refusal(
@@ -367,7 +374,10 @@ fn a_delete_of_another_authors_message_is_refused() {
 
     // Taking it out of the list is no delete at all.
     let before = bob.doc().oplog_vv();
-    bob.doc().get_list(MESSAGES).delete(0, 1).expect("remove");
+    bob.doc()
+        .get_list(Root::Messages.as_str())
+        .delete(0, 1)
+        .expect("remove");
     let removed = bob.json_since(&before);
     assert_eq!(
         refusal(
@@ -396,7 +406,7 @@ fn a_later_session_of_the_author_edits_its_own_message() {
     alice.new_session();
     let before = carol.doc().oplog_vv();
     let Some(ValueOrContainer::Container(Container::Text(content))) =
-        alice.first_message().get(MESSAGE_CONTENT)
+        alice.first_message().get(MessageKey::Content)
     else {
         panic!("the content is a text");
     };
@@ -414,8 +424,14 @@ fn a_later_session_of_the_author_edits_its_own_message() {
         alice.doc().oplog_vv().get(&peer.0)
     );
     assert_eq!(
-        carol.doc().get_list(MESSAGES).get_deep_value(),
-        alice.doc().get_list(MESSAGES).get_deep_value()
+        carol
+            .doc()
+            .get_list(Root::Messages.as_str())
+            .get_deep_value(),
+        alice
+            .doc()
+            .get_list(Root::Messages.as_str())
+            .get_deep_value()
     );
     assert_eq!(
         carol.state.messages(carol.state.active_id()).expect("read")[0].text,
@@ -512,8 +528,13 @@ fn two_peers_accept_and_refuse_the_same_deltas() {
         ]
     );
     assert_eq!(
-        carol.doc().get_list(MESSAGES).get_deep_value(),
-        dave.doc().get_list(MESSAGES).get_deep_value()
+        carol
+            .doc()
+            .get_list(Root::Messages.as_str())
+            .get_deep_value(),
+        dave.doc()
+            .get_list(Root::Messages.as_str())
+            .get_deep_value()
     );
 }
 

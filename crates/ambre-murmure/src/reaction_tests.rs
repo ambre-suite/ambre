@@ -5,7 +5,7 @@ use ambre_bus::{ActivityKind, MessageDraft, MessageView, Reaction, Timestamp, Un
 use ambre_core::{ChannelId, MessageId, SegmentId, Seq, UserId};
 use loro::{Container, LoroMap, ValueOrContainer, VersionVector};
 
-use crate::schema::{MESSAGE_REACTIONS, MESSAGES};
+use crate::schema::{MessageKey, Root};
 use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Refusal, Sent, Signer,
 };
@@ -232,11 +232,13 @@ fn reactions_map(member: &Member) -> LoroMap {
         .state
         .doc(member.segment().document_id())
         .expect("held");
-    let Some(ValueOrContainer::Container(Container::Map(message))) = doc.get_list(MESSAGES).get(0)
+    let Some(message) = crate::schema::root_list(doc, Root::Messages)
+        .get(0)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("a message is a map");
     };
-    let Some(ValueOrContainer::Container(Container::Map(map))) = message.get(MESSAGE_REACTIONS)
+    let Some(ValueOrContainer::Container(Container::Map(map))) = message.get(MessageKey::Reactions)
     else {
         panic!("a message carries its reactions map");
     };
@@ -279,8 +281,10 @@ fn a_reaction_under_another_members_key_is_refused() {
         .doc(bob.segment().document_id())
         .expect("held")
         .oplog_vv();
-    let forged = crate::reaction::key(alice.user, &ambre_bus::Emoji::from("\u{1F44E}"));
-    reactions_map(&bob).insert(&forged, 1_i64).expect("write");
+    let forged = crate::reaction::ReactionKey::of(alice.user, &ambre_bus::Emoji::from("\u{1F44E}"));
+    reactions_map(&bob)
+        .insert(forged.as_str(), 1_i64)
+        .expect("write");
     let inserted = written_since(&bob, &before);
     let removal_from = bob
         .state
@@ -288,10 +292,9 @@ fn a_reaction_under_another_members_key_is_refused() {
         .expect("held")
         .oplog_vv();
     reactions_map(&bob)
-        .delete(&crate::reaction::key(
-            alice.user,
-            &ambre_bus::Emoji::from(THUMB),
-        ))
+        .delete(
+            crate::reaction::ReactionKey::of(alice.user, &ambre_bus::Emoji::from(THUMB)).as_str(),
+        )
         .expect("delete");
     let removed = written_since(&bob, &removal_from);
 
@@ -317,17 +320,18 @@ fn a_reaction_under_another_members_key_is_refused() {
 
     // The author of the message may not replace its map either.
     let before = alice.state.doc(document_id).expect("held").oplog_vv();
-    let Some(ValueOrContainer::Container(Container::Map(first))) = alice
+    let Some(first) = alice
         .state
         .doc(document_id)
         .expect("held")
-        .get_list(MESSAGES)
+        .get_list(Root::Messages.as_str())
         .get(0)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("a message is a map");
     };
     first
-        .insert_container(MESSAGE_REACTIONS, LoroMap::new())
+        .insert_container(MessageKey::Reactions, LoroMap::new())
         .expect("replace");
     let replaced = written_since(&alice, &before);
     assert_eq!(

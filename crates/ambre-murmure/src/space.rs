@@ -9,14 +9,11 @@
 
 use ambre_bus::{CatalogueEntry, CategoryView, SealedChannelKey, Timestamp, Topic};
 use ambre_core::{CategoryId, ChannelId, DocumentId, SpaceId};
-use loro::{ExportMode, LoroDoc, LoroMap, LoroValue, ValueOrContainer, VersionVector};
+use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
 use crate::channel::ChannelState;
 use crate::error::MurmureError;
-use crate::schema::{
-    self, CATALOGUE, CATEGORIES, CATEGORY_NAME, CATEGORY_POSITION, ChannelType, ENTRY_CATEGORY,
-    ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, SPACE, SPACE_NAME,
-};
+use crate::schema::{self, CategoryKey, ChannelType, EntryKey, Fields, Root, SpaceKey};
 use crate::session::Session;
 
 /// A public channel the catalogue is asked to list.
@@ -146,7 +143,7 @@ impl SpaceState {
 
     /// The name of the space, absent when it has none.
     pub fn name(&self) -> Option<String> {
-        schema::string(&self.doc.get_map(SPACE), SPACE_NAME)
+        schema::string(&crate::schema::space(&self.doc), SpaceKey::Name)
     }
 
     /// Every operation of the document, as one Loro update: the first
@@ -194,12 +191,12 @@ impl SpaceState {
     ) -> Result<Vec<u8>, MurmureError> {
         crate::channel::fitting(Some(name))?;
         self.writable()?;
-        let entry = self
-            .doc
-            .get_map(CATEGORIES)
-            .ensure_mergeable_map(&category_id.to_string())?;
-        entry.insert(CATEGORY_NAME, name)?;
-        entry.insert(CATEGORY_POSITION, i64::from(position))?;
+        let entry = Fields::<CategoryKey>::of(
+            crate::schema::root_map(&self.doc, Root::Categories)
+                .ensure_mergeable_map(&category_id.to_string())?,
+        );
+        entry.insert(CategoryKey::Name, name)?;
+        entry.insert(CategoryKey::Position, i64::from(position))?;
         self.export()
     }
 
@@ -223,24 +220,24 @@ impl SpaceState {
             return Err(MurmureError::NotPublic(channel_id));
         }
         self.writable()?;
-        let entry = self
-            .doc
-            .get_map(CATALOGUE)
-            .ensure_mergeable_map(&channel_id.to_string())?;
+        let entry = Fields::<EntryKey>::of(
+            crate::schema::root_map(&self.doc, Root::Catalogue)
+                .ensure_mergeable_map(&channel_id.to_string())?,
+        );
         match channel.name() {
-            Some(name) => entry.insert(ENTRY_NAME, name)?,
-            None => clear(&entry, ENTRY_NAME)?,
+            Some(name) => entry.insert(EntryKey::Name, name)?,
+            None => clear(&entry, EntryKey::Name)?,
         }
         match listing.topic {
-            Some(topic) => entry.insert(ENTRY_TOPIC, topic.as_str())?,
-            None => clear(&entry, ENTRY_TOPIC)?,
+            Some(topic) => entry.insert(EntryKey::Topic, topic.as_str())?,
+            None => clear(&entry, EntryKey::Topic)?,
         }
         match listing.category {
-            Some(category) => entry.insert(ENTRY_CATEGORY, category.to_string())?,
-            None => clear(&entry, ENTRY_CATEGORY)?,
+            Some(category) => entry.insert(EntryKey::Category, category.to_string())?,
+            None => clear(&entry, EntryKey::Category)?,
         }
-        entry.insert(ENTRY_POSITION, i64::from(listing.position))?;
-        entry.insert(ENTRY_KEY, listing.key.as_bytes().to_vec())?;
+        entry.insert(EntryKey::Position, i64::from(listing.position))?;
+        entry.insert(EntryKey::Key, listing.key.as_bytes().to_vec())?;
         self.export()
     }
 
@@ -254,7 +251,7 @@ impl SpaceState {
         &mut self,
         channel_id: ChannelId,
     ) -> Result<Option<Vec<u8>>, MurmureError> {
-        let catalogue = self.doc.get_map(CATALOGUE);
+        let catalogue = crate::schema::root_map(&self.doc, Root::Catalogue);
         let key = channel_id.to_string();
         if catalogue.get(&key).is_none() {
             return Ok(None);
@@ -276,14 +273,14 @@ impl SpaceState {
         channel_id: ChannelId,
         key: &SealedChannelKey,
     ) -> Result<Option<Vec<u8>>, MurmureError> {
-        let Some(entry) = child_map(&self.doc.get_map(CATALOGUE), &channel_id.to_string()) else {
+        let Some(entry) = self.listed(channel_id) else {
             return Ok(None);
         };
         if self.sealed_key(channel_id).as_ref() == Ok(key) {
             return Ok(None);
         }
         self.writable()?;
-        entry.insert(ENTRY_KEY, key.as_bytes().to_vec())?;
+        entry.insert(EntryKey::Key, key.as_bytes().to_vec())?;
         self.export().map(Some)
     }
 
@@ -294,28 +291,38 @@ impl SpaceState {
     /// [`MurmureError::NotListed`] when the catalogue lists no such channel,
     /// or holds no readable key for it.
     pub fn sealed_key(&self, channel_id: ChannelId) -> Result<SealedChannelKey, MurmureError> {
-        let entry = child_map(&self.doc.get_map(CATALOGUE), &channel_id.to_string())
+        let entry = self
+            .listed(channel_id)
             .ok_or(MurmureError::NotListed(channel_id))?;
-        match schema::value(&entry, ENTRY_KEY) {
+        match schema::value(&entry, EntryKey::Key) {
             Some(LoroValue::Binary(bytes)) => Ok(SealedChannelKey::from_bytes(bytes.to_vec())),
             _ => Err(MurmureError::NotListed(channel_id)),
         }
     }
 
+    /// The catalogue entry of `channel_id`, or `None` when the catalogue
+    /// does not list it.
+    fn listed(&self, channel_id: ChannelId) -> Option<Fields<EntryKey>> {
+        crate::schema::root_map(&self.doc, Root::Catalogue)
+            .get(&channel_id.to_string())
+            .and_then(schema::fields_of)
+    }
+
     /// The categories, by position then identifier.
     pub fn categories(&self) -> Vec<CategoryView> {
         let mut found = Vec::new();
-        let categories = self.doc.get_map(CATEGORIES);
+        let categories = crate::schema::root_map(&self.doc, Root::Categories);
         categories.for_each(|key, value| {
-            let (Ok(id), ValueOrContainer::Container(loro::Container::Map(entry))) =
-                (CategoryId::parse_str(key), value)
-            else {
+            let (Ok(id), Some(entry)) = (
+                CategoryId::parse_str(key),
+                schema::fields_of::<CategoryKey>(value),
+            ) else {
                 return;
             };
             found.push(CategoryView {
                 id,
-                name: schema::string(&entry, CATEGORY_NAME).unwrap_or_default(),
-                position: position_of(&entry, CATEGORY_POSITION),
+                name: schema::string(&entry, CategoryKey::Name).unwrap_or_default(),
+                position: position_of(&entry, CategoryKey::Position),
             });
         });
         found.sort_by_key(|c| (c.position, *c.id.as_bytes()));
@@ -326,19 +333,20 @@ impl SpaceState {
     /// build wrote is skipped rather than refused.
     pub fn catalogue(&self) -> Vec<CatalogueEntry> {
         let mut found = Vec::new();
-        self.doc.get_map(CATALOGUE).for_each(|key, value| {
-            let (Ok(channel_id), ValueOrContainer::Container(loro::Container::Map(entry))) =
-                (ChannelId::parse_str(key), value)
-            else {
+        crate::schema::root_map(&self.doc, Root::Catalogue).for_each(|key, value| {
+            let (Ok(channel_id), Some(entry)) = (
+                ChannelId::parse_str(key),
+                schema::fields_of::<EntryKey>(value),
+            ) else {
                 return;
             };
             found.push(CatalogueEntry {
                 channel_id,
-                name: schema::string(&entry, ENTRY_NAME).unwrap_or_default(),
-                topic: schema::string(&entry, ENTRY_TOPIC).and_then(Topic::new),
-                category: schema::string(&entry, ENTRY_CATEGORY)
+                name: schema::string(&entry, EntryKey::Name).unwrap_or_default(),
+                topic: schema::string(&entry, EntryKey::Topic).and_then(Topic::new),
+                category: schema::string(&entry, EntryKey::Category)
                     .and_then(|s| CategoryId::parse_str(&s).ok()),
-                position: position_of(&entry, ENTRY_POSITION),
+                position: position_of(&entry, EntryKey::Position),
             });
         });
         found.sort_by_key(|c| (c.position, *c.channel_id.as_bytes()));
@@ -387,31 +395,23 @@ fn write_created(
 ) -> Result<(), MurmureError> {
     schema::write_space_header(doc, space_id, now)?;
     if !name.is_empty() {
-        doc.get_map(SPACE).insert(SPACE_NAME, name)?;
+        crate::schema::space(doc).insert(SpaceKey::Name, name)?;
     }
     doc.commit();
     Ok(())
 }
 
-/// The map under `key`, or `None` when it is absent or not a map.
-fn child_map(map: &LoroMap, key: &str) -> Option<LoroMap> {
-    match map.get(key)? {
-        ValueOrContainer::Container(loro::Container::Map(child)) => Some(child),
-        _ => None,
-    }
-}
-
 /// Remove `key` when present: an unset property is an absent key
 /// (`MURMURE-018`), and removing one never written would write an operation.
-fn clear(map: &LoroMap, key: &str) -> Result<(), MurmureError> {
-    if map.get(key).is_some() {
+fn clear(map: &Fields<EntryKey>, key: EntryKey) -> Result<(), MurmureError> {
+    if map.contains(key) {
         map.delete(key)?;
     }
     Ok(())
 }
 
 /// A stored position, saturating into `u32`. A value no build wrote reads as 0.
-fn position_of(map: &LoroMap, key: &str) -> u32 {
+fn position_of<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> u32 {
     schema::unsigned(map, key)
         .map(|n| u32::try_from(n).unwrap_or(u32::MAX))
         .unwrap_or(0)

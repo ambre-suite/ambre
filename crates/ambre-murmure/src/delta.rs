@@ -18,10 +18,8 @@ use serde::Deserialize;
 
 use crate::error::MurmureError;
 use crate::reaction;
-use crate::schema::{
-    self, AMENDMENT_BY, AMENDMENT_THREADS, AMENDMENTS, DeletedBy, MESSAGE_AUTHOR, MESSAGE_ID,
-    MESSAGE_REACTIONS, MESSAGE_THREAD, MESSAGES,
-};
+use crate::schema::{self, AmendmentKey, DeletedBy, Fields, MessageKey, Root};
+use ambre_core::crdt::{ContainerName, FoundationRoot};
 
 /// The Loro JSON schema version a segment delta carries (`MURMURE-227`). A
 /// change of it is a bump of `SCHEMA_VERSION` (`MURMURE-020`).
@@ -132,11 +130,7 @@ pub(crate) fn read(payload: &[u8]) -> Result<JsonSchema, Refusal> {
 /// Turn each registry entry back into the bytes it was written as.
 fn restore_entries(update: &mut JsonSchema) {
     for op in update.changes.iter_mut().flat_map(|c| c.ops.iter_mut()) {
-        if !is_root(
-            &op.container,
-            ambre_core::crdt::FoundationRoot::Peers.as_str(),
-            ContainerType::Map,
-        ) {
+        if !is_root(&op.container, FoundationRoot::Peers, ContainerType::Map) {
             continue;
         }
         let JsonOpContent::Map(MapOp::Insert { value, .. }) = &mut op.content else {
@@ -212,7 +206,9 @@ pub(crate) fn check(
                     return Err(Refusal::ForeignMessage);
                 }
                 match &op.content {
-                    JsonOpContent::Map(MapOp::Insert { key, value }) if key == MESSAGE_AUTHOR => {
+                    JsonOpContent::Map(MapOp::Insert { key, value })
+                        if MessageKey::parse(key) == Some(MessageKey::Author) =>
+                    {
                         if !names(value, user) {
                             return Err(Refusal::ForeignAuthor);
                         }
@@ -221,20 +217,22 @@ pub(crate) fn check(
                     // The map comes with its message, and is never replaced:
                     // a new one would drop every member's reaction.
                     JsonOpContent::Map(MapOp::Insert { key, value })
-                        if key == MESSAGE_REACTIONS =>
+                        if MessageKey::parse(key) == Some(MessageKey::Reactions) =>
                     {
                         match value {
                             LoroValue::Container(map) if created.contains(&id) => fresh.push(map),
                             _ => return Err(Refusal::ForeignReaction),
                         }
                     }
-                    JsonOpContent::Map(MapOp::Delete { key }) if key == MESSAGE_REACTIONS => {
+                    JsonOpContent::Map(MapOp::Delete { key })
+                        if MessageKey::parse(key) == Some(MessageKey::Reactions) =>
+                    {
                         return Err(Refusal::ForeignReaction);
                     }
                     _ => {}
                 }
             }
-            root if is_root(root, MESSAGES, ContainerType::List) => match &op.content {
+            root if is_root(root, Root::Messages, ContainerType::List) => match &op.content {
                 JsonOpContent::List(ListOp::Insert { value, .. }) => {
                     for item in value {
                         let LoroValue::Container(id) = item else {
@@ -245,12 +243,7 @@ pub(crate) fn check(
                 }
                 _ => return Err(Refusal::Removed),
             },
-            root if is_root(
-                root,
-                ambre_core::crdt::FoundationRoot::Peers.as_str(),
-                ContainerType::Map,
-            ) =>
-            {
+            root if is_root(root, FoundationRoot::Peers, ContainerType::Map) => {
                 entry_allowed(&op.content, signer.peer, user)?;
             }
             // The header and the version register hold no message.
@@ -303,13 +296,13 @@ pub(crate) fn check_amendments(
                 // moderator is the moderation feature's, and no build writes
                 // it yet.
                 if let JsonOpContent::Map(MapOp::Insert { key, value }) = &op.content
-                    && key == AMENDMENT_BY
+                    && AmendmentKey::parse(key) == Some(AmendmentKey::By)
                     && !matches!(value, LoroValue::String(s) if s.as_str() == DeletedBy::Author.as_str())
                 {
                     return Err(Refusal::ForeignMessage);
                 }
             }
-            root if is_root(root, AMENDMENTS, ContainerType::Map) => match &op.content {
+            root if is_root(root, Root::Amendments, ContainerType::Map) => match &op.content {
                 JsonOpContent::Map(MapOp::Insert {
                     key,
                     value: LoroValue::Container(_),
@@ -320,7 +313,7 @@ pub(crate) fn check_amendments(
                 },
                 _ => return Err(Refusal::Removed),
             },
-            root if is_root(root, AMENDMENT_THREADS, ContainerType::Map) => match &op.content {
+            root if is_root(root, Root::Threads, ContainerType::Map) => match &op.content {
                 JsonOpContent::Map(MapOp::Insert {
                     key,
                     value: LoroValue::String(value),
@@ -337,12 +330,7 @@ pub(crate) fn check_amendments(
                 }
                 _ => return Err(Refusal::Removed),
             },
-            root if is_root(
-                root,
-                ambre_core::crdt::FoundationRoot::Peers.as_str(),
-                ContainerType::Map,
-            ) =>
-            {
+            root if is_root(root, FoundationRoot::Peers, ContainerType::Map) => {
                 entry_allowed(&op.content, signer.peer, user)?;
             }
             // The header and the version register hold no amendment.
@@ -355,28 +343,26 @@ pub(crate) fn check_amendments(
 /// The author `segment` holds for the message `key` names, `None` when it
 /// holds no such message.
 pub(crate) fn author_in(segment: &LoroDoc, key: &str) -> Option<UserId> {
-    let list = segment.get_list(MESSAGES);
-    (0..list.len()).find_map(|index| match list.get(index) {
-        Some(ValueOrContainer::Container(Container::Map(map)))
-            if schema::string(&map, MESSAGE_ID).as_deref() == Some(key) =>
-        {
-            UserId::parse_str(&schema::string(&map, MESSAGE_AUTHOR)?).ok()
+    let list = crate::schema::root_list(segment, Root::Messages);
+    (0..list.len()).find_map(|index| {
+        let map = list.get(index).and_then(schema::fields_of::<MessageKey>)?;
+        if schema::string(&map, MessageKey::Id).as_deref() != Some(key) {
+            return None;
         }
-        _ => None,
+        UserId::parse_str(&schema::string(&map, MessageKey::Author)?).ok()
     })
 }
 
 /// The `thread` field `segment` holds for the message `key` names, `None`
 /// when it holds no such message or no thread.
 fn thread_in(segment: &LoroDoc, key: &str) -> Option<String> {
-    let list = segment.get_list(MESSAGES);
-    (0..list.len()).find_map(|index| match list.get(index) {
-        Some(ValueOrContainer::Container(Container::Map(map)))
-            if schema::string(&map, MESSAGE_ID).as_deref() == Some(key) =>
-        {
-            schema::string(&map, MESSAGE_THREAD)
+    let list = crate::schema::root_list(segment, Root::Messages);
+    (0..list.len()).find_map(|index| {
+        let map = list.get(index).and_then(schema::fields_of::<MessageKey>)?;
+        if schema::string(&map, MessageKey::Id).as_deref() != Some(key) {
+            return None;
         }
-        _ => None,
+        schema::string(&map, MessageKey::Thread)
     })
 }
 
@@ -398,7 +384,7 @@ fn thread_set(content: &JsonOpContent, current: Option<Option<String>>) -> bool 
     let Some(current) = current else {
         return false;
     };
-    key == MESSAGE_THREAD
+    MessageKey::parse(key) == Some(MessageKey::Thread)
         && DocumentId::parse_str(value).is_ok()
         && current.is_none_or(|set| set.as_str() == value.as_str())
 }
@@ -410,13 +396,13 @@ pub(crate) fn thread_field(doc: &LoroDoc, id: &ContainerID) -> Option<Option<Str
     let [(list, _), (_, Index::Seq(_))] = path.as_slice() else {
         return None;
     };
-    if !is_root(list, MESSAGES, ContainerType::List) {
+    if !is_root(list, Root::Messages, ContainerType::List) {
         return None;
     }
     let Some(Container::Map(map)) = doc.get_container(id.clone()) else {
         return None;
     };
-    Some(schema::string(&map, MESSAGE_THREAD))
+    Some(schema::string(&Fields::of(map), MessageKey::Thread))
 }
 
 /// Whether a registry write is the signer's own: its PeerID's key alone. An
@@ -446,7 +432,7 @@ fn entry_allowed(
 /// Whether a write to a `reactions` map is the signer's own: an entry under
 /// their key, set to a plain value or removed.
 fn reaction_allowed(content: &JsonOpContent, user: UserId) -> Result<(), Refusal> {
-    let own = |key: &str| reaction::user_of(key) == Some(user);
+    let own = |key: &str| reaction::ReactionKey::read(key).map(|(writer, _)| writer) == Some(user);
     match content {
         JsonOpContent::Map(MapOp::Insert { key, value })
             if own(key) && !matches!(value, LoroValue::Container(_)) =>
@@ -469,7 +455,7 @@ pub(crate) fn created_messages(update: &JsonSchema) -> Vec<MessageId> {
             JsonOpContent::Map(MapOp::Insert {
                 key,
                 value: LoroValue::String(id),
-            }) if key == MESSAGE_ID => MessageId::parse_str(id).ok(),
+            }) if MessageKey::parse(key) == Some(MessageKey::Id) => MessageId::parse_str(id).ok(),
             _ => None,
         })
         .collect()
@@ -480,8 +466,8 @@ fn names(value: &LoroValue, user: UserId) -> bool {
     matches!(value, LoroValue::String(s) if UserId::parse_str(s).is_ok_and(|u| u == user))
 }
 
-fn is_root(id: &ContainerID, root: &str, kind: ContainerType) -> bool {
-    matches!(id, ContainerID::Root { name, container_type } if name.as_str() == root && *container_type == kind)
+fn is_root(id: &ContainerID, root: impl ContainerName, kind: ContainerType) -> bool {
+    matches!(id, ContainerID::Root { name, container_type } if name.as_str() == root.as_str() && *container_type == kind)
 }
 
 /// The user the registry of `doc` names for `peer`, `None` when its entry is
@@ -570,7 +556,7 @@ pub(crate) fn verdict(
             |peer| registered(doc, peer),
             |key| author_in(segment, key),
             |key| {
-                schema::string(&doc.get_map(AMENDMENT_THREADS), key)
+                schema::string_value(crate::schema::root_map(doc, Root::Threads).get(key))
                     .or_else(|| thread_in(segment, key))
             },
         ),

@@ -6,7 +6,7 @@ use ambre_bus::{Mention, MentionCount, MentionTarget, MessageDraft, MessageView,
 use ambre_core::{ChannelId, Seq, UserId};
 use loro::{Container, LoroValue, TextDelta, ValueOrContainer};
 
-use crate::schema::{MENTION, MESSAGE_CONTENT, MESSAGES};
+use crate::schema::{Mark, MessageKey, Root};
 use crate::{
     CONFIRM_CHANNEL_PAST, ChannelState, ChannelType, MurmureError, Opening, OpeningChannel,
     Screened, Sent, Signer, screen,
@@ -74,11 +74,14 @@ fn messages(state: &ChannelState) -> Vec<MessageView> {
 /// The value of every `mention` mark over the body of message `n`.
 fn stored_marks(state: &ChannelState, n: usize) -> Vec<LoroValue> {
     let doc = state.doc(state.active_id().document_id()).expect("held");
-    let Some(ValueOrContainer::Container(Container::Map(message))) = doc.get_list(MESSAGES).get(n)
+    let Some(message) = crate::schema::root_list(doc, Root::Messages)
+        .get(n)
+        .and_then(crate::schema::fields_of)
     else {
         panic!("a message is a map");
     };
-    let Some(ValueOrContainer::Container(Container::Text(content))) = message.get(MESSAGE_CONTENT)
+    let Some(ValueOrContainer::Container(Container::Text(content))) =
+        message.get(MessageKey::Content)
     else {
         panic!("a body is a text");
     };
@@ -89,7 +92,7 @@ fn stored_marks(state: &ChannelState, n: usize) -> Vec<LoroValue> {
             TextDelta::Insert {
                 attributes: Some(attributes),
                 ..
-            } => attributes.get(MENTION).cloned(),
+            } => attributes.get(Mark::Mention.as_str()).cloned(),
             _ => None,
         })
         .collect()
@@ -177,11 +180,17 @@ fn an_at_channel_names_the_channel_and_no_member() {
         vec![at(MentionTarget::Channel, 0..8)]
     );
     let doc = state.doc(state.active_id().document_id()).expect("held");
-    let Some(ValueOrContainer::Container(Container::Map(message))) = doc.get_list(MESSAGES).get(0)
+    let Some(message) = crate::schema::root_list(doc, Root::Messages)
+        .get(0)
+        .and_then(crate::schema::fields_of::<MessageKey>)
     else {
         panic!("a message is a map");
     };
-    let mut keys = message.keys().map(|k| k.to_string()).collect::<Vec<_>>();
+    let mut keys = message
+        .map()
+        .keys()
+        .map(|k| k.to_string())
+        .collect::<Vec<_>>();
     keys.sort();
     assert_eq!(
         keys,

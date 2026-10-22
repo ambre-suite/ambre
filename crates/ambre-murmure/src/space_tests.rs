@@ -5,7 +5,7 @@ use ambre_bus::{SealedChannelKey, Timestamp, Topic};
 use ambre_core::{CategoryId, ChannelId, SpaceId};
 use loro::{LoroDoc, LoroValue};
 
-use crate::schema::{HEADER, HEADER_KIND, HEADER_SPACE, read_version};
+use crate::schema::{HeaderKey, read_version};
 use crate::{ChannelState, ChannelType, Listing, MurmureError, SCHEMA_VERSION, SpaceState};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
@@ -51,13 +51,13 @@ fn a_new_space_is_one_document_that_holds_no_member() {
     let space = SpaceState::create(space_id, "Acme", NOW).expect("create");
     assert_eq!(space.document_id(), space_id.document_id());
     assert_eq!(space.name().as_deref(), Some("Acme"));
-    let header = space.doc().get_map(HEADER);
+    let header = crate::schema::header(space.doc());
     assert_eq!(
-        crate::schema::string(&header, HEADER_KIND).as_deref(),
+        crate::schema::string(&header, HeaderKey::Kind).as_deref(),
         Some("space")
     );
     assert_eq!(
-        crate::schema::string(&header, HEADER_SPACE),
+        crate::schema::string(&header, HeaderKey::Space),
         Some(space_id.to_string())
     );
     assert_eq!(read_version(space.doc()), Ok(SCHEMA_VERSION));
@@ -196,7 +196,7 @@ fn an_unnamed_channel_lists_with_no_name_key() {
     doc.import(&space.export_all().expect("export"))
         .expect("import");
     let entry = doc
-        .get_map(crate::schema::CATALOGUE)
+        .get_map(crate::schema::Root::Catalogue.as_str())
         .get_deep_value()
         .into_map()
         .expect("a map");
@@ -205,7 +205,10 @@ fn an_unnamed_channel_lists_with_no_name_key() {
         .cloned()
         .and_then(|value| value.into_map().ok())
         .expect("one entry");
-    assert!(!entry.contains_key(crate::schema::ENTRY_NAME), "{entry:?}");
+    assert!(
+        !entry.contains_key(crate::schema::EntryKey::Name.as_str()),
+        "{entry:?}"
+    );
     let [listed] = space.catalogue().try_into().expect("one entry");
     assert_eq!(listed.name, "");
 }

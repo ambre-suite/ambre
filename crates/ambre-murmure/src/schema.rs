@@ -1,8 +1,10 @@
 //! The persisted shape of a Murmure document: container names, keys, the
 //! values they hold, and the version gate (`ambre-spec-murmure-schema.md`).
 //!
-//! Every key the engine writes is declared here, so the shape belt can read
-//! this file and demand a line for each (`MURMURE-437`).
+//! Every name the engine writes is declared here, one closed set per
+//! container. The shape belt walks each set and demands a line for each name
+//! (`MURMURE-437`). A map is read and written through [`Fields`], typed by its
+//! set, so a key of one map does not compile against another.
 //!
 //! **Where the version lives.** In the foundation's root `meta` map, under
 //! `ambre_core::schema::MetaKey::SchemaVersion`, as in Trame and Prose
@@ -16,7 +18,7 @@ use ambre_core::schema::{
     migration_peer, verdict,
 };
 use ambre_core::{ChannelId, DocumentId, SpaceId};
-use loro::{LoroDoc, LoroMap, LoroValue, ValueOrContainer};
+use loro::{LoroDoc, LoroList, LoroMap, LoroValue, ValueOrContainer};
 
 use crate::error::MurmureError;
 
@@ -30,117 +32,228 @@ use crate::error::MurmureError;
 /// message (`MURMURE-017`).
 pub const SCHEMA_VERSION: u32 = 3;
 
-/// The root map every Murmure document carries (`MURMURE-001`).
-pub(crate) const HEADER: &str = "header";
-pub(crate) const HEADER_KIND: &str = "kind";
-pub(crate) const HEADER_CHANNEL: &str = "channel_id";
-pub(crate) const HEADER_CREATED_AT: &str = "created_at";
-/// The key a space document names its space under, in place of a channel.
-pub(crate) const HEADER_SPACE: &str = "space_id";
-/// The key an amendments document names its segment under, beside its
-/// channel (`MURMURE-013`). A thread document names its root's segment so.
-pub(crate) const HEADER_SEGMENT: &str = "segment_id";
-/// The key a thread document names its root message under (`MURMURE-009`).
-pub(crate) const HEADER_ROOT: &str = "root_id";
-/// The amendments document a fold snapshot of a segment folded in, absent
-/// from every other snapshot.
-pub(crate) const HEADER_FOLDED: &str = "folded";
-/// The last delta number of those amendments the fold holds.
-pub(crate) const HEADER_FOLDED_SEQ: &str = "folded_seq";
+ambre_core::loro_fields!(pub(crate));
 
-/// The `space` root of a space document.
-pub(crate) const SPACE: &str = "space";
-pub(crate) const SPACE_NAME: &str = "name";
+ambre_core::crdt_names! {
+    /// The root containers of the Murmure documents. A document of each kind
+    /// opens the roots its kind holds.
+    pub(crate) enum Root: ContainerName {
+        /// The root map every Murmure document carries (`MURMURE-001`), read
+        /// through [`HeaderKey`].
+        Header = "header",
+        /// The `space` root of a space document, read through [`SpaceKey`].
+        Space = "space",
+        /// The `categories` root of a space document, one [`CategoryKey`] map
+        /// per `CategoryId`.
+        Categories = "categories",
+        /// The `channels` root of a space document, the catalogue: one
+        /// [`EntryKey`] map per public `ChannelId`.
+        Catalogue = "channels",
+        /// The `channel` root of a `meta` document, read through
+        /// [`ChannelKey`].
+        Channel = "channel",
+        /// The `segments` list of a `meta` document, one [`SegmentKey`] map per
+        /// segment.
+        Segments = "segments",
+        /// The `amendments` root of an amendments document, one
+        /// [`AmendmentKey`] map per `MessageId` of its segment.
+        Amendments = "amendments",
+        /// The `threads` root of an amendments document: the thread document
+        /// of each root of its locked segment, keyed by `MessageId`
+        /// (`MURMURE-484`).
+        Threads = "threads",
+        /// The `messages` list of a segment, one [`MessageKey`] map per
+        /// message.
+        Messages = "messages",
+    }
+}
 
-/// The `categories` root of a space document, one entry per `CategoryId`.
-pub(crate) const CATEGORIES: &str = "categories";
-pub(crate) const CATEGORY_NAME: &str = "name";
-pub(crate) const CATEGORY_POSITION: &str = "position";
+ambre_core::crdt_names! {
+    /// The keys of the `header` root. Public, since a refused header names
+    /// the key it lacks.
+    pub enum HeaderKey: FieldKey {
+        Kind = "kind",
+        Channel = "channel_id",
+        CreatedAt = "created_at",
+        /// The key a space document names its space under, in place of a
+        /// channel.
+        Space = "space_id",
+        /// The key an amendments document names its segment under, beside
+        /// its channel (`MURMURE-013`). A thread document names its root's
+        /// segment so.
+        Segment = "segment_id",
+        /// The key a thread document names its root message under
+        /// (`MURMURE-009`).
+        Root = "root_id",
+        /// The amendments document a fold snapshot of a segment folded in,
+        /// absent from every other snapshot.
+        Folded = "folded",
+        /// The last delta number of those amendments the fold holds.
+        FoldedSeq = "folded_seq",
+    }
+}
 
-/// The `channels` root of a space document, the catalogue: one entry per
-/// public `ChannelId`.
-pub(crate) const CATALOGUE: &str = "channels";
-pub(crate) const ENTRY_NAME: &str = "name";
-pub(crate) const ENTRY_TOPIC: &str = "topic";
-pub(crate) const ENTRY_CATEGORY: &str = "category_id";
-pub(crate) const ENTRY_POSITION: &str = "position";
-pub(crate) const ENTRY_KEY: &str = "key";
+ambre_core::crdt_names! {
+    /// The keys of the `space` root.
+    pub(crate) enum SpaceKey: FieldKey {
+        Name = "name",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of one entry of the `categories` root.
+    pub(crate) enum CategoryKey: FieldKey {
+        Name = "name",
+        Position = "position",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of one entry of the catalogue.
+    pub(crate) enum EntryKey: FieldKey {
+        Name = "name",
+        Topic = "topic",
+        Category = "category_id",
+        Position = "position",
+        Key = "key",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of the `channel` root.
+    pub(crate) enum ChannelKey: FieldKey {
+        Type = "type",
+        Name = "name",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of one entry of the `segments` list.
+    pub(crate) enum SegmentKey: FieldKey {
+        Document = "document_id",
+        From = "from_ts",
+        State = "state",
+        /// The amendments document of a locked segment, absent while it has
+        /// none.
+        Amendments = "amendments",
+        /// The amendments document the final snapshot folded in, which the
+        /// relay erased. An `amendments` that names it names no document.
+        Folded = "folded",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of one entry of the `amendments` root.
+    pub(crate) enum AmendmentKey: FieldKey {
+        /// The edited body, a char CRDT like the body of a message.
+        Content = "content",
+        /// `true` once the message is deleted, its edited body emptied.
+        Deleted = "deleted",
+        /// Who deleted the message, a [`DeletedBy`] word.
+        By = "by",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of one message of the `messages` list.
+    pub(crate) enum MessageKey: FieldKey {
+        Id = "id",
+        Author = "author",
+        Ts = "ts",
+        Content = "content",
+        /// The flat map of a message's reactions, one entry per member and
+        /// emoji (`MURMURE-006`). Each entry holds the instant of its
+        /// reaction.
+        Reactions = "reactions",
+        /// `true` once the author edited the body (`MURMURE-084`).
+        Edited = "edited",
+        /// `true` once the author deleted the message, its body emptied
+        /// (`MURMURE-087`).
+        Deleted = "deleted",
+        /// The kind of a notice, absent from a message a member wrote
+        /// (`MURMURE-057`). A notice keeps an empty body.
+        Notice = "notice",
+        /// The member a `member_added` notice names.
+        Member = "member",
+        /// The files a message carries, absent from a message that carries
+        /// none (`MURMURE-017`). One [`AttachmentKey`] map per file, in the
+        /// order its author attached them.
+        Attachments = "attachments",
+        /// The thread document of a root message, absent while it has no
+        /// reply (`MURMURE-107`).
+        Thread = "thread",
+        /// The thread document a reply also sent to the channel came from
+        /// (`MURMURE-109`).
+        AlsoInThread = "also_in_thread",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of one file of a message's `attachments`.
+    pub(crate) enum AttachmentKey: FieldKey {
+        Media = "media_ref",
+        Name = "name",
+        Type = "media_type",
+        Size = "size",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The marks over a body. A mark is a key of a text, not of a map.
+    pub(crate) enum Mark {
+        /// A mention. Its value is a user identifier, or the channel
+        /// identifier for an `@channel` (`MURMURE-008`).
+        Mention = "mention",
+        /// The style marks (`MURMURE-562`). Bold, italic and code hold
+        /// `true`, a link its address.
+        Bold = "bold",
+        Italic = "italic",
+        Code = "code",
+        Link = "link",
+        /// The block marks, which hold `true` over whole lines
+        /// (`MURMURE-194`).
+        CodeBlock = "code_block",
+        Quote = "quote",
+        List = "list",
+    }
+}
+
+/// The map root `root` of `doc`, for a root keyed by identifiers: the
+/// categories, the catalogue, the amendments and the threads.
+pub(crate) fn root_map(doc: &LoroDoc, root: Root) -> LoroMap {
+    doc.get_map(root.as_str())
+}
+
+/// The list root `root` of `doc`: the segments or the messages.
+pub(crate) fn root_list(doc: &LoroDoc, root: Root) -> LoroList {
+    doc.get_list(root.as_str())
+}
+
+/// The `header` of `doc`.
+pub(crate) fn header(doc: &LoroDoc) -> Fields<HeaderKey> {
+    Fields::of(root_map(doc, Root::Header))
+}
 
 /// The `channel` root of a `meta` document.
-pub(crate) const CHANNEL: &str = "channel";
-pub(crate) const CHANNEL_TYPE: &str = "type";
-pub(crate) const CHANNEL_NAME: &str = "name";
+pub(crate) fn channel(doc: &LoroDoc) -> Fields<ChannelKey> {
+    Fields::of(root_map(doc, Root::Channel))
+}
 
-/// The `segments` root of a `meta` document, and the fields of one entry.
-pub(crate) const SEGMENTS: &str = "segments";
-pub(crate) const SEGMENT_DOCUMENT: &str = "document_id";
-pub(crate) const SEGMENT_FROM: &str = "from_ts";
-pub(crate) const SEGMENT_STATE: &str = "state";
-/// The amendments document of a locked segment, absent while it has none.
-pub(crate) const SEGMENT_AMENDMENTS: &str = "amendments";
-/// The amendments document the final snapshot folded in, which the relay
-/// erased. An `amendments` that names it names no document.
-pub(crate) const SEGMENT_FOLDED: &str = "folded";
+/// The `space` root of a space document.
+pub(crate) fn space(doc: &LoroDoc) -> Fields<SpaceKey> {
+    Fields::of(root_map(doc, Root::Space))
+}
 
-/// The `amendments` root of an amendments document, one entry per
-/// `MessageId` of its segment, and the fields of one entry.
-pub(crate) const AMENDMENTS: &str = "amendments";
-/// The edited body, a char CRDT like the body of a message.
-pub(crate) const AMENDMENT_CONTENT: &str = "content";
-/// `true` once the message is deleted, its edited body emptied.
-pub(crate) const AMENDMENT_DELETED: &str = "deleted";
-/// Who deleted the message, a [`DeletedBy`] word.
-pub(crate) const AMENDMENT_BY: &str = "by";
-/// The `threads` root of an amendments document: the thread document of
-/// each root of its locked segment, keyed by `MessageId` (`MURMURE-484`).
-pub(crate) const AMENDMENT_THREADS: &str = "threads";
-
-/// The `messages` root of a segment, and the fields of one message.
-pub(crate) const MESSAGES: &str = "messages";
-pub(crate) const MESSAGE_ID: &str = "id";
-pub(crate) const MESSAGE_AUTHOR: &str = "author";
-pub(crate) const MESSAGE_TS: &str = "ts";
-pub(crate) const MESSAGE_CONTENT: &str = "content";
-/// The flat map of a message's reactions, one entry per member and emoji
-/// (`MURMURE-006`). Each entry holds the instant of its reaction.
-pub(crate) const MESSAGE_REACTIONS: &str = "reactions";
-/// `true` once the author edited the body (`MURMURE-084`).
-pub(crate) const MESSAGE_EDITED: &str = "edited";
-/// `true` once the author deleted the message, its body emptied
-/// (`MURMURE-087`).
-pub(crate) const MESSAGE_DELETED: &str = "deleted";
-/// The kind of a notice, absent from a message a member wrote
-/// (`MURMURE-057`). A notice keeps an empty body.
-pub(crate) const MESSAGE_NOTICE: &str = "notice";
-/// The member a `member_added` notice names.
-pub(crate) const MESSAGE_MEMBER: &str = "member";
-/// The files a message carries, absent from a message that carries none
-/// (`MURMURE-017`). One map per file, in the order its author attached them.
-pub(crate) const MESSAGE_ATTACHMENTS: &str = "attachments";
-pub(crate) const ATTACHMENT_MEDIA: &str = "media_ref";
-pub(crate) const ATTACHMENT_NAME: &str = "name";
-pub(crate) const ATTACHMENT_TYPE: &str = "media_type";
-pub(crate) const ATTACHMENT_SIZE: &str = "size";
-/// The thread document of a root message, absent while it has no reply
-/// (`MURMURE-107`).
-pub(crate) const MESSAGE_THREAD: &str = "thread";
-/// The thread document a reply also sent to the channel came from
-/// (`MURMURE-109`).
-pub(crate) const MESSAGE_ALSO_IN_THREAD: &str = "also_in_thread";
-/// The mark over a mention in a body. Its value is a user identifier, or the
-/// channel identifier for an `@channel` (`MURMURE-008`).
-pub(crate) const MENTION: &str = "mention";
-/// The style marks over a body (`MURMURE-562`). Bold, italic and code hold
-/// `true`, a link its address. A block mark holds `true` over whole lines
-/// (`MURMURE-194`).
-pub(crate) const BOLD: &str = "bold";
-pub(crate) const ITALIC: &str = "italic";
-pub(crate) const CODE: &str = "code";
-pub(crate) const LINK: &str = "link";
-pub(crate) const CODE_BLOCK: &str = "code_block";
-pub(crate) const QUOTE: &str = "quote";
-/// The `list` mark. Named apart, since a `LIST` constant names a container.
-pub(crate) const BULLETS: &str = "list";
+/// The map `item` holds, read through the keys of the schema `K`, or `None`
+/// for an item of another kind.
+pub(crate) fn fields_of<K: ambre_core::crdt::FieldKey>(
+    item: ValueOrContainer,
+) -> Option<Fields<K>> {
+    match item {
+        ValueOrContainer::Container(loro::Container::Map(map)) => Some(Fields::of(map)),
+        _ => None,
+    }
+}
 
 /// Murmure's migration registry: one row per version bump, appended never
 /// rewritten.
@@ -294,10 +407,10 @@ pub(crate) fn write_header(
     channel_id: ChannelId,
     created_at: ambre_core::Timestamp,
 ) -> Result<(), MurmureError> {
-    let header = doc.get_map(HEADER);
-    header.insert(HEADER_KIND, kind.as_str())?;
-    header.insert(HEADER_CHANNEL, channel_id.to_string())?;
-    header.insert(HEADER_CREATED_AT, ts_value(created_at))?;
+    let header = header(doc);
+    header.insert(HeaderKey::Kind, kind.as_str())?;
+    header.insert(HeaderKey::Channel, channel_id.to_string())?;
+    header.insert(HeaderKey::CreatedAt, ts_value(created_at))?;
     doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .insert(
             ambre_core::schema::MetaKey::SchemaVersion.as_str(),
@@ -316,10 +429,10 @@ pub(crate) fn write_space_header(
     space_id: SpaceId,
     created_at: ambre_core::Timestamp,
 ) -> Result<(), MurmureError> {
-    let header = doc.get_map(HEADER);
-    header.insert(HEADER_KIND, DocumentKind::Space.as_str())?;
-    header.insert(HEADER_SPACE, space_id.to_string())?;
-    header.insert(HEADER_CREATED_AT, ts_value(created_at))?;
+    let header = header(doc);
+    header.insert(HeaderKey::Kind, DocumentKind::Space.as_str())?;
+    header.insert(HeaderKey::Space, space_id.to_string())?;
+    header.insert(HeaderKey::CreatedAt, ts_value(created_at))?;
     doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .insert(
             ambre_core::schema::MetaKey::SchemaVersion.as_str(),
@@ -330,23 +443,27 @@ pub(crate) fn write_space_header(
 
 /// The plain value under `key`, or `None` when the key is absent or holds a
 /// container.
-pub(crate) fn value(map: &LoroMap, key: &str) -> Option<LoroValue> {
-    match map.get(key)? {
-        ValueOrContainer::Value(value) => Some(value),
-        ValueOrContainer::Container(_) => None,
-    }
+pub(crate) fn value<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> Option<LoroValue> {
+    map.value(key)
 }
 
 /// The string under `key`, or `None` when it is absent or not a string.
-pub(crate) fn string(map: &LoroMap, key: &str) -> Option<String> {
-    match value(map, key)? {
-        LoroValue::String(s) => Some(s.to_string()),
+pub(crate) fn string<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> Option<String> {
+    string_value(map.get(key))
+}
+
+/// The string a read found, or `None` when it found nothing or no string.
+/// A root keyed by identifiers is read so: its key is an identifier, not a
+/// name of the schema.
+pub(crate) fn string_value(found: Option<ValueOrContainer>) -> Option<String> {
+    match found? {
+        ValueOrContainer::Value(LoroValue::String(s)) => Some(s.to_string()),
         _ => None,
     }
 }
 
 /// The non-negative integer under `key`, or `None` otherwise.
-pub(crate) fn unsigned(map: &LoroMap, key: &str) -> Option<u64> {
+pub(crate) fn unsigned<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> Option<u64> {
     match value(map, key)? {
         LoroValue::I64(n) => u64::try_from(n).ok(),
         _ => None,
@@ -355,7 +472,7 @@ pub(crate) fn unsigned(map: &LoroMap, key: &str) -> Option<u64> {
 
 /// Whether the boolean under `key` is `true`. Absent, or of another type,
 /// reads as `false`.
-pub(crate) fn flag(map: &LoroMap, key: &str) -> bool {
+pub(crate) fn flag<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> bool {
     matches!(value(map, key), Some(LoroValue::Bool(true)))
 }
 
@@ -443,13 +560,13 @@ pub(crate) fn admit_with(
     fill: impl FnOnce(&LoroDoc) -> Result<(), MurmureError>,
 ) -> Result<LoroDoc, MurmureError> {
     let doc = import_current(fill)?;
-    let header = doc.get_map(HEADER);
+    let header = header(&doc);
     check_kind(&header, kind, document_id)?;
-    let found_channel = string(&header, HEADER_CHANNEL)
+    let found_channel = string(&header, HeaderKey::Channel)
         .and_then(|s| ChannelId::parse_str(&s).ok())
         .ok_or(MurmureError::HeaderMalformed {
             document_id,
-            key: HEADER_CHANNEL,
+            key: HeaderKey::Channel,
         })?;
     if found_channel != channel_id {
         // A document of another channel would read as a valid one of this
@@ -480,13 +597,13 @@ pub(crate) fn admit_space(payloads: &[&[u8]], space_id: SpaceId) -> Result<LoroD
             .iter()
             .try_for_each(|payload| import_bytes(doc, payload, document_id))
     })?;
-    let header = doc.get_map(HEADER);
+    let header = header(&doc);
     check_kind(&header, DocumentKind::Space, document_id)?;
-    let found = string(&header, HEADER_SPACE)
+    let found = string(&header, HeaderKey::Space)
         .and_then(|s| SpaceId::parse_str(&s).ok())
         .ok_or(MurmureError::HeaderMalformed {
             document_id,
-            key: HEADER_SPACE,
+            key: HeaderKey::Space,
         })?;
     if found != space_id {
         tracing::warn!("[Murmure] document {document_id} names space {found}; refused");
@@ -546,13 +663,13 @@ fn import_current(
 
 /// Refuse a header that names another kind, or none.
 fn check_kind(
-    header: &LoroMap,
+    header: &Fields<HeaderKey>,
     kind: DocumentKind,
     document_id: DocumentId,
 ) -> Result<(), MurmureError> {
-    let found = string(header, HEADER_KIND).ok_or(MurmureError::HeaderMalformed {
+    let found = string(header, HeaderKey::Kind).ok_or(MurmureError::HeaderMalformed {
         document_id,
-        key: HEADER_KIND,
+        key: HeaderKey::Kind,
     })?;
     if found != kind.as_str() {
         return Err(MurmureError::WrongKind {

@@ -326,6 +326,11 @@ class Schema(unittest.TestCase):
         )))
         self.assertEqual(["container-missing"], kinds(issues))
 
+    def test_a_root_of_a_container_enum_absent_from_the_table_is_a_lie(self):
+        code = 'crdt_names! {\n    enum Root: ContainerName {\n        Sheets = "sheets",\n    }\n}'
+        issues = list(spec_shape.schema_issues(doc("## 1. CONTAINERS"), self.source(code)))
+        self.assertEqual(["container-missing"], kinds(issues))
+
     def test_a_declared_container_with_no_code_is_normal(self):
         """Asymmetric on purpose: that is spec-driven development working."""
         text = doc("## 1. CONTAINERS", "| Container | Value |", "|---|---|", "| `sheets` | a map |")

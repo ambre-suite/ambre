@@ -9,12 +9,10 @@ use ambre_bus::{
     ActivityKind, MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle, Timestamp,
 };
 use ambre_core::{DocumentId, MessageId, SegmentId, Seq, UserId};
-use loro::{Container, LoroDoc, LoroMap, ValueOrContainer, VersionVector};
+use loro::{LoroDoc, LoroMap, VersionVector};
 
 use crate::channel::read_messages;
-use crate::schema::{
-    AMENDMENT_BY, AMENDMENT_THREADS, AMENDMENTS, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT, SEGMENTS,
-};
+use crate::schema::{AmendmentKey, Root, SegmentKey};
 use crate::session::next_peer;
 use crate::{
     ChangeTarget, ChannelState, ChannelType, MurmureError, Refusal, Replay, Sent, Signer,
@@ -230,13 +228,14 @@ fn an_edit_and_a_delete_of_a_locked_segment_write_amendments() {
 
     // `MURMURE-088`: the delete names its author.
     let doc = alice.doc(amendments).expect("held");
-    let Some(ValueOrContainer::Container(Container::Map(entry))) =
-        doc.get_map(AMENDMENTS).get(&ids[1].to_string())
+    let Some(entry) = crate::schema::root_map(doc, Root::Amendments)
+        .get(&ids[1].to_string())
+        .and_then(crate::schema::fields_of)
     else {
         panic!("an entry per message");
     };
     assert_eq!(
-        crate::schema::string(&entry, AMENDMENT_BY).as_deref(),
+        crate::schema::string(&entry, AmendmentKey::By).as_deref(),
         Some("author")
     );
     let raw = read_messages(
@@ -323,7 +322,7 @@ fn an_amendment_of_another_authors_message_is_refused() {
 
     let doc = bob.doc(amendments).expect("held");
     let before = doc.oplog_vv();
-    doc.get_map(AMENDMENTS)
+    crate::schema::root_map(doc, Root::Amendments)
         .insert_container(&message.to_string(), LoroMap::new())
         .expect("forge");
     let forged = json_since(doc, &before);
@@ -348,13 +347,14 @@ fn an_amendment_of_another_authors_message_is_refused() {
     .expect("the author's amendment");
     let doc = bob.doc(amendments).expect("held");
     let before = doc.oplog_vv();
-    let Some(ValueOrContainer::Container(Container::Map(entry))) =
-        doc.get_map(AMENDMENTS).get(&message.to_string())
+    let Some(entry) = crate::schema::root_map(doc, Root::Amendments)
+        .get(&message.to_string())
+        .and_then(crate::schema::fields_of)
     else {
         panic!("the author's entry");
     };
     entry
-        .insert(crate::schema::AMENDMENT_DELETED, true)
+        .insert(crate::schema::AmendmentKey::Deleted, true)
         .expect("forge");
     let forged = json_since(doc, &before);
     assert_eq!(
@@ -384,7 +384,7 @@ fn an_amendment_outside_its_segment_is_refused() {
 
     let doc = bob.doc(amendments).expect("held");
     let before = doc.oplog_vv();
-    doc.get_map(AMENDMENTS)
+    crate::schema::root_map(doc, Root::Amendments)
         .insert_container(&MessageId::new().to_string(), LoroMap::new())
         .expect("forge");
     let forged = json_since(doc, &before);
@@ -403,14 +403,14 @@ fn an_amendment_outside_its_segment_is_refused() {
     let list = carol
         .doc(carol.meta_id().document_id())
         .expect("meta")
-        .get_list(SEGMENTS);
+        .get_list(Root::Segments.as_str());
     for index in 0..list.len() {
-        let Some(ValueOrContainer::Container(Container::Map(entry))) = list.get(index) else {
+        let Some(entry) = list.get(index).and_then(crate::schema::fields_of) else {
             continue;
         };
-        if crate::schema::string(&entry, SEGMENT_DOCUMENT) == Some(active.to_string()) {
+        if crate::schema::string(&entry, SegmentKey::Document) == Some(active.to_string()) {
             entry
-                .insert(SEGMENT_AMENDMENTS, amendments.to_string())
+                .insert(SegmentKey::Amendments, amendments.to_string())
                 .expect("forge");
         }
     }
@@ -543,7 +543,7 @@ fn a_thread_record_outside_the_rule_is_refused() {
     let forge = |write: &dyn Fn(&LoroMap)| {
         let doc = bob.doc(amendments).expect("held");
         let before = doc.oplog_vv();
-        write(&doc.get_map(AMENDMENT_THREADS));
+        write(&crate::schema::root_map(doc, Root::Threads));
         json_since(doc, &before)
     };
     type Write<'a> = &'a dyn Fn(&LoroMap);
