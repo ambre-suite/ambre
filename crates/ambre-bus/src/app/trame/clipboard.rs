@@ -2,7 +2,7 @@
 //! of a copied/cut range, moved to the Logic thread inside
 //! [`TrameCommand::PasteRange`](super::TrameCommand).
 
-use super::{CellStyle, Col, ColCount, Row, RowCount};
+use super::{CellStyle, Col, ColCount, ColSpan, ColVec, Row, RowCount, RowSpan, RowVec};
 use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------------
@@ -43,22 +43,27 @@ impl ClipboardPayload {
     /// gaps (blank source cells, omitted from `cells`) render as empty fields. A
     /// formula cell contributes its raw text (for example `=A1*2`).
     pub fn to_tsv(&self) -> String {
-        let width = usize::try_from(self.cols.get().max(1)).unwrap_or(1);
-        let height = usize::try_from(self.rows.get().max(1)).unwrap_or(1);
-        let mut grid = vec![vec![String::new(); width]; height];
+        let width = ColCount::new(self.cols.get().max(1));
+        let height = RowCount::new(self.rows.get().max(1));
+        let mut grid: RowVec<ColVec<String>> = RowSpan::from_count(Row::ZERO, height)
+            .into_iter()
+            .map(|_| {
+                ColSpan::from_count(Col::ZERO, width)
+                    .into_iter()
+                    .map(|_| String::new())
+                    .collect()
+            })
+            .collect();
         for cell in &self.cells {
-            if let Some(row) = usize::try_from(cell.dr.get())
-                .ok()
-                .and_then(|dr| grid.get_mut(dr))
-                && let Some(slot) = usize::try_from(cell.dc.get())
-                    .ok()
-                    .and_then(|dc| row.get_mut(dc))
+            if let Some(slot) = grid
+                .get_mut(cell.dr.as_end())
+                .and_then(|row| row.get_mut(cell.dc.as_end()))
             {
                 *slot = cell.raw.clone();
             }
         }
-        grid.into_iter()
-            .map(|r| r.join("\t"))
+        grid.iter()
+            .map(|r| r.as_slice().join("\t"))
             .collect::<Vec<_>>()
             .join("\n")
     }

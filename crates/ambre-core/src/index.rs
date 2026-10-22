@@ -54,9 +54,10 @@ pub mod __private {
 /// into a foreign API. Each serialises as its bare integer, the
 /// shape `#[serde(transparent)]` writes, so the wire keeps its bytes.
 ///
-/// The collection has no `Index` operator. Indexing out of bounds panics,
-/// and the workspace forbids a panic outside a test; `get` returns an
-/// `Option` instead.
+/// The collection takes its position in `[]`, as a slice takes a `usize`.
+/// The operator panics past the end, as a slice index does. The workspace
+/// forbids that panic outside a test, so production code calls `get`, which
+/// returns an `Option`.
 ///
 /// The span exists because `core::iter::Step` is unstable (tracking issue
 /// rust-lang/rust#73121), so a `Range` of a newtype cannot iterate. When
@@ -167,6 +168,10 @@ macro_rules! define_index {
             }
 
             /// The span from this position up to and with `last`.
+            ///
+            /// A span stops before its end, and no position lies past
+            /// [`Self::MAX`]. So `through(MAX)` holds every position up to
+            /// `MAX` and leaves `MAX` out.
             pub const fn through(self, last: Self) -> $span {
                 $span::new(self, last.next())
             }
@@ -443,6 +448,32 @@ macro_rules! define_index {
             }
         }
 
+        impl<T> std::ops::Index<$pos> for $vec<T> {
+            type Output = T;
+
+            /// The item at `pos`. It panics past the end, as a slice index
+            /// does; `get` is the call that cannot.
+            #[allow(
+                clippy::indexing_slicing,
+                reason = "the operator keeps the slice contract; `get` is the checked call"
+            )]
+            fn index(&self, pos: $pos) -> &T {
+                &self.0[usize::try_from(pos.0).unwrap_or(usize::MAX)]
+            }
+        }
+
+        impl<T> std::ops::IndexMut<$pos> for $vec<T> {
+            /// The item at `pos`, mutable. It panics past the end, as a slice
+            /// index does; `get_mut` is the call that cannot.
+            #[allow(
+                clippy::indexing_slicing,
+                reason = "the operator keeps the slice contract; `get_mut` is the checked call"
+            )]
+            fn index_mut(&mut self, pos: $pos) -> &mut T {
+                &mut self.0[usize::try_from(pos.0).unwrap_or(usize::MAX)]
+            }
+        }
+
         impl<'a, T> IntoIterator for &'a $vec<T> {
             type Item = &'a T;
             type IntoIter = std::slice::Iter<'a, T>;
@@ -542,6 +573,31 @@ mod tests {
         assert_eq!(items.get(Line::new(1)), Some(&'b'));
         assert_eq!(items.remove(Line::new(9)), None);
         assert_eq!(items.len(), LineCount::new(2));
+    }
+
+    #[test]
+    fn the_collection_takes_its_position_in_brackets() {
+        let mut items: LineVec<char> = vec!['a', 'b'].into();
+        items[Line::new(1)] = 'c';
+        assert_eq!(items[Line::ZERO], 'a');
+        assert_eq!(items[Line::new(1)], 'c');
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds")]
+    fn the_bracket_panics_past_the_end() {
+        let items: LineVec<char> = vec!['a'].into();
+        let _ = items[Line::new(1)];
+    }
+
+    #[test]
+    fn a_span_through_the_last_position_leaves_it_out() {
+        let span = Line::new(u32::MAX - 1).through(Line::MAX);
+        assert_eq!(
+            span.into_iter().collect::<Vec<_>>(),
+            vec![Line::new(u32::MAX - 1)]
+        );
+        assert!(!span.contains(Line::MAX));
     }
 
     #[test]
