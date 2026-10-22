@@ -39,6 +39,15 @@ enum Attempt {
     Held,
 }
 
+/// When the store reads a document's copy back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReadBack {
+    /// At boot: a store with no copy hands nothing.
+    Boot,
+    /// Logic asked for the copy, after the writes queued before it.
+    Requested,
+}
+
 /// The store, its ledger and the writes the quota holds back.
 #[derive(Clone)]
 pub(crate) struct LocalStore {
@@ -99,7 +108,7 @@ impl LocalStore {
     /// copy, if the store holds one. Before it, the copy cannot open.
     pub(crate) fn signed_in(&self) {
         if let Some((doc_type, document_id)) = self.inner.boot.take() {
-            self.read_back(document_id, doc_type, true);
+            self.read_back(document_id, doc_type, ReadBack::Boot);
         }
     }
 
@@ -153,16 +162,18 @@ impl LocalStore {
             PersistWrite::Sent => self.inner.held.borrow_mut().retain(|(held, _)| *held != id),
             // Read after every write queued before it, so the copy holds what
             // the document had when it left (`RESID-010`).
-            PersistWrite::ReadBack { doc_type } => self.read_back(id, doc_type, false),
+            PersistWrite::ReadBack { doc_type } => {
+                self.read_back(id, doc_type, ReadBack::Requested);
+            }
             PersistWrite::Shown | PersistWrite::Hidden => {}
         }
     }
 
     /// Read the document's copy back, open it, and hand it to Logic. A copy
     /// with a row that does not open leaves the store, and Logic receives
-    /// none (`RESID-027`). At `boot`, a store that holds no copy hands
+    /// none (`RESID-027`). At boot, a store that holds no copy hands
     /// nothing: the open fetches the document anyway.
-    fn read_back(&self, document_id: DocumentId, doc_type: DocType, boot: bool) {
+    fn read_back(&self, document_id: DocumentId, doc_type: DocType, moment: ReadBack) {
         let this = self.clone();
         wasm_bindgen_futures::spawn_local(async move {
             let store = &this.inner.store;
@@ -178,7 +189,7 @@ impl LocalStore {
                     sealed,
                 })
                 .collect();
-            if boot && rows.is_empty() {
+            if moment == ReadBack::Boot && rows.is_empty() {
                 return;
             }
             let opened_by = this.clone();
@@ -201,7 +212,7 @@ impl LocalStore {
                     // No session holds the key: the copy stays for the next.
                     None => (None, Vec::new(), Vec::new()),
                 };
-                if boot && snapshot.is_none() && deltas.is_empty() {
+                if moment == ReadBack::Boot && snapshot.is_none() && deltas.is_empty() {
                     return;
                 }
                 let _ = opened_by

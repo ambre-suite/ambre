@@ -150,9 +150,6 @@ ambre-app | src/lib.rs | crate | ChromeStatus::label() | ret | &'static str	free
 ambre-app | src/lib.rs | crate | ChromeStatus::open_failed() | ret | Option<&'static str>	free-text	notice text
 ambre-app | src/lib.rs | crate | SYNC_INBOX_HIGH | const | usize	math	watermark count
 ambre-app | src/lib.rs | crate | SYNC_INBOX_LOW | const | usize	math	watermark count
-ambre-app | src/lib.rs | crate | Wiring.boot_is_murmure | field | bool	debt	finding: Three bools that encode DocType (confirmed)
-ambre-app | src/lib.rs | crate | Wiring.boot_is_prose | field | bool	debt	finding: Three bools that encode DocType (confirmed)
-ambre-app | src/lib.rs | crate | Wiring.boot_is_toile | field | bool	debt	finding: Three bools that encode DocType (confirmed)
 ambre-app | src/lib.rs | crate | Wiring.filter_values | field | RwSignal<Vec<String>>	free-text	filter values text
 ambre-app | src/lib.rs | crate | Wiring.formula_ref | field | RwSignal<String>	free-text	formula bar label
 ambre-app | src/lib.rs | crate | Wiring.formula_text | field | RwSignal<String>	free-text	formula bar text
@@ -160,7 +157,6 @@ ambre-app | src/lib.rs | crate | Wiring.presenter_notes | field | RwSignal<Strin
 ambre-app | src/lib.rs | crate | Wiring.username | field | RwSignal<Option<String>>	debt	finding: Display names held as String (confirmed)
 ambre-app | src/lib.rs | crate | offer_to_child() | ret | bool	generic	predicate result
 ambre-app | src/local_store.rs | crate::local_store | Inner.frames | field | Cell<u32>	math	frame count
-ambre-app | src/local_store.rs | crate::local_store | LocalStore::read_back(boot) | param | bool	debt	finding: Mode bools (confirmed)
 ambre-app | src/local_store.rs | crate::local_store | LocalStore::tell_logic(full) | param | bool	math	value carried to Logic (LocalStoreFull{full})
 ambre-app | src/local_store.rs | crate::local_store | RETRY_FRAMES | const | u32	math	frame count
 ambre-app | src/notify.rs | crate::notify | act(asked) | param | bool	math	value flag
@@ -172,7 +168,6 @@ ambre-app | src/platform.rs | crate::platform | MENU_CANVASES | const | [&str;2]
 ambre-app | src/platform.rs | crate::platform | OpenedFile.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Option<String>	free-text	dev username
 ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	generic	predicate result
-ambre-app | src/platform.rs | crate::platform | fetch_dev_mode::inner() | ret | Option<bool>	debt	a bool that selects a mode: the dev mode
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(ctx_menu) | param | RwSignal<Option<(f64,f64)>>	math	css position
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	math	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	math	UI flag signal
@@ -194,9 +189,6 @@ ambre-app | src/platform.rs | crate::platform | stored_dev_user() | ret | Option
 ambre-app | src/platform.rs | crate::platform | sync_warning_message() | ret | &'static str	free-text	message
 ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	free-text	worker URL
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
-ambre-app | src/route.rs | crate::route | booted_kind(boot_is_murmure) | param | bool	debt	finding: Three bools that encode DocType (confirmed)
-ambre-app | src/route.rs | crate::route | booted_kind(boot_is_prose) | param | bool	debt	finding: Three bools that encode DocType (confirmed)
-ambre-app | src/route.rs | crate::route | booted_kind(boot_is_toile) | param | bool	debt	finding: Three bools that encode DocType (confirmed)
 ambre-app | src/route.rs | crate::route | doc_path() | ret | String	generic	generic codec/parser/bytes API
 ambre-app | src/route.rs | crate::route | needs_reload() | ret | bool	generic	predicate result
 ambre-app | src/route.rs | crate::route | parse(path) | param | &str	generic	generic codec/parser/bytes API
@@ -211,9 +203,6 @@ ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath.seal_op
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::key() | ret | bool	generic	predicate result
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::seal(passphrase) | param | String	debt	finding: Passphrase passed as a plain String (confirmed)
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(anchor_slot) | param | Slot<RwSignal<Option<(f64,f64)>>>	math	css position
-ambre-app | src/shell/mod.rs | crate::shell | mount_shell(boot_is_murmure) | param | bool	debt	finding: Three bools that encode DocType (confirmed)
-ambre-app | src/shell/mod.rs | crate::shell | mount_shell(boot_is_prose) | param | bool	debt	finding: Three bools that encode DocType (confirmed)
-ambre-app | src/shell/mod.rs | crate::shell | mount_shell(boot_is_toile) | param | bool	debt	finding: Three bools that encode DocType (confirmed)
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_ref) | param | RwSignal<String>	free-text	formula bar text
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_text) | param | RwSignal<String>	free-text	formula bar text
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(presenter_notes) | param | RwSignal<String>	free-text	presenter notes text
@@ -4561,7 +4550,6 @@ ambre-server | src/hot_tail.rs | crate::hot_tail | past_watermark(deltas) | para
 ambre-server | src/hot_tail.rs | crate::hot_tail | trim() | ret | Result<u64,AppError>	math	trimmed count
 ambre-server | src/jwt.rs | crate::jwt | JwtKeys::from_seed(seed) | param | &[u8;32]	generic	generic codec/parser/bytes API
 ambre-server | src/main.rs | crate | build_cors(allowed) | param | &str	free-text	config list text
-ambre-server | src/main.rs | crate | build_cors(dev_mode) | param | bool	debt	finding: Mode bools (confirmed)
 ambre-server | src/main.rs | crate | compact_once::KEEP_PER_DOCUMENT | const | i64	math	a local limit or period, passed to SQL or a loop
 ambre-server | src/main.rs | crate | parse_cors_origins(allowed) | param | &str	free-text	config list text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | INSTANCE_ID | static | std::sync::LazyLock<String>	free-text	random per-boot nonce text mixed into a member
@@ -4577,7 +4565,6 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | cl
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_ip_str(remote_ip) | param | &str	free-text	socket peer text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_ip_str(x_forwarded_for) | param | Option<&str>	free-text	header text; an IpAddr parse would be a hardening, not a type rule
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | request_bucket() | ret | String	debt	finding: Stringly Redis keys (confirmed)
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | request_bucket(trust_proxy) | param | bool	debt	finding: Mode bools (confirmed)
 ambre-server | src/oidc.rs | crate::oidc | CallbackResponse.display_name | field | String	debt	bug: The display-name rule is enforced on one write path only (BUG, confirmed)
 ambre-server | src/oidc.rs | crate::oidc | CallbackResponse.is_new_user | field | bool	math	named state or style flag, local
 ambre-server | src/oidc.rs | crate::oidc | GOOGLE_ISSUER | const | &str	debt	finding: OIDC config strings (confirmed)
@@ -4726,11 +4713,9 @@ ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key() | ret | bool	gene
 ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key(env_prefix) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
 ambre-server | src/state.rs | crate::state | AppState.s3_bucket | field | String	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
 ambre-server | src/state.rs | crate::state | Config.base_url | field | String	free-text	config URL
-ambre-server | src/state.rs | crate::state | Config.dev_mode | field | bool	math	config flag, named field
 ambre-server | src/state.rs | crate::state | Config.oidc_google_client_id | field | String	debt	finding: OIDC config strings (confirmed)
 ambre-server | src/state.rs | crate::state | Config.oidc_google_redirect_uri | field | String	debt	finding: OIDC config strings (confirmed)
 ambre-server | src/state.rs | crate::state | Config.s3_env_prefix | field | String	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
-ambre-server | src/state.rs | crate::state | Config.trust_proxy_headers | field | bool	math	config flag, named field
 ambre-server | src/state.rs | crate::state | Config.ws_msg_burst | field | u32	math	config burst
 ambre-server | src/state.rs | crate::state | Config.ws_msg_rate_per_sec | field | u32	math	config rate; the burst/rate order is right at ws/handler/mod.rs:202
 ambre-server | src/supervise.rs | crate::supervise | contained(task) | param | &'static str	free-text	task label for logs

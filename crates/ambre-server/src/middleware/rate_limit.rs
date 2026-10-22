@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::AppError;
-use crate::state::AppState;
+use crate::state::{AppState, ProxyTrust};
 
 /// Atomic sliding-window rate-limit script (M6).
 ///
@@ -59,7 +59,7 @@ static INSTANCE_ID: std::sync::LazyLock<String> =
 /// in its claims. `X-Forwarded-For` is read only when `trust_proxy` says a
 /// proxy overwrites it. Otherwise it is the caller's to forge, so the socket
 /// peer decides.
-fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: bool, req: &Request) -> String {
+fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: ProxyTrust, req: &Request) -> String {
     let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok());
     if let Some(token) = header("authorization").and_then(|h| h.strip_prefix("Bearer "))
         && let Ok(claims) = jwt.verify(&ambre_protocol::ws::AccessToken::new(
@@ -68,7 +68,8 @@ fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: bool, req: &Request) -
     {
         return format!("user:{}", claims.sub);
     }
-    let x_forwarded_for = header("x-forwarded-for").filter(|_| trust_proxy);
+    let x_forwarded_for =
+        header("x-forwarded-for").filter(|_| trust_proxy == ProxyTrust::BehindProxy);
     let remote_ip = req
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
@@ -340,11 +341,17 @@ mod tests {
         let (user, bearer) = bearer_for(&jwt);
         for peer in [[10, 0, 0, 1], [10, 0, 0, 2]] {
             let req = request_from(peer, &[("authorization", &bearer)]);
-            assert_eq!(request_bucket(&jwt, false, &req), format!("user:{user}"));
+            assert_eq!(
+                request_bucket(&jwt, ProxyTrust::Direct, &req),
+                format!("user:{user}")
+            );
         }
         let forged = crate::jwt::JwtKeys::from_seed(&[6u8; 32]);
         let req = request_from([10, 0, 0, 1], &[("authorization", &bearer)]);
-        assert_eq!(request_bucket(&forged, false, &req), "ip:10.0.0.1");
+        assert_eq!(
+            request_bucket(&forged, ProxyTrust::Direct, &req),
+            "ip:10.0.0.1"
+        );
     }
 
     /// `SRV-094`: a request with no caller is bucketed by its socket peer. A
@@ -353,8 +360,14 @@ mod tests {
     fn an_anonymous_request_is_bucketed_by_its_peer() {
         let jwt = crate::jwt::JwtKeys::from_seed(&[5u8; 32]);
         let req = request_from([10, 0, 0, 1], &[("x-forwarded-for", "203.0.113.9")]);
-        assert_eq!(request_bucket(&jwt, false, &req), "ip:10.0.0.1");
-        assert_eq!(request_bucket(&jwt, true, &req), "ip:203.0.113.9");
+        assert_eq!(
+            request_bucket(&jwt, ProxyTrust::Direct, &req),
+            "ip:10.0.0.1"
+        );
+        assert_eq!(
+            request_bucket(&jwt, ProxyTrust::BehindProxy, &req),
+            "ip:203.0.113.9"
+        );
     }
 
     /// `SRV-095`: two callers never share a bucket, whether they sign in or
@@ -376,8 +389,8 @@ mod tests {
         ];
         for [first, second] in [signed, anonymous] {
             assert_ne!(
-                request_bucket(&jwt, false, &first),
-                request_bucket(&jwt, false, &second)
+                request_bucket(&jwt, ProxyTrust::Direct, &first),
+                request_bucket(&jwt, ProxyTrust::Direct, &second)
             );
         }
     }

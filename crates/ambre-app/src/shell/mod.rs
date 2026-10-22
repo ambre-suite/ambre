@@ -51,9 +51,7 @@ pub(crate) fn mount_shell(
     devmode_slot: Slot<RwSignal<Option<landing::SignInMode>>>,
     current_doc_slot: Slot<RwSignal<Option<DocumentId>>>,
     relays_slot: Slot<Relays>,
-    boot_is_toile: bool,
-    boot_is_prose: bool,
-    boot_is_murmure: bool,
+    booted: ambre_bus::DocType,
     prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
     prose_signals: crate::host::ProseSignals,
     style_slot: Slot<trame_chrome::StyleState>,
@@ -171,7 +169,7 @@ pub(crate) fn mount_shell(
         // what the shell needs to perform its answers. The keyboard listener
         // reads it back through the slot.
         let toile_dialogs = toile_chrome::ToileDialogs::new();
-        let handler = if boot_is_toile {
+        let handler = if booted == ambre_bus::DocType::Toile {
             AppHandler::Toile(toile_chrome::ToileHandler {
                 find: find_state_toile,
                 tool: toile_active_tool,
@@ -180,11 +178,11 @@ pub(crate) fn mount_shell(
                 toasts,
                 dialogs: toile_dialogs,
             })
-        } else if boot_is_prose {
+        } else if booted == ambre_bus::DocType::Prose {
             AppHandler::Prose(ambre_prose::chrome::ProseHandler {
                 format: prose_signals.format,
             })
-        } else if boot_is_murmure {
+        } else if booted == ambre_bus::DocType::Murmure {
             AppHandler::Murmure(ambre_murmure::chrome::MurmureHandler {
                 relay: murmure_relay,
                 send: commands::murmure_send(to_logic.clone()),
@@ -240,9 +238,7 @@ pub(crate) fn mount_shell(
             find_result,
             find_state_toile,
             find_result_toile,
-            boot_is_toile,
-            boot_is_prose,
-            boot_is_murmure,
+            booted,
             prose_figures,
             prose_signals,
             formula_ref,

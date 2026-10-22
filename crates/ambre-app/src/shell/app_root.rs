@@ -223,9 +223,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         find_result,
         find_state_toile,
         find_result_toile,
-        boot_is_toile,
-        boot_is_prose,
-        boot_is_murmure,
+        booted,
         prose_figures,
         prose_signals,
         formula_ref,
@@ -285,7 +283,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // document `data-theme` (CSS custom properties) are the real switches.
     let theme_sig = RwSignal::new(theme_ctl.get());
     // The kind of the view this page booted, fixed per page load.
-    let booted = crate::route::booted_kind(boot_is_toile, boot_is_prose, boot_is_murmure);
+    let boot_is_toile = booted == DocType::Toile;
+    let boot_is_prose = booted == DocType::Prose;
+    let boot_is_murmure = booted == DocType::Murmure;
 
     // About modal. Every `Dialog` suspends the canvas rAF through the
     // `ModalHold` the shell provides, so no modal here wires the loop.

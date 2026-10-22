@@ -279,7 +279,7 @@ fn sync_worker_url() -> Option<String> {
 /// non-JSON, missing field) it defaults to `false`, so production falls back to
 /// the OIDC sign-in affordance.
 pub(crate) async fn fetch_dev_mode() -> bool {
-    async fn inner() -> Option<bool> {
+    async fn inner() -> Option<wasm_bindgen::JsValue> {
         let window = web_sys::window()?;
         let req = web_sys::Request::new_with_str("/api/auth/config").ok()?;
         let resp_val = wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(&req))
@@ -289,11 +289,9 @@ pub(crate) async fn fetch_dev_mode() -> bool {
         let json = wasm_bindgen_futures::JsFuture::from(resp.json().ok()?)
             .await
             .ok()?;
-        js_sys::Reflect::get(&json, &"dev_mode".into())
-            .ok()
-            .and_then(|v| v.as_bool())
+        js_sys::Reflect::get(&json, &"dev_mode".into()).ok()
     }
-    inner().await.unwrap_or(false)
+    inner().await.and_then(|flag| flag.as_bool()) == Some(true)
 }
 
 /// The main side of the Sync -> Logic channel. An event from the Sync worker

@@ -74,17 +74,17 @@ pub struct Config {
     /// Google OIDC redirect URI (for example "http://localhost:3000/api/auth/google/callback").
     #[allow(dead_code)]
     pub oidc_google_redirect_uri: String,
-    /// Dev-only switch: when true, the `POST /api/auth/dev/login` endpoint is
+    /// Dev-only switch: when on, the `POST /api/auth/dev/login` endpoint is
     /// enabled, letting `?user=<name>` authenticate as an on-the-fly user
-    /// (deterministic keys, no OIDC). MUST stay false in production.
-    pub dev_mode: bool,
+    /// (deterministic keys, no OIDC). MUST stay off in production.
+    pub dev_mode: DevMode,
     /// Whether to trust the `X-Forwarded-For` header for the client IP used in
-    /// rate limiting. MUST stay false unless the server runs behind a reverse
+    /// rate limiting. MUST stay `Direct` unless the server runs behind a reverse
     /// proxy that OVERWRITES `X-Forwarded-For` with the real client address
-    /// (for example nginx `proxy_set_header X-Forwarded-For $remote_addr`). When false,
-    /// the header is ignored and the socket peer address is used, so a client
+    /// (for example nginx `proxy_set_header X-Forwarded-For $remote_addr`). When
+    /// `Direct`, the header is ignored and the socket peer address is used, so a client
     /// cannot spoof its rate-limit bucket by forging the header.
-    pub trust_proxy_headers: bool,
+    pub trust_proxy_headers: ProxyTrust,
     /// Sustained inbound-message rate per WebSocket connection, in messages per
     /// second (default 60). The WS *upgrade* is rate-limited. But once a socket
     /// is open, each `Update` drives a Postgres INSERT + Redis RPUSH + S3
@@ -104,6 +104,26 @@ pub struct Config {
     pub ephemeral_max_bytes: ambre_core::ByteSize,
 }
 
+/// Whether the server runs in development mode, read from `DEV_MODE`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum DevMode {
+    /// Production: no dev login, no wildcard origin, no ephemeral signing key.
+    #[default]
+    Off,
+    /// Local development only.
+    On,
+}
+
+/// Who writes the `X-Forwarded-For` header a request carries.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum ProxyTrust {
+    /// The socket peer is the client: the header is the caller's to forge.
+    #[default]
+    Direct,
+    /// A reverse proxy overwrites the header with the real client address.
+    BehindProxy,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -118,8 +138,8 @@ impl Default for Config {
             oidc_google_client_id: String::new(),
             oidc_google_client_secret: crate::oidc::OidcSecret::default(),
             oidc_google_redirect_uri: String::new(),
-            dev_mode: false,
-            trust_proxy_headers: false,
+            dev_mode: DevMode::Off,
+            trust_proxy_headers: ProxyTrust::Direct,
             ws_msg_rate_per_sec: 60,
             ws_msg_burst: 120,
             ephemeral_max_bytes: ambre_core::ByteSize(64 * 1024),

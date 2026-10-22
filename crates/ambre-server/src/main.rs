@@ -149,13 +149,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
         .unwrap_or(false);
 
+    let dev = if dev_mode {
+        state::DevMode::On
+    } else {
+        state::DevMode::Off
+    };
     let config = Config {
         s3_env_prefix,
         oidc_google_client_id: oidc_google_client_id.clone(),
         oidc_google_client_secret: oidc_google_client_secret.clone(),
         oidc_google_redirect_uri: oidc_google_redirect_uri.clone(),
-        dev_mode,
-        trust_proxy_headers,
+        dev_mode: dev,
+        trust_proxy_headers: if trust_proxy_headers {
+            state::ProxyTrust::BehindProxy
+        } else {
+            state::ProxyTrust::Direct
+        },
         access_ttl_secs: ambre_core::Seconds(env_ttl("ACCESS_TTL_SECS", 900)),
         refresh_ttl_secs: ambre_core::Seconds(env_ttl("REFRESH_TTL_SECS", 30 * 24 * 3600)),
         media_max_bytes: ambre_core::ByteSize(env_ttl("MEDIA_MAX_BYTES", 100 * 1024 * 1024)),
@@ -236,7 +245,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // deployment cannot accidentally ship an open origin.
     let cors = build_cors(
         &std::env::var("CORS_ALLOWED_ORIGINS").unwrap_or_default(),
-        dev_mode,
+        dev,
     );
 
     let app = Router::new()
@@ -285,7 +294,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// `Any` is never reachable outside `DEV_MODE`, so a production deployment
 /// cannot accidentally ship a wildcard origin.
-fn build_cors(allowed: &str, dev_mode: bool) -> CorsLayer {
+fn build_cors(allowed: &str, dev_mode: state::DevMode) -> CorsLayer {
     let origins = parse_cors_origins(allowed);
 
     if !origins.is_empty() {
@@ -295,7 +304,7 @@ fn build_cors(allowed: &str, dev_mode: bool) -> CorsLayer {
             .allow_headers(Any);
     }
 
-    if dev_mode {
+    if dev_mode == state::DevMode::On {
         tracing::warn!("DEV_MODE: CORS allow_origin(Any) (insecure, dev only)");
         CorsLayer::new()
             .allow_origin(Any)

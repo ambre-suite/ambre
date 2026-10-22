@@ -1546,7 +1546,7 @@ mod handler_tests {
             .expect("need Redis for tests");
         let s3 = aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build());
         let config = Config {
-            dev_mode: true,
+            dev_mode: crate::state::DevMode::On,
             ..Config::default()
         };
         let pubsub = crate::ws::PubSubHub::spawn(redis.clone());

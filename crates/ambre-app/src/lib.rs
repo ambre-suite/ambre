@@ -278,17 +278,13 @@ struct Wiring {
     /// Last `FindResult` summarized for the panel's "k/n" counter. Published
     /// by the Trame view, which keeps the match set.
     find_result: RwSignal<Option<trame_chrome::FindPosition>>,
-    /// Whether the booted document is a Toile board. The chrome layer is still
-    /// largely Trame-shaped; this gates the Toile-specific panels (the Find panel,
-    /// `toile-find`) which replace their Trame equivalents. Cross-type
-    /// in-session navigation reloads the page, so it is fixed per page load.
-    boot_is_toile: bool,
-    /// Whether the booted document is a Prose document: the canvas mounts the
-    /// page view and the status bar shows the five figures.
-    boot_is_prose: bool,
-    /// Whether the page is a Murmure page: the shell lays out its channel
-    /// list, its channel and its thread (the Murmure layout spec).
-    boot_is_murmure: bool,
+    /// The type of the booted view, Trame on the landing route. The chrome
+    /// layer is still largely Trame-shaped. A Toile board swaps in its own
+    /// panels (the Find panel, `toile-find`), and a Prose page its status
+    /// figures. A Murmure page lays out its channel list, its channel and its
+    /// thread (the Murmure layout spec). Cross-type in-session navigation
+    /// reloads the page, so it is fixed per page load.
+    booted: ambre_bus::DocType,
     /// The five figures of the open Prose document, for the status bar slot
     /// (`PROSE-FEAT-040`). Published by the Prose view.
     prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
@@ -747,24 +743,20 @@ pub fn main() {
     // A Murmure page binds no document, so it restores and opens none.
     let boot_doc_typed = boot_route.document();
     let boot_doc = boot_doc_typed.map(|(_, id)| id);
-    let boot_is_murmure = matches!(boot_route.doc(), Some((ambre_bus::DocType::Murmure, _)));
     // Cross-type in-session navigation reloads the page (the `DocSwitcher` only
     // swaps the id within one `AppView`). So the booted app kind is fixed here,
     // and gates both the render view (below) and the app-specific chrome (Find
     // panel, keymap). Toile binds its own, smaller chord set.
-    let boot_is_toile = matches!(boot_doc_typed, Some((ambre_bus::DocType::Toile, _)));
-    let boot_is_prose = matches!(boot_doc_typed, Some((ambre_bus::DocType::Prose, _)));
+    let booted = route::booted_kind(&boot_route);
+    let boot_is_murmure = booted == ambre_bus::DocType::Murmure;
     // The status bar slot the Prose view fills with its five figures.
     let prose_figures = RwSignal::new(None::<ambre_prose::ui::StatusFigures>);
     let prose_signals = host::ProseSignals::new();
-    if boot_is_toile {
-        toile_chrome::bind_keys(&mut keymap);
-    } else if boot_is_prose {
-        ambre_prose::commands::bind_keys(&mut keymap);
-    } else if boot_is_murmure {
-        ambre_murmure::commands::bind_keys(&mut keymap);
-    } else {
-        trame_chrome::bind_keys(&mut keymap);
+    match booted {
+        ambre_bus::DocType::Toile => toile_chrome::bind_keys(&mut keymap),
+        ambre_bus::DocType::Prose => ambre_prose::commands::bind_keys(&mut keymap),
+        ambre_bus::DocType::Murmure => ambre_murmure::commands::bind_keys(&mut keymap),
+        ambre_bus::DocType::Trame => trame_chrome::bind_keys(&mut keymap),
     }
     // The canvas needs a document from frame 0. Boot onto the routed one, or a
     // throwaway id on the landing route. The canvas is hidden there, and the
@@ -893,9 +885,7 @@ pub fn main() {
         Rc::clone(&devmode_slot),
         Rc::clone(&current_doc_slot),
         Rc::clone(&relays_slot),
-        boot_is_toile,
-        boot_is_prose,
-        boot_is_murmure,
+        booted,
         prose_figures,
         prose_signals,
         Rc::clone(&style_slot),
@@ -1844,7 +1834,7 @@ pub fn main() {
                     (w, h),
                     theme_ctl,
                 ))
-            } else if boot_is_prose {
+            } else if booted == ambre_bus::DocType::Prose {
                 AppView::Prose(host::ProseView::new(
                     initial_doc,
                     view_tx_logic,
@@ -1858,7 +1848,7 @@ pub fn main() {
                     busy_pub.clone(),
                     notice_pub.clone(),
                 ))
-            } else if boot_is_toile {
+            } else if booted == ambre_bus::DocType::Toile {
                 AppView::Toile(ToileView::new(
                     initial_doc,
                     view_tx_logic,

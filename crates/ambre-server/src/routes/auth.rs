@@ -29,7 +29,7 @@ pub async fn auth_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
     Ok(axum::Json(AuthConfigResponse {
-        dev_mode: state.config.dev_mode,
+        dev_mode: state.config.dev_mode == crate::state::DevMode::On,
     }))
 }
 
@@ -69,7 +69,7 @@ pub async fn dev_login(
     State(state): State<Arc<AppState>>,
     Json(req): Json<DevLoginRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    if !state.config.dev_mode {
+    if state.config.dev_mode == crate::state::DevMode::Off {
         return Err(AppError::Unauthorized);
     }
     // The name is the account's display name, so it obeys the same bound

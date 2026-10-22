@@ -138,16 +138,8 @@ pub fn needs_reload(target: DocType, booted: DocType) -> bool {
 
 /// The type of the view a page booted with. The landing route boots the
 /// Trame view on a throwaway document.
-pub fn booted_kind(boot_is_toile: bool, boot_is_prose: bool, boot_is_murmure: bool) -> DocType {
-    if boot_is_toile {
-        DocType::Toile
-    } else if boot_is_prose {
-        DocType::Prose
-    } else if boot_is_murmure {
-        DocType::Murmure
-    } else {
-        DocType::Trame
-    }
+pub fn booted_kind(route: &Route) -> DocType {
+    route.doc().map_or(DocType::Trame, |(doc_type, _)| doc_type)
 }
 
 // -- Tests (wasm tier) -------------------------------------------------------
@@ -288,8 +280,8 @@ mod tests {
                 show: None
             })
         );
-        assert_eq!(booted_kind(false, false, true), DocType::Murmure);
-        assert_eq!(booted_kind(false, false, false), DocType::Trame);
+        assert_eq!(booted_kind(&page), DocType::Murmure);
+        assert_eq!(booted_kind(&Route::Landing), DocType::Trame);
     }
 
     #[wasm_bindgen_test]
