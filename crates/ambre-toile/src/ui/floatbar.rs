@@ -19,7 +19,7 @@
 // selection into an anchored [`FloatBar`].
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayElement, ElementId, ElementKind, ElementStyle};
+use ambre_bus::app::toile::{DisplayElement, ElementId, ElementKind, ElementStyle, FontFamily};
 use ambre_core::{Argb, FontSize};
 use ambre_draw::{Point, Rect};
 
@@ -99,7 +99,7 @@ impl StyleEdit {
     /// another. The inspector applies it to its working copy for the same reason
     /// (`TOILE-UI-172`). Kept in the always-compiled `ui` module so it is
     /// host-tested: both callers are wasm-only. A `None` family maps to the default
-    /// sans label so the renderer resolves it to the bundled sans face.
+    /// sans family, which the renderer resolves to the bundled sans face.
     pub fn apply_to(self, style: &mut ElementStyle) {
         match self {
             StyleEdit::Fill(c) => style.fill = c,
@@ -107,7 +107,11 @@ impl StyleEdit {
             StyleEdit::StrokeWidth(w) => style.stroke_w = w.max(0.0),
             StyleEdit::Opacity(o) => style.opacity = o.clamp(0.0, 1.0),
             StyleEdit::TextColor(c) => style.text_color = c,
-            StyleEdit::Font(f) => style.font.family = f.unwrap_or_else(|| "Sans".to_owned()),
+            StyleEdit::Font(f) => {
+                style.font.family = f
+                    .as_deref()
+                    .map_or(FontFamily::Sans, FontFamily::from_label);
+            }
             // A negative size is refused, never clamped to the zero sentinel:
             // the control cannot mean a negative number (`TOILE-UI-180`).
             StyleEdit::Size(s) => {
@@ -535,9 +539,9 @@ mod tests {
             "zero stays the auto sentinel"
         );
         StyleEdit::Font(None).apply_to(&mut s);
-        assert_eq!(s.font.family, "Sans");
+        assert_eq!(s.font.family, FontFamily::Sans);
         StyleEdit::Font(Some("Serif".to_owned())).apply_to(&mut s);
-        assert_eq!(s.font.family, "Serif");
+        assert_eq!(s.font.family, FontFamily::Serif);
     }
 
     /// `TOILE-UI-172`: a panel edit writes its own field and keeps every other
@@ -553,7 +557,7 @@ mod tests {
             corner: 7.0,
             text_color: Some(Argb::from_bits(0xff77_8899)),
             font: FontSpec {
-                family: "sans-serif".to_owned(),
+                family: FontFamily::Other("Comic Sans MS".to_owned()),
                 size: ambre_core::FontSize::from_whole_points(18),
                 weight: 600,
                 italic: true,
@@ -614,7 +618,7 @@ mod tests {
             fill: Some(Argb::from_bits(0xff11_2233)),
             text_color: Some(Argb::from_bits(0xff00_0000)),
             font: FontSpec {
-                family: "Sans".to_owned(),
+                family: FontFamily::Sans,
                 size: ambre_core::FontSize::from_whole_points(12),
                 weight: 400,
                 italic: false,
@@ -627,7 +631,7 @@ mod tests {
             fill: Some(Argb::from_bits(0xff11_2233)),
             text_color: Some(Argb::from_bits(0xffff_ffff)),
             font: FontSpec {
-                family: "Serif".to_owned(),
+                family: FontFamily::Serif,
                 size: ambre_core::FontSize::from_whole_points(24),
                 weight: 700,
                 italic: true,

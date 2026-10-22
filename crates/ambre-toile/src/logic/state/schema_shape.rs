@@ -243,7 +243,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
         opacity: 0.25,
         corner: 3.5,
         font: FontSpec {
-            family: "f".to_owned(),
+            family: ambre_bus::app::toile::FontFamily::Other("f".to_owned()),
             size: ambre_core::FontSize::new(7.5).unwrap(),
             weight: 700,
             italic: true,

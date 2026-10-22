@@ -33,13 +33,6 @@ use ambre_chrome::{ColorPopover, Debouncer, FontPicker, FontSizeSelect, FormatTo
 use ambre_core::{Argb, FontSize};
 use leptos::prelude::*;
 
-/// Map a stored `FontSpec.family` string to the picker's family label (`None` =
-/// Default): only the offered labels round-trip. Anything else reads as
-/// Default, the raw "sans-serif" included.
-fn family_label(family: &str) -> Option<String> {
-    matches!(family, "Sans" | "Serif" | "Monospace").then(|| family.to_owned())
-}
-
 use crate::ui::floatbar::StyleEdit;
 use crate::ui::menu;
 use crate::ui::menu::CtxScope;
@@ -89,7 +82,7 @@ pub fn StyleInspector(
             stroke_w.set(m.base.stroke_w);
             opacity.set(m.base.opacity);
             text_color.set(m.base.text_color.map(Argb::bits));
-            font_family.set(family_label(&m.base.font.family));
+            font_family.set(m.base.font.family.picker_label().map(str::to_owned));
             font_size.set(m.base.font.size);
             bold.set(m.base.font.weight >= 700);
             italic.set(m.base.font.italic);

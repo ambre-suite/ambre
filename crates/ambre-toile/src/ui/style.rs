@@ -270,6 +270,18 @@ mod tests {
         assert!(!model.mixed.stroke);
     }
 
+    /// `TOILE-UI-161`: an element on the default family and one the picker
+    /// reset to it agree, so the family does not read as mixed.
+    #[test]
+    fn two_elements_on_the_default_family_are_not_mixed() {
+        let fresh = ElementStyle::default();
+        let mut reset = ElementStyle::default();
+        crate::ui::floatbar::StyleEdit::Font(None).apply_to(&mut reset);
+        let dv = viewport(vec![elem("a", fresh), elem("b", reset)]);
+        let model = style_scope_for(&[eid("a"), eid("b")], &els(&dv)).expect("model");
+        assert!(!model.mixed.font_family);
+    }
+
     #[test]
     fn differing_text_decorations_flag_underline_and_strikethrough() {
         let font_with = |underline, strikethrough| ambre_bus::app::toile::FontSpec {

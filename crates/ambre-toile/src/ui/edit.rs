@@ -93,7 +93,7 @@ impl InlineEditor {
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
-            family: font.family.clone(),
+            family: font.family.label().to_owned(),
             base_size,
             color,
             underline: font.underline,
@@ -115,7 +115,7 @@ impl InlineEditor {
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
-            family: font.family,
+            family: font.family.label().to_owned(),
             base_size: super::label::LABEL_FONT_SIZE,
             color: palette.cell_text,
             underline: false,
@@ -137,7 +137,7 @@ impl InlineEditor {
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
-            family: font.family,
+            family: font.family.label().to_owned(),
             base_size,
             color: palette.cell_text,
             underline: false,

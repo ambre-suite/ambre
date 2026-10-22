@@ -398,7 +398,7 @@ fn paint_label<S: DrawSurface>(
         Alignment::Center,
         false,
         false,
-        Some(style.font.family.as_str()),
+        Some(style.font.family.label()),
         false,
     );
     // The plate hugs the laid-out text rather than the (fixed) caption box, so a
@@ -602,7 +602,7 @@ fn paint_text<S: DrawSurface>(
         Alignment::Start,
         e.style.font.weight >= 700,
         e.style.font.italic,
-        Some(e.style.font.family.as_str()),
+        Some(e.style.font.family.label()),
         false,
     );
     let brush = Brush::Solid(color);

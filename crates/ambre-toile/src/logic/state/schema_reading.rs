@@ -210,7 +210,7 @@ fn style_reading(style: &ElementStyle) -> String {
         format!("stroke {} {stroke_w} px", maybe_colour(*stroke)),
         format!("opacity {opacity}"),
         format!("corner {corner} px"),
-        format!("font {family:?} {size} pt weight {weight}"),
+        format!("font {:?} {size} pt weight {weight}", family.label()),
     ];
     for (set, name) in [
         (*italic, "italic"),
