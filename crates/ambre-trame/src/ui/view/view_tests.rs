@@ -1052,9 +1052,11 @@ impl Rig {
     /// One wheel sample, as the host forwards it.
     fn wheel(&mut self, dy: f64, delta_mode: u32, ctrl_key: bool) -> bool {
         self.view.handle_input(&InputEvent::Wheel {
-            dx: 0.0,
-            dy,
-            delta_mode,
+            delta: ambre_canvas::WheelDelta::new(
+                0.0,
+                dy,
+                ambre_canvas::WheelDeltaMode::from_dom(delta_mode),
+            ),
             ctrl_key,
         })
     }
@@ -1064,7 +1066,7 @@ impl Rig {
     }
 }
 
-/// `TRAME-UI-147`: a line delta and a page delta land once and in full. A
+/// `TRAME-UI-147`, `KINETIC-015`: a line delta and a page delta land once and in full. A
 /// pixel delta keeps its sub-row remainder for the next sample.
 #[test]
 fn a_wheel_delta_lands_once_and_keeps_its_remainder() {

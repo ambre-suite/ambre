@@ -139,9 +139,6 @@ const SECONDARY_BUTTON: i16 = 2;
 /// The button of a pointer event that selects text: the main one.
 const PRIMARY_BUTTON: i16 = 0;
 
-/// The height of one line of a wheel that steps by lines.
-const WHEEL_LINE_PX: f32 = 40.0;
-
 /// How far down the viewport a message the pane names comes to rest.
 const AT_FRACTION: f32 = 0.25;
 
@@ -1607,20 +1604,14 @@ impl MurmureView {
                 return true;
             }
             InputEvent::Wheel {
-                dy,
-                delta_mode,
+                delta,
                 ctrl_key: false,
-                ..
             } => {
-                let unit = match delta_mode {
-                    1 => WHEEL_LINE_PX,
-                    2 => self.list_height(),
-                    _ => 1.0,
-                };
+                let line = ambre_canvas::WHEEL_LINE_PX;
+                let page = f64::from(self.list_height());
+                let (_, dy) = delta.to_px((line, line), (page, page));
                 let now_ms = (self.reads.now_ms)();
-                let step = self
-                    .kinetic
-                    .wheel(0.0, dy as f32 * unit, delta_mode != 0, now_ms);
+                let step = self.kinetic.wheel(0.0, dy as f32, delta.is_step(), now_ms);
                 self.scroll_by(step);
                 return true;
             }
@@ -2388,9 +2379,11 @@ mod tests {
     fn wheel(page: &mut Page, dy: f64, delta_mode: u32, now_ms: ambre_core::PageTime) -> bool {
         page.clock.set(now_ms);
         let ev = InputEvent::Wheel {
-            dx: 0.0,
-            dy,
-            delta_mode,
+            delta: ambre_canvas::WheelDelta::new(
+                0.0,
+                dy,
+                ambre_canvas::WheelDeltaMode::from_dom(delta_mode),
+            ),
             ctrl_key: false,
         };
         page.view.handle_input(&ev)

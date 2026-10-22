@@ -431,22 +431,16 @@ impl TrameView {
 
     /// Pan the viewport from a wheel / two-finger touchpad scroll. Pixel deltas
     /// (touchpad, modern mice) accumulate sub-cell residue across events; line
-    /// and page deltas (`delta_mode` 1/2) are normalised to pixels first.
+    /// and page deltas are read as pixels first (`KINETIC-015`).
     /// Returns `true` when consumed (so the page itself doesn't scroll).
-    pub(crate) fn handle_wheel(
-        &mut self,
-        dx: f64,
-        dy: f64,
-        delta_mode: u32,
-        ctrl_key: bool,
-    ) -> bool {
+    pub(crate) fn handle_wheel(&mut self, delta: ambre_canvas::WheelDelta, ctrl_key: bool) -> bool {
         // Leave Ctrl+wheel to the browser (pinch-zoom gesture); not ours yet.
         if ctrl_key {
             return false;
         }
         let outcome = self
             .scroll
-            .wheel(&mut self.state, dx, dy, delta_mode, self.clock.now_ms());
+            .wheel(&mut self.state, delta, self.clock.now_ms());
         self.note_scroll(outcome);
         true
     }

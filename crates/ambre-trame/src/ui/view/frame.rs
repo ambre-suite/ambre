@@ -589,14 +589,8 @@ impl TrameView {
         }
         // Wheel / two-finger touchpad scroll pans the viewport in any mode and
         // never disturbs the cursor or an open editor.
-        if let InputEvent::Wheel {
-            dx,
-            dy,
-            delta_mode,
-            ctrl_key,
-        } = ev
-        {
-            return self.handle_wheel(*dx, *dy, *delta_mode, *ctrl_key);
+        if let InputEvent::Wheel { delta, ctrl_key } = ev {
+            return self.handle_wheel(*delta, *ctrl_key);
         }
         // An open edit session owns text, IME and the editing keys.
         if self.editor.is_some() {

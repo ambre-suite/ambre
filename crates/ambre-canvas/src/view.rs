@@ -16,7 +16,7 @@
 
 use ambre_draw::{Color, Rect};
 
-use crate::{ContentRepaint, OverlayRepaint};
+use crate::{ContentRepaint, OverlayRepaint, WheelDelta};
 
 /// Driver-measured per-frame timings, handed to the view so it can render a
 /// debug HUD. All values are wall-clock milliseconds from the *previous* frame.
@@ -108,14 +108,11 @@ pub enum InputEvent {
         x: f64,
         y: f64,
     },
-    /// Wheel / two-finger touchpad scroll. `dx`/`dy` are logical pixels, the
-    /// DOM's CSS pixels (`CANVAS-032`). `delta_mode` is the DOM `WheelEvent`
-    /// unit: 0 = pixel (touchpad, modern mice), 1 = line, 2 = page. The view
-    /// normalises lines/pages to pixels before scrolling.
+    /// Wheel / two-finger touchpad scroll. The delta keeps the unit the
+    /// browser gave it: CSS pixels (`CANVAS-032`), lines or pages. The view
+    /// reads it through [`WheelDelta::to_px`] (`KINETIC-015`).
     Wheel {
-        dx: f64,
-        dy: f64,
-        delta_mode: u32,
+        delta: WheelDelta,
         ctrl_key: bool,
     },
 

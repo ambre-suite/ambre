@@ -11,6 +11,7 @@
 //
 // `kinetic` is the one kinetic scroll the applications share: pure arithmetic
 // over timed pointer positions, beside the drawing primitives they share.
+// `wheel` is the wheel delta with its unit, which every view reads as pixels.
 // `hit` is the trait each view's content hit-test implements, and `walk` the
 // trait each application's document walk implements.
 //
@@ -23,6 +24,9 @@ pub mod types;
 pub use types::*;
 
 pub mod kinetic;
+
+pub mod wheel;
+pub use wheel::{WHEEL_LINE_PX, WheelDelta, WheelDeltaMode};
 
 pub mod hit;
 pub use hit::HitTest;

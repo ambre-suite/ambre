@@ -59,12 +59,13 @@ The user glides two fingers on a trackpad and lifts them, or turns a notched whe
 |---|---|---|---|---|---|---|
 | `KINETIC-002` | `POST` | A trackpad glide that pauses MUST keep the view moving at the glide's speed. | this spec section 4 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does`; Prose `ambre_prose::input_tests::a_paused_glide_keeps_the_column_moving_and_a_notch_never_does`; Trame `ambre_trame::ui::view::scroll::tests::a_paused_glide_keeps_the_grid_moving_and_a_notch_never_does`; Toile `ambre_toile::ui::kinetic::tests::a_paused_glide_keeps_the_board_moving_and_a_notch_never_does` | none | verified |
 | `KINETIC-009` | `FRAME` | A wheel notch, a line step or a page step MUST NOT start a motion. | this spec section 4 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does`; Prose `ambre_prose::input_tests::a_paused_glide_keeps_the_column_moving_and_a_notch_never_does`; Trame `ambre_trame::ui::view::scroll::tests::a_paused_glide_keeps_the_grid_moving_and_a_notch_never_does`; Toile `ambre_toile::ui::kinetic::tests::a_paused_glide_keeps_the_board_moving_and_a_notch_never_does` | none | verified |
+| `KINETIC-015` | `POST` | A line or page wheel delta MUST move the view by the pixels a line or a page is worth in that view, never by its bare number. | this spec section 3 | `ambre_draw::wheel::tests::each_unit_reads_as_its_pixels` -- the one conversion, which the delta's private fields leave as the only way to read it; Prose `ambre_prose::input_tests::a_line_or_a_page_scrolls_the_column_by_its_pixels`; Trame `ambre_trame::ui::view::view_tests::a_wheel_delta_lands_once_and_keeps_its_remainder`; Toile `ambre_toile::ui::view::view_tests::a_line_wheel_pans_and_zooms_as_its_pixels_do` -- a line pans and zooms as its pixels do | none | verified |
 
 * **Budget.** none of its own: a tick is a multiplication and an exponential. What it costs is the
   scroll the application's viewport already carries in `ambre-spec-budgets.md`.
 * **Boundary.** none: the model is view state on the UI thread. It writes no document and sends no
   command, so nothing here reaches the relay.
-* **Verification.** 14 `verified`. The browser tier holds the cancelled pointer (`KINETIC-011`). A
+* **Verification.** 15 `verified`. The browser tier holds the cancelled pointer (`KINETIC-011`). A
   gate refuses a speed name outside the model, and a step only the model builds holds each step it
   hands back (`KINETIC-013`). Each view's setter takes that step, and a gate refuses an offset moved
   by a distance anywhere else (`KINETIC-001`).
@@ -127,8 +128,8 @@ pub struct EdgeScroll { /* the last frame, private */ }
 4. each frame, the application moves its view by the tick's distance, and reports an edge it met
    (`KINETIC-005`, `KINETIC-006`).
 
-**Code.** `ambre_draw::kinetic`. It sits beside the drawing primitives every application already
-depends on, and it depends on nothing.
+**Code.** `ambre_draw::kinetic`, and `ambre_draw::wheel` for the unit of a wheel delta. They sit
+beside the drawing primitives every application already depends on, and they depend on nothing.
 
 ---
 
@@ -146,6 +147,7 @@ depends on, and it depends on nothing.
 | a selection or an object dragged near an edge | the view scrolls, faster the deeper it goes (`KINETIC-007`) |
 | a trackpad glide | the view follows each step, and coasts once the glide pauses (`KINETIC-002`) |
 | a wheel notch, a line or a page step | the view takes the step once, with no coast, and a coast under way stops (`KINETIC-009`) |
+| a line or a page step | the view moves by a line or a page of its own: a zoomed cell in Trame, 40 pixels in the other views, the viewport for a page (`KINETIC-015`) |
 
 ---
 

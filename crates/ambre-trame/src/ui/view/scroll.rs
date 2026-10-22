@@ -2,6 +2,7 @@
 // The grid's scroll motion: wheel steps, glides, finger pans and the edge
 // scroll, folded into whole-cell pans of the viewport.
 
+use ambre_canvas::WheelDelta;
 use ambre_draw::kinetic::{EdgeScroll, EdgeSpeed, Kinetic, Release, ScrollStep};
 
 use super::ScrollOutcome;
@@ -26,28 +27,24 @@ pub(crate) struct GridScroll {
 
 impl GridScroll {
     /// A wheel event. Pixel deltas accumulate sub-cell residue; line and page
-    /// deltas (`delta_mode` 1 and 2) are normalised to pixels first.
+    /// deltas are read as pixels first (`KINETIC-015`).
     pub(crate) fn wheel(
         &mut self,
         grid: &mut TrameUiState,
-        dx: f64,
-        dy: f64,
-        delta_mode: u32,
+        delta: WheelDelta,
         now_ms: ambre_core::PageTime,
     ) -> ScrollOutcome {
         // A line step is one zoomed cell, so it scales with the grid zoom.
         let z = grid.zoom;
-        let (sx, sy) = match delta_mode {
-            1 => (COL_WIDTH * z, ROW_HEIGHT * z),
-            2 => (grid.canvas_width, grid.canvas_height),
-            _ => (1.0, 1.0),
-        };
+        let line = (COL_WIDTH * z, ROW_HEIGHT * z);
+        let page = (grid.canvas_width, grid.canvas_height);
+        let (dx, dy) = delta.to_px(line, page);
         // The shared model applies the step one for one, and lets a trackpad
         // glide coast once it pauses; a notch never coasts (`KINETIC-002`,
         // `KINETIC-009`).
         let step = self
             .kinetic
-            .wheel((dx * sx) as f32, (dy * sy) as f32, delta_mode != 0, now_ms);
+            .wheel(dx as f32, dy as f32, delta.is_step(), now_ms);
         self.accumulate(step);
         let outcome = self.apply(grid);
         if matches!(outcome, ScrollOutcome::Edge) {
@@ -177,9 +174,7 @@ mod tests {
         for step in 0..5 {
             s.wheel(
                 &mut g,
-                0.0,
-                16.0,
-                0,
+                WheelDelta::pixels(0.0, 16.0),
                 ambre_bus::PageTime(16.0 * f64::from(step)),
             );
         }
@@ -201,9 +196,7 @@ mod tests {
         for step in 0..5 {
             s.wheel(
                 &mut g,
-                0.0,
-                16.0,
-                1,
+                WheelDelta::new(0.0, 16.0, ambre_canvas::WheelDeltaMode::Line),
                 ambre_bus::PageTime(16.0 * f64::from(step)),
             );
         }

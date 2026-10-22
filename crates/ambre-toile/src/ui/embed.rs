@@ -1542,9 +1542,7 @@ mod routing_tests {
 
     fn wheel() -> InputEvent {
         InputEvent::Wheel {
-            dx: 0.0,
-            dy: 10.0,
-            delta_mode: 0,
+            delta: ambre_canvas::WheelDelta::pixels(0.0, 10.0),
             ctrl_key: false,
         }
     }

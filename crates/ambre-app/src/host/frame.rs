@@ -814,15 +814,14 @@ mod tests {
             remap_with(&end, |_| None),
             Some(InputEvent::CompositionEnd { text }) if text == "仮名"
         ));
+        let delta = ambre_canvas::WheelDelta::new(1.5, -3.0, ambre_canvas::WheelDeltaMode::Line);
         let wheel = InputEvent::Wheel {
-            dx: 1.5,
-            dy: -3.0,
-            delta_mode: 1,
+            delta,
             ctrl_key: true,
         };
         assert!(matches!(
             remap_with(&wheel, |_| None),
-            Some(InputEvent::Wheel { dx, dy, delta_mode: 1, ctrl_key: true }) if dx == 1.5 && dy == -3.0
+            Some(InputEvent::Wheel { delta: kept, ctrl_key: true }) if kept == delta
         ));
     }
 

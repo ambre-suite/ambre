@@ -6,6 +6,7 @@
 //! vertical distance, and meeting an end of the column stops it.
 
 use ambre_draw::kinetic::Release;
+use ambre_draw::{WHEEL_LINE_PX, WheelDelta};
 
 use crate::ui::ProseUiState;
 
@@ -40,11 +41,14 @@ impl ProseUiState {
         self.kinetic.cancel();
     }
 
-    /// A wheel event, in screen pixels: the column takes its step now. A
-    /// trackpad glide that pauses keeps its momentum; a notch never does
-    /// (`KINETIC-002`). `stepped` marks a line or page delta mode.
-    pub fn wheel(&mut self, dy: f32, stepped: bool, now_ms: ambre_core::PageTime) {
-        let step = self.kinetic.wheel(0.0, dy, stepped, now_ms);
+    /// A wheel event: the column takes its step now. A line is
+    /// [`WHEEL_LINE_PX`] and a page is the viewport's height (`KINETIC-015`).
+    /// A trackpad glide that pauses keeps its momentum; a notch never does
+    /// (`KINETIC-002`).
+    pub fn wheel(&mut self, delta: WheelDelta, now_ms: ambre_core::PageTime) {
+        let page = f64::from(self.viewport.height_px);
+        let (_, dy) = delta.to_px((WHEEL_LINE_PX, WHEEL_LINE_PX), (page, page));
+        let step = self.kinetic.wheel(0.0, dy as f32, delta.is_step(), now_ms);
         self.scroll_by(step);
     }
 

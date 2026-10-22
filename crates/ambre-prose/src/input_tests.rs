@@ -2287,6 +2287,37 @@ fn a_press_stops_a_flick_and_the_motion_writes_nothing() {
     );
 }
 
+/// A pixel delta of `dy`, as a trackpad glide sends it.
+fn glide(dy: f64) -> ambre_draw::WheelDelta {
+    ambre_draw::WheelDelta::pixels(0.0, dy)
+}
+
+/// A delta of `dy` lines, as a notched wheel sends it.
+fn notch(dy: f64) -> ambre_draw::WheelDelta {
+    ambre_draw::WheelDelta::new(0.0, dy, ambre_draw::WheelDeltaMode::Line)
+}
+
+/// `KINETIC-015`: a line delta scrolls the column by the pixels a line is
+/// worth, and a page delta by the viewport's height.
+#[test]
+fn a_line_or_a_page_scrolls_the_column_by_its_pixels() {
+    let mut by_line = long_rig();
+    by_line.ui.wheel(notch(2.0), ambre_core::PageTime(0.0));
+    let mut by_px = long_rig();
+    by_px.ui.wheel(
+        glide(2.0 * ambre_draw::WHEEL_LINE_PX),
+        ambre_core::PageTime(0.0),
+    );
+    assert!(by_px.ui.viewport.scroll_y > 0.0, "the column moved");
+    assert_eq!(by_line.ui.viewport.scroll_y, by_px.ui.viewport.scroll_y);
+
+    let mut by_page = long_rig();
+    let page = by_page.ui.viewport.height_px;
+    let page_delta = ambre_draw::WheelDelta::new(0.0, 1.0, ambre_draw::WheelDeltaMode::Page);
+    by_page.ui.wheel(page_delta, ambre_core::PageTime(0.0));
+    assert_eq!(by_page.ui.viewport.scroll_y, page);
+}
+
 /// `KINETIC-002`, `KINETIC-009`: a trackpad glide that pauses keeps the column
 /// moving at the glide's speed, and a notch of the same size never does.
 #[test]
@@ -2294,7 +2325,7 @@ fn a_paused_glide_keeps_the_column_moving_and_a_notch_never_does() {
     let mut rig = long_rig();
     for step in 0..5 {
         rig.ui
-            .wheel(16.0, false, ambre_core::PageTime(16.0 * f64::from(step)));
+            .wheel(glide(16.0), ambre_core::PageTime(16.0 * f64::from(step)));
     }
     let glided = rig.ui.viewport.scroll_y;
     rig.ui.tick_fling(ambre_core::PageTime(64.0));
@@ -2313,7 +2344,7 @@ fn a_paused_glide_keeps_the_column_moving_and_a_notch_never_does() {
     let mut rig = long_rig();
     for step in 0..5 {
         rig.ui
-            .wheel(16.0, true, ambre_core::PageTime(16.0 * f64::from(step)));
+            .wheel(notch(0.4), ambre_core::PageTime(16.0 * f64::from(step)));
     }
     let stepped = rig.ui.viewport.scroll_y;
     assert!(

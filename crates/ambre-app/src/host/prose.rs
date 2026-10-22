@@ -40,9 +40,6 @@ use ambre_prose::view::annotate::{HoveredSuggestion, PanelThread, ScreenRect};
 use ambre_prose::view::paint::PagePalette;
 use ambre_prose::view::ruler::RulerState;
 
-/// The pixels one wheel line scrolls, for a device that reports lines.
-const LINE_PX: f64 = 40.0;
-
 /// The page palette, read from the theme tokens (`PROSE-UI-014`).
 ///
 /// The sheet is the content surface. The accent and the three statuses are
@@ -543,18 +540,13 @@ impl ProseView {
             return true;
         }
         match ev {
-            InputEvent::Wheel { dy, delta_mode, .. } => {
+            InputEvent::Wheel { delta, .. } => {
                 // A new scroll stops the motion a flick left, and a glide
                 // may leave its own (`PROSE-UI-218`, `KINETIC-002`).
-                let px = match delta_mode {
-                    1 => dy * LINE_PX,
-                    2 => dy * f64::from(self.size.1),
-                    _ => *dy,
-                };
                 let now = web_sys::window()
                     .and_then(|w| w.performance())
                     .map_or(self.now_ms, |p| ambre_bus::PageTime(p.now()));
-                self.state.wheel(px as f32, *delta_mode != 0, now);
+                self.state.wheel(*delta, now);
                 // The text moved from under the pointer, and the bar with it
                 // (`PROSE-UI-055`).
                 self.state.hovered = None;
@@ -876,9 +868,7 @@ mod tests {
         }
         assert!(view.outbox.is_busy());
         let wheel = InputEvent::Wheel {
-            dx: 0.0,
-            dy: 40.0,
-            delta_mode: 0,
+            delta: ambre_canvas::WheelDelta::pixels(0.0, 40.0),
             ctrl_key: false,
         };
         view.dirty = false;

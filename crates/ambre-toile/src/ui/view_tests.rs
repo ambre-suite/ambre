@@ -1048,9 +1048,7 @@ fn two_camera_moves_in_one_frame_send_one_viewport_request() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     for dy in [40.0, 60.0] {
         rig.input(InputEvent::Wheel {
-            dx: 0.0,
-            dy,
-            delta_mode: 0,
+            delta: ambre_canvas::WheelDelta::pixels(0.0, dy),
             ctrl_key: false,
         });
     }
@@ -1638,9 +1636,11 @@ fn a_find_step_recentres_without_a_zoom_or_a_selection() {
 
 fn wheel(rig: &mut Rig, (dx, dy): (f64, f64), delta_mode: u32, ctrl_key: bool) {
     rig.input(InputEvent::Wheel {
-        dx,
-        dy,
-        delta_mode,
+        delta: ambre_canvas::WheelDelta::new(
+            dx,
+            dy,
+            ambre_canvas::WheelDeltaMode::from_dom(delta_mode),
+        ),
         ctrl_key,
     });
 }
@@ -2933,5 +2933,21 @@ fn a_canvas_point_reaches_its_element_through_the_shared_hit_test() {
         assert_eq!(rig.view.hit_test(x, y), Some(eid("a")), "zoom {zoom}");
         let (x, y) = rig.screen(900.0, 600.0);
         assert_eq!(rig.view.hit_test(x, y), None, "zoom {zoom}");
+    }
+}
+
+/// `KINETIC-015`: a line-mode wheel moves the board by the pixels one line is
+/// worth, in both modes, as Trame, Prose and Murmure read it.
+#[test]
+fn a_line_wheel_pans_and_zooms_as_its_pixels_do() {
+    for (mode, name) in [(PointerMode::Trackpad, "pan"), (PointerMode::Mouse, "zoom")] {
+        let mut by_line = Rig::new();
+        by_line.view.pointer_mode = mode;
+        wheel(&mut by_line, (0.0, 1.0), 1, false);
+        let mut by_px = Rig::new();
+        by_px.view.pointer_mode = mode;
+        wheel(&mut by_px, (0.0, ambre_canvas::WHEEL_LINE_PX), 0, false);
+        assert_eq!(by_line.view.cam.zoom, by_px.view.cam.zoom, "{name}");
+        assert_eq!(by_line.screen(0.0, 0.0), by_px.screen(0.0, 0.0), "{name}");
     }
 }
