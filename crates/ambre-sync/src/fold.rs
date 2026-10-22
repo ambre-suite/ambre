@@ -19,7 +19,9 @@ pub(crate) async fn take_fold_lease(
     channel_id: ChannelId,
     segment: SegmentId,
 ) -> Result<FoldAnswer, String> {
-    let url = format!("{base}/channels/{channel_id}/segments/{segment}/fold-lease");
+    let url = base.route(format!(
+        "/channels/{channel_id}/segments/{segment}/fold-lease"
+    ));
     let answer: http::FoldLeaseResponse =
         http::post_json_auth_via(transport, &url, &serde_json::json!({}), auth).await?;
     Ok(match answer.lease {
@@ -56,7 +58,7 @@ pub(crate) async fn commit_fold(
     upload: SnapshotUpload,
 ) -> Result<(), String> {
     let snapshot_id = upload_snapshot(transport, auth, base, upload).await?;
-    let url = format!("{base}/channels/{channel_id}/segments/{segment}/fold");
+    let url = base.route(format!("/channels/{channel_id}/segments/{segment}/fold"));
     let body = http::FoldSegmentRequest {
         lease_id: reach.lease,
         snapshot_id,

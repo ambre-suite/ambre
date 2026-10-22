@@ -356,14 +356,14 @@ pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>, log: &Log) ->
 /// concern, not the task's -- the real impl carries an `AuthContext`.
 #[allow(async_fn_in_trait)] // single-threaded worker; futures are intentionally !Send
 pub(crate) trait ShareHttp {
-    async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T, String>;
+    async fn get_json<T: DeserializeOwned>(&self, url: &http::RelayUrl) -> Result<T, String>;
     async fn post_json<B: Serialize, R: DeserializeOwned>(
         &self,
-        url: &str,
+        url: &http::RelayUrl,
         body: &B,
     ) -> Result<R, String>;
-    async fn delete<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String>;
-    async fn patch<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String>;
+    async fn delete<B: Serialize>(&self, url: &http::RelayUrl, body: &B) -> Result<(), String>;
+    async fn patch<B: Serialize>(&self, url: &http::RelayUrl, body: &B) -> Result<(), String>;
 }
 
 /// Production transport: authenticated `gloo_net` fetch (wasm at runtime, but it
@@ -373,20 +373,20 @@ pub(crate) struct GlooHttp {
 }
 
 impl ShareHttp for GlooHttp {
-    async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T, String> {
+    async fn get_json<T: DeserializeOwned>(&self, url: &http::RelayUrl) -> Result<T, String> {
         http::get_json_auth::<T>(url, self.auth.clone()).await
     }
     async fn post_json<B: Serialize, R: DeserializeOwned>(
         &self,
-        url: &str,
+        url: &http::RelayUrl,
         body: &B,
     ) -> Result<R, String> {
         http::post_json_auth::<B, R>(url, body, self.auth.clone()).await
     }
-    async fn delete<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String> {
+    async fn delete<B: Serialize>(&self, url: &http::RelayUrl, body: &B) -> Result<(), String> {
         http::delete_json_auth(url, body, self.auth.clone()).await
     }
-    async fn patch<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String> {
+    async fn patch<B: Serialize>(&self, url: &http::RelayUrl, body: &B) -> Result<(), String> {
         http::patch_json_auth(url, body, self.auth.clone()).await
     }
 }
@@ -460,14 +460,10 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         Ok(key) => key,
         Err(e) => return api_error(logic_tx, "InviteToDocument", 500, e),
     };
-    let members_url = format!(
-        "{}://{}/api/documents/{}/members",
-        p.url_scheme, p.api_base, p.document_id
-    );
-    let invite_url = format!(
-        "{}://{}/api/documents/{}/share",
-        p.url_scheme, p.api_base, p.document_id
-    );
+    let members_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+        .route(format!("/documents/{}/members", p.document_id));
+    let invite_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+        .route(format!("/documents/{}/share", p.document_id));
     let mut tries = 0;
     let posted = loop {
         tries += 1;
@@ -553,10 +549,8 @@ async fn invitee_keys<H: ShareHttp>(
     p: &InviteParams,
 ) -> Result<InviteeKeys, (u16, String)> {
     let Some(email) = &p.invitee_email else {
-        let url = format!(
-            "{}://{}/api/users/{}/pubkeys",
-            p.url_scheme, p.api_base, p.invitee
-        );
+        let url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+            .route(format!("/users/{}/pubkeys", p.invitee));
         return match http.get_json::<http::PubkeysResponse>(&url).await {
             Ok(served) => Ok(InviteeKeys {
                 exchange_pubkey: served.exchange_pubkey,
@@ -565,12 +559,10 @@ async fn invitee_keys<H: ShareHttp>(
             Err(e) => Err((500, format!("Key fetch failed: {e}"))),
         };
     };
-    let search_url = format!(
-        "{}://{}/api/users/search?query={}",
-        p.url_scheme,
-        p.api_base,
+    let search_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base).route(format!(
+        "/users/search?query={}",
         email.as_str().replace('@', "%40")
-    );
+    ));
     let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
         Ok(resp) => resp.users,
         Err(e) => return Err((500, format!("User search failed: {e}"))),
@@ -627,12 +619,10 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    let search_url = format!(
-        "{}://{}/api/users/search?query={}",
-        p.url_scheme,
-        p.api_base,
+    let search_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base).route(format!(
+        "/users/search?query={}",
         p.invitee_email.as_str().replace('@', "%40")
-    );
+    ));
     let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
         Ok(resp) => resp.users,
         Err(e) => {
@@ -684,10 +674,8 @@ pub(crate) async fn fetch_member_key_task<H: ShareHttp>(
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    let url = format!(
-        "{}://{}/api/users/{}/pubkeys",
-        p.url_scheme, p.api_base, p.user_id
-    );
+    let url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+        .route(format!("/users/{}/pubkeys", p.user_id));
     let served = match http.get_json::<http::PubkeysResponse>(&url).await {
         Ok(served) => served,
         Err(e) => {
@@ -741,10 +729,8 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    let members_url = format!(
-        "{}://{}/api/documents/{}/members",
-        p.url_scheme, p.api_base, p.document_id
-    );
+    let members_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+        .route(format!("/documents/{}/members", p.document_id));
     let new_doc_key = DocumentKey::generate();
     let link = match link_to(
         p.document_id,
@@ -755,10 +741,8 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         Ok(link) => link,
         Err(e) => return api_error(logic_tx, "RevokeFromDocument", 500, e),
     };
-    let revoke_url = format!(
-        "{}://{}/api/documents/{}/revoke",
-        p.url_scheme, p.api_base, p.document_id
-    );
+    let revoke_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+        .route(format!("/documents/{}/revoke", p.document_id));
     let mut tries = 0;
     let unwrapped = loop {
         tries += 1;
@@ -904,8 +888,10 @@ async fn leave_document<H: ShareHttp>(
     exchange_key: &StaticSecret,
 ) -> Result<(), String> {
     let me = author.user_id;
-    let members_url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
-    let url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/share/{me}");
+    let members_url = crate::http::ApiRoot::of(url_scheme, api_base)
+        .route(format!("/documents/{document_id}/members"));
+    let url = crate::http::ApiRoot::of(url_scheme, api_base)
+        .route(format!("/documents/{document_id}/share/{me}"));
     let mut tries = 0;
     loop {
         tries += 1;
@@ -960,7 +946,8 @@ pub(crate) async fn leave_channel_task<H: ShareHttp>(
     p: ChannelLeaveParams,
 ) -> Result<(), String> {
     let (scheme, base) = (p.url_scheme, &p.api_base);
-    let url = format!("{scheme}://{base}/api/channels/{}/documents", p.channel_id);
+    let url = crate::http::ApiRoot::of(scheme, base)
+        .route(format!("/channels/{}/documents", p.channel_id));
     let listed = http
         .get_json::<http::ChannelDocumentsResponse>(&url)
         .await?;
@@ -1011,18 +998,18 @@ pub(crate) async fn close_segment_task<H: ShareHttp>(
         entry: Some(entry),
         space: false,
     };
-    http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
+    http.post_json::<_, http::CreateDocumentResponse>(&base.route("/documents"), &body)
         .await?;
     let body = http::CloseSegmentRequest {
         closing: p.closing,
         successor: p.successor,
     };
-    let url = format!("{base}/channels/{}/segments", p.channel_id);
+    let url = base.route(format!("/channels/{}/segments", p.channel_id));
     let closed = http
         .post_json::<_, http::ClosedSegmentResponse>(&url, &body)
         .await?;
     if !closed.created {
-        let url = format!("{base}/documents/{successor}");
+        let url = base.route(format!("/documents/{successor}"));
         if let Err(e) = http.delete(&url, &()).await {
             tracing::warn!("[Sync] the successor of a lost close stays on the relay: {e}");
         }
@@ -1066,20 +1053,20 @@ pub(crate) async fn amendments_task<H: ShareHttp>(
         entry: Some(entry),
         space: false,
     };
-    http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
+    http.post_json::<_, http::CreateDocumentResponse>(&base.route("/documents"), &body)
         .await?;
     let body = http::RegisterAmendmentsRequest {
         amendments: p.amendments,
     };
-    let url = format!(
-        "{base}/channels/{}/segments/{}/amendments",
+    let url = base.route(format!(
+        "/channels/{}/segments/{}/amendments",
         p.channel_id, p.segment
-    );
+    ));
     let linked = http
         .post_json::<_, http::AmendmentsResponse>(&url, &body)
         .await?;
     if !linked.created {
-        let url = format!("{base}/documents/{}", p.amendments);
+        let url = base.route(format!("/documents/{}", p.amendments));
         if let Err(e) = http.delete(&url, &()).await {
             tracing::warn!("[Sync] the amendments of a lost registration stay on the relay: {e}");
         }
@@ -1122,18 +1109,18 @@ pub(crate) async fn thread_task<H: ShareHttp>(
         entry: Some(entry),
         space: false,
     };
-    http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
+    http.post_json::<_, http::CreateDocumentResponse>(&base.route("/documents"), &body)
         .await?;
     let body = http::RegisterThreadRequest {
         root: p.root,
         thread: p.thread,
     };
-    let url = format!("{base}/channels/{}/threads", p.channel_id);
+    let url = base.route(format!("/channels/{}/threads", p.channel_id));
     let linked = http
         .post_json::<_, http::ThreadResponse>(&url, &body)
         .await?;
     if !linked.created {
-        let url = format!("{base}/documents/{}", p.thread);
+        let url = base.route(format!("/documents/{}", p.thread));
         if let Err(e) = http.delete(&url, &()).await {
             tracing::warn!("[Sync] the thread of a lost registration stays on the relay: {e}");
         }
@@ -1176,14 +1163,12 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    let members_url = format!(
-        "{}://{}/api/documents/{}/members",
-        p.url_scheme, p.api_base, p.document_id
-    );
-    let url = format!(
-        "{}://{}/api/documents/{}/members/{}",
-        p.url_scheme, p.api_base, p.document_id, p.user_id
-    );
+    let members_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+        .route(format!("/documents/{}/members", p.document_id));
+    let url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base).route(format!(
+        "/documents/{}/members/{}",
+        p.document_id, p.user_id
+    ));
     let mut tries = 0;
     loop {
         tries += 1;
@@ -1273,14 +1258,10 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             message,
         });
     };
-    let members_url = format!(
-        "{}://{}/api/documents/{}/members",
-        p.url_scheme, p.api_base, document_id
-    );
-    let rotate_url = format!(
-        "{}://{}/api/documents/{}/rotate-key",
-        p.url_scheme, p.api_base, document_id
-    );
+    let members_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+        .route(format!("/documents/{}/members", document_id));
+    let rotate_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+        .route(format!("/documents/{}/rotate-key", document_id));
     let new_doc_key = DocumentKey::generate();
     let (link, text) = match link_to(document_id, &p.previous, &new_doc_key, &p.signing_key) {
         Ok(link) => link,
@@ -1378,12 +1359,12 @@ async fn rotate_channel<H: ShareHttp>(
 ) -> Result<ambre_bus::SealedChannelKey, String> {
     let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let head = http
-        .get_json::<http::JoinHeadResponse>(&format!("{base}/channels/{}/join", p.channel_id))
+        .get_json::<http::JoinHeadResponse>(&base.route(format!("/channels/{}/join", p.channel_id)))
         .await
         .map_err(|e| format!("Get the join head failed: {e}"))?;
     let meta = head.meta_id.document_id();
-    let members_url = format!("{base}/documents/{meta}/members");
-    let rotate_url = format!("{base}/documents/{meta}/rotate-key");
+    let members_url = base.route(format!("/documents/{meta}/members"));
+    let rotate_url = base.route(format!("/documents/{meta}/rotate-key"));
     let new_key = DocumentKey::generate();
     let (_, text) = link_to(meta, &p.previous, &new_key, &p.signing_key)?;
     let mut tries = 0;
@@ -1444,10 +1425,8 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
     p: ListMembersParams,
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
 ) {
-    let url = format!(
-        "{}://{}/api/documents/{}/members",
-        p.url_scheme, p.api_base, p.document_id
-    );
+    let url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+        .route(format!("/documents/{}/members", p.document_id));
     match http.get_json::<http::DocumentMembersResponse>(&url).await {
         Ok(resp) => {
             // Refresh the presence directory off the same response
@@ -1684,14 +1663,14 @@ mod tests {
     }
 
     impl ShareHttp for FakeHttp {
-        async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T, String> {
+        async fn get_json<T: DeserializeOwned>(&self, url: &http::RelayUrl) -> Result<T, String> {
             self.calls.borrow_mut().push(Call::Get(url.to_string()));
             let v = self.next()?;
             serde_json::from_value(v).map_err(|e| e.to_string())
         }
         async fn post_json<B: Serialize, R: DeserializeOwned>(
             &self,
-            url: &str,
+            url: &http::RelayUrl,
             body: &B,
         ) -> Result<R, String> {
             let bv = serde_json::to_value(body).unwrap();
@@ -1701,14 +1680,14 @@ mod tests {
             let v = self.next()?;
             serde_json::from_value(v).map_err(|e| e.to_string())
         }
-        async fn delete<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String> {
+        async fn delete<B: Serialize>(&self, url: &http::RelayUrl, body: &B) -> Result<(), String> {
             let bv = serde_json::to_value(body).unwrap();
             self.calls
                 .borrow_mut()
                 .push(Call::Delete(url.to_string(), bv));
             self.next().map(|_| ())
         }
-        async fn patch<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String> {
+        async fn patch<B: Serialize>(&self, url: &http::RelayUrl, body: &B) -> Result<(), String> {
             let bv = serde_json::to_value(body).unwrap();
             self.calls
                 .borrow_mut()

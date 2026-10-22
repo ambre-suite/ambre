@@ -140,10 +140,8 @@ impl SyncState {
             signing_key,
         };
         wasm_bindgen_futures::spawn_local(async move {
-            let base = format!(
-                "{}/documents/{document_id}",
-                crate::http::ApiRoot::of(url_scheme, &api_base)
-            );
+            let base = crate::http::ApiRoot::of(url_scheme, &api_base)
+                .route(format!("/documents/{document_id}"));
             upload_media(&GlooHttp { auth }, &base, upload, &tx, &logic_tx).await;
         });
     }
@@ -214,10 +212,8 @@ impl SyncState {
         };
 
         wasm_bindgen_futures::spawn_local(async move {
-            let base = format!(
-                "{}/documents/{document_id}",
-                crate::http::ApiRoot::of(url_scheme, &api_base)
-            );
+            let base = crate::http::ApiRoot::of(url_scheme, &api_base)
+                .route(format!("/documents/{document_id}"));
             let http = GlooHttp { auth };
             download_media(&http, &base, id, content_hash, &keyring, &tx, &logic_tx).await;
         });
@@ -244,10 +240,8 @@ impl SyncState {
         };
         let logic_tx = self.logic_tx.clone();
         let auth = self.auth_context();
-        let base = format!(
-            "{}://{}/api/documents/{document_id}",
-            self.url_scheme, self.api_base
-        );
+        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base)
+            .route(format!("/documents/{document_id}"));
         wasm_bindgen_futures::spawn_local(async move {
             let http = GlooHttp { auth };
             erase_media(&http, &base, id, document_id, content_hash, &tx, &logic_tx).await;
@@ -262,7 +256,7 @@ pub(crate) trait MediaHttp {
     /// An authenticated request to the relay.
     async fn post_json<B: Serialize, R: DeserializeOwned>(
         &self,
-        url: &str,
+        url: &http::RelayUrl,
         body: &B,
     ) -> Result<R, String>;
     /// A sealed blob to a presigned object-storage link.
@@ -270,13 +264,13 @@ pub(crate) trait MediaHttp {
     /// A blob from a presigned object-storage link.
     async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, String>;
     /// An authenticated `DELETE` to the relay, answering its status.
-    async fn delete(&self, url: &str) -> Result<u16, String>;
+    async fn delete(&self, url: &http::RelayUrl) -> Result<u16, String>;
 }
 
 impl MediaHttp for GlooHttp {
     async fn post_json<B: Serialize, R: DeserializeOwned>(
         &self,
-        url: &str,
+        url: &http::RelayUrl,
         body: &B,
     ) -> Result<R, String> {
         http::post_json_auth::<B, R>(url, body, self.auth.clone()).await
@@ -287,7 +281,7 @@ impl MediaHttp for GlooHttp {
     async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, String> {
         http::fetch_bytes(url).await
     }
-    async fn delete(&self, url: &str) -> Result<u16, String> {
+    async fn delete(&self, url: &http::RelayUrl) -> Result<u16, String> {
         http::delete_status_auth(url, self.auth.clone()).await
     }
 }
@@ -318,7 +312,7 @@ pub(crate) struct Upload {
 /// the success event is never sent.
 async fn upload_media(
     http: &impl MediaHttp,
-    base: &str,
+    base: &http::RelayUrl,
     upload: Upload,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
@@ -353,7 +347,7 @@ async fn upload_media(
 /// byte of the blob is sent.
 async fn download_media(
     http: &impl MediaHttp,
-    base: &str,
+    base: &http::RelayUrl,
     id: RequestId,
     content_hash: ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
@@ -380,14 +374,17 @@ async fn download_media(
 /// answer as erased. Anything else is reported, and the caller retries it.
 async fn erase_media(
     http: &impl MediaHttp,
-    base: &str,
+    base: &http::RelayUrl,
     id: RequestId,
     document_id: DocumentId,
     content_hash: ambre_core::ContentHash,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    match http.delete(&format!("{base}/media/{content_hash}")).await {
+    match http
+        .delete(&base.join(format!("/media/{content_hash}")))
+        .await
+    {
         Ok(status) if (200..300).contains(&status) || status == 403 || status == 404 => {
             let _ = tx.send(SyncEvent::MediaErased {
                 id,
@@ -404,14 +401,14 @@ async fn erase_media(
 /// step returns before the next runs, so a failed put confirms nothing.
 async fn upload_leg(
     http: &impl MediaHttp,
-    base: &str,
+    base: &http::RelayUrl,
     content_hash: &ambre_core::ContentHash,
     blob: &pipeline::SealedBlob,
 ) -> Result<(), String> {
     let size = blob.len() as u64;
     let link: http::UploadUrlResponse = http
         .post_json(
-            &format!("{base}/media/upload-url"),
+            &base.join("/media/upload-url"),
             &http::UploadUrlRequest {
                 content_hash: content_hash.clone(),
                 size_bytes: ambre_core::ByteSize(size),
@@ -424,7 +421,7 @@ async fn upload_leg(
         .await
         .map_err(|e| format!("S3 PUT: {e}"))?;
     http.post_json::<_, http::WriteAnswer>(
-        &format!("{base}/media"),
+        &base.join("/media"),
         &http::ConfirmUploadRequest {
             content_hash: content_hash.clone(),
             size_bytes: ambre_core::ByteSize(size),
@@ -439,13 +436,13 @@ async fn upload_leg(
 /// failed step returns before any data is built, so nothing half-read leaves.
 async fn download_leg(
     http: &impl MediaHttp,
-    base: &str,
+    base: &http::RelayUrl,
     content_hash: &ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
 ) -> Result<Vec<u8>, String> {
     let link: http::DownloadUrlResponse = http
         .post_json(
-            &format!("{base}/media/download-url"),
+            &base.join("/media/download-url"),
             &http::DownloadUrlRequest {
                 content_hash: content_hash.clone(),
             },
@@ -566,13 +563,22 @@ mod tests {
         }
     }
 
+    /// The relay base every media test addresses.
+    fn base() -> crate::http::RelayUrl {
+        crate::http::ApiRoot::of(
+            "https",
+            &crate::http::RelayHost::new("relay.test".to_owned()),
+        )
+        .route("/documents/d")
+    }
+
     impl MediaHttp for FakeMedia {
         async fn post_json<B: Serialize, R: DeserializeOwned>(
             &self,
-            url: &str,
+            url: &crate::http::RelayUrl,
             _body: &B,
         ) -> Result<R, String> {
-            let name = match url.rsplit('/').next() {
+            let name = match url.as_str().rsplit('/').next() {
                 Some("upload-url") => "link",
                 Some("download-url") => "link",
                 _ => "confirm",
@@ -590,8 +596,8 @@ mod tests {
             self.step("fetch")?;
             Ok(self.served.clone())
         }
-        async fn delete(&self, url: &str) -> Result<u16, String> {
-            assert!(url.ends_with("/media/hash"), "{url}");
+        async fn delete(&self, url: &crate::http::RelayUrl) -> Result<u16, String> {
+            assert!(url.as_str().ends_with("/media/hash"), "{url}");
             self.step("delete")?;
             Ok(self.erase_status)
         }
@@ -616,7 +622,7 @@ mod tests {
             let mut http = FakeMedia::new(fail, Vec::new());
             http.erase_status = status;
             let id = RequestId::next();
-            erase_media(&http, "base", id, document_id, "hash".into(), &tx, &logic).await;
+            erase_media(&http, &base(), id, document_id, "hash".into(), &tx, &logic).await;
             let (errors, sent) = answers(&logic_rx, &events);
             if erased {
                 assert!(errors.is_empty(), "{status}");
@@ -673,7 +679,7 @@ mod tests {
         ] {
             let http = FakeMedia::new(fail, Vec::new());
             let id = RequestId::next();
-            upload_media(&http, "base", upload(id), &tx, &logic).await;
+            upload_media(&http, &base(), upload(id), &tx, &logic).await;
             assert_eq!(*http.steps.borrow(), ran);
             let (errors, sent) = answers(&logic_rx, &events);
             assert_eq!(errors, [(Some(id), "UploadMedia".to_owned())], "{fail}");
@@ -681,7 +687,7 @@ mod tests {
         }
         let http = FakeMedia::new("", Vec::new());
         let id = RequestId::next();
-        upload_media(&http, "base", upload(id), &tx, &logic).await;
+        upload_media(&http, &base(), upload(id), &tx, &logic).await;
         assert_eq!(*http.steps.borrow(), ["link", "put", "confirm"]);
         let (errors, sent) = answers(&logic_rx, &events);
         assert!(errors.is_empty());
@@ -721,14 +727,14 @@ mod tests {
         ] {
             let http = FakeMedia::new(fail, served);
             let id = RequestId::next();
-            download_media(&http, "base", id, hash.clone(), &keyring, &tx, &logic).await;
+            download_media(&http, &base(), id, hash.clone(), &keyring, &tx, &logic).await;
             let (errors, sent) = answers(&logic_rx, &events);
             assert_eq!(errors, [(Some(id), "DownloadMedia".to_owned())], "{fail}");
             assert!(sent.is_empty(), "{fail} delivered bytes");
         }
         let http = FakeMedia::new("", blob);
         let id = RequestId::next();
-        download_media(&http, "base", id, hash.clone(), &keyring, &tx, &logic).await;
+        download_media(&http, &base(), id, hash.clone(), &keyring, &tx, &logic).await;
         let (errors, sent) = answers(&logic_rx, &events);
         assert!(errors.is_empty());
         assert!(matches!(

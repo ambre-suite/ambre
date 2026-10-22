@@ -1563,8 +1563,8 @@ impl SyncState {
         let auth = self.auth_context();
         let rule = self.log_rule(document_id);
         wasm_bindgen_futures::spawn_local(async move {
-            let members_url =
-                format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
+            let members_url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                .route(format!("/documents/{document_id}/members"));
             let resp = match http::get_json_auth::<http::MembersResponse>(
                 &members_url,
                 auth.clone(),

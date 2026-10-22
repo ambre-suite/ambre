@@ -76,9 +76,40 @@ impl ApiRoot {
     pub(crate) fn of(scheme: &str, host: &RelayHost) -> Self {
         Self(format!("{scheme}://{host}/api"))
     }
+
+    /// The URL of the route at `path` under this root. `path` starts with a
+    /// slash, as `/documents` does.
+    pub(crate) fn route(&self, path: impl AsRef<str>) -> RelayUrl {
+        RelayUrl(format!("{}{}", self.0, path.as_ref()))
+    }
 }
 
 impl std::fmt::Display for ApiRoot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// The URL of one of the relay's REST routes. Only [`ApiRoot::route`] builds
+/// one, and every helper that attaches the access token takes one. A
+/// presigned object-storage link is not one, so the token never reaches the
+/// storage host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RelayUrl(String);
+
+impl RelayUrl {
+    /// The route at `path` below this one, such as `/media` below a
+    /// document's route.
+    pub(crate) fn join(&self, path: impl AsRef<str>) -> Self {
+        Self(format!("{}{}", self.0, path.as_ref()))
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for RelayUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
@@ -97,6 +128,11 @@ struct RefreshRequest {
 }
 
 impl AuthContext {
+    /// The root of the relay routes this session talks to.
+    pub(crate) fn api_root(&self) -> ApiRoot {
+        ApiRoot::of(self.url_scheme, &self.api_base)
+    }
+
     fn access_token(&self) -> Result<SecretToken, String> {
         self.tokens
             .borrow()
@@ -123,11 +159,11 @@ impl AuthContext {
     /// Renews the token pair through `transport`. The refresh token is the
     /// one credential the request carries.
     async fn refresh_via(&self, transport: &impl Transport) -> Result<(), String> {
-        let url = format!("{}://{}/api/auth/refresh", self.url_scheme, self.api_base);
+        let url = self.api_root().route("/auth/refresh");
         let body = RefreshRequest {
             refresh_token: self.refresh_token()?,
         };
-        let next = post_json_via::<_, TokenPair>(transport, &url, &body).await?;
+        let next = post_json_via::<_, TokenPair>(transport, url.as_str(), &body).await?;
         *self.tokens.borrow_mut() = Some(next);
         Ok(())
     }
@@ -144,13 +180,13 @@ impl AuthContext {
     /// is built again after that renewal: the renewal replaced the refresh
     /// token, and revoking the old one would leave the new one alive.
     async fn revoke_via(&self, transport: &impl Transport) -> Result<(), String> {
-        let url = format!("{}://{}/api/auth/logout", self.url_scheme, self.api_base);
+        let url = self.api_root().route("/auth/logout");
         let send = || async {
             // The same body as a renewal's: the refresh token alone.
             let body = RefreshRequest {
                 refresh_token: self.refresh_token()?,
             };
-            let mut request = Outgoing::json(Method::Post, &url, &body)?;
+            let mut request = Outgoing::json(Method::Post, url.as_str(), &body)?;
             request.bearer = Some(self.access_token()?);
             let resp = exchange(transport, &request).await?;
             Ok::<_, String>((request, resp))
@@ -483,10 +519,10 @@ async fn exchange_auth(
 /// An authenticated GET of JSON, reading `404 Not Found` as `Ok(None)`.
 pub(crate) async fn get_json_opt_via<T: serde::de::DeserializeOwned>(
     transport: &impl Transport,
-    url: &str,
+    url: &RelayUrl,
     auth: &AuthContext,
 ) -> Result<Option<T>, String> {
-    let mut request = Outgoing::new(Method::Get, url);
+    let mut request = Outgoing::new(Method::Get, url.as_str());
     let resp = exchange_auth(transport, auth, &mut request).await?;
     if resp.status == 404 {
         return Ok(None);
@@ -497,10 +533,10 @@ pub(crate) async fn get_json_opt_via<T: serde::de::DeserializeOwned>(
 /// An authenticated GET of JSON.
 pub(crate) async fn get_json_auth_via<T: serde::de::DeserializeOwned>(
     transport: &impl Transport,
-    url: &str,
+    url: &RelayUrl,
     auth: &AuthContext,
 ) -> Result<T, String> {
-    let mut request = Outgoing::new(Method::Get, url);
+    let mut request = Outgoing::new(Method::Get, url.as_str());
     let resp = exchange_auth(transport, auth, &mut request).await?;
     read_json(&request, &resp)
 }
@@ -519,11 +555,11 @@ pub(crate) async fn post_json_via<T: Serialize, R: serde::de::DeserializeOwned>(
 /// An authenticated POST of JSON, answered with JSON.
 pub(crate) async fn post_json_auth_via<T: Serialize, R: serde::de::DeserializeOwned>(
     transport: &impl Transport,
-    url: &str,
+    url: &RelayUrl,
     body: &T,
     auth: &AuthContext,
 ) -> Result<R, String> {
-    let mut request = Outgoing::json(Method::Post, url, body)?;
+    let mut request = Outgoing::json(Method::Post, url.as_str(), body)?;
     let resp = exchange_auth(transport, auth, &mut request).await?;
     read_json(&request, &resp)
 }
@@ -533,18 +569,18 @@ pub(crate) async fn post_json_auth_via<T: Serialize, R: serde::de::DeserializeOw
 pub(crate) async fn send_json_auth_via<T: Serialize>(
     transport: &impl Transport,
     method: Method,
-    url: &str,
+    url: &RelayUrl,
     body: &T,
     auth: &AuthContext,
 ) -> Result<(), String> {
-    let mut request = Outgoing::json(method, url, body)?;
+    let mut request = Outgoing::json(method, url.as_str(), body)?;
     let resp = exchange_auth(transport, auth, &mut request).await?;
     expect_ok(&request, &resp)
 }
 
 /// HTTP GET to JSON, treating `404 Not Found` as `Ok(None)`.
 pub(crate) async fn get_json_opt_auth<T: serde::de::DeserializeOwned>(
-    url: &str,
+    url: &RelayUrl,
     auth: AuthContext,
 ) -> Result<Option<T>, String> {
     get_json_opt_via(&Fetch, url, &auth).await
@@ -559,7 +595,7 @@ pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Resul
 }
 
 pub(crate) async fn get_json_auth<T: serde::de::DeserializeOwned>(
-    url: &str,
+    url: &RelayUrl,
     auth: AuthContext,
 ) -> Result<T, String> {
     get_json_auth_via(&Fetch, url, &auth).await
@@ -573,7 +609,7 @@ pub(crate) async fn post_json<T: Serialize, R: serde::de::DeserializeOwned>(
 }
 
 pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>(
-    url: &str,
+    url: &RelayUrl,
     body: &T,
     auth: AuthContext,
 ) -> Result<R, String> {
@@ -589,8 +625,8 @@ pub(crate) async fn download_snapshot(
     snapshot_id: ambre_core::SnapshotId,
     auth: AuthContext,
 ) -> Option<Vec<u8>> {
-    let url =
-        format!("{url_scheme}://{api_base}/api/documents/{document_id}/snapshot/download-url");
+    let url = crate::http::ApiRoot::of(url_scheme, api_base)
+        .route(format!("/documents/{document_id}/snapshot/download-url"));
     let body = SnapshotDownloadUrlRequest { snapshot_id };
     let resp = post_json_auth::<_, SnapshotDownloadUrlResponse>(&url, &body, auth)
         .await
@@ -598,16 +634,16 @@ pub(crate) async fn download_snapshot(
     fetch_bytes(resp.download_url.expose()).await.ok()
 }
 
-pub(crate) async fn delete_auth(url: &str, auth: AuthContext) -> Result<(), String> {
-    let mut request = Outgoing::new(Method::Delete, url);
+pub(crate) async fn delete_auth(url: &RelayUrl, auth: AuthContext) -> Result<(), String> {
+    let mut request = Outgoing::new(Method::Delete, url.as_str());
     let resp = exchange_auth(&Fetch, &auth, &mut request).await?;
     expect_ok(&request, &resp)
 }
 
 /// Sends an authenticated `DELETE` and answers the status the relay gave. Only
 /// a request that reached no answer is an error.
-pub(crate) async fn delete_status_auth(url: &str, auth: AuthContext) -> Result<u16, String> {
-    let mut request = Outgoing::new(Method::Delete, url);
+pub(crate) async fn delete_status_auth(url: &RelayUrl, auth: AuthContext) -> Result<u16, String> {
+    let mut request = Outgoing::new(Method::Delete, url.as_str());
     exchange_auth(&Fetch, &auth, &mut request)
         .await
         .map(|resp| resp.status)
@@ -640,7 +676,7 @@ pub(crate) async fn put_sealed_via(
 }
 
 pub(crate) async fn patch_json_auth<T: Serialize>(
-    url: &str,
+    url: &RelayUrl,
     body: &T,
     auth: AuthContext,
 ) -> Result<(), String> {
@@ -650,7 +686,7 @@ pub(crate) async fn patch_json_auth<T: Serialize>(
 /// HTTP DELETE carrying a JSON body: a departure sends the entry it signs
 /// (`SYNC-132`).
 pub(crate) async fn delete_json_auth<T: Serialize>(
-    url: &str,
+    url: &RelayUrl,
     body: &T,
     auth: AuthContext,
 ) -> Result<(), String> {
@@ -659,7 +695,7 @@ pub(crate) async fn delete_json_auth<T: Serialize>(
 
 /// HTTP PUT of a JSON body, expecting a success with no body to read.
 pub(crate) async fn put_json_auth<T: Serialize>(
-    url: &str,
+    url: &RelayUrl,
     body: &T,
     auth: AuthContext,
 ) -> Result<(), String> {
@@ -668,7 +704,7 @@ pub(crate) async fn put_json_auth<T: Serialize>(
 
 /// HTTP POST of a JSON body, expecting a success with no body to read.
 pub(crate) async fn post_json_auth_ok<T: Serialize>(
-    url: &str,
+    url: &RelayUrl,
     body: &T,
     auth: AuthContext,
 ) -> Result<(), String> {
@@ -1446,7 +1482,8 @@ pub(crate) async fn fetch_key_links(
     document_id: ambre_core::DocumentId,
     auth: AuthContext,
 ) -> Vec<ambre_protocol::KeyLink> {
-    let url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/key-links");
+    let url = crate::http::ApiRoot::of(url_scheme, api_base)
+        .route(format!("/documents/{document_id}/key-links"));
     match get_json_auth::<KeyLinksResponse>(&url, auth).await {
         Ok(resp) => decode_links(resp),
         Err(e) => {
@@ -1660,6 +1697,24 @@ mod tests {
             .map(|token| bearer(token).to_string())
     }
 
+    /// A route the token travels to is built from the session's own API
+    /// root, so it names the relay and nothing else. A presigned storage link
+    /// is a `&str`, and no `*_auth` helper takes one.
+    #[tokio::test]
+    async fn a_relay_url_is_built_from_the_api_root() {
+        let auth = session("access-1", "refresh-1");
+        let url = auth.api_root().route("/documents/d").join("/members");
+        assert_eq!(url.as_str(), "https://relay.test/api/documents/d/members");
+        assert_eq!(url.to_string(), url.as_str());
+
+        let transport = Scripted::new([Ok((200, serde_json::json!({ "ok": 1 })))]);
+        let _: serde_json::Value = get_json_auth_via(&transport, &url, &auth).await.unwrap();
+        let sent = transport.sent.borrow();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].url, url.as_str());
+        assert_eq!(bearer_of(&sent[0]).as_deref(), Some("Bearer access-1"));
+    }
+
     /// `SYNC-062`: a request refused for an expired token renews the pair
     /// once, with the refresh token alone. It then replays the same request
     /// under the new token. Every request carries the per-request timeout.
@@ -1671,7 +1726,8 @@ mod tests {
             Ok((200, serde_json::json!({ "ok": 1 }))),
         ]);
         let auth = session("access-1", "refresh-1");
-        let url = "https://relay.test/api/documents";
+        let url =
+            &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned())).route("/documents");
 
         let answer: serde_json::Value =
             post_json_auth_via(&transport, url, &serde_json::json!({ "n": 7 }), &auth)
@@ -1758,7 +1814,8 @@ mod tests {
     /// the relay refuses, ends the request with an error.
     #[tokio::test]
     async fn a_request_is_replayed_at_most_once() {
-        let url = "https://relay.test/api/documents";
+        let url =
+            &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned())).route("/documents");
         let refused_twice = Scripted::new([
             Ok((401, serde_json::json!({}))),
             Ok((200, renewed("access-2"))),
@@ -1793,7 +1850,8 @@ mod tests {
     async fn a_request_with_no_answer_is_abandoned_at_its_deadline() {
         let transport = Scripted::default();
         transport.silent.set(true);
-        let url = "https://relay.test/api/documents";
+        let url =
+            &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned())).route("/documents");
 
         let error = post_json_auth_via::<_, serde_json::Value>(
             &transport,
@@ -1808,7 +1866,7 @@ mod tests {
             error,
             format!("POST {url}: no answer within {} ms", REQUEST_TIMEOUT_MS.0)
         );
-        assert_eq!(transport.calls(), [(Method::Post, url.to_owned())]);
+        assert_eq!(transport.calls(), [(Method::Post, url.to_string())]);
         assert_eq!(*transport.waited.borrow(), [REQUEST_TIMEOUT_MS]);
     }
 
@@ -1818,7 +1876,8 @@ mod tests {
     /// renews the token or replays the request (`SYNC-099`).
     #[tokio::test]
     async fn each_answer_maps_to_its_error() {
-        let url = "https://relay.test/api/documents/d/members";
+        let url = &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned()))
+            .route("/documents/d/members");
         let auth = session("access-1", "refresh-1");
         let body = serde_json::json!({});
         let answer = |status: u16, code: RefusalCode| {
@@ -1843,7 +1902,12 @@ mod tests {
             format!("PATCH {url}: network down")
         );
         assert_eq!(transport.calls().len(), 5, "one request per answer");
-        assert!(transport.calls().iter().all(|(_, called)| called == url));
+        assert!(
+            transport
+                .calls()
+                .iter()
+                .all(|(_, called)| called == url.as_str())
+        );
     }
 
     /// Holds `SRV-181`: a write answer reads the relay's typed body, beside
@@ -1871,7 +1935,8 @@ mod tests {
             _role: ambre_core::Role,
             _status: ambre_core::SnapshotStatus,
         }
-        let url = "https://relay.test/api/documents/d/members";
+        let url = &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned()))
+            .route("/documents/d/members");
         let auth = session("access-1", "refresh-1");
         let user = &ambre_core::UserId::new().to_string();
         let row = |user: &str, role: &str, status: &str| {
@@ -2002,7 +2067,8 @@ mod tests {
     /// moved membership.
     #[tokio::test]
     async fn a_refusal_code_outside_the_set_reads_as_its_status() {
-        let url = "https://relay.test/api/documents/d/rotate";
+        let url = &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned()))
+            .route("/documents/d/rotate");
         let auth = session("access-1", "refresh-1");
         let body = serde_json::json!({});
         let transport = Scripted::new([

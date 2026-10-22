@@ -205,9 +205,8 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let dl_url = format!(
-                "{url_scheme}://{api_base}/api/documents/{document_id}/snapshot/download-url"
-            );
+            let dl_url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                .route(format!("/documents/{document_id}/snapshot/download-url"));
             let body = http::SnapshotDownloadUrlRequest { snapshot_id };
             let blob = match http::post_json_auth::<_, http::SnapshotDownloadUrlResponse>(
                 &dl_url, &body, auth,
@@ -506,8 +505,8 @@ impl SyncState {
                 .map(|key| ambre_core::SigningKeyHex::encode(key.as_array()))
                 .unwrap_or_default();
             wasm_bindgen_futures::spawn_local(async move {
-                let members_url =
-                    format!("{url_scheme}://{api_base}/api/documents/{doc_id}/members");
+                let members_url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                    .route(format!("/documents/{doc_id}/members"));
                 // 404 -> the doc does not exist server-side yet (local-only):
                 // generate a fresh key and defer creation to the first update.
                 let mut signers = None;
@@ -603,8 +602,8 @@ impl SyncState {
                 // back until the replay is done (`AUTHOR-022`).
                 let mut held_snapshot = None;
                 let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if server_created {
-                    let meta_url =
-                        format!("{url_scheme}://{api_base}/api/documents/{doc_id}/snapshot");
+                    let meta_url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                        .route(format!("/documents/{doc_id}/snapshot"));
                     match http::get_json_opt_auth::<http::SnapshotMetadataResponse>(
                         &meta_url,
                         auth.clone(),
@@ -1371,7 +1370,7 @@ impl SyncState {
                     }
                 };
 
-            let url = format!("{url_scheme}://{api_base}/api/documents");
+            let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/documents");
             let body = http::CreateDocumentRequest {
                 doc_type,
                 name_enc: None,
@@ -1536,20 +1535,20 @@ pub(crate) async fn send_vouch(
     snapshot_id: SnapshotId,
     vouch: &Vouch,
 ) -> Result<Option<DocumentId>, String> {
-    let url = format!("{base}/documents/{document_id}/snapshots/{snapshot_id}");
+    let url = base.route(format!("/documents/{document_id}/snapshots/{snapshot_id}"));
     let post = http::Method::Post;
     match vouch {
         Vouch::Confirm => {
             let body = serde_json::json!({});
             let confirmed: http::ConfirmSnapshotResponse =
-                http::post_json_auth_via(transport, &format!("{url}/confirm"), &body, auth).await?;
+                http::post_json_auth_via(transport, &url.join("/confirm"), &body, auth).await?;
             Ok(confirmed.folded)
         }
         Vouch::Report(signature) => {
             let body = http::ReportSnapshotRequest {
                 signature: ambre_core::SignatureHex(signature.clone()),
             };
-            http::send_json_auth_via(transport, post, &format!("{url}/report"), &body, auth)
+            http::send_json_auth_via(transport, post, &url.join("/report"), &body, auth)
                 .await
                 .map(|()| None)
         }
@@ -1587,7 +1586,7 @@ pub(crate) async fn upload_snapshot(
     } = upload;
     let link: http::SnapshotUploadUrlResponse = http::post_json_auth_via(
         transport,
-        &format!("{base}/documents/{document_id}/snapshot/upload-url"),
+        &base.route(format!("/documents/{document_id}/snapshot/upload-url")),
         &serde_json::json!({ "size_bytes": blob.len() }),
         auth,
     )
@@ -1603,7 +1602,7 @@ pub(crate) async fn upload_snapshot(
     };
     let created: http::CreateSnapshotResponse = http::post_json_auth_via(
         transport,
-        &format!("{base}/documents/{document_id}/snapshot"),
+        &base.route(format!("/documents/{document_id}/snapshot")),
         &metadata,
         auth,
     )

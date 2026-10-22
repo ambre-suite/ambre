@@ -19,7 +19,7 @@ pub(crate) async fn take_lease(
     channel_id: ChannelId,
     segment: SegmentId,
 ) -> Result<LeaseAnswer, String> {
-    let url = format!("{base}/channels/{channel_id}/segments/{segment}/lease");
+    let url = base.route(format!("/channels/{channel_id}/segments/{segment}/lease"));
     let answer: http::FinalizeLeaseResponse =
         http::post_json_auth_via(transport, &url, &serde_json::json!({}), auth).await?;
     Ok(match answer.lease {
@@ -46,7 +46,9 @@ pub(crate) async fn commit_final(
     upload: SnapshotUpload,
 ) -> Result<(), String> {
     let snapshot_id = upload_snapshot(transport, auth, base, upload).await?;
-    let url = format!("{base}/channels/{channel_id}/segments/{segment}/finalize");
+    let url = base.route(format!(
+        "/channels/{channel_id}/segments/{segment}/finalize"
+    ));
     let body = http::FinalizeSegmentRequest {
         lease_id: lease,
         snapshot_id,

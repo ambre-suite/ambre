@@ -16,7 +16,7 @@ impl SyncState {
             // WASM path: spawn an async HTTP task; the result flows back
             // through the SyncEvent queue into handle_sync_event.
             wasm_bindgen_futures::spawn_local(async move {
-                let url = format!("{url_scheme}://{api_base}/api/keys/master");
+                let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/keys/master");
                 match http::get_json_auth::<http::MasterKeyResponse>(&url, auth.clone()).await {
                     Ok(resp) if resp.setup_owed() => {
                         // No master material to unlock: the account still owes
@@ -100,7 +100,8 @@ impl SyncState {
                         let signing_key = master_seed.derive_signing_key();
                         let exchange_key = master_seed.derive_exchange_key();
 
-                        let auth_url = format!("{url_scheme}://{api_base}/api/auth/me");
+                        let auth_url =
+                            crate::http::ApiRoot::of(url_scheme, &api_base).route("/auth/me");
                         match http::get_json_auth::<http::AuthMeResponse>(&auth_url, auth.clone())
                             .await
                         {
@@ -189,13 +190,13 @@ impl SyncState {
                 ambre_core::ExchangeKeyHex::encode(&pub_key)
             };
             wasm_bindgen_futures::spawn_local(async move {
-                let url = format!("{url_scheme}://{api_base}/api/auth/dev/login");
+                let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/auth/dev/login");
                 let body = http::DevLoginRequest {
                     username,
                     signing_pub_key,
                     exchange_pub_key,
                 };
-                match http::post_json::<_, http::DevLoginResponse>(&url, &body).await {
+                match http::post_json::<_, http::DevLoginResponse>(url.as_str(), &body).await {
                     Ok(resp) => {
                         let user_id = resp.user_id;
                         let _ = tx.send(SyncEvent::SessionReady {
@@ -253,12 +254,10 @@ impl SyncState {
             return;
         }
         let logic_tx = self.logic_tx.clone();
-        let url = format!(
-            "{}://{}/api/auth/{provider}/login",
-            self.url_scheme, self.api_base
-        );
+        let url = crate::http::ApiRoot::of(self.url_scheme, &self.api_base)
+            .route(format!("/auth/{provider}/login"));
         wasm_bindgen_futures::spawn_local(async move {
-            let evt = match http::get_json::<http::ProviderLoginResponse>(&url).await {
+            let evt = match http::get_json::<http::ProviderLoginResponse>(url.as_str()).await {
                 Ok(resp) => LogicEvent::Rest {
                     id,
                     evt: RestEvent::ProviderAddress {
@@ -301,16 +300,19 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         wasm_bindgen_futures::spawn_local(async move {
-            let url = format!("{url_scheme}://{api_base}/api/auth/{provider}/callback");
+            let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                .route(format!("/auth/{provider}/callback"));
             let body = http::ProviderCallbackRequest { code, state };
-            let resp = match http::post_json::<_, http::ProviderCallbackResponse>(&url, &body).await
-            {
-                Ok(resp) => resp,
-                Err(message) => {
-                    let _ = logic_tx.send(LogicEvent::AuthError { message });
-                    return;
-                }
-            };
+            let resp =
+                match http::post_json::<_, http::ProviderCallbackResponse>(url.as_str(), &body)
+                    .await
+                {
+                    Ok(resp) => resp,
+                    Err(message) => {
+                        let _ = logic_tx.send(LogicEvent::AuthError { message });
+                        return;
+                    }
+                };
             // A context of its own: the worker's store takes the tokens only
             // once the whole sign-in has succeeded.
             let auth = http::AuthContext {
@@ -322,7 +324,7 @@ impl SyncState {
                     access_expires_in: resp.access_expires_in,
                 }))),
             };
-            let keys_url = format!("{url_scheme}://{api_base}/api/keys/master");
+            let keys_url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/keys/master");
             let keys = match http::get_json_auth::<http::MasterKeyResponse>(&keys_url, auth.clone())
                 .await
             {
@@ -403,7 +405,7 @@ impl SyncState {
                 // Zero-Knowledge (N4): only the wrapped master key and its salt go
                 // over the wire; the passphrase stays in this worker and zeroizes
                 // on drop.
-                let url = format!("{url_scheme}://{api_base}/api/auth/setup");
+                let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/auth/setup");
                 let body = http::SetupAccountRequest {
                     email,
                     display_name,
@@ -414,7 +416,7 @@ impl SyncState {
                     signing_pubkey: signing_pub_key,
                     exchange_pubkey: exchange_pub_key,
                 };
-                match http::post_json::<_, http::SetupAccountResponse>(&url, &body).await {
+                match http::post_json::<_, http::SetupAccountResponse>(url.as_str(), &body).await {
                     Ok(resp) => {
                         let _ = tx.send(SyncEvent::AccountCreated {
                             id,

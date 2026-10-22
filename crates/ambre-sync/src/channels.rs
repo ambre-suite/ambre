@@ -29,7 +29,8 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let url = format!("{url_scheme}://{api_base}/api/channels/{channel_id}/documents");
+            let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                .route(format!("/channels/{channel_id}/documents"));
             let result = http::get_json_auth::<http::ChannelDocumentsResponse>(&url, auth)
                 .await
                 .map(|resp| channel_documents(&resp.documents));
@@ -222,7 +223,7 @@ impl SyncState {
                         space: false,
                     };
                     http::post_json_auth::<_, http::CreateDocumentResponse>(
-                        &format!("{base}/documents"),
+                        &base.route("/documents"),
                         &body,
                         auth.clone(),
                     )
@@ -235,7 +236,7 @@ impl SyncState {
                     meta_id: meta,
                     segment_id: segment,
                 };
-                http::post_json_auth_ok(&format!("{base}/channels"), &body, auth).await
+                http::post_json_auth_ok(&base.route("/channels"), &body, auth).await
             }
             .await
             .map(|()| sealed);
@@ -264,12 +265,8 @@ impl SyncState {
             tracing::warn!("Sync: no relay on this transport, the name of {meta} stays local");
             return;
         };
-        let url = format!(
-            "{}://{}/api/documents/{}",
-            self.url_scheme,
-            self.api_base,
-            meta.document_id()
-        );
+        let url = crate::http::ApiRoot::of(self.url_scheme, &self.api_base)
+            .route(format!("/documents/{}", meta.document_id()));
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let body = http::RenameDocumentRequest { name_enc };
@@ -316,7 +313,8 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let url = format!("{url_scheme}://{api_base}/api/channels/{channel_id}/join");
+            let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                .route(format!("/channels/{channel_id}/join"));
             let result = async {
                 let head =
                     http::get_json_auth::<http::JoinHeadResponse>(&url, auth.clone()).await?;
@@ -501,7 +499,8 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let url = format!("{url_scheme}://{api_base}/api/channels/{channel_id}");
+            let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                .route(format!("/channels/{channel_id}"));
             let result = http::delete_auth(&url, auth).await;
             let _ = tx.send(SyncEvent::ChannelDeleted { channel_id, result });
         });
@@ -564,7 +563,7 @@ impl SyncState {
             let result = async {
                 let mut signing_keys = Vec::with_capacity(members.len());
                 for member in &members {
-                    let url = format!("{base}/users/{}/pubkeys", member.user_id);
+                    let url = base.route(format!("/users/{}/pubkeys", member.user_id));
                     let served =
                         http::get_json_auth::<http::PubkeysResponse>(&url, auth.clone()).await?;
                     check_pinned(member, &served.exchange_pubkey)?;
@@ -576,7 +575,7 @@ impl SyncState {
                 let body =
                     direct_message_request(&author, &exchange_key, channel_id, ids, &invited)?;
                 let answer = http::post_json_auth::<_, http::DirectMessageResponse>(
-                    &format!("{base}/channels/direct"),
+                    &base.route("/channels/direct"),
                     &body,
                     auth,
                 )
@@ -626,7 +625,8 @@ impl SyncState {
             let base = crate::http::ApiRoot::of(url_scheme, &api_base);
             put_cursors(&base, cursors, auth.clone()).await;
             if !finals.is_empty() {
-                let url = format!("{url_scheme}://{api_base}/api/read-cursors/mark-read");
+                let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                    .route("/read-cursors/mark-read");
                 let body = http::MarkReadRequest {
                     documents: Some(finals.iter().map(SegmentId::document_id).collect()),
                 };
@@ -693,13 +693,14 @@ impl SyncState {
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             if mark_all_read_first {
-                let url = format!("{url_scheme}://{api_base}/api/read-cursors/mark-read");
+                let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                    .route("/read-cursors/mark-read");
                 let body = http::MarkReadRequest { documents: None };
                 if let Err(e) = http::post_json_auth_ok(&url, &body, auth.clone()).await {
                     tracing::warn!("Sync: mark all read failed: {e}");
                 }
             }
-            let url = format!("{url_scheme}://{api_base}/api/activity");
+            let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/activity");
             let result = http::get_json_auth::<http::ActivityResponse>(&url, auth)
                 .await
                 .map(|resp| activity_of(&resp.documents));
@@ -727,7 +728,8 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let url = format!("{url_scheme}://{api_base}/api/spaces/{space_id}/channels");
+            let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                .route(format!("/spaces/{space_id}/channels"));
             let result = http::get_json_auth::<http::SpaceChannelsResponse>(&url, auth)
                 .await
                 .map(|resp| resp.channels);
@@ -766,7 +768,7 @@ impl SyncState {
         let auth = self.auth_context();
         let exchange_key = self.exchange_key.clone();
         wasm_bindgen_futures::spawn_local(async move {
-            let url = format!("{url_scheme}://{api_base}/api/channels");
+            let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/channels");
             let result =
                 match http::get_json_auth::<http::MemberChannelsResponse>(&url, auth.clone()).await
                 {
@@ -919,7 +921,7 @@ async fn put_cursors(
     auth: http::AuthContext,
 ) {
     for (document_id, seq) in cursors {
-        let url = format!("{base}/documents/{document_id}/read-cursor");
+        let url = base.route(format!("/documents/{document_id}/read-cursor"));
         let body = http::ReadCursorRequest { seq };
         if let Err(e) = http::put_json_auth(&url, &body, auth.clone()).await {
             tracing::warn!("Sync: read cursor of {document_id} not moved: {e}");

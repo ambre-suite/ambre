@@ -12,7 +12,7 @@ impl SyncState {
             let auth = self.auth_context();
             let exchange_key = self.exchange_key.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                let url = format!("{url_scheme}://{api_base}/api/documents");
+                let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/documents");
                 match http::get_json_auth::<http::DocumentListResponse>(&url, auth.clone()).await {
                     Ok(resp) => {
                         let mut docs = Vec::with_capacity(resp.documents.len());
@@ -163,7 +163,7 @@ impl SyncState {
                     }
                 };
 
-                let url = format!("{url_scheme}://{api_base}/api/documents");
+                let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/documents");
                 let body = http::CreateDocumentRequest {
                     doc_type,
                     name_enc,
@@ -216,7 +216,8 @@ impl SyncState {
             let auth = self.auth_context();
             let doc_id = document_id;
             wasm_bindgen_futures::spawn_local(async move {
-                let url = format!("{url_scheme}://{api_base}/api/documents/{doc_id}");
+                let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                    .route(format!("/documents/{doc_id}"));
                 match http::delete_auth(&url, auth).await {
                     Ok(()) => {
                         let _ = tx.send(SyncEvent::DocumentDeleted {
@@ -279,8 +280,8 @@ impl SyncState {
                             });
                             return;
                         };
-                        let members_url =
-                            format!("{url_scheme}://{api_base}/api/documents/{doc_id}/members");
+                        let members_url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                            .route(format!("/documents/{doc_id}/members"));
                         match http::get_json_auth::<http::MembersResponse>(
                             &members_url,
                             auth.clone(),
@@ -315,7 +316,8 @@ impl SyncState {
                 };
 
                 // PATCH /api/documents/{id} (matches the server route).
-                let url = format!("{url_scheme}://{api_base}/api/documents/{doc_id}");
+                let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                    .route(format!("/documents/{doc_id}"));
                 let body = http::RenameDocumentRequest { name_enc };
                 match http::patch_json_auth(&url, &body, auth).await {
                     Ok(()) => {

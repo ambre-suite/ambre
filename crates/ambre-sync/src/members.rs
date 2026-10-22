@@ -370,10 +370,8 @@ impl SyncState {
 
         if let Some(tx) = event_tx {
             wasm_bindgen_futures::spawn_local(async move {
-                let url = format!(
-                    "{url_scheme}://{api_base}/api/users/search?query={}",
-                    query.replace('@', "%40")
-                );
+                let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                    .route(format!("/users/search?query={}", query.replace('@', "%40")));
                 match http::get_json_auth::<http::UserSearchResult>(&url, auth).await {
                     Ok(resp) => {
                         // Each id was parsed when the answer was read, so none
