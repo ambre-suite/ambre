@@ -394,8 +394,8 @@ pub struct DisplayCell {
     pub bg: Option<Rgb>,
     /// Font family name (`None` = grid default).
     pub font: Option<String>,
-    /// Font size in points (`None` = grid default).
-    pub size: Option<u16>,
+    /// Font size (`None` = grid default).
+    pub size: Option<ambre_core::FontSize>,
     /// Per-edge border (style + colour each); `None` edges are undrawn.
     pub borders: super::Borders,
     /// Part of a merged range (`trame-cell-merges`). `true` for both

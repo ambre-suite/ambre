@@ -955,7 +955,7 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 120.0, 120.0);
         let auto = ElementStyle {
             font: ambre_bus::app::toile::FontSpec {
-                size: 0.0,
+                size: ambre_core::FontSize::from_whole_points(0),
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -968,12 +968,13 @@ mod tests {
         // A positive size overrides the auto-sizing.
         let manual = ElementStyle {
             font: ambre_bus::app::toile::FontSpec {
-                size: 30.0,
+                size: ambre_core::FontSize::from_whole_points(30),
                 ..Default::default()
             },
             ..ElementStyle::default()
         };
-        assert_eq!(sticky_or_style_font_size(true, &manual, bounds), 30.0);
+        // The style holds points: 30 points lay out at 40 px.
+        assert_eq!(sticky_or_style_font_size(true, &manual, bounds), 40.0);
         // A text element always uses its style size, never auto.
         assert_eq!(sticky_or_style_font_size(false, &auto, bounds), 0.0);
     }

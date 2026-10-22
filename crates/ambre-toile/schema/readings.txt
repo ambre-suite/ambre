@@ -90,3 +90,82 @@ presentation_config/loop = false => read by no reader of this build
 presentation_config/transition_ms = 300 => slides change over 300 ms
 presentation_order/* = "0000000000000001_00000003" => slide 1
 reactions/* = 00022b3102 => tallies [("+1", 1)], 0 votes summing 0
+
+== v5
+board/bg_color = 4280163870 => read by no reader of this build
+board/grid_size = 32 => grid unit 32 world px
+board/grid_snap = false => read by no reader of this build
+comments/*/anchor = 0019303030303030303030303030303030315f3030303030303031 => pinned to element 0000000000000001_00000001
+comments/*/messages/*/author = "07070707-0707-0707-0707-070707070707" => message 1 by 07070707-0707-0707-0707-070707070707
+comments/*/messages/*/author = "07070707-0707-0707-0707-070707070707" => message 2 by 07070707-0707-0707-0707-070707070707
+comments/*/messages/*/body = "a remark" => message 1 reads "a remark"
+comments/*/messages/*/body = "an answer" => message 2 reads "an answer"
+comments/*/messages/*/ts = 2 => message 1 stamped 2
+comments/*/messages/*/ts = 3 => message 2 stamped 3
+comments/*/resolved = true => resolved
+connectors/*/arrow_end = true => arrowhead at end true
+connectors/*/arrow_start = false => arrowhead at start false
+connectors/*/from = "0000000000000001_00000001" => starts at (10, 5) px
+connectors/*/from_anch = "r" => leaves by Right
+connectors/*/label = "edge" => captioned "edge"
+connectors/*/path_type = "s" => routed Straight as M10,5 L40,5
+connectors/*/style = 0101ffffffff0f01b3e6ccf90f0000803f0000803f000000000a73616e732d73657269660000404190030000000000 => fill #ffffffff, stroke #ff333333 1 px, opacity 1, corner 0 px, font "sans-serif" 12 pt weight 400, ink none
+connectors/*/to = "0000000000000001_00000002" => ends at (40, 5) px
+connectors/*/to_anch = "l" => arrives by Left
+elements/*/autolayout = 00000000000000204000000000000010400000000000001040000000000000104000000000000010400000 => flows Horizontal, gap 8 px, padding [4.0, 4.0, 4.0, 4.0] px, aligned Start, sized Hug
+elements/*/children/* = "0000000000000001_00000002" => member 1 of 1
+elements/*/doc_id = "01010101-0101-0101-0101-010101010101" => embeds Toile document 01010101-0101-0101-0101-010101010101
+elements/*/doc_type = "Toile" => embeds Toile document 01010101-0101-0101-0101-010101010101
+elements/*/h = 1 => 1 px tall
+elements/*/h = 10 => 10 px tall
+elements/*/hash = "h" => draws media "h"
+elements/*/link = 001768747470733a2f2f6578616d706c652e696e76616c6964 => links to "https://example.invalid"
+elements/*/locked = false => unlocked
+elements/*/locked = true => locked
+elements/*/name = "Slide" => titled "Slide"
+elements/*/notes = "say this" => speaker notes "say this"
+elements/*/path = "M0,0 L5,5" => outline M0,0 L5,5
+elements/*/points = 0200000000000000000000803f0000803f0000803f0000803f => stroke of 9 points from (0, 0) to (1, 1) px
+elements/*/rot = 0 => turned 0 degrees
+elements/*/shape = "path" => kind Shape(Path)
+elements/*/shape = "rect" => kind Shape(Rect)
+elements/*/style = 01018ae1fbff0f00000000000000803f000000000a73616e732d73657269660000000090030000000000 => fill #fffef08a, stroke none 0 px, opacity 1, corner 0 px, font "sans-serif" 0 pt weight 400, ink none
+elements/*/style = 0101ffffffff0f01b3e6ccf90f0000803f0000803f000000000a73616e732d73657269660000404190030000000000 => fill #ffffffff, stroke #ff333333 1 px, opacity 1, corner 0 px, font "sans-serif" 12 pt weight 400, ink none
+elements/*/text = "hello" => shows "hello"
+elements/*/type = "doc_embed" => kind DocEmbed
+elements/*/type = "drawing" => kind Drawing
+elements/*/type = "embed" => kind Embed
+elements/*/type = "frame" => kind Frame
+elements/*/type = "image" => kind Image
+elements/*/type = "shape" => kind Shape(Path)
+elements/*/type = "shape" => kind Shape(Rect)
+elements/*/type = "sticky" => kind Sticky
+elements/*/url = "https://example.invalid" => embeds "https://example.invalid"
+elements/*/w = 1 => 1 px wide
+elements/*/w = 10 => 10 px wide
+elements/*/x = 0 => left edge at 0 px
+elements/*/x = 120 => left edge at 120 px
+elements/*/x = 40 => left edge at 40 px
+elements/*/x = 80 => left edge at 80 px
+elements/*/y = 0 => top edge at 0 px
+elements/*/y = 200 => top edge at 200 px
+elements/*/y = 80 => top edge at 80 px
+layers/* = "C:0000000000000001_00000009" => painted 9 of 9
+layers/* = "E:0000000000000001_00000001" => painted 1 of 9
+layers/* = "E:0000000000000001_00000002" => painted 3 of 9
+layers/* = "E:0000000000000001_00000003" => painted 2 of 9
+layers/* = "E:0000000000000001_00000004" => painted 4 of 9
+layers/* = "E:0000000000000001_00000005" => painted 5 of 9
+layers/* = "E:0000000000000001_00000006" => painted 6 of 9
+layers/* = "E:0000000000000001_00000007" => painted 7 of 9
+layers/* = "E:0000000000000001_00000008" => painted 8 of 9
+media/*/h = 2 => read by no reader of this build
+media/*/mime = "image/png" => read by no reader of this build
+media/*/thumb = 89504e470d0a1a0a0000000d49484452000000010000000208060000009981b62700000015494441547801010a00f5ff00000000000000000000000a0001072729540000000049454e44ae426082 => thumbnail 1x2 px
+media/*/w = 1 => read by no reader of this build
+meta/schema_version = 5 => version 5, Current
+presentation_config/autoplay = false => read by no reader of this build
+presentation_config/loop = false => read by no reader of this build
+presentation_config/transition_ms = 300 => slides change over 300 ms
+presentation_order/* = "0000000000000001_00000003" => slide 1
+reactions/* = 00022b3102 => tallies [("+1", 1)], 0 votes summing 0

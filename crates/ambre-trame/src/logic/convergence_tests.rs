@@ -429,7 +429,7 @@ type StyleView = (
     Option<Rgb>,
     Option<Rgb>,
     Option<String>,
-    Option<u16>,
+    Option<ambre_core::FontSize>,
     Borders,
 );
 
@@ -497,7 +497,7 @@ fn base_style() -> StylePatch {
         fg: Some(Some(Rgb::from_bits(0x00FF_0000))),
         bg: Some(Some(Rgb::from_bits(0x0000_FF00))),
         font: Some(Some("Arial".to_owned())),
-        size: Some(Some(18)),
+        size: Some(Some(ambre_core::FontSize::from_whole_points(18))),
         format: Some(CellFormat::Percent),
         border: Some(BorderEdit {
             preset: BorderPreset::All,
@@ -546,7 +546,7 @@ fn other_style() -> StylePatch {
         fg: Some(Some(Rgb::from_bits(0x0000_00FF))),
         bg: Some(Some(Rgb::from_bits(0x00FF_FF00))),
         font: Some(Some("Times".to_owned())),
-        size: Some(Some(9)),
+        size: Some(Some(ambre_core::FontSize::from_whole_points(9))),
         format: Some(CellFormat::General),
         decimals: Some(None),
         decimals_step: None,

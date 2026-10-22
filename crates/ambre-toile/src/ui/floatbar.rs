@@ -20,7 +20,7 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{DisplayElement, ElementId, ElementKind, ElementStyle};
-use ambre_core::Argb;
+use ambre_core::{Argb, FontSize};
 use ambre_draw::{Point, Rect};
 
 use super::style::MixedFlags;
@@ -80,7 +80,7 @@ pub enum StyleEdit {
     TextColor(Option<Argb>),
     /// Font family label (`None` == the "Default" reset -> the app default face).
     Font(Option<String>),
-    /// Font size in world px (`0.0` == the auto sentinel: size to the card).
+    /// Font size in points (`0.0` == the auto sentinel: size to the card).
     Size(f32),
     /// Bold toggle (maps to `font.weight` 700 / 400).
     Bold(bool),
@@ -111,8 +111,8 @@ impl StyleEdit {
             // A negative size is refused, never clamped to the zero sentinel:
             // the control cannot mean a negative number (`TOILE-UI-180`).
             StyleEdit::Size(s) => {
-                if s >= 0.0 {
-                    style.font.size = s;
+                if let Some(size) = FontSize::new(s) {
+                    style.font.size = size;
                 }
             }
             StyleEdit::Bold(b) => style.font.weight = if b { 700 } else { 400 },
@@ -475,7 +475,7 @@ mod tests {
             fill: Some(Argb::from_bits(0xff11_2233)),
             text_color: Some(Argb::from_bits(0xff44_5566)),
             font: ambre_bus::app::toile::FontSpec {
-                size: 18.0,
+                size: ambre_core::FontSize::from_whole_points(18),
                 weight: 700,
                 italic: true,
                 underline: false,
@@ -511,7 +511,7 @@ mod tests {
     fn style_edit_field_mappings() {
         let mut s = ElementStyle {
             font: FontSpec {
-                size: 18.0,
+                size: ambre_core::FontSize::from_whole_points(18),
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -522,10 +522,18 @@ mod tests {
         assert_eq!(s.font.weight, 700);
         // A negative size is refused, never clamped to the auto sentinel.
         StyleEdit::Size(-3.0).apply_to(&mut s);
-        assert_eq!(s.font.size, 18.0, "a negative size is refused");
+        assert_eq!(
+            s.font.size,
+            ambre_core::FontSize::from_whole_points(18),
+            "a negative size is refused"
+        );
         // Zero is the auto sentinel, and it is a meaning the control has.
         StyleEdit::Size(0.0).apply_to(&mut s);
-        assert_eq!(s.font.size, 0.0, "zero stays the auto sentinel");
+        assert_eq!(
+            s.font.size,
+            ambre_core::FontSize::from_whole_points(0),
+            "zero stays the auto sentinel"
+        );
         StyleEdit::Font(None).apply_to(&mut s);
         assert_eq!(s.font.family, "Sans");
         StyleEdit::Font(Some("Serif".to_owned())).apply_to(&mut s);
@@ -546,7 +554,7 @@ mod tests {
             text_color: Some(Argb::from_bits(0xff77_8899)),
             font: FontSpec {
                 family: "sans-serif".to_owned(),
-                size: 18.0,
+                size: ambre_core::FontSize::from_whole_points(18),
                 weight: 600,
                 italic: true,
                 ..Default::default()
@@ -607,7 +615,7 @@ mod tests {
             text_color: Some(Argb::from_bits(0xff00_0000)),
             font: FontSpec {
                 family: "Sans".to_owned(),
-                size: 12.0,
+                size: ambre_core::FontSize::from_whole_points(12),
                 weight: 400,
                 italic: false,
                 underline: false,
@@ -620,7 +628,7 @@ mod tests {
             text_color: Some(Argb::from_bits(0xffff_ffff)),
             font: FontSpec {
                 family: "Serif".to_owned(),
-                size: 24.0,
+                size: ambre_core::FontSize::from_whole_points(24),
                 weight: 700,
                 italic: true,
                 underline: true,

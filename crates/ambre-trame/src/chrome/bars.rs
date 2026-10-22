@@ -8,7 +8,7 @@
 use ambre_bus::StylePatch;
 use ambre_chrome::commands::{CommandId, Locale};
 use ambre_chrome::{FontSizeSelect, FormatToggle};
-use ambre_core::Rgb;
+use ambre_core::{FontSize, Rgb};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
@@ -165,9 +165,10 @@ pub fn FormatBar(
         // size.
         <FontPopover style=style on_style=on_style />
         <FontSizeSelect
-            current=style.size.into()
+            current=Signal::derive(move || style.size.get().map(FontSize::whole_points))
             on_pick=Callback::new(move |p: Option<u16>| {
-                on_style.run(StylePatch { size: Some(p), ..Default::default() });
+                let size = p.map(FontSize::from_whole_points);
+                on_style.run(StylePatch { size: Some(size), ..Default::default() });
             })
             auto_label="Default"
         />

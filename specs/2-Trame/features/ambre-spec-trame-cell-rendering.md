@@ -28,6 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-098` | `OBS` | Text taller than its row MUST be cut, never painted over the row below. | this spec section 3 | `ambre_trame::render::tests::text_taller_than_its_row_is_cut_at_the_row` | none | verified |
 | `TRAME-UI-099` | `OBS` | A vertical alignment MUST NOT lift text above the top of its cell. | this spec section 3 | `ambre_trame::render::tests::a_vertical_alignment_never_lifts_text_above_the_top` | none | verified |
 | `TRAME-UI-100` | `OBS` | Glyphs MUST scale with the zoom, like the row heights and column widths. | this spec section 3 | `ambre_trame::render::tests::glyphs_scale_with_the_zoom` | none | verified |
+| `TRAME-UI-177` | `OBS` | A cell's size MUST be read in points, so one size draws at one height in Trame and in Prose. | this spec section 3 | `ambre_trame::render::tests::a_cell_size_in_points_lays_out_as_prose_lays_it_out` -- a sized cell and the body default, against `FontSize::to_px` | none | verified |
 | `TRAME-UI-139` | `OBS` | A fill and a border MUST be cut at the cell's own edge, whatever its text does. | this spec section 3 | `ambre_trame::render::tests::a_fill_and_a_border_stop_at_the_cell_edge` | none | verified |
 | `TRAME-UI-020` | `INV` | A sparkline MUST be derived on the UI thread from the viewport data alone, with no round trip to the Logic thread. | this spec section 5 | not built | unbuilt -- lands with the `Post-V1 surface` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-UI-021` | `OBS` | A chart MUST be clipped to the cell range that hosts it. | this spec section 5 | not built | unbuilt -- lands with the `Post-V1 surface` Story (`ambre-roadmap.md` post-V1) | unimplemented |
@@ -38,7 +39,7 @@ status values are normative in `ambre-spec-template.md`.
   measures it.
 * **Boundary.** none: the renderer paints view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 9 `verified`, 3 `unimplemented`. The render tests draw one cell into a
+* **Verification.** 10 `verified`, 3 `unimplemented`. The render tests draw one cell into a
   recording surface and read its decisions back. They read the clip a spill or a wrap pushes, the
   fill rect, the border segments and the glyph origin under a zoom. The two alignment rows hold: the pack
   decides once, on the **computed** value, and the renderer and the toolbar read that answer.
@@ -63,7 +64,7 @@ pub struct CellContent<'a> {      // one cell, as the renderer sees it
     pub fg: Option<u32>,          // None = the palette's cell text colour
     pub bg: Option<u32>,          // None = the palette's content background
     pub font: Option<&'a str>,
-    pub size: Option<u16>,        // points, before zoom
+    pub size: Option<FontSize>,   // points, before zoom
     pub wrap: bool,
     pub borders: Borders,
 }
@@ -100,8 +101,8 @@ the same calls whichever surface it holds.
 
 1. The cell is filled: its own colour if it carries one, the palette's content background otherwise.
 2. Wrap decides the layout width: the cell's content box when it wraps, unbounded when it does not.
-3. The glyph size is the cell's point size, or the grid default, multiplied by the zoom
-   (`TRAME-UI-100`).
+3. The glyph size is the cell's point size laid out at 96/72 px per point, or the grid default,
+   multiplied by the zoom (`TRAME-UI-100`, `TRAME-UI-177`).
 4. The text is always shaped left-aligned; the renderer then positions the run itself.
 5. The vertical offset follows the vertical alignment, clamped so it never goes negative
    (`TRAME-UI-099`).

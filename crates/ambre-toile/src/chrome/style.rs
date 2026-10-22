@@ -27,10 +27,10 @@
 
 use std::time::Duration;
 
-use ambre_bus::app::toile::ElementStyle;
+use ambre_bus::app::toile::{ElementStyle, STICKY_AUTO_FONT_SIZE};
 use ambre_chrome::commands::CommandId;
 use ambre_chrome::{ColorPopover, Debouncer, FontPicker, FontSizeSelect, FormatToggle};
-use ambre_core::Argb;
+use ambre_core::{Argb, FontSize};
 use leptos::prelude::*;
 
 /// Map a stored `FontSpec.family` string to the picker's family label (`None` =
@@ -72,7 +72,7 @@ pub fn StyleInspector(
     // Text (foreground) colour + font controls.
     let text_color = RwSignal::new(None::<u32>);
     let font_family = RwSignal::new(None::<String>);
-    let font_size = RwSignal::new(0.0_f32);
+    let font_size = RwSignal::new(FontSize::default());
     let bold = RwSignal::new(false);
     let italic = RwSignal::new(false);
     let underline = RwSignal::new(false);
@@ -127,16 +127,16 @@ pub fn StyleInspector(
         font_family.set(f.clone());
         commit(StyleEdit::Font(f));
     });
-    // Size: the shared dropdown speaks points (`Option<u16>`, `None` = auto); the
-    // working copy stores world px as `f32` with `0.0` = the auto sentinel.
+    // Size: the shared dropdown speaks whole points (`Option<u16>`, `None` =
+    // auto); the working copy stores points with zero as the auto sentinel.
     let size_current = Signal::derive(move || {
         let s = font_size.get();
-        (s > 0.0).then_some(s.round() as u16)
+        (s > STICKY_AUTO_FONT_SIZE).then_some(s.whole_points())
     });
     let on_size = Callback::new(move |p: Option<u16>| {
-        let size = p.map(f32::from).unwrap_or(0.0);
+        let size = FontSize::from_whole_points(p.unwrap_or(0));
         font_size.set(size);
-        commit(StyleEdit::Size(size));
+        commit(StyleEdit::Size(size.points()));
     });
     // The four format toggles flip their signal and commit.
     let on_bold = Callback::new(move |()| {

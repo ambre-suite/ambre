@@ -35,8 +35,8 @@ pub struct CellContent<'a> {
     pub bg: Option<Rgb>,
     /// Font family name (`None` = the grid default).
     pub font: Option<&'a str>,
-    /// Font size in points (`None` = the grid default [`BODY_SIZE`]).
-    pub size: Option<u16>,
+    /// Font size (`None` = the grid default [`BODY_FONT`](super::BODY_FONT)).
+    pub size: Option<ambre_core::FontSize>,
     /// Wrap onto multiple lines inside the cell instead of overflowing.
     pub wrap: bool,
     /// Per-edge border (style + colour each); `None` edges are not drawn.

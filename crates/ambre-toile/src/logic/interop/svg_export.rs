@@ -16,6 +16,7 @@
 
 use std::fmt::Write as _;
 
+use ambre_bus::app::toile::STICKY_AUTO_FONT_SIZE;
 use ambre_core::Argb;
 use base64::Engine as _;
 use kurbo::Rect;
@@ -170,8 +171,8 @@ fn element_shape(el: &ExportElement) -> Option<String> {
             // (`TOILE-IO-088`). A size the style leaves automatic is the box
             // height, which is what the board itself lays out to.
             let body = xml_escape(el.text.as_deref().unwrap_or(""));
-            let size = if el.style.font.size > 0.0 {
-                f64::from(el.style.font.size)
+            let size = if el.style.font.size > STICKY_AUTO_FONT_SIZE {
+                f64::from(el.style.font.size.to_px())
             } else {
                 r.height()
             };
@@ -416,11 +417,11 @@ mod tests {
     fn text_carries_its_size_and_its_ink() {
         let mut el = ExportElement::new(ElementKind::Text, Rect::new(0.0, 0.0, 50.0, 20.0));
         el.text = Some("sized".to_owned());
-        el.style.font.size = 24.0;
+        el.style.font.size = ambre_core::FontSize::from_whole_points(24);
         el.style.text_color = Some(Argb::from_bits(0xFF11_2233));
         let svg = export_svg(&[el]).document;
         assert!(
-            svg.contains("font-size=\"24\" fill=\"#112233\""),
+            svg.contains("font-size=\"32\" fill=\"#112233\""),
             "the text left bare: {svg}"
         );
     }

@@ -24,8 +24,9 @@
 // pipe, the palette / inspector hazard. A click then never clears the selection the bar
 // acts on. ============================================================================
 
+use ambre_bus::app::toile::STICKY_AUTO_FONT_SIZE;
 use ambre_chrome::commands::{CommandId, Locale};
-use ambre_core::Argb;
+use ambre_core::{Argb, FontSize};
 
 use super::icons;
 use crate::ui::commands as registry;
@@ -63,7 +64,7 @@ pub fn SelectionToolbar(
     let fill = RwSignal::new(None::<u32>);
     let text_color = RwSignal::new(None::<u32>);
     let font_family = RwSignal::new(None::<String>);
-    let font_size = RwSignal::new(0.0_f32);
+    let font_size = RwSignal::new(FontSize::default());
     let bold = RwSignal::new(false);
     let italic = RwSignal::new(false);
     let underline = RwSignal::new(false);
@@ -100,16 +101,16 @@ pub fn SelectionToolbar(
         font_family.set(f.clone());
         on_style.run(StyleEdit::Font(f));
     });
-    // Size: the shared dropdown speaks points (`Option<u16>`, `None` = auto). Toile
-    // stores world px as `f32` with `0.0` = the auto sentinel, so map both ways.
+    // Size: the shared dropdown speaks whole points (`Option<u16>`, `None` =
+    // auto). Toile stores points with zero as the auto sentinel, so map both ways.
     let size_current = Signal::derive(move || {
         let s = font_size.get();
-        (s > 0.0).then_some(s.round() as u16)
+        (s > STICKY_AUTO_FONT_SIZE).then_some(s.whole_points())
     });
     let on_size = Callback::new(move |p: Option<u16>| {
-        let v = p.map(f32::from).unwrap_or(0.0);
+        let v = FontSize::from_whole_points(p.unwrap_or(0));
         font_size.set(v);
-        on_style.run(StyleEdit::Size(v));
+        on_style.run(StyleEdit::Size(v.points()));
     });
     // The four format toggles emit their flipped state and track locally.
     let on_bold = Callback::new(move |()| {

@@ -212,7 +212,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
             fg: Some(Rgb::from_bits(0x01_02_03)),
             bg: Some(Rgb::from_bits(0x04_05_06)),
             font: Some("f".to_owned()),
-            size: Some(7),
+            size: Some(ambre_core::FontSize::from_whole_points(7)),
             format: CellFormat::Time,
             decimals: Some(8),
             borders: Borders {
@@ -352,7 +352,7 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         // measure and a colour to resolve (`SCHEMA-017`).
         patch: StylePatch {
             bold: Some(true),
-            size: Some(Some(14)),
+            size: Some(Some(ambre_core::FontSize::from_whole_points(14))),
             fg: Some(Some(Rgb::from_bits(0x33_66_99))),
             ..Default::default()
         },

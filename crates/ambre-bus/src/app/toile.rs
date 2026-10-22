@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 use ambre_core::Argb;
 use ambre_core::DocType;
 use ambre_core::DocumentId;
+use ambre_core::FontSize;
 use ambre_core::UserId;
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use serde::{Deserialize, Serialize};
@@ -197,7 +198,8 @@ impl ShapeKind {
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct FontSpec {
     pub family: String,
-    pub size: f32,
+    /// The size. Zero is the sticky auto-size sentinel [`STICKY_AUTO_FONT_SIZE`].
+    pub size: FontSize,
     pub weight: u16, // CSS weight scale, 400 = regular, 700 = bold
     pub italic: bool,
     pub underline: bool,
@@ -208,7 +210,7 @@ impl Default for FontSpec {
     fn default() -> Self {
         Self {
             family: "sans-serif".to_owned(),
-            size: 16.0,
+            size: FontSize::from_whole_points(12),
             weight: 400,
             italic: false,
             underline: false,
@@ -285,7 +287,7 @@ pub const STICKY_CORNER: f32 = 0.0;
 /// renderer then computes the body size from the card bounds, not from a fixed
 /// value (`toile-styles`). A positive size from the style inspector overrides
 /// it.
-pub const STICKY_AUTO_FONT_SIZE: f32 = 0.0;
+pub const STICKY_AUTO_FONT_SIZE: FontSize = FontSize::from_whole_points(0);
 
 /// The style register's own layout version, its first byte (`TOILE-UI-071`). A
 /// later layout change bumps it and adds a migration row, so an older build's
@@ -1970,7 +1972,7 @@ mod tests {
             }),
             font: FontSpec {
                 family: "Serif".to_owned(),
-                size: 24.0,
+                size: FontSize::from_whole_points(24),
                 weight: 600,
                 italic: true,
                 underline: false,

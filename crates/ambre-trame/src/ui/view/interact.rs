@@ -117,10 +117,7 @@ impl TrameView {
                     if *row != r || data.text.is_empty() {
                         continue;
                     }
-                    let size = data
-                        .size
-                        .map(|s| s as f32)
-                        .unwrap_or(crate::render::BODY_SIZE);
+                    let size = crate::render::cell_font_px(data.size);
                     let lyt = text_cache.get_or_build_font(
                         font_cx,
                         &data.text,
@@ -883,7 +880,7 @@ pub(crate) fn fit_column_width(
         .iter()
         .filter(|cell| !cell.text.is_empty())
         .map(|cell| {
-            let size = cell.size.map(f32::from).unwrap_or(crate::render::BODY_SIZE);
+            let size = crate::render::cell_font_px(cell.size);
             text_cache
                 .get_or_build_font(
                     font_cx,

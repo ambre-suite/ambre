@@ -98,7 +98,7 @@ pub struct CellStyle {
     pub fg: Option<u32>,          // 0xRRGGBB; None = the theme default
     pub bg: Option<u32>,          // 0xRRGGBB; None = transparent
     pub font: Option<String>,
-    pub size: Option<u16>,
+    pub size: Option<FontSize>,   // points, stored as a whole `u16`
     pub format: CellFormat,       // `features/ambre-spec-trame-number-formats.md`
     pub decimals: Option<u8>,
     pub borders: Borders,         // four independent Option<CellBorder> edges
@@ -121,7 +121,7 @@ pub struct StylePatch {           // one toolbar control, one sparse edit
     pub fg: Option<Option<u32>>,       // None leaves, Some(None) clears, Some(Some) sets
     pub bg: Option<Option<u32>>,
     pub font: Option<Option<String>>,
-    pub size: Option<Option<u16>>,
+    pub size: Option<Option<FontSize>>,
     pub format: Option<CellFormat>,
     pub decimals: Option<Option<u8>>,
     pub border: Option<BorderEdit>,    // a preset and a pen, resolved per cell

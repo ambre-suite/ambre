@@ -39,6 +39,8 @@ pub mod fingerprint;
 /// `fixtures` feature so no client build can reach it (I4).
 #[cfg(feature = "fixtures")]
 pub mod fixtures;
+/// Font attributes every application shares: [`FontSize`].
+pub mod font;
 pub mod id;
 pub mod key_hex;
 pub mod key_id;
@@ -88,6 +90,7 @@ pub use fixtures::{
     FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape, ShapeBody, fixture_peer_count,
     seeded_document_id,
 };
+pub use font::{FontSize, InvalidFontSize, PX_PER_PT};
 pub use id::{
     CategoryId, ChannelId, CommentId, DocumentId, FootnoteId, LeaseId, MeetingId, MessageId,
     MetaId, OrgId, ReplyId, SegmentId, SnapshotId, SpaceId, SuggestionId, UserId,

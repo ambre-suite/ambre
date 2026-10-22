@@ -72,7 +72,7 @@ pub struct CellData {
     pub fg: Option<Rgb>,
     pub bg: Option<Rgb>,
     pub font: Option<String>,
-    pub size: Option<u16>,
+    pub size: Option<ambre_core::FontSize>,
     pub borders: ambre_bus::Borders,
     /// `Some((col_span, row_span))` on a merge master, `None` otherwise. Covered
     /// cells arrive with empty text and are simply rendered blank.

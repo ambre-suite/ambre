@@ -105,7 +105,7 @@ pub struct ElementStyle {
     pub stroke_w:   f32,
     pub opacity:    f32,           // 0.0 ..= 1.0
     pub corner:     f32,           // corner radius
-    pub font:       FontSpec,      // family, size, weight, italic, underline, strikethrough
+    pub font:       FontSpec,      // family, size (points), weight, italic, underline, strikethrough
     pub shadow:     Option<Shadow>,
     pub text_color: Option<u32>,   // None = the kind's default ink
 }
@@ -168,7 +168,8 @@ a mixed flag (`TOILE-UI-164`), so the bar never shows one member's value as the 
 
 **The size control's "Auto" entry** maps to the note sentinel, and choosing a number sets an explicit
 size that overrides it (`features/ambre-spec-toile-text-editing.md`). The sentinel is zero, and a
-negative number is refused, not clamped to it (`TOILE-UI-180`).
+negative number is refused, not clamped to it (`TOILE-UI-180`). The style holds points, the unit of
+the control. The board lays them out at 96/72 world px per point, as Trame and Prose do.
 
 **The two surfaces overlap on purpose**, and the bar is a subset. Every action on it exists in the panel or
 the menus, so the three can never offer different behaviour for the same name

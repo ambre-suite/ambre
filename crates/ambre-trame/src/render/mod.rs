@@ -23,6 +23,7 @@
 // ============================================================================
 
 use ambre_canvas::{Palette, TextCache};
+use ambre_core::FontSize;
 use ambre_draw::{
     Affine, Alignment, Brush, Color, DrawSurface, FontContext, Layout, ParleyBrush,
     PositionedLayoutItem, Rect,
@@ -30,8 +31,19 @@ use ambre_draw::{
 
 /// Cell text left padding (also the caret's x origin inside a cell).
 pub const CELL_PAD_X: f64 = 4.0;
-/// Body font size, shared by the cell renderer and the edit overlay.
+/// Body font size of a cell that carries none, in points.
+pub const BODY_FONT: FontSize = FontSize::from_whole_points(9);
+/// Body font size in px, shared by the cell renderer and the edit overlay. It
+/// is [`BODY_FONT`] laid out.
 pub const BODY_SIZE: f32 = 12.0;
+
+/// The px size parley lays a cell's text out in, before the zoom. The bus
+/// carries points, so an explicit size goes through [`FontSize::to_px`] as in
+/// every other view.
+#[must_use]
+pub fn cell_font_px(size: Option<FontSize>) -> f32 {
+    size.map_or(BODY_SIZE, FontSize::to_px)
+}
 /// Header label font size (column letters + row numbers).
 pub const HEADER_SIZE: f32 = 11.0;
 

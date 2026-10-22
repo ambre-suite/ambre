@@ -206,16 +206,18 @@ pub(crate) fn sticky_font_size(bounds: Rect) -> f32 {
 /// The effective body font size (world units) for a sticky / text element. A sticky
 /// auto-sizes from its bounds while `style.font.size` is the auto sentinel
 /// (`STICKY_AUTO_FONT_SIZE`, that is, not positive). A positive size set from the
-/// style inspector overrides it. A text element always uses its style size.
+/// style inspector overrides it. A text element always uses its style size. The
+/// style holds points, and a world unit is a CSS pixel at zoom 1, so the style
+/// size goes through [`FontSize::to_px`](ambre_core::FontSize::to_px).
 pub(crate) fn sticky_or_style_font_size(
     is_sticky: bool,
     style: &ElementStyle,
     bounds: Rect,
 ) -> f32 {
-    if is_sticky && style.font.size <= 0.0 {
+    if is_sticky && style.font.size <= ambre_bus::app::toile::STICKY_AUTO_FONT_SIZE {
         sticky_font_size(bounds)
     } else {
-        style.font.size
+        style.font.size.to_px()
     }
 }
 

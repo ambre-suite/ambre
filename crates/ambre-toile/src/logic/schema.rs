@@ -36,8 +36,9 @@ use crate::logic::state::{BODY, CONNECTORS, ELEMENTS, PRESENTATION_CONFIG, PRESE
 /// in front of every `"style"` register, which obliges the [`MIGRATIONS`] row
 /// that rewrites the registers an older board holds. `2 -> 3` moves the deck
 /// out of the `presentation` map and into two root containers. `3 -> 4` turns
-/// each note and text body from a string register into a text container.
-pub const SCHEMA_VERSION: u32 = 4;
+/// each note and text body from a string register into a text container. `4 ->
+/// 5` stores a style's font size in points rather than in world px.
+pub const SCHEMA_VERSION: u32 = 5;
 
 /// Write the current version into a board's `meta` register.
 ///
@@ -95,6 +96,9 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// (`TOILE-029`).
 ///
 /// `3 -> 4` moves each string body into a text container (`TOILE-030`).
+///
+/// `4 -> 5` stores the font size of a style in points, the unit the size
+/// picker and every other view use, in place of world px.
 pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: 0,
@@ -115,6 +119,11 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
         from: 3,
         to: 4,
         apply: body_text_step,
+    },
+    SchemaMigration {
+        from: 4,
+        to: 5,
+        apply: font_points_step,
     },
 ];
 
@@ -138,6 +147,16 @@ fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
 /// A register that call refuses is left verbatim (`SCHEMA-003`): the layout the
 /// step cannot name is not one it may overwrite.
 fn style_version_step(doc: &LoroDoc) -> Result<(), String> {
+    rewrite_styles(doc, ElementStyle::upgrade_unversioned)?;
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
+
+/// Rewrite every `"style"` register of the elements and the connectors that
+/// `rewrite` has new bytes for. A register `rewrite` refuses is left verbatim
+/// (`SCHEMA-003`).
+fn rewrite_styles(doc: &LoroDoc, rewrite: impl Fn(&[u8]) -> Option<Vec<u8>>) -> Result<(), String> {
     for container in [ELEMENTS, CONNECTORS] {
         let root = doc.get_map(container);
         let LoroValue::Map(entries) = root.get_value() else {
@@ -159,12 +178,29 @@ fn style_version_step(doc: &LoroDoc) -> Result<(), String> {
             else {
                 continue;
             };
-            if let Some(upgraded) = ElementStyle::upgrade_unversioned(&bytes) {
+            if let Some(upgraded) = rewrite(&bytes) {
                 map.insert("style", LoroValue::Binary(upgraded.into()))
                     .map_err(|e| format!("rewriting the style register of {id} failed: {e}"))?;
             }
         }
     }
+    Ok(())
+}
+
+/// The `4 -> 5` step: carry each font size from world px to points.
+///
+/// A version 4 board stores the size the renderer lays out, in world px, which
+/// is CSS px at zoom 1. This build stores points and lays them out through
+/// [`FontSize::to_px`](ambre_core::FontSize::to_px). The step divides each
+/// size by [`PX_PER_PT`](ambre_core::PX_PER_PT), so a body keeps the height it
+/// had. Zero, the sticky auto-size sentinel, stays zero.
+fn font_points_step(doc: &LoroDoc) -> Result<(), String> {
+    rewrite_styles(doc, |bytes| {
+        let mut style = ElementStyle::try_from_bytes(bytes)?;
+        style.font.size =
+            ambre_core::FontSize::new(style.font.size.points() / ambre_core::PX_PER_PT)?;
+        Some(style.to_bytes())
+    })?;
     stamp(doc);
     doc.commit();
     Ok(())
@@ -429,9 +465,14 @@ mod tests {
         };
         let board = unversioned_board(&style);
         let gated = gate(&board).expect("version 1 migrates");
+        // The `4 -> 5` row then reads the stored size as px, and carries it to
+        // points.
+        let mut kept = style;
+        kept.font.size = ambre_core::FontSize::new(kept.font.size.points() / ambre_core::PX_PER_PT)
+            .expect("a size");
         assert_eq!(
             styles_of(&gated),
-            vec![Some(style.clone()), Some(style)],
+            vec![Some(kept.clone()), Some(kept)],
             "the element and the connector both keep the style they carried"
         );
     }
@@ -515,6 +556,52 @@ mod tests {
                 .expect("the body is a text");
             assert_eq!(text.to_string(), body, "{id} lost its body");
         }
+    }
+
+    /// `SCHEMA-007`, the `4 -> 5` row: a version 4 board keeps the height of
+    /// its text. That board stores world px, and this build reads points and
+    /// lays them out at 4/3 of their value.
+    #[test]
+    fn a_board_whose_font_sizes_are_px_keeps_their_height() {
+        let doc = LoroDoc::new();
+        let elements = doc.get_map(ELEMENTS);
+        for (id, px) in [("e1", 16), ("e2", 0)] {
+            let mut style = ElementStyle::default();
+            style.font.size = ambre_core::FontSize::from_whole_points(px);
+            elements
+                .insert_container(id, loro::LoroMap::new())
+                .expect("seed")
+                .insert("style", LoroValue::Binary(style.to_bytes().into()))
+                .expect("a version 4 style");
+        }
+        doc.get_map(SCHEMA_META_MAP)
+            .insert(SCHEMA_VERSION_KEY, 4i64)
+            .expect("stamp");
+        doc.commit();
+        let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
+
+        let gated = gate(&bytes).expect("version 4 migrates");
+        let migrated = LoroDoc::new();
+        migrated.import(&gated).expect("imports");
+        let size_of = |id: &str| {
+            let Some(Ok(LoroValue::Binary(raw))) = migrated
+                .get_map(ELEMENTS)
+                .get(id)
+                .and_then(|v| v.into_container().ok())
+                .and_then(|c| c.into_map().ok())
+                .and_then(|em| em.get("style"))
+                .map(|v| v.into_value())
+            else {
+                panic!("{id} lost its style");
+            };
+            ElementStyle::try_from_bytes(&raw)
+                .expect("decodes")
+                .font
+                .size
+        };
+        assert_eq!(size_of("e1").to_px(), 16.0, "16 px read back as 16 px");
+        assert_eq!(size_of("e1"), ambre_core::FontSize::from_whole_points(12));
+        assert_eq!(size_of("e2"), ambre_bus::app::toile::STICKY_AUTO_FONT_SIZE);
     }
 
     /// `SCHEMA-020`: two peers open one version 3 board, and each migrates its

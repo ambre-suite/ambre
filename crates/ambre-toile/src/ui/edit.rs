@@ -305,7 +305,7 @@ mod tests {
     fn a_zero_size_element_keeps_zero_under_edit() {
         let style = ElementStyle {
             font: FontSpec {
-                size: 0.0,
+                size: ambre_core::FontSize::from_whole_points(0),
                 ..Default::default()
             },
             ..ElementStyle::default()

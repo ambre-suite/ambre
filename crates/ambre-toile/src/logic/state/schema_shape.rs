@@ -244,7 +244,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
         corner: 3.5,
         font: FontSpec {
             family: "f".to_owned(),
-            size: 7.5,
+            size: ambre_core::FontSize::new(7.5).unwrap(),
             weight: 700,
             italic: true,
             underline: true,
@@ -735,6 +735,19 @@ fn canonical(from: u32) -> LoroDoc {
                 let element = element_map(doc, ELEMENTS, id);
                 element.insert("type", "sticky").expect("a type");
                 element.insert(BODY, body).expect("a string body");
+            }
+        }),
+        // A text sized 16 world px and an auto-sized note, whose sizes the
+        // `4 -> 5` step carries to points.
+        4 => board_at(Some(4), |doc| {
+            for (id, kind, px) in [("e1", "text", 16), ("e2", "sticky", 0)] {
+                let mut style = ElementStyle::default();
+                style.font.size = ambre_core::FontSize::from_whole_points(px);
+                let element = element_map(doc, ELEMENTS, id);
+                element.insert("type", kind).expect("a type");
+                element
+                    .insert("style", LoroValue::Binary(style.to_bytes().into()))
+                    .expect("a style register");
             }
         }),
         _ => panic!("the step from version {from} has no canonical board: write one here"),

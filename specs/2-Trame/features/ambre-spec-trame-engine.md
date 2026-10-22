@@ -244,7 +244,7 @@ pub struct DisplayCell {
     pub fg: Option<u32>,                 // 0xRRGGBB, None = the theme's colour
     pub bg: Option<u32>,                 // 0xRRGGBB, None = transparent
     pub font: Option<String>,
-    pub size: Option<u16>,
+    pub size: Option<FontSize>,         // points
     pub borders: Borders,
     pub is_merged: bool,                 // a master, or a cell it covers
     pub merge_span: Option<(u32, u32)>,  // Some((col_span, row_span)) on the master

@@ -25,8 +25,9 @@ use crate::layout::run::{ParleyRunData, Resume, ShapedRun};
 const MAX_SEGMENTS: usize = 16;
 
 /// Pixels per point at 96 DPI. Every length the document stores in points is
-/// converted here and nowhere else.
-pub(crate) const PX_PER_PT: f32 = 96.0 / 72.0;
+/// converted here and nowhere else. It is the factor every view reads, so a
+/// size lays out at one height in Prose, Trame and Toile.
+pub(crate) const PX_PER_PT: f32 = ambre_core::PX_PER_PT;
 
 /// A byte range of a block's text and the inline marks the shaper reads on
 /// it. A mark either changes the glyphs (`PROSE-UI-207`) or draws a line
@@ -120,7 +121,11 @@ impl EffectiveStyle {
     /// The same resolution, from parts a caller already holds.
     #[must_use]
     pub fn from_parts(defaults: &doc::DocDefaults, paragraph: &ParagraphStyle, bold: bool) -> Self {
-        let font_size_px = px(defaults.font_size_pt);
+        // A stored size outside the range of a font size lays out at zero
+        // rather than at a negative height.
+        let font_size_px = ambre_core::FontSize::new(defaults.font_size_pt)
+            .unwrap_or_default()
+            .to_px();
         Self {
             font_family: defaults.font_family.clone(),
             font_size_px,
@@ -1038,6 +1043,20 @@ mod tests {
         // way (`features/ambre-spec-prose-pagination.md section 2`).
         assert!((px(12.0) - 16.0).abs() < 0.001);
         assert!((px(72.0) - 96.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn the_body_size_lays_out_as_every_view_lays_it_out() {
+        // Trame and Toile read `FontSize::to_px` too, so twelve points draw at
+        // one height in all three applications.
+        let defaults = doc::DocDefaults {
+            font_size_pt: 12.0,
+            ..doc::DocDefaults::default()
+        };
+        let style = EffectiveStyle::from_parts(&defaults, &ParagraphStyle::default(), false);
+        let twelve = ambre_core::FontSize::from_whole_points(12);
+        assert_eq!(style.font_size_px, twelve.to_px());
+        assert_eq!(style.font_size_px, 16.0);
     }
 
     #[test]
