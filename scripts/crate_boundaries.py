@@ -513,6 +513,9 @@ ONE_COPY_ACCEPTED = {
     "crates/ambre-toile/src/ui/style.rs:StyleModel.base": (
         "the selection's common style, which the inspector shows; the restyle signal carries an edit"
     ),
+    "crates/ambre-toile/src/ui/view.rs:ToileView.present": (
+        "the host build holds no signal; one PresentModeChanged event writes it here and into the signal"
+    ),
 }
 # The modules a walk may reach, per application crate, and why each holds no
 # screen state (`CANVAS-074`). A module not listed is refused, so a new reach
