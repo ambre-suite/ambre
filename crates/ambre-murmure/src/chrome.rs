@@ -1390,14 +1390,14 @@ impl CommandHandler for MurmureHandler {
         Vec::new()
     }
 
-    fn on_key(&self, id: CommandId, in_text_field: bool) -> KeyRoute<AppCommand> {
+    fn on_key(&self, id: CommandId, target: ambre_chrome::KeyTarget) -> KeyRoute<AppCommand> {
         if id == PALETTE {
             return KeyRoute::Run(vec![ShellAction::OpenPalette]);
         }
         // A text field keeps Alt+Shift with an arrow, which extends its
         // selection on a Mac. The find chord opens the search from any field,
         // or the browser's find would take it (`MURMURE-213`).
-        if in_text_field && id != SEARCH {
+        if target == ambre_chrome::KeyTarget::TextField && id != SEARCH {
             return KeyRoute::Yield;
         }
         self.run(id);

@@ -763,11 +763,11 @@ fn a_jump_opens_the_next_active_channel_and_moves_no_read_cursor() {
     let (handler, sent) = handler(relay);
 
     assert!(matches!(
-        handler.on_key(NEXT_ACTIVITY, false),
+        handler.on_key(NEXT_ACTIVITY, ambre_chrome::KeyTarget::Canvas),
         KeyRoute::Run(actions) if actions.is_empty()
     ));
     assert_eq!(relay.pane.get_untracked().shown_channel(), Some(budget));
-    handler.on_key(NEXT_ACTIVITY, false);
+    handler.on_key(NEXT_ACTIVITY, ambre_chrome::KeyTarget::Canvas);
     assert_eq!(relay.pane.get_untracked().shown_channel(), Some(direct));
     handler.on_command(PREVIOUS_ACTIVITY);
     assert_eq!(relay.pane.get_untracked().shown_channel(), Some(budget));
@@ -790,18 +790,18 @@ fn the_mark_all_read_chord_runs_the_command_of_the_unread_feature() {
     let (_owner, relay, _) = three_named();
     let (handler, sent) = handler(relay);
     assert!(matches!(
-        handler.on_key(MARK_ALL_READ, true),
+        handler.on_key(MARK_ALL_READ, ambre_chrome::KeyTarget::TextField),
         KeyRoute::Yield
     ));
     assert!(sent.get_untracked().is_empty());
 
-    handler.on_key(MARK_ALL_READ, false);
+    handler.on_key(MARK_ALL_READ, ambre_chrome::KeyTarget::Canvas);
     assert!(matches!(
         sent.get_untracked()[..],
         [LogicCommand::MarkAllRead]
     ));
     assert!(matches!(
-        handler.on_key(PALETTE, true),
+        handler.on_key(PALETTE, ambre_chrome::KeyTarget::TextField),
         KeyRoute::Run(actions) if matches!(actions[..], [ShellAction::OpenPalette])
     ));
 }
@@ -1261,7 +1261,7 @@ fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
     assert_eq!(binding.keybindings, [KeyBinding::primary('f')]);
     let (handler, sent) = handler(relay);
     assert!(matches!(
-        handler.on_key(SEARCH, true),
+        handler.on_key(SEARCH, ambre_chrome::KeyTarget::TextField),
         KeyRoute::Run(actions) if actions.is_empty()
     ));
     assert!(relay.search.get_untracked().open);

@@ -122,7 +122,7 @@ impl CommandHandler for TrameHandler {
         vec![action]
     }
 
-    fn on_key(&self, id: CommandId, _in_text_field: bool) -> KeyRoute<AppCommand> {
+    fn on_key(&self, id: CommandId, _target: ambre_chrome::KeyTarget) -> KeyRoute<AppCommand> {
         // A chord opens the palette and find and replace like the menu does.
         // Every other chord
         // maps straight through the table: the toggles and the clipboard keep

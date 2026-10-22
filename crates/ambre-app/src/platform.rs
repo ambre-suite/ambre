@@ -590,7 +590,12 @@ pub(crate) fn install_command_keys(keymap: Keymap, commands: shell::CommandPath)
             };
             // A field the user types into (the editor's hidden input, a chrome
             // text field) may keep the key: the handler decides which.
-            if commands.key(id, target_is_editable(&event)) {
+            let target = if target_is_editable(&event) {
+                ambre_chrome::KeyTarget::TextField
+            } else {
+                ambre_chrome::KeyTarget::Canvas
+            };
+            if commands.key(id, target) {
                 event.prevent_default();
             }
         });

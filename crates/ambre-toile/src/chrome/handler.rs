@@ -127,10 +127,10 @@ impl CommandHandler for ToileHandler {
         Vec::new()
     }
 
-    fn on_key(&self, id: CommandId, in_text_field: bool) -> KeyRoute<AppCommand> {
+    fn on_key(&self, id: CommandId, target: ambre_chrome::KeyTarget) -> KeyRoute<AppCommand> {
         if let Some(tool) = tool_for_command(id) {
             // A bare tool key typed into a text field is a character.
-            if in_text_field {
+            if target == ambre_chrome::KeyTarget::TextField {
                 return KeyRoute::Yield;
             }
             self.tool.set(tool);

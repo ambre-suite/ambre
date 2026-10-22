@@ -92,8 +92,8 @@ impl CommandPath {
 
     /// Run the chord that resolved to `id`. `false` when the key yields to the
     /// focused field, whose default must then stand.
-    pub(crate) fn key(&self, id: CommandId, in_text_field: bool) -> bool {
-        match self.handler.get().on_key(id, in_text_field) {
+    pub(crate) fn key(&self, id: CommandId, target: ambre_chrome::KeyTarget) -> bool {
+        match self.handler.get().on_key(id, target) {
             KeyRoute::Yield => false,
             KeyRoute::Run(actions) => {
                 for action in actions {

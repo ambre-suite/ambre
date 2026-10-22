@@ -51,6 +51,15 @@ pub struct FilePick<C> {
     pub read: Box<dyn Fn(Vec<u8>) -> C>,
 }
 
+/// Where a chord's key went: the page's canvas, or a text field that keeps
+/// the chords it needs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum KeyTarget {
+    #[default]
+    Canvas,
+    TextField,
+}
+
 /// What a chord resolved in the keymap does.
 pub enum KeyRoute<C> {
     /// Leave the key to the focused field: its default stays.
@@ -71,9 +80,9 @@ pub trait CommandHandler {
     /// panels before it returns.
     fn on_command(&self, id: CommandId) -> Vec<ShellAction<Self::Command>>;
 
-    /// What a chord resolving to `id` does. `in_text_field` is whether the key
+    /// What a chord resolving to `id` does. `target` says whether the key
     /// went to a text field, which keeps a chord the field needs.
-    fn on_key(&self, id: CommandId, in_text_field: bool) -> KeyRoute<Self::Command>;
+    fn on_key(&self, id: CommandId, target: KeyTarget) -> KeyRoute<Self::Command>;
 
     /// The command a sealed save ends in, once the prompt holds a passphrase.
     /// `None` for an application with no sealed file.

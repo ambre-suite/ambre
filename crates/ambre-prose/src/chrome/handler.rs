@@ -60,13 +60,13 @@ impl CommandHandler for ProseHandler {
         vec![action]
     }
 
-    fn on_key(&self, id: CommandId, in_text_field: bool) -> KeyRoute<AppCommand> {
+    fn on_key(&self, id: CommandId, target: ambre_chrome::KeyTarget) -> KeyRoute<AppCommand> {
         if id == PALETTE {
             return KeyRoute::Run(vec![ShellAction::OpenPalette]);
         }
         // A chrome text field keeps its own formatting chords.
         if mark_key(id).is_some() {
-            if in_text_field {
+            if target == ambre_chrome::KeyTarget::TextField {
                 return KeyRoute::Yield;
             }
             self.format.set(Some(id));
