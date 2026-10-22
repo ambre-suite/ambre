@@ -36,7 +36,7 @@ impl LogicState {
         if keeps_identity && restoring.is_none() {
             self.owe_snapshot(document_id);
         }
-        self.answer_document(document_id, true);
+        self.answer_document(document_id, crate::AnswerFor::Closing);
         // No view shows it now: its copy may leave the store once the relay
         // holds every change (`RESID-008`, `RESID-019`).
         self.send_to_persist(document_id, PersistWrite::Hidden);

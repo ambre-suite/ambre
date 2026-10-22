@@ -2031,7 +2031,6 @@ ambre-logic | src/data.rs | crate::data | LogicState::apply_ephemeral(payload) |
 ambre-logic | src/data.rs | crate::data | LogicState::apply_remote(payload) | param | &[u8]	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-logic | src/data.rs | crate::data | LogicState::check_pending_snapshot(payload) | param | &[u8]	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-logic | src/data.rs | crate::data | LogicState::dispatch_outcome(ephemeral) | param | Option<Vec<u8>>	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
-ambre-logic | src/data.rs | crate::data | LogicState::dispatch_outcome(persist) | param | bool	debt	finding: boolean parameters that pick a mode
 ambre-logic | src/data.rs | crate::data | LogicState::dispatch_outcome(update) | param | Option<Vec<u8>>	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-logic | src/data.rs | crate::data | LogicState::export_covered_snapshot() | ret | Option<(Vec<u8>,Seq)>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-logic | src/data.rs | crate::data | LogicState::has_pending_work() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2124,7 +2123,6 @@ ambre-logic | src/lib.rs | crate | LogicState.murmure_identities | field | HashM
 ambre-logic | src/lib.rs | crate | LogicState.my_display_name | field | Option<String>	debt	finding: display names as `String` though `ambre_core::DisplayName` exists
 ambre-logic | src/lib.rs | crate | LogicState.pending_seals | field | HashMap<RequestId,(DocumentId,String)>	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | LogicState.unsent | field | HashMap<DocumentId,Vec<u8>>	debt	planned: lot B bis 1 (DeltaBytes)
-ambre-logic | src/lib.rs | crate | LogicState::answer_document(closing) | param | bool	debt	finding: boolean parameters that pick a mode
 ambre-logic | src/lib.rs | crate | Owed.layout | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | Owed.snapshot | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | PersistWrite::Delta.0 | field | Vec<u8>	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
@@ -2202,9 +2200,9 @@ ambre-logic | src/segments.rs | crate::segments | LogicState::amendments_link_fa
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_close_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_closed(created) | param | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/segments.rs | crate::segments | LogicState::segment_finalize_failed(withdrawn) | param | bool	debt	finding: boolean parameters that pick a mode
+ambre-logic | src/segments.rs | crate::segments | LogicState::segment_finalize_failed(withdrawn) | param | bool	generic	the fact LogicEvent::SegmentFinalizeFailed.withdrawn carries
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_fold_failed(message) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/segments.rs | crate::segments | LogicState::snapshot_dropped(refinalize) | param | bool	debt	finding: boolean parameters that pick a mode
+ambre-logic | src/segments.rs | crate::segments | LogicState::snapshot_dropped(refinalize) | param | bool	generic	the fact LogicEvent::SnapshotDropped.refinalize carries
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.container | field | String	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.deps | field | Vec<String>	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.lamport | field | u32	generic	generic byte/text API or codec
@@ -2243,7 +2241,6 @@ ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::decode(row) | pa
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::encode() | ret | [u8;Self::LEN]	generic	generic byte/text API or codec
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Observed.record | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | StoreLedger::charge(unsent) | param | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/store_ledger.rs | crate::store_ledger | StoreLedger::refused(retried) | param | bool	debt	finding: boolean parameters that pick a mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | StoreLedger::set_immutable(immutable) | param | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | StoreLedger::unsent() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | len() | ret | u64	debt	finding: the local store ledger's sizes and LRU tick are bare `u64` (extends lot B bis 3)
@@ -4752,7 +4749,6 @@ ambre-sync | src/auth.rs | crate::auth | is_provider_name(provider) | param | &s
 ambre-sync | src/channels.rs | crate::channels | SyncState::activity_fetched(result) | param | Result<Vec<DocumentActivity>,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | SyncState::channel_answered(result) | param | Result<LogicEvent,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | SyncState::channel_creation() | ret | Result<(ambre_bus::conduit::UnboundedSender<SyncEvent>,DocumentKey,StaticSecret,crate::sharing::Author,),String,>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
-ambre-sync | src/channels.rs | crate::channels | SyncState::fetch_activity(mark_all_read_first) | param | bool	debt	finding: boolean parameters that pick a mode
 ambre-sync | src/channels.rs | crate::channels | SyncState::member_channels_listed(asked) | param | u32	debt	finding: request generation counters ("asked")
 ambre-sync | src/channels.rs | crate::channels | SyncState::member_channels_listed(result) | param | Result<MemberListing,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | SyncState::seal_channel_name() | ret | Result<ambre_core::SealedName,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
@@ -4775,7 +4771,7 @@ ambre-sync | src/documents.rs | crate::documents | SyncState::created_document()
 ambre-sync | src/documents.rs | crate::documents | open_name() | ret | Option<String>	free-text	free text: message, label, name or report
 ambre-sync | src/documents.rs | crate::documents | open_name(bytes) | param | &[u8]	debt	finding: sealed document name bytes
 ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
-ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(withdrawn) | param | bool	debt	finding: boolean parameters that pick a mode
+ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(withdrawn) | param | bool	generic	the fact LogicEvent::SegmentFinalizeFailed.withdrawn carries
 ambre-sync | src/finalize.rs | crate::finalize | SyncState::handle_finalize_segment(payload) | param | &[u8]	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/finalize.rs | crate::finalize | commit_final() | ret | Result<(),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/fold.rs | crate::fold | SyncState::fold_failed(message) | param | &str	free-text	free text: message, label, name or report
@@ -4798,7 +4794,6 @@ ambre-sync | src/http.rs | crate::http | ApiRoot::route(path) | param | impl AsR
 ambre-sync | src/http.rs | crate::http | AuthContext.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/http.rs | crate::http | AuthMeResponse.display_name | field | String	debt	finding: display names as `String` though `ambre_core::DisplayName` exists
 ambre-sync | src/http.rs | crate::http | ClosedSegmentResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/http.rs | crate::http | CreateDocumentRequest.space | field | bool	debt	finding: boolean parameters that pick a mode
 ambre-sync | src/http.rs | crate::http | DevLoginRequest.username | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/http.rs | crate::http | DevLoginResponse.display_name | field | String	debt	finding: display names as `String` though `ambre_core::DisplayName` exists
 ambre-sync | src/http.rs | crate::http | DirectMessageResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -4855,6 +4850,7 @@ ambre-sync | src/http.rs | crate::http | fetch_bytes() | ret | Result<Vec<u8>,Ht
 ambre-sync | src/http.rs | crate::http | fetch_bytes(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | fetch_key_links(url_scheme) | param | &str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/http.rs | crate::http | get_json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
+ambre-sync | src/http.rs | crate::http | is_personal() | ret | bool	generic	predicate result: the serde skip test of CreateDocumentRequest.space
 ambre-sync | src/http.rs | crate::http | post_json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | post_json_via(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | put_sealed(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
@@ -4877,7 +4873,7 @@ ambre-sync | src/lib.rs | crate | SyncDocumentState.server_created | field | boo
 ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter(counter) | param | u64	debt	finding: ephemeral counter and mock sequence unwrapped
 ambre-sync | src/lib.rs | crate | SyncDocumentState::first_arrival() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | SyncDocumentState::new(server_created) | param | bool	debt	finding: boolean parameters that pick a mode
+ambre-sync | src/lib.rs | crate | SyncDocumentState::new(server_created) | param | bool	generic	initial value of the server_created fact field
 ambre-sync | src/lib.rs | crate | SyncDocumentState::open_ephemeral_named() | ret | Result<Vec<u8>,pipeline::PipelineError>	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-sync | src/lib.rs | crate | SyncDocumentState::open_signed_snapshot() | ret | Result<(Vec<u8>,ambre_core::PublicKey),pipeline::PipelineError>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/lib.rs | crate | SyncDocumentState::open_signed_snapshot(blob) | param | &[u8]	debt	planned: lot B bis 9 (SealedBlob)
@@ -4946,7 +4942,7 @@ ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle.attempts | field | 
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::back_off(jitter) | param | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::closed(code) | param | u16	debt	finding: WebSocket close code, with 0 meaning "no close"
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::closed(jitter) | param | f64	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::closed(wanted) | param | bool	debt	finding: boolean parameters that pick a mode
+ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::closed(wanted) | param | bool	generic	predicate answer: whether any document still needs the socket
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::delay(attempts) | param | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/light.rs | crate::light | LightSubscription.on_relay | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/light.rs | crate::light | LightSubscription.replays | field | bool	generic	yes/no fact or predicate answer, selects no mode

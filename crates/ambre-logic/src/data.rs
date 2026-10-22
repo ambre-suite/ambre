@@ -47,7 +47,6 @@ impl LogicState {
             vec![AppEvent::Toile(answer)],
             None,
             None,
-            false,
             Vec::new(),
         );
     }
@@ -71,7 +70,7 @@ impl LogicState {
             tracing::warn!("Logic: .ambre export asked of a document that is not open");
             return;
         };
-        self.dispatch_outcome(document_id, vec![answer], None, None, false, Vec::new());
+        self.dispatch_outcome(document_id, vec![answer], None, None, Vec::new());
     }
 
     /// Write a document to a native `.ambre` file **sealed under a passphrase**
@@ -99,7 +98,7 @@ impl LogicState {
             let answer = doc
                 .state
                 .export_failed_event("the document could not be read".to_owned());
-            self.dispatch_outcome(document_id, vec![answer], None, None, false, Vec::new());
+            self.dispatch_outcome(document_id, vec![answer], None, None, Vec::new());
             return;
         };
         let id = RequestId::next();
@@ -137,7 +136,7 @@ impl LogicState {
             Ok(data) => doc.state.export_complete_event(filename, data),
             Err(reason) => doc.state.export_failed_event(reason),
         };
-        self.dispatch_outcome(document_id, vec![event], None, None, false, Vec::new());
+        self.dispatch_outcome(document_id, vec![event], None, None, Vec::new());
         true
     }
 
@@ -241,38 +240,32 @@ impl LogicState {
         match (doc, command) {
             (DocState::Trame(state), AppCommand::Trame(cmd)) => {
                 let outcome = state.handle_command(cmd);
-                let persist = outcome.update.is_some();
                 self.dispatch_outcome(
                     document_id,
                     outcome.display.into_iter().map(AppEvent::Trame).collect(),
                     outcome.update,
                     outcome.ephemeral,
-                    persist,
                     // Trame issues no service-plane requests (no interop plane).
                     Vec::new(),
                 );
             }
             (DocState::Toile(state), AppCommand::Toile(cmd)) => {
                 let outcome = state.handle_command(cmd);
-                let persist = outcome.update.is_some();
                 self.dispatch_outcome(
                     document_id,
                     outcome.display.into_iter().map(AppEvent::Toile).collect(),
                     outcome.update,
                     outcome.ephemeral,
-                    persist,
                     outcome.requests,
                 );
             }
             (DocState::Prose(state), AppCommand::Prose(cmd)) => {
                 let outcome = state.handle_view_command(cmd);
-                let persist = outcome.update.is_some();
                 self.dispatch_outcome(
                     document_id,
                     outcome.display.into_iter().map(AppEvent::Prose).collect(),
                     outcome.update,
                     outcome.ephemeral,
-                    persist,
                     // Prose issues no service-plane request yet: the picture
                     // route lands with the "Images" Story.
                     Vec::new(),
@@ -355,13 +348,11 @@ impl LogicState {
         document_id: DocumentId,
         outcome: ambre_toile::ToileOutcome,
     ) {
-        let persist = outcome.update.is_some();
         self.dispatch_outcome(
             document_id,
             outcome.display.into_iter().map(AppEvent::Toile).collect(),
             outcome.update,
             outcome.ephemeral,
-            persist,
             outcome.requests,
         );
     }
@@ -369,15 +360,13 @@ impl LogicState {
     /// Fan an already-typed outcome out to the UI Thread (display events), to
     /// Sync (`SendUpdate` / `SendEphemeral`), and to local persistence, which
     /// logs the same delta. Shared by every `AppCommand` arm; the arm only
-    /// decides which `AppEvent` variant wraps the display events and whether
-    /// the delta is saved.
+    /// decides which `AppEvent` variant wraps the display events.
     fn dispatch_outcome(
         &mut self,
         document_id: DocumentId,
         display: Vec<AppEvent>,
         update: Option<Vec<u8>>,
         ephemeral: Option<Vec<u8>>,
-        persist: bool,
         requests: Vec<ToileRequest>,
     ) {
         for event in display {
@@ -390,9 +379,7 @@ impl LogicState {
             );
             // The delta that leaves for the relay is the one saved: it holds
             // every operation the command wrote.
-            if persist {
-                self.owe_delta(document_id, payload.clone().into());
-            }
+            self.owe_delta(document_id, payload.clone().into());
             // A document command carries no activity summary: only Murmure
             // writes one today (the Murmure messages spec).
             self.send_to_sync(SyncCommand::SendUpdate {
@@ -460,13 +447,11 @@ impl LogicState {
             return;
         };
         let outcome = state.handle_service_event(id, evt);
-        let persist = outcome.update.is_some();
         self.dispatch_outcome(
             document_id,
             outcome.display.into_iter().map(AppEvent::Toile).collect(),
             outcome.update,
             outcome.ephemeral,
-            persist,
             outcome.requests,
         );
     }
@@ -488,13 +473,11 @@ impl LogicState {
             return;
         };
         let outcome = state.handle_service_error(id, reason);
-        let persist = outcome.update.is_some();
         self.dispatch_outcome(
             document_id,
             outcome.display.into_iter().map(AppEvent::Toile).collect(),
             outcome.update,
             outcome.ephemeral,
-            persist,
             outcome.requests,
         );
     }
@@ -1034,7 +1017,7 @@ impl LogicState {
         };
         let outcome = state.sweep_hidden();
         let display = outcome.display.into_iter().map(AppEvent::Prose).collect();
-        self.dispatch_outcome(document_id, display, outcome.update, None, true, Vec::new());
+        self.dispatch_outcome(document_id, display, outcome.update, None, Vec::new());
     }
 
     /// Import a snapshot whose contents are trusted, and count the deltas a

@@ -19,7 +19,7 @@ use ambre_bus::{DocType, DocumentId, LogicCommand, RowPlace, SealedRow};
 use ambre_logic::PersistWrite;
 use ambre_logic::persistence::{PersistenceStore, Stored};
 use ambre_logic::seal_queue::SealQueue;
-use ambre_logic::store_ledger::{Refusal, StoreLedger};
+use ambre_logic::store_ledger::{QuotaAttempt, Refusal, StoreLedger};
 
 use crate::vault::Vault;
 
@@ -274,11 +274,15 @@ impl LocalStore {
             _ => 0,
         };
         let need = ambre_core::ByteSize(u64::try_from(need).unwrap_or(u64::MAX));
-        let decision = self
-            .inner
-            .ledger
-            .borrow_mut()
-            .refused(id, need, attempt != Attempt::First);
+        let decision = self.inner.ledger.borrow_mut().refused(
+            id,
+            need,
+            if attempt == Attempt::First {
+                QuotaAttempt::First
+            } else {
+                QuotaAttempt::Retried
+            },
+        );
         match decision {
             Refusal::Retry { evict } => {
                 for gone in &evict {

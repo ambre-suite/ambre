@@ -441,6 +441,15 @@ fn authored_by(payload: &[u8], peer: ambre_core::PeerId) -> bool {
     }
 }
 
+/// When a document is handed what it is owed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AnswerFor {
+    /// At the end of a pass, with the document still open.
+    Open,
+    /// As it closes: a log holding anything becomes a snapshot.
+    Closing,
+}
+
 /// [`authored_by`] for a payload of either form: a binary update, or the JSON
 /// update a segment delta travels as (the Murmure messages spec).
 #[cfg(test)]
@@ -936,7 +945,7 @@ impl LogicState {
     fn answer_pass(&mut self) {
         let owed: Vec<DocumentId> = self.owed.keys().copied().collect();
         for document_id in owed {
-            self.answer_document(document_id, false);
+            self.answer_document(document_id, AnswerFor::Open);
         }
     }
 
@@ -945,9 +954,9 @@ impl LogicState {
     /// waits on it and the save does not.
     ///
     /// The save is the pass's deltas. A snapshot takes their place when one
-    /// was asked for, once the log is long enough, or when `closing` finds
-    /// the log holding anything. A document already closed is owed nothing.
-    fn answer_document(&mut self, document_id: DocumentId, closing: bool) {
+    /// was asked for, once the log is long enough, or when a close finds the
+    /// log holding anything. A document already closed is owed nothing.
+    fn answer_document(&mut self, document_id: DocumentId, moment: AnswerFor) {
         let owed = self.owed.remove(&document_id).unwrap_or_default();
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
@@ -965,7 +974,7 @@ impl LogicState {
         let compact = owed.snapshot
             || match logged {
                 None => written,
-                Some(n) => n > DELTAS_PER_SNAPSHOT || (closing && n > 0),
+                Some(n) => n > DELTAS_PER_SNAPSHOT || (moment == AnswerFor::Closing && n > 0),
             };
         if compact {
             doc.logged = Some(0);

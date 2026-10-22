@@ -6,6 +6,15 @@ use ambre_bus::{
 use ambre_core::DocType;
 use ambre_crypto::aead::NONCE_LEN;
 
+/// What an activity fetch does before it asks the relay.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ActivityFetch {
+    /// Ask for the activity alone.
+    Plain,
+    /// Move every read cursor to its last number first.
+    MarkAllReadFirst,
+}
+
 impl SyncState {
     // -- Channels --------------------------------------------------------------
 
@@ -220,7 +229,7 @@ impl SyncState {
                         doc_key_enc,
                         document_id: Some(document_id),
                         entry: Some(entry),
-                        space: false,
+                        space: http::DocumentScope::Personal,
                     };
                     http::post_json_auth::<_, http::CreateDocumentResponse>(
                         &base.route("/documents"),
@@ -682,15 +691,15 @@ impl SyncState {
     /// spec). Then fetch the activity answer, so the sidebar clears from the
     /// relay's word.
     pub(crate) fn handle_mark_all_read(&self) {
-        self.fetch_activity(true);
+        self.fetch_activity(ActivityFetch::MarkAllReadFirst);
     }
 
     /// Ask the relay which channel documents hold something new (`SRV-109`).
     pub(crate) fn handle_fetch_activity(&self) {
-        self.fetch_activity(false);
+        self.fetch_activity(ActivityFetch::Plain);
     }
 
-    fn fetch_activity(&self, mark_all_read_first: bool) {
+    fn fetch_activity(&self, fetch: ActivityFetch) {
         let Some(tx) = self.event_tx.clone() else {
             tracing::warn!("Sync: no relay on this transport, no activity answer");
             return;
@@ -699,7 +708,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            if mark_all_read_first {
+            if fetch == ActivityFetch::MarkAllReadFirst {
                 let url = crate::http::ApiRoot::of(url_scheme, &api_base)
                     .route("/read-cursors/mark-read");
                 let body = http::MarkReadRequest { documents: None };
@@ -1840,7 +1849,11 @@ pub(crate) mod tests {
                 doc_key_enc: ambre_core::WrappedDocKey::new(Vec::new()),
                 document_id: Some(document_id),
                 entry: Some(ambre_core::EncodedLogEntry::new(Vec::new())),
-                space: state.new_spaces.contains(&document_id),
+                space: if state.new_spaces.contains(&document_id) {
+                    http::DocumentScope::Space
+                } else {
+                    http::DocumentScope::Personal
+                },
             };
             serde_json::to_value(request).expect("encodes")
         };

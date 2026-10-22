@@ -34,6 +34,15 @@ impl Cost {
     }
 }
 
+/// Which try of one write the quota refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuotaAttempt {
+    /// The write as Logic sent it: evicting a copy may make room.
+    First,
+    /// The one retry after an eviction: nothing more is evicted.
+    Retried,
+}
+
 /// What the store does about a write the browser refused for its quota.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Refusal {
@@ -195,12 +204,13 @@ impl StoreLedger {
     }
 
     /// Decide what a write of `need` bytes on `id`, refused for the quota,
-    /// does. `retried` says the write was already retried once (`RESID-017`).
+    /// does. A write met on its `Retried` attempt was already retried once
+    /// (`RESID-017`).
     ///
     /// A copy named to leave is never `id`, and never a document with a
     /// change the relay has not acknowledged (`RESID-019`).
-    pub fn refused(&mut self, id: DocumentId, need: ByteSize, retried: bool) -> Refusal {
-        if !retried {
+    pub fn refused(&mut self, id: DocumentId, need: ByteSize, attempt: QuotaAttempt) -> Refusal {
+        if attempt == QuotaAttempt::First {
             let room = self.residency.bytes().saturating_sub(need);
             let evict: Vec<DocumentId> = self
                 .residency
@@ -319,7 +329,10 @@ mod tests {
         ledger.observe(doc(2), &PersistWrite::Shown);
         let observed = ledger.observe(doc(2), &PersistWrite::Delta(vec![0; 80]));
         assert!(observed.evict.is_empty(), "both stay");
-        assert_eq!(ledger.refused(doc(2), ByteSize(10), false), Refusal::Full);
+        assert_eq!(
+            ledger.refused(doc(2), ByteSize(10), QuotaAttempt::First),
+            Refusal::Full
+        );
         let observed = ledger.observe(doc(1), &PersistWrite::Sent);
         assert_eq!(observed.evict, vec![doc(1)], "once acknowledged, it may go");
     }
@@ -335,15 +348,21 @@ mod tests {
         ledger.observe(doc(4), &PersistWrite::Shown);
         ledger.observe(doc(4), &PersistWrite::Delta(vec![0; 10]));
         assert_eq!(
-            ledger.refused(doc(4), ByteSize(50), false),
+            ledger.refused(doc(4), ByteSize(50), QuotaAttempt::First),
             Refusal::Retry {
                 evict: vec![doc(1), doc(2)]
             },
             "the least recently viewed leave until the write fits"
         );
         assert_eq!(ledger.bytes(), ByteSize(40));
-        assert_eq!(ledger.refused(doc(4), ByteSize(50), true), Refusal::Full);
-        assert_eq!(ledger.refused(doc(3), ByteSize(50), true), Refusal::Drop);
+        assert_eq!(
+            ledger.refused(doc(4), ByteSize(50), QuotaAttempt::Retried),
+            Refusal::Full
+        );
+        assert_eq!(
+            ledger.refused(doc(3), ByteSize(50), QuotaAttempt::Retried),
+            Refusal::Drop
+        );
     }
 
     /// `RESID-008`: what a reload restores keeps the order of the views.

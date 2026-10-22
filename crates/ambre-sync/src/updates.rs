@@ -1351,7 +1351,11 @@ impl SyncState {
         doc_state.creating = true;
         // A space is marked so on its creation, so each member lists it
         // (`SYNC-170`).
-        let space = self.new_spaces.contains(&document_id);
+        let space = if self.new_spaces.contains(&document_id) {
+            http::DocumentScope::Space
+        } else {
+            http::DocumentScope::Personal
+        };
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
