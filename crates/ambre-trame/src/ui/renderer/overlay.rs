@@ -207,7 +207,7 @@ pub fn draw_overlay<S: DrawSurface>(
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    text_enabled: bool,
+    text_pass: TextPass,
     clock: &dyn Clock,
     stats: &mut DrawStats,
 ) {
@@ -235,7 +235,7 @@ pub fn draw_overlay<S: DrawSurface>(
         hover_col,
         font_cx,
         text_cache,
-        text_enabled,
+        text_pass,
     );
     render::draw_row_headers_on(
         surface,
@@ -246,7 +246,7 @@ pub fn draw_overlay<S: DrawSurface>(
         hover_corner,
         font_cx,
         text_cache,
-        text_enabled,
+        text_pass,
     );
 
     // -- 1b. Funnel badge on the filtered column's letter header (`trame-shared-filter`), kept

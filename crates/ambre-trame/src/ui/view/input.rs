@@ -2,6 +2,7 @@
 // TrameView: keyboard/pointer navigation, wheel/momentum scrolling, cursor moves, resize arming.
 
 use super::*;
+use ambre_commands::{Modifiers, SelectionMode};
 use ambre_draw::kinetic::Release;
 
 impl TrameView {
@@ -57,7 +58,7 @@ impl TrameView {
             // and clear the drag/preview.
             InputEvent::PointerUp { ctrl, .. } if self.fill_drag.is_some() => {
                 self.drag_point = None;
-                self.end_fill_drag(*ctrl);
+                self.end_fill_drag(Modifiers::from_event(*ctrl, false, false, false));
                 true
             }
             // A press on a header strip (`trame-headers`) acts by zone. The body does
@@ -343,7 +344,11 @@ impl TrameView {
                 let chord = *ctrl || *meta; // Ctrl (or Cmd on macOS) jump modifier.
                 // Shift extends the selection range across navigation keys
                 // (Shift+arrows, Shift+Page, Shift+Home/End, Shift+Ctrl+End).
-                let ext = *shift;
+                let ext = if *shift {
+                    SelectionMode::Extend
+                } else {
+                    SelectionMode::Move
+                };
                 match key.as_str() {
                     "ArrowUp" => self.nav_move(RowDelta::new(-1), ColDelta::ZERO, ext),
                     "ArrowDown" => self.nav_move(RowDelta::new(1), ColDelta::ZERO, ext),
@@ -356,11 +361,11 @@ impl TrameView {
                     // moving focus off the canvas.
                     "Tab" if !chord => {
                         let step = ColDelta::new(if *shift { -1 } else { 1 });
-                        self.nav_move(RowDelta::ZERO, step, false)
+                        self.nav_move(RowDelta::ZERO, step, SelectionMode::Move)
                     }
                     "Enter" if !chord => {
                         let step = RowDelta::new(if *shift { -1 } else { 1 });
-                        self.nav_move(step, ColDelta::ZERO, false)
+                        self.nav_move(step, ColDelta::ZERO, SelectionMode::Move)
                     }
                     // Page Down / Up move by a full viewport height.
                     "PageDown" | "PageUp" => {
@@ -416,7 +421,10 @@ impl TrameView {
                     }
                     // Debug HUD text toggle, moved behind Alt so plain letters type.
                     "t" | "T" if *alt => {
-                        self.text_enabled ^= true;
+                        self.text_pass = match self.text_pass {
+                            TextPass::Shapes => TextPass::WithText,
+                            TextPass::WithText => TextPass::Shapes,
+                        };
                         self.needs_full = true;
                         true
                     }
@@ -435,9 +443,13 @@ impl TrameView {
     /// (touchpad, modern mice) accumulate sub-cell residue across events; line
     /// and page deltas are read as pixels first (`KINETIC-015`).
     /// Returns `true` when consumed (so the page itself doesn't scroll).
-    pub(crate) fn handle_wheel(&mut self, delta: ambre_canvas::WheelDelta, ctrl_key: bool) -> bool {
+    pub(crate) fn handle_wheel(
+        &mut self,
+        delta: ambre_canvas::WheelDelta,
+        mods: Modifiers,
+    ) -> bool {
         // Leave Ctrl+wheel to the browser (pinch-zoom gesture); not ours yet.
-        if ctrl_key {
+        if mods.primary {
             return false;
         }
         let outcome = self
@@ -542,7 +554,7 @@ impl TrameView {
     /// Move the active cell by `dr` rows and `dc` columns; returns `true`
     /// (consumed). With `extend` (Shift held) the selection range grows
     /// instead of collapsing.
-    pub(crate) fn nav_move(&mut self, dr: RowDelta, dc: ColDelta, extend: bool) -> bool {
+    pub(crate) fn nav_move(&mut self, dr: RowDelta, dc: ColDelta, extend: SelectionMode) -> bool {
         let mv = self.state.move_cursor(dr, dc, extend);
         self.apply_cursor_move(mv)
     }
@@ -550,7 +562,7 @@ impl TrameView {
     /// Jump the active cell to absolute `at` (Home / End / Ctrl+Home /
     /// Ctrl+End); returns `true` (consumed). With `extend` the range grows to
     /// the target (Shift+End, Shift+Ctrl+End...).
-    pub(crate) fn nav_goto(&mut self, at: CellPos, extend: bool) -> bool {
+    pub(crate) fn nav_goto(&mut self, at: CellPos, extend: SelectionMode) -> bool {
         let mv = self.state.move_to(at, extend);
         self.apply_cursor_move(mv)
     }

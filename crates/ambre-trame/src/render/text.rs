@@ -63,8 +63,7 @@ pub fn draw_layout_runs<S: DrawSurface>(
 /// Like [`draw_layout_runs`] but also paints per-run underline / strikethrough
 /// decorations in `deco_color`. Shared by the plain-cell and merged-cell text
 /// paths. Both draw a 1px underline just below the baseline, and a 1px
-/// strikethrough at ~0.3em above it. draw a 1px underline just below the
-/// baseline and a 1px strikethrough at ~0.3em above it.
+/// strikethrough at ~0.3em above it.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_layout_runs_decorated<S: DrawSurface>(
     surface: &mut S,
@@ -74,8 +73,7 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
     brush: &Brush,
     deco_color: Color,
     font_size: f32,
-    underline: bool,
-    strikethrough: bool,
+    decoration: Decoration,
 ) {
     for line in layout.lines() {
         for item in line.items() {
@@ -85,16 +83,16 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
             let tx = origin_x + run.offset() as f64;
             let ty = origin_y + run.baseline() as f64;
             surface.draw_glyphs(&run, brush, Affine::translate((tx, ty)));
-            if !underline && !strikethrough {
+            if decoration == Decoration::default() {
                 continue;
             }
             let adv = run.advance() as f64;
             // Underline run: a 1px line just below the glyph baseline.
-            if underline {
+            if decoration.underline == Underline::Underlined {
                 surface.stroke_line(tx, ty + 2.0, tx + adv, ty + 2.0, deco_color, 1.0);
             }
             // Strikethrough run: a 1px line through the x-height.
-            if strikethrough {
+            if decoration.strikethrough == Strikethrough::Struck {
                 let sy = ty - (font_size as f64) * 0.3;
                 surface.stroke_line(tx, sy, tx + adv, sy, deco_color, 1.0);
             }

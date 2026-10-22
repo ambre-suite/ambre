@@ -2,6 +2,7 @@
 // TrameUiState grid geometry/navigation tests. Helpers via `use super::super::*`.
 
 use super::*;
+use ambre_commands::SelectionMode;
 
 /// After a merge, the active cell may sit on the block's bottom-right
 /// (covered) sub-cell -- the drag-end corner. `snap_active_to_master`
@@ -158,12 +159,12 @@ fn filtered_rows_collapse_geometry_and_nav() {
     // Arrow-down from row 1 jumps straight to row 4, skipping 2 and 3.
     state.select(CellPos::new(Row::new(1), Col::new(0)));
     state
-        .move_cursor(RowDelta::new(1), ColDelta::new(0), false)
+        .move_cursor(RowDelta::new(1), ColDelta::new(0), SelectionMode::Move)
         .expect("moved");
     assert_eq!(state.active_row(), Row::new(4));
     // Arrow-up returns to row 1.
     state
-        .move_cursor(RowDelta::new(-1), ColDelta::new(0), false)
+        .move_cursor(RowDelta::new(-1), ColDelta::new(0), SelectionMode::Move)
         .expect("moved");
     assert_eq!(state.active_row(), Row::new(1));
 }
@@ -182,7 +183,7 @@ fn move_to_and_content_scans() {
     // No change -> None.
     assert!(
         state
-            .move_to(CellPos::new(Row::new(0), Col::new(0)), false)
+            .move_to(CellPos::new(Row::new(0), Col::new(0)), SelectionMode::Move)
             .is_none()
     );
     // Clamped to the last valid index.
@@ -192,7 +193,7 @@ fn move_to_and_content_scans() {
                 crate::LAST_ROW + RowCount::new(10),
                 crate::LAST_COL + ColCount::new(10),
             ),
-            false,
+            SelectionMode::Move,
         )
         .expect("moved");
     assert_eq!(

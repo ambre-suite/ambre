@@ -43,7 +43,7 @@ pub(super) fn spill_width<E: Fn(CellPos) -> bool>(
 ///
 /// `cells` yields `(at, content)` for the cells that exist (on screen: the
 /// cells received from the Logic thread; for PDF: every used cell). Each gets an
-/// opaque `palette.content_bg` fill, followed by its text when `text_enabled`. On
+/// opaque `palette.content_bg` fill, followed by its text when `text_pass`. On
 /// screen that fill is what lifts a cell out of the "pending" grey.
 ///
 /// `is_empty(at)` reports whether a neighbour cell carries no visible text,
@@ -63,7 +63,7 @@ pub fn draw_cells_on<'a, S, I, E>(
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    text_enabled: bool,
+    text_pass: TextPass,
     cells: I,
     is_empty: E,
 ) -> u32
@@ -89,7 +89,7 @@ where
         // Borders are a separate pass (draw_cell_borders_on) AFTER the grid lines,
         // so a deliberate border is never overpainted by a faint separator.
 
-        if !text_enabled || content.text.is_empty() {
+        if text_pass == TextPass::Shapes || content.text.is_empty() {
             continue;
         }
 
@@ -177,8 +177,7 @@ where
             &brush,
             fg,
             font_size,
-            content.underline,
-            content.strikethrough,
+            Decoration::of(&content),
         );
         if needs_clip {
             surface.pop_clip();

@@ -26,7 +26,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     hover_col: Option<Col>,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    text_enabled: bool,
+    text_pass: TextPass,
 ) {
     let w = layout.width;
     let hh = layout.header_height;
@@ -68,7 +68,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
 
     // Per-column separators: a vertical hairline at each column's right edge, so
     // the letter cells read as discrete buttons (`trame-headers`). Walks the same
-    // visible columns as the label loop below, independent of `text_enabled`.
+    // visible columns as the label loop below, independent of `text_pass`.
     {
         let mut col = layout.origin_col;
         let mut col_x = layout.header_width;
@@ -80,7 +80,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         }
     }
 
-    if !text_enabled {
+    if text_pass == TextPass::Shapes {
         return;
     }
     let brush = Brush::Solid(palette.header_text);
@@ -133,7 +133,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     hover_corner: bool,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    text_enabled: bool,
+    text_pass: TextPass,
 ) {
     let h = layout.height;
     let hw = layout.header_width;
@@ -185,7 +185,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
 
     // Per-row separators: a horizontal hairline at each visible row's bottom edge,
     // so the numbers read as discrete buttons (`trame-headers`). Walks the collapsed
-    // (filtered) row space like the number loop, independent of `text_enabled`.
+    // (filtered) row space like the number loop, independent of `text_pass`.
     {
         let mut slot = RowCount::ZERO;
         let mut row_y = cells_top;
@@ -200,7 +200,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         }
     }
 
-    if !text_enabled {
+    if text_pass == TextPass::Shapes {
         return;
     }
     let brush = Brush::Solid(palette.header_text);

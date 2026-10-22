@@ -73,13 +73,13 @@ mod text;
 mod walk;
 
 pub use cells::draw_cells_on;
-pub use content::{CellContent, draw_cell_borders_on};
+pub use content::{CellContent, Decoration, Strikethrough, Underline, draw_cell_borders_on};
 pub use grid::draw_grid_lines_on;
 pub use headers::{draw_col_headers_on, draw_row_headers_on};
 pub use layout::GridLayout;
 pub use merges::draw_merges_on;
 pub use text::{col_label, draw_layout_runs, draw_layout_runs_decorated, draw_text, row_label};
-pub use walk::{SheetAxes, SheetCell, SheetCells, SheetView, SheetWalk};
+pub use walk::{SheetAxes, SheetCell, SheetCells, SheetView, SheetWalk, TextPass};
 
 // -----------------------------------------------------------------------------
 // Formula bar action types (shared between the UI thread and the Leptos chrome)

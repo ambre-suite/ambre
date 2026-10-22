@@ -296,16 +296,25 @@ fn extra_math_functions() {
         CellValue::Error(FormulaError::DivisionByZero)
     ));
     assert_eq!(
-        round_dir(&[num(2.001), num(2.0)], true).to_display(),
+        round_dir(&[num(2.001), num(2.0)], Rounding::Up).to_display(),
         "2.01"
     );
-    assert_eq!(round_dir(&[num(2.009), num(2.0)], false).to_display(), "2");
     assert_eq!(
-        round_dir(&[num(-2.001), num(2.0)], true).to_display(),
+        round_dir(&[num(2.009), num(2.0)], Rounding::Down).to_display(),
+        "2"
+    );
+    assert_eq!(
+        round_dir(&[num(-2.001), num(2.0)], Rounding::Up).to_display(),
         "-2.01"
     );
-    assert_eq!(ceil_floor(&[num(4.3), num(1.0)], true).to_display(), "5");
-    assert_eq!(ceil_floor(&[num(4.7), num(1.0)], false).to_display(), "4");
+    assert_eq!(
+        ceil_floor(&[num(4.3), num(1.0)], Rounding::Up).to_display(),
+        "5"
+    );
+    assert_eq!(
+        ceil_floor(&[num(4.7), num(1.0)], Rounding::Down).to_display(),
+        "4"
+    );
     assert_eq!(product(&[num(2.0), num(3.0), num(4.0)]).to_display(), "24");
     assert_eq!(median(&[num(3.0), num(1.0), num(2.0)]).to_display(), "2");
     assert_eq!(
@@ -403,8 +412,14 @@ fn stats_functions() {
     let r = range(5, 1, (1..=5).map(|n| num(n as f64)).collect());
     approx(variance(std::slice::from_ref(&r)), 2.5);
     approx(stdev(std::slice::from_ref(&r)), 2.5f64.sqrt());
-    assert_eq!(large_small(&[r.clone(), num(2.0)], true).to_display(), "4");
-    assert_eq!(large_small(&[r.clone(), num(2.0)], false).to_display(), "2");
+    assert_eq!(
+        large_small(&[r.clone(), num(2.0)], Rank::Largest).to_display(),
+        "4"
+    );
+    assert_eq!(
+        large_small(&[r.clone(), num(2.0)], Rank::Smallest).to_display(),
+        "2"
+    );
     // RANK of 4 within 1..5 descending = 2.
     assert_eq!(rank(&[num(4.0), r.clone()]).to_display(), "2");
     assert_eq!(

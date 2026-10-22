@@ -2,6 +2,7 @@
 // TrameUiState: construction, zoom, selection, cursor movement, scroll and viewport-data ingestion.
 
 use super::*;
+use ambre_commands::SelectionMode;
 
 impl TrameUiState {
     /// Discrete zoom levels cycled by the status-bar zoom control.
@@ -185,7 +186,12 @@ impl TrameUiState {
     /// cell, plus an optional `ScrollViewport` to fetch newly exposed cells.
     /// The active cell always travels, so the Logic thread can retarget
     /// formatting.
-    pub fn move_cursor(&mut self, dr: RowDelta, dc: ColDelta, extend: bool) -> Option<CursorMove> {
+    pub fn move_cursor(
+        &mut self,
+        dr: RowDelta,
+        dc: ColDelta,
+        extend: SelectionMode,
+    ) -> Option<CursorMove> {
         use std::cmp::Ordering;
         let at = self.active_cell();
         // Stepping off a merge master must clear its whole span, else the
@@ -223,15 +229,14 @@ impl TrameUiState {
     /// collapsing. Same contract as [`move_cursor`](Self::move_cursor): `None`
     /// if the cell did not change, otherwise a [`CursorMove`] with the new
     /// active cell plus an optional `ScrollViewport`.
-    pub fn move_to(&mut self, at: CellPos, extend: bool) -> Option<CursorMove> {
+    pub fn move_to(&mut self, at: CellPos, extend: SelectionMode) -> Option<CursorMove> {
         // Landing on a covered sub-cell snaps to its master, but only when
         // collapsing. An extension keeps its raw corner so the live rectangle
         // can grow cell by cell.
         let clamped = CellPos::new(at.row.min(LAST_ROW), at.col.min(LAST_COL));
-        let target = if extend {
-            clamped
-        } else {
-            self.snap_to_master(clamped)
+        let target = match extend {
+            SelectionMode::Extend => clamped,
+            SelectionMode::Move => self.snap_to_master(clamped),
         };
         // A jump target (Home/End/PageDown/click-through) may fall on a collapsed
         // row: snap to the nearest visible one so the caret stays on shown data.
@@ -248,13 +253,12 @@ impl TrameUiState {
         if target == self.active_cell() {
             return None;
         }
-        if extend {
+        match extend {
             // Grow the live rectangle: move the active corner, keep the anchor
             // (and any committed disjoint rectangles).
-            self.selection.extend_to(target);
-        } else {
+            SelectionMode::Extend => self.selection.extend_to(target),
             // Plain navigation collapses the selection onto the new cell.
-            self.selection = Selection::single(target);
+            SelectionMode::Move => self.selection = Selection::single(target),
         }
 
         // Scroll viewport so the active cell stays visible. When the active cell

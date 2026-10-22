@@ -59,15 +59,21 @@ impl TrameHandler {
     }
 
     /// Flip bold or italic against the tracked style (`trame-cell-styles`).
-    fn toggle_style(&self, bold: bool) -> AppCommand {
+    fn toggle_style(&self, style: StyleToggle) -> AppCommand {
         let mut patch = StylePatch::default();
-        if bold {
-            patch.bold = Some(!self.style.bold.get_untracked());
-        } else {
-            patch.italic = Some(!self.style.italic.get_untracked());
+        match style {
+            StyleToggle::Bold => patch.bold = Some(!self.style.bold.get_untracked()),
+            StyleToggle::Italic => patch.italic = Some(!self.style.italic.get_untracked()),
         }
         AppCommand::Trame(TrameCommand::SetCellStyle { patch })
     }
+}
+
+/// The style a toolbar toggle flips.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StyleToggle {
+    Bold,
+    Italic,
 }
 
 impl CommandHandler for TrameHandler {
@@ -91,7 +97,8 @@ impl CommandHandler for TrameHandler {
                 ShellAction::Send(AppCommand::Trame(TrameCommand::RequestSortRange))
             }
             FILTER_COLUMN => ShellAction::Send(self.open_filter()),
-            BOLD | ITALIC => ShellAction::Send(self.toggle_style(id == BOLD)),
+            BOLD => ShellAction::Send(self.toggle_style(StyleToggle::Bold)),
+            ITALIC => ShellAction::Send(self.toggle_style(StyleToggle::Italic)),
             COPY => ShellAction::Copy(ClipboardWrite::Copy),
             CUT => ShellAction::Copy(ClipboardWrite::Cut),
             PASTE => ShellAction::Paste(PasteForm::Rich),

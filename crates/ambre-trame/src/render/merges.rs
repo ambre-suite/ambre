@@ -33,7 +33,7 @@ pub fn draw_merges_on<'a, S, I>(
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    text_enabled: bool,
+    text_pass: TextPass,
     merges: I,
 ) -> u32
 where
@@ -54,7 +54,7 @@ where
         // user-set border draws on top of this in the dedicated border pass.
         surface.stroke_rect(rect, palette.grid_line, 1.0);
 
-        if text_enabled && !content.text.is_empty() {
+        if text_pass == TextPass::WithText && !content.text.is_empty() {
             // Honour the master's full style (size, font, colour, alignment,
             // underline/strike) exactly like a plain cell, but always clipped to
             // and aligned within the span rect.
@@ -97,8 +97,7 @@ where
                 &brush,
                 fg,
                 font_size,
-                content.underline,
-                content.strikethrough,
+                Decoration::of(&content),
             );
             surface.pop_clip();
             drawn += 1;

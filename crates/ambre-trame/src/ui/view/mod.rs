@@ -32,7 +32,7 @@ use super::grid::{
     TrameUiState,
 };
 use super::renderer::{self, DrawStats};
-use crate::render::{CommitDirection, FormulaAction};
+use crate::render::{CommitDirection, FormulaAction, TextPass};
 use crate::{CellPos, CellRect, Col, ColCount, ColDelta, MergeSpan, Row, RowCount, RowDelta};
 
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
@@ -407,7 +407,7 @@ pub struct TrameView {
     /// natively.
     clock: Box<dyn Clock>,
 
-    text_enabled: bool,
+    text_pass: TextPass,
     /// Per-frame sub-phase breakdown produced by the renderer, shown on the HUD.
     draw_stats: DrawStats,
     initial_viewport_sent: bool,

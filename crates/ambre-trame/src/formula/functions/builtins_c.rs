@@ -26,7 +26,7 @@ pub(crate) fn stdev(args: &[CellValue]) -> CellValue {
 }
 
 /// LARGE / SMALL(array..., k) -- the k-th largest / smallest numeric value.
-pub(crate) fn large_small(args: &[CellValue], largest: bool) -> CellValue {
+pub(crate) fn large_small(args: &[CellValue], rank: Rank) -> CellValue {
     let Some((last, values)) = args.split_last().filter(|(_, values)| !values.is_empty()) else {
         return CellValue::Error(FormulaError::NaError);
     };
@@ -42,7 +42,10 @@ pub(crate) fn large_small(args: &[CellValue], largest: bool) -> CellValue {
         return CellValue::Error(FormulaError::NumError);
     }
     nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let pick = if largest { nums.len() - k } else { k - 1 };
+    let pick = match rank {
+        Rank::Largest => nums.len() - k,
+        Rank::Smallest => k - 1,
+    };
     match nums.get(pick) {
         Some(&n) => CellValue::Number(n),
         None => CellValue::Error(FormulaError::NumError),

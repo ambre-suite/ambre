@@ -79,8 +79,8 @@ pub enum SortOrder {
     Descending,
 }
 
-/// Whether the first row of a range is a header: a sort leaves it in place,
-/// and a CSV import reads it as column names (`trame-sort`).
+/// Whether the first row of a range is a header (`trame-sort`). A sort leaves
+/// it in place, and a CSV import reads it as column names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum HeaderRow {
     /// Every row is data.

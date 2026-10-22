@@ -70,10 +70,10 @@ pub fn call_builtin(name: &str, args: &[CellValue], ctx: FnCtx) -> CellValue {
         "COUNTIF" => countif(args),
         "INT" => int_fn(args),
         "MOD" => mod_fn(args),
-        "ROUNDUP" => round_dir(args, true),
-        "ROUNDDOWN" => round_dir(args, false),
-        "CEILING" => ceil_floor(args, true),
-        "FLOOR" => ceil_floor(args, false),
+        "ROUNDUP" => round_dir(args, Rounding::Up),
+        "ROUNDDOWN" => round_dir(args, Rounding::Down),
+        "CEILING" => ceil_floor(args, Rounding::Up),
+        "FLOOR" => ceil_floor(args, Rounding::Down),
         "PRODUCT" => product(args),
         "SUMPRODUCT" => sumproduct(args),
         "MEDIAN" => median(args),
@@ -99,8 +99,8 @@ pub fn call_builtin(name: &str, args: &[CellValue], ctx: FnCtx) -> CellValue {
         "COUNTIFS" => countifs(args),
         "STDEV" => stdev(args),
         "VAR" => variance(args),
-        "LARGE" => large_small(args, true),
-        "SMALL" => large_small(args, false),
+        "LARGE" => large_small(args, Rank::Largest),
+        "SMALL" => large_small(args, Rank::Smallest),
         "RANK" => rank(args),
         "MODE" => mode(args),
 
@@ -185,10 +185,34 @@ pub fn call_builtin(name: &str, args: &[CellValue], ctx: FnCtx) -> CellValue {
     }
 }
 
+/// Which way a rounding function moves a value it does not keep.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Rounding {
+    /// Away from zero, or to the next multiple above.
+    Up,
+    /// Toward zero, or to the next multiple below.
+    Down,
+}
+
+/// Which end of the sorted values LARGE or SMALL counts its `k` from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Rank {
+    Largest,
+    Smallest,
+}
+
+/// Whether a criterion holds where its comparison does, or where it fails.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Polarity {
+    Match,
+    /// The `<>`, `>=` and `<=` operators: the comparison negated.
+    NotMatch,
+}
+
 /// A parsed SUMIF/COUNTIF criterion: a comparison operator plus an operand.
 enum Criterion {
-    Num(std::cmp::Ordering, f64, bool), // (op, operand, negated for `<>`)
-    Text(std::cmp::Ordering, String, bool),
+    Num(std::cmp::Ordering, f64, Polarity),
+    Text(std::cmp::Ordering, String, Polarity),
 }
 
 impl Criterion {
@@ -215,12 +239,12 @@ impl Criterion {
         };
         use std::cmp::Ordering::*;
         let (ord, negated) = match op_str {
-            ">" => (Greater, false),
-            "<" => (Less, false),
-            ">=" => (Less, true),    // not Less
-            "<=" => (Greater, true), // not Greater
-            "<>" => (Equal, true),
-            _ => (Equal, false),
+            ">" => (Greater, Polarity::Match),
+            "<" => (Less, Polarity::Match),
+            ">=" => (Less, Polarity::NotMatch),    // not Less
+            "<=" => (Greater, Polarity::NotMatch), // not Greater
+            "<>" => (Equal, Polarity::NotMatch),
+            _ => (Equal, Polarity::Match),
         };
         match rest.parse::<f64>() {
             Ok(n) => Criterion::Num(ord, n, negated),
@@ -230,8 +254,12 @@ impl Criterion {
 
     fn eq_value(value: &CellValue) -> Self {
         match value.as_number() {
-            Ok(n) => Criterion::Num(std::cmp::Ordering::Equal, n, false),
-            Err(_) => Criterion::Text(std::cmp::Ordering::Equal, value.to_display(), false),
+            Ok(n) => Criterion::Num(std::cmp::Ordering::Equal, n, Polarity::Match),
+            Err(_) => Criterion::Text(
+                std::cmp::Ordering::Equal,
+                value.to_display(),
+                Polarity::Match,
+            ),
         }
     }
 
@@ -239,14 +267,16 @@ impl Criterion {
         match self {
             Criterion::Num(ord, operand, negated) => match value.as_number() {
                 Ok(n) => {
-                    let cmp = n.partial_cmp(operand);
-                    let hit = cmp == Some(*ord);
-                    if *negated { !hit } else { hit }
+                    let hit = n.partial_cmp(operand) == Some(*ord);
+                    match negated {
+                        Polarity::Match => hit,
+                        Polarity::NotMatch => !hit,
+                    }
                 }
                 // A cell that does not coerce to a number cannot be ordered
                 // against one, so `>5` and `>=5` reject it. `<>5` is the sole
                 // exception: "different from 5" holds of any non-number.
-                Err(_) => *negated && *ord == std::cmp::Ordering::Equal,
+                Err(_) => *negated == Polarity::NotMatch && *ord == std::cmp::Ordering::Equal,
             },
             Criterion::Text(ord, operand, negated) => {
                 let hit = value
@@ -254,7 +284,10 @@ impl Criterion {
                     .to_lowercase()
                     .cmp(&operand.to_lowercase())
                     == *ord;
-                if *negated { !hit } else { hit }
+                match negated {
+                    Polarity::Match => hit,
+                    Polarity::NotMatch => !hit,
+                }
             }
         }
     }

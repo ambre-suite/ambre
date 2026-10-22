@@ -306,7 +306,7 @@ pub(crate) fn mod_fn(args: &[CellValue]) -> CellValue {
 }
 
 /// ROUNDUP / ROUNDDOWN(number, [digits]) -- round away from / toward zero.
-pub(crate) fn round_dir(args: &[CellValue], up: bool) -> CellValue {
+pub(crate) fn round_dir(args: &[CellValue], way: Rounding) -> CellValue {
     let num = match first_num(args) {
         Some(n) => n,
         None => return CellValue::Error(FormulaError::TypeError),
@@ -321,16 +321,15 @@ pub(crate) fn round_dir(args: &[CellValue], up: bool) -> CellValue {
     };
     let factor = 10f64.powi(digits);
     let scaled = num * factor;
-    let rounded = if up {
-        scaled.abs().ceil().copysign(scaled)
-    } else {
-        scaled.trunc()
+    let rounded = match way {
+        Rounding::Up => scaled.abs().ceil().copysign(scaled),
+        Rounding::Down => scaled.trunc(),
     };
     CellValue::Number(rounded / factor)
 }
 
 /// CEILING / FLOOR(number, [significance]) -- round to a multiple of `significance`.
-pub(crate) fn ceil_floor(args: &[CellValue], up: bool) -> CellValue {
+pub(crate) fn ceil_floor(args: &[CellValue], way: Rounding) -> CellValue {
     let num = match first_num(args) {
         Some(n) => n,
         None => return CellValue::Error(FormulaError::TypeError),
@@ -347,7 +346,10 @@ pub(crate) fn ceil_floor(args: &[CellValue], up: bool) -> CellValue {
         return CellValue::Number(0.0);
     }
     let ratio = num / sig;
-    let stepped = if up { ratio.ceil() } else { ratio.floor() };
+    let stepped = match way {
+        Rounding::Up => ratio.ceil(),
+        Rounding::Down => ratio.floor(),
+    };
     CellValue::Number(stepped * sig)
 }
 

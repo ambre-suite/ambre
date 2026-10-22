@@ -44,13 +44,13 @@ pub struct CellContent<'a> {
 }
 
 impl<'a> CellContent<'a> {
-    /// A plain cell view (no rich style): the common case for tests and any caller
-    /// that only carries text + bold/italic.
-    pub fn plain(text: &'a str, bold: bool, italic: bool) -> Self {
+    /// A plain cell view, with no style: the common case for tests. A caller
+    /// that styles the text sets the fields over it.
+    pub fn plain(text: &'a str) -> Self {
         Self {
             text,
-            bold,
-            italic,
+            bold: false,
+            italic: false,
             underline: false,
             strikethrough: false,
             h_align: ambre_bus::HAlign::Auto,
@@ -62,6 +62,49 @@ impl<'a> CellContent<'a> {
             size: None,
             wrap: false,
             borders: ambre_bus::Borders::default(),
+        }
+    }
+}
+
+/// The lines a run of cell text carries over its glyphs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Decoration {
+    pub underline: Underline,
+    pub strikethrough: Strikethrough,
+}
+
+/// Whether a run of text is underlined (`trame-cell-styles`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Underline {
+    #[default]
+    Plain,
+    /// A 1px line just below the baseline.
+    Underlined,
+}
+
+/// Whether a run of text is struck through (`trame-cell-styles`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Strikethrough {
+    #[default]
+    Plain,
+    /// A 1px line at about 0.3em above the baseline.
+    Struck,
+}
+
+impl Decoration {
+    /// The lines the style of `content` asks for.
+    pub fn of(content: &CellContent<'_>) -> Self {
+        Self {
+            underline: if content.underline {
+                Underline::Underlined
+            } else {
+                Underline::Plain
+            },
+            strikethrough: if content.strikethrough {
+                Strikethrough::Struck
+            } else {
+                Strikethrough::Plain
+            },
         }
     }
 }

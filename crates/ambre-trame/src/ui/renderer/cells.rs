@@ -73,7 +73,7 @@ pub fn draw_cells<S: DrawSurface>(
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    text_enabled: bool,
+    text_pass: TextPass,
     strip_rect: Option<Rect>,
     clock: &dyn Clock,
     stats: &mut DrawStats,
@@ -119,7 +119,7 @@ pub fn draw_cells<S: DrawSurface>(
         cells: &CacheCells(&state.cell_cache),
         axes: sheet_axes(state),
         palette,
-        text_enabled,
+        text_pass,
     };
     let mut walk = SheetWalk {
         font_cx,

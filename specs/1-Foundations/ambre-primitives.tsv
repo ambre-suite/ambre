@@ -5957,7 +5957,6 @@ ambre-trame | src/chrome/formula_bar.rs | crate::chrome::formula_bar | FormulaBa
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | <TrameHandler as CommandHandler>::sealed_save(passphrase) | param | String	trait	ambre-chrome CommandHandler trait fixes the signature (passphrase typing belongs to that trait)
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | TrameHandler.anchor | field | RwSignal<Option<(f64,f64)>>	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | TrameHandler.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/handler.rs | crate::chrome::handler | TrameHandler::toggle_style(bold) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | client_anchor() | ret | (f64,f64)	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | client_anchor(anchor) | param | Option<(f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FILTER_OPS | const | &[(FilterOp,&str)]	free-text	free text: user content, label, message or display string
@@ -6016,7 +6015,6 @@ ambre-trame | src/formula/engine.rs | crate::formula::engine | literal_value(raw
 ambre-trame | src/formula/engine.rs | crate::formula::engine | now_serial() | ret | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | EXACT_SUM_LIMIT | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | arg(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | ceil_floor(up) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | check_argc(_name) | param | &str	debt	finding: (FINDING, confirmed): builtin function name as String
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | check_argc(expected) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum() | ret | f64	math	local geometry / pixel arithmetic
@@ -6028,7 +6026,6 @@ ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | is_truthy() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | one(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | rest_from(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | round_dir(up) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | str_count_arg() | ret | Result<usize,FormulaError>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | str_count_arg(default) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | average_at(idx) | param | &[usize]	math	count, length, local index, limit or calendar/arith helper
@@ -6057,7 +6054,6 @@ ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | days_in_month() | ret | i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | days_in_month(m) | param | i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | days_in_month(y) | param | i64	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | large_small(largest) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
@@ -6069,16 +6065,12 @@ ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | shift_month(y) | param | i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | time_part(which) | param | u8	debt	finding: (FINDING, confirmed): closed sets held as int, char or bool
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.1 | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.2 | field | bool	debt	finding: (FINDING, confirmed): closed sets held as int, char or bool
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.1 | field | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.2 | field | bool	debt	finding: (FINDING, confirmed): closed sets held as int, char or bool
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::matches() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | FnCtx.now_serial | field | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | call_builtin(name) | param | &str	debt	finding: (FINDING, confirmed): builtin function name as String
-ambre-trame | src/formula/identity.rs | crate::formula::identity | is_single() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor_on(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/identity.rs | crate::formula::identity | stored_node(single) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_CHARS | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_NESTING | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_OPERATORS | const | usize	math	count, length, local index, limit or calendar/arith helper
@@ -6530,7 +6522,6 @@ ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | cell_key() | ret | String	debt	finding: (FINDING, confirmed): cell key is a formatted String
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	debt	finding: (FINDING, confirmed): cell key is a formatted String
 ambre-trame | src/render/cells.rs | crate::render::cells | draw_cells_on() | ret | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/render/cells.rs | crate::render::cells | draw_cells_on(text_enabled) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width(need) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.bold | field | bool	generic	independent state or style flag, not a mode selector
@@ -6541,8 +6532,6 @@ ambre-trame | src/render/content.rs | crate::render::content | CellContent.strik
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.text | field | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.underline | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.wrap | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::plain(bold) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::plain(italic) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::plain(text) | param | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | border_stroke() | ret | (f64,f64)	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | cell_alignment(numeric) | param | bool	generic	fact passed in (state predicate), not a mode selector
@@ -6554,9 +6543,7 @@ ambre-trame | src/render/content.rs | crate::render::content | styled_segment(x0
 ambre-trame | src/render/content.rs | crate::render::content | styled_segment(x1) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | styled_segment(y0) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | styled_segment(y1) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/headers.rs | crate::render::headers | draw_col_headers_on(text_enabled) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/render/headers.rs | crate::render::headers | draw_row_headers_on(hover_corner) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/render/headers.rs | crate::render::headers | draw_row_headers_on(text_enabled) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.col_width | field | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.col_widths | field | &'a HashMap<Col,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.header_height | field | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
@@ -6575,7 +6562,6 @@ ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_h() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_top() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/merges.rs | crate::render::merges | draw_merges_on() | ret | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/render/merges.rs | crate::render::merges | draw_merges_on(text_enabled) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/render/mod.rs | crate::render | BODY_SIZE | const | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/render/mod.rs | crate::render | CELL_PAD_X | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/mod.rs | crate::render | HEADER_SIZE | const | f32	math	local geometry / pixel arithmetic
@@ -6586,8 +6572,6 @@ ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs(origin
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(font_size) | param | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(origin_x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(origin_y) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(strikethrough) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(underline) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(font_size) | param | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(max_width) | param | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(origin_x) | param | f64	math	local geometry / pixel arithmetic
@@ -6603,7 +6587,6 @@ ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::col_x() 
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::row_at(y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::row_y() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetView.text_enabled | field | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetWalk.cells_drawn | field | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/render/walk.rs | crate::render::walk | first() | ret | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/walk.rs | crate::render::walk | first(n) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
@@ -6685,8 +6668,6 @@ ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.zoom | field |
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::ZOOM_PRESETS | const | [f64;6]	debt	planned: lot B 7 (ZoomFactor)
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::grid_bottom() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::is_row_hidden() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::move_cursor(extend) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::move_to(extend) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::new(canvas_height) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::new(canvas_width) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::resize(height) | param | f64	math	local geometry / pixel arithmetic
@@ -6696,7 +6677,6 @@ ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scro
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::set_zoom() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::set_zoom(zoom) | param | f64	debt	planned: lot B 7 (ZoomFactor)
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::snap_active_to_master() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/renderer/cells.rs | crate::ui::renderer::cells | draw_cells(text_enabled) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/renderer/edit.rs | crate::ui::renderer::edit | draw_edit(caret_visible) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DIRTY_VEIL_ALPHA | const | f32	math	local geometry / pixel arithmetic
@@ -6729,7 +6709,6 @@ ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_f
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_funnel(w) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_insert_badge(cx) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_insert_badge(cy) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_overlay(text_enabled) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_disc(cx) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_disc(cy) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_disc(r) | param | f64	math	local geometry / pixel arithmetic
@@ -6753,11 +6732,8 @@ ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::arm_row
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::clear_active_cell() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_input_nav() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_wheel() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_wheel(ctrl_key) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_goto() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_goto(extend) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_move() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_move(extend) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::set_cursor(_css) | param | &str	debt	finding: (FINDING, confirmed): CSS cursor as a string
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::set_cursor(css) | param | &str	debt	finding: (FINDING, confirmed): CSS cursor as a string
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::set_fill_cursor(_on) | param | bool	generic	fact passed in (state predicate), not a mode selector
@@ -6774,7 +6750,6 @@ ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::c
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::editor_local_point() | ret | Option<(f32,f32)>	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::editor_local_point(_y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::editor_local_point(x) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::end_fill_drag(ctrl) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::grid_paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::handle_input_editing() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::is_editing() | ret | bool	generic	predicate or did-it-change return
@@ -6822,7 +6797,6 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.hover_cursor | fi
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.initial_viewport_sent | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.needs_full | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.selecting_drag | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.text_enabled | field | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.viewport_changed | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement(value) | param | &str	free-text	free text: user content, label, message or display string

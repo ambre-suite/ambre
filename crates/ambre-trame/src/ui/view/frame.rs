@@ -135,7 +135,7 @@ impl TrameView {
                 if let Some(i) = active
                     && let Some(&at) = matches.get(i)
                 {
-                    self.nav_goto(at, false);
+                    self.nav_goto(at, ambre_commands::SelectionMode::Move);
                 }
             }
             // Wholesale content change: a local snapshot restore (DataReset) or a
@@ -465,7 +465,7 @@ impl TrameView {
             self.theme.palette(),
             font_cx,
             text_cache,
-            self.text_enabled,
+            self.text_pass,
             strip,
             &*self.clock,
             &mut self.draw_stats,
@@ -485,7 +485,7 @@ impl TrameView {
             self.theme.palette(),
             font_cx,
             text_cache,
-            self.text_enabled,
+            self.text_pass,
             &*self.clock,
             &mut self.draw_stats,
         );
@@ -548,7 +548,7 @@ impl TrameView {
                 PendingCommit::Stay => self.commit_edit(),
                 PendingCommit::Nav(dr, dc) => {
                     self.commit_edit();
-                    self.nav_move(dr, dc, false);
+                    self.nav_move(dr, dc, ambre_commands::SelectionMode::Move);
                 }
             }
         }
@@ -590,7 +590,10 @@ impl TrameView {
         // Wheel / two-finger touchpad scroll pans the viewport in any mode and
         // never disturbs the cursor or an open editor.
         if let InputEvent::Wheel { delta, ctrl_key } = ev {
-            return self.handle_wheel(*delta, *ctrl_key);
+            return self.handle_wheel(
+                *delta,
+                ambre_commands::Modifiers::from_event(*ctrl_key, false, false, false),
+            );
         }
         // An open edit session owns text, IME and the editing keys.
         if self.editor.is_some() {

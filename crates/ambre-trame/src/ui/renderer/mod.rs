@@ -27,7 +27,7 @@ use ambre_canvas::{Palette, TextCache};
 
 use super::TrameUiState;
 use super::grid::{self, COL_WIDTH, CellEditor, ROW_HEIGHT};
-use crate::render::{self, BODY_SIZE, CELL_PAD_X, GridLayout};
+use crate::render::{self, BODY_SIZE, CELL_PAD_X, GridLayout, TextPass};
 use crate::{CellPos, ColSpan, LAST_COL, LAST_ROW, RowSpan, TOTAL_COLS, TOTAL_ROWS};
 
 // Rendering entry points are split by layer; shared layout/stats/helpers stay
@@ -81,7 +81,7 @@ pub struct DrawStats {
     /// grid lines. Zero on overlay-only frames.
     pub bg_ms: f32,
     /// Cells layer text (parley shaping + glyph atlas + push_glyph per cell).
-    /// Zero on overlay-only frames or when `text_enabled` is false.
+    /// Zero on overlay-only frames or when `text_pass` is false.
     pub cells_ms: f32,
     /// Overlay layer non-HUD: header backgrounds, active tints, separator
     /// lines, active border, header labels.
@@ -300,7 +300,7 @@ mod tests {
             let palette = Theme::Light.palette();
             let (mut screen, clock, mut font_cx, mut cache, mut stats) = harness();
             draw_cells(
-                &mut screen, &state, palette, &mut font_cx, &mut cache, true, None, &clock,
+                &mut screen, &state, palette, &mut font_cx, &mut cache, TextPass::WithText, None, &clock,
                 &mut stats,
             );
 
@@ -318,7 +318,7 @@ mod tests {
                 cells: &cells,
                 axes: cells::sheet_axes(&state),
                 palette,
-                text_enabled: true,
+                text_pass: TextPass::WithText,
             };
             let mut walked = RecordingSurface::new();
             SheetWalk {
@@ -351,7 +351,7 @@ mod tests {
                 palette,
                 &mut font_cx,
                 &mut cache,
-                true,
+                TextPass::WithText,
                 None,
                 &clock,
                 &mut stats,
@@ -382,7 +382,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             None,
             &clock,
             &mut stats,
@@ -431,7 +431,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             Some(strip),
             &clock,
             &mut stats,
@@ -468,7 +468,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             None,
             &clock,
             &mut stats,
@@ -500,7 +500,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             None,
             &clock,
             &mut stats,
@@ -557,7 +557,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             None,
             &clock,
             &mut stats,
@@ -595,7 +595,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             Some(header_corner),
             &clock,
             &mut stats,
@@ -617,7 +617,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             &clock,
             &mut stats,
         );
@@ -654,7 +654,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             &clock,
             &mut stats,
         );
@@ -687,7 +687,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             &clock,
             &mut stats,
         );
@@ -720,7 +720,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             &clock,
             &mut stats,
         );
@@ -766,7 +766,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             &clock,
             &mut stats,
         );
@@ -809,7 +809,7 @@ mod tests {
                 palette,
                 &mut font_cx,
                 &mut cache,
-                true,
+                TextPass::WithText,
                 &clock,
                 &mut stats,
             );
@@ -854,7 +854,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             None,
             &clock,
             &mut stats,
@@ -888,7 +888,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             None,
             &clock,
             &mut stats,
@@ -917,7 +917,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut cache,
-            true,
+            TextPass::WithText,
             None,
             &clock,
             &mut stats,

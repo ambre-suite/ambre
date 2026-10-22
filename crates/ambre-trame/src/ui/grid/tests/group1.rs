@@ -2,6 +2,7 @@
 // TrameUiState grid geometry/navigation tests. Helpers via `use super::super::*`.
 
 use super::*;
+use ambre_commands::SelectionMode;
 
 /// `current_region` returns `None` on an isolated empty active cell and the
 /// bounding rectangle of an L-shaped contiguous block otherwise (`trame-shared-filter`).
@@ -88,7 +89,7 @@ fn single_cell_selection_tracks_active() {
 
     // Arrow navigation keeps the selection single-cell on the new active cell.
     state
-        .move_cursor(RowDelta::new(1), ColDelta::new(0), false)
+        .move_cursor(RowDelta::new(1), ColDelta::new(0), SelectionMode::Move)
         .expect("cursor moved");
     assert_eq!(
         state.selection,
@@ -398,7 +399,7 @@ fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
 
     // Arrow Right from the master clears the 2-wide span -> column 3.
     state
-        .move_cursor(RowDelta::new(0), ColDelta::new(1), false)
+        .move_cursor(RowDelta::new(0), ColDelta::new(1), SelectionMode::Move)
         .expect("moved past merge");
     assert_eq!(
         (state.active_row(), state.active_col()),
@@ -407,7 +408,7 @@ fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
 
     // Arrow Left back into the block snaps onto the master, not a sub-cell.
     state
-        .move_cursor(RowDelta::new(0), ColDelta::new(-1), false)
+        .move_cursor(RowDelta::new(0), ColDelta::new(-1), SelectionMode::Move)
         .expect("moved back");
     assert_eq!(
         (state.active_row(), state.active_col()),
@@ -465,7 +466,7 @@ fn selection_extend_disjoint_and_membership() {
 
     // A plain move collapses everything back to a single cell.
     state
-        .move_to(CellPos::new(Row::new(7), Col::new(7)), false)
+        .move_to(CellPos::new(Row::new(7), Col::new(7)), SelectionMode::Move)
         .expect("moved");
     assert_eq!(
         state.selection,
@@ -500,10 +501,10 @@ fn move_with_extend_keeps_anchor() {
     let mut state = TrameUiState::new(800.0, 600.0);
     state.select(CellPos::new(Row::new(0), Col::new(0)));
     state
-        .move_cursor(RowDelta::new(2), ColDelta::new(0), true)
+        .move_cursor(RowDelta::new(2), ColDelta::new(0), SelectionMode::Extend)
         .expect("moved");
     state
-        .move_cursor(RowDelta::new(0), ColDelta::new(3), true)
+        .move_cursor(RowDelta::new(0), ColDelta::new(3), SelectionMode::Extend)
         .expect("moved");
     assert_eq!(
         state.selection.anchor,

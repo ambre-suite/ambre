@@ -114,8 +114,18 @@ pub struct SheetView<'v> {
     pub axes: SheetAxes<'v>,
     /// The paint of the fills, lines and text.
     pub palette: &'v Palette,
-    /// Draw the cell text. Off, only the fills, lines and borders land.
-    pub text_enabled: bool,
+    /// Whether the cell text is drawn, or only the fills, lines and borders.
+    pub text_pass: TextPass,
+}
+
+/// Whether a paint of the sheet draws its text (the debug HUD toggles it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TextPass {
+    /// Only the fills, lines and borders land.
+    Shapes,
+    /// The text lands over them.
+    #[default]
+    WithText,
 }
 
 /// The sheet's walk: the shaping context and the caches it keeps between
@@ -194,7 +204,7 @@ impl DocumentWalk for SheetWalk<'_> {
             palette,
             self.font_cx,
             self.text_cache,
-            view.text_enabled,
+            view.text_pass,
             cells,
             is_empty,
         );
@@ -212,7 +222,7 @@ impl DocumentWalk for SheetWalk<'_> {
                     palette,
                     self.font_cx,
                     self.text_cache,
-                    view.text_enabled,
+                    view.text_pass,
                     std::iter::once((master, span, content)),
                 );
             }

@@ -198,7 +198,7 @@ impl TrameView {
     /// dragged extent, grow the selection to cover the filled range, then clear
     /// the drag/preview. A drag that never left the source (no extension) is a
     /// no-op beyond clearing the state.
-    pub(crate) fn end_fill_drag(&mut self, ctrl: bool) {
+    pub(crate) fn end_fill_drag(&mut self, mods: ambre_commands::Modifiers) {
         // The drag is over: drop the crosshair (the next hover re-arms it).
         self.set_fill_cursor(false);
         self.hover_cursor = String::new();
@@ -240,14 +240,10 @@ impl TrameView {
         } else {
             src.col_count() == ColCount::ONE
         };
-        let mode = if ctrl {
-            if single_line {
-                FillMode::Series
-            } else {
-                FillMode::Copy
-            }
-        } else {
-            FillMode::Auto
+        let mode = match (mods.primary, single_line) {
+            (false, _) => FillMode::Auto,
+            (true, true) => FillMode::Series,
+            (true, false) => FillMode::Copy,
         };
         let cmd = TrameCommand::FillRange {
             sheet_id: self.state.active_sheet.clone(),

@@ -122,10 +122,19 @@ fn draw_cells_on_fills_each_and_counts_nonempty_text() {
     let (mut s, mut fc, mut tc) = harness();
 
     let cells = vec![
-        (at(0, 0), CellContent::plain("hi", false, false)),
-        (at(1, 1), CellContent::plain("", false, false)),
+        (at(0, 0), CellContent::plain("hi")),
+        (at(1, 1), CellContent::plain("")),
     ];
-    let drawn = draw_cells_on(&mut s, &l, palette, &mut fc, &mut tc, true, cells, |_| true);
+    let drawn = draw_cells_on(
+        &mut s,
+        &l,
+        palette,
+        &mut fc,
+        &mut tc,
+        TextPass::WithText,
+        cells,
+        |_| true,
+    );
 
     // Both cells get a content_bg fill...
     assert_eq!(
@@ -228,7 +237,7 @@ fn col_headers_draw_bg_separator_and_active_tint() {
         None,
         &mut fc,
         &mut tc,
-        true,
+        TextPass::WithText,
     );
 
     // The full-width header strip.
@@ -268,7 +277,7 @@ fn col_headers_draw_hover_tint() {
         Some(Col::new(1)),
         &mut fc,
         &mut tc,
-        true,
+        TextPass::WithText,
     );
 
     assert!(
@@ -293,7 +302,7 @@ fn col_headers_skip_hover_tint_on_active_column() {
         Some(Col::new(0)),
         &mut fc,
         &mut tc,
-        true,
+        TextPass::WithText,
     );
 
     assert_eq!(
@@ -320,7 +329,7 @@ fn row_headers_draw_hover_tint() {
         false,
         &mut fc,
         &mut tc,
-        true,
+        TextPass::WithText,
     );
 
     assert!(
@@ -338,7 +347,15 @@ fn row_headers_draw_corner_hover_tint() {
 
     // Hovering the top-left corner tints it with header_hover.
     draw_row_headers_on(
-        &mut s, &l, palette, None, None, true, &mut fc, &mut tc, true,
+        &mut s,
+        &l,
+        palette,
+        None,
+        None,
+        true,
+        &mut fc,
+        &mut tc,
+        TextPass::WithText,
     );
 
     assert!(
@@ -355,7 +372,15 @@ fn row_headers_draw_per_row_separators() {
     let (mut s, mut fc, mut tc) = harness();
 
     draw_row_headers_on(
-        &mut s, &l, palette, None, None, false, &mut fc, &mut tc, true,
+        &mut s,
+        &l,
+        palette,
+        None,
+        None,
+        false,
+        &mut fc,
+        &mut tc,
+        TextPass::WithText,
     );
 
     // The right separator plus one per-row hairline: strictly more than the
@@ -376,7 +401,15 @@ fn row_headers_skip_tint_when_inactive() {
 
     // No active row -> no header_active fill, just bg + separator.
     draw_row_headers_on(
-        &mut s, &l, palette, None, None, false, &mut fc, &mut tc, true,
+        &mut s,
+        &l,
+        palette,
+        None,
+        None,
+        false,
+        &mut fc,
+        &mut tc,
+        TextPass::WithText,
     );
 
     assert_eq!(
@@ -408,7 +441,7 @@ fn row_headers_draw_active_tint() {
         false,
         &mut fc,
         &mut tc,
-        true,
+        TextPass::WithText,
     );
 
     // One tint, over the band of row 2 alone.
@@ -449,7 +482,7 @@ fn draw_one(l: &GridLayout<'_>, row: u32, col: u32, content: CellContent<'_>) ->
         palette,
         &mut fc,
         &mut tc,
-        true,
+        TextPass::WithText,
         [(at(row, col), content)],
         |_| true,
     );
@@ -481,7 +514,7 @@ fn a_spill_runs_in_the_direction_of_the_alignment() {
     let l = layout();
     let rect = l.cell_rect(CellPos::new(Row::new(0), Col::new(3)));
     let with = |h_align| {
-        let mut c = CellContent::plain(LONG, false, false);
+        let mut c = CellContent::plain(LONG);
         c.h_align = h_align;
         the_clip(&draw_one(&l, 0, 3, c))
     };
@@ -506,7 +539,7 @@ fn a_spill_runs_in_the_direction_of_the_alignment() {
 fn a_wrapped_cell_is_cut_at_its_own_box() {
     // `TRAME-UI-097`: wrap takes the cell out of the spill and clips it.
     let l = layout();
-    let mut c = CellContent::plain(LONG, false, false);
+    let mut c = CellContent::plain(LONG);
     c.wrap = true;
     let ops = draw_one(&l, 0, 3, c);
     assert_eq!(
@@ -520,7 +553,7 @@ fn text_taller_than_its_row_is_cut_at_the_row() {
     // `TRAME-UI-098`: newlines push the text below the row, and the clip is the
     // cell's own rect, so nothing paints over the row below.
     let l = layout();
-    let ops = draw_one(&l, 0, 0, CellContent::plain("a\nb\nc\nd", false, false));
+    let ops = draw_one(&l, 0, 0, CellContent::plain("a\nb\nc\nd"));
     assert_eq!(
         the_clip(&ops),
         l.cell_rect(CellPos::new(Row::new(0), Col::new(0)))
@@ -547,7 +580,7 @@ fn glyphs_scale_with_the_zoom() {
         let mut l = layout();
         l.zoom = zoom;
         let top = l.cell_rect(CellPos::new(Row::new(0), Col::new(0))).y0;
-        let mut c = CellContent::plain("Ag", false, false);
+        let mut c = CellContent::plain("Ag");
         c.v_align = ambre_bus::VAlign::Top;
         let ops = draw_one(&l, 0, 0, c);
         let y = ops
@@ -572,7 +605,7 @@ fn a_fill_and_a_border_stop_at_the_cell_edge() {
     // rect and is emitted before the clip opens.
     let l = layout();
     let rect = l.cell_rect(CellPos::new(Row::new(0), Col::new(3)));
-    let mut c = CellContent::plain(LONG, false, false);
+    let mut c = CellContent::plain(LONG);
     c.bg = Some(Rgb::from_bits(0x00ff_0000));
     let ops = draw_one(&l, 0, 3, c);
     assert!(the_clip(&ops).x1 > rect.x1, "the text spills");

@@ -97,7 +97,7 @@ impl TrameView {
             last_blink_ms: ambre_bus::PageTime(0.0),
             pending_input_mark: None,
             clock,
-            text_enabled: true,
+            text_pass: TextPass::WithText,
             draw_stats: DrawStats::default(),
             initial_viewport_sent: false,
             pending_viewport: ViewportQueue::default(),
@@ -397,7 +397,7 @@ impl TrameView {
         }
         self.edit_dirty = true;
         self.needs_full = true;
-        let mv = self.state.move_to(at, false);
+        let mv = self.state.move_to(at, ambre_commands::SelectionMode::Move);
         self.apply_cursor_move(mv);
     }
 
@@ -574,10 +574,18 @@ impl TrameView {
                 self.commit_edit();
                 match dir {
                     CommitDirection::Down => {
-                        self.nav_move(RowDelta::new(1), ColDelta::ZERO, false);
+                        self.nav_move(
+                            RowDelta::new(1),
+                            ColDelta::ZERO,
+                            ambre_commands::SelectionMode::Move,
+                        );
                     }
                     CommitDirection::Right => {
-                        self.nav_move(RowDelta::ZERO, ColDelta::new(1), false);
+                        self.nav_move(
+                            RowDelta::ZERO,
+                            ColDelta::new(1),
+                            ambre_commands::SelectionMode::Move,
+                        );
                     }
                     CommitDirection::Stay => {}
                 }

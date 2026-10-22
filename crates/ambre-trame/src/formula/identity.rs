@@ -120,8 +120,8 @@ fn span_of(start: StoredCell, end: StoredCell) -> Option<AxisSpan> {
 
 /// The node for a cell or a range in stored form, plain `A1` or `A:C` when no
 /// axis names a line.
-fn stored_node(start: StoredCell, end: StoredCell, single: bool) -> Expr {
-    if single {
+fn stored_node(start: StoredCell, end: StoredCell, shape: NodeShape) -> Expr {
+    if shape == NodeShape::Single {
         return match start.as_position() {
             Some(at) => Expr::CellRef(at),
             None => Expr::StoredCell(start),
@@ -138,8 +138,19 @@ fn stored_node(start: StoredCell, end: StoredCell, single: bool) -> Expr {
     }
 }
 
-fn is_single(node: &Expr) -> bool {
-    matches!(node, Expr::CellRef(_) | Expr::StoredCell(_))
+/// Whether a reference node names one cell or a range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NodeShape {
+    Single,
+    Range,
+}
+
+fn shape_of(node: &Expr) -> NodeShape {
+    if matches!(node, Expr::CellRef(_) | Expr::StoredCell(_)) {
+        NodeShape::Single
+    } else {
+        NodeShape::Range
+    }
 }
 
 fn broken() -> Expr {
@@ -215,7 +226,7 @@ pub fn bind<'a>(
         };
         bind_axis::<Row>(index, &mut start, &mut end);
         bind_axis::<Col>(index, &mut start, &mut end);
-        stored_node(start, end, is_single(&node))
+        stored_node(start, end, shape_of(&node))
     })
 }
 
@@ -241,7 +252,7 @@ pub fn unbind<'a>(
         let (Some(a), Some(b)) = (at(start), at(end)) else {
             return broken();
         };
-        stored_node(a, b, is_single(&node))
+        stored_node(a, b, shape_of(&node))
     })
 }
 
@@ -309,7 +320,7 @@ fn reanchor_on<P: CellAxis>(
         let Some((mut start, mut end)) = corners(&node) else {
             return node;
         };
-        if is_single(&node) {
+        if shape_of(&node) == NodeShape::Single {
             let next = match P::get(&start) {
                 // A line follows itself; one that is gone already reads `#REF!`.
                 StoredAxis::Line(_) | StoredAxis::Whole => return node,
@@ -320,7 +331,7 @@ fn reanchor_on<P: CellAxis>(
                 },
             };
             P::set(&mut start, next);
-            return stored_node(start, end, true);
+            return stored_node(start, end, NodeShape::Single);
         }
         // A range of whole lines on the edited axis keeps covering them all.
         if P::get(&start) == StoredAxis::Whole {
@@ -350,7 +361,7 @@ fn reanchor_on<P: CellAxis>(
         };
         P::set(&mut start, encode(lo));
         P::set(&mut end, encode(hi));
-        stored_node(start, end, false)
+        stored_node(start, end, NodeShape::Range)
     })
 }
 
