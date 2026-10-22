@@ -5,11 +5,45 @@
 * **Idiomatic.** Prefer iterators and combinators over manual loops.
 * **Data-oriented design, no Java-like OOP.** A closed `enum` plus a `match` beats a trait object:
   the compiler proves the dispatch is exhaustive.
-* **A newtype for every domain value.** An identifier, a quantity with a unit, a secret and a
-  validated value each get their own type, for example `MessageId(Uuid)`, `Timestamp(u64)` or
-  `Emoji(String)`. A closed set of values is an `enum`, never a `String`. A bare `String`, `Uuid`,
-  integer or `Vec<u8>` is allowed for free text with no rule, and inside the newtype that wraps it.
-  The compiler then refuses a message id passed as a document id (`ambre-spec-testing.md section 2`).
+* **A newtype for every domain value, inside a function too.** An identifier, a quantity with a
+  unit, an index or offset, a secret and a validated value each get their own type. Examples:
+  `MessageId(Uuid)`, `Timestamp(u64)`, `Row(u32)`, `Emoji(String)`. A closed set of values is
+  an `enum`, never a `String`. A `bool` that selects a mode is an `enum` too. A bare `String`,
+  `Uuid`, integer, float or `Vec<u8>` is allowed in three places only:
+  * free text with no rule;
+  * the inside of the newtype that wraps it;
+  * the call into a foreign API that takes the primitive.
+
+  The type is unwrapped at that call and nowhere else. The compiler then refuses a message id
+  passed as a document id, or a row passed as a column (`ambre-spec-testing.md section 2`).
+
+  A new concept gets its newtype in the change that introduces it, never later. If no type
+  exists, the change adds one.
+* **A newtype is complete, so its callers never unwrap it.**
+  * **Validation.** A value with a rule has a fallible constructor, and no other way in.
+    Deserialisation goes through that constructor.
+  * **Arithmetic.** It is limited to the operations the domain allows. A position, a count and a
+    difference are three types: `Row + RowCount -> Row` and `Row - Row -> RowDelta`, while
+    `Row + Row` does not compile.
+  * **Iteration.** `Range<Row>` cannot iterate, because `core::iter::Step` is unstable
+    (tracking issue rust-lang/rust#73121). So an index type ships a span type that implements
+    `IntoIterator`. When `Step` reaches stable, implement it for every index type. Then replace
+    each span type with `Range` and delete it. The macro that generates the index types carries
+    the same note.
+  * **Indexing.** A collection indexed by an index type is a typed collection.
+  * **Derives.** Each type derives what the code needs: `Ord`, `Hash` and `Default` where they
+    hold. Its serde form is `#[serde(transparent)]` unless the wire says otherwise. A secret or
+    plaintext type prints only its length through `Debug`.
+  * **Two bans.** Never implement `Deref` to the primitive, and never implement `From` in both
+    directions. Either one turns the newtype back into the primitive silently.
+  * **Generation.** A family of similar types comes from one macro, as `define_encoded!` does.
+    Hand-written copies drift.
+* **The primitive gate holds the rule.** `just primitives` finds every site outside a test whose
+  type holds a primitive. Each site is typed, or `specs/1-Foundations/ambre-primitives.tsv` names
+  it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
+  line of that file by hand (`ARCH-035`). The gate checks the category word, and never whether it
+  is true. A `debt` line names a value still to type: type it, and `just primitives-prune` drops
+  the line.
 * **Minimal allocations.** Borrow before you clone. Never allocate on a hot path.
 * **No `unsafe` in our code.** A third-party crate with C or C++ bindings is allowed, but native
   Rust is preferred. The workspace lint table forbids `unsafe_code`, and every crate inherits it.

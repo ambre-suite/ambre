@@ -249,6 +249,19 @@ index:
 index-write:
     python3 scripts/contract_index.py --write
 
+# The primitive gate: every site outside a test whose type holds a bare
+# primitive is typed, or named by one line of
+# `specs/1-Foundations/ambre-primitives.tsv` with a category and a reason
+# (`ARCH-033`). A line that names no site fails too (`ARCH-034`), so the debt
+# only goes down. It prints the lines per category, the debt among them.
+primitives:
+    cargo run -q -p ambre-primitives -- check
+
+# Remove the lines that name no site, after a value was typed. No recipe adds
+# a line: a new one is a hand edit a reviewer reads (`ARCH-035`).
+primitives-prune:
+    cargo run -q -p ambre-primitives -- --prune
+
 # How a spec is built, not what it quotes: prose share and line length, both
 # capped for every spec, production markers in a feature document, the schema
 # document's budgets, and every container built in the code present in the

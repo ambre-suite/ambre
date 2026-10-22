@@ -60,6 +60,9 @@ jobs:
       # The parsed corpus: one record per row and the edges it asserts, both
       # generated, plus every edge resolved (`ambre-spec-template.md` §1.D).
       - run: just index
+      # The primitive gate: every bare primitive outside a test is typed or named
+      # by the allowlist, and no line names a site that is gone (`ARCH-033`).
+      - run: just primitives
       # What a spec quotes: no function body in a spec (template §0).
       - run: just spec-code
       # How a spec is built: prose share, production markers in a feature

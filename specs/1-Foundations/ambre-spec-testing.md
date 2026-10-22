@@ -50,6 +50,7 @@ compiler needs no test, no run and no reading.
 | Lint wall: `[workspace.lints]`, `deny(unwrap_used, panic, indexing_slicing)`, `#![forbid(unsafe_code)]` in **every** crate | removes a whole scanning category from review | always. The "no `unsafe`" pillar is a claim until the lint enforces it crate by crate |
 | `cargo-deny`: advisories, licences, duplicate versions, capability bans | the supply chain of a crypto product, checked by machine | always |
 | A gate in `scripts/`, run by a `just` recipe in the CI `lint` job | holds what the compiler cannot see: the corpus, the prose, and a committed artifact that must not move | a rule about the tree rather than the code. Its own tests run under `just test-scripts`, because a gate that reads nothing and a gate that is satisfied look alike |
+| The primitive gate, `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job | every bare primitive outside a test is typed, or named by a line with its reason (`ARCH-033`) | always: it holds the newtype rule of `ai/ambre-rust-style.md`, which review alone loses on every change |
 | `proptest` | universal rules over an unenumerated input space | pure logic and reference models: the formula engine, CRDT convergence, cache against rebuild |
 | `cargo-fuzz` plus `arbitrary` | robustness against hostile input | every decoder fed by the relay or by a file. The relay is untrusted by design, so this is not a hardening extra |
 | `cargo-mutants` | verifies the tests themselves -- a surviving mutant is unverified code | periodically, starting with the crates whose belts were generated fastest |
@@ -58,6 +59,23 @@ compiler needs no test, no run and no reading.
 | `callgrind`, a count of instructions with a CI ceiling | a performance regression never appears in a diff, and a count does not move between runs | every operation carrying a numbered budget in `ambre-spec-budgets.md`. The ceiling is the budget converted at the rate `scripts/instructions.py` states, and the CI `instructions` job fails an operation above it. It counts the native build: the phone figure stays a conversion |
 | `insta` snapshots | read consequences instead of code; reveals unintended blast radius | deterministic structured output: `RecordingSurface` op sequences, wire encodings. **Acceptance stays human** -- `cargo insta accept` accepts blindly |
 | `loom`, `miri` | interleavings under the C11 model, undefined behaviour under Stacked and Tree Borrows | **only if hand-written `unsafe` or lock-free atomics appear.** Measured 2026-08: zero `unsafe` in 17 crates, and atomics are flags and counters. Not adopted |
+
+**The primitive gate reads the items rustc reads.** It parses each crate from its roots without
+expanding a macro, and never opens test code. A site is a field, a parameter, a return, a constant,
+a static or an alias whose type holds a primitive. Its key names the crate, the file, the module,
+the item, the kind and the type, and no line number.
+
+* **The primitive allowlist is `specs/1-Foundations/ambre-primitives.tsv`.** One line per site:
+  the key, a category and a note. The categories are a closed set: `free-text`, `foreign-api`,
+  `newtype-inner`, `trait`, `generic`, `math` and `debt`.
+* **The file only shrinks on its own.** A site no line names fails, and so does a line that names no
+  site (`ARCH-034`). `just primitives-prune` removes those lines, and no mode adds one.
+* **A new line is a hand edit, read by a reviewer** (`ARCH-035`). The gate checks the word, never
+  whether it is true of the site. A `debt` line names a value still to type, and the gate prints
+  their count.
+* **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
+  over the source cannot. `quote` prints a parsed type back as text for the key. The tree walk uses
+  `std` rather than a crate.
 
 ---
 
@@ -86,13 +104,14 @@ more, and asserts identical final states once every delta has been exchanged.
 tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one obstacle of the
 table below. A rule a mechanism holds in part is two rows, and only the half left names an obstacle.
 
-**The two obstacles.** Each holds one row today: the frame on the phone, and the page a deployment
-serves.
+**The three obstacles.** Each holds one row today: the frame on the phone, the page a deployment
+serves, and what an allowlist line means.
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
 | `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | -- |
 | `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | -- |
+| `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so
@@ -237,6 +256,7 @@ One row per crate: what runs, what stands in for the world, and the belt an incr
 | `ambre-draw`, `ambre-pdf` | tooling | -- | they **are** the seam | `RecordingSurface` is exercised by every consumer |
 | `ambre-prose` | yes (`proptest`, `criterion`) | yes (`tests/chrome_panel.rs`) | `ProseState::with_peer`, `RecordingSurface` | CRDT convergence of text and annotations, placement properties over generated documents, and a `RecordingSurface` assertion for anything painted. The comment panel is mounted in Chrome |
 | `ambre-belt` | -- (browser tier) | -- | a static server in front of a relay process; the DevTools Protocol, to pause a worker | the browser tier itself: one file per surface, each test a user gesture and the answer read off the page. A peer is a second browser signed in as a second user |
+| `ambre-primitives` | yes | -- | `Tree`, a source tree held in memory | the primitive gate itself: every kind of site read, a module resolved where rustc finds it, test code and macro output never read, an unreached file failing the scan, and the allowlist failing on a missing site, a stale line and a word outside the set |
 | `ambre-murmure` | -- | -- | -- | none yet: a stub. The belt it lands with: CRDT convergence of a channel across its documents, a forged delta refused by the authorship check, a false final snapshot caught by the second client, and eviction held to its byte budget |
 
 **A belt is a floor, not a list.** It says what an increment cannot land without. The tests that
@@ -256,7 +276,7 @@ run the same command.
 
 | Job | Runs |
 | :--- | :--- |
-| `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, and the five corpus scripts |
+| `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, the five corpus scripts, and the primitive gate |
 | `test-native` | the host tier, plus `ambre-server` on the native target |
 | `test-db` | postgres and redis as services, minio started by a step, with `--features db` |
 | `test-wasm` | `just lint-wasm`, the denied lints on the wasm target, then `wasm-pack test --headless --chrome` |

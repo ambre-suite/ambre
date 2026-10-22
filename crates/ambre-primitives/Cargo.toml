@@ -1,0 +1,17 @@
+[package]
+name = "ambre-primitives"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "The primitive gate: every site whose type holds a primitive is typed, or named by the allowlist (ambre-spec-testing.md section 2)."
+
+# Host only, like the relay and the browser belt: the gate reads the source
+# tree, and no client build reaches it. `just primitives` runs it.
+
+[dependencies]
+quote = { workspace = true }
+syn   = { workspace = true }
+
+[lints]
+workspace = true

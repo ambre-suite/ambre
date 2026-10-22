@@ -19,6 +19,7 @@ members = [
     "crates/ambre-app",
     "crates/ambre-server",
     "crates/ambre-belt",
+    "crates/ambre-primitives",
 ]
 # Server excluded from default builds: it's a native target (tokio/mio)
 # and would fail wasm32 compilations. Build it explicitly:
@@ -77,6 +78,11 @@ data-encoding = "2.11"
 # CSPRNG for nonces and key material. `wasm_js` selects the browser entropy
 # backend (crypto.getRandomValues) on wasm32-unknown-unknown.
 getrandom = { version = "0.3", features = ["wasm_js"] }
+
+# The primitive gate (`crates/ambre-primitives`, `ambre-spec-testing.md`
+# section 2): a Rust parser, so the gate reads the items rustc reads. Host only.
+syn   = { version = "2.0.117", default-features = false, features = ["full", "visit", "parsing", "printing"] }
+quote = { version = "1.0.45", default-features = false }
 
 # Test-only
 proptest = "1"

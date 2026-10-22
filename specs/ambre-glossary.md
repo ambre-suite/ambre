@@ -155,6 +155,7 @@
 | tier | one of the three places a test runs | | `1-Foundations/ambre-spec-testing.md` |
 | mechanism ladder | the ordered strengths a verification can claim | | `1-Foundations/ambre-spec-testing.md` |
 | regime | the verification a component shape owes | | `1-Foundations/ambre-spec-testing.md` |
+| primitive allowlist | the file naming each site that keeps a bare primitive, and why | | `1-Foundations/ambre-spec-testing.md` |
 | fixture | a stored artifact a test reads instead of building | | `1-Foundations/ambre-spec-fixtures.md` |
 | freeze | pin an artifact at a version | | `1-Foundations/ambre-spec-fixtures.md` |
 | frozen artifact | a fixture pinned at an older version | | `1-Foundations/ambre-spec-fixtures.md` |

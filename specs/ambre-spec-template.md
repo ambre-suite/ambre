@@ -170,7 +170,7 @@ where the two disagree; this table invents no rung of its own.
 | `target-build` | the build is the mechanism: the code compiles only under this flag, this manifest entry or this generated file, so the CI build fails without it |
 | `lint-wall` | `[workspace.lints]`, `deny(unwrap_used, panic, indexing_slicing)`, `#![forbid(unsafe_code)]` |
 | `cargo-deny` | a capability ban in `deny.toml`, held by the CI `deny` job |
-| `ci-gate` | a gate in `scripts/`, run by a `just` recipe in the CI `lint` job. The clause names the script |
+| `ci-gate` | a gate in `scripts/`, or the primitive gate of `crates/ambre-primitives`, run by a `just` recipe in the CI `lint` job. The clause names the script or the crate |
 | `proptest`, `cargo-fuzz`, `cargo-mutants`, `cargo-llvm-cov`, `criterion`, `callgrind`, `insta` | the upper rungs, each written only where the mechanism runs in CI |
 | `qa-manual` | the places the doctrine declares mechanism-free, one obstacle each of `1-Foundations/ambre-spec-testing.md section 3` |
 | `human-review` | a reading no mechanism replaces, one obstacle of `1-Foundations/ambre-spec-testing.md section 3` |

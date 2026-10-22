@@ -263,6 +263,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambre-primitives"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "ambre-prose"
 version = "0.1.0"
 dependencies = [
