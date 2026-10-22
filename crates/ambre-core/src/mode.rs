@@ -30,3 +30,13 @@ pub enum HistoryStep {
     /// Apply again the last change an undo took back.
     Redo,
 }
+
+/// Whether a space lists a channel in its catalogue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum Visibility {
+    /// Listed nowhere: only its members know of it.
+    #[default]
+    Private,
+    /// Listed in the catalogue of its space, which any member may join.
+    Public,
+}

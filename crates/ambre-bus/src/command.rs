@@ -159,7 +159,7 @@ pub enum SyncCommand {
         space_id: SpaceId,
         meta: MetaId,
         segment: SegmentId,
-        public: bool,
+        visibility: ambre_core::Visibility,
         name: Option<ambre_core::Name>,
     },
     /// Seal the name just written into the `meta` of an open channel beside

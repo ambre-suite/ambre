@@ -152,12 +152,12 @@ impl SyncState {
         channel_id: ChannelId,
         space_id: SpaceId,
         (meta, segment): (MetaId, SegmentId),
-        public: bool,
+        visibility: ambre_core::Visibility,
         name: Option<ambre_core::Name>,
     ) {
         let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
             // A private channel is listed nowhere, so it needs no space key.
-            let space_key = if public {
+            let space_key = if visibility == ambre_core::Visibility::Public {
                 Some(self.space_keys(space_id)?.0.current)
             } else {
                 None
@@ -230,7 +230,7 @@ impl SyncState {
                     .await?;
                 }
                 let body = http::CreateChannelRequest {
-                    public,
+                    visibility,
                     channel_id,
                     space_id,
                     meta_id: meta,
@@ -1416,9 +1416,12 @@ pub(crate) mod tests {
         let (sink, rx) = LogicSink::channel();
         let state = SyncState::new(sink, String::new());
         let (channel_id, space_id) = (ChannelId::new(), SpaceId::new());
-        for public in [true, false] {
+        for visibility in [
+            ambre_core::Visibility::Public,
+            ambre_core::Visibility::Private,
+        ] {
             let documents = (MetaId::new(), SegmentId::new());
-            state.handle_create_channel(channel_id, space_id, documents, public, None);
+            state.handle_create_channel(channel_id, space_id, documents, visibility, None);
         }
         state.handle_join_channel(
             channel_id,
@@ -1731,7 +1734,7 @@ pub(crate) mod tests {
             |meta: MetaId, name_enc: Option<ambre_core::SealedName>| http::MemberChannelEntry {
                 channel_id: ChannelId::new(),
                 space_id: None,
-                public: false,
+                visibility: ambre_core::Visibility::Private,
                 meta_id: meta,
                 name_enc,
                 doc_key_enc: doc_key_enc.clone(),

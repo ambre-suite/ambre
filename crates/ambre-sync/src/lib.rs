@@ -1440,9 +1440,11 @@ impl SyncState {
                 space_id,
                 meta,
                 segment,
-                public,
+                visibility,
                 name,
-            } => self.handle_create_channel(channel_id, space_id, (meta, segment), public, name),
+            } => {
+                self.handle_create_channel(channel_id, space_id, (meta, segment), visibility, name)
+            }
             SyncCommand::NameChannel { meta, name } => self.handle_name_channel(meta, name),
             SyncCommand::JoinChannel {
                 channel_id,

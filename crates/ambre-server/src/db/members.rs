@@ -409,7 +409,7 @@ pub async fn remove_document_member(
         tx.commit().await?;
         return Ok(Removed::ChannelDeleted(deleted));
     }
-    if matches!(channel, Some((_, true))) {
+    if channel.is_some_and(|meta| meta.visibility == ambre_core::Visibility::Public) {
         tx.commit().await?;
         return Ok(Removed::Kept);
     }
@@ -574,15 +574,15 @@ pub async fn rotation_owed(
 /// Deletes one member row with its read cursors, refusing the last owner. The
 /// target row is locked so two concurrent removals cannot both see two owners.
 ///
-/// `channel` is the channel whose `meta` the document is, with its public
-/// flag. The last-owner check holds for neither the last member of a channel
+/// `channel` is the channel whose `meta` the document is, with its
+/// visibility. The last-owner check holds for neither the last member of a channel
 /// nor a public channel. A channel that is not public is answered for its delete
 /// (`SRV-142`); a public one stays with its documents (`SRV-173`).
 async fn delete_member(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: ambre_core::DocumentId,
     user_id: ambre_core::UserId,
-    channel: Option<(ambre_core::ChannelId, bool)>,
+    channel: Option<super::channels::ChannelMeta>,
 ) -> Result<Option<ambre_core::ChannelId>, AppError> {
     let did = id_to_uuid(document_id);
     let uid = id_to_uuid(user_id);
@@ -608,14 +608,17 @@ async fn delete_member(
         _ => false,
     };
     let empties_private = match channel {
-        Some((channel, false)) if empties_channel => Some(channel),
+        Some(super::channels::ChannelMeta {
+            id,
+            visibility: ambre_core::Visibility::Private,
+        }) if empties_channel => Some(id),
         _ => None,
     };
     // A public channel outlives its last member: the space reads its key in
     // the catalogue, so the next member joins it alone (`SRV-173`). It
     // outlives its last owner too: an owner of the space stands in for one
     // (`SRV-174`).
-    let public = matches!(channel, Some((_, true)));
+    let public = channel.is_some_and(|meta| meta.visibility == ambre_core::Visibility::Public);
     if current_role == Some(ambre_core::Role::Owner) && !empties_channel && !public {
         ensure_not_last_owner(tx, document_id).await?;
     }

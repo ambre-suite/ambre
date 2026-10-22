@@ -727,7 +727,11 @@ impl LogicState {
             space_id,
             meta: channel.meta_id(),
             segment: channel.active_id(),
-            public: listing.is_some(),
+            visibility: if listing.is_some() {
+                ambre_core::Visibility::Public
+            } else {
+                ambre_core::Visibility::Private
+            },
             name,
         });
         self.creating.insert(
@@ -1201,7 +1205,7 @@ mod tests {
                 space_id: of,
                 meta,
                 segment,
-                public: true,
+                visibility: ambre_core::Visibility::Public,
                 name: None,
             },
         ] = sent.as_slice()
@@ -1358,7 +1362,7 @@ mod tests {
                 space_id: of,
                 meta,
                 segment,
-                public: false,
+                visibility: ambre_core::Visibility::Private,
                 name,
             },
         ] = sent.as_slice()

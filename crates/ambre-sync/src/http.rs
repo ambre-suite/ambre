@@ -1071,7 +1071,8 @@ pub(crate) struct MemberChannelEntry {
     pub channel_id: ambre_core::ChannelId,
     #[serde(with = "ambre_core::serde_id::space_id::option")]
     pub space_id: Option<ambre_core::SpaceId>,
-    pub public: bool,
+    #[serde(rename = "public", with = "ambre_core::serde_enums::visibility_flag")]
+    pub visibility: ambre_core::Visibility,
     #[serde(with = "ambre_core::serde_id::meta_id")]
     pub meta_id: ambre_core::MetaId,
     /// Base64 of the sealed name, none for a meta never named.
@@ -1094,9 +1095,11 @@ impl MemberChannelEntry {
     /// The entry as the bus carries it. A channel in no space is a direct
     /// message, whatever its flag says.
     pub(crate) fn member_channel(&self) -> ambre_bus::MemberChannel {
-        let place = match (self.space_id, self.public) {
-            (Some(space), true) => ambre_bus::ChannelPlace::Public(space),
-            (Some(space), false) => ambre_bus::ChannelPlace::Private(space),
+        let place = match (self.space_id, self.visibility) {
+            (Some(space), ambre_core::Visibility::Public) => ambre_bus::ChannelPlace::Public(space),
+            (Some(space), ambre_core::Visibility::Private) => {
+                ambre_bus::ChannelPlace::Private(space)
+            }
             (None, _) => ambre_bus::ChannelPlace::Direct,
         };
         ambre_bus::MemberChannel {
@@ -1202,7 +1205,8 @@ pub(crate) struct CreateDocumentRequest {
 #[derive(Serialize)]
 pub(crate) struct CreateChannelRequest {
     /// A public channel, which its catalogue lists, or a private one.
-    pub public: bool,
+    #[serde(rename = "public", with = "ambre_core::serde_enums::visibility_flag")]
+    pub visibility: ambre_core::Visibility,
     #[serde(with = "ambre_core::serde_id::channel_id")]
     pub channel_id: ambre_core::ChannelId,
     #[serde(with = "ambre_core::serde_id::space_id")]

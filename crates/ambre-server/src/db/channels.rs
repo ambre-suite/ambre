@@ -1341,7 +1341,7 @@ pub(super) async fn leave_space_channels_in(
 pub(super) async fn channel_of_meta(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: ambre_core::DocumentId,
-) -> Result<Option<(ambre_core::ChannelId, bool)>, AppError> {
+) -> Result<Option<ChannelMeta>, AppError> {
     let document_id = id_to_uuid(document_id);
     let row: Option<(uuid::Uuid, bool)> = sqlx::query_as(
         "SELECT c.id, c.is_public FROM channel_documents d \
@@ -1351,7 +1351,21 @@ pub(super) async fn channel_of_meta(
     .bind(document_id)
     .fetch_optional(&mut **tx)
     .await?;
-    Ok(row.map(|(channel, public)| (uuid_row_to_id(channel), public)))
+    Ok(row.map(|(channel, public)| ChannelMeta {
+        id: uuid_row_to_id(channel),
+        visibility: if public {
+            ambre_core::Visibility::Public
+        } else {
+            ambre_core::Visibility::Private
+        },
+    }))
+}
+
+/// The channel whose `meta` a document is, with whether its space lists it.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ChannelMeta {
+    pub(super) id: ambre_core::ChannelId,
+    pub(super) visibility: ambre_core::Visibility,
 }
 
 /// Add `user_id` to the members of a channel's `meta`, unless a row is there.

@@ -457,7 +457,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             space_id: space,
             meta,
             segment,
-            public: false,
+            visibility: ambre_core::Visibility::Private,
             name: Some(ambre_core::Name::new("board").unwrap()),
         },
         SyncCommand::NameChannel { meta, name: None },

@@ -727,7 +727,6 @@ ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.itali
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.strikethrough | field | Option<bool>	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.underline | field | Option<bool>	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.wrap | field | Option<bool>	generic	named option or style flag, selects no mode
-ambre-bus | src/command.rs | crate::command | SyncCommand::CreateChannel.public | field | bool	debt	finding: Boolean mode selectors (low-medium, confirmed)
 ambre-bus | src/conduit.rs | crate::conduit | Backlog.holding | field | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
@@ -4449,7 +4448,6 @@ ambre-server | src/db/channels.rs | crate::db::channels | MemberChannelRow.meta_
 ambre-server | src/db/channels.rs | crate::db::channels | MemberChannelRow.peers | field | Vec<String>	debt	finding: Display names held as String (confirmed)
 ambre-server | src/db/channels.rs | crate::db::channels | NewChannel.is_public | field | bool	math	named state or style flag, local
 ambre-server | src/db/channels.rs | crate::db::channels | add_channel_member_if_absent() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/db/channels.rs | crate::db::channels | channel_of_meta() | ret | Result<Option<(ambre_core::ChannelId,bool)>,AppError>	debt	finding: (ChannelId, bool) where the bool means is_public (confirmed)
 ambre-server | src/db/channels.rs | crate::db::channels | decode_kind(word) | param | &str	generic	generic codec/parser/bytes API
 ambre-server | src/db/channels.rs | crate::db::channels | finalizable() | ret | bool	generic	predicate result
 ambre-server | src/db/channels.rs | crate::db::channels | segment_locked() | ret | Result<bool,AppError>	generic	predicate result
@@ -4474,7 +4472,6 @@ ambre-server | src/db/documents.rs | crate::db::documents | pending_deletions(li
 ambre-server | src/db/members.rs | crate::db::members | LogEntry.position | field | u64	debt	finding: LogEntry.position as u64 (confirmed)
 ambre-server | src/db/members.rs | crate::db::members | MemberWithUserRow.display_name | field | String	debt	finding: Display names held as String (confirmed)
 ambre-server | src/db/members.rs | crate::db::members | MemberWithUserRow.email_verified | field | bool	math	named state or style flag, local
-ambre-server | src/db/members.rs | crate::db::members | delete_member(channel) | param | Option<(ambre_core::ChannelId,bool)>	debt	finding: (ChannelId, bool) where the bool means is_public (confirmed)
 ambre-server | src/db/members.rs | crate::db::members | rotation_owed() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/mod.rs | crate::db | PgId.0 | field | uuid::Uuid	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/mod.rs | crate::db | PgKey.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
@@ -4756,7 +4753,6 @@ ambre-sync | src/channels.rs | crate::channels | SyncState::activity_fetched(res
 ambre-sync | src/channels.rs | crate::channels | SyncState::channel_answered(result) | param | Result<LogicEvent,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | SyncState::channel_creation() | ret | Result<(ambre_bus::conduit::UnboundedSender<SyncEvent>,DocumentKey,StaticSecret,crate::sharing::Author,),String,>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | SyncState::fetch_activity(mark_all_read_first) | param | bool	debt	finding: boolean parameters that pick a mode
-ambre-sync | src/channels.rs | crate::channels | SyncState::handle_create_channel(public) | param | bool	debt	finding: boolean parameters that pick a mode
 ambre-sync | src/channels.rs | crate::channels | SyncState::member_channels_listed(asked) | param | u32	debt	finding: request generation counters ("asked")
 ambre-sync | src/channels.rs | crate::channels | SyncState::member_channels_listed(result) | param | Result<MemberListing,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | SyncState::seal_channel_name() | ret | Result<ambre_core::SealedName,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
@@ -4802,7 +4798,6 @@ ambre-sync | src/http.rs | crate::http | ApiRoot::route(path) | param | impl AsR
 ambre-sync | src/http.rs | crate::http | AuthContext.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/http.rs | crate::http | AuthMeResponse.display_name | field | String	debt	finding: display names as `String` though `ambre_core::DisplayName` exists
 ambre-sync | src/http.rs | crate::http | ClosedSegmentResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/http.rs | crate::http | CreateChannelRequest.public | field | bool	debt	finding: boolean parameters that pick a mode
 ambre-sync | src/http.rs | crate::http | CreateDocumentRequest.space | field | bool	debt	finding: boolean parameters that pick a mode
 ambre-sync | src/http.rs | crate::http | DevLoginRequest.username | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/http.rs | crate::http | DevLoginResponse.display_name | field | String	debt	finding: display names as `String` though `ambre_core::DisplayName` exists
@@ -4831,7 +4826,6 @@ ambre-sync | src/http.rs | crate::http | InviteResponse.display_name | field | S
 ambre-sync | src/http.rs | crate::http | JoinHeadResponse.length | field | u64	debt	finding: membership log position as `u64`
 ambre-sync | src/http.rs | crate::http | MasterKeyResponse::setup_owed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | MemberChannelEntry.peers | field | Vec<String>	debt	finding: display names as `String` though `ambre_core::DisplayName` exists
-ambre-sync | src/http.rs | crate::http | MemberChannelEntry.public | field | bool	debt	finding: boolean parameters that pick a mode
 ambre-sync | src/http.rs | crate::http | MembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Method::as_str() | ret | &'static str	generic	generic byte/text API or codec
 ambre-sync | src/http.rs | crate::http | Outgoing.body | field | Option<(&'static str,Vec<u8>)>	debt	planned: lot C bis 3 (ContentType)

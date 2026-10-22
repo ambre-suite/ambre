@@ -11,7 +11,7 @@
 
 use serde::{Deserialize, Deserializer, Serializer};
 
-use crate::{ChannelDocumentKind, DocType, Role};
+use crate::{ChannelDocumentKind, DocType, Role, Visibility};
 
 /// Reads a word of a closed set, refusing one `parse` does not know as an
 /// unknown variant among `words`.
@@ -117,6 +117,42 @@ pub mod channel_document_kind {
     }
 }
 
+// Visibility adapter: the JSON flag `true` for a public channel, `false` for
+// a private one. The relay HTTP API keeps the flag it always carried.
+pub mod visibility_flag {
+    use super::*;
+    use serde::Serialize;
+
+    /// Writes the visibility as the flag of a public channel.
+    ///
+    /// # Errors
+    ///
+    /// Whatever `serializer` refuses.
+    pub fn serialize<S>(visibility: &Visibility, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        (*visibility == Visibility::Public).serialize(serializer)
+    }
+
+    /// Reads the visibility from the flag of a public channel.
+    ///
+    /// # Errors
+    ///
+    /// A value that is not a JSON boolean.
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Visibility, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let public = bool::deserialize(deserializer)?;
+        Ok(if public {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,6 +166,23 @@ mod tests {
         _role: Role,
         #[serde(with = "channel_document_kind")]
         _kind: ChannelDocumentKind,
+    }
+
+    #[derive(Debug, serde::Serialize, Deserialize, PartialEq)]
+    struct Listed {
+        #[serde(with = "visibility_flag")]
+        public: Visibility,
+    }
+
+    /// The visibility travels as the JSON flag of a public channel, both ways.
+    #[test]
+    fn a_visibility_reads_and_writes_as_the_public_flag() {
+        for (visibility, flag) in [(Visibility::Public, true), (Visibility::Private, false)] {
+            let listed = Listed { public: visibility };
+            let json = serde_json::to_value(&listed).unwrap();
+            assert_eq!(json, serde_json::json!({ "public": flag }));
+            assert_eq!(serde_json::from_value::<Listed>(json).unwrap(), listed);
+        }
     }
 
     /// Holds `SYNC-152`: a word no member of its set carries is refused as
