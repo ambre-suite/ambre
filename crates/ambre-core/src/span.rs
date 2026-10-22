@@ -75,6 +75,38 @@ impl Timestamp {
     }
 }
 
+/// A logical instant: the Lamport time a CRDT operation carries.
+///
+/// It counts operations, never milliseconds. Unlike a [`Timestamp`], a rule
+/// may order on it: a write made after another was seen carries a greater
+/// stamp. Two concurrent writes may share one, so such a rule breaks the tie
+/// on something else.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct LamportStamp(pub u64);
+
+impl std::fmt::Display for LamportStamp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl LamportStamp {
+    /// The stamp as a CRDT stores it, a signed 64-bit integer, saturating at
+    /// `i64::MAX`.
+    pub fn to_i64_saturating(self) -> i64 {
+        i64::try_from(self.0).unwrap_or(i64::MAX)
+    }
+
+    /// Read a stamp a CRDT stored. A negative value names no operation, and
+    /// reads as zero, before every write.
+    pub fn from_i64(stored: i64) -> Self {
+        Self(u64::try_from(stored).unwrap_or(0))
+    }
+}
+
 /// An instant on the page's monotonic clock, in milliseconds since the page
 /// loaded, as `performance.now()` and a frame callback read it.
 ///
@@ -185,8 +217,16 @@ impl UnixSeconds {
 
 #[cfg(test)]
 mod tests {
-    use super::{Millis, Seconds, Timestamp, UnixSeconds};
+    use super::{LamportStamp, Millis, Seconds, Timestamp, UnixSeconds};
     use std::time::Duration;
+
+    #[test]
+    fn a_lamport_stamp_reads_back_what_a_crdt_stored() {
+        assert_eq!(LamportStamp::from_i64(7).to_i64_saturating(), 7);
+        assert_eq!(LamportStamp::from_i64(-1), LamportStamp(0));
+        assert_eq!(LamportStamp(u64::MAX).to_i64_saturating(), i64::MAX);
+        assert!(LamportStamp(3) > LamportStamp(2));
+    }
 
     #[test]
     fn a_span_serializes_as_the_bare_integer_of_its_unit() {

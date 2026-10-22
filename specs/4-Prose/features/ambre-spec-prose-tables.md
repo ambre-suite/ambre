@@ -106,7 +106,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-253` | `POST` | Each region whose anchor or extent no longer resolves to a live cell MUST be dropped. | this spec section 3 | `ambre_prose::logic::tables::tests::a_region_whose_corner_is_gone_is_dropped_by_validation` | none | verified |
-| `PROSE-FEAT-254` | `POST` | Two regions covering one cell MUST resolve to the later of the two, and the other MUST be dropped. | this spec section 3 | `ambre_prose::logic::tables::tests::of_two_regions_over_one_cell_the_later_stands` | none | verified |
+| `PROSE-FEAT-254` | `POST` | Two regions covering one cell MUST resolve to the later of the two, and the other MUST be dropped. | this spec section 3 | `ambre_prose::logic::tables::tests::of_two_regions_over_one_cell_the_later_stands`; `::region_resolution_orders_by_the_lamport_stamp` -- the later is the greater Lamport stamp, in either order | none | verified |
 | `PROSE-FEAT-255` | `POST` | A cell found covered while it still holds text MUST be reported to the view. | this spec section 3 | `ambre_prose::logic::convergence_tests::a_merge_over_text_typed_at_once_masks_it_and_reports_it` | none | verified |
 | `PROSE-FEAT-256` | `FRAME` | The pass MUST NOT change the text of a cell, and MUST NOT hold a change back on what it reports. | this spec section 3 | `ambre_prose::logic::convergence_tests::a_merge_over_text_typed_at_once_masks_it_and_reports_it` | none | verified |
 

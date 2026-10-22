@@ -152,7 +152,7 @@ pub(crate) fn surviving_regions(
 /// A region written after another one was seen carries a greater stamp than
 /// it, which is what "the later of the two" means (`PROSE-FEAT-254`). Two
 /// concurrent writes may share a stamp, and the anchor breaks the tie.
-fn next_stamp(document: &LoroDoc) -> i64 {
+fn next_stamp(document: &LoroDoc) -> ambre_core::LamportStamp {
     let mut next = 0_i64;
     for id in document.oplog_frontiers().iter() {
         let Some(change) = document.get_change(id) else {
@@ -161,7 +161,7 @@ fn next_stamp(document: &LoroDoc) -> i64 {
         let offset = i64::from(id.counter) - i64::from(change.id.counter);
         next = next.max(i64::from(change.lamport) + offset + 1);
     }
-    next
+    ambre_core::LamportStamp::from_i64(next)
 }
 
 /// Whether any text block under `block` holds a character.
@@ -594,7 +594,10 @@ impl ProseState {
                     doc::R_EXTENT.to_owned(),
                     LoroValue::from(extent.to_string()),
                 ),
-                (doc::R_STAMP.to_owned(), LoroValue::I64(stamp)),
+                (
+                    doc::R_STAMP.to_owned(),
+                    LoroValue::I64(stamp.to_i64_saturating()),
+                ),
             ]
             .into_iter()
             .collect::<std::collections::HashMap<_, _>>()
@@ -1506,6 +1509,39 @@ pub(crate) mod tests {
         let standing = state.regions_of(&table);
         assert_eq!(standing.len(), 1);
         assert_eq!(standing[0].anchor, anchor);
-        assert_eq!(standing[0].stamp, ambre_core::Timestamp::from_i64(later));
+        assert_eq!(standing[0].stamp, ambre_core::LamportStamp::from_i64(later));
+    }
+
+    /// `PROSE-FEAT-254`: the later region is the one with the greater Lamport
+    /// stamp, whatever order the records arrive in. A record stamped before
+    /// the standing one is the one dropped.
+    #[test]
+    fn region_resolution_orders_by_the_lamport_stamp() {
+        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        merge(&mut state, table, (0, 0), (0, 1));
+        let first = state.regions_of(&table)[0];
+        assert!(first.stamp > ambre_core::LamportStamp(0), "{}", first.stamp);
+        let (anchor, extent) = (cell_at(&state, table, 0, 1), cell_at(&state, table, 1, 1));
+        let map = state
+            .table_attrs(&table)
+            .and_then(|attrs| doc::map_at(&attrs, doc::A_MERGED))
+            .expect("the region map");
+        let earlier = first.stamp.to_i64_saturating() - 1;
+        let record = LoroValue::Map(
+            [
+                (
+                    doc::R_EXTENT.to_owned(),
+                    LoroValue::from(extent.to_string()),
+                ),
+                (doc::R_STAMP.to_owned(), LoroValue::I64(earlier)),
+            ]
+            .into_iter()
+            .collect::<std::collections::HashMap<_, _>>()
+            .into(),
+        );
+        map.insert(&anchor.to_string(), record)
+            .expect("the record lands");
+        state.validate_tables();
+        assert_eq!(state.regions_of(&table), [first], "the earlier stamp drops");
     }
 }

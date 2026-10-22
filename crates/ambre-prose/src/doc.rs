@@ -361,7 +361,7 @@ pub(crate) fn merged_read(tree: &LoroTree, table: &TreeID) -> Option<LoroMap> {
 pub(crate) struct Region {
     pub anchor: TreeID,
     pub extent: TreeID,
-    pub stamp: ambre_core::Timestamp,
+    pub stamp: ambre_core::LamportStamp,
 }
 
 /// Every region a table's map holds, in anchor order. An entry whose record
@@ -384,8 +384,8 @@ pub(crate) fn regions(tree: &LoroTree, table: &TreeID) -> Vec<Region> {
             _ => None,
         };
         let stamp = match record.get(R_STAMP) {
-            Some(LoroValue::I64(n)) => ambre_core::Timestamp::from_i64(*n),
-            _ => ambre_core::Timestamp::default(),
+            Some(LoroValue::I64(n)) => ambre_core::LamportStamp::from_i64(*n),
+            _ => ambre_core::LamportStamp::default(),
         };
         if let Some(extent) = extent {
             out.push(Region {

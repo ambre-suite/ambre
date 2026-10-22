@@ -8030,6 +8030,7 @@
   {"edge": "verified-by", "from": "PROSE-FEAT-253", "to": "ambre_prose::logic::tables::tests::a_region_whose_corner_is_gone_is_dropped_by_validation"},
   {"edge": "cites-section", "from": "PROSE-FEAT-254", "section": "3", "to": "4-Prose/features/ambre-spec-prose-tables.md"},
   {"edge": "verified-by", "from": "PROSE-FEAT-254", "to": "ambre_prose::logic::tables::tests::of_two_regions_over_one_cell_the_later_stands"},
+  {"edge": "verified-by", "from": "PROSE-FEAT-254", "to": "::region_resolution_orders_by_the_lamport_stamp"},
   {"edge": "cites-section", "from": "PROSE-FEAT-255", "section": "3", "to": "4-Prose/features/ambre-spec-prose-tables.md"},
   {"edge": "verified-by", "from": "PROSE-FEAT-255", "to": "ambre_prose::logic::convergence_tests::a_merge_over_text_typed_at_once_masks_it_and_reports_it"},
   {"edge": "cites-section", "from": "PROSE-FEAT-256", "section": "3", "to": "4-Prose/features/ambre-spec-prose-tables.md"},
