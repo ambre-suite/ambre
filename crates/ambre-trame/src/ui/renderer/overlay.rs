@@ -2,6 +2,7 @@
 // Overlay rendering: headers, selection, marching ants, badges, autofilter buttons.
 
 use super::*;
+use crate::CellPos;
 
 /// Marching-ants dash geometry (logical px): 6px dash + 4px gap. The animation
 /// crawls the dashes by advancing a phase across this period each frame.
@@ -253,9 +254,9 @@ pub fn draw_overlay<S: DrawSurface>(
     //        Drawn only when the column is within the visible span.
     if let Some(fcol) = state.filtered_col
         && fcol >= layout.origin_col
-        && fcol < layout.origin_col + state.viewport_cols + 1
+        && fcol <= layout.origin_col + state.viewport_cols
     {
-        let cell = layout.cell_rect(layout.origin_row, fcol);
+        let cell = layout.cell_rect(CellPos::new(layout.origin_row, fcol));
         // Anchor the badge to the header strip, right-aligned in the cell. The
         // glyph scales with the grid zoom so it tracks the zoomed header letters.
         let z = state.zoom;
@@ -272,9 +273,11 @@ pub fn draw_overlay<S: DrawSurface>(
     //         cell -- a plain chevron when the column is unfiltered, a funnel
     //         when the shared filter targets it. Clicking opens the same
     //         FilterPopover as the context-menu entry (one filter code path).
-    if let Some((band_row, c1, _r2, c2)) = state.current_region() {
-        for col in c1..=c2 {
-            let Some((bx, by, bw, bh)) = state.filter_button_rect(band_row, col) else {
+    if let Some(region) = state.current_region() {
+        let band_row = region.top_left.row;
+        for col in region.cols() {
+            let Some((bx, by, bw, bh)) = state.filter_button_rect(CellPos::new(band_row, col))
+            else {
                 continue;
             };
             let r = Rect::new(bx, by, bx + bw, by + bh);
@@ -299,8 +302,8 @@ pub fn draw_overlay<S: DrawSurface>(
     //        cell so every hit is visible at a glance; the focused match is the
     //        active cell, so it also carries the active border drawn below.
     if !state.find_matches.is_empty() {
-        for &(row, col) in &state.find_matches {
-            if let Some((x, y, cw, ch)) = state.cell_pixel_rect(row, col) {
+        for &at in &state.find_matches {
+            if let Some((x, y, cw, ch)) = state.cell_pixel_rect(at) {
                 surface.fill_rect(
                     Rect::new(x, y, x + cw, y + ch),
                     palette.selection.with_alpha(0.28),
@@ -317,8 +320,8 @@ pub fn draw_overlay<S: DrawSurface>(
         let (band_x0, band_x1, band_y0, band_y1, hx0, hx1, hy0, hy1) = match sel.kind {
             grid::SelKind::Cols => {
                 let (c1, c2) = (
-                    sel.anchor.1.min(sel.active.1),
-                    sel.anchor.1.max(sel.active.1),
+                    sel.anchor.col.min(sel.active.col),
+                    sel.anchor.col.max(sel.active.col),
                 );
                 let x0 = state.col_x(c1).max(state.header_w());
                 let x1 = (state.col_x(c2) + state.col_width_of(c2)).min(state.canvas_width);
@@ -336,8 +339,8 @@ pub fn draw_overlay<S: DrawSurface>(
             }
             _ => {
                 let (r1, r2) = (
-                    sel.anchor.0.min(sel.active.0),
-                    sel.anchor.0.max(sel.active.0),
+                    sel.anchor.row.min(sel.active.row),
+                    sel.anchor.row.max(sel.active.row),
                 );
                 let y0 = state.row_y(r1).max(state.header_h());
                 let y1 = (state.row_y(r2) + state.row_height_of(r2)).min(state.grid_bottom());
@@ -371,8 +374,8 @@ pub fn draw_overlay<S: DrawSurface>(
     // each rectangle with a translucent tint and outlines it. Skipped for a
     // whole-axis band (drawn above): its `bounds()` collapses to row/col 0.
     if sel.kind == grid::SelKind::Cells && sel.is_multi() {
-        for (r1, c1, r2, c2) in state.selection_rects() {
-            if let Some((x, y, w, ht)) = state.range_pixel_rect(r1, c1, r2, c2) {
+        for rect in state.selection_rects() {
+            if let Some((x, y, w, ht)) = state.range_pixel_rect(rect) {
                 let rect = Rect::new(x, y, x + w, y + ht);
                 surface.fill_rect(rect, palette.selection.with_alpha(0.16));
                 surface.stroke_rect(rect, palette.selection, 1.0);
@@ -389,15 +392,15 @@ pub fn draw_overlay<S: DrawSurface>(
         && !sel.is_multi()
         && let Some((x, y, cw, ch)) = state
             .active_merge_rect()
-            .or_else(|| state.cell_pixel_rect(state.active_row(), state.active_col()))
+            .or_else(|| state.cell_pixel_rect(state.active_cell()))
     {
         surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), palette.selection, 2.0);
     }
 
     // -- 2b. Clipboard marching-ants marquee (`trame-clipboard`). A dashed rectangle around
     //        the copied/cut range, its dashes crawling so the marquee animates.
-    if let Some((r1, c1, r2, c2)) = state.clipboard_anchor
-        && let Some((x, y, w, ht)) = state.range_pixel_rect(r1, c1, r2, c2)
+    if let Some(rect) = state.clipboard_anchor
+        && let Some((x, y, w, ht)) = state.range_pixel_rect(rect)
     {
         let phase = (clock.now_ms().0 / 40.0) % MARCHING_PERIOD;
         let c = palette.selection;
@@ -410,8 +413,8 @@ pub fn draw_overlay<S: DrawSurface>(
     // -- 2c. Autofill (`trame-autofill`): a dashed preview outline of the destination
     //        rectangle while the handle is dragged, then the small blue handle
     //        square at the selection's bottom-right corner.
-    if let Some((r1, c1, r2, c2)) = state.fill_preview
-        && let Some((x, y, w, ht)) = state.range_pixel_rect(r1, c1, r2, c2)
+    if let Some(rect) = state.fill_preview
+        && let Some((x, y, w, ht)) = state.range_pixel_rect(rect)
     {
         let c = palette.selection;
         dashed_h(surface, x, x + w, y, c, 0.0);
@@ -448,7 +451,7 @@ pub fn draw_overlay<S: DrawSurface>(
     //            prospective insertion boundary while a selected column/row is
     //            dragged to a new position (Excel-style reorder preview).
     match state.reorder_preview {
-        Some((grid::SelKind::Cols, i)) => {
+        Some(grid::AxisPos::Col(i)) => {
             let x = state.col_x(i);
             surface.stroke_line(
                 x,
@@ -459,11 +462,11 @@ pub fn draw_overlay<S: DrawSurface>(
                 2.5,
             );
         }
-        Some((grid::SelKind::Rows, i)) => {
+        Some(grid::AxisPos::Row(i)) => {
             let y = state.row_y(i);
             surface.stroke_line(0.0, y, state.canvas_width, y, palette.selection, 2.5);
         }
-        _ => {}
+        None => {}
     }
 
     // -- 2e. Inline insert "+" badge on the hovered header boundary (`trame-headers`).

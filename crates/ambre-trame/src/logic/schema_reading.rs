@@ -39,6 +39,7 @@ use crate::formula::types::NameTarget;
 use crate::logic::TrameState;
 use crate::logic::schema::{FILTER_KEY, NAMED_RANGES_MAP, SCHEMA_VERSION, SHEET_ORDER, SHEETS_MAP};
 use crate::model::{Uid, parse_cell_key};
+use crate::{CellPos, Col};
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/readings.txt");
@@ -118,8 +119,13 @@ fn frozen_path(stored: &Stored) -> String {
 }
 
 /// A one-based cell position, the spelling every reading uses.
-fn cell(row: usize, col: usize) -> String {
-    format!("R{}C{}", row + 1, col + 1)
+fn cell(at: CellPos) -> String {
+    format!("R{}C{}", ordinal(at.row.get()), ordinal(at.col.get()))
+}
+
+/// The one-based ordinal of the zero-based position `pos`.
+fn ordinal(pos: u32) -> u32 {
+    pos.saturating_add(1)
 }
 
 /// A packed `0xRRGGBB` colour.
@@ -195,13 +201,13 @@ fn target_reading(target: &NameTarget) -> String {
         NameTarget::Cell(at) => format!(
             "sheet {} {}",
             at.sheet.index() + 1,
-            cell(at.row as usize, at.col as usize)
+            cell(CellPos::new(at.row, at.col))
         ),
         NameTarget::Range(range) => format!(
             "sheet {} {}:{}",
             range.sheet.index() + 1,
-            cell(range.row_start as usize, range.col_start as usize),
-            cell(range.row_end as usize, range.col_end as usize)
+            cell(CellPos::new(range.row_start, range.col_start)),
+            cell(CellPos::new(range.row_end, range.col_end))
         ),
     }
 }
@@ -262,7 +268,7 @@ fn sheet_reading(reader: &TrameState, stored: &Stored, key: &str) -> Option<Stri
     let uid = || Uid::parse(key);
     let at = || {
         let (row, col) = parse_cell_key(key)?;
-        Some((index.row_pos(&row)?, index.col_pos(&col)?))
+        Some(CellPos::new(index.row_pos(&row)?, index.col_pos(&col)?))
     };
     let item = || match &stored.value {
         LoroValue::String(id) => Uid::parse(id),
@@ -270,63 +276,61 @@ fn sheet_reading(reader: &TrameState, stored: &Stored, key: &str) -> Option<Stri
     };
     match prefix.as_str() {
         "cells_" => {
-            let (row, col) = at()?;
-            let shown = reader.displayed_text(row as u32, col as u32);
-            Some(format!("{} shows {shown:?}", cell(row, col)))
+            let place = at()?;
+            let shown = reader.displayed_text(place);
+            Some(format!("{} shows {shown:?}", cell(place)))
         }
         "cellstyle_" => {
-            let (row, col) = at()?;
-            let place = (row as u32, col as u32);
+            let place = at()?;
             let style = reader.styles.get(&place).cloned().unwrap_or_default();
             let read = style_reading(
                 reader.bold.contains(&place),
                 reader.italic.contains(&place),
                 &style,
             );
-            Some(format!("{} {read}", cell(row, col)))
+            Some(format!("{} {read}", cell(place)))
         }
         "col_widths_" => {
             let col = index.col_pos(&uid()?)?;
             Some(format!(
                 "column {} is {} px wide",
-                col + 1,
-                reader.col_width(col as u32)
+                ordinal(col.get()),
+                reader.col_width(col)
             ))
         }
         "row_heights_" => {
             let row = index.row_pos(&uid()?)?;
             Some(format!(
                 "row {} is {} px tall",
-                row + 1,
-                reader.row_height(row as u32)
+                ordinal(row.get()),
+                reader.row_height(row)
             ))
         }
-        "cols_" => Some(format!("column {}", index.col_pos(&item()?)? + 1)),
-        "rows_" => Some(format!("row {}", index.row_pos(&item()?)? + 1)),
+        "cols_" => Some(format!(
+            "column {}",
+            ordinal(index.col_pos(&item()?)?.get())
+        )),
+        "rows_" => Some(format!("row {}", ordinal(index.row_pos(&item()?)?.get()))),
         "merges_" => {
-            let (row, col) = at()?;
-            let (end_row, end_col) = reader.merges.get(&(row as u32, col as u32))?;
-            Some(format!(
-                "{}:{} merged",
-                cell(row, col),
-                cell(*end_row as usize, *end_col as usize)
-            ))
+            let master = at()?;
+            let end = reader.merges.get(&master)?;
+            Some(format!("{}:{} merged", cell(master), cell(*end)))
         }
         "filters_" if key == FILTER_KEY => {
             let (col, kind) = reader.load_active_filter()?;
             Some(format!(
                 "column {} keeps {kind:?}",
-                index.col_pos(&col)? + 1
+                ordinal(index.col_pos(&col)?.get())
             ))
         }
         "filter_hidden_" => {
             let row = index.row_pos(&uid()?)?;
-            let shown = if reader.hidden_rows.contains(&(row as u32)) {
+            let shown = if reader.hidden_rows.contains(&row) {
                 "hidden"
             } else {
                 "shown"
             };
-            Some(format!("row {} {shown}", row + 1))
+            Some(format!("row {} {shown}", ordinal(row.get())))
         }
         _ => None,
     }
@@ -444,7 +448,7 @@ fn a_stored_value_moving_moves_the_reading() {
     moved.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(0),
         sheet_id: ambre_bus::SheetId(super::schema::DEFAULT_SHEET.to_owned()),
-        col: 0,
+        col: Col::new(0),
         width_px: 90.0,
     });
     let after = readings_of(&moved, &reopened(&moved)).lines;
@@ -458,8 +462,8 @@ fn a_reader_moving_moves_the_reading() {
     // A reader that takes the stored width as points: the stored bytes are
     // the same, only what this build makes of them moved.
     let mut misread = reopened(&state);
-    let width = misread.col_width(0);
-    misread.col_widths.insert(0, width * 96.0 / 72.0);
+    let width = misread.col_width(Col::new(0));
+    misread.col_widths.insert(Col::new(0), width * 96.0 / 72.0);
     let after = readings_of(&state, &misread).lines;
     assert_ne!(
         render(&before),

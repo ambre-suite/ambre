@@ -525,17 +525,17 @@ fn lookup_reference_functions() {
         call_builtin("COLUMNS", &[r], FnCtx::at_clock(0.0)).to_display(),
         "4"
     );
-    // ROW()/COLUMN() with the evaluating cell at (row 7, col 2).
+    // ROW()/COLUMN() with the evaluating cell at B7.
     let ctx = FnCtx {
         now_serial: 0.0,
-        cell_row: 7,
-        cell_col: 2,
+        cell_row: Some(Row::new(6)),
+        cell_col: Some(Col::new(1)),
     };
     assert_eq!(call_builtin("ROW", &[], ctx).to_display(), "7");
     assert_eq!(call_builtin("COLUMN", &[], ctx).to_display(), "2");
     // The reference form is deferred -> #N/A.
     assert!(matches!(
-        row_col(&[num(1.0)], 7),
+        row_col(&[num(1.0)], Some(7.0)),
         CellValue::Error(FormulaError::NaError)
     ));
 }

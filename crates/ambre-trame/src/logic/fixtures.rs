@@ -100,7 +100,7 @@ impl TrameState {
             // peer ids and mint counters, exactly what two documents "agreeing by
             // a different route" are allowed to differ in. `BTreeMap` sorts the
             // rows/columns for free, making the order deterministic.
-            let mut by_pos: BTreeMap<(usize, usize), String> = BTreeMap::new();
+            let mut by_pos: BTreeMap<CellPos, String> = BTreeMap::new();
             if let LoroValue::Map(map) = self.doc.get_map(cells_map_name(&sheet)).get_value() {
                 for (key, value) in map.iter() {
                     let LoroValue::String(raw) = value else {
@@ -117,8 +117,8 @@ impl TrameState {
                     };
                     let label = format!(
                         "{}{}",
-                        crate::columns::col_to_alpha(col as u32),
-                        row.saturating_add(1)
+                        crate::columns::col_to_alpha(col),
+                        row.get().saturating_add(1)
                     );
                     let line = match sheet_u16 {
                         // Both representations for a formula cell, one for a
@@ -135,7 +135,7 @@ impl TrameState {
                         }
                         _ => format!("  {label} {raw}\n"),
                     };
-                    by_pos.insert((row, col), line);
+                    by_pos.insert(CellPos::new(row, col), line);
                 }
             }
             for line in by_pos.values() {
@@ -290,10 +290,11 @@ impl FixtureGen for TrameFixture {
 /// index, not a grid whose positions and ids still agree.
 fn build_grid_literals(state: &mut TrameState) {
     let header = ["region", "q1", "q2", "q3", "q4", "target", "owner", "note"];
-    let mut cells: Vec<(u32, u32, String)> = header
+    let at = |row: u32, col: u32| CellPos::new(Row::new(row), Col::new(col));
+    let mut cells: Vec<(CellPos, String)> = header
         .iter()
-        .enumerate()
-        .map(|(col, text)| (0, col as u32, (*text).to_owned()))
+        .zip(0..)
+        .map(|(text, col)| (at(0, col), (*text).to_owned()))
         .collect();
     cells.extend((1..20).flat_map(|row| {
         (0..8).map(move |col| {
@@ -303,18 +304,18 @@ fn build_grid_literals(state: &mut TrameState) {
                 7 => String::new(),
                 _ => (row * 100 + col).to_string(),
             };
-            (row, col, text)
+            (at(row, col), text)
         })
     }));
     state.handle_command(TrameCommand::SetCellsBatch { cells });
     // A merged title band over the header, then a row inserted under it.
     state.handle_command(TrameCommand::MergeCells {
-        row: 0,
-        col: 1,
-        row_end: 0,
-        col_end: 4,
+        row: Row::ZERO,
+        col: Col::new(1),
+        row_end: Row::ZERO,
+        col_end: Col::new(4),
     });
-    state.handle_command(TrameCommand::InsertRow { at: 1 });
+    state.handle_command(TrameCommand::InsertRow { at: Row::new(1) });
 }
 
 /// A 40-deep dependency chain plus three aggregates.
@@ -323,15 +324,16 @@ fn build_grid_literals(state: &mut TrameState) {
 /// one wrong link changes every cell below it in the dump.
 fn build_formula_dag(state: &mut TrameState) {
     const DEPTH: u32 = 40;
-    let mut cells: Vec<(u32, u32, String)> = (0..DEPTH)
-        .map(|row| (row, 0, (row + 1).to_string()))
+    let at = |row: u32, col: u32| CellPos::new(Row::new(row), Col::new(col));
+    let mut cells: Vec<(CellPos, String)> = (0..DEPTH)
+        .map(|row| (at(row, 0), (row + 1).to_string()))
         .collect();
     // B1 seeds the chain; every later B reads the A beside it and the B above.
-    cells.push((0, 1, "=A1".to_owned()));
-    cells.extend((1..DEPTH).map(|row| (row, 1, format!("=A{}+B{}", row + 1, row))));
-    cells.push((0, 2, format!("=SUM(A1:A{DEPTH})")));
-    cells.push((1, 2, format!("=AVERAGE(A1:A{DEPTH})")));
-    cells.push((2, 2, format!("=IF(C1>100,B{DEPTH},C2)")));
+    cells.push((at(0, 1), "=A1".to_owned()));
+    cells.extend((1..DEPTH).map(|row| (at(row, 1), format!("=A{}+B{}", row + 1, row))));
+    cells.push((at(0, 2), format!("=SUM(A1:A{DEPTH})")));
+    cells.push((at(1, 2), format!("=AVERAGE(A1:A{DEPTH})")));
+    cells.push((at(2, 2), format!("=IF(C1>100,B{DEPTH},C2)")));
     state.handle_command(TrameCommand::SetCellsBatch { cells });
 }
 
@@ -341,9 +343,10 @@ fn build_formula_dag(state: &mut TrameState) {
 /// reference binds to the display name, a known gap (`trame-sheets`). The
 /// fixture would record a parse error rather than a feature.
 fn build_multi_sheet(state: &mut TrameState) {
+    let at = |row: u32| CellPos::new(Row::new(row), Col::ZERO);
     state.handle_command(TrameCommand::SetCellsBatch {
         cells: (0..6)
-            .map(|row| (row, 0, format!("summary {row}")))
+            .map(|row| (at(row), format!("summary {row}")))
             .collect(),
     });
     for name in ["Data", "Notes"] {
@@ -360,7 +363,7 @@ fn build_multi_sheet(state: &mut TrameState) {
                     "Data" => (row * 7 + 1).to_string(),
                     _ => format!("note {row}"),
                 };
-                (row, 0, text)
+                (at(row), text)
             })
             .collect();
         state.handle_command(TrameCommand::SetCellsBatch { cells });
@@ -372,8 +375,8 @@ fn build_multi_sheet(state: &mut TrameState) {
                 reference: "Data!A1:A8".to_owned(),
             });
             state.handle_command(TrameCommand::SetCellText {
-                row: 0,
-                col: 2,
+                row: Row::ZERO,
+                col: Col::new(2),
                 text: "=SUM(readings)".to_owned(),
             });
             // The tab order stops matching the creation order, so a dump that
@@ -400,12 +403,22 @@ fn build_two_peer_merge(state: &mut TrameState, seed: u64) {
     let mut other = TrameState::with_peer(ambre_core::PeerId(seed ^ 0xFFFF_FFFF));
     state.handle_command(TrameCommand::SetCellsBatch {
         cells: (0..10)
-            .map(|row| (row, 0, format!("local {row}")))
+            .map(|row| {
+                (
+                    CellPos::new(Row::new(row), Col::ZERO),
+                    format!("local {row}"),
+                )
+            })
             .collect(),
     });
     other.handle_command(TrameCommand::SetCellsBatch {
         cells: (0..10)
-            .map(|row| (row, 3, format!("remote {row}")))
+            .map(|row| {
+                (
+                    CellPos::new(Row::new(row), Col::new(3)),
+                    format!("remote {row}"),
+                )
+            })
             .collect(),
     });
     other.apply_remote(&state.export_snapshot());
@@ -414,8 +427,8 @@ fn build_two_peer_merge(state: &mut TrameState, seed: u64) {
     // rather than only ops that precede one. The formula reads one cell from each
     // peer, so a reload that lost either side's ops changes the result.
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 5,
+        row: Row::ZERO,
+        col: Col::new(5),
         text: "=A1&E11".to_owned(),
     });
 }
@@ -533,7 +546,7 @@ impl FixtureGen for TrameBenchFixture {
 /// so a cell-at-a-time build costs the square of the cell count and produces the
 /// same document.
 fn build_literal_grid(state: &mut TrameState, rows: u32, cols: u32) {
-    let cells: Vec<(u32, u32, String)> = (0..rows)
+    let cells: Vec<(CellPos, String)> = (0..rows)
         .flat_map(|row| {
             (0..cols).map(move |col| {
                 // A mix of text and numbers. An all-numeric grid compresses far
@@ -544,7 +557,7 @@ fn build_literal_grid(state: &mut TrameState, rows: u32, cols: u32) {
                     7 => format!("owner {}", row % 37),
                     _ => (row * 31 + col * 7).to_string(),
                 };
-                (row, col, text)
+                (CellPos::new(Row::new(row), Col::new(col)), text)
             })
         })
         .collect();
@@ -562,19 +575,20 @@ fn build_literal_grid(state: &mut TrameState, rows: u32, cols: u32) {
 /// measures that kind rather than a workbook.
 fn build_formula_grid(state: &mut TrameState) {
     const ROWS: u32 = 12_500;
-    let mut cells: Vec<(u32, u32, String)> = Vec::with_capacity(125_000);
+    let at = |row: u32, col: u32| CellPos::new(Row::new(row), Col::new(col));
+    let mut cells: Vec<(CellPos, String)> = Vec::with_capacity(125_000);
     for row in 0..ROWS {
         let line = row + 1;
-        cells.push((row, 0, (row * 13 + 1).to_string()));
-        cells.push((row, 1, (row * 13 + 2).to_string()));
-        cells.push((row, 2, format!("=A{line}+B{line}")));
-        cells.push((row, 3, format!("=C{line}*2")));
-        cells.push((row, 4, format!("=C{line}+D{line}")));
-        cells.push((row, 5, format!("=IF(E{line}>100,E{line},D{line})")));
-        cells.push((row, 6, format!("=SUM(A{line}:B{line})")));
-        cells.push((row, 7, format!("=AVERAGE(C{line}:F{line})")));
-        cells.push((row, 8, format!("=G{line}+H{line}")));
-        cells.push((row, 9, format!("=I{line}-A{line}")));
+        cells.push((at(row, 0), (row * 13 + 1).to_string()));
+        cells.push((at(row, 1), (row * 13 + 2).to_string()));
+        cells.push((at(row, 2), format!("=A{line}+B{line}")));
+        cells.push((at(row, 3), format!("=C{line}*2")));
+        cells.push((at(row, 4), format!("=C{line}+D{line}")));
+        cells.push((at(row, 5), format!("=IF(E{line}>100,E{line},D{line})")));
+        cells.push((at(row, 6), format!("=SUM(A{line}:B{line})")));
+        cells.push((at(row, 7), format!("=AVERAGE(C{line}:F{line})")));
+        cells.push((at(row, 8), format!("=G{line}+H{line}")));
+        cells.push((at(row, 9), format!("=I{line}-A{line}")));
     }
     state.handle_command(TrameCommand::SetCellsBatch { cells });
 }
@@ -587,21 +601,22 @@ fn build_formula_grid(state: &mut TrameState) {
 fn build_formula_cascade(state: &mut TrameState) {
     const ROWS: u32 = 2_000;
     const CASCADE: u32 = 5;
-    let mut cells: Vec<(u32, u32, String)> = Vec::with_capacity(12_000);
+    let at = |row: u32, col: u32| CellPos::new(Row::new(row), Col::new(col));
+    let mut cells: Vec<(CellPos, String)> = Vec::with_capacity(12_000);
     for row in 0..ROWS {
         let line = row + 1;
-        cells.push((row, 0, (row + 1).to_string()));
+        cells.push((at(row, 0), (row + 1).to_string()));
         // Every later column reads the one beside it and the row above, so a
         // wrong walk order changes the whole cascade rather than one cell.
         for col in 1..=CASCADE {
-            let previous = crate::columns::col_to_alpha(col - 1);
+            let previous = crate::columns::col_to_alpha(Col::new(col - 1));
             let text = if row == 0 {
                 format!("={previous}{line}")
             } else {
-                let here = crate::columns::col_to_alpha(col);
+                let here = crate::columns::col_to_alpha(Col::new(col));
                 format!("={previous}{line}+{here}{row}")
             };
-            cells.push((row, col, text));
+            cells.push((at(row, col), text));
         }
     }
     state.handle_command(TrameCommand::SetCellsBatch { cells });

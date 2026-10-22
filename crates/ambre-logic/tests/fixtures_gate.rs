@@ -24,7 +24,7 @@
 
 use std::path::{Path, PathBuf};
 
-use ambre_bus::TrameCommand;
+use ambre_bus::{CellPos, Col, Row, TrameCommand};
 use ambre_core::{DocType, FixtureGen, seeded_document_id};
 use ambre_logic::fixtures::{
     self, Drift, FROZEN_KEEP_PER_TYPE, REGISTRY, check_corpus, freeze, generate_into,
@@ -63,7 +63,12 @@ impl FixtureGen for Gen {
         let mut state = TrameState::with_peer(ambre_core::PeerId(self.seed));
         state.handle_command(TrameCommand::SetCellsBatch {
             cells: (0..self.filler)
-                .map(|row| (row, 0, format!("row {row}")))
+                .map(|row| {
+                    (
+                        CellPos::new(Row::new(row), Col::new(0)),
+                        format!("row {row}"),
+                    )
+                })
                 .collect(),
         });
         state

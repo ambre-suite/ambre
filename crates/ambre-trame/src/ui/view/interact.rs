@@ -2,35 +2,53 @@
 // TrameView: resize application, fill/reorder drags, axis selection, clipboard and paste.
 
 use super::*;
+use crate::model::Line;
+use crate::{LAST_COL, LAST_ROW};
+
+/// Where a line grabbed at `from` lands when dropped before `slot`, or `None`
+/// when the drop leaves it in place. `LoroMovableList::mov` takes the index
+/// after the source is removed, so a slot past the origin shifts down by one.
+fn reorder_target<P: Line>(from: P, slot: P) -> Option<P> {
+    if slot == from || slot.before() == Some(from) {
+        return None;
+    }
+    if slot > from {
+        slot.before()
+    } else {
+        Some(slot)
+    }
+}
 
 impl TrameView {
+    /// A press with no Shift on a column or row header body. A press on a
+    /// selected header grabs it for a reorder; any other press selects.
+    pub(crate) fn press_header(&mut self, line: AxisPos) {
+        if self.axis_sel_contains(line) {
+            // Press on an already-selected header: grab it for an Excel-style
+            // drag reorder rather than re-selecting.
+            self.reorder_drag = Some(line);
+            self.state.reorder_preview = Some(line);
+        } else {
+            self.select_axis(line);
+            self.axis_drag = Some(line.kind());
+        }
+    }
+
     /// Columns a column resize applies to: the whole-column selection's band when
     /// the dragged column is part of it, else just the dragged column.
-    pub(crate) fn resize_target_cols(&self, c: u32) -> Vec<u32> {
+    pub(crate) fn resize_target_cols(&self, c: Col) -> Vec<Col> {
         let sel = &self.state.selection;
-        if sel.kind == SelKind::Cols {
-            let (c1, c2) = (
-                sel.anchor.1.min(sel.active.1),
-                sel.anchor.1.max(sel.active.1),
-            );
-            if c >= c1 && c <= c2 {
-                return (c1..=c2).collect();
-            }
+        if sel.band_contains(AxisPos::Col(c)) {
+            return sel.live_rect().cols().into_iter().collect();
         }
         vec![c]
     }
 
     /// Rows a row resize applies to (row analogue of [`resize_target_cols`]).
-    pub(crate) fn resize_target_rows(&self, r: u32) -> Vec<u32> {
+    pub(crate) fn resize_target_rows(&self, r: Row) -> Vec<Row> {
         let sel = &self.state.selection;
-        if sel.kind == SelKind::Rows {
-            let (r1, r2) = (
-                sel.anchor.0.min(sel.active.0),
-                sel.anchor.0.max(sel.active.0),
-            );
-            if r >= r1 && r <= r2 {
-                return (r1..=r2).collect();
-            }
+        if sel.band_contains(AxisPos::Row(r)) {
+            return sel.live_rect().rows().into_iter().collect();
         }
         vec![r]
     }
@@ -42,7 +60,7 @@ impl TrameView {
     /// holds it (`BUS-011`). The local map takes the width only once the outbox
     /// carries the command: a width the document never took hides the loss
     /// (`TRAME-UI-127`).
-    pub(crate) fn send_resize_col(&mut self, col: u32, width: f32) {
+    pub(crate) fn send_resize_col(&mut self, col: Col, width: f32) {
         let version = self.state.bump_version();
         let cmd = TrameCommand::ResizeCol {
             version,
@@ -60,7 +78,7 @@ impl TrameView {
     }
 
     /// Emit a `ResizeRow` (row analogue of [`send_resize_col`]).
-    pub(crate) fn send_resize_row(&mut self, row: u32, height: f32) {
+    pub(crate) fn send_resize_row(&mut self, row: Row, height: f32) {
         let version = self.state.bump_version();
         let cmd = TrameCommand::ResizeRow {
             version,
@@ -82,7 +100,7 @@ impl TrameView {
     /// content is asked of the Logic thread, and the paint after the answer
     /// measures it (`TRAME-UI-128`). A column is never resized from a part of
     /// its content.
-    pub(crate) fn auto_fit_col(&mut self, c: u32) {
+    pub(crate) fn auto_fit_col(&mut self, c: Col) {
         if self
             .send_command_lossless(TrameCommand::RequestColumnContent { col: c })
             .is_err()
@@ -91,7 +109,7 @@ impl TrameView {
         }
     }
 
-    pub(crate) fn auto_fit_row(&mut self, r: u32) {
+    pub(crate) fn auto_fit_row(&mut self, r: Row) {
         self.pending_autofit = Some(HeaderHit::RowBorder(r));
         self.edit_dirty = true;
     }
@@ -113,8 +131,8 @@ impl TrameView {
             HeaderHit::ColBorder(_) => {}
             HeaderHit::RowBorder(r) => {
                 let mut max_h = 0.0f32;
-                for ((row, _), data) in self.state.cell_cache.iter() {
-                    if *row != r || data.text.is_empty() {
+                for (at, data) in self.state.cell_cache.iter() {
+                    if at.row != r || data.text.is_empty() {
                         continue;
                     }
                     let size = crate::render::cell_font_px(data.size);
@@ -149,8 +167,8 @@ impl TrameView {
     /// The intent is a document mutation, so it goes out lossless (`BUS-023`).
     /// A command the outbox took nowhere selects no band: a whole-column
     /// selection would read as an insertion that never happened (`BUS-018`).
-    pub(crate) fn insert_col_at(&mut self, c: u32) {
-        self.select_cell(self.state.active_row(), c);
+    pub(crate) fn insert_col_at(&mut self, c: Col) {
+        self.select_cell(CellPos::new(self.state.active_row(), c));
         if self
             .send_command_lossless(TrameCommand::InsertColLeft)
             .is_err()
@@ -160,11 +178,11 @@ impl TrameView {
         }
         // Select the freshly created column (it lands at `c`) so the insertion
         // reads as a clear whole-column band rather than a silent shift.
-        self.select_axis(crate::ui::grid::SelKind::Cols, c);
+        self.select_axis(AxisPos::Col(c));
     }
 
-    pub(crate) fn insert_row_at(&mut self, r: u32) {
-        self.select_cell(r, self.state.active_col());
+    pub(crate) fn insert_row_at(&mut self, r: Row) {
+        self.select_cell(CellPos::new(r, self.state.active_col()));
         if self
             .send_command_lossless(TrameCommand::InsertRowAbove)
             .is_err()
@@ -173,7 +191,7 @@ impl TrameView {
             return;
         }
         // Select the freshly created row (it lands at `r`) for the same feedback.
-        self.select_axis(crate::ui::grid::SelKind::Rows, r);
+        self.select_axis(AxisPos::Row(r));
     }
 
     /// Finish an autofill drag (`trame-autofill`): emit `FillRange` over the source +
@@ -196,8 +214,6 @@ impl TrameView {
         if dest == src {
             return; // No extension: nothing to fill.
         }
-        let (sr1, sc1, sr2, sc2) = src;
-        let (dr1, dc1, dr2, dc2) = dest;
         // Ctrl inverts the default Excel/Sheets behaviour. But the single- vs
         // multi-cell test is per fill line, that is, on the source extent *along the
         // drag axis*. A vertical drag fills column lines, so it cares about the
@@ -210,18 +226,19 @@ impl TrameView {
         // block is a single value (Ctrl -> +1 Series), and several blocks are
         // several values (Ctrl -> Copy). `block` is the merge span; divide the
         // source extent by it to get the block count along the axis.
-        let vertical = dr1 < sr1 || dr2 > sr2;
-        let single_line = if block != (1, 1) {
+        let vertical =
+            dest.top_left.row < src.top_left.row || dest.bottom_right.row > src.bottom_right.row;
+        let single_line = if block != MergeSpan::CELL {
             let n = if vertical {
-                (sr2 - sr1 + 1) / block.0
+                src.row_count().get() / block.rows.get().max(1)
             } else {
-                (sc2 - sc1 + 1) / block.1
+                src.col_count().get() / block.cols.get().max(1)
             };
             n == 1
         } else if vertical {
-            sr1 == sr2
+            src.row_count() == RowCount::ONE
         } else {
-            sc1 == sc2
+            src.col_count() == ColCount::ONE
         };
         let mode = if ctrl {
             if single_line {
@@ -234,18 +251,8 @@ impl TrameView {
         };
         let cmd = TrameCommand::FillRange {
             sheet_id: self.state.active_sheet.clone(),
-            src: GridRange {
-                row: sr1,
-                col: sc1,
-                row_end: sr2,
-                col_end: sc2,
-            },
-            dest: GridRange {
-                row: dr1,
-                col: dc1,
-                row_end: dr2,
-                col_end: dc2,
-            },
+            src: GridRange::from(src),
+            dest: GridRange::from(dest),
             mode,
         };
         if self.send_command_lossless(cmd).is_err() {
@@ -257,8 +264,8 @@ impl TrameView {
         }
         // Grow the selection to the whole filled rectangle (anchor top-left,
         // active bottom-right), matching Sheets after a fill-handle drag.
-        self.state.selection.anchor = (dr1, dc1);
-        self.state.selection.active = (dr2, dc2);
+        self.state.selection.anchor = dest.top_left;
+        self.state.selection.active = dest.bottom_right;
         self.state.selection.extra.clear();
         self.viewport_changed = true;
         if let Err(SendError::Refused) = self.send_command_lossless(self.set_active_cmd()) {
@@ -268,17 +275,17 @@ impl TrameView {
     }
 
     /// Select a cell directly (pointer hit), keeping Logic and the pipe in sync.
-    pub(crate) fn select_cell(&mut self, row: u32, col: u32) {
-        if row == self.state.active_row() && col == self.state.active_col() {
-            self.park_input_on(row, col);
+    pub(crate) fn select_cell(&mut self, at: CellPos) {
+        if at == self.state.active_cell() {
+            self.park_input_on(at);
             return;
         }
-        self.state.select(row, col);
+        self.state.select(at);
         self.viewport_changed = true;
         if let Err(SendError::Refused) = self.send_command_lossless(self.set_active_cmd()) {
             tracing::error!("Trame: the outbox is full, the cell selection was dropped");
         }
-        self.park_input_on(row, col);
+        self.park_input_on(at);
         self.announce_active();
     }
 
@@ -289,44 +296,38 @@ impl TrameView {
         self.set_active_cmd()
     }
 
-    /// Whether the current whole-axis selection is of `kind` and its band covers
-    /// column/row `idx`. Gates the reorder-drag grab: a press on an already
+    /// Whether the current whole-axis selection runs on `line`'s axis and its
+    /// band covers `line`. Gates the reorder-drag grab: a press on an already
     /// selected header starts a move, any other press selects.
-    pub(crate) fn axis_sel_contains(&self, kind: crate::ui::grid::SelKind, idx: u32) -> bool {
-        let sel = &self.state.selection;
-        if sel.kind != kind {
-            return false;
-        }
-        let (a, b) = match kind {
-            crate::ui::grid::SelKind::Cols => (sel.anchor.1, sel.active.1),
-            crate::ui::grid::SelKind::Rows => (sel.anchor.0, sel.active.0),
-            crate::ui::grid::SelKind::Cells => return false,
-        };
-        (a.min(b)..=a.max(b)).contains(&idx)
+    pub(crate) fn axis_sel_contains(&self, line: AxisPos) -> bool {
+        self.state.selection.band_contains(line)
     }
 
     /// Finish a header reorder drag (Excel-style): drop the grabbed column/row at
     /// the previewed insertion slot. It emits `MoveColumn` / `MoveRow` unless it
     /// lands back on its origin, then reselects the moved band and clears the
-    /// drag. The slot is an "insert before" index. `LoroMovableList::mov` takes
-    /// the destination index *after* the source is removed, so a slot past the
-    /// origin shifts down by one.
+    /// drag. The slot is an "insert before" position (see [`reorder_target`]).
     pub(crate) fn end_reorder_drag(&mut self) {
-        let Some((kind, from)) = self.reorder_drag.take() else {
+        let Some(grabbed) = self.reorder_drag.take() else {
             return;
         };
-        let slot = self.state.reorder_preview.take().map(|(_, s)| s);
+        let slot = self.state.reorder_preview.take();
         self.edit_dirty = true;
-        let Some(slot) = slot else { return };
         // Dropping on the origin's own slot or the one just past it is a no-op.
-        if slot == from || slot == from + 1 {
-            return;
-        }
-        let to = if slot > from { slot - 1 } else { slot };
-        let cmd = match kind {
-            crate::ui::grid::SelKind::Cols => TrameCommand::MoveColumn { from, to },
-            crate::ui::grid::SelKind::Rows => TrameCommand::MoveRow { from, to },
-            crate::ui::grid::SelKind::Cells => return,
+        let (cmd, moved) = match (grabbed, slot) {
+            (AxisPos::Col(from), Some(AxisPos::Col(slot))) => {
+                let Some(to) = reorder_target(from, slot) else {
+                    return;
+                };
+                (TrameCommand::MoveColumn { from, to }, AxisPos::Col(to))
+            }
+            (AxisPos::Row(from), Some(AxisPos::Row(slot))) => {
+                let Some(to) = reorder_target(from, slot) else {
+                    return;
+                };
+                (TrameCommand::MoveRow { from, to }, AxisPos::Row(to))
+            }
+            _ => return,
         };
         // A move is a document mutation, so it goes out lossless (`BUS-023`). A
         // command the outbox took nowhere reselects nothing: a band drawn at the
@@ -336,13 +337,13 @@ impl TrameView {
             return;
         }
         // Keep the moved column/row selected at its new position.
-        self.select_axis(kind, to);
+        self.select_axis(moved);
     }
 
     /// Select a whole column/row band from a header click (`trame-selection`) and report
     /// it to Logic as a used-range rectangle.
-    pub(crate) fn select_axis(&mut self, kind: crate::ui::grid::SelKind, idx: u32) {
-        self.state.selection = Selection::axis(kind, idx, idx);
+    pub(crate) fn select_axis(&mut self, line: AxisPos) {
+        self.state.selection = Selection::axis(line, line);
         self.viewport_changed = true;
         if let Err(SendError::Refused) = self.send_command_lossless(self.axis_active_cmd()) {
             tracing::error!("Trame: the outbox is full, the axis select was dropped");
@@ -350,16 +351,15 @@ impl TrameView {
         self.announce_active();
     }
 
-    /// Extend the active whole-axis band to column/row `idx` (Shift+click or a
-    /// header drag), keeping the anchor. A band extension changes the selection,
-    /// so it refreshes the aggregates like every other selection path
-    /// (`TRAME-UI-109`).
-    pub(crate) fn extend_axis(&mut self, idx: u32) {
-        let kind = self.state.selection.kind;
-        if kind == crate::ui::grid::SelKind::Cells {
+    /// Extend the active whole-axis band to `to` (Shift+click or a header
+    /// drag), keeping the anchor. A band on the other axis, or no band, stays.
+    /// A band extension changes the selection, so it refreshes the aggregates
+    /// like every other selection path (`TRAME-UI-109`).
+    pub(crate) fn extend_axis(&mut self, to: AxisPos) {
+        if self.state.selection.kind != to.kind() {
             return;
         }
-        self.state.selection.extend_axis(kind, idx);
+        self.state.selection.extend_axis(to);
         self.viewport_changed = true;
         if let Err(SendError::Refused) = self.send_command_lossless(self.axis_active_cmd()) {
             tracing::error!("Trame: the outbox is full, the axis extend was dropped");
@@ -370,7 +370,7 @@ impl TrameView {
     /// Select the whole sheet from the header corner (`trame-selection`): a column band
     /// spanning every column.
     pub(crate) fn select_all(&mut self) {
-        self.state.selection = Selection::axis(crate::ui::grid::SelKind::Cols, 0, TOTAL_COLS - 1);
+        self.state.selection = Selection::axis(AxisPos::Col(Col::ZERO), AxisPos::Col(LAST_COL));
         self.viewport_changed = true;
         if let Err(SendError::Refused) = self.send_command_lossless(self.axis_active_cmd()) {
             tracing::error!("Trame: the outbox is full, the select-all was dropped");
@@ -435,12 +435,12 @@ impl TrameView {
         // emptiness from the viewport cache without reintroducing the limit. Only
         // the trivial case, a single active cell that is empty in cache, lets the
         // browser default proceed. Any multi-cell selection defers to Logic.
-        let (r1, c1, r2, c2) = self.state.selection.bounds();
-        if (r1, c1) == (r2, c2)
+        let bounds = self.state.selection.bounds();
+        if bounds.is_single_cell()
             && self
                 .state
                 .cell_cache
-                .get(&(r1, c1))
+                .get(&bounds.top_left)
                 .is_none_or(|d| d.raw.is_empty())
         {
             return CopyOutcome::Nothing;
@@ -498,11 +498,11 @@ impl TrameView {
     /// Logic thread reindexes relative formulas and applies styles; a pending cut
     /// then clears the source range.
     pub fn grid_paste_payload(&mut self, payload: ambre_bus::ClipboardPayload) {
-        let (row, col) = (self.state.active_row(), self.state.active_col());
-        let (rows, cols) = (payload.rows, payload.cols);
+        let at = self.state.active_cell();
+        let extent = MergeSpan::new(payload.rows, payload.cols);
         let sent = self.send_command_lossless(TrameCommand::PasteRange {
-            target_row: row,
-            target_col: col,
+            target_row: at.row,
+            target_col: at.col,
             payload,
         });
         if sent.is_err() {
@@ -515,7 +515,7 @@ impl TrameView {
         }
         // Select the whole destination rectangle, not just the landing cell, so
         // the pasted block reads back as a single selection (`trame-clipboard`).
-        self.select_pasted_region(row, col, rows, cols);
+        self.select_pasted_region(at, extent);
         self.finish_paste();
         self.needs_full = true;
     }
@@ -524,21 +524,23 @@ impl TrameView {
     /// each field becomes a literal cell (`src == target`, so no relative-formula
     /// shift). Used when the clipboard carries no Ambre payload.
     pub fn grid_paste_text(&mut self, text: &str) {
-        let (row, col) = (self.state.active_row(), self.state.active_col());
+        let at = self.state.active_cell();
         let normalized = text.replace('\r', "");
         let mut cells = Vec::new();
-        let mut rows = 0u32;
-        let mut cols = 0u32;
+        let mut rows = RowCount::ZERO;
+        let mut cols = ColCount::ZERO;
         for (dr, line) in normalized.trim_end_matches('\n').split('\n').enumerate() {
-            rows = rows.max(dr as u32 + 1);
+            let dr = RowCount::from_len(dr);
+            rows = rows.max(dr + RowCount::ONE);
             for (dc, field) in line.split('\t').enumerate() {
-                cols = cols.max(dc as u32 + 1);
+                let dc = ColCount::from_len(dc);
+                cols = cols.max(dc + ColCount::ONE);
                 if field.is_empty() {
                     continue;
                 }
                 cells.push(ambre_bus::ClipboardCell {
-                    dr: dr as u32,
-                    dc: dc as u32,
+                    dr,
+                    dc,
                     raw: field.to_owned(),
                     ..Default::default()
                 });
@@ -548,15 +550,15 @@ impl TrameView {
             return;
         }
         let payload = ambre_bus::ClipboardPayload {
-            src_row: row,
-            src_col: col,
+            src_row: at.row,
+            src_col: at.col,
             rows,
             cols,
             cells,
         };
         let sent = self.send_command_lossless(TrameCommand::PasteRange {
-            target_row: row,
-            target_col: col,
+            target_row: at.row,
+            target_col: at.col,
             payload,
         });
         if sent.is_err() {
@@ -565,30 +567,28 @@ impl TrameView {
             return;
         }
         // Select the whole destination rectangle (see `grid_paste_payload`).
-        self.select_pasted_region(row, col, rows, cols);
+        self.select_pasted_region(at, MergeSpan::new(rows, cols));
         self.needs_full = true;
     }
 
     /// Select the rectangle a paste just landed on: top-left at the target cell,
-    /// extending `rows` x `cols` (the payload's dimensions), clamped to the grid.
+    /// extending over `extent` (the payload's dimensions), clamped to the grid.
     /// A single-cell paste collapses to a plain single selection. The active
     /// corner stays on the top-left so subsequent typing overwrites there, while
     /// the whole pasted block is highlighted (`trame-clipboard`).
-    fn select_pasted_region(&mut self, row: u32, col: u32, rows: u32, cols: u32) {
-        let r2 = (row + rows.saturating_sub(1)).min(crate::TOTAL_ROWS - 1);
-        let c2 = (col + cols.saturating_sub(1)).min(TOTAL_COLS - 1);
-        self.state.select_rect(row, col, r2, c2);
+    fn select_pasted_region(&mut self, at: CellPos, extent: MergeSpan) {
+        let last = extent.last_from(at);
+        let last = CellPos::new(last.row.min(LAST_ROW), last.col.min(LAST_COL));
+        self.state.select_rect(CellRect::spanning(at, last));
     }
 
     /// After a paste: clear the source range if the clipboard held a cut, then
     /// drop the marching-ants anchor.
     pub(crate) fn finish_paste(&mut self) {
         if self.cut_pending
-            && let Some((r1, c1, r2, c2)) = self.state.clipboard_anchor
+            && let Some(anchor) = self.state.clipboard_anchor
         {
-            let batch = (r1..=r2)
-                .flat_map(|r| (c1..=c2).map(move |c| (r, c, String::new())))
-                .collect();
+            let batch = anchor.cells().map(|at| (at, String::new())).collect();
             // The source clear is a document mutation like any other. The grid
             // may only forget the range once the command is on its way
             // (`BUS-018`). A refused clear would otherwise show an empty range
@@ -597,10 +597,8 @@ impl TrameView {
                 .send_command_lossless(TrameCommand::SetCellsBatch { cells: batch })
                 .is_ok()
             {
-                for r in r1..=r2 {
-                    for c in c1..=c2 {
-                        self.state.set_cell_text(r, c, String::new());
-                    }
+                for at in anchor.cells() {
+                    self.state.set_cell_text(at, String::new());
                 }
             } else {
                 tracing::error!("Trame: the source clear was refused, the cut range is kept");
@@ -615,7 +613,7 @@ impl TrameView {
     /// Single-line: the local y is 0 (line 0), so only x carries information.
     fn editor_local_point(&self, x: f64, _y: f64) -> Option<(f32, f32)> {
         let ed = self.editor.as_ref()?;
-        let (cx, _cy, _cw, _ch) = self.state.cell_pixel_rect(ed.row, ed.col)?;
+        let (cx, _cy, _cw, _ch) = self.state.cell_pixel_rect(ed.at)?;
         let pad = crate::render::CELL_PAD_X * self.state.zoom;
         Some(((x - (cx + pad)).max(0.0) as f32, 0.0))
     }
@@ -626,7 +624,7 @@ impl TrameView {
         let Some(ed) = self.editor.as_ref() else {
             return false;
         };
-        self.state.cell_at(x, y) == Some((ed.row, ed.col))
+        self.state.cell_at(x, y) == Some(ed.at)
     }
 
     /// Input routing while editing a cell.
@@ -675,8 +673,8 @@ impl TrameView {
                 self.pending_commit = Some(PendingCommit::Stay);
                 self.edit_dirty = true;
                 self.text_input.focus();
-                if let Some((row, col)) = self.state.cell_at(*x, *y) {
-                    self.select_cell(row, col);
+                if let Some(at) = self.state.cell_at(*x, *y) {
+                    self.select_cell(at);
                 }
                 true
             }
@@ -713,8 +711,8 @@ impl TrameView {
                 self.pending_commit = Some(PendingCommit::Stay);
                 self.edit_dirty = true;
                 self.text_input.focus();
-                if let Some((row, col)) = self.state.cell_at(*x, *y) {
-                    self.select_cell(row, col);
+                if let Some(at) = self.state.cell_at(*x, *y) {
+                    self.select_cell(at);
                 }
                 false
             }
@@ -761,12 +759,14 @@ impl TrameView {
                     // deferred to the paint flush so the queued edits are applied
                     // before the buffer is read (`trame-cell-editing`).
                     "Enter" => {
-                        self.pending_commit = Some(PendingCommit::Nav(1, 0));
+                        self.pending_commit =
+                            Some(PendingCommit::Nav(RowDelta::new(1), ColDelta::ZERO));
                         self.edit_dirty = true;
                         true
                     }
                     "Tab" => {
-                        self.pending_commit = Some(PendingCommit::Nav(0, 1));
+                        self.pending_commit =
+                            Some(PendingCommit::Nav(RowDelta::ZERO, ColDelta::new(1)));
                         self.edit_dirty = true;
                         true
                     }

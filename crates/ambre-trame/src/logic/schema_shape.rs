@@ -47,6 +47,7 @@ use crate::logic::schema::{
 };
 use crate::logic::styles::StyleRecord;
 use crate::model::{Uid, cell_key};
+use crate::{Col, Row};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/shapes.txt");
@@ -330,20 +331,20 @@ pub(super) fn declared_string_consts(source: &str) -> Vec<String> {
 pub(super) fn workbook_of_every_key() -> TrameState {
     let mut state = TrameState::with_peer(ambre_core::PeerId(1));
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "hello".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 1,
-        col: 0,
+        row: Row::new(1),
+        col: Col::new(0),
         text: "=1+1".to_owned(),
     });
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: Vec::new(),
         kind: SelectionKind::Cells,
     });
@@ -360,20 +361,20 @@ pub(super) fn workbook_of_every_key() -> TrameState {
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(0),
         sheet_id: ambre_bus::SheetId(DEFAULT_SHEET.to_owned()),
-        col: 0,
+        col: Col::new(0),
         width_px: 120.0,
     });
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_bus::ViewportVersion(0),
         sheet_id: ambre_bus::SheetId(DEFAULT_SHEET.to_owned()),
-        row: 0,
+        row: Row::new(0),
         height_px: 33.0,
     });
     state.handle_command(TrameCommand::MergeCells {
-        row: 3,
-        col: 0,
-        row_end: 4,
-        col_end: 1,
+        row: Row::new(3),
+        col: Col::new(0),
+        row_end: Row::new(4),
+        col_end: Col::new(1),
     });
     state.handle_command(TrameCommand::DefineName {
         name: "N".to_owned(),
@@ -381,7 +382,7 @@ pub(super) fn workbook_of_every_key() -> TrameState {
     });
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: ambre_bus::SheetId(DEFAULT_SHEET.to_owned()),
-        col: 0,
+        col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Eq,
             value: "hello".to_owned(),
@@ -564,8 +565,8 @@ fn a_value_changing_leaves_the_shape_alone() {
     let first = workbook_of_every_key();
     let mut second = workbook_of_every_key();
     second.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "a different cell entirely".to_owned(),
     });
     assert_eq!(

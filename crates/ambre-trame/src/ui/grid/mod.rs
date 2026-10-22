@@ -17,7 +17,11 @@ use ambre_canvas::{TextEditor, TextEditorStyle};
 use ambre_draw::Color;
 
 use crate::render::BODY_SIZE;
-use crate::{GridRange, SelectionKind, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
+use crate::{
+    CellPos, CellRect, Col, ColCount, ColDelta, ColSpan, GridRange, LAST_COL, LAST_ROW, MergeSpan,
+    Row, RowCount, RowDelta, RowSpan, SelectionKind, TOTAL_COLS, TOTAL_ROWS, TrameCommand,
+    TrameEvent,
+};
 
 // Cell layout.
 
@@ -46,9 +50,9 @@ pub const MIN_ROW_HEIGHT: f64 = 12.0;
 /// edge (resp. a row's bottom edge) resizes instead of selecting.
 pub const RESIZE_BAND: f64 = 4.0;
 
-const PADDING_ROWS: u32 = 20;
+const PADDING_ROWS: RowCount = RowCount::new(20);
 
-const PADDING_COLS: u32 = 5;
+const PADDING_COLS: ColCount = ColCount::new(5);
 
 /// A cached cell ready to render: text plus its pinned formatting runs.
 #[derive(Clone, Default)]
@@ -74,9 +78,9 @@ pub struct CellData {
     pub font: Option<String>,
     pub size: Option<ambre_core::FontSize>,
     pub borders: ambre_bus::Borders,
-    /// `Some((col_span, row_span))` on a merge master, `None` otherwise. Covered
-    /// cells arrive with empty text and are simply rendered blank.
-    pub merge_span: Option<(u32, u32)>,
+    /// The block's extent on a merge master, `None` otherwise. Covered cells
+    /// arrive with empty text and are simply rendered blank.
+    pub merge_span: Option<MergeSpan>,
     /// The cell's row is hidden by the active shared filter (`trame-shared-filter`):
     /// the row axis collapses over it. Drives [`TrameUiState::hidden_rows`].
     pub is_filtered: bool,
@@ -113,14 +117,14 @@ impl CellData {
 /// `FontContext` is live. A commit therefore reads the buffer only after that
 /// flush.
 ///
-/// The wrapper only binds the core to a `(row, col)`. Every editing operation and
+/// The wrapper only binds the core to a cell. Every editing operation and
 /// buffer accessor reaches the core through `Deref`/`DerefMut`. The named intent
 /// constructors -- `insert`, `backspace`, the caret moves -- live on the core
 /// now. Pointer hits push point intents the core resolves against its own layout
 /// (no renderer-side byte-offset resolution).
 pub struct CellEditor {
-    pub row: u32,
-    pub col: u32,
+    /// The cell the editor is open on.
+    pub at: CellPos,
     /// The token the Logic thread knows this session by (`TRAME-UI-160`).
     pub session: u64,
     /// The shared editor core (drawn by `renderer::draw_edit`).
@@ -128,10 +132,10 @@ pub struct CellEditor {
 }
 
 impl CellEditor {
-    /// Open an editor on `(row, col)` seeded with `text`, caret at the end. The
+    /// Open an editor on cell `at` seeded with `text`, caret at the end. The
     /// pinned style is a placeholder; `draw_edit` re-pins it from the cell's
     /// formatting each paint before flushing.
-    pub fn new(row: u32, col: u32, text: String) -> Self {
+    pub fn new(at: CellPos, text: String) -> Self {
         let style = TextEditorStyle {
             weight: 400,
             italic: false,
@@ -142,8 +146,7 @@ impl CellEditor {
             strikethrough: false,
         };
         Self {
-            row,
-            col,
+            at,
             session: 0,
             core: TextEditor::new(&text, style),
         }
@@ -159,13 +162,13 @@ impl CellEditor {
         }
     }
 
-    /// Carry the editor to `(row, col)` when `session` is its own, where a
-    /// peer moved its cell. Returns whether it moved.
-    pub fn follow(&mut self, session: u64, row: u32, col: u32) -> bool {
+    /// Carry the editor to `at` when `session` is its own, where a peer moved
+    /// its cell. Returns whether it moved.
+    pub fn follow(&mut self, session: u64, at: CellPos) -> bool {
         if session != self.session {
             return false;
         }
-        (self.row, self.col) = (row, col);
+        self.at = at;
         true
     }
 
@@ -178,7 +181,7 @@ impl CellEditor {
 }
 
 // Every editing operation and buffer accessor lives on the shared core; the
-// wrapper only binds it to a `(row, col)`. Deref exposes `insert`, `backspace`,
+// wrapper only binds it to a cell. Deref exposes `insert`, `backspace`,
 // the caret/selection moves, `text`, `set_text` and `push` directly on a
 // `CellEditor`. The inherent `selected_text` above shadows the core's, for the
 // Trame `String` signature.
@@ -195,11 +198,6 @@ impl std::ops::DerefMut for CellEditor {
     }
 }
 
-/// A normalized cell rectangle `(r1, c1, r2, c2)` with `r1 <= r2` and
-/// `c1 <= c2`. Used for the committed disjoint rectangles of a multi-range
-/// selection and as the return type of [`Selection::bounds`].
-pub type CellRect = (u32, u32, u32, u32);
-
 /// The grid selection (`trame-selection`). A single-cell selection has `anchor ==
 /// active` and no extra ranges. A contiguous range keeps `anchor` fixed and
 /// moves `active` (drag, Shift+click, Shift+arrows). Disjoint ranges
@@ -211,9 +209,9 @@ pub type CellRect = (u32, u32, u32, u32);
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Selection {
     /// Fixed corner of the live rectangle (where this range started).
-    pub anchor: (u32, u32),
+    pub anchor: CellPos,
     /// Active cell; the cursor / editor / formatting target.
-    pub active: (u32, u32),
+    pub active: CellPos,
     /// Committed disjoint rectangles (Ctrl+click), each normalized. The live
     /// rectangle (`anchor..=active`) is *not* in here; the full selection is
     /// `extra` plus that rectangle (see [`rects`](Self::rects)).
@@ -233,6 +231,33 @@ pub enum SelKind {
     Cells,
     Cols,
     Rows,
+}
+
+/// A whole column or a whole row, named from a header.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AxisPos {
+    /// A column.
+    Col(Col),
+    /// A row.
+    Row(Row),
+}
+
+impl AxisPos {
+    /// The band shape a selection of this line takes.
+    pub const fn kind(self) -> SelKind {
+        match self {
+            Self::Col(_) => SelKind::Cols,
+            Self::Row(_) => SelKind::Rows,
+        }
+    }
+
+    /// The line's cell on the first row or the first column.
+    pub const fn cell(self) -> CellPos {
+        match self {
+            Self::Col(col) => CellPos::new(Row::ZERO, col),
+            Self::Row(row) => CellPos::new(row, Col::ZERO),
+        }
+    }
 }
 
 impl From<SelKind> for SelectionKind {
@@ -272,17 +297,17 @@ pub enum CtxScope {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HeaderHit {
     /// Column header body -> select / drag-extend the whole column.
-    ColBody(u32),
+    ColBody(Col),
     /// Row header body -> select the whole row.
-    RowBody(u32),
+    RowBody(Row),
     /// Band around column `i`'s right border -> resize column `i`.
-    ColBorder(u32),
+    ColBorder(Col),
     /// Band around row `i`'s bottom border -> resize row `i`.
-    RowBorder(u32),
+    RowBorder(Row),
     /// Inline "+" affordance at a column boundary -> insert a column left of `i`.
-    ColInsert(u32),
+    ColInsert(Col),
     /// Inline "+" affordance at a row boundary -> insert a row above `i`.
-    RowInsert(u32),
+    RowInsert(Row),
     /// Top-left corner -> select the whole sheet.
     Corner,
 }
@@ -298,78 +323,64 @@ pub enum ResizePreview {
 
 impl Default for Selection {
     fn default() -> Self {
-        Self::single(0, 0)
+        Self::single(CellPos::ORIGIN)
     }
 }
 
 impl Selection {
     /// A selection collapsed to a single cell (`anchor == active`, no extras).
-    pub fn single(row: u32, col: u32) -> Self {
+    pub fn single(at: CellPos) -> Self {
         Self {
-            anchor: (row, col),
-            active: (row, col),
+            anchor: at,
+            active: at,
             extra: Vec::new(),
             kind: SelKind::Cells,
         }
     }
 
     /// A whole-axis band selection from a header (`trame-selection`): the band
-    /// spans columns `anchor.1..=active.1` (`SelKind::Cols`) or rows
-    /// `anchor.0..=active.0` (`SelKind::Rows`). The perpendicular coordinate is
-    /// irrelevant (set to 0). `active` carries the clicked band so Shift extends
-    /// and arrow keys still resolve an active cell.
-    pub fn axis(kind: SelKind, anchor: u32, active: u32) -> Self {
-        let (anc, act) = match kind {
-            SelKind::Cols => ((0, anchor), (0, active)),
-            // Rows (and the degenerate Cells, never built here) key on the row.
-            _ => ((anchor, 0), (active, 0)),
-        };
+    /// spans the lines from `anchor` to `active`, which name the same axis.
+    /// The perpendicular coordinate is irrelevant (set to 0). `active` carries
+    /// the clicked band so Shift extends and arrow keys still resolve an
+    /// active cell.
+    pub fn axis(anchor: AxisPos, active: AxisPos) -> Self {
+        debug_assert_eq!(anchor.kind(), active.kind(), "a band runs on one axis");
         Self {
-            anchor: anc,
-            active: act,
+            anchor: anchor.cell(),
+            active: active.cell(),
             extra: Vec::new(),
-            kind,
+            kind: anchor.kind(),
         }
     }
 
     /// Move the active corner of the live rectangle, keeping the anchor (range
     /// extension: drag, Shift+click, Shift+arrows).
-    pub fn extend_to(&mut self, row: u32, col: u32) {
-        self.active = (row, col);
+    pub fn extend_to(&mut self, at: CellPos) {
+        self.active = at;
     }
 
-    /// Extend a whole-axis band to column/row `idx`, keeping the anchor
-    /// (`trame-selection`). The band kind is the caller's; a `Cells` selection
-    /// has no band to extend and is left untouched.
-    pub fn extend_axis(&mut self, kind: SelKind, idx: u32) {
-        match kind {
-            SelKind::Cols => self.active = (0, idx),
-            SelKind::Rows => self.active = (idx, 0),
-            SelKind::Cells => {}
-        }
+    /// Extend a whole-axis band to the line `to`, keeping the anchor
+    /// (`trame-selection`). The caller checks that the band runs on its axis.
+    pub fn extend_axis(&mut self, to: AxisPos) {
+        self.active = to.cell();
     }
 
-    /// Commit the live rectangle and start a fresh single-cell one at
-    /// `(row, col)` (Ctrl+click: disjoint selection).
-    pub fn add_disjoint(&mut self, row: u32, col: u32) {
+    /// Commit the live rectangle and start a fresh single-cell one at `at`
+    /// (Ctrl+click: disjoint selection).
+    pub fn add_disjoint(&mut self, at: CellPos) {
         self.extra.push(self.live_rect());
-        self.anchor = (row, col);
-        self.active = (row, col);
+        self.anchor = at;
+        self.active = at;
     }
 
-    /// The active cell (row, col).
-    pub fn active(&self) -> (u32, u32) {
+    /// The active cell.
+    pub fn active(&self) -> CellPos {
         self.active
     }
 
-    /// The live rectangle normalized to `(r1, c1, r2, c2)`.
+    /// The live rectangle, its corners ordered.
     pub fn live_rect(&self) -> CellRect {
-        (
-            self.anchor.0.min(self.active.0),
-            self.anchor.1.min(self.active.1),
-            self.anchor.0.max(self.active.0),
-            self.anchor.1.max(self.active.1),
-        )
+        CellRect::spanning(self.anchor, self.active)
     }
 
     /// Bounds of the live rectangle (the target of range ops: merge, sort,
@@ -384,23 +395,12 @@ impl Selection {
     /// extent across the other axis. The Logic thread resolves that extent from
     /// the used range, never from the UI cache.
     pub fn report(&self) -> TrameCommand {
-        let (row, col) = self.active;
-        let (anchor_row, anchor_col) = self.anchor;
-        let extra = self
-            .extra
-            .iter()
-            .map(|&(r1, c1, r2, c2)| GridRange {
-                row: r1,
-                col: c1,
-                row_end: r2,
-                col_end: c2,
-            })
-            .collect();
+        let extra = self.extra.iter().copied().map(GridRange::from).collect();
         TrameCommand::SetActiveCell {
-            row,
-            col,
-            anchor_row,
-            anchor_col,
+            row: self.active.row,
+            col: self.active.col,
+            anchor_row: self.anchor.row,
+            anchor_col: self.anchor.col,
             extra,
             kind: self.kind.into(),
         }
@@ -422,45 +422,40 @@ impl Selection {
         !self.extra.is_empty() || self.anchor != self.active
     }
 
-    /// Every distinct cell `(row, col)` covered by the selection, across all
-    /// rectangles, deduplicated (disjoint rectangles may overlap). Backs
-    /// Ctrl+Enter "fill the selection with the entered value".
-    pub fn selected_cells(&self) -> Vec<(u32, u32)> {
-        let mut cells: Vec<(u32, u32)> = self
-            .rects()
-            .flat_map(|(r1, c1, r2, c2)| {
-                (r1..=r2).flat_map(move |r| (c1..=c2).map(move |c| (r, c)))
-            })
-            .collect();
+    /// Every distinct cell covered by the selection, across all rectangles,
+    /// deduplicated (disjoint rectangles may overlap). Backs Ctrl+Enter "fill
+    /// the selection with the entered value".
+    pub fn selected_cells(&self) -> Vec<CellPos> {
+        let mut cells: Vec<CellPos> = self.rects().flat_map(CellRect::cells).collect();
         cells.sort_unstable();
         cells.dedup();
         cells
     }
 
-    /// True if `(row, col)` falls inside any selected rectangle.
-    pub fn contains(&self, row: u32, col: u32) -> bool {
-        self.rects()
-            .any(|(r1, c1, r2, c2)| row >= r1 && row <= r2 && col >= c1 && col <= c2)
+    /// True if `at` falls inside any selected rectangle.
+    pub fn contains(&self, at: CellPos) -> bool {
+        self.rects().any(|rect| rect.contains(at))
     }
 
     /// True if `col` is within the live rectangle's column span.
     #[allow(dead_code)]
-    pub fn contains_col(&self, col: u32) -> bool {
-        let (c1, c2) = (
-            self.anchor.1.min(self.active.1),
-            self.anchor.1.max(self.active.1),
-        );
-        col >= c1 && col <= c2
+    pub fn contains_col(&self, col: Col) -> bool {
+        self.live_rect().cols().contains(col)
     }
 
     /// True if `row` is within the live rectangle's row span.
     #[allow(dead_code)]
-    pub fn contains_row(&self, row: u32) -> bool {
-        let (r1, r2) = (
-            self.anchor.0.min(self.active.0),
-            self.anchor.0.max(self.active.0),
-        );
-        row >= r1 && row <= r2
+    pub fn contains_row(&self, row: Row) -> bool {
+        self.live_rect().rows().contains(row)
+    }
+
+    /// True if the live selection is a band on `line`'s axis that covers it.
+    pub fn band_contains(&self, line: AxisPos) -> bool {
+        self.kind == line.kind()
+            && match line {
+                AxisPos::Col(col) => self.contains_col(col),
+                AxisPos::Row(row) => self.contains_row(row),
+            }
     }
 }
 
@@ -475,18 +470,18 @@ pub struct CursorMove {
 /// All mutable UI state for the Trame grid on the UI Thread.
 pub struct TrameUiState {
     /// Top-left visible row (0-based).
-    pub top_row: u32,
+    pub top_row: Row,
     /// Top-left visible column (0-based).
-    pub left_col: u32,
+    pub left_col: Col,
 
     /// Current selection. Single-cell for now (`anchor == active`); the active
     /// cell drives the cursor, inline editor and formatting commands (`trame-selection`).
     pub selection: Selection,
 
     /// Number of full rows visible in the grid area (recomputed on resize).
-    pub viewport_rows: u32,
+    pub viewport_rows: RowCount,
     /// Number of full columns visible in the grid area.
-    pub viewport_cols: u32,
+    pub viewport_cols: ColCount,
 
     /// Canvas logical size in CSS pixels, set by ResizeObserver (`CANVAS-044`).
     pub canvas_width: f64,
@@ -499,23 +494,23 @@ pub struct TrameUiState {
     /// untouched and zooms the whole page incl. chrome; this scales the grid only.
     pub zoom: f64,
 
-    /// Cache of received cells: (row, col) -> display data (text + formatting).
+    /// Cache of received cells: cell -> display data (text + formatting).
     ///
     /// A cell absent from the cache is shown as "pending" (grey background).
     /// Only cells within the last requested range + padding should be queried;
     /// we never evict entries because the grid is read-only for now.
-    pub cell_cache: HashMap<(u32, u32), CellData>,
+    pub cell_cache: HashMap<CellPos, CellData>,
 
     /// Cells edited locally whose authoritative (recomputed) value has not yet
     /// arrived from the Logic thread. Rendered with a reduced-opacity veil so
     /// the optimistic value reads as "not yet confirmed". Cleared per cell when
     /// the next `ViewportData` carries it. UI-only derived state -- never synced.
-    pub dirty_cells: HashSet<(u32, u32)>,
+    pub dirty_cells: HashSet<CellPos>,
 
     /// Cells whose formula evaluation failed, keyed to the error string (for example
     /// `#DIV/0!`). Rendered with a small corner marker. Populated by
     /// `TrameEvent::FormulaError`, cleared when a valid value arrives. UI-only.
-    pub formula_errors: HashMap<(u32, u32), String>,
+    pub formula_errors: HashMap<CellPos, String>,
 
     /// Version of the last accepted `ViewportData` response (anti-flicker).
     pub accepted_version: ambre_bus::ViewportVersion,
@@ -532,29 +527,29 @@ pub struct TrameUiState {
     /// Grid column carrying the active shared filter, drawn with a funnel badge on
     /// its header (`trame-shared-filter`). `None` when no filter is active. Tracked from
     /// `TrameEvent::FilterApplied` / `FilterCleared`; UI-only derived state.
-    pub filtered_col: Option<u32>,
+    pub filtered_col: Option<Col>,
 
     /// Absolute grid rows hidden by the active shared filter, sorted ascending
     /// (`trame-shared-filter`). Derived from the `is_filtered` flag of cached cells and
     /// rebuilt whenever the cache changes. The row axis collapses over these (see
     /// [`visible_offset`](Self::visible_offset)); fed to the renderer's
     /// `GridLayout`. UI-only derived state.
-    pub hidden_rows: Vec<u32>,
+    pub hidden_rows: Vec<Row>,
 
     /// Per-column widths (logical px) keyed by absolute grid column, fed by the
     /// Logic thread's `col_widths` viewport slice (`trame-resize`). A column
     /// with no entry uses the uniform [`COL_WIDTH`]. Drives every pixel mapping
     /// (the renderer's `GridLayout` and the hit-testing helpers below). UI-only
     /// derived state, mirrors the CRDT `col_widths_{sheet}` map.
-    pub col_widths: HashMap<u32, f32>,
+    pub col_widths: HashMap<Col, f32>,
     /// Per-row heights (logical px) keyed by absolute grid row. Row analogue of
     /// [`col_widths`](Self::col_widths); absence uses [`ROW_HEIGHT`].
-    pub row_heights: HashMap<u32, f32>,
+    pub row_heights: HashMap<Row, f32>,
 
     /// The range last copied/cut, drawn with animated marching-ants until the
     /// next copy or an Escape (`trame-clipboard`). `None` when nothing is on the
-    /// clipboard. Stored as the normalized rectangle `(r1, c1, r2, c2)` in
-    /// absolute grid coordinates. UI-only view state.
+    /// clipboard. Stored as a rectangle in absolute grid coordinates. UI-only
+    /// view state.
     pub clipboard_anchor: Option<CellRect>,
 
     /// While the fill handle is being dragged, the destination rectangle the
@@ -581,17 +576,17 @@ pub struct TrameUiState {
     pub hover_header: Option<HeaderHit>,
 
     /// While a selected column/row header is being dragged to a new position
-    /// (Excel-style reorder), the target insertion slot. `(Cols, i)` means the
-    /// grabbed column would land left of column `i`, `(Rows, i)` above row `i`.
+    /// (Excel-style reorder), the target insertion slot. `Col(i)` means the
+    /// grabbed column would land left of column `i`, `Row(i)` above row `i`.
     /// Drawn as a full-height/width guide line at that boundary. `None` when no
     /// reorder drag is in progress. UI-only view state.
-    pub reorder_preview: Option<(SelKind, u32)>,
+    pub reorder_preview: Option<AxisPos>,
 
     /// Cells matched by the active Find query (`trame-find-replace`), drawn with a
-    /// translucent highlight. Absolute grid `(row, col)` pairs from the last
+    /// translucent highlight. Absolute grid cells from the last
     /// `TrameEvent::FindResult`; empty when the panel is closed or there is no
     /// match. UI-only view state, never synced.
-    pub find_matches: Vec<(u32, u32)>,
+    pub find_matches: Vec<CellPos>,
 }
 
 /// Side of the square autofill handle drawn at the selection's bottom-right

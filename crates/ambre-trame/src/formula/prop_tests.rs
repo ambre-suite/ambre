@@ -41,6 +41,7 @@ use super::types::{
 };
 use super::vm::EvalContext;
 use crate::model::Uid;
+use crate::{Col, Row};
 
 // -----------------------------------------------------------------------------
 // Shared helpers
@@ -67,8 +68,8 @@ fn cell(row: u32, col: u32) -> CellId {
 fn fnctx() -> FnCtx {
     FnCtx {
         now_serial: 0.0,
-        cell_row: 0,
-        cell_col: 0,
+        cell_row: None,
+        cell_col: None,
     }
 }
 
@@ -102,13 +103,19 @@ fn num_leaf() -> impl Strategy<Value = f64> {
 
 /// Cell references inside a generous positional window.
 fn cellref() -> impl Strategy<Value = CellRef> {
-    (0u32..1_000, 0u32..1_000).prop_map(|(r, c)| CellRef::new(r, c))
+    (0u32..1_000, 0u32..1_000).prop_map(|(r, c)| CellRef::new(Row::new(r), Col::new(c)))
 }
 
 /// Normalized ranges (`start <= end` on both axes), as the parser emits.
 fn rangedep() -> impl Strategy<Value = RangeDep> {
-    (0u32..500, 0u32..500, 0u32..500, 0u32..500)
-        .prop_map(|(a, b, c, d)| RangeDep::new(a.min(b), a.max(b), c.min(d), c.max(d)))
+    (0u32..500, 0u32..500, 0u32..500, 0u32..500).prop_map(|(a, b, c, d)| {
+        RangeDep::new(
+            Row::new(a.min(b)),
+            Row::new(a.max(b)),
+            Col::new(c.min(d)),
+            Col::new(c.max(d)),
+        )
+    })
 }
 
 /// Text literals over a quote-free, exponent-free charset (escaping has its own

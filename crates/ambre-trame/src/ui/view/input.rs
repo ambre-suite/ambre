@@ -26,9 +26,9 @@ impl TrameView {
             InputEvent::PointerDown {
                 x, y, button: 0, ..
             } if self.fill_drag.is_none() && self.state.filter_button_at(*x, *y).is_some() => {
-                if let Some((row, col)) = self.state.filter_button_at(*x, *y) {
+                if let Some(at) = self.state.filter_button_at(*x, *y) {
                     self.text_input.focus();
-                    self.select_cell(row, col);
+                    self.select_cell(at);
                     self.filter_open.publish();
                 }
                 true
@@ -77,30 +77,19 @@ impl TrameView {
                 };
                 self.text_input.focus();
                 match hit {
-                    HeaderHit::ColBody(c) => {
-                        if *shift && self.state.selection.kind == SelKind::Cols {
-                            self.extend_axis(c);
-                        } else if self.axis_sel_contains(SelKind::Cols, c) {
-                            // Press on an already-selected column: grab it for an
-                            // Excel-style drag reorder rather than re-selecting.
-                            self.reorder_drag = Some((SelKind::Cols, c));
-                            self.state.reorder_preview = Some((SelKind::Cols, c));
-                        } else {
-                            self.select_axis(SelKind::Cols, c);
-                            self.axis_drag = Some(SelKind::Cols);
-                        }
+                    // Shift extends a band of the same axis.
+                    HeaderHit::ColBody(c)
+                        if *shift && self.state.selection.kind == SelKind::Cols =>
+                    {
+                        self.extend_axis(AxisPos::Col(c))
                     }
-                    HeaderHit::RowBody(r) => {
-                        if *shift && self.state.selection.kind == SelKind::Rows {
-                            self.extend_axis(r);
-                        } else if self.axis_sel_contains(SelKind::Rows, r) {
-                            self.reorder_drag = Some((SelKind::Rows, r));
-                            self.state.reorder_preview = Some((SelKind::Rows, r));
-                        } else {
-                            self.select_axis(SelKind::Rows, r);
-                            self.axis_drag = Some(SelKind::Rows);
-                        }
+                    HeaderHit::RowBody(r)
+                        if *shift && self.state.selection.kind == SelKind::Rows =>
+                    {
+                        self.extend_axis(AxisPos::Row(r))
                     }
+                    HeaderHit::ColBody(c) => self.press_header(AxisPos::Col(c)),
+                    HeaderHit::RowBody(r) => self.press_header(AxisPos::Row(r)),
                     HeaderHit::Corner => self.select_all(),
                     // Resize bands / inline-insert affordance: handled in the
                     // resize-drag wiring (`trame-resize`, `trame-headers`).
@@ -117,12 +106,12 @@ impl TrameView {
                 match self.axis_drag {
                     Some(SelKind::Cols) => {
                         if let Some(c) = self.state.col_at_x(*x) {
-                            self.extend_axis(c);
+                            self.extend_axis(AxisPos::Col(c));
                         }
                     }
                     Some(SelKind::Rows) => {
                         if let Some(r) = self.state.row_at_y(*y) {
-                            self.extend_axis(r);
+                            self.extend_axis(AxisPos::Row(r));
                         }
                     }
                     _ => {}
@@ -136,13 +125,12 @@ impl TrameView {
             // Dragging a grabbed header moves the live insertion guide to the
             // boundary under the cursor (Excel-style reorder preview).
             InputEvent::PointerMove { x, y } if self.reorder_drag.is_some() => {
-                let Some((kind, _)) = self.reorder_drag else {
+                let Some(grabbed) = self.reorder_drag else {
                     return false;
                 };
-                let slot = match kind {
-                    SelKind::Cols => self.state.col_drop_slot(*x).map(|s| (SelKind::Cols, s)),
-                    SelKind::Rows => self.state.row_drop_slot(*y).map(|s| (SelKind::Rows, s)),
-                    SelKind::Cells => None,
+                let slot = match grabbed {
+                    AxisPos::Col(_) => self.state.col_drop_slot(*x).map(AxisPos::Col),
+                    AxisPos::Row(_) => self.state.row_drop_slot(*y).map(AxisPos::Row),
                 };
                 if let Some(slot) = slot
                     && self.state.reorder_preview != Some(slot)
@@ -191,13 +179,13 @@ impl TrameView {
                 ctrl,
             } => {
                 self.text_input.focus();
-                if let Some((row, col)) = self.state.cell_at(*x, *y) {
+                if let Some(at) = self.state.cell_at(*x, *y) {
                     if *shift {
-                        self.extend_cell(row, col);
+                        self.extend_cell(at);
                     } else if *ctrl {
-                        self.disjoin_cell(row, col);
+                        self.disjoin_cell(at);
                     } else {
-                        self.select_cell(row, col);
+                        self.select_cell(at);
                         // Arm drag-to-select: pointer moves now grow the range.
                         self.selecting_drag = true;
                     }
@@ -272,11 +260,11 @@ impl TrameView {
                 use crate::ui::grid::CtxScope;
                 let scope = match hit {
                     HeaderHit::ColBody(c) => {
-                        self.select_axis(SelKind::Cols, c);
+                        self.select_axis(AxisPos::Col(c));
                         CtxScope::Column
                     }
                     HeaderHit::RowBody(r) => {
-                        self.select_axis(SelKind::Rows, r);
+                        self.select_axis(AxisPos::Row(r));
                         CtxScope::Row
                     }
                     HeaderHit::Corner => {
@@ -301,10 +289,10 @@ impl TrameView {
                 // Right-click inside the current multi-cell selection keeps it, so
                 // a context menu can act on the range. Otherwise it collapses to
                 // the clicked cell, like a left click.
-                if let Some((row, col)) = self.state.cell_at(*x, *y)
-                    && !self.state.selection.contains(row, col)
+                if let Some(at) = self.state.cell_at(*x, *y)
+                    && !self.state.selection.contains(at)
                 {
-                    self.select_cell(row, col);
+                    self.select_cell(at);
                 }
                 self.set_ctx_scope(crate::ui::grid::CtxScope::Cell);
                 false
@@ -312,9 +300,9 @@ impl TrameView {
             // Double-click opens an editor on the clicked cell's current text.
             InputEvent::DoubleClick { x, y } => {
                 self.text_input.focus();
-                if let Some((row, col)) = self.state.cell_at(*x, *y) {
-                    self.select_cell(row, col);
-                    let seed = self.cell_seed(row, col);
+                if let Some(at) = self.state.cell_at(*x, *y) {
+                    self.select_cell(at);
+                    let seed = self.cell_seed(at);
                     self.begin_edit(seed);
                 }
                 true
@@ -357,34 +345,48 @@ impl TrameView {
                 // (Shift+arrows, Shift+Page, Shift+Home/End, Shift+Ctrl+End).
                 let ext = *shift;
                 match key.as_str() {
-                    "ArrowUp" => self.nav_move(-1, 0, ext),
-                    "ArrowDown" => self.nav_move(1, 0, ext),
-                    "ArrowLeft" => self.nav_move(0, -1, ext),
-                    "ArrowRight" => self.nav_move(0, 1, ext),
+                    "ArrowUp" => self.nav_move(RowDelta::new(-1), ColDelta::ZERO, ext),
+                    "ArrowDown" => self.nav_move(RowDelta::new(1), ColDelta::ZERO, ext),
+                    "ArrowLeft" => self.nav_move(RowDelta::ZERO, ColDelta::new(-1), ext),
+                    "ArrowRight" => self.nav_move(RowDelta::ZERO, ColDelta::new(1), ext),
                     // Tab / Shift+Tab walk columns; Enter / Shift+Enter walk rows
                     // (convention, `trame-selection`). These always collapse the
                     // selection: Shift is the reverse-direction modifier here, not
                     // a range extender. preventDefault keeps the browser from
                     // moving focus off the canvas.
-                    "Tab" if !chord => self.nav_move(0, if *shift { -1 } else { 1 }, false),
-                    "Enter" if !chord => self.nav_move(if *shift { -1 } else { 1 }, 0, false),
+                    "Tab" if !chord => {
+                        let step = ColDelta::new(if *shift { -1 } else { 1 });
+                        self.nav_move(RowDelta::ZERO, step, false)
+                    }
+                    "Enter" if !chord => {
+                        let step = RowDelta::new(if *shift { -1 } else { 1 });
+                        self.nav_move(step, ColDelta::ZERO, false)
+                    }
                     // Page Down / Up move by a full viewport height.
-                    "PageDown" => self.nav_move(self.state.viewport_rows.max(1) as i32, 0, ext),
-                    "PageUp" => self.nav_move(-(self.state.viewport_rows.max(1) as i32), 0, ext),
+                    "PageDown" | "PageUp" => {
+                        let page =
+                            RowDelta::from_count(self.state.viewport_rows.max(RowCount::ONE));
+                        let step = if key == "PageUp" {
+                            page.reversed()
+                        } else {
+                            page
+                        };
+                        self.nav_move(step, ColDelta::ZERO, ext)
+                    }
                     // Home: column 0 of the row; Ctrl+Home: top-left of the grid.
-                    "Home" if chord => self.nav_goto(0, 0, ext),
-                    "Home" => self.nav_goto(self.state.active_row(), 0, ext),
+                    "Home" if chord => self.nav_goto(CellPos::ORIGIN, ext),
+                    "Home" => self.nav_goto(CellPos::new(self.state.active_row(), Col::ZERO), ext),
                     // End: last cell with content in the row; Ctrl+End: bottom-right
                     // of the used (cached) range. With Shift the range grows to that
                     // target (Shift+Ctrl+End = select to the last non-empty cell).
                     // Best-effort -- the UI thread has no used-range model, so it
                     // scans its local cache (`trame-grid-viewport`).
                     "End" if chord => {
-                        let (row, col) = self
+                        let at = self
                             .state
                             .last_content_cell()
-                            .unwrap_or((self.state.active_row(), self.state.active_col()));
-                        self.nav_goto(row, col, ext)
+                            .unwrap_or(self.state.active_cell());
+                        self.nav_goto(at, ext)
                     }
                     "End" => {
                         let row = self.state.active_row();
@@ -392,7 +394,7 @@ impl TrameView {
                             .state
                             .last_content_col(row)
                             .unwrap_or(self.state.active_col());
-                        self.nav_goto(row, col, ext)
+                        self.nav_goto(CellPos::new(row, col), ext)
                     }
                     // Escape clears the marching-ants clipboard marquee (`trame-clipboard`),
                     // if any; otherwise it is not ours.
@@ -408,7 +410,7 @@ impl TrameView {
                     "Delete" | "Backspace" => self.clear_active_cell(),
                     // F2 opens an editor on the cell's current text.
                     "F2" => {
-                        let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
+                        let seed = self.cell_seed(self.state.active_cell());
                         self.begin_edit(seed);
                         true
                     }
@@ -467,14 +469,14 @@ impl TrameView {
         let Some((x, y)) = self.drag_point else {
             return;
         };
-        let Some((row, col)) = self.state.drag_cell_at(x, y) else {
+        let Some(at) = self.state.drag_cell_at(x, y) else {
             return;
         };
         if let Some((src, block)) = self.fill_drag {
-            self.state.fill_preview = Some(fill_dest(src, row, col, block));
+            self.state.fill_preview = Some(fill_dest(src, at, block));
             self.edit_dirty = true; // repaint the preview outline.
         } else if self.selecting_drag {
-            self.extend_cell(row, col);
+            self.extend_cell(at);
         }
     }
 
@@ -537,18 +539,19 @@ impl TrameView {
         self.scroll.cancel();
     }
 
-    /// Move the active cell by `(dr, dc)`; returns `true` (consumed). With
-    /// `extend` (Shift held) the selection range grows instead of collapsing.
-    pub(crate) fn nav_move(&mut self, dr: i32, dc: i32, extend: bool) -> bool {
+    /// Move the active cell by `dr` rows and `dc` columns; returns `true`
+    /// (consumed). With `extend` (Shift held) the selection range grows
+    /// instead of collapsing.
+    pub(crate) fn nav_move(&mut self, dr: RowDelta, dc: ColDelta, extend: bool) -> bool {
         let mv = self.state.move_cursor(dr, dc, extend);
         self.apply_cursor_move(mv)
     }
 
-    /// Jump the active cell to absolute `(row, col)` (Home / End / Ctrl+Home /
+    /// Jump the active cell to absolute `at` (Home / End / Ctrl+Home /
     /// Ctrl+End); returns `true` (consumed). With `extend` the range grows to
     /// the target (Shift+End, Shift+Ctrl+End...).
-    pub(crate) fn nav_goto(&mut self, row: u32, col: u32, extend: bool) -> bool {
-        let mv = self.state.move_to(row, col, extend);
+    pub(crate) fn nav_goto(&mut self, at: CellPos, extend: bool) -> bool {
+        let mv = self.state.move_to(at, extend);
         self.apply_cursor_move(mv)
     }
 
@@ -560,31 +563,31 @@ impl TrameView {
         self.state.selection.report()
     }
 
-    /// Extend the live selection rectangle to `(row, col)` (Shift+click / drag),
+    /// Extend the live selection rectangle to `at` (Shift+click / drag),
     /// keeping the anchor. Moves the active cell, so Logic and the pipe stay in
     /// sync via the same path as a plain selection.
-    pub(crate) fn extend_cell(&mut self, row: u32, col: u32) {
-        if (row, col) == (self.state.active_row(), self.state.active_col()) {
+    pub(crate) fn extend_cell(&mut self, at: CellPos) {
+        if at == self.state.active_cell() {
             return;
         }
-        self.state.select_extend(row, col);
+        self.state.select_extend(at);
         self.viewport_changed = true;
         if let Err(SendError::Refused) = self.send_command_lossless(self.set_active_cmd()) {
             tracing::error!("Trame: the outbox is full, the selection extend was dropped");
         }
-        self.park_input_on(row, col);
+        self.park_input_on(at);
         self.announce_active();
     }
 
-    /// Add `(row, col)` as a fresh disjoint range (Ctrl+click), committing the
+    /// Add `at` as a fresh disjoint range (Ctrl+click), committing the
     /// previous live rectangle. The new cell becomes active.
-    pub(crate) fn disjoin_cell(&mut self, row: u32, col: u32) {
-        self.state.select_disjoint(row, col);
+    pub(crate) fn disjoin_cell(&mut self, at: CellPos) {
+        self.state.select_disjoint(at);
         self.viewport_changed = true;
         if let Err(SendError::Refused) = self.send_command_lossless(self.set_active_cmd()) {
             tracing::error!("Trame: the outbox is full, the disjoint select was dropped");
         }
-        self.park_input_on(row, col);
+        self.park_input_on(at);
         self.announce_active();
     }
 
@@ -601,7 +604,7 @@ impl TrameView {
             if let Some(scroll) = mv.scroll {
                 self.pending_viewport.coalesce(scroll);
             }
-            self.park_input_on(self.state.active_row(), self.state.active_col());
+            self.park_input_on(self.state.active_cell());
             self.announce_active();
         }
         true
@@ -614,7 +617,7 @@ impl TrameView {
     pub(crate) fn clear_active_cell(&mut self) -> bool {
         let cells = self.state.selection.selected_cells();
         // One batch command so the whole clear is a single undo item.
-        let batch = cells.iter().map(|&(r, c)| (r, c, String::new())).collect();
+        let batch = cells.iter().map(|&at| (at, String::new())).collect();
         if self
             .send_command_lossless(TrameCommand::SetCellsBatch { cells: batch })
             .is_err()
@@ -622,8 +625,8 @@ impl TrameView {
             tracing::error!("Trame: the cell clear was dropped, the cells keep their text");
             return true;
         }
-        for &(row, col) in &cells {
-            self.state.set_cell_text(row, col, String::new());
+        for &at in &cells {
+            self.state.set_cell_text(at, String::new());
         }
         self.needs_full = true;
         self.announce_active();
@@ -682,7 +685,7 @@ impl TrameView {
 
     /// Arm a column resize from a press on column `c`'s right border. Shows the
     /// live vertical guide at the pointer x.
-    pub(crate) fn arm_col_resize(&mut self, c: u32, x: f64) {
+    pub(crate) fn arm_col_resize(&mut self, c: Col, x: f64) {
         self.resize_drag = Some(HeaderHit::ColBorder(c));
         self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(x));
         self.set_cursor("col-resize");
@@ -690,7 +693,7 @@ impl TrameView {
     }
 
     /// Arm a row resize from a press on row `r`'s bottom border.
-    pub(crate) fn arm_row_resize(&mut self, r: u32, y: f64) {
+    pub(crate) fn arm_row_resize(&mut self, r: Row, y: f64) {
         self.resize_drag = Some(HeaderHit::RowBorder(r));
         self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(y));
         self.set_cursor("row-resize");

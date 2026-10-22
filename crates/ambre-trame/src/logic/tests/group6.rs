@@ -13,32 +13,32 @@ fn fill_merged_source_tiles_and_remerges_blocks() {
     use crate::{FillMode, GridRange};
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "x".to_owned(),
     });
     // Merge A1:A2 (1 col x 2 rows), master = A1.
     state.handle_command(TrameCommand::MergeCells {
-        row: 0,
-        col: 0,
-        row_end: 1,
-        col_end: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        row_end: Row::new(1),
+        col_end: Col::new(0),
     });
 
     // Drag the handle down: source is the whole merge, dest snapped to A6.
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(state.active_sheet.clone()),
         src: GridRange {
-            row: 0,
-            col: 0,
-            row_end: 1,
-            col_end: 0,
+            row: Row::new(0),
+            col: Col::new(0),
+            row_end: Row::new(1),
+            col_end: Col::new(0),
         },
         dest: GridRange {
-            row: 0,
-            col: 0,
-            row_end: 5,
-            col_end: 0,
+            row: Row::new(0),
+            col: Col::new(0),
+            row_end: Row::new(5),
+            col_end: Col::new(0),
         },
         mode: FillMode::Auto,
     });
@@ -46,10 +46,10 @@ fn fill_merged_source_tiles_and_remerges_blocks() {
     // Each block's master carries the value and a fresh 2x1 span; the masters
     // (A3, A5) re-merge while the covered rows (A4, A6) stay blank.
     let a3 = read_display(&mut state, 2, 0);
-    assert_eq!(a3.merge_span, Some((1, 2)), "A3 master spans 2 rows");
+    assert_eq!(a3.merge_span, Some(span(2, 1)), "A3 master spans 2 rows");
     assert_eq!(a3.text, "x");
     let a5 = read_display(&mut state, 4, 0);
-    assert_eq!(a5.merge_span, Some((1, 2)), "A5 master spans 2 rows");
+    assert_eq!(a5.merge_span, Some(span(2, 1)), "A5 master spans 2 rows");
     assert_eq!(a5.text, "x");
     let a4 = read_display(&mut state, 3, 0);
     assert!(a4.is_merged, "A4 is covered by the A3 block");
@@ -65,41 +65,41 @@ fn fill_merged_series_increments_per_block() {
     use crate::{FillMode, GridRange};
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "1".to_owned(),
     });
     // Merge A1:A2 (1 col x 2 rows), master = A1 holding the number 1.
     state.handle_command(TrameCommand::MergeCells {
-        row: 0,
-        col: 0,
-        row_end: 1,
-        col_end: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        row_end: Row::new(1),
+        col_end: Col::new(0),
     });
 
     // Ctrl-drag down to A6: Series, so each block master grows by +1.
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(state.active_sheet.clone()),
         src: GridRange {
-            row: 0,
-            col: 0,
-            row_end: 1,
-            col_end: 0,
+            row: Row::new(0),
+            col: Col::new(0),
+            row_end: Row::new(1),
+            col_end: Col::new(0),
         },
         dest: GridRange {
-            row: 0,
-            col: 0,
-            row_end: 5,
-            col_end: 0,
+            row: Row::new(0),
+            col: Col::new(0),
+            row_end: Row::new(5),
+            col_end: Col::new(0),
         },
         mode: FillMode::Series,
     });
 
     let a3 = read_display(&mut state, 2, 0);
-    assert_eq!(a3.merge_span, Some((1, 2)), "A3 master spans 2 rows");
+    assert_eq!(a3.merge_span, Some(span(2, 1)), "A3 master spans 2 rows");
     assert_eq!(a3.text, "2", "second block increments to 2");
     let a5 = read_display(&mut state, 4, 0);
-    assert_eq!(a5.merge_span, Some((1, 2)), "A5 master spans 2 rows");
+    assert_eq!(a5.merge_span, Some(span(2, 1)), "A5 master spans 2 rows");
     assert_eq!(a5.text, "3", "third block increments to 3");
 }
 
@@ -112,52 +112,52 @@ fn fill_multi_merged_source_continues_pattern() {
     let mut state = TrameState::new();
     // A1 = 1, A3 = 2; merge A1:A2 and A3:A4 into two 2x1 blocks.
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "1".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 2,
-        col: 0,
+        row: Row::new(2),
+        col: Col::new(0),
         text: "2".to_owned(),
     });
     state.handle_command(TrameCommand::MergeCells {
-        row: 0,
-        col: 0,
-        row_end: 1,
-        col_end: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        row_end: Row::new(1),
+        col_end: Col::new(0),
     });
     state.handle_command(TrameCommand::MergeCells {
-        row: 2,
-        col: 0,
-        row_end: 3,
-        col_end: 0,
+        row: Row::new(2),
+        col: Col::new(0),
+        row_end: Row::new(3),
+        col_end: Col::new(0),
     });
 
     // Drag the two-block source (A1:A4) down to A8 -> two more blocks.
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(state.active_sheet.clone()),
         src: GridRange {
-            row: 0,
-            col: 0,
-            row_end: 3,
-            col_end: 0,
+            row: Row::new(0),
+            col: Col::new(0),
+            row_end: Row::new(3),
+            col_end: Col::new(0),
         },
         dest: GridRange {
-            row: 0,
-            col: 0,
-            row_end: 7,
-            col_end: 0,
+            row: Row::new(0),
+            col: Col::new(0),
+            row_end: Row::new(7),
+            col_end: Col::new(0),
         },
         mode: FillMode::Auto,
     });
 
     // A5 (block 3) and A7 (block 4) re-merge and continue the 1,2,... series.
     let a5 = read_display(&mut state, 4, 0);
-    assert_eq!(a5.merge_span, Some((1, 2)), "A5 master spans 2 rows");
+    assert_eq!(a5.merge_span, Some(span(2, 1)), "A5 master spans 2 rows");
     assert_eq!(a5.text, "3");
     let a7 = read_display(&mut state, 6, 0);
-    assert_eq!(a7.merge_span, Some((1, 2)), "A7 master spans 2 rows");
+    assert_eq!(a7.merge_span, Some(span(2, 1)), "A7 master spans 2 rows");
     assert_eq!(a7.text, "4");
     // Covered rows of the new blocks stay blank.
     let a6 = read_display(&mut state, 5, 0);
@@ -175,10 +175,10 @@ fn find_next_matches_and_wraps() {
     // Active at A1 (0,0): the three "apple" cells (case-folded) match; the
     // focused one is the first strictly after the active cell -> A2.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -195,10 +195,10 @@ fn find_next_matches_and_wraps() {
 
     // Active at the last match A4 (3,0): the next wraps back to A1.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 3,
-        col: 0,
-        anchor_row: 3,
-        anchor_col: 0,
+        row: Row::new(3),
+        col: Col::new(0),
+        anchor_row: Row::new(3),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -216,10 +216,10 @@ fn find_next_honors_case_and_whole_cell() {
     let mut state = TrameState::new();
     seed_find(&mut state);
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -249,17 +249,17 @@ fn a_search_reads_past_the_requested_window() {
     let mut state = TrameState::new();
     for (row, col) in [(0, 0), (900, 60)] {
         state.handle_command(TrameCommand::SetCellText {
-            row,
-            col,
+            row: Row::new(row),
+            col: Col::new(col),
             text: "needle".to_owned(),
         });
     }
     state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        row_end: 30,
-        col_start: 0,
-        col_end: 10,
+        row_start: Row::new(0),
+        row_end: Row::new(30),
+        col_start: Col::new(0),
+        col_end: Col::new(10),
     });
     let out = state.handle_command(TrameCommand::FindNext {
         query: "needle".to_owned(),
@@ -277,8 +277,8 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
     let mut state = TrameState::new();
     seed_find(&mut state); // A1 "apple", A2 "Apple pie", A3 "banana", A4 "APPLE"
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "grape".to_owned(),
     });
     state.handle_command(TrameCommand::CreateSheet {
@@ -289,8 +289,8 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
         sheet_id: SheetId(s2.clone()),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "apple".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
@@ -351,13 +351,13 @@ fn replace_all_gates_formula_cells() {
     let mut state = TrameState::new();
     // A1 = 2, A2 = "=A1" (displays "2"). Replace displayed "2" with "9".
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "2".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 1,
-        col: 0,
+        row: Row::new(1),
+        col: Col::new(0),
         text: "=A1".to_owned(),
     });
 
@@ -401,10 +401,10 @@ fn replace_one_replaces_active_and_advances() {
 
     // Active on A1 (a match): replace just this cell, advance to A2.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -426,10 +426,10 @@ fn replace_one_replaces_active_and_advances() {
 
     // Active on a non-match (A3): nothing replaced, but it advances.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 2,
-        col: 0,
-        anchor_row: 2,
-        anchor_col: 0,
+        row: Row::new(2),
+        col: Col::new(0),
+        anchor_row: Row::new(2),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -450,8 +450,8 @@ fn replace_all_spans_sheets() {
     let mut state = TrameState::new();
     // Sheet1!A1 = "foo".
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "foo".to_owned(),
     });
     // Sheet2!A1 = "foo".
@@ -463,8 +463,8 @@ fn replace_all_spans_sheets() {
         sheet_id: SheetId(s2.clone()),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "foo".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
@@ -506,8 +506,8 @@ fn csv_import_creates_sheet_and_cells() {
         delimiter: None,
         has_header: false,
         target_sheet_id: None,
-        start_row: 0,
-        start_col: 0,
+        start_row: Row::new(0),
+        start_col: Col::new(0),
     });
     let (sheet_id, rows, cols) = import_result(&out);
     assert_eq!((rows, cols), (2, 3));
@@ -526,8 +526,8 @@ fn csv_import_skips_header() {
         delimiter: None,
         has_header: true,
         target_sheet_id: None,
-        start_row: 0,
-        start_col: 0,
+        start_row: Row::new(0),
+        start_col: Col::new(0),
     });
     let (_, rows, _) = import_result(&out);
     assert_eq!(rows, 1);
@@ -543,8 +543,8 @@ fn csv_delimiter_autodetect() {
         delimiter: None,
         has_header: false,
         target_sheet_id: None,
-        start_row: 0,
-        start_col: 0,
+        start_row: Row::new(0),
+        start_col: Col::new(0),
     });
     assert_eq!(read_cell(&mut state, 0, 1), "y");
     assert_eq!(read_cell(&mut state, 1, 2), "3");
@@ -559,8 +559,8 @@ fn csv_import_export_roundtrip() {
         delimiter: None,
         has_header: false,
         target_sheet_id: None,
-        start_row: 0,
-        start_col: 0,
+        start_row: Row::new(0),
+        start_col: Col::new(0),
     });
     let (sheet_id, _, _) = import_result(&out);
     let out = state.handle_command(TrameCommand::ExportCsv {
@@ -602,8 +602,8 @@ fn csv_import_malformed_never_panics() {
                     delimiter,
                     has_header,
                     target_sheet_id: None,
-                    start_row: 0,
-                    start_col: 0,
+                    start_row: Row::new(0),
+                    start_col: Col::new(0),
                 });
             }
         }
@@ -640,8 +640,8 @@ fn csv_import_random_bytes_never_panics() {
             delimiter: None,
             has_header: next() % 2 == 0,
             target_sheet_id: None,
-            start_row: 0,
-            start_col: 0,
+            start_row: Row::new(0),
+            start_col: Col::new(0),
         });
     }
 }
@@ -654,29 +654,29 @@ fn csv_export_trims_empty_trailing_columns() {
     let mut state = TrameState::new();
     // Materialize out to column R (17) by writing then clearing a far cell.
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 17,
+        row: Row::new(0),
+        col: Col::new(17),
         text: "x".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 17,
+        row: Row::new(0),
+        col: Col::new(17),
         text: String::new(),
     });
     // Real content only in columns A..C.
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "1".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "2".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 2,
+        row: Row::new(0),
+        col: Col::new(2),
         text: "3".to_owned(),
     });
 
@@ -697,8 +697,8 @@ fn csv_import_then_export_drops_trailing_empties() {
         delimiter: None,
         has_header: false,
         target_sheet_id: None,
-        start_row: 0,
-        start_col: 0,
+        start_row: Row::new(0),
+        start_col: Col::new(0),
     });
     let _ = import_result(&out);
 

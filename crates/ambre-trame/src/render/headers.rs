@@ -22,8 +22,8 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     surface: &mut S,
     layout: &GridLayout<'_>,
     palette: &Palette,
-    active_col: Option<u32>,
-    hover_col: Option<u32>,
+    active_col: Option<Col>,
+    hover_col: Option<Col>,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     text_enabled: bool,
@@ -72,11 +72,11 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     {
         let mut col = layout.origin_col;
         let mut col_x = layout.header_width;
-        while col < layout.total_cols && col_x < w {
+        while col < layout.total_cols.as_end() && col_x < w {
             let edge = col_x + layout.col_w(col);
             surface.stroke_line(edge, top, edge, top + hh, palette.header_border, 1.0);
             col_x = edge;
-            col += 1;
+            col = col.next();
         }
     }
 
@@ -87,7 +87,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     let mut col = layout.origin_col;
     let mut col_x = layout.header_width;
     loop {
-        if col >= layout.total_cols || col_x >= w {
+        if col >= layout.total_cols.as_end() || col_x >= w {
             break;
         }
         let cw = layout.col_w(col);
@@ -112,7 +112,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
             surface.pop_clip();
         }
         col_x += cw;
-        col += 1;
+        col = col.next();
     }
 }
 
@@ -128,8 +128,8 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     surface: &mut S,
     layout: &GridLayout<'_>,
     palette: &Palette,
-    active_row: Option<u32>,
-    hover_row: Option<u32>,
+    active_row: Option<Row>,
+    hover_row: Option<Row>,
     hover_corner: bool,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
@@ -187,7 +187,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     // so the numbers read as discrete buttons (`trame-headers`). Walks the collapsed
     // (filtered) row space like the number loop, independent of `text_enabled`.
     {
-        let mut slot = 0u32;
+        let mut slot = RowCount::ZERO;
         let mut row_y = cells_top;
         while let Some(row) = layout.row_at_slot(slot) {
             if row_y >= h {
@@ -196,7 +196,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
             let edge = row_y + layout.row_h(row);
             surface.stroke_line(0.0, edge, hw, edge, palette.header_border, 1.0);
             row_y = edge;
-            slot += 1;
+            slot += RowCount::ONE;
         }
     }
 
@@ -213,7 +213,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     // Walk the visible rows, accumulating their variable heights. `slot` only
     // tracks how many visible rows we have drawn (for `row_at_slot`); `row_y` is
     // the running pixel top.
-    let mut slot = 0u32;
+    let mut slot = RowCount::ZERO;
     let mut row_y = cells_top;
     while let Some(row) = layout.row_at_slot(slot) {
         if row_y >= h {
@@ -241,7 +241,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
             surface.pop_clip();
         }
         row_y += rh;
-        slot += 1;
+        slot += RowCount::ONE;
     }
     surface.pop_clip();
 }

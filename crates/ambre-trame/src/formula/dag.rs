@@ -259,10 +259,10 @@ fn position_aliases(cell: CellId, indices: &SheetIndices) -> Vec<CellId> {
     let Some(index) = indices.get(&cell.sheet) else {
         return Vec::new();
     };
-    let at = |pos: Option<usize>| pos.and_then(|p| u32::try_from(p).ok()).map(AxisId::Virtual);
-    let (Some(row_at), Some(col_at)) = (at(index.row_pos(&row)), at(index.col_pos(&col))) else {
+    let Some(at) = index.pos_of(&row, &col) else {
         return Vec::new();
     };
+    let (row_at, col_at) = (AxisId::Virtual(at.row), AxisId::Virtual(at.col));
     vec![
         CellId::new(cell.sheet, AxisId::Bound(row), col_at),
         CellId::new(cell.sheet, row_at, AxisId::Bound(col)),

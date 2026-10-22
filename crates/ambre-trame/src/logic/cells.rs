@@ -15,8 +15,8 @@ impl TrameState {
     /// Display text for a cell. The formula evaluation result if it's a formula
     /// cell, otherwise the edited value from the CRDT if present, otherwise
     /// empty. A virtual or cleared cell renders blank.
-    pub(super) fn cell_text(&self, row: u32, col: u32) -> String {
-        let cell = self.active_cell_id(row, col);
+    pub(super) fn cell_text(&self, at: CellPos) -> String {
+        let cell = self.active_cell_id(at);
         // Formula cells: return cached evaluation result. Plain cells also have
         // a cached literal value now, so formula references resolve. Their raw
         // CRDT string is rendered verbatim, to avoid normalizing user input.
@@ -28,7 +28,7 @@ impl TrameState {
         // Plain-text cells: resolve the grid position to its stable id pair and
         // read the CRDT value. A virtual (never-written) cell, or one cleared
         // back to empty, has no stored value and renders blank.
-        if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
+        if let Some((rl, cl)) = self.index.resolve(at) {
             let map = self.doc.get_map(cells_map_name(&self.active_sheet));
             if let Some(LoroValue::String(s)) =
                 map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value())
@@ -41,8 +41,8 @@ impl TrameState {
 
     /// Raw cell text as stored in the CRDT (the formula source for a formula
     /// cell, the literal otherwise). Empty for virtual/cleared cells.
-    pub(super) fn cell_raw(&self, row: u32, col: u32) -> String {
-        if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
+    pub(super) fn cell_raw(&self, at: CellPos) -> String {
+        if let Some((rl, cl)) = self.index.resolve(at) {
             let map = self.doc.get_map(cells_map_name(&self.active_sheet));
             if let Some(LoroValue::String(s)) =
                 map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value())
@@ -56,12 +56,8 @@ impl TrameState {
     /// The text of an active-sheet cell with a formula's references at their
     /// positions ([`formula_source`](Self::formula_source)). A fill or a copy
     /// shifts this text, never the stored one (`TRAME-228`).
-    pub(super) fn cell_source(&self, row: u32, col: u32) -> String {
-        self.formula_source(
-            &self.cell_raw(row, col),
-            &self.active_sheet,
-            &self.sheet_lines(),
-        )
+    pub(super) fn cell_source(&self, at: CellPos) -> String {
+        self.formula_source(&self.cell_raw(at), &self.active_sheet, &self.sheet_lines())
     }
 
     /// Rewrite user-entered formula text into its canonical CRDT form, for a
@@ -170,7 +166,7 @@ impl TrameState {
         }
     }
 
-    /// Ensure grid `(row, col)` is materialized (its row and column exist in the
+    /// Ensure the cell `at` is materialized (its row and column exist in the
     /// `rows_/cols_` lists) and return the `(row_lid, col_lid)` pair to key the
     /// cell with. Extends the dense used range by pushing placeholder elements,
     /// capturing each new element's stable id. Returns `None` -- dropping the
@@ -188,21 +184,19 @@ impl TrameState {
         uid
     }
 
-    pub(super) fn materialize(&mut self, row: u32, col: u32) -> Option<(Uid, Uid)> {
-        let (row, col) = (row as usize, col as usize);
-        if row >= self.index.row_len() && row - self.index.row_len() >= MATERIALIZE_CAP
-            || col >= self.index.col_len() && col - self.index.col_len() >= MATERIALIZE_CAP
+    pub(super) fn materialize(&mut self, at: CellPos) -> Option<(Uid, Uid)> {
+        let (rows, cols) = (self.index.row_len(), self.index.col_len());
+        if at.row.count_from(rows.as_end()) >= MATERIALIZE_ROWS
+            || at.col.count_from(cols.as_end()) >= MATERIALIZE_COLS
         {
             tracing::warn!(
-                "[Logic] materialize ({row},{col}) exceeds cap past hwm \
-                 (rows {}, cols {}); write dropped",
-                self.index.row_len(),
-                self.index.col_len(),
+                "[Logic] materialize {at:?} exceeds cap past hwm \
+                 (rows {rows:?}, cols {cols:?}); write dropped",
             );
             return None;
         }
         let mut grew = false;
-        while self.index.row_len() <= row {
+        while self.index.row_len().as_end() <= at.row {
             let uid = self.mint_uid();
             let rows = self
                 .doc
@@ -211,7 +205,7 @@ impl TrameState {
             self.index.push_row(uid);
             grew = true;
         }
-        while self.index.col_len() <= col {
+        while self.index.col_len().as_end() <= at.col {
             let uid = self.mint_uid();
             let cols = self
                 .doc
@@ -231,7 +225,7 @@ impl TrameState {
             self.doc.set_next_commit_origin(MATERIALIZE_ORIGIN);
             self.doc.commit();
         }
-        self.index.resolve(row, col)
+        self.index.resolve(at)
     }
 
     /// Rebuild [`Self::index`] from the active sheet's `rows_/cols_` lists.
@@ -264,17 +258,17 @@ impl TrameState {
         m
     }
 
-    /// Engine [`CellId`] for grid `(row, col)` on the active sheet (local index
+    /// Engine [`CellId`] for the cell `at` on the active sheet (local index
     /// 0). Each axis binds to its row/column `Uid` when materialized, else stays
     /// a virtual grid position.
-    pub(super) fn active_cell_id(&self, row: u32, col: u32) -> CellId {
-        let r = match self.index.row_id(row as usize) {
+    pub(super) fn active_cell_id(&self, at: CellPos) -> CellId {
+        let r = match self.index.row_id(at.row) {
             Some(u) => AxisId::Bound(u),
-            None => AxisId::Virtual(row),
+            None => AxisId::Virtual(at.row),
         };
-        let c = match self.index.col_id(col as usize) {
+        let c = match self.index.col_id(at.col) {
             Some(u) => AxisId::Bound(u),
-            None => AxisId::Virtual(col),
+            None => AxisId::Virtual(at.col),
         };
         CellId {
             sheet: EngineSheet::ACTIVE,
@@ -296,16 +290,16 @@ impl TrameState {
     /// excluded commit interleaved between two value commits splits them into
     /// separate undo items. Materializing up front keeps all value writes in one
     /// final commit, hence one undo item.
-    pub(super) fn write_cell(&mut self, row: u32, col: u32, text: &str) {
+    pub(super) fn write_cell(&mut self, at: CellPos, text: &str) {
         if text.is_empty() {
             // Clearing: only touch the CRDT if the cell was materialized.
-            if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
+            if let Some((rl, cl)) = self.index.resolve(at) {
                 let _ = self
                     .doc
                     .get_map(cells_map_name(&self.active_sheet))
                     .delete(&cell_key(rl, cl));
             }
-            let cell = self.active_cell_id(row, col);
+            let cell = self.active_cell_id(at);
             let indices = self.engine_indices();
             let ctx = TrameCtx {
                 engine_sheet_by_name: &self.engine_sheet_by_name,
@@ -326,7 +320,7 @@ impl TrameState {
                     .push(WriteRefusal::UnknownSheet(unknown));
                 return;
             }
-            let Some((rl, cl)) = self.materialize(row, col) else {
+            let Some((rl, cl)) = self.materialize(at) else {
                 // Beyond the materialization cap: the write is refused, and
                 // `finish_cell_writes` says so (`TRAME-UI-164`).
                 self.write_refusals.push(WriteRefusal::BeyondCap);

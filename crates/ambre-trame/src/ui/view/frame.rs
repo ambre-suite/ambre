@@ -22,8 +22,8 @@ impl TrameView {
         self.needs_full = true;
         self.viewport_changed = false;
         self.data_dirty = false;
-        self.prev_top_row = 0;
-        self.prev_left_col = 0;
+        self.prev_top_row = Row::ZERO;
+        self.prev_left_col = Col::ZERO;
         self.cut_pending = false;
         // Retract any floating-toolbar anchor from the previous document.
         self.last_anchor = None;
@@ -89,7 +89,7 @@ impl TrameView {
             // A peer moved or deleted the cell an open session writes to
             // (`TRAME-UI-160`, `TRAME-UI-176`).
             TrameEvent::EditTargetMoved { session, row, col } => {
-                self.follow_moved_edit(session, row, col);
+                self.follow_moved_edit(session, CellPos::new(row, col));
             }
             TrameEvent::EditTargetGone { session } => self.drop_lost_edit(session),
             // Both schema notices are the chrome's to toast. Announcing them here
@@ -133,9 +133,9 @@ impl TrameView {
                 self.state.find_matches = matches.clone();
                 self.needs_full = true;
                 if let Some(i) = active
-                    && let Some(&(row, col)) = matches.get(i)
+                    && let Some(&at) = matches.get(i)
                 {
-                    self.nav_goto(row, col, false);
+                    self.nav_goto(at, false);
                 }
             }
             // Wholesale content change: a local snapshot restore (DataReset) or a
@@ -157,14 +157,14 @@ impl TrameView {
             // span-defining merge is gone. Active cell collapses to the top-left
             // corner; the anchor sits at the bottom-right so the rectangle renders
             // whole. Mirror the active cell back to Logic and the input pipe.
-            TrameEvent::SelectRange { r1, c1, r2, c2 } => {
-                self.state.select_rect(r1, c1, r2, c2);
+            TrameEvent::SelectRange { rect } => {
+                self.state.select_rect(rect);
                 self.needs_full = true;
                 self.viewport_changed = true;
                 if let Err(SendError::Refused) = self.send_command_lossless(self.set_active_cmd()) {
                     tracing::error!("Trame: the outbox is full, SelectRange dropped");
                 }
-                self.park_input_on(r1, c1);
+                self.park_input_on(rect.top_left);
                 self.announce_active();
             }
             // Interop export (`trame-import-export`): the Logic thread
@@ -353,8 +353,8 @@ impl TrameView {
         let (content, content_strip): (ContentRepaint, Option<Rect>) = if self.needs_full {
             (ContentRepaint::Full, None)
         } else if self.viewport_changed {
-            let dr = self.state.top_row as i64 - self.prev_top_row as i64;
-            let dc = self.state.left_col as i64 - self.prev_left_col as i64;
+            let dr = (self.state.top_row - self.prev_top_row).get();
+            let dc = (self.state.left_col - self.prev_left_col).get();
             if dr == 0 && dc == 0 {
                 // Cursor moved within the viewport without scrolling. If data
                 // also arrived the visible content need a refresh; otherwise the

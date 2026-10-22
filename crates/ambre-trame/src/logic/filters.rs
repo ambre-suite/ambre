@@ -23,7 +23,7 @@ impl TrameState {
     pub(super) fn apply_filter(
         &mut self,
         sheet_id: &str,
-        col: u32,
+        col: Col,
         kind: FilterKind,
     ) -> TrameOutcome {
         // A filter that cannot apply says so (`TRAME-FEAT-037`): the popover
@@ -33,7 +33,7 @@ impl TrameState {
                 message: "the filter applies to the sheet on screen only".to_owned(),
             }]);
         }
-        let Some(col_uid) = self.index.col_id(col as usize) else {
+        let Some(col_uid) = self.index.col_id(col) else {
             return TrameOutcome::display_only(vec![TrameEvent::Error {
                 message: "this column holds no data to filter".to_owned(),
             }]);
@@ -66,8 +66,8 @@ impl TrameState {
     /// text, sorts, and replies with [`TrameEvent::ColumnValues`]. A read-only
     /// query (no delta); replies with an empty list for a virtual column.
     pub(super) fn active_column_values(&mut self) -> TrameOutcome {
-        let col = self.active.1;
-        let Some(col_uid) = self.index.col_id(col as usize) else {
+        let col = self.active.col;
+        let Some(col_uid) = self.index.col_id(col) else {
             return TrameOutcome::display_only(vec![TrameEvent::ColumnValues {
                 col,
                 values: vec![],
@@ -76,15 +76,16 @@ impl TrameState {
         // The popover lists current results; make sure the cache is up to date.
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
-        let col_pos = self.index.col_pos(&col_uid).unwrap_or(col as usize);
-        let mut cells: Vec<CellValue> = (0..self.index.row_len())
+        let col_pos = self.index.col_pos(&col_uid).unwrap_or(col);
+        let mut cells: Vec<CellValue> = RowSpan::from_count(Row::ZERO, self.index.row_len())
+            .into_iter()
             // Skip rows already hidden by an active filter (distinct *visible*
             // values, matching Google Sheets).
-            .filter(|&pos| !self.hidden_rows.contains(&(pos as u32)))
+            .filter(|pos| !self.hidden_rows.contains(pos))
             .filter_map(|pos| {
                 match self
                     .engine
-                    .evaluated_value(self.active_cell_id(pos as u32, col_pos as u32))
+                    .evaluated_value(self.active_cell_id(CellPos::new(pos, col_pos)))
                 {
                     None | Some(CellValue::Empty) => None,
                     Some(value) => Some(value),
@@ -117,10 +118,10 @@ impl TrameState {
         let mut min = f64::INFINITY;
         let mut max = f64::NEG_INFINITY;
         // The whole selection, deduplicated across every rectangle (`TRAME-UI-104`).
-        for (row, col) in self.selected_cells() {
+        for at in self.selected_cells() {
             let v = self
                 .engine
-                .evaluated_value(self.active_cell_id(row, col))
+                .evaluated_value(self.active_cell_id(at))
                 .unwrap_or(CellValue::Empty);
             match v {
                 CellValue::Empty => {}
@@ -212,17 +213,18 @@ impl TrameState {
     /// column, returning how many. Only the rows whose mark changes are written,
     /// so an edit that hides and shows nothing broadcasts nothing
     /// (`TRAME-FEAT-036`). Does not commit (the caller does).
-    pub(super) fn write_filter_hidden(&mut self, col_uid: Uid, kind: &FilterKind) -> u32 {
+    pub(super) fn write_filter_hidden(&mut self, col_uid: Uid, kind: &FilterKind) -> RowCount {
         let hidden = self.doc.get_map(filter_hidden_map_name(&self.active_sheet));
         let Some(col_pos) = self.index.col_pos(&col_uid) else {
             clear_loro_map(&hidden);
-            return 0; // column deleted since the filter was set
+            return RowCount::ZERO; // column deleted since the filter was set
         };
-        let wanted: HashSet<String> = (0..self.index.row_len())
+        let wanted: HashSet<String> = RowSpan::from_count(Row::ZERO, self.index.row_len())
+            .into_iter()
             .filter(|&pos| {
                 let value = self
                     .engine
-                    .evaluated_value(self.active_cell_id(pos as u32, col_pos as u32))
+                    .evaluated_value(self.active_cell_id(CellPos::new(pos, col_pos)))
                     .unwrap_or(CellValue::Empty);
                 !filter_pass(kind, &value)
             })
@@ -239,7 +241,7 @@ impl TrameState {
         for new in wanted.difference(&current) {
             let _ = hidden.insert(new.as_str(), true);
         }
-        wanted.len() as u32
+        RowCount::from_len(wanted.len())
     }
 
     /// Persist the active filter definition into `filters_{sheet}` as one whole
@@ -309,7 +311,7 @@ impl TrameState {
                 && let Some(uid) = Uid::parse(key)
                 && let Some(pos) = self.index.row_pos(&uid)
             {
-                self.hidden_rows.insert(pos as u32);
+                self.hidden_rows.insert(pos);
             }
         }
     }

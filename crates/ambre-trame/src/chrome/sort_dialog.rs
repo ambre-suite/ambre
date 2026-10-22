@@ -14,7 +14,7 @@
 // (`0` = the selection's left column), matching the `SortRangeMulti` contract.
 // ============================================================================
 
-use ambre_bus::SortKey;
+use ambre_bus::{Col, ColCount, Row, SortKey};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
@@ -26,10 +26,10 @@ use crate::render::col_label;
 /// each time the dialog reopens).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SortDialogState {
-    pub r1: u32,
-    pub c1: u32,
-    pub r2: u32,
-    pub c2: u32,
+    pub r1: Row,
+    pub c1: Col,
+    pub r2: Row,
+    pub c2: Col,
 }
 
 /// A multi-column sort request. The launcher forwards it as the parameterless
@@ -54,7 +54,7 @@ pub fn SortDialog(
     // Ordered sort levels (decreasing priority). Reset to a single primary level
     // (the selection's first column, ascending) each time the dialog reopens.
     let levels = RwSignal::new(vec![SortKey {
-        col: 0,
+        col: ColCount::ZERO,
         ascending: true,
     }]);
     let has_header = RwSignal::new(false);
@@ -62,7 +62,7 @@ pub fn SortDialog(
     Effect::new(move |_| {
         if state.get().is_some() {
             levels.set(vec![SortKey {
-                col: 0,
+                col: ColCount::ZERO,
                 ascending: true,
             }]);
             has_header.set(false);
@@ -111,8 +111,11 @@ pub fn SortDialog(
         state.get().map(|st| {
             // The selection's columns, offered as range-relative options
             // (value = index within the range, label = absolute A1 column).
-            let cols: Vec<(u32, String)> = (st.c1..=st.c2)
-                .map(|abs| (abs - st.c1, col_label(abs)))
+            let cols: Vec<(ColCount, String)> = st
+                .c1
+                .through(st.c2)
+                .into_iter()
+                .map(|abs| (abs.count_from(st.c1), col_label(abs)))
                 .collect();
             let cols = StoredValue::new(cols);
 
@@ -144,14 +147,14 @@ pub fn SortDialog(
                                     <select
                                         class="ambre-sort-col"
                                         on:change=move |ev| {
-                                            let v = event_target_value(&ev).parse::<u32>().unwrap_or(0);
+                                            let v = ColCount::new(event_target_value(&ev).parse::<u32>().unwrap_or(0));
                                             levels.update(|ls| {
                                                 if let Some(l) = ls.get_mut(i) { l.col = v; }
                                             });
                                         }
                                     >
                                         {cols.get_value().into_iter().map(|(rel, label)| view! {
-                                            <option value=rel.to_string() selected=rel == key.col>
+                                            <option value=rel.get().to_string() selected=rel == key.col>
                                                 {format!("Column {label}")}
                                             </option>
                                         }).collect::<Vec<_>>()}
@@ -191,9 +194,9 @@ pub fn SortDialog(
                             prop:disabled=move || levels.with(|ls| ls.len() >= cols.get_value().len())
                             on:click=move |_| levels.update(|ls| {
                                 // New level defaults to the first not-yet-used column.
-                                let used: Vec<u32> = ls.iter().map(|k| k.col).collect();
+                                let used: Vec<ColCount> = ls.iter().map(|k| k.col).collect();
                                 let next = cols.get_value().iter().map(|(rel, _)| *rel)
-                                    .find(|rel| !used.contains(rel)).unwrap_or(0);
+                                    .find(|rel| !used.contains(rel)).unwrap_or(ColCount::ZERO);
                                 ls.push(SortKey { col: next, ascending: true });
                             })
                         >

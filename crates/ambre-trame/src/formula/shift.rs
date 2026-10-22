@@ -11,15 +11,17 @@
 //! shifted here is the *display* form the UI cached; the Logic thread
 //! re-canonicalises it on write, so cross-sheet qualifiers survive.
 
+use ambre_bus::{ColDelta, RowDelta};
+
 use super::parser::parse_formula;
 use super::render::render;
-use super::types::{AxisSpan, CellRef, CellValue, Expr, FormulaError, LineAxis, RangeDep};
+use super::types::{AxisSpan, CellRef, CellValue, Expr, FormulaError, RangeDep, SpanLines};
 
 /// Re-index a stored formula's relative references by `(dr, dc)` rows/columns
 /// and return the new formula text *with* its leading `=`. A formula that fails
 /// to parse is returned verbatim (a paste must never silently drop user input).
-pub fn shift_formula(raw: &str, dr: i64, dc: i64) -> String {
-    if dr == 0 && dc == 0 {
+pub fn shift_formula(raw: &str, dr: RowDelta, dc: ColDelta) -> String {
+    if dr == RowDelta::ZERO && dc == ColDelta::ZERO {
         return raw.to_owned();
     }
     let body = raw.strip_prefix('=').unwrap_or(raw);
@@ -29,34 +31,32 @@ pub fn shift_formula(raw: &str, dr: i64, dc: i64) -> String {
     }
 }
 
-/// Offset a 0-based axis index, returning `None` when the shift drives it off
-/// the grid (a negative position) -- the caller turns that into `#REF!`.
-fn shift_idx(v: u32, d: i64) -> Option<u32> {
-    let n = v as i64 + d;
-    (n >= 0).then_some(n as u32)
+/// The `#REF!` a reference driven off the grid becomes.
+fn off_grid() -> Expr {
+    Expr::Literal(CellValue::Error(FormulaError::BrokenRef))
 }
 
 /// Offset a single cell reference; a reference pushed off the grid becomes a
 /// `#REF!` error literal (matching Excel/Sheets).
-fn shift_cell(mut r: CellRef, dr: i64, dc: i64) -> Expr {
-    match (shift_idx(r.row, dr), shift_idx(r.col, dc)) {
+fn shift_cell(mut r: CellRef, dr: RowDelta, dc: ColDelta) -> Expr {
+    match (r.row.checked_offset(dr), r.col.checked_offset(dc)) {
         (Some(row), Some(col)) => {
             r.row = row;
             r.col = col;
             Expr::CellRef(r)
         }
-        _ => Expr::Literal(CellValue::Error(FormulaError::BrokenRef)),
+        _ => off_grid(),
     }
 }
 
 /// Offset a range reference; if any endpoint leaves the grid the whole range
 /// resolves to `#REF!`.
-fn shift_range(mut r: RangeDep, dr: i64, dc: i64) -> Expr {
+fn shift_range(mut r: RangeDep, dr: RowDelta, dc: ColDelta) -> Expr {
     match (
-        shift_idx(r.row_start, dr),
-        shift_idx(r.row_end, dr),
-        shift_idx(r.col_start, dc),
-        shift_idx(r.col_end, dc),
+        r.row_start.checked_offset(dr),
+        r.row_end.checked_offset(dr),
+        r.col_start.checked_offset(dc),
+        r.col_end.checked_offset(dc),
     ) {
         (Some(rs), Some(re), Some(cs), Some(ce)) => {
             r.row_start = rs;
@@ -65,24 +65,29 @@ fn shift_range(mut r: RangeDep, dr: i64, dc: i64) -> Expr {
             r.col_end = ce;
             Expr::Range(r)
         }
-        _ => Expr::Literal(CellValue::Error(FormulaError::BrokenRef)),
+        _ => off_grid(),
     }
 }
 
 /// Offset a range of whole lines along its own axis only: `A:A` pasted one row
 /// down still reads `A:A`. A line driven off the grid makes it `#REF!`.
-fn shift_span(mut s: AxisSpan, dr: i64, dc: i64) -> Expr {
-    let d = match s.axis {
-        LineAxis::Row => dr,
-        LineAxis::Col => dc,
+fn shift_span(mut s: AxisSpan, dr: RowDelta, dc: ColDelta) -> Expr {
+    let lines = match s.lines {
+        SpanLines::Rows { first, last } => first
+            .checked_offset(dr)
+            .zip(last.checked_offset(dr))
+            .map(|(first, last)| SpanLines::Rows { first, last }),
+        SpanLines::Cols { first, last } => first
+            .checked_offset(dc)
+            .zip(last.checked_offset(dc))
+            .map(|(first, last)| SpanLines::Cols { first, last }),
     };
-    match (shift_idx(s.start, d), shift_idx(s.end, d)) {
-        (Some(start), Some(end)) => {
-            s.start = start;
-            s.end = end;
+    match lines {
+        Some(lines) => {
+            s.lines = lines;
             Expr::AxisSpan(s)
         }
-        _ => Expr::Literal(CellValue::Error(FormulaError::BrokenRef)),
+        None => off_grid(),
     }
 }
 
@@ -90,7 +95,7 @@ fn shift_span(mut s: AxisSpan, dr: i64, dc: i64) -> Expr {
 /// (`Sheet2!A1`) shift their inner cell/range too. A relative cross-sheet ref
 /// tracks the paste like any other: `=Sheet2!A1` pasted one row down reads
 /// `=Sheet2!A2`. Named ranges and literals are left intact.
-fn shift_expr(expr: Expr, dr: i64, dc: i64) -> Expr {
+fn shift_expr(expr: Expr, dr: RowDelta, dc: ColDelta) -> Expr {
     match expr {
         Expr::CellRef(r) => shift_cell(r, dr, dc),
         Expr::Range(r) => shift_range(r, dr, dc),
@@ -123,31 +128,55 @@ mod tests {
     #[test]
     fn shifts_cell_and_range_down_right() {
         // Pasted 2 rows down, 1 column right.
-        assert_eq!(shift_formula("=A1", 2, 1), "=B3");
-        assert_eq!(shift_formula("=SUM(A1:B2)", 2, 1), "=SUM(B3:C4)");
+        assert_eq!(
+            shift_formula("=A1", RowDelta::new(2), ColDelta::new(1)),
+            "=B3"
+        );
+        assert_eq!(
+            shift_formula("=SUM(A1:B2)", RowDelta::new(2), ColDelta::new(1)),
+            "=SUM(B3:C4)"
+        );
     }
 
     #[test]
     fn whole_lines_shift_along_their_own_axis() {
-        assert_eq!(shift_formula("=SUM(A:B)", 2, 1), "=SUM(B:C)");
-        assert_eq!(shift_formula("=SUM(2:3)", 2, 1), "=SUM(4:5)");
-        assert_eq!(shift_formula("=SUM(A:A)", 0, -1), "=SUM(#REF!)");
+        assert_eq!(
+            shift_formula("=SUM(A:B)", RowDelta::new(2), ColDelta::new(1)),
+            "=SUM(B:C)"
+        );
+        assert_eq!(
+            shift_formula("=SUM(2:3)", RowDelta::new(2), ColDelta::new(1)),
+            "=SUM(4:5)"
+        );
+        assert_eq!(
+            shift_formula("=SUM(A:A)", RowDelta::new(0), ColDelta::new(-1)),
+            "=SUM(#REF!)"
+        );
     }
 
     #[test]
     fn no_shift_is_verbatim() {
-        assert_eq!(shift_formula("=A1+B2", 0, 0), "=A1+B2");
+        assert_eq!(
+            shift_formula("=A1+B2", RowDelta::new(0), ColDelta::new(0)),
+            "=A1+B2"
+        );
     }
 
     #[test]
     fn off_grid_reference_becomes_ref_error() {
         // A1 shifted up one row leaves the grid.
-        assert_eq!(shift_formula("=A1", -1, 0), "=#REF!");
+        assert_eq!(
+            shift_formula("=A1", RowDelta::new(-1), ColDelta::new(0)),
+            "=#REF!"
+        );
     }
 
     #[test]
     fn keeps_operators_and_functions() {
-        assert_eq!(shift_formula("=A1*2+SUM(C1:C3)", 1, 0), "=A2*2+SUM(C2:C4)");
+        assert_eq!(
+            shift_formula("=A1*2+SUM(C1:C3)", RowDelta::new(1), ColDelta::new(0)),
+            "=A2*2+SUM(C2:C4)"
+        );
     }
 
     #[test]
@@ -155,7 +184,7 @@ mod tests {
         // The shifted text is written back to the CRDT and re-parsed by the
         // engine. If `#REF!` is not part of the grammar the pasted cell settles
         // on `#PARSE!(...)` instead of the `#REF!` the shift decided on.
-        let shifted = shift_formula("=A1+B1", -1, 0);
+        let shifted = shift_formula("=A1+B1", RowDelta::new(-1), ColDelta::new(0));
         assert_eq!(shifted, "=#REF!+#REF!");
         let body = shifted.strip_prefix('=').unwrap();
         assert!(
@@ -167,7 +196,11 @@ mod tests {
     #[test]
     fn unparseable_left_verbatim() {
         assert_eq!(
-            shift_formula("=this is not (a formula", 1, 1),
+            shift_formula(
+                "=this is not (a formula",
+                RowDelta::new(1),
+                ColDelta::new(1)
+            ),
             "=this is not (a formula"
         );
     }

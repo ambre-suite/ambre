@@ -23,11 +23,12 @@ use crate::formula::types::Expr;
 use crate::formula::{
     AxisId, CellId, EngineSheet, FormulaCtx, FormulaEngine, NameTarget, SheetIndices, render,
 };
-use crate::model::{SheetIndex, Uid, cell_key, parse_cell_key};
-use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
+use crate::model::{Line, SheetIndex, Uid, cell_key, parse_cell_key};
+use crate::{DisplayCell, TrameCommand, TrameEvent};
 use ambre_bus::{
-    BorderPreset, CellBorder, CellFormat, CellStyle, ClipboardCell, ClipboardPayload, FilterKind,
-    FilterOp, SelectionKind, SheetId, SheetTab, SortKey, StylePatch,
+    BorderPreset, CellBorder, CellFormat, CellPos, CellRect, CellStyle, ClipboardCell,
+    ClipboardPayload, Col, ColCount, FilterKind, FilterOp, MergeSpan, Row, RowCount, RowSpan,
+    SelectionKind, SheetId, SheetTab, SortKey, StylePatch,
 };
 
 // -----------------------------------------------------------------------------
@@ -68,10 +69,6 @@ impl FormulaCtx for TrameCtx<'_> {
 /// Sync as [`SyncCommand::SendUpdate`] / [`SyncCommand::SendEphemeral`].  This
 /// is the *lossless* path required by the architecture: no app content is
 /// silently dropped.
-/// A resolvable merge rectangle: master key, inclusive top-left `(row, col)`,
-/// and inclusive bottom-right `(row, col)` in grid positions.
-type MergeRect = (String, (u32, u32), (u32, u32));
-
 pub struct TrameOutcome {
     /// Display events destined for the UI Thread.
     pub display: Vec<TrameEvent>,
@@ -98,12 +95,12 @@ impl TrameOutcome {
 
 /// The Logic thread's copy of the whole selection (`trame-selection`). `anchor`
 /// is the live rectangle's fixed corner; `extra` holds the rectangles a modifier
-/// committed, each normalized `(r1, c1, r2, c2)`; `kind` is the band shape. The
+/// committed, each normalized; `kind` is the band shape. The
 /// active cell lives beside it in [`TrameState::active`]. The two corners
 /// normalize into the live rectangle on read.
 struct TrackedSelection {
-    anchor: (u32, u32),
-    extra: Vec<(u32, u32, u32, u32)>,
+    anchor: CellPos,
+    extra: Vec<CellRect>,
     kind: SelectionKind,
 }
 
@@ -123,7 +120,7 @@ enum WriteRefusal {
 pub struct TrameState {
     /// Active cell (selection), kept in sync by the UI via
     /// [`TrameCommand::SetActiveCell`]. Formatting toggles target this cell.
-    active: (u32, u32),
+    active: CellPos,
     /// The whole selection reported by the UI via [`TrameCommand::SetActiveCell`]:
     /// the live rectangle's anchor corner, every committed disjoint rectangle,
     /// and the band kind. Kept in sync by the UI alongside [`active`](Self::active);
@@ -135,18 +132,18 @@ pub struct TrameState {
     /// Id of the sheet the UI is currently looking at. Step 1 always holds the
     /// implicit [`DEFAULT_SHEET`]; multi-sheet switching arrives with the tabs.
     active_sheet: String,
-    /// Cells carrying a bold run on the active sheet. Keyed by grid `(row, col)`;
+    /// Cells carrying a bold run on the active sheet. Keyed by grid position;
     /// absence means regular weight. Mirrors the persisted `format_{sheet}` map
     /// (the CRDT source of truth) for fast lookup; reseeded on import.
-    bold: HashSet<(u32, u32)>,
+    bold: HashSet<CellPos>,
     /// Cells carrying an italic run on the active sheet.
-    italic: HashSet<(u32, u32)>,
+    italic: HashSet<CellPos>,
     /// Rich manual formatting (underline, alignment, colours, font, number
     /// format, borders, wrap) per cell on the active sheet (`trame-cell-styles`).
-    /// Keyed by grid `(row, col)`; absence means the default style. Mirrors the
+    /// Keyed by grid position; absence means the default style. Mirrors the
     /// persisted per-sheet style containers (the CRDT source of truth); reseeded
     /// on import. Bold/italic stay in their own sets above.
-    styles: HashMap<(u32, u32), CellStyle>,
+    styles: HashMap<CellPos, CellStyle>,
     /// The whole workbook CRDT: multi-sheet schema (`trame-schema`). Cells are
     /// keyed by
     /// stable `(row_lid, col_lid)` pairs -- see [`crate::model`].
@@ -164,26 +161,26 @@ pub struct TrameState {
     /// Active-sheet merges, master grid position -> bottom-right grid position.
     /// Derived cache of `merges_{sheet}`, rebuilt by [`Self::rebuild_merges`]
     /// after any import or structural op (`trame-cell-merges`).
-    merges: HashMap<(u32, u32), (u32, u32)>,
+    merges: HashMap<CellPos, CellPos>,
     /// Grid positions covered by a merge but not the master (rendered blank,
     /// swallowed by the master cell). Derived alongside [`Self::merges`].
-    covered: HashSet<(u32, u32)>,
+    covered: HashSet<CellPos>,
     /// Active-sheet grid row positions hidden by the shared filter
     /// (`trame-shared-filter`).
     /// Derived cache of `filter_hidden_{sheet}` (a `{row_uid -> true}` map),
     /// rebuilt by [`Self::rebuild_filter`] after any import or structural op.
     /// Cells in these rows are flagged [`DisplayCell::is_filtered`] but still
     /// participate in calculations.
-    hidden_rows: HashSet<u32>,
+    hidden_rows: HashSet<Row>,
     /// Active-sheet column widths (logical px) per grid column position,
     /// derived cache of `col_widths_{sheet}` (a `{col_uid -> width}` map),
     /// rebuilt by [`Self::reseed_metrics`] after any import or structural op.
     /// Absence means the uniform [`DEFAULT_COL_WIDTH`]; the viewport response
     /// fills the gap so the UI gets a complete slice (`trame-resize`).
-    col_widths: HashMap<u32, f32>,
+    col_widths: HashMap<Col, f32>,
     /// Active-sheet row heights (logical px) per grid row position. Row analogue
     /// of [`col_widths`](Self::col_widths); derived from `row_heights_{sheet}`.
-    row_heights: HashMap<u32, f32>,
+    row_heights: HashMap<Row, f32>,
     /// Stable cell keys of covered cells that still hold a non-empty value -- a
     /// concurrent-edit conflict (`trame-cell-merges`). Masked: excluded from the
     /// formula engine
@@ -377,9 +374,9 @@ impl TrameState {
         // retracts it (`AUTHOR-009`).
         undo_manager.add_exclude_origin_prefix(ambre_core::authorship::PEERS_ORIGIN);
         let mut state = Self {
-            active: (0, 0),
+            active: CellPos::ORIGIN,
             selection: TrackedSelection {
-                anchor: (0, 0),
+                anchor: CellPos::ORIGIN,
                 extra: Vec::new(),
                 kind: SelectionKind::Cells,
             },
@@ -424,34 +421,37 @@ impl Default for TrameState {
 }
 
 impl TrameState {
-    /// The live rectangle (the anchor corner and the active cell), normalized to
-    /// `(r1, c1, r2, c2)`. The primary range of the tracked selection.
-    fn live_selection_rect(&self) -> (u32, u32, u32, u32) {
-        let (ar, ac) = self.active;
-        let (br, bc) = self.selection.anchor;
-        (ar.min(br), ac.min(bc), ar.max(br), ac.max(bc))
+    /// The live rectangle (the anchor corner and the active cell), normalized.
+    /// The primary range of the tracked selection.
+    fn live_selection_rect(&self) -> CellRect {
+        CellRect::spanning(self.active, self.selection.anchor)
     }
 
     /// Every rectangle a range intent acts on, resolved from the tracked
     /// selection (`TRAME-UI-129`). A `Cells` selection returns the live rectangle
     /// plus the committed disjoint ones; a `Cols`/`Rows` band expands to the
     /// materialized used range across its axis (`TRAME-UI-033`).
-    fn selection_rects(&self) -> Vec<(u32, u32, u32, u32)> {
+    fn selection_rects(&self) -> Vec<CellRect> {
+        let live = self.live_selection_rect();
         match self.selection.kind {
             SelectionKind::Cells => {
                 let mut rects = self.selection.extra.clone();
-                rects.push(self.live_selection_rect());
+                rects.push(live);
                 rects
             }
             SelectionKind::Cols => {
-                let (_, c1, _, c2) = self.live_selection_rect();
-                let row_end = self.index.row_len().saturating_sub(1) as u32;
-                vec![(0, c1, row_end, c2)]
+                let row_end = self.index.row_len().as_end().prev().unwrap_or(Row::ZERO);
+                vec![CellRect::spanning(
+                    CellPos::new(Row::ZERO, live.top_left.col),
+                    CellPos::new(row_end, live.bottom_right.col),
+                )]
             }
             SelectionKind::Rows => {
-                let (r1, _, r2, _) = self.live_selection_rect();
-                let col_end = self.index.col_len().saturating_sub(1) as u32;
-                vec![(r1, 0, r2, col_end)]
+                let col_end = self.index.col_len().as_end().prev().unwrap_or(Col::ZERO);
+                vec![CellRect::spanning(
+                    CellPos::new(live.top_left.row, Col::ZERO),
+                    CellPos::new(live.bottom_right.row, col_end),
+                )]
             }
         }
     }
@@ -459,23 +459,31 @@ impl TrameState {
     /// The bounding box of [`selection_rects`](Self::selection_rects): the single
     /// rectangle that covers every selected rectangle. A band resolves to its
     /// used-range rectangle first.
-    fn selection_bounds(&self) -> (u32, u32, u32, u32) {
-        self.selection_rects().into_iter().fold(
-            (u32::MAX, u32::MAX, 0, 0),
-            |(a1, b1, a2, b2), (x1, y1, x2, y2)| (a1.min(x1), b1.min(y1), a2.max(x2), b2.max(y2)),
-        )
+    fn selection_bounds(&self) -> CellRect {
+        let mut rects = self.selection_rects().into_iter();
+        let first = rects.next().unwrap_or_else(|| self.live_selection_rect());
+        rects.fold(first, |a, b| {
+            CellRect::spanning(
+                CellPos::new(
+                    a.top_left.row.min(b.top_left.row),
+                    a.top_left.col.min(b.top_left.col),
+                ),
+                CellPos::new(
+                    a.bottom_right.row.max(b.bottom_right.row),
+                    a.bottom_right.col.max(b.bottom_right.col),
+                ),
+            )
+        })
     }
 
     /// Every distinct cell covered by the tracked selection, deduplicated across
     /// rectangles (`TRAME-UI-031`). A whole-axis band resolves to the used range
     /// first. Backs the style, the aggregate and the copy paths.
-    fn selected_cells(&self) -> Vec<(u32, u32)> {
-        let mut cells: Vec<(u32, u32)> = self
+    fn selected_cells(&self) -> Vec<CellPos> {
+        let mut cells: Vec<CellPos> = self
             .selection_rects()
             .into_iter()
-            .flat_map(|(r1, c1, r2, c2)| {
-                (r1..=r2).flat_map(move |r| (c1..=c2).map(move |c| (r, c)))
-            })
+            .flat_map(CellRect::cells)
             .collect();
         cells.sort_unstable();
         cells.dedup();

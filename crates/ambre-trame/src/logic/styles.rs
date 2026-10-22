@@ -33,8 +33,7 @@ impl TrameState {
     /// single undo item and a single broadcast delta. Committing here would split
     /// the batch into one undo item per cell. It would also, mid-batch, strip the
     /// intervening ops out of the broadcast delta (mirrors [`write_cell`]).
-    pub(super) fn write_cell_style(&mut self, row: u32, col: u32) -> Option<()> {
-        let pos = (row, col);
+    pub(super) fn write_cell_style(&mut self, pos: CellPos) -> Option<()> {
         let record = StyleRecord {
             bold: self.bold.contains(&pos),
             italic: self.italic.contains(&pos),
@@ -42,7 +41,7 @@ impl TrameState {
         };
         // Styling a cell pins an identity to it, so it must be materialized just
         // like an edited value. Beyond the cap there is nothing to persist.
-        let (rl, cl) = self.materialize(row, col)?;
+        let (rl, cl) = self.materialize(pos)?;
         let key = cell_key(rl, cl);
         let map = self.doc.get_map(cellstyle_map_name(&self.active_sheet));
         if !record.bold && !record.italic && record.style == CellStyle::default() {
@@ -74,7 +73,7 @@ impl TrameState {
         }
         // Bounding box for the border perimeter, and the deduplicated cell set for
         // the writes (`TRAME-UI-129`): every rectangle the user selected.
-        let (r1, c1, r2, c2) = self.selection_bounds();
+        let bounds = self.selection_bounds();
         let cells = self.selected_cells();
         // One undo group + one commit for the whole selection. The restyle is then
         // a single undo step and a single broadcast delta (mirrors `fill_range` /
@@ -88,14 +87,13 @@ impl TrameState {
         // A cell past the materialization cap has no line to key its style by.
         // It is refused whole, never drawn with a style the document does not
         // hold (`TRAME-193`).
-        let mut refused: HashSet<(u32, u32)> = HashSet::new();
-        for &(row, col) in &cells {
-            if !self.covered.contains(&(row, col)) && self.materialize(row, col).is_none() {
-                refused.insert((row, col));
+        let mut refused: HashSet<CellPos> = HashSet::new();
+        for &cell in &cells {
+            if !self.covered.contains(&cell) && self.materialize(cell).is_none() {
+                refused.insert(cell);
             }
         }
-        for &(row, col) in &cells {
-            let cell = (row, col);
+        for &cell in &cells {
             // Cells covered by a merge are swallowed by their master: they
             // render blank, so styling them is pointless. For `All` borders
             // it is actively wrong, since it would draw interior edges
@@ -129,17 +127,18 @@ impl TrameState {
             // preset is additive (touches only its own edges) except `None`,
             // which clears all four.
             if let Some(edit) = patch.border {
-                let (br, bc) = self.merges.get(&cell).copied().unwrap_or((row, col));
+                let end = self.merges.get(&cell).copied().unwrap_or(cell);
+                let (first, last) = (bounds.top_left, bounds.bottom_right);
                 // Perimeter membership within the selection rectangle.
-                let top_p = row == r1;
-                let bottom_p = br == r2;
-                let left_p = col == c1;
-                let right_p = bc == c2;
+                let top_p = cell.row == first.row;
+                let bottom_p = end.row == last.row;
+                let left_p = cell.col == first.col;
+                let right_p = end.col == last.col;
                 // Interior membership (edge shared with an adjacent cell).
-                let top_i = row > r1;
-                let bottom_i = br < r2;
-                let left_i = col > c1;
-                let right_i = bc < c2;
+                let top_i = cell.row > first.row;
+                let bottom_i = end.row < last.row;
+                let left_i = cell.col > first.col;
+                let right_i = end.col < last.col;
                 // Targeted edges in [top, right, bottom, left] order.
                 let targeted = match edit.preset {
                     BorderPreset::None => [true; 4],
@@ -174,7 +173,7 @@ impl TrameState {
             } else {
                 self.styles.insert(cell, style.clone());
             }
-            let _ = self.write_cell_style(row, col);
+            let _ = self.write_cell_style(cell);
         }
         // Single trailing commit for every style write in the selection -> one
         // undo item, one delta.
@@ -198,26 +197,25 @@ impl TrameState {
         }
     }
 
-    /// Whether the cell at `(row, col)` computes to a number, before its format
+    /// Whether the cell at `at` computes to a number, before its format
     /// renders it. The one test behind `HAlign::Auto`, for the grid and the
     /// toolbar alike (`TRAME-UI-093`, `TRAME-UI-094`, `TRAME-186`).
-    pub(super) fn cell_is_numeric(&self, row: u32, col: u32) -> bool {
+    pub(super) fn cell_is_numeric(&self, at: CellPos) -> bool {
         matches!(
-            self.engine.evaluated_value(self.active_cell_id(row, col)),
+            self.engine.evaluated_value(self.active_cell_id(at)),
             Some(CellValue::Number(n)) if n.is_finite()
         )
     }
 
     /// The master of the merged block covering `cell`, or `cell` itself when no
     /// block covers it.
-    fn merge_master(&self, cell: (u32, u32)) -> (u32, u32) {
+    fn merge_master(&self, cell: CellPos) -> CellPos {
         if !self.covered.contains(&cell) {
             return cell;
         }
-        let (row, col) = cell;
         self.merges
             .iter()
-            .find(|&(&(r1, c1), &(r2, c2))| (r1..=r2).contains(&row) && (c1..=c2).contains(&col))
+            .find(|&(&master, &end)| CellRect::spanning(master, end).contains(cell))
             .map_or(cell, |(&master, _)| master)
     }
 
@@ -232,7 +230,7 @@ impl TrameState {
             italic: self.italic.contains(&shown),
             merged: self.merges.contains_key(&self.active) || self.covered.contains(&self.active),
             // The test the viewport pack hands the renderer (`TRAME-UI-094`).
-            numeric: self.cell_is_numeric(shown.0, shown.1),
+            numeric: self.cell_is_numeric(shown),
         }
     }
 
@@ -257,7 +255,7 @@ impl TrameState {
             let (Some((rl, cl)), LoroValue::Binary(bytes)) = (parse_cell_key(key), value) else {
                 continue;
             };
-            let (Some(row), Some(col)) = (self.index.row_pos(&rl), self.index.col_pos(&cl)) else {
+            let Some(cell) = self.index.pos_of(&rl, &cl) else {
                 continue; // references a deleted row/column
             };
             let Ok(record) = postcard::from_bytes::<StyleRecord>(bytes) else {
@@ -267,7 +265,6 @@ impl TrameState {
                 self.note_undecodable(bytes);
                 continue;
             };
-            let cell = (row as u32, col as u32);
             if record.bold {
                 self.bold.insert(cell);
             }
@@ -285,10 +282,10 @@ impl TrameState {
     /// The text a cell of the active sheet shows: its computed text through its
     /// number format. Find, replace and export read this, so a cell reads the
     /// same wherever it is shown as text (`TRAME-108`).
-    pub(super) fn displayed_text(&self, row: u32, col: u32) -> String {
-        let text = self.cell_text(row, col);
-        match self.styles.get(&(row, col)) {
-            Some(style) => self.format_display(row, col, text, style),
+    pub(super) fn displayed_text(&self, at: CellPos) -> String {
+        let text = self.cell_text(at);
+        match self.styles.get(&at) {
+            Some(style) => self.format_display(at, text, style),
             None => text,
         }
     }
@@ -313,13 +310,7 @@ impl TrameState {
     /// Apply a cell's number format to its computed display `text`. A `General` /
     /// `Text` cell or a non-numeric value renders verbatim
     /// (`trame-number-formats`).
-    pub(super) fn format_display(
-        &self,
-        _row: u32,
-        _col: u32,
-        text: String,
-        style: &CellStyle,
-    ) -> String {
+    pub(super) fn format_display(&self, _at: CellPos, text: String, style: &CellStyle) -> String {
         match style.format {
             CellFormat::General | CellFormat::Text => text,
             ref fmt => match text.parse::<f64>() {

@@ -13,10 +13,10 @@ fn bold_stays_on_the_cell_not_the_selection() {
 
     // Select A1 (0,0) and bold it via the single style event.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -31,10 +31,10 @@ fn bold_stays_on_the_cell_not_the_selection() {
     // Move the selection to B2 (1,1): the active cell is not bold, so the
     // toolbar reports false -- A1 keeps its bold.
     let evts = state.handle_command(TrameCommand::SetActiveCell {
-        row: 1,
-        col: 1,
-        anchor_row: 1,
-        anchor_col: 1,
+        row: Row::new(1),
+        col: Col::new(1),
+        anchor_row: Row::new(1),
+        anchor_col: Col::new(1),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -46,16 +46,22 @@ fn bold_stays_on_the_cell_not_the_selection() {
     // A viewport covering both cells: only A1 carries the bold run.
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        row_end: 1,
-        col_start: 0,
-        col_end: 1,
+        row_start: Row::new(0),
+        row_end: Row::new(1),
+        col_start: Col::new(0),
+        col_end: Col::new(1),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!("expected ViewportData");
     };
-    let a1 = cells.iter().find(|c| c.row == 0 && c.col == 0).unwrap();
-    let b2 = cells.iter().find(|c| c.row == 1 && c.col == 1).unwrap();
+    let a1 = cells
+        .iter()
+        .find(|c| c.row == Row::new(0) && c.col == Col::new(0))
+        .unwrap();
+    let b2 = cells
+        .iter()
+        .find(|c| c.row == Row::new(1) && c.col == Col::new(1))
+        .unwrap();
     assert!(a1.bold, "A1 must stay bold");
     assert!(!b2.bold, "B2 must not become bold");
 }
@@ -66,10 +72,10 @@ fn bold_stays_on_the_cell_not_the_selection() {
 fn formatting_survives_snapshot_roundtrip() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -90,15 +96,18 @@ fn formatting_survives_snapshot_roundtrip() {
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        row_end: 0,
-        col_start: 0,
-        col_end: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(0),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!("expected ViewportData");
     };
-    let a1 = cells.iter().find(|c| c.row == 0 && c.col == 0).unwrap();
+    let a1 = cells
+        .iter()
+        .find(|c| c.row == Row::new(0) && c.col == Col::new(0))
+        .unwrap();
     assert!(a1.bold, "A1 must stay bold after reload");
     assert!(a1.italic, "A1 must stay italic after reload");
 }
@@ -114,15 +123,15 @@ fn set_cell_style_round_trips_and_formats_numbers() {
     let mut state = TrameState::new();
     // A numeric value at A1, selection collapsed on it.
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "3.14159".to_owned(),
     });
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -158,15 +167,18 @@ fn set_cell_style_round_trips_and_formats_numbers() {
         .expect("a snapshot this build wrote reads back at the current schema");
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        row_end: 0,
-        col_start: 0,
-        col_end: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(0),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!("expected ViewportData");
     };
-    let a1 = cells.iter().find(|c| c.row == 0 && c.col == 0).unwrap();
+    let a1 = cells
+        .iter()
+        .find(|c| c.row == Row::new(0) && c.col == Col::new(0))
+        .unwrap();
     assert!(a1.underline, "underline must survive reload");
     assert_eq!(a1.h_align, HAlign::Right, "alignment must survive reload");
     // 3.14159 -> Percent, 1 decimal -> "314.2%".
@@ -182,10 +194,10 @@ fn edited_text_overrides_generated_label() {
     // A1 starts blank (virtual cell).
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        row_end: 0,
-        col_start: 0,
-        col_end: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(0),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -194,16 +206,16 @@ fn edited_text_overrides_generated_label() {
 
     // Edit A1, then read it back: the stored text wins.
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "hello".to_owned(),
     });
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(2),
-        row_start: 0,
-        row_end: 0,
-        col_start: 0,
-        col_end: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(0),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -212,16 +224,16 @@ fn edited_text_overrides_generated_label() {
 
     // Clearing it restores the blank cell.
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: String::new(),
     });
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(3),
-        row_start: 0,
-        row_end: 0,
-        col_start: 0,
-        col_end: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(0),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -237,8 +249,8 @@ fn edited_text_overrides_generated_label() {
 fn far_cell_survives_snapshot_roundtrip() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 1000,
-        col: 3,
+        row: Row::new(1000),
+        col: Col::new(3),
         text: "deep".to_owned(),
     });
 
@@ -250,10 +262,10 @@ fn far_cell_survives_snapshot_roundtrip() {
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 1000,
-        row_end: 1000,
-        col_start: 3,
-        col_end: 3,
+        row_start: Row::new(1000),
+        row_end: Row::new(1000),
+        col_start: Col::new(3),
+        col_end: Col::new(3),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -262,10 +274,10 @@ fn far_cell_survives_snapshot_roundtrip() {
     // An untouched far cell is blank (virtual space).
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(2),
-        row_start: 2000,
-        row_end: 2000,
-        col_start: 0,
-        col_end: 0,
+        row_start: Row::new(2000),
+        row_end: Row::new(2000),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -279,13 +291,13 @@ fn far_cell_survives_snapshot_roundtrip() {
 fn formula_evaluates_through_stable_keys() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "=21".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "=A1*2".to_owned(),
     });
 
@@ -297,15 +309,18 @@ fn formula_evaluates_through_stable_keys() {
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        row_end: 0,
-        col_start: 0,
-        col_end: 1,
+        row_start: Row::new(0),
+        row_end: Row::new(0),
+        col_start: Col::new(0),
+        col_end: Col::new(1),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
     };
-    let b1 = cells.iter().find(|c| c.row == 0 && c.col == 1).unwrap();
+    let b1 = cells
+        .iter()
+        .find(|c| c.row == Row::new(0) && c.col == Col::new(1))
+        .unwrap();
     assert_eq!(b1.text, "42", "B1 = A1*2 must evaluate after reload");
 }
 
@@ -317,8 +332,8 @@ fn named_range_defines_resolves_and_deletes() {
     // A1=1, A2=2, A3=3.
     for r in 0..3 {
         state.handle_command(TrameCommand::SetCellText {
-            row: r,
-            col: 0,
+            row: Row::new(r),
+            col: Col::new(0),
             text: format!("{}", r + 1),
         });
     }
@@ -328,18 +343,18 @@ fn named_range_defines_resolves_and_deletes() {
         reference: "A1:A3".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 2,
+        row: Row::new(0),
+        col: Col::new(2),
         text: "=SUM(TOTAL)".to_owned(),
     });
 
     let read_c1 = |state: &mut TrameState, version: u64| {
         let evts = state.handle_command(TrameCommand::ScrollViewport {
             version: ambre_bus::ViewportVersion(version),
-            row_start: 0,
-            row_end: 0,
-            col_start: 2,
-            col_end: 2,
+            row_start: Row::new(0),
+            row_end: Row::new(0),
+            col_start: Col::new(2),
+            col_end: Col::new(2),
         });
         let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
             panic!()
@@ -351,8 +366,8 @@ fn named_range_defines_resolves_and_deletes() {
 
     // Editing a target cell recomputes the name's consumer.
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "10".to_owned(),
     });
     assert_eq!(read_c1(&mut state, 2), "15", "SUM(TOTAL) tracks A1 edit");
@@ -393,10 +408,10 @@ fn read_a1(state: &mut TrameState, version: u64) -> String {
 fn read_cell_v(state: &mut TrameState, row: u32, col: u32, version: u64) -> String {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(version),
-        row_start: row,
-        row_end: row,
-        col_start: col,
-        col_end: col,
+        row_start: Row::new(row),
+        row_end: Row::new(row),
+        col_start: Col::new(col),
+        col_end: Col::new(col),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -420,8 +435,8 @@ fn unqualified_name_resolves_the_same_for_every_reader() {
         });
         for row in 0..2 {
             state.handle_command(TrameCommand::SetCellText {
-                row,
-                col: 0,
+                row: Row::new(row),
+                col: Col::new(0),
                 text: format!("{}", base * (row + 1)),
             });
         }
@@ -434,8 +449,8 @@ fn unqualified_name_resolves_the_same_for_every_reader() {
         reference: "A1:A2".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "=SUM(TOTAL)".to_owned(),
     });
     assert_eq!(read_cell_v(&mut state, 0, 1, 1), "3");
@@ -444,8 +459,8 @@ fn unqualified_name_resolves_the_same_for_every_reader() {
         sheet_id: SheetId(other.clone()),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "=SUM(TOTAL)".to_owned(),
     });
     assert_eq!(read_cell_v(&mut state, 0, 1, 2), "3");
@@ -464,8 +479,8 @@ fn name_on_another_sheet_survives_its_rename() {
         sheet_id: SheetId(data.clone()),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "7".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
@@ -476,8 +491,8 @@ fn name_on_another_sheet_survives_its_rename() {
         reference: "Data!A1".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "=RATE*2".to_owned(),
     });
     assert_eq!(read_a1(&mut state, 1), "14");
@@ -541,37 +556,43 @@ fn name_a_formula_cannot_read_is_refused() {
 fn sum_over_plain_literals_and_formula_raw_in_viewport() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "1".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "2".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 2,
+        row: Row::new(0),
+        col: Col::new(2),
         text: "=SUM(A1:B1)".to_owned(),
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        row_end: 0,
-        col_start: 0,
-        col_end: 2,
+        row_start: Row::new(0),
+        row_end: Row::new(0),
+        col_start: Col::new(0),
+        col_end: Col::new(2),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
     };
 
-    let a1 = cells.iter().find(|c| c.row == 0 && c.col == 0).unwrap();
+    let a1 = cells
+        .iter()
+        .find(|c| c.row == Row::new(0) && c.col == Col::new(0))
+        .unwrap();
     assert_eq!(a1.text, "1");
     assert_eq!(a1.raw, "1", "plain cell raw == display");
 
-    let c1 = cells.iter().find(|c| c.row == 0 && c.col == 2).unwrap();
+    let c1 = cells
+        .iter()
+        .find(|c| c.row == Row::new(0) && c.col == Col::new(2))
+        .unwrap();
     assert_eq!(c1.text, "3", "SUM must see plain literals A1=1, B1=2");
     assert_eq!(c1.raw, "=SUM(A1:B1)", "editor must reopen on the formula");
 }
@@ -583,18 +604,18 @@ fn sum_over_plain_literals_and_formula_raw_in_viewport() {
 fn sum_over_plain_literals_survives_reseed() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "1".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "2".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 2,
+        row: Row::new(0),
+        col: Col::new(2),
         text: "=SUM(A1:B1)".to_owned(),
     });
 
@@ -606,15 +627,18 @@ fn sum_over_plain_literals_survives_reseed() {
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        row_end: 0,
-        col_start: 0,
-        col_end: 2,
+        row_start: Row::new(0),
+        row_end: Row::new(0),
+        col_start: Col::new(0),
+        col_end: Col::new(2),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
     };
-    let c1 = cells.iter().find(|c| c.row == 0 && c.col == 2).unwrap();
+    let c1 = cells
+        .iter()
+        .find(|c| c.row == Row::new(0) && c.col == Col::new(2))
+        .unwrap();
     assert_eq!(c1.text, "3", "SUM must re-evaluate after reseed");
     assert_eq!(c1.raw, "=SUM(A1:B1)");
 }
@@ -630,8 +654,8 @@ fn multi_sheet_isolation_and_name_lookup() {
     // Write to the default sheet, then to a second sheet's containers
     // directly (the add-sheet command lands in a later step).
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "on_s0".to_owned(),
     });
     let _ = state
@@ -682,8 +706,8 @@ fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
         sheet_id: SheetId(s2.clone()),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "5".to_owned(),
     });
 
@@ -692,14 +716,14 @@ fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
         sheet_id: SheetId("s0".to_owned()),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "=Sheet2!A1*2".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 1), "10");
     // Stored canonical form is id-bound, its cell named by its row and column
     // (`TRAME-228`); the formula bar shows the name and the position.
-    let stored = state.cell_raw(0, 1);
+    let stored = state.cell_raw(CellPos::new(Row::new(0), Col::new(1)));
     assert!(
         stored.starts_with(&format!("=#{s2}!{{")) && stored.ends_with("}*2"),
         "v is sheet_id-bound: {stored}"
@@ -751,8 +775,8 @@ fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
 fn undo_then_redo_round_trips_a_cell_edit() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "hello".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "hello");
@@ -794,10 +818,10 @@ fn selection_style_is_a_single_undo() {
     let mut state = TrameState::new();
     // Selection A1:C1 (row 0, cols 0..2).
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 2,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(2),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -808,16 +832,19 @@ fn selection_style_is_a_single_undo() {
     state.handle_command(TrameCommand::Undo);
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        row_end: 0,
-        col_start: 0,
-        col_end: 2,
+        row_start: Row::new(0),
+        row_end: Row::new(0),
+        col_start: Col::new(0),
+        col_end: Col::new(2),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!("expected ViewportData");
     };
     for c in 0..=2u32 {
-        let cell = cells.iter().find(|x| x.row == 0 && x.col == c).unwrap();
+        let cell = cells
+            .iter()
+            .find(|x| x.row == Row::new(0) && x.col == Col::new(c))
+            .unwrap();
         assert!(
             !cell.bold,
             "col {c} still bold after ONE undo -> style was multi-undo"
@@ -831,15 +858,15 @@ use ambre_bus::{CellFormat, StylePatch};
 fn formatted_a1(value: &str, format: CellFormat) -> TrameState {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: value.to_owned(),
     });
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -936,10 +963,10 @@ fn custom_pattern_is_applied() {
 /// Select `(r1, c1)`..`(r2, c2)`, the active cell at `(r1, c1)`.
 fn select(state: &mut TrameState, (r1, c1): (u32, u32), (r2, c2): (u32, u32)) {
     state.handle_command(TrameCommand::SetActiveCell {
-        row: r1,
-        col: c1,
-        anchor_row: r2,
-        anchor_col: c2,
+        row: Row::new(r1),
+        col: Col::new(c1),
+        anchor_row: Row::new(r2),
+        anchor_col: Col::new(c2),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -951,8 +978,8 @@ fn select(state: &mut TrameState, (r1, c1): (u32, u32), (r2, c2): (u32, u32)) {
 fn toolbar_reports_the_block_style_inside_a_merge() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "title".to_owned(),
     });
     select(&mut state, (0, 0), (1, 1));

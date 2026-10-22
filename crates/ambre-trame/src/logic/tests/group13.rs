@@ -8,13 +8,16 @@ use crate::{BorderEdit, BorderPreset, BorderStyle, CellFormat, StylePatch};
 use ambre_core::Rgb;
 use loro::LoroValue;
 
+const COL_1: Col = Col::new(1);
+const ROWS_1: RowCount = RowCount::new(1);
+
 /// Select the rectangle `(r1, c1)`-`(r2, c2)`, the active cell at its far corner.
 fn select(state: &mut TrameState, r1: u32, c1: u32, r2: u32, c2: u32) {
     state.handle_command(TrameCommand::SetActiveCell {
-        row: r2,
-        col: c2,
-        anchor_row: r1,
-        anchor_col: c1,
+        row: Row::new(r2),
+        col: Col::new(c2),
+        anchor_row: Row::new(r1),
+        anchor_col: Col::new(c1),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -22,8 +25,8 @@ fn select(state: &mut TrameState, r1: u32, c1: u32, r2: u32, c2: u32) {
 
 fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
     state.handle_command(TrameCommand::SetCellText {
-        row,
-        col,
+        row: Row::new(row),
+        col: Col::new(col),
         text: text.to_owned(),
     });
 }
@@ -53,11 +56,11 @@ const DEFAULT: &str = crate::logic::DEFAULT_SHEET;
 fn sort(state: &mut TrameState, rows: (u32, u32), col: u32, ascending: bool) -> TrameOutcome {
     state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId(DEFAULT.to_owned()),
-        row_start: rows.0,
-        row_end: rows.1,
-        col_start: 0,
-        col_end: 1,
-        sort_col: col,
+        row_start: Row::new(rows.0),
+        row_end: Row::new(rows.1),
+        col_start: Col::new(0),
+        col_end: Col::new(1),
+        sort_col: ColCount::new(col),
         ascending,
         has_header: false,
     })
@@ -66,7 +69,7 @@ fn sort(state: &mut TrameState, rows: (u32, u32), col: u32, ascending: bool) -> 
 fn filter(state: &mut TrameState, col: u32, kind: FilterKind) -> TrameOutcome {
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId(DEFAULT.to_owned()),
-        col,
+        col: Col::new(col),
         kind,
     })
 }
@@ -164,7 +167,7 @@ fn a_border_preset_reaches_only_its_edges() {
             for c in 0..3 {
                 let b = state
                     .styles
-                    .get(&(r, c))
+                    .get(&at(r, c))
                     .map(|s| s.borders)
                     .unwrap_or_default();
                 let got = [
@@ -187,10 +190,10 @@ fn a_border_preset_reaches_only_its_edges() {
 fn a_covered_cell_takes_no_style() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::MergeCells {
-        row: 0,
-        col: 0,
-        row_end: 1,
-        col_end: 1,
+        row: Row::new(0),
+        col: Col::new(0),
+        row_end: Row::new(1),
+        col_end: Col::new(1),
     });
     select(&mut state, 0, 0, 2, 2);
     style(
@@ -205,8 +208,8 @@ fn a_covered_cell_takes_no_style() {
             ..Default::default()
         },
     );
-    assert!(state.styles.contains_key(&(0, 0)), "the master is styled");
-    for covered in [(0, 1), (1, 0), (1, 1)] {
+    assert!(state.styles.contains_key(&at(0, 0)), "the master is styled");
+    for covered in [at(0, 1), at(1, 0), at(1, 1)] {
         assert!(!state.styles.contains_key(&covered), "{covered:?}");
     }
     // Nine cells, three covered: six entries reach the document.
@@ -302,7 +305,7 @@ fn a_decimal_step_keeps_the_computed_value() {
         },
     );
     assert_eq!(read_cell(&mut state, 0, 0), "0.33");
-    let id = state.active_cell_id(0, 0);
+    let id = state.active_cell_id(CellPos::new(Row::new(0), Col::new(0)));
     let value = format!("{:?}", state.engine.evaluated_value(id));
     let before = cells(&state);
     style(
@@ -350,8 +353,8 @@ fn a_second_filter_replaces_the_first() {
     assert!(out.display.iter().any(|e| matches!(
         e,
         TrameEvent::FilterApplied {
-            hidden_row_count: 1,
-            col: 1
+            hidden_row_count: ROWS_1,
+            col: COL_1
         }
     )));
 }
@@ -468,11 +471,11 @@ fn a_sort_of_fewer_than_two_rows_changes_nothing() {
     for (row_end, has_header) in [(0, false), (1, true)] {
         let out = state.handle_command(TrameCommand::SortRange {
             sheet_id: SheetId(DEFAULT.to_owned()),
-            row_start: 0,
-            row_end,
-            col_start: 0,
-            col_end: 0,
-            sort_col: 0,
+            row_start: Row::new(0),
+            row_end: Row::new(row_end),
+            col_start: Col::new(0),
+            col_end: Col::new(0),
+            sort_col: ColCount::new(0),
             ascending: true,
             has_header,
         });

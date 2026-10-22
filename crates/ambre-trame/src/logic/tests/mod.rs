@@ -3,10 +3,19 @@
 
 use super::{TrameOutcome, TrameState, col_to_alpha};
 use crate::model::Uid;
+use crate::{CellPos, Col, ColCount, Row, RowCount};
 use crate::{SortKey, TrameCommand, TrameEvent};
 use ambre_bus::{FilterKind, FilterOp, SheetId};
 
+use crate::test_support::{at, span};
+
 const TEST_SHEET: &str = "s0";
+
+/// `rect` as `(r1, c1, r2, c2)`.
+fn rect_tuple(rect: crate::CellRect) -> (u32, u32, u32, u32) {
+    let (a, b) = (rect.top_left, rect.bottom_right);
+    (a.row.get(), a.col.get(), b.row.get(), b.col.get())
+}
 
 // The suite is split into groups; shared helpers and imports live here and
 // reach each group via `use super::*`.
@@ -36,10 +45,10 @@ fn bold_patch(on: bool) -> crate::StylePatch {
 fn read_cell(state: &mut TrameState, row: u32, col: u32) -> String {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(999),
-        row_start: row,
-        row_end: row,
-        col_start: col,
-        col_end: col,
+        row_start: Row::new(row),
+        row_end: Row::new(row),
+        col_start: Col::new(col),
+        col_end: Col::new(col),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -52,10 +61,10 @@ fn read_cell(state: &mut TrameState, row: u32, col: u32) -> String {
 fn read_raw(state: &mut TrameState, row: u32, col: u32) -> String {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(999),
-        row_start: row,
-        row_end: row,
-        col_start: col,
-        col_end: col,
+        row_start: Row::new(row),
+        row_end: Row::new(row),
+        col_start: Col::new(col),
+        col_end: Col::new(col),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -67,10 +76,10 @@ fn read_raw(state: &mut TrameState, row: u32, col: u32) -> String {
 fn read_display(state: &mut TrameState, row: u32, col: u32) -> crate::DisplayCell {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(5000),
-        row_start: row,
-        row_end: row,
-        col_start: col,
-        col_end: col,
+        row_start: Row::new(row),
+        row_end: Row::new(row),
+        col_start: Col::new(col),
+        col_end: Col::new(col),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -91,10 +100,10 @@ fn second_sheet_id(state: &TrameState) -> String {
 fn read_col(state: &mut TrameState, col: u32, row_end: u32, version: u64) -> Vec<String> {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(version),
-        row_start: 0,
-        row_end,
-        col_start: 0,
-        col_end: col,
+        row_start: Row::new(0),
+        row_end: Row::new(row_end),
+        col_start: Col::new(0),
+        col_end: Col::new(col),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -103,7 +112,7 @@ fn read_col(state: &mut TrameState, col: u32, row_end: u32, version: u64) -> Vec
         .map(|r| {
             cells
                 .iter()
-                .find(|c| c.row == r && c.col == col)
+                .find(|c| c.row == Row::new(r) && c.col == Col::new(col))
                 .map(|c| c.text.clone())
                 .unwrap_or_default()
         })
@@ -119,8 +128,8 @@ fn is_filtered(state: &mut TrameState, row: u32, col: u32) -> bool {
 fn seed_col_a(state: &mut TrameState, values: &[&str]) {
     for (r, v) in values.iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: (*v).to_owned(),
         });
     }
@@ -129,23 +138,23 @@ fn seed_col_a(state: &mut TrameState, values: &[&str]) {
 /// Seed a few cells on the active sheet for the find/replace tests.
 fn seed_find(state: &mut TrameState) {
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "apple".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 1,
-        col: 0,
+        row: Row::new(1),
+        col: Col::new(0),
         text: "Apple pie".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 2,
-        col: 0,
+        row: Row::new(2),
+        col: Col::new(0),
         text: "banana".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 3,
-        col: 0,
+        row: Row::new(3),
+        col: Col::new(0),
         text: "APPLE".to_owned(),
     });
 }
@@ -154,7 +163,13 @@ fn find_result(out: &TrameOutcome) -> (Vec<(u32, u32)>, Option<usize>) {
     out.display
         .iter()
         .find_map(|e| match e {
-            TrameEvent::FindResult { matches, active } => Some((matches.clone(), *active)),
+            TrameEvent::FindResult { matches, active } => Some((
+                matches
+                    .iter()
+                    .map(|at| (at.row.get(), at.col.get()))
+                    .collect(),
+                *active,
+            )),
             _ => None,
         })
         .expect("a FindResult")
@@ -179,7 +194,7 @@ fn import_result(out: &TrameOutcome) -> (String, u32, u32) {
                 sheet_id,
                 rows,
                 cols,
-            } => Some((sheet_id.0.clone(), *rows, *cols)),
+            } => Some((sheet_id.0.clone(), rows.get(), cols.get())),
             _ => None,
         })
         .expect("expected ImportComplete")
@@ -206,10 +221,10 @@ fn viewport_metrics(
 ) -> (Vec<f32>, Vec<f32>) {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(99),
-        row_start: r0,
-        row_end: r1,
-        col_start: c0,
-        col_end: c1,
+        row_start: Row::new(r0),
+        row_end: Row::new(r1),
+        col_start: Col::new(c0),
+        col_end: Col::new(c1),
     });
     let TrameEvent::ViewportData {
         col_widths,

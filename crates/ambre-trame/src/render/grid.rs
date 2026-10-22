@@ -34,14 +34,14 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
         let mut col = layout.origin_col;
         let mut x = layout.header_width;
         loop {
-            if col > layout.total_cols || x > layout.width {
+            if col > layout.total_cols.as_end() || x > layout.width {
                 break;
             }
             if x >= area.x0 && x <= area.x1 {
                 surface.stroke_line(x, line_y0, x, line_y1, color, 1.0);
             }
             x += layout.col_w(col);
-            col += 1;
+            col = col.next();
         }
     }
 
@@ -53,7 +53,7 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
         let mut row = layout.origin_row;
         let mut y = cells_top;
         loop {
-            if row > layout.total_rows || y > layout.height {
+            if row > layout.total_rows.as_end() || y > layout.height {
                 break;
             }
             if y >= area.y0 && y <= area.y1 {
@@ -62,7 +62,7 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
             if !layout.is_hidden(row) {
                 y += layout.row_h(row);
             }
-            row += 1;
+            row = row.next();
         }
     }
 }

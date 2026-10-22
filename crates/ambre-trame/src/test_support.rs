@@ -105,3 +105,18 @@ impl MockSyncHandle {
             .collect()
     }
 }
+
+/// The cell at `row`, `col`.
+pub fn at(row: u32, col: u32) -> crate::CellPos {
+    crate::CellPos::new(crate::Row::new(row), crate::Col::new(col))
+}
+
+/// The rectangle from `(r1, c1)` to `(r2, c2)`, both corners included.
+pub fn rect(r1: u32, c1: u32, r2: u32, c2: u32) -> crate::CellRect {
+    crate::CellRect::spanning(at(r1, c1), at(r2, c2))
+}
+
+/// A merge block `rows` tall and `cols` wide.
+pub fn span(rows: u32, cols: u32) -> crate::MergeSpan {
+    crate::MergeSpan::new(crate::RowCount::new(rows), crate::ColCount::new(cols))
+}

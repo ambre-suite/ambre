@@ -26,12 +26,12 @@ pub fn draw_edit<S: DrawSurface>(
     font_cx: &mut FontContext,
 ) -> Option<Rect> {
     // An active cell scrolled out of view: nothing to draw.
-    let (x, y, cw, ch) = state.cell_pixel_rect(editor.row, editor.col)?;
+    let (x, y, cw, ch) = state.cell_pixel_rect(editor.at)?;
 
     // Match the cell's pinned formatting so the edit looks like the result.
     let (bold, italic) = state
         .cell_cache
-        .get(&(editor.row, editor.col))
+        .get(&editor.at)
         .map(|c| (c.bold, c.italic))
         .unwrap_or((false, false));
     editor.core.set_style(TextEditorStyle {

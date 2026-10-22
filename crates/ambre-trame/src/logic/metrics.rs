@@ -23,14 +23,14 @@ impl TrameState {
     /// viewport with the new metrics. A no-op when `sheet_id` is not the active
     /// sheet (the index/caches only track the active sheet -- the MVP UI never
     /// resizes a background sheet).
-    pub(super) fn resize_col(&mut self, sheet_id: &str, col: u32, width_px: f32) -> TrameOutcome {
+    pub(super) fn resize_col(&mut self, sheet_id: &str, col: Col, width_px: f32) -> TrameOutcome {
         if sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
         let width = width_px.max(MIN_COL_WIDTH);
         // Materialize the column to mint/resolve its stable id (materialize keys
         // on a cell; row 0 is the cheapest anchor). Beyond the cap: drop.
-        let Some((_, col_uid)) = self.materialize(0, col) else {
+        let Some((_, col_uid)) = self.materialize(CellPos::new(Row::ZERO, col)) else {
             return TrameOutcome::display_only(vec![]);
         };
         let _ = self
@@ -50,12 +50,12 @@ impl TrameState {
     /// Set row `row`'s height (logical px) on the active sheet, clamped to
     /// [`MIN_ROW_HEIGHT`]. Row analogue of [`resize_col`](Self::resize_col):
     /// writes `row_heights_{sheet}`.
-    pub(super) fn resize_row(&mut self, sheet_id: &str, row: u32, height_px: f32) -> TrameOutcome {
+    pub(super) fn resize_row(&mut self, sheet_id: &str, row: Row, height_px: f32) -> TrameOutcome {
         if sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
         let height = height_px.max(MIN_ROW_HEIGHT);
-        let Some((row_uid, _)) = self.materialize(row, 0) else {
+        let Some((row_uid, _)) = self.materialize(CellPos::new(row, Col::ZERO)) else {
             return TrameOutcome::display_only(vec![]);
         };
         let _ = self
@@ -91,7 +91,7 @@ impl TrameState {
                     continue;
                 };
                 if let Some(pos) = self.index.col_pos(&uid) {
-                    self.col_widths.insert(pos as u32, *w as f32);
+                    self.col_widths.insert(pos, *w as f32);
                 }
             }
         }
@@ -105,7 +105,7 @@ impl TrameState {
                     continue;
                 };
                 if let Some(pos) = self.index.row_pos(&uid) {
-                    self.row_heights.insert(pos as u32, *h as f32);
+                    self.row_heights.insert(pos, *h as f32);
                 }
             }
         }
@@ -113,7 +113,7 @@ impl TrameState {
 
     /// Width (logical px) of column `col` on the active sheet: its resized value
     /// or the uniform [`DEFAULT_COL_WIDTH`]. Used to pack the viewport slice.
-    pub(super) fn col_width(&self, col: u32) -> f32 {
+    pub(super) fn col_width(&self, col: Col) -> f32 {
         self.col_widths
             .get(&col)
             .copied()
@@ -121,7 +121,7 @@ impl TrameState {
     }
     /// Height (logical px) of row `row`: its resized value or the uniform
     /// [`DEFAULT_ROW_HEIGHT`].
-    pub(super) fn row_height(&self, row: u32) -> f32 {
+    pub(super) fn row_height(&self, row: Row) -> f32 {
         self.row_heights
             .get(&row)
             .copied()

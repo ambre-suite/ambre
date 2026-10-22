@@ -41,15 +41,20 @@ pub mod chrome;
 pub mod test_support;
 
 pub use ambre_bus::{
-    BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle,
-    ClipboardCell, ClipboardPayload, CondFormatKind, CondStyle, DisplayCell, FillMode, FilterKind,
-    FilterOp, GridRange, HAlign, SelectionKind, SortKey, StylePatch, TrameCommand, TrameEvent,
-    VAlign, ValidationKind, ValidationOnInvalid,
+    BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
+    CellStyle, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan, ColVec,
+    CondFormatKind, CondStyle, DisplayCell, FillMode, FilterKind, FilterOp, GridRange, HAlign,
+    MergeSpan, Row, RowCount, RowDelta, RowSpan, RowVec, SelectionKind, SortKey, StylePatch,
+    TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };
 pub use logic::docfile::{export_ambre_plaintext, import_ambre_plaintext};
 pub use logic::{TrameOutcome, TrameState};
 
 /// Total number of rows in a Trame grid (0-based indices `0..TOTAL_ROWS`).
-pub const TOTAL_ROWS: u32 = 100_000;
+pub const TOTAL_ROWS: RowCount = RowCount::new(100_000);
 /// Total number of columns in a Trame grid (0-based indices `0..TOTAL_COLS`).
-pub const TOTAL_COLS: u32 = 1_000;
+pub const TOTAL_COLS: ColCount = ColCount::new(1_000);
+/// The last row of a Trame grid.
+pub const LAST_ROW: Row = Row::new(TOTAL_ROWS.get() - 1);
+/// The last column of a Trame grid.
+pub const LAST_COL: Col = Col::new(TOTAL_COLS.get() - 1);

@@ -13,12 +13,12 @@
 
 use std::collections::{HashMap, HashSet};
 
+use ambre_bus::{Col, Row};
+
 use super::cache::BytecodeCache;
 use super::compile::SheetIndices;
 use super::functions::call_builtin;
-use super::types::{
-    AxisId, CellId, CellValue, FormulaError, Op, RangeId, RangeValue, nearly_equal,
-};
+use super::types::{CellId, CellValue, FormulaError, Op, RangeId, RangeValue, nearly_equal};
 
 /// Upper bound on the number of cells a single range reference may materialize
 /// during evaluation. Protects the WASM Logic worker from a peer-supplied
@@ -70,21 +70,15 @@ pub struct EvalContext<'a> {
     /// Evaluation clock as an Excel serial number. Shared by every cell in the
     /// pass so `TODAY()`/`NOW()` are stable within one recomputation.
     pub now_serial: f64,
-    /// 1-based grid position of the cell currently being evaluated, used by the
-    /// no-argument `ROW()`/`COLUMN()`. `(0, 0)` means "unknown" (for example a bare
-    /// `execute` call in tests). Set by [`EvalContext::eval_cell`].
-    pub current_pos: (u32, u32),
+    /// Row of the cell currently being evaluated, used by the no-argument
+    /// `ROW()`. `None` means "unknown" (for example a bare `execute` call in
+    /// tests). Set by [`EvalContext::eval_cell`].
+    pub current_row: Option<Row>,
+    /// Column of the cell currently being evaluated, for `COLUMN()`.
+    pub current_col: Option<Col>,
     /// Range cells this pass may still read ([`MAX_PASS_RANGE_CELLS`]). A range
     /// that would overdraw it reads as `#REF!`, like one over `MAX_RANGE_CELLS`.
     pub range_cells_left: usize,
-}
-
-/// Resolving one axis of a reference to a grid position.
-enum AxisPos {
-    /// A concrete grid position (may be beyond the materialized range).
-    Pos(usize),
-    /// A bound `Uid` that is no longer in the index -> `#REF!`.
-    Broken,
 }
 
 impl<'a> EvalContext<'a> {
@@ -103,25 +97,19 @@ impl<'a> EvalContext<'a> {
             formula_cache,
             indices,
             now_serial,
-            current_pos: (0, 0),
+            current_row: None,
+            current_col: None,
             range_cells_left: MAX_PASS_RANGE_CELLS,
         }
     }
 
-    /// Resolve the 1-based grid position of a cell against its sheet index.
-    /// A bound id that has been deleted, or a missing sheet, yields `(0, 0)`.
-    fn grid_pos_of(&self, cell: CellId) -> (u32, u32) {
+    /// Resolve the row and column of a cell against its sheet index. A bound
+    /// id that has been deleted, or a missing sheet, yields `None` on its axis.
+    fn grid_pos_of(&self, cell: CellId) -> (Option<Row>, Option<Col>) {
         let Some(idx) = self.indices.get(&cell.sheet) else {
-            return (0, 0);
+            return (None, None);
         };
-        let axis = |a: AxisId, pos_of: &dyn Fn(&crate::model::Uid) -> Option<usize>| match a {
-            AxisId::Bound(u) => pos_of(&u).map(|p| p as u32 + 1).unwrap_or(0),
-            AxisId::Virtual(p) => p + 1,
-        };
-        (
-            axis(cell.row, &|u| idx.row_pos(u)),
-            axis(cell.col, &|u| idx.col_pos(u)),
-        )
+        (cell.row.pos(idx), cell.col.pos(idx))
     }
 
     /// Evaluate a single cell (already in canonical bound form), detecting
@@ -134,8 +122,8 @@ impl<'a> EvalContext<'a> {
             return v.clone();
         }
         self.eval_stack.insert(cell);
-        let prev_pos = self.current_pos;
-        self.current_pos = self.grid_pos_of(cell);
+        let prev = (self.current_row, self.current_col);
+        (self.current_row, self.current_col) = self.grid_pos_of(cell);
         let result = match self.bc.get(&cell) {
             Some(bc) => self.execute(bc),
             None => self
@@ -145,20 +133,9 @@ impl<'a> EvalContext<'a> {
                 .unwrap_or(CellValue::Empty),
         };
         self.eval_stack.remove(&cell);
-        self.current_pos = prev_pos;
+        (self.current_row, self.current_col) = prev;
         self.resolved.insert(cell, result.clone());
         result
-    }
-
-    /// Resolve one axis of a reference to a grid position against `idx`.
-    fn axis_pos(axis: AxisId, pos_of: impl Fn(&crate::model::Uid) -> Option<usize>) -> AxisPos {
-        match axis {
-            AxisId::Bound(u) => match pos_of(&u) {
-                Some(p) => AxisPos::Pos(p),
-                None => AxisPos::Broken,
-            },
-            AxisId::Virtual(p) => AxisPos::Pos(p as usize),
-        }
     }
 
     /// Resolve a [`CellId`] to the value it points at. `#REF!` for a deleted
@@ -168,13 +145,9 @@ impl<'a> EvalContext<'a> {
         let Some(idx) = self.indices.get(&r.sheet) else {
             return CellValue::Error(FormulaError::BrokenRef);
         };
-        let rp = match Self::axis_pos(r.row, |u| idx.row_pos(u)) {
-            AxisPos::Pos(p) => p,
-            AxisPos::Broken => return CellValue::Error(FormulaError::BrokenRef),
-        };
-        let cp = match Self::axis_pos(r.col, |u| idx.col_pos(u)) {
-            AxisPos::Pos(p) => p,
-            AxisPos::Broken => return CellValue::Error(FormulaError::BrokenRef),
+        // A bound id no longer in the index reads `#REF!`.
+        let (Some(rp), Some(cp)) = (r.row.pos(idx), r.col.pos(idx)) else {
+            return CellValue::Error(FormulaError::BrokenRef);
         };
         match (idx.row_id(rp), idx.col_id(cp)) {
             (Some(row), Some(col)) => self.eval_cell(CellId::bound(r.sheet, row, col)),
@@ -306,8 +279,8 @@ impl<'a> EvalContext<'a> {
                     let args: Vec<CellValue> = stack.drain(split..).collect();
                     let fnctx = super::functions::FnCtx {
                         now_serial: self.now_serial,
-                        cell_row: self.current_pos.0,
-                        cell_col: self.current_pos.1,
+                        cell_row: self.current_row,
+                        cell_col: self.current_col,
                     };
                     stack.push(call_builtin(name, &args, fnctx));
                 }
@@ -325,8 +298,6 @@ impl<'a> EvalContext<'a> {
         let Some(idx) = self.indices.get(&dep.sheet) else {
             return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]);
         };
-        let row_len = idx.row_len();
-        let col_len = idx.col_len();
         let (rs, re) = match dep.row_range(idx) {
             Some(r) => r,
             None => return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]),
@@ -338,8 +309,8 @@ impl<'a> EvalContext<'a> {
         if re < rs || ce < cs {
             return RangeValue::new(0, 0, Vec::new());
         }
-        let rows = re - rs + 1;
-        let cols = ce - cs + 1;
+        let rows = re.count_from(rs).get() as usize + 1;
+        let cols = ce.count_from(cs).get() as usize + 1;
         // Bound the materialized range. A compiled range stores only its two
         // endpoints (O(1) to register), but evaluating it allocates one
         // `CellValue` per member cell. With remote apply live, a malicious peer
@@ -352,13 +323,10 @@ impl<'a> EvalContext<'a> {
             return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]);
         };
         let mut values = Vec::with_capacity(cells);
-        for rp in rs..=re {
-            for cp in cs..=ce {
-                let ids = (rp < row_len && cp < col_len).then(|| (idx.row_id(rp), idx.col_id(cp)));
-                let v = match ids {
-                    Some((Some(row), Some(col))) => {
-                        self.eval_cell(CellId::bound(dep.sheet, row, col))
-                    }
+        for rp in rs.through(re) {
+            for cp in cs.through(ce) {
+                let v = match (idx.row_id(rp), idx.col_id(cp)) {
+                    (Some(row), Some(col)) => self.eval_cell(CellId::bound(dep.sheet, row, col)),
                     _ => CellValue::Empty,
                 };
                 values.push(v);
@@ -508,7 +476,7 @@ mod tests {
         bcc.insert(cell(0, 1), bc);
 
         let mut idx = index_with(10, 10);
-        idx.apply_delete_row(0); // removes row_uid(0)
+        idx.apply_delete_row(Row::new(0)); // removes row_uid(0)
         let mut indices = super::super::compile::SheetIndices::new();
         indices.insert(EngineSheet::ACTIVE, idx);
 

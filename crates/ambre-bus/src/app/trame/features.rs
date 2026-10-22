@@ -11,16 +11,38 @@
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
+use super::{CellPos, CellRect, Col, ColCount, Row};
 use ambre_core::Rgb;
 
 /// A rectangular grid range `[row..=row_end] x [col..=col_end]` (0-based,
 /// inclusive). Corners may be given in any order; the handler normalizes them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GridRange {
-    pub row: u32,
-    pub col: u32,
-    pub row_end: u32,
-    pub col_end: u32,
+    pub row: Row,
+    pub col: Col,
+    pub row_end: Row,
+    pub col_end: Col,
+}
+
+impl GridRange {
+    /// The rectangle the range covers, its corners ordered.
+    pub fn rect(self) -> CellRect {
+        CellRect::spanning(
+            CellPos::new(self.row, self.col),
+            CellPos::new(self.row_end, self.col_end),
+        )
+    }
+}
+
+impl From<CellRect> for GridRange {
+    fn from(rect: CellRect) -> Self {
+        Self {
+            row: rect.top_left.row,
+            col: rect.top_left.col,
+            row_end: rect.bottom_right.row,
+            col_end: rect.bottom_right.col,
+        }
+    }
 }
 
 /// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
@@ -42,8 +64,8 @@ pub enum FillMode {
 /// `trame-sort`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SortKey {
-    /// Column to sort on, as an index within the range (`0` = `col_start`).
-    pub col: u32,
+    /// Column to sort on, as an offset within the range (`0` = `col_start`).
+    pub col: ColCount,
     pub ascending: bool,
 }
 

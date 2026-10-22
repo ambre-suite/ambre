@@ -36,10 +36,10 @@ pub enum TrameCommand {
     /// whose version is older than the last accepted one.
     ScrollViewport {
         version: crate::ViewportVersion,
-        row_start: u32,
-        row_end: u32,
-        col_start: u32,
-        col_end: u32,
+        row_start: Row,
+        row_end: Row,
+        col_start: Col,
+        col_end: Col,
     },
 
     /// Move the active cell to `(row, col)` and report the whole selection
@@ -60,10 +60,10 @@ pub enum TrameCommand {
     /// selection is local view state -- never persisted, never synced
     /// (`trame-selection`).
     SetActiveCell {
-        row: u32,
-        col: u32,
-        anchor_row: u32,
-        anchor_col: u32,
+        row: Row,
+        col: Col,
+        anchor_row: Row,
+        anchor_col: Col,
         /// Committed disjoint rectangles (Ctrl+click), each normalized. The live
         /// rectangle (`anchor..=active`) is not here; the full selection is these
         /// plus that rectangle.
@@ -79,13 +79,13 @@ pub enum TrameCommand {
     /// pipe. The Logic thread stores the text in the document CRDT (the source
     /// of truth); an empty `text` clears the cell. The UI updates its own cache
     /// optimistically, so no echo event is required.
-    SetCellText { row: u32, col: u32, text: String },
+    SetCellText { row: Row, col: Col, text: String },
 
     /// Open edit session `session` on cell `(row, col)`. The Logic thread
     /// resolves the position once, to the sheet and the two lines under it, and
     /// writes nothing. A later commit reaches that cell wherever a peer moved it.
     /// A new session replaces the previous one.
-    BeginCellEdit { session: u64, row: u32, col: u32 },
+    BeginCellEdit { session: u64, row: Row, col: Col },
 
     /// Commit session `session` with `text`, written to the cell it opened on.
     /// A session the Logic thread no longer holds writes nothing: its cell is
@@ -104,7 +104,7 @@ pub enum TrameCommand {
     /// a single `UndoManager` group, so the whole batch is one undo item. A
     /// stream of `SetCellText` differs: each write is its own item. An empty
     /// `text` clears that cell.
-    SetCellsBatch { cells: Vec<(u32, u32, String)> },
+    SetCellsBatch { cells: Vec<(CellPos, String)> },
 
     /// Close the undo group opened by the cell edit, on cell exit (`trame-cell-editing`,
     /// `trame-undo`). An interactive edit can mutate the `LoroDoc` more than once: the cell
@@ -138,21 +138,21 @@ pub enum TrameCommand {
     /// A row inserted within a range formula is naturally included; references
     /// are never rewritten (`trame-formula-engine`). A no-op past the
     /// materialized used range (virtual rows are already blank).
-    InsertRow { at: u32 },
+    InsertRow { at: Row },
 
     /// Delete the row at grid position `at`, shifting rows at `> at` up by one.
     /// Its cells/formatting are dropped and any formula referencing the now
     /// removed row id resolves to `#REF!` (`trame-formula-engine`). A no-op in
     /// virtual space.
-    DeleteRow { at: u32 },
+    DeleteRow { at: Row },
 
     /// Insert a blank column at grid position `at`, shifting existing columns at
     /// `>= at` right by one. Column analogue of [`InsertRow`](TrameCommand::InsertRow).
-    InsertColumn { at: u32 },
+    InsertColumn { at: Col },
 
     /// Delete the column at grid position `at`, shifting columns at `> at` left
     /// by one. Column analogue of [`DeleteRow`](TrameCommand::DeleteRow).
-    DeleteColumn { at: u32 },
+    DeleteColumn { at: Col },
 
     /// Move the row at grid position `from` to grid position `to` (Excel-style
     /// drag reorder), shifting the rows in between to fill the gap. Realized as a
@@ -162,12 +162,12 @@ pub enum TrameCommand {
     /// (`trame-formula-engine`, the same guarantee as sort). Concurrent moves
     /// converge by LWW on the list order. A no-op if `from == to` or either index
     /// is outside the materialized used range.
-    MoveRow { from: u32, to: u32 },
+    MoveRow { from: Row, to: Row },
 
     /// Move the column at grid position `from` to grid position `to`. Column
     /// analogue of [`MoveRow`](TrameCommand::MoveRow): a single `mov` on
     /// `cols_{sheet}`.
-    MoveColumn { from: u32, to: u32 },
+    MoveColumn { from: Col, to: Col },
 
     /// Merge the rectangular range `[row..=row_end] x [col..=col_end]` into a
     /// single cell, the top-left corner becoming the master
@@ -177,17 +177,17 @@ pub enum TrameCommand {
     /// the per-sheet `merges_{sheet}` LWW map keyed by stable id pairs, so the
     /// merge follows its cells across structural ops.
     MergeCells {
-        row: u32,
-        col: u32,
-        row_end: u32,
-        col_end: u32,
+        row: Row,
+        col: Col,
+        row_end: Row,
+        col_end: Col,
     },
 
     /// Split the merge whose rectangle contains grid cell `(row, col)`, restoring
     /// the covered cells. Any value masked by the merge (a concurrent-edit
     /// conflict, `trame-cell-merges`) reappears. A no-op if `(row, col)` is not
     /// inside a merge.
-    UnmergeCells { row: u32, col: u32 },
+    UnmergeCells { row: Row, col: Col },
 
     /// Set the width (physical px) of column `col` on `sheet_id` (`trame-resize`,
     /// `trame-engine`). The Logic thread writes the value into the per-sheet
@@ -202,7 +202,7 @@ pub enum TrameCommand {
     ResizeCol {
         version: crate::ViewportVersion,
         sheet_id: SheetId,
-        col: u32,
+        col: Col,
         width_px: f32,
     },
     /// Set the height (physical px) of row `row` on `sheet_id`. Row analogue of
@@ -210,7 +210,7 @@ pub enum TrameCommand {
     ResizeRow {
         version: crate::ViewportVersion,
         sheet_id: SheetId,
-        row: u32,
+        row: Row,
         height_px: f32,
     },
 
@@ -309,7 +309,7 @@ pub enum TrameCommand {
     /// column is measured whole or not resized. Replies with
     /// [`TrameEvent::ColumnContent`](super::TrameEvent::ColumnContent). A
     /// read-only query: no CRDT delta.
-    RequestColumnContent { col: u32 },
+    RequestColumnContent { col: Col },
     /// Build the clipboard payload for the tracked selection (`trame-clipboard`). The
     /// parameterless-geometry sibling of copy. The Logic thread is the only holder of
     /// document data, so it serializes the selected cells (never culled to a viewport) into
@@ -344,8 +344,8 @@ pub enum TrameCommand {
     ///
     /// [`DataReset`]: super::TrameEvent::DataReset
     PasteRange {
-        target_row: u32,
-        target_col: u32,
+        target_row: Row,
+        target_col: Col,
         payload: ClipboardPayload,
     },
 
@@ -499,12 +499,12 @@ pub enum TrameCommand {
     /// [`TrameEvent::SortComplete`]: super::TrameEvent::SortComplete
     SortRange {
         sheet_id: SheetId,
-        row_start: u32,
-        row_end: u32,
-        col_start: u32,
-        col_end: u32,
+        row_start: Row,
+        row_end: Row,
+        col_start: Col,
+        col_end: Col,
         /// Column to sort on, as an index within the range (`0` = `col_start`).
-        sort_col: u32,
+        sort_col: ColCount,
         ascending: bool,
         /// When `true`, the first range row is treated as a header and not sorted.
         has_header: bool,
@@ -535,7 +535,7 @@ pub enum TrameCommand {
     ApplyFilter {
         sheet_id: SheetId,
         /// Grid column the filter is applied to (0-based).
-        col: u32,
+        col: Col,
         kind: FilterKind,
     },
 
@@ -565,8 +565,8 @@ pub enum TrameCommand {
         has_header: bool,
         /// Target sheet; `None` creates a new "CSV Import" sheet.
         target_sheet_id: Option<SheetId>,
-        start_row: u32,
-        start_col: u32,
+        start_row: Row,
+        start_col: Col,
     },
 
     /// Export the **active** sheet to CSV (`trame-import-export`). Parameterless sibling of
@@ -638,7 +638,7 @@ pub enum TrameCommand {
         name: String,
         sheet_id: SheetId,
         /// Grid column the personal view filters on (0-based).
-        filter_col: u32,
+        filter_col: Col,
         kind: FilterKind,
     },
 
@@ -655,10 +655,10 @@ pub enum TrameCommand {
     /// `rows_{sheet}`; references follow the data (`trame-formula-engine`).
     SortRangeMulti {
         sheet_id: SheetId,
-        row_start: u32,
-        row_end: u32,
-        col_start: u32,
-        col_end: u32,
+        row_start: Row,
+        row_end: Row,
+        col_start: Col,
+        col_end: Col,
         /// Decreasing priority: `[primary, secondary, ...]`. Each `col` is an
         /// index within the range (`0` = `col_start`).
         sort_keys: Vec<SortKey>,

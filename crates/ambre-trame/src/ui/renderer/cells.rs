@@ -8,22 +8,23 @@ use ambre_draw::{Affine, DocumentWalk};
 use super::super::grid::CellData;
 use super::*;
 use crate::render::{CellContent, SheetAxes, SheetCell, SheetCells, SheetView, SheetWalk};
+use crate::{CellPos, MergeSpan};
 
 /// The screen cache as the sheet walk reads it.
-pub(super) struct CacheCells<'a>(pub(super) &'a HashMap<(u32, u32), CellData>);
+pub(super) struct CacheCells<'a>(pub(super) &'a HashMap<CellPos, CellData>);
 
 impl SheetCells for CacheCells<'_> {
-    fn cell(&self, row: u32, col: u32) -> Option<SheetCell<'_>> {
-        self.0.get(&(row, col)).map(|c| SheetCell {
+    fn cell(&self, at: CellPos) -> Option<SheetCell<'_>> {
+        self.0.get(&at).map(|c| SheetCell {
             content: c.content(&c.text),
             merge_span: c.merge_span,
         })
     }
 
-    fn for_each_merge(&self, f: &mut dyn FnMut(u32, u32, u32, u32, CellContent<'_>)) {
-        for (&(row, col), c) in self.0 {
-            if let Some((col_span, row_span)) = c.merge_span {
-                f(row, col, col_span, row_span, c.content(&c.text));
+    fn for_each_merge(&self, f: &mut dyn FnMut(CellPos, MergeSpan, CellContent<'_>)) {
+        for (&at, c) in self.0 {
+            if let Some(span) = c.merge_span {
+                f(at, span, c.content(&c.text));
             }
         }
     }
@@ -162,9 +163,9 @@ pub(crate) fn draw_ui_cell_layers<S: DrawSurface>(
 ) {
     // Dirty veil: a translucent content_bg quad fades the optimistic value.
     let veil = palette.content_bg.with_alpha(DIRTY_VEIL_ALPHA);
-    for &(row, col) in &state.dirty_cells {
-        if span.contains(row, col) && !state.is_row_hidden(row) {
-            surface.fill_rect(layout.cell_rect(row, col), veil);
+    for &at in &state.dirty_cells {
+        if span.contains(at) && !state.is_row_hidden(at.row) {
+            surface.fill_rect(layout.cell_rect(at), veil);
         }
     }
 
@@ -172,11 +173,11 @@ pub(crate) fn draw_ui_cell_layers<S: DrawSurface>(
     // assembled from 1px horizontal lines. It then renders on the GPU
     // surface, since `WgpuSurface` does not implement fill_path.
     let err = palette.cell_error;
-    for &(row, col) in state.formula_errors.keys() {
-        if !span.contains(row, col) || state.is_row_hidden(row) {
+    for &at in state.formula_errors.keys() {
+        if !span.contains(at) || state.is_row_hidden(at.row) {
             continue;
         }
-        let rect = layout.cell_rect(row, col);
+        let rect = layout.cell_rect(at);
         let mut dy = 0.0;
         while dy < ERROR_MARK_SIZE {
             // Row `dy` from the top spans the hypotenuse to the right edge.

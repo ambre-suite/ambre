@@ -26,8 +26,8 @@
 
 use std::hint::black_box;
 
-use ambre_bus::TrameCommand;
 use ambre_bus::app::toile::{ToileCommand, Viewport};
+use ambre_bus::{CellPos, Col, Row, TrameCommand};
 use ambre_logic::DocState;
 use ambre_logic::fixtures::load_bench_fixture;
 use criterion::{Criterion, criterion_group, criterion_main};
@@ -101,8 +101,8 @@ fn bench_trame_recompute(c: &mut Criterion) {
             // no-op measures the equality check rather than the recompute.
             round += 1;
             state.handle_command(TrameCommand::SetCellText {
-                row: 0,
-                col: 0,
+                row: Row::new(0),
+                col: Col::new(0),
                 text: round.to_string(),
             })
         });
@@ -124,7 +124,12 @@ fn bench_trame_batch(c: &mut Criterion) {
         b.iter(|| {
             round += 1;
             let cells = (0..50)
-                .map(|i| (i, 0, format!("{round}-{i}")))
+                .map(|i| {
+                    (
+                        CellPos::new(Row::new(i), Col::new(0)),
+                        format!("{round}-{i}"),
+                    )
+                })
                 .collect::<Vec<_>>();
             state.handle_command(TrameCommand::SetCellsBatch { cells })
         });
@@ -236,7 +241,12 @@ fn bench_remote_delta(c: &mut Criterion) {
             other => panic!("the dense corpus is a workbook, not {other:?}"),
         };
         let cells = (0..50)
-            .map(|i| (i, 1, format!("remote {i}")))
+            .map(|i| {
+                (
+                    CellPos::new(Row::new(i), Col::new(1)),
+                    format!("remote {i}"),
+                )
+            })
             .collect::<Vec<_>>();
         writer
             .handle_command(TrameCommand::SetCellsBatch { cells })

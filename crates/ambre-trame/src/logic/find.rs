@@ -33,24 +33,25 @@ impl TrameState {
             }]);
         }
         let needle = fold(&query, match_case);
-        let (rows, cols) = (self.index.row_len() as u32, self.index.col_len() as u32);
-        let mut matches: Vec<(u32, u32)> = Vec::new();
-        for row in 0..rows {
-            for col in 0..cols {
-                // The displayed value, format included (`TRAME-UI-078`).
-                let text = self.displayed_text(row, col);
-                if !text.is_empty() && cell_matches(&text, &needle, match_case, whole_cell) {
-                    matches.push((row, col));
-                }
+        let mut matches: Vec<CellPos> = Vec::new();
+        for at in self
+            .index
+            .used_range()
+            .into_iter()
+            .flat_map(CellRect::cells)
+        {
+            // The displayed value, format included (`TRAME-UI-078`).
+            let text = self.displayed_text(at);
+            if !text.is_empty() && cell_matches(&text, &needle, match_case, whole_cell) {
+                matches.push(at);
             }
         }
         // Pick the first hit strictly after the active cell (row-major), else wrap
         // to the first hit overall.
-        let (ar, ac) = self.active;
         let active = if matches.is_empty() {
             None
         } else {
-            let after = matches.iter().position(|&(r, c)| (r, c) > (ar, ac));
+            let after = matches.iter().position(|&at| at > self.active);
             Some(after.unwrap_or(0))
         };
         TrameOutcome::display_only(vec![TrameEvent::FindResult { matches, active }])
@@ -146,12 +147,11 @@ impl TrameState {
             return TrameOutcome::display_only(vec![TrameEvent::ReplaceDone { replaced: 0 }]);
         }
         let needle = fold(&query, match_case);
-        let (r, c) = self.active;
+        let at = self.active;
 
         let _ = self.undo_manager.group_start();
         let replaced = u32::from(self.replace_active_cell(
-            r,
-            c,
+            at,
             &needle,
             &query,
             &replacement,
@@ -189,22 +189,23 @@ impl TrameState {
         whole_cell: bool,
         in_formulas: bool,
     ) -> u32 {
-        let (rows, cols) = (self.index.row_len() as u32, self.index.col_len() as u32);
         let mut replaced = 0;
-        for row in 0..rows {
-            for col in 0..cols {
-                if self.replace_active_cell(
-                    row,
-                    col,
-                    needle,
-                    query,
-                    replacement,
-                    match_case,
-                    whole_cell,
-                    in_formulas,
-                ) {
-                    replaced += 1;
-                }
+        for at in self
+            .index
+            .used_range()
+            .into_iter()
+            .flat_map(CellRect::cells)
+        {
+            if self.replace_active_cell(
+                at,
+                needle,
+                query,
+                replacement,
+                match_case,
+                whole_cell,
+                in_formulas,
+            ) {
+                replaced += 1;
             }
         }
         replaced
@@ -217,8 +218,7 @@ impl TrameState {
     #[allow(clippy::too_many_arguments)]
     fn replace_active_cell(
         &mut self,
-        row: u32,
-        col: u32,
+        at: CellPos,
         needle: &str,
         query: &str,
         replacement: &str,
@@ -226,7 +226,7 @@ impl TrameState {
         whole_cell: bool,
         in_formulas: bool,
     ) -> bool {
-        let raw = self.cell_raw(row, col);
+        let raw = self.cell_raw(at);
         if raw.is_empty() {
             return false;
         }
@@ -245,7 +245,7 @@ impl TrameState {
         let haystack = if is_formula {
             raw.clone()
         } else {
-            self.displayed_text(row, col)
+            self.displayed_text(at)
         };
         if !cell_matches(&haystack, needle, match_case, whole_cell) {
             return false;
@@ -254,7 +254,7 @@ impl TrameState {
         if new_raw == raw {
             return false;
         }
-        self.write_cell(row, col, &new_raw);
+        self.write_cell(at, &new_raw);
         true
     }
 
@@ -276,64 +276,61 @@ impl TrameState {
             return 0;
         };
         let index = self.build_sheet_index(sheet_id);
-        let (rows, cols) = (index.row_len(), index.col_len());
         let map = self.doc.get_map(cells_map_name(sheet_id));
         let mut edits: Vec<((Uid, Uid), Option<String>)> = Vec::new();
         let mut refusals = Vec::new();
         let lines = self.sheet_lines();
-        for row in 0..rows {
-            for col in 0..cols {
-                let Some((rl, cl)) = index.resolve(row, col) else {
-                    continue;
-                };
-                let raw = match map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value()) {
-                    Some(LoroValue::String(s)) => s.to_string(),
-                    _ => continue,
-                };
-                let is_formula = raw.starts_with('=');
-                if is_formula && !in_formulas {
-                    continue;
-                }
-                let raw = if is_formula {
-                    self.formula_source(&raw, sheet_id, &lines)
+        for at in index.used_range().into_iter().flat_map(CellRect::cells) {
+            let Some((rl, cl)) = index.resolve(at) else {
+                continue;
+            };
+            let raw = match map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value()) {
+                Some(LoroValue::String(s)) => s.to_string(),
+                _ => continue,
+            };
+            let is_formula = raw.starts_with('=');
+            if is_formula && !in_formulas {
+                continue;
+            }
+            let raw = if is_formula {
+                self.formula_source(&raw, sheet_id, &lines)
+            } else {
+                raw
+            };
+            // Formula cells (with `in_formulas`) match on their raw formula
+            // text; plain cells match on the engine's displayed value.
+            let haystack = if is_formula {
+                raw.clone()
+            } else {
+                let cell = CellId::bound(idx, rl, cl);
+                let text = if self.engine.is_formula_cell(cell) {
+                    self.engine.evaluated_text(cell).unwrap_or_default()
                 } else {
-                    raw
-                };
-                // Formula cells (with `in_formulas`) match on their raw formula
-                // text; plain cells match on the engine's displayed value.
-                let haystack = if is_formula {
                     raw.clone()
+                };
+                // The displayed value, format included (`TRAME-UI-078`).
+                match self.stored_style(sheet_id, rl, cl) {
+                    Some(style) => self.format_display(at, text, &style),
+                    None => text,
+                }
+            };
+            if !cell_matches(&haystack, needle, match_case, whole_cell) {
+                continue;
+            }
+            let new_raw = rewrite(&raw, query, replacement, match_case, whole_cell);
+            if new_raw != raw {
+                let stored = if new_raw.is_empty() {
+                    None
                 } else {
-                    let cell = CellId::bound(idx, rl, cl);
-                    let text = if self.engine.is_formula_cell(cell) {
-                        self.engine.evaluated_text(cell).unwrap_or_default()
-                    } else {
-                        raw.clone()
-                    };
-                    // The displayed value, format included (`TRAME-UI-078`).
-                    match self.stored_style(sheet_id, rl, cl) {
-                        Some(style) => self.format_display(0, 0, text, &style),
-                        None => text,
+                    match self.canonicalize_input(&new_raw, sheet_id, &lines) {
+                        Ok(stored) => Some(stored),
+                        Err(sheet) => {
+                            refusals.push(WriteRefusal::UnknownSheet(sheet));
+                            continue;
+                        }
                     }
                 };
-                if !cell_matches(&haystack, needle, match_case, whole_cell) {
-                    continue;
-                }
-                let new_raw = rewrite(&raw, query, replacement, match_case, whole_cell);
-                if new_raw != raw {
-                    let stored = if new_raw.is_empty() {
-                        None
-                    } else {
-                        match self.canonicalize_input(&new_raw, sheet_id, &lines) {
-                            Ok(stored) => Some(stored),
-                            Err(sheet) => {
-                                refusals.push(WriteRefusal::UnknownSheet(sheet));
-                                continue;
-                            }
-                        }
-                    };
-                    edits.push(((rl, cl), stored));
-                }
+                edits.push(((rl, cl), stored));
             }
         }
         drop(lines);

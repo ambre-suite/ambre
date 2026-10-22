@@ -70,6 +70,7 @@ pub fn send_lossy(
 mod tests {
     use super::*;
     use crate::{AppCommand, DocumentId, TrameCommand};
+    use crate::{Col, Row};
 
     /// The viewport request, the archetype of the class.
     fn viewport() -> LogicCommand {
@@ -77,10 +78,10 @@ mod tests {
             document_id: DocumentId::from_bytes([1; 16]),
             command: AppCommand::Trame(TrameCommand::ScrollViewport {
                 version: crate::ViewportVersion(1),
-                row_start: 0,
-                row_end: 10,
-                col_start: 0,
-                col_end: 10,
+                row_start: Row::new(0),
+                row_end: Row::new(10),
+                col_start: Col::new(0),
+                col_end: Col::new(10),
             }),
         }
     }
@@ -90,11 +91,14 @@ mod tests {
         [
             TrameCommand::InsertColLeft,
             TrameCommand::InsertRowAbove,
-            TrameCommand::MoveColumn { from: 0, to: 3 },
+            TrameCommand::MoveColumn {
+                from: Col::new(0),
+                to: Col::new(3),
+            },
             TrameCommand::ResizeCol {
                 version: crate::ViewportVersion(1),
                 sheet_id: crate::SheetId("s1".to_string()),
-                col: 0,
+                col: Col::new(0),
                 width_px: 120.0,
             },
         ]

@@ -16,23 +16,32 @@
 //! does this reference read": `None` for the formula's own sheet, else its
 //! qualifier. A sheet the host cannot index is left untouched.
 
-use crate::model::{SheetIndex, Uid};
+use ambre_bus::{Col, Row};
 
-pub use super::types::LineAxis;
+use crate::model::{Line, SheetIndex};
+
 use super::types::{
-    AxisSpan, CellRef, CellValue, Expr, FormulaError, RangeDep, SheetQualifier, StoredAxis,
-    StoredCell,
+    AxisSpan, CellRef, CellValue, Expr, FormulaError, RangeDep, SheetQualifier, SpanLines,
+    StoredAxis, StoredCell,
 };
 
-/// The structural edit a [`reanchor`] follows, in positions of the old layout.
+/// The structural edit a [`reanchor`] follows on one axis, in positions of the
+/// old layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LineEdit {
+pub enum LineEdit<P: Line> {
     /// `n` lines inserted before position `at`.
-    Insert { at: u32, n: u32 },
+    Insert { at: P, n: P::Count },
     /// The `n` lines from position `at` removed.
-    Delete { at: u32, n: u32 },
+    Delete { at: P, n: P::Count },
     /// The lines permuted, with none added or removed: a sort or a move.
     Reorder,
+}
+
+/// A structural edit and the axis it changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AxisEdit {
+    Rows(LineEdit<Row>),
+    Cols(LineEdit<Col>),
 }
 
 /// Rewrite every reference of `expr` through `f`, which receives the reference
@@ -77,19 +86,22 @@ fn corners(node: &Expr) -> Option<(StoredCell, StoredCell)> {
             StoredCell::at(CellRef::new(r.row_start, r.col_start)),
             StoredCell::at(CellRef::new(r.row_end, r.col_end)),
         )),
-        Expr::AxisSpan(s) => {
-            let corner = |pos| match s.axis {
-                LineAxis::Col => StoredCell {
+        Expr::AxisSpan(s) => Some(match s.lines {
+            SpanLines::Cols { first, last } => {
+                let corner = |col| StoredCell {
                     row: StoredAxis::Whole,
-                    col: StoredAxis::At(pos),
-                },
-                LineAxis::Row => StoredCell {
-                    row: StoredAxis::At(pos),
+                    col: StoredAxis::At(col),
+                };
+                (corner(first), corner(last))
+            }
+            SpanLines::Rows { first, last } => {
+                let corner = |row| StoredCell {
+                    row: StoredAxis::At(row),
                     col: StoredAxis::Whole,
-                },
-            };
-            Some((corner(s.start), corner(s.end)))
-        }
+                };
+                (corner(first), corner(last))
+            }
+        }),
         Expr::StoredCell(c) => Some((*c, *c)),
         Expr::StoredRange(a, b) => Some((*a, *b)),
         _ => None,
@@ -100,8 +112,8 @@ fn corners(node: &Expr) -> Option<(StoredCell, StoredCell)> {
 fn span_of(start: StoredCell, end: StoredCell) -> Option<AxisSpan> {
     use StoredAxis::{At, Whole};
     match (start.row, start.col, end.row, end.col) {
-        (Whole, At(a), Whole, At(b)) => Some(AxisSpan::new(LineAxis::Col, a, b)),
-        (At(a), Whole, At(b), Whole) => Some(AxisSpan::new(LineAxis::Row, a, b)),
+        (Whole, At(a), Whole, At(b)) => Some(AxisSpan::cols(a, b)),
+        (At(a), Whole, At(b), Whole) => Some(AxisSpan::rows(a, b)),
         _ => None,
     }
 }
@@ -134,72 +146,60 @@ fn broken() -> Expr {
     Expr::Literal(CellValue::Error(FormulaError::BrokenRef))
 }
 
-/// One axis of a sheet's layout, read through a [`SheetIndex`].
-#[derive(Clone, Copy)]
-struct Lines<'a> {
-    index: &'a SheetIndex,
-    axis: LineAxis,
+/// One axis of a stored cell, read and written by its position type.
+trait CellAxis: Line {
+    fn get(cell: &StoredCell) -> StoredAxis<Self>;
+    fn set(cell: &mut StoredCell, value: StoredAxis<Self>);
 }
 
-impl Lines<'_> {
-    fn uid(&self, pos: u32) -> Option<Uid> {
-        match self.axis {
-            LineAxis::Row => self.index.row_id(pos as usize),
-            LineAxis::Col => self.index.col_id(pos as usize),
-        }
+impl CellAxis for Row {
+    fn get(cell: &StoredCell) -> StoredAxis<Self> {
+        cell.row
     }
-
-    fn pos(&self, uid: &Uid) -> Option<u32> {
-        match self.axis {
-            LineAxis::Row => self.index.row_pos(uid),
-            LineAxis::Col => self.index.col_pos(uid),
-        }
-        .map(|p| p as u32)
-    }
-
-    fn len(&self) -> u32 {
-        (match self.axis {
-            LineAxis::Row => self.index.row_len(),
-            LineAxis::Col => self.index.col_len(),
-        }) as u32
-    }
-
-    /// The line at `pos`, or the position itself past the used range.
-    fn bind(&self, pos: u32) -> StoredAxis {
-        self.uid(pos).map_or(StoredAxis::At(pos), StoredAxis::Line)
-    }
-
-    /// The position of a stored axis, `None` for a line that is gone. The
-    /// whole axis has no single position, so it is `None` too.
-    fn position(&self, axis: StoredAxis) -> Option<u32> {
-        match axis {
-            StoredAxis::Line(uid) => self.pos(&uid),
-            StoredAxis::At(pos) => Some(pos),
-            StoredAxis::Whole => None,
-        }
-    }
-
-    /// A stored axis in today's layout: a line becomes its position, and
-    /// `None` once it is gone. A position and the whole axis stay as they are.
-    fn place(&self, axis: StoredAxis) -> Option<StoredAxis> {
-        match axis {
-            StoredAxis::Line(uid) => self.pos(&uid).map(StoredAxis::At),
-            other => Some(other),
-        }
+    fn set(cell: &mut StoredCell, value: StoredAxis<Self>) {
+        cell.row = value;
     }
 }
 
-fn get(cell: &StoredCell, axis: LineAxis) -> StoredAxis {
+impl CellAxis for Col {
+    fn get(cell: &StoredCell) -> StoredAxis<Self> {
+        cell.col
+    }
+    fn set(cell: &mut StoredCell, value: StoredAxis<Self>) {
+        cell.col = value;
+    }
+}
+
+/// The line at `pos`, or the position itself past the used range.
+fn bind_at<P: Line>(index: &SheetIndex, pos: P) -> StoredAxis<P> {
+    P::uid(index, pos).map_or(StoredAxis::At(pos), StoredAxis::Line)
+}
+
+/// The position of a stored axis, `None` for a line that is gone. The whole
+/// axis has no single position, so it is `None` too.
+fn position<P: Line>(index: &SheetIndex, axis: StoredAxis<P>) -> Option<P> {
     match axis {
-        LineAxis::Row => cell.row,
-        LineAxis::Col => cell.col,
+        StoredAxis::Line(uid) => P::pos(index, &uid),
+        StoredAxis::At(pos) => Some(pos),
+        StoredAxis::Whole => None,
     }
 }
 
-fn set(cell: &mut StoredCell, axis: LineAxis, value: StoredAxis) {
+/// A stored axis in today's layout: a line becomes its position, and `None`
+/// once it is gone. A position and the whole axis stay as they are.
+fn place<P: Line>(index: &SheetIndex, axis: StoredAxis<P>) -> Option<StoredAxis<P>> {
     match axis {
-        LineAxis::Row => cell.row = value,
-        LineAxis::Col => cell.col = value,
+        StoredAxis::Line(uid) => P::pos(index, &uid).map(StoredAxis::At),
+        other => Some(other),
+    }
+}
+
+/// Name each position of one axis of both corners by the line now at it.
+fn bind_axis<P: CellAxis>(index: &SheetIndex, start: &mut StoredCell, end: &mut StoredCell) {
+    for cell in [start, end] {
+        if let StoredAxis::At(pos) = P::get(cell) {
+            P::set(cell, bind_at(index, pos));
+        }
     }
 }
 
@@ -213,14 +213,8 @@ pub fn bind<'a>(
         let (Some(index), Some((mut start, mut end))) = (index_of(q), corners(&node)) else {
             return node;
         };
-        for axis in [LineAxis::Row, LineAxis::Col] {
-            let lines = Lines { index, axis };
-            for cell in [&mut start, &mut end] {
-                if let StoredAxis::At(pos) = get(cell, axis) {
-                    set(cell, axis, lines.bind(pos));
-                }
-            }
-        }
+        bind_axis::<Row>(index, &mut start, &mut end);
+        bind_axis::<Col>(index, &mut start, &mut end);
         stored_node(start, end, is_single(&node))
     })
 }
@@ -238,18 +232,10 @@ pub fn unbind<'a>(
         let (Some(index), Some((start, end))) = (index_of(q), corners(&node)) else {
             return node;
         };
-        let rows = Lines {
-            index,
-            axis: LineAxis::Row,
-        };
-        let cols = Lines {
-            index,
-            axis: LineAxis::Col,
-        };
         let at = |c: StoredCell| {
             Some(StoredCell {
-                row: rows.place(c.row)?,
-                col: cols.place(c.col)?,
+                row: place(index, c.row)?,
+                col: place(index, c.col)?,
             })
         };
         let (Some(a), Some(b)) = (at(start), at(end)) else {
@@ -274,30 +260,48 @@ pub fn unbind<'a>(
 pub fn reanchor(
     expr: Expr,
     edited: &impl Fn(Option<&SheetQualifier>) -> bool,
-    axis: LineAxis,
     old: &SheetIndex,
     new: &SheetIndex,
-    edit: LineEdit,
+    edit: AxisEdit,
 ) -> Expr {
-    let old = Lines { index: old, axis };
-    let new = Lines { index: new, axis };
-    // Where a position of the old layout sits in the new one. A removed one
-    // moves to the nearest survivor on the side `towards_end` names.
-    let moved = |pos: u32, towards_end: bool| -> Option<u32> {
-        match edit {
-            LineEdit::Reorder => Some(pos),
-            LineEdit::Insert { at, n } => Some(if pos >= at { pos + n } else { pos }),
-            LineEdit::Delete { at, n } if pos >= at + n => Some(pos - n),
-            LineEdit::Delete { at, .. } if pos >= at => {
-                if towards_end {
-                    Some(at)
-                } else {
-                    at.checked_sub(1)
-                }
-            }
-            LineEdit::Delete { .. } => Some(pos),
-        }
-    };
+    match edit {
+        AxisEdit::Rows(edit) => reanchor_on(expr, edited, old, new, edit),
+        AxisEdit::Cols(edit) => reanchor_on(expr, edited, old, new, edit),
+    }
+}
+
+/// The side a removed position moves to, to its nearest survivor.
+#[derive(Clone, Copy)]
+enum Survivor {
+    /// The first survivor past the removed lines.
+    After,
+    /// The last survivor before the removed lines.
+    Before,
+}
+
+/// Where a position of the old layout sits in the new one. A removed one moves
+/// to the nearest survivor on the side `side` names.
+fn moved<P: Line>(edit: LineEdit<P>, pos: P, side: Survivor) -> Option<P> {
+    match edit {
+        LineEdit::Reorder => Some(pos),
+        LineEdit::Insert { at, n } => Some(if pos >= at { pos.forward(n) } else { pos }),
+        LineEdit::Delete { at, n } if pos >= at.forward(n) => pos.back(n),
+        LineEdit::Delete { at, .. } if pos >= at => match side {
+            Survivor::After => Some(at),
+            Survivor::Before => at.before(),
+        },
+        LineEdit::Delete { .. } => Some(pos),
+    }
+}
+
+/// [`reanchor`] on the axis whose positions are `P`.
+fn reanchor_on<P: CellAxis>(
+    expr: Expr,
+    edited: &impl Fn(Option<&SheetQualifier>) -> bool,
+    old: &SheetIndex,
+    new: &SheetIndex,
+    edit: LineEdit<P>,
+) -> Expr {
     map_refs(expr, &|q, node| {
         if !edited(q) {
             return node;
@@ -306,45 +310,46 @@ pub fn reanchor(
             return node;
         };
         if is_single(&node) {
-            let next = match get(&start, axis) {
+            let next = match P::get(&start) {
                 // A line follows itself; one that is gone already reads `#REF!`.
                 StoredAxis::Line(_) | StoredAxis::Whole => return node,
-                StoredAxis::At(pos) if pos < old.len() => old.bind(pos),
-                StoredAxis::At(pos) => match moved(pos, true) {
+                StoredAxis::At(pos) if pos < P::end(old) => bind_at(old, pos),
+                StoredAxis::At(pos) => match moved(edit, pos, Survivor::After) {
                     Some(to) => StoredAxis::At(to),
                     None => return broken(),
                 },
             };
-            set(&mut start, axis, next);
+            P::set(&mut start, next);
             return stored_node(start, end, true);
         }
         // A range of whole lines on the edited axis keeps covering them all.
-        if get(&start, axis) == StoredAxis::Whole {
+        if P::get(&start) == StoredAxis::Whole {
             return node;
         }
-        let (Some(a), Some(b)) = (
-            old.position(get(&start, axis)),
-            old.position(get(&end, axis)),
-        ) else {
+        let (Some(a), Some(b)) = (position(old, P::get(&start)), position(old, P::get(&end)))
+        else {
             // A corner whose line is already gone: it reads `#REF!` as it is.
             return node;
         };
         let (lo, hi) = (a.min(b), a.max(b));
-        let (Some(lo), Some(hi)) = (moved(lo, true), moved(hi, false)) else {
+        let (Some(lo), Some(hi)) = (
+            moved(edit, lo, Survivor::After),
+            moved(edit, hi, Survivor::Before),
+        ) else {
             return broken();
         };
         if lo > hi {
             return broken();
         }
-        let encode = |pos: u32| {
-            if pos < new.len() {
-                new.bind(pos)
+        let encode = |pos: P| {
+            if pos < P::end(new) {
+                bind_at(new, pos)
             } else {
                 StoredAxis::At(pos)
             }
         };
-        set(&mut start, axis, encode(lo));
-        set(&mut end, axis, encode(hi));
+        P::set(&mut start, encode(lo));
+        P::set(&mut end, encode(hi));
         stored_node(start, end, false)
     })
 }

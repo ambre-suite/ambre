@@ -121,13 +121,13 @@ mod tests {
     fn populated() -> TrameState {
         let mut state = TrameState::new();
         state.handle_command(TrameCommand::SetCellText {
-            row: 0,
-            col: 0,
+            row: Row::new(0),
+            col: Col::new(0),
             text: "21".to_owned(),
         });
         state.handle_command(TrameCommand::SetCellText {
-            row: 1,
-            col: 0,
+            row: Row::new(1),
+            col: Col::new(0),
             text: "=A1*2".to_owned(),
         });
         state
@@ -138,10 +138,10 @@ mod tests {
     fn read_cell(state: &mut TrameState, row: u32, col: u32) -> String {
         let outcome = state.handle_command(TrameCommand::ScrollViewport {
             version: ambre_bus::ViewportVersion(1),
-            row_start: row,
-            row_end: row,
-            col_start: col,
-            col_end: col,
+            row_start: Row::new(row),
+            row_end: Row::new(row),
+            col_start: Col::new(col),
+            col_end: Col::new(col),
         });
         let TrameEvent::ViewportData { cells, .. } = &outcome.display[0] else {
             panic!("expected ViewportData");

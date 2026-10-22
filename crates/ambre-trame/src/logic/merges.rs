@@ -8,50 +8,47 @@
 use super::*;
 
 impl TrameState {
-    /// Merge the range with corners `(r0,c0)`-`(r1,c1)` (given in any order) into
-    /// one cell. Rejected locally if a covered cell is non-empty
-    /// (`trame-cell-merges`); otherwise
-    /// records the master->extent entry in `merges_{sheet}` keyed by stable ids.
-    pub(super) fn merge_cells(&mut self, r0: u32, c0: u32, r1: u32, c1: u32) -> TrameOutcome {
-        let (top, bottom) = (r0.min(r1), r0.max(r1));
-        let (left, right) = (c0.min(c1), c0.max(c1));
+    /// Merge `rect` into one cell. Rejected locally if a covered cell is
+    /// non-empty (`trame-cell-merges`); otherwise records the master->extent
+    /// entry in `merges_{sheet}` keyed by stable ids.
+    pub(super) fn merge_cells(&mut self, rect: CellRect) -> TrameOutcome {
         // A single cell is not a merge.
-        if top == bottom && left == right {
+        if rect.is_single_cell() {
             return TrameOutcome::display_only(vec![]);
         }
         // Client-side rule: every covered cell (excluding the master) must be
         // empty locally, matching Excel/Sheets. Cannot prevent a later
         // concurrent conflict -- that path masks instead (rebuild_merges).
-        for row in top..=bottom {
-            for col in left..=right {
-                if (row, col) == (top, left) {
-                    continue;
-                }
-                if self.cell_has_raw(row, col) {
-                    return TrameOutcome::display_only(vec![TrameEvent::MergeRejected {
-                        reason: format!("cell {}{} is not empty", col_to_alpha(col), row + 1),
-                    }]);
-                }
-            }
+        let full = rect
+            .cells()
+            .filter(|&at| at != rect.top_left)
+            .find(|&at| self.cell_has_raw(at));
+        if let Some(at) = full {
+            return TrameOutcome::display_only(vec![TrameEvent::MergeRejected {
+                reason: format!(
+                    "cell {}{} is not empty",
+                    col_to_alpha(at.col),
+                    row_label(at.row)
+                ),
+            }]);
         }
-        self.insert_merge_entry(top, left, bottom, right);
+        self.insert_merge_entry(rect);
         self.doc.commit();
         self.after_merge_change()
     }
 
-    /// Record one master->extent merge entry in `merges_{sheet}` for the
-    /// rectangle `(top,left)`-`(bottom,right)` (corners already ordered). Shared
+    /// Record one master->extent merge entry in `merges_{sheet}` for `rect`. Shared
     /// by the context-menu merge and the merge-aware autofill
     /// (`trame-autofill`); does not
     /// commit or rebuild the derived caches -- the caller batches those.
-    pub(super) fn insert_merge_entry(&mut self, top: u32, left: u32, bottom: u32, right: u32) {
+    pub(super) fn insert_merge_entry(&mut self, rect: CellRect) {
         // Materialize the bottom-right corner so the whole rectangle has ids.
-        if self.materialize(bottom, right).is_none() {
+        if self.materialize(rect.bottom_right).is_none() {
             return;
         }
         let (Some(master), Some(extent)) = (
-            self.index.resolve(top as usize, left as usize),
-            self.index.resolve(bottom as usize, right as usize),
+            self.index.resolve(rect.top_left),
+            self.index.resolve(rect.bottom_right),
         ) else {
             return;
         };
@@ -64,10 +61,10 @@ impl TrameState {
             );
     }
 
-    /// Split the merge whose rectangle contains `(row, col)`, restoring covered
+    /// Split the merge whose rectangle contains `at`, restoring covered
     /// cells (and any masked value). A no-op when the cell is not in a merge.
-    pub(super) fn unmerge_cells(&mut self, row: u32, col: u32) -> TrameOutcome {
-        if !self.delete_merge_at(row, col) {
+    pub(super) fn unmerge_cells(&mut self, at: CellPos) -> TrameOutcome {
+        if !self.delete_merge_at(at) {
             return TrameOutcome::display_only(vec![]);
         }
         self.doc.commit();
@@ -79,28 +76,23 @@ impl TrameState {
     /// active cell, so one step splits every merge the selection touches.
     pub(super) fn unmerge_selection(&mut self) -> TrameOutcome {
         // Bounding box of every selected rectangle (`TRAME-UI-129`).
-        let (mut r1, mut c1, mut r2, mut c2) = self.selection_bounds();
+        let mut freed = self.selection_bounds();
         // Masters whose rectangle intersects the selection. Snapshot first: the
         // deletion mutates the CRDT, but `self.merges` stays put until rebuild.
-        let masters: Vec<(u32, u32, u32, u32)> = self
+        let blocks: Vec<CellRect> = self
             .merges
             .iter()
-            .filter_map(|(&(top, left), &(bottom, right))| {
-                let intersects = top <= r2 && bottom >= r1 && left <= c2 && right >= c1;
-                intersects.then_some((top, left, bottom, right))
-            })
+            .map(|(&master, &end)| CellRect::spanning(master, end))
+            .filter(|block| block.overlaps(freed))
             .collect();
         let mut deleted = false;
-        for (top, left, bottom, right) in masters {
-            if self.delete_merge_at(top, left) {
+        for block in blocks {
+            if self.delete_merge_at(block.top_left) {
                 deleted = true;
                 // Grow the post-unmerge selection over every freed block. A
                 // merge straddling the selection edge extends past it, and the
                 // user needs every cell the split exposed, not the drag rect.
-                r1 = r1.min(top);
-                c1 = c1.min(left);
-                r2 = r2.max(bottom);
-                c2 = c2.max(right);
+                freed = freed.union(block);
             }
         }
         if !deleted {
@@ -110,24 +102,22 @@ impl TrameState {
         let mut outcome = self.after_merge_change();
         outcome
             .display
-            .push(TrameEvent::SelectRange { r1, c1, r2, c2 });
+            .push(TrameEvent::SelectRange { rect: freed });
         outcome
     }
 
-    /// Delete the merge entry whose rectangle contains `(row, col)` from the
+    /// Delete the merge entry whose rectangle contains `at` from the
     /// `merges_{sheet}` map. Returns whether an entry was removed; does not
     /// commit or rebuild the derived caches -- the caller batches those.
-    fn delete_merge_at(&mut self, row: u32, col: u32) -> bool {
-        let Some((top, left)) = self
-            .merges
-            .iter()
-            .find_map(|(&(top, left), &(bottom, right))| {
-                (row >= top && row <= bottom && col >= left && col <= right).then_some((top, left))
-            })
-        else {
+    fn delete_merge_at(&mut self, at: CellPos) -> bool {
+        let Some(master) = self.merges.iter().find_map(|(&master, &end)| {
+            CellRect::spanning(master, end)
+                .contains(at)
+                .then_some(master)
+        }) else {
             return false;
         };
-        let Some((rl, cl)) = self.index.resolve(top as usize, left as usize) else {
+        let Some((rl, cl)) = self.index.resolve(master) else {
             return false;
         };
         self.doc
@@ -153,19 +143,15 @@ impl TrameState {
         }
     }
 
-    /// Whether grid `(row, col)` holds a non-empty string value in the CRDT.
+    /// Whether the grid cell `at` holds a non-empty string value in the CRDT.
     /// Resolves the position to its stable id pair; a virtual cell has no value.
-    pub(super) fn cell_has_raw(&self, row: u32, col: u32) -> bool {
-        has_raw_value(
-            self.index
-                .resolve(row as usize, col as usize)
-                .and_then(|(rl, cl)| {
-                    self.doc
-                        .get_map(cells_map_name(&self.active_sheet))
-                        .get(&cell_key(rl, cl))
-                        .map(|v| v.get_deep_value())
-                }),
-        )
+    pub(super) fn cell_has_raw(&self, at: CellPos) -> bool {
+        has_raw_value(self.index.resolve(at).and_then(|(rl, cl)| {
+            self.doc
+                .get_map(cells_map_name(&self.active_sheet))
+                .get(&cell_key(rl, cl))
+                .map(|v| v.get_deep_value())
+        }))
     }
 
     /// Rebuild the derived merge caches ([`Self::merges`], [`Self::covered`],
@@ -186,27 +172,23 @@ impl TrameState {
         let placed = self.resolved_merges(&self.active_sheet, &self.index);
 
         let mut events = Vec::new();
-        for ((top, left), (bottom, right)) in placed {
-            self.merges.insert((top, left), (bottom, right));
-            for row in top..=bottom {
-                for col in left..=right {
-                    if (row, col) == (top, left) {
-                        continue;
+        for block in placed {
+            let master = block.top_left;
+            self.merges.insert(master, block.bottom_right);
+            for at in block.cells().filter(|&at| at != master) {
+                self.covered.insert(at);
+                // Mask a covered cell that still holds a value (concurrent
+                // conflict): keep the data, exclude it from the engine.
+                if self.cell_has_raw(at) {
+                    if let Some((rl, cl)) = self.index.resolve(at) {
+                        self.masked_cells.insert(cell_key(rl, cl));
                     }
-                    self.covered.insert((row, col));
-                    // Mask a covered cell that still holds a value (concurrent
-                    // conflict): keep the data, exclude it from the engine.
-                    if self.cell_has_raw(row, col) {
-                        if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
-                            self.masked_cells.insert(cell_key(rl, cl));
-                        }
-                        events.push(TrameEvent::MergeConflictDetected {
-                            master_row: top,
-                            master_col: left,
-                            covered_row: row,
-                            covered_col: col,
-                        });
-                    }
+                    events.push(TrameEvent::MergeConflictDetected {
+                        master_row: master.row,
+                        master_col: master.col,
+                        covered_row: at.row,
+                        covered_col: at.col,
+                    });
                 }
             }
         }
@@ -214,7 +196,7 @@ impl TrameState {
     }
 
     /// The merge rectangles of `sheet_id` that survive overlap resolution, in
-    /// placement order, as `(master, bottom-right)` grid positions. The walk
+    /// placement order, in grid positions. The walk
     /// takes entries in ascending master-key order and skips any rectangle
     /// meeting one already placed. That key is stable and that order derives
     /// from the document alone. Every peer resolves one layout, and none
@@ -226,18 +208,14 @@ impl TrameState {
     /// ([`Self::masked_cells_for`]) -- therefore read one answer instead of
     /// each deriving its own. A second copy of this precedence would let a
     /// masked cell differ from the block the grid draws.
-    pub(super) fn resolved_merges(
-        &self,
-        sheet_id: &str,
-        index: &SheetIndex,
-    ) -> Vec<((u32, u32), (u32, u32))> {
+    pub(super) fn resolved_merges(&self, sheet_id: &str, index: &SheetIndex) -> Vec<CellRect> {
         let LoroValue::Map(entries) = self.doc.get_map(merges_map_name(sheet_id)).get_value()
         else {
             return Vec::new();
         };
         // Collect resolvable rectangles tagged with their master key for a
         // deterministic, peer-independent overlap precedence.
-        let mut rects: Vec<MergeRect> = entries
+        let mut rects: Vec<(String, CellRect)> = entries
             .iter()
             .filter_map(|(master_key, value)| {
                 let LoroValue::String(extent_key) = value else {
@@ -245,33 +223,22 @@ impl TrameState {
                 };
                 let (mr, mc) = parse_cell_key(master_key)?;
                 let (er, ec) = parse_cell_key(extent_key)?;
-                let top = index.row_pos(&mr)? as u32;
-                let left = index.col_pos(&mc)? as u32;
-                let bottom = index.row_pos(&er)? as u32;
-                let right = index.col_pos(&ec)? as u32;
+                let rect = CellRect::spanning(index.pos_of(&mr, &mc)?, index.pos_of(&er, &ec)?);
                 // A peer may write an entry of one cell. It is no merge
                 // (`TRAME-128`), so it masks nothing and draws no block.
-                if top == bottom && left == right {
-                    return None;
-                }
-                Some((
-                    master_key.to_string(),
-                    (top.min(bottom), left.min(right)),
-                    (top.max(bottom), right.max(left)),
-                ))
+                (!rect.is_single_cell()).then(|| (master_key.to_string(), rect))
             })
             .collect();
         rects.sort_by(|a, b| a.0.cmp(&b.0));
 
         let mut placed = Vec::with_capacity(rects.len());
-        let mut occupied: HashSet<(u32, u32)> = HashSet::new();
-        for (_key, (top, left), (bottom, right)) in rects {
-            let cells = (top..=bottom).flat_map(|r| (left..=right).map(move |c| (r, c)));
-            if cells.clone().any(|cell| occupied.contains(&cell)) {
+        let mut occupied: HashSet<CellPos> = HashSet::new();
+        for (_, rect) in rects {
+            if rect.cells().any(|cell| occupied.contains(&cell)) {
                 continue;
             }
-            occupied.extend(cells);
-            placed.push(((top, left), (bottom, right)));
+            occupied.extend(rect.cells());
+            placed.push(rect);
         }
         placed
     }
@@ -289,13 +256,13 @@ impl TrameState {
         let cells = self.doc.get_map(cells_map_name(sheet_id));
         self.resolved_merges(sheet_id, index)
             .into_iter()
-            .flat_map(|((top, left), (bottom, right))| {
-                (top..=bottom)
-                    .flat_map(move |row| (left..=right).map(move |col| (row, col)))
+            .flat_map(|block| {
+                block
+                    .cells()
                     // The master carries the value; only what it covers is masked.
-                    .filter(move |&pos| pos != (top, left))
+                    .filter(move |&at| at != block.top_left)
             })
-            .filter_map(|(row, col)| index.resolve(row as usize, col as usize))
+            .filter_map(|at| index.resolve(at))
             .map(|(rl, cl)| cell_key(rl, cl))
             // A covered cell that still holds a value is a concurrent conflict:
             // mask it (keep the data, exclude it from the DAG).

@@ -10,7 +10,7 @@ use super::*;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FilterPopoverState {
     /// Grid column (0-based) the filter targets.
-    pub col: u32,
+    pub col: Col,
     /// Client-space anchor (CSS px): the popover's top-left.
     pub x: f64,
     pub y: f64,
@@ -47,8 +47,8 @@ const FILTER_OPS: &[(FilterOp, &str)] = &[
     (FilterOp::IsNotEmpty, "is not empty"),
 ];
 
-/// A1-style column label for a 0-based grid column index (0 -> "A", 26 -> "AA").
-fn col_label(col: u32) -> String {
+/// A1-style column label for a grid column (0 -> "A", 26 -> "AA").
+fn col_label(col: Col) -> String {
     crate::columns::col_to_alpha(col)
 }
 

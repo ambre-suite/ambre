@@ -656,29 +656,18 @@ ambre-bus | src/app/toile.rs | crate::app::toile | Viewport.zoom | field | f64	d
 ambre-bus | src/app/toile.rs | crate::app::toile | Viewport::clamped_zoom() | ret | f64	debt	planned: lot B bis 7: ZoomFactor (bus Viewport.zoom is the carrier of toile ui/viewport.rs)
 ambre-bus | src/app/toile.rs | crate::app::toile | ZTarget::Index.0 | field | usize	math	z-order index
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.bold | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.dc | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.dr | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.italic | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.raw | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardPayload.cols | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardPayload.rows | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardPayload.src_col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardPayload.src_row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardPayload::to_tsv() | ret | String	generic	TSV rendering of the payload
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddCondFormat.priority | field | i64	math	rule priority order
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddValidation.message | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ApplyFilter.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::BeginCellEdit.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::BeginCellEdit.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::BeginCellEdit.session | field | u64	debt	finding: Trame edit `session: u64` (medium-low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CommitCellEdit.session | field | u64	debt	finding: Trame edit `session: u64` (medium-low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CommitCellEdit.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CreateSheet.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.reference | field | String	free-text	A1 reference text, parsed by the formula engine
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DeleteColumn.at | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DeleteName.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DeleteRow.at | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::EndCellEdit.session | field | u64	debt	finding: Trame edit `session: u64` (medium-low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ExportCsv.delimiter | field | Option<u8>	debt	finding: CSV delimiter as Option<u8> (low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.match_case | field | bool	generic	named option or style flag, selects no mode
@@ -687,21 +676,7 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.data | field | Vec<u8>	generic	imported CSV bytes
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.delimiter | field | Option<u8>	debt	finding: CSV delimiter as Option<u8> (low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.has_header | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.start_col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.start_row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::InsertColumn.at | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::InsertRow.at | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MergeCells.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MergeCells.col_end | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MergeCells.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MergeCells.row_end | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MoveColumn.from | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MoveColumn.to | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MoveRow.from | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MoveRow.to | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MoveSheet.to_index | field | u32	math	sheet tab index
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::PasteRange.target_col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::PasteRange.target_row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::PasteText.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::RenameSheet.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.all_sheets | field | bool	generic	named option or style flag, selects no mode
@@ -715,55 +690,27 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.replacement | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.whole_cell | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::RequestColumnContent.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ResizeCol.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ResizeCol.width_px | field | f32	math	column width / row height in px
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ResizeRow.height_px | field | f32	math	column width / row height in px
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ResizeRow.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SaveFilterView.filter_col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SaveFilterView.name | field | String	free-text	user label of a filter view
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ScrollViewport.col_end | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ScrollViewport.col_start | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ScrollViewport.row_end | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ScrollViewport.row_start | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetActiveCell.anchor_col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetActiveCell.anchor_row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetActiveCell.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetActiveCell.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellText.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellText.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellText.text | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellsBatch.cells | field | Vec<(u32,u32,String)>	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellsBatch.cells | field | Vec<(CellPos,String)>	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetProtection.description | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRange.ascending | field | bool	debt	finding: Boolean mode selectors (low-medium, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRange.col_end | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRange.col_start | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRange.has_header | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRange.row_end | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRange.row_start | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRange.sort_col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRangeMulti.col_end | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRangeMulti.col_start | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRangeMulti.has_header | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRangeMulti.row_end | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortRangeMulti.row_start | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SortSelectionMulti.has_header | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::UnmergeCells.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::UnmergeCells.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::UpdateCondFormat.priority | field | i64	math	rule priority order
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <SheetId as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature fixed by the trait
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatId.0 | field | String	newtype-inner	id newtype
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.bold | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.font | field | Option<String>	free-text	font family / font size
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.is_filtered | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.is_merged | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.italic | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.merge_span | field | Option<(u32,u32)>	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.numeric | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.raw | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.strikethrough | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.underline | field | bool	generic	named option or style flag, selects no mode
@@ -772,66 +719,35 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | FilterViewId.0 |
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetId.0 | field | String	newtype-inner	id newtype
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetId::as_str() | ret | &str	newtype-inner	id newtype
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetTab.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ColumnContent.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ColumnValues.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ColumnValues.values | field | Vec<String>	free-text	cell text / query / user message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::DocumentRefused.reason | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::EditTargetGone.session | field | u64	debt	finding: Trame edit `session: u64` (medium-low, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::EditTargetMoved.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::EditTargetMoved.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::EditTargetMoved.session | field | u64	debt	finding: Trame edit `session: u64` (medium-low, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Error.message | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ExportComplete.data | field | Vec<u8>	generic	exported file bytes
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ExportComplete.filename | field | String	free-text	export filename
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::FilterApplied.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::FilterApplied.hidden_row_count | field | u32	math	count
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::FindResult.active | field | Option<usize>	math	index into the match list
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::FindResult.matches | field | Vec<(u32,u32)>	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ImportComplete.cols | field | u32	math	count
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ImportComplete.rows | field | u32	math	count
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::MergeConflictDetected.covered_col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::MergeConflictDetected.covered_row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::MergeConflictDetected.master_col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::MergeConflictDetected.master_row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::MergeRejected.reason | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::PasteRejected.reason | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionDenied.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionDenied.description | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionDenied.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionViolationWarning.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionViolationWarning.description | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionViolationWarning.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ReplaceDone.replaced | field | u32	math	count
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectRange.c1 | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectRange.c2 | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectRange.r1 | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectRange.r2 | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectionStats.avg | field | f64	math	selection aggregate
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectionStats.count | field | u64	math	selection aggregate
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectionStats.count_num | field | u64	math	selection aggregate
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectionStats.max | field | f64	math	selection aggregate
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectionStats.min | field | f64	math	selection aggregate
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectionStats.sum | field | f64	math	selection aggregate
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SortRange.c1 | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SortRange.c2 | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SortRange.r1 | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SortRange.r2 | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::StyleApplied.bold | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::StyleApplied.italic | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::StyleApplied.merged | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::StyleApplied.numeric | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::UndoState.can_redo | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::UndoState.can_undo | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationError.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationError.message | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationError.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationWarning.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationWarning.message | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationWarning.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ViewportData.col_start | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ViewportData.col_widths | field | Vec<f32>	math	column width / row height in px
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ViewportData.row_heights | field | Vec<f32>	math	column width / row height in px
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ViewportData.row_start | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.1 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::BottomN.0 | field | u32	math	top/bottom N count
@@ -844,12 +760,7 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormat
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::TopN.0 | field | u32	math	top/bottom N count
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::TopNPercent.0 | field | f32	debt	finding: Raw date and percentage in Trame rules (low, suspected)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondStyle.bold | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | GridRange.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | GridRange.col_end | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | GridRange.row | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | GridRange.row_end | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | SortKey.ascending | field | bool	debt	finding: Boolean mode selectors (low-medium, confirmed)
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | SortKey.col | field | u32	debt	finding: Trame grid row/col as bare u32 (high, confirmed)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::DateRange.max | field | Option<String>	debt	finding: Raw date and percentage in Trame rules (low, suspected)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::DateRange.min | field | Option<String>	debt	finding: Raw date and percentage in Trame rules (low, suspected)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::Formula.0 | field | String	free-text	user-entered rule operand, pattern or formula text
@@ -861,6 +772,9 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Validation
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::Regex.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::TextLength.max | field | Option<u32>	math	validation bound
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::TextLength.min | field | Option<u32>	math	validation bound
+ambre-bus | src/app/trame/grid.rs | crate::app::trame::grid | CellRect::contains() | ret | bool	generic	predicate result
+ambre-bus | src/app/trame/grid.rs | crate::app::trame::grid | CellRect::is_single_cell() | ret | bool	generic	predicate result
+ambre-bus | src/app/trame/grid.rs | crate::app::trame::grid | CellRect::overlaps() | ret | bool	generic	predicate result
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | BORDER_EDGE_ALL | const | u8	debt	finding: Dead BORDER_EDGE_* u8 bit constants (low, confirmed)
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | BORDER_EDGE_BOTTOM | const | u8	debt	finding: Dead BORDER_EDGE_* u8 bit constants (low, confirmed)
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | BORDER_EDGE_LEFT | const | u8	debt	finding: Dead BORDER_EDGE_* u8 bit constants (low, confirmed)
@@ -6493,12 +6407,10 @@ ambre-trame | src/chrome/handler.rs | crate::chrome::handler | client_anchor() |
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | client_anchor(anchor) | param | Option<(f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FILTER_OPS | const | &[(FilterOp,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FilterPopover(values) | param | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FilterPopoverState.col | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FilterPopoverState.x | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FilterPopoverState.y | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | SheetFilter::is_filtered() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | col_label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | col_label(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_BUTTONS | const | &[(BorderPreset,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_STYLES | const | &[(BorderStyle,&str,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | H_ALIGNS | const | &[(HAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
@@ -6509,10 +6421,6 @@ ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameRelay.filter_val
 ambre-trame | src/chrome/sheet_tabs.rs | crate::chrome::sheet_tabs | ReorderSheet.to_index | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/chrome/sheet_tabs.rs | crate::chrome::sheet_tabs | SheetTabs(on_rename) | param | Callback<(SheetId,String)>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/chrome/sort_dialog.rs | crate::chrome::sort_dialog | SortApply.has_header | field | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/chrome/sort_dialog.rs | crate::chrome::sort_dialog | SortDialogState.c1 | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/chrome/sort_dialog.rs | crate::chrome::sort_dialog | SortDialogState.c2 | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/chrome/sort_dialog.rs | crate::chrome::sort_dialog | SortDialogState.r1 | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/chrome/sort_dialog.rs | crate::chrome::sort_dialog | SortDialogState.r2 | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.avg | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.count | field | u64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.count_num | field | u64	math	count, length, local index, limit or calendar/arith helper
@@ -6534,10 +6442,10 @@ ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.underline 
 ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.wrap | field | RwSignal<bool>	generic	state flag
 ambre-trame | src/chrome/style.rs | crate::chrome::style | Toggles.redo_enabled | field | RwSignal<bool>	generic	state flag
 ambre-trame | src/chrome/style.rs | crate::chrome::style | Toggles.undo_enabled | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/columns.rs | crate::columns | alpha_to_col() | ret | Result<u32,String>	debt	finding: (FINDING, confirmed): errors carried as String
+ambre-trame | src/columns.rs | crate::columns | alpha_to_col() | ret | Result<Col,String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/columns.rs | crate::columns | alpha_to_col(s) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | col_to_alpha() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/columns.rs | crate::columns | col_to_alpha(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
+ambre-trame | src/columns.rs | crate::columns | row_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.compiles | field | u64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.sources | field | HashMap<CellId,Box<str>>	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::compiled_from() | ret | bool	generic	predicate or did-it-change return
@@ -6545,7 +6453,6 @@ ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::comp
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::is_empty() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::len() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::recompile_if_stale(raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/formula/compile.rs | crate::formula::compile | bind(pos) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/formula/dag.rs | crate::formula::dag | DependencyGraph::node_count() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::evaluated_text() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::formula_count() | ret | usize	math	count, length, local index, limit or calendar/arith helper
@@ -6601,7 +6508,7 @@ ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | range_dims() | ret | Option<(usize,usize)>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | row_col(current) | param | u32	debt	finding: (FINDING, confirmed): 1-based position with a 0 sentinel inside a 0-based world
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | row_col(current) | param | Option<f64>	math	formula number: the evaluating cell's 1-based row or column
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | shift_month() | ret | (i64,i64)	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | shift_month(m) | param | i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | shift_month(months) | param | i64	math	calendar arithmetic (y/m/d), local
@@ -6612,21 +6519,11 @@ ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criteri
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.1 | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.2 | field | bool	debt	finding: (FINDING, confirmed): closed sets held as int, char or bool
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::matches() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | FnCtx.cell_col | field | u32	debt	finding: (FINDING, confirmed): 1-based position with a 0 sentinel inside a 0-based world
-ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | FnCtx.cell_row | field | u32	debt	finding: (FINDING, confirmed): 1-based position with a 0 sentinel inside a 0-based world
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | FnCtx.now_serial | field | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | call_builtin(name) | param | &str	debt	finding: (FINDING, confirmed): builtin function name as String
-ambre-trame | src/formula/identity.rs | crate::formula::identity | LineEdit::Delete.at | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/identity.rs | crate::formula::identity | LineEdit::Delete.n | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/identity.rs | crate::formula::identity | LineEdit::Insert.at | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/identity.rs | crate::formula::identity | LineEdit::Insert.n | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/identity.rs | crate::formula::identity | Lines<'_>::bind(pos) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/identity.rs | crate::formula::identity | Lines<'_>::len() | ret | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/identity.rs | crate::formula::identity | Lines<'_>::pos() | ret | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/identity.rs | crate::formula::identity | Lines<'_>::position() | ret | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/identity.rs | crate::formula::identity | Lines<'_>::uid(pos) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/formula/identity.rs | crate::formula::identity | is_single() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor_on(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/identity.rs | crate::formula::identity | stored_node(single) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_CHARS | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_NESTING | const | usize	math	count, length, local index, limit or calendar/arith helper
@@ -6674,7 +6571,7 @@ ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | pow_expr(inpu
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | range() | ret | nom::IResult<&str,Expr>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | range(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | resolve_refs() | ret | Result<Expr,String>	debt	finding: (FINDING, confirmed): errors carried as String
-ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | row_number() | ret | nom::IResult<&str,u32>	generic	parser, renderer, lexer or freeze tooling over text or bytes
+ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | row_number() | ret | nom::IResult<&str,Row>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | row_number(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_id_token() | ret | nom::IResult<&str,String>	debt	planned: lot A 1 ripple (parsed sheet id token)
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_id_token(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -6715,35 +6612,11 @@ ambre-trame | src/formula/render.rs | crate::formula::render | render_span() | r
 ambre-trame | src/formula/render.rs | crate::formula::render | render_stored() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_uid() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | to_display_form(id_to_name) | param | &impl Fn(&str)->Option<String>	debt	planned: lot A 1 knock-on (render.rs:57,87)
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_cell(dc) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_cell(dr) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_expr(dc) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_expr(dr) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_formula() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_formula(dc) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_formula(dr) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_formula(raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_idx() | ret | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_idx(d) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_idx(v) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_range(dc) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_range(dr) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_span(dc) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_span(dr) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/formula/types.rs | crate::formula::types | <SingleSheetCtx as FormulaCtx>::resolve_name(_name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/formula/types.rs | crate::formula::types | <SingleSheetCtx as FormulaCtx>::resolve_sheet(_name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/types.rs | crate::formula::types | <SingleSheetCtx as FormulaCtx>::resolve_sheet_id(_id) | param | &str	debt	planned: lot A 1 (FormulaCtx::resolve_sheet_id)
-ambre-trame | src/formula/types.rs | crate::formula::types | AxisId::Virtual.0 | field | u32	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/formula/types.rs | crate::formula::types | AxisSpan.end | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | AxisSpan.start | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | AxisSpan::new(a) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | AxisSpan::new(b) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | CellRef.col | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | CellRef.row | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | CellRef::new(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | CellRef::new(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | CellRef::with_sheet(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | CellRef::with_sheet(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Boolean.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Number.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Text.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
@@ -6764,24 +6637,10 @@ ambre-trame | src/formula/types.rs | crate::formula::types | Op::CallFn.name | f
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushBool.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushNum.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushStr.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep.col_end | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep.col_start | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep.row_end | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep.row_start | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::is_empty() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::len() | ret | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::new(col_end) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::new(col_start) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::new(row_end) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::new(row_start) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::with_sheet(col_end) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::with_sheet(col_start) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::with_sheet(row_end) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::with_sheet(row_start) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::col_range() | ret | Option<(usize,usize)>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::row_range() | ret | Option<(usize,usize)>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue.cols | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue.rows | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::get(col) | param | usize	math	count, length, local index, limit or calendar/arith helper
@@ -6790,19 +6649,11 @@ ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::new(col
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::new(rows) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | SheetQualifier::Id.0 | field | String	debt	planned: lot A 1 (SheetQualifier::Id)
 ambre-trame | src/formula/types.rs | crate::formula::types | SheetQualifier::Name.0 | field | String	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/formula/types.rs | crate::formula::types | StoredAxis::At.0 | field | u32	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/formula/types.rs | crate::formula::types | endpoint_pos() | ret | Option<usize>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/formula/types.rs | crate::formula::types | endpoint_pos(entire) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/formula/types.rs | crate::formula::types | endpoint_pos(pos) | param | impl Fn(&Uid)->Option<usize>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/vm.rs | crate::formula::vm | AxisPos::Pos.0 | field | usize	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/formula/vm.rs | crate::formula::vm | EvalContext.current_pos | field | (u32,u32)	debt	finding: (FINDING, confirmed): 1-based position with a 0 sentinel inside a 0-based world
 ambre-trame | src/formula/vm.rs | crate::formula::vm | EvalContext.now_serial | field | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/formula/vm.rs | crate::formula::vm | EvalContext.range_cells_left | field | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/vm.rs | crate::formula::vm | EvalContext<'a>::axis_pos(pos_of) | param | impl Fn(&crate::model::Uid)->Option<usize>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/formula/vm.rs | crate::formula::vm | EvalContext<'a>::grid_pos_of() | ret | (u32,u32)	debt	finding: (FINDING, confirmed): 1-based position with a 0 sentinel inside a 0-based world
 ambre-trame | src/formula/vm.rs | crate::formula::vm | EvalContext<'a>::new(now_serial) | param | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/formula/vm.rs | crate::formula::vm | MAX_PASS_RANGE_CELLS | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/vm.rs | crate::formula::vm | MAX_RANGE_CELLS | const | usize	math	count, length, local index, limit or calendar/arith helper
@@ -6811,140 +6662,56 @@ ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(cols) | param
 ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(left) | param | &mut usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(rows) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/lib.rs | crate | TOTAL_COLS | const | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/lib.rs | crate | TOTAL_ROWS | const | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/cells.rs | crate::logic::cells | SheetLines<'_>::of(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::active_cell_id(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::active_cell_id(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::canonicalize_input() | ret | Result<String,String>	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::canonicalize_input(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::canonicalize_input(text) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_raw() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_raw(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_raw(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_source() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_source(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_source(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_display() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_display(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_display(stored) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_source() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_source(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_source(stored) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::materialize(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::materialize(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::write_cell(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::write_cell(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::write_cell(text) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::apply_pasted_style(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::apply_pasted_style(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_range(target_col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_range(target_row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/commands.rs | crate::logic::commands | TrameState::apply_history(undo) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/logic/commands.rs | crate::logic::commands | TrameState::column_content(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/commands.rs | crate::logic::commands | TrameState::pack_cells(col_end) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/commands.rs | crate::logic::commands | TrameState::pack_cells(col_start) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/commands.rs | crate::logic::commands | TrameState::pack_cells(row_end) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/commands.rs | crate::logic::commands | TrameState::pack_cells(row_start) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | EditAnchor.at | field | (u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | EditAnchor.session | field | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | EditAnchor.sheet | field | String	debt	planned: lot A 1 ripple (edit_anchor)
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | Line::Past.offset | field | usize	math	offset along one line, local to the anchor algorithm
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | Line::locate() | ret | Option<usize>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | Line::locate(len) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | Line::locate(pos_of) | param | impl Fn(&Uid)->Option<usize>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | Line::pin(id_at) | param | impl Fn(usize)->Option<Uid>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | Line::pin(len) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | Line::pin(pos) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::begin_cell_edit(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::begin_cell_edit(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::begin_cell_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::commit_cell_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::commit_cell_edit(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::end_cell_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::locate_anchor() | ret | Option<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::write_at_anchor(text) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_horizontal(dc1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_horizontal(dc2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_horizontal(sc1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_horizontal(sc2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_horizontal(sr1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_horizontal(sr2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged(bh) | param | u32	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged(bw) | param | u32	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged(dc1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged(dc2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged(dr1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged(dr2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged(sc1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged(sc2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged(sr1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged(sr2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(bh) | param | u32	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(bw) | param | u32	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(left) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
+ambre-trame | src/logic/fill.rs | crate::logic::fill | Term.0 | field | i64	newtype-inner	newtype inner field
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(series) | param | Option<(f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(src_col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(src_raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(src_row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(tidx) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(top) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(idx) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(line_col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(line_row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(series) | param | Option<(f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(sources) | param | &[String]	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(span) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_range(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_vertical(dr1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_vertical(dr2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_vertical(sc1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_vertical(sc2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_vertical(sr1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_vertical(sr2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::merged_source_block() | ret | Option<(u32,u32)>	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::merged_source_block(sc1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::merged_source_block(sc2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::merged_source_block(sr1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::merged_source_block(sr2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/fill.rs | crate::logic::fill | format_number() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | format_number(v) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/logic/fill.rs | crate::logic::fill | merged_tiles() | ret | Vec<(i64,u32,u32)>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/fill.rs | crate::logic::fill | merged_tiles(block) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | merged_tiles(d1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | merged_tiles(d2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | merged_tiles(s1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | merged_tiles(s2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/fill.rs | crate::logic::fill | normalize() | ret | (u32,u32,u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/fill.rs | crate::logic::fill | parse_num() | ret | Option<f64>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/fill.rs | crate::logic::fill | parse_num(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | series_params() | ret | Option<(f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/fill.rs | crate::logic::fill | series_params(sources) | param | &[String]	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/filters.rs | crate::logic::filters | TrameState::apply_filter(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/filters.rs | crate::logic::filters | TrameState::apply_filter(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/filters.rs | crate::logic::filters | TrameState::clear_filter(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/filters.rs | crate::logic::filters | TrameState::write_filter_hidden() | ret | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::find_next(match_case) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::find_next(query) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::find_next(whole_cell) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(in_formulas) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(match_case) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(needle) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(whole_cell) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_all(all_sheets) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_all(in_formulas) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
@@ -7018,89 +6785,51 @@ ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass(oper
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | filter_pass() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | op_from_str(s) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_csv(delimiter) | param | Option<u8>	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_csv(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(data) | param | Vec<u8>	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(delimiter) | param | Option<u8>	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(has_header) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(start_col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(start_row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(target_sheet_id) | param | Option<String>	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::used_extent() | ret | Option<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::used_extent(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter() | ret | u8	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter(data) | param | &[u8]	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::insert_merge_entry(bottom) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::insert_merge_entry(left) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::insert_merge_entry(right) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::insert_merge_entry(top) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::masked_cells_for() | ret | HashSet<String>	debt	finding: (FINDING, confirmed): cell key is a formatted String
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::masked_cells_for(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::merge_cells(c0) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::merge_cells(c1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::merge_cells(r0) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::merge_cells(r1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::resolved_merges() | ret | Vec<((u32,u32),(u32,u32))>	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::resolved_merges(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::unmerge_cells(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::unmerge_cells(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/merges.rs | crate::logic::merges | has_raw_value() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::col_width() | ret | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::col_width(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_col(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_col(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_col(width_px) | param | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_row(height_px) | param | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_row(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_row(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::row_height() | ret | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::row_height(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/mod.rs | crate::logic | <TrameCtx<'_> as FormulaCtx>::resolve_name(name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/mod.rs | crate::logic | <TrameCtx<'_> as FormulaCtx>::resolve_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/mod.rs | crate::logic | <TrameCtx<'_> as FormulaCtx>::resolve_sheet_id(id) | param | &str	debt	planned: lot A 1 (FormulaCtx::resolve_sheet_id)
 ambre-trame | src/logic/mod.rs | crate::logic | DEFAULT_SHEET_NAME | const | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/mod.rs | crate::logic | MergeRect | alias | (String,(u32,u32),(u32,u32))	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/logic/mod.rs | crate::logic | TrackedSelection.anchor | field | (u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/mod.rs | crate::logic | TrackedSelection.extra | field | Vec<(u32,u32,u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/mod.rs | crate::logic | TrameCtx.engine_sheet_by_id | field | &'a HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameCtx.engine_sheet_by_name | field | &'a HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameCtx.named | field | &'a HashMap<String,NameTarget>	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/mod.rs | crate::logic | TrameOutcome.ephemeral | field | Option<Vec<u8>>	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
 ambre-trame | src/logic/mod.rs | crate::logic | TrameOutcome.update | field | Option<Vec<u8>>	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.active | field | (u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.active_sheet | field | String	debt	planned: lot A 1 (TrameState.active_sheet)
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.bold | field | HashSet<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.col_widths | field | HashMap<u32,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.covered | field | HashSet<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
+ambre-trame | src/logic/mod.rs | crate::logic | TrameState.col_widths | field | HashMap<Col,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.engine_sheet_by_id | field | HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.engine_sheet_by_name | field | HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.entry_end | field | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.hidden_rows | field | HashSet<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.italic | field | HashSet<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.masked_cells | field | HashSet<String>	debt	finding: (FINDING, confirmed): cell key is a formatted String
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.merges | field | HashMap<(u32,u32),(u32,u32)>	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.named | field | HashMap<String,NameTarget>	debt	finding: (FINDING, confirmed): defined names and their reference text
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.row_heights | field | HashMap<u32,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
+ambre-trame | src/logic/mod.rs | crate::logic | TrameState.row_heights | field | HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_counter | field | u32	newtype-inner	per-session mint counter feeding the id formatter
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_id_to_name | field | HashMap<String,String>	debt	planned: lot A 1 (SheetId key; the name value is G8)
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_list_sent | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheets_by_idx | field | Vec<String>	debt	bug: (BUG, suspected): create_sheet re-sorts the engine sheet indices without a reseed
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.styles | field | HashMap<(u32,u32),CellStyle>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.uid_counter | field | u32	newtype-inner	per-session mint counter feeding the id formatter
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.undecodable | field | std::cell::Cell<bool>	generic	state flag
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState::live_selection_rect() | ret | (u32,u32,u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState::selected_cells() | ret | Vec<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState::selection_bounds() | ret | (u32,u32,u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState::selection_rects() | ret | Vec<(u32,u32,u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/mod.rs | crate::logic | WriteRefusal::UnknownSheet.0 | field | String	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | DAYS | const | [&str;7]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | MONTHS | const | [&str;12]	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -7201,50 +6930,25 @@ ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::sheet_nam
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::sheet_order_ids() | ret | Vec<String>	debt	planned: lot A 1 (Vec<SheetId>)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::stored_sheet_ids() | ret | Vec<String>	debt	planned: lot A 1 (Vec<SheetId>)
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::after_reorder(rewritten) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::realize_sort(sort_start) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(ascending) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(col_end) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(col_start) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(has_header) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(row_end) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(row_start) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(sort_col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range_multi(col_end) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range_multi(col_start) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range_multi(has_header) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range_multi(row_end) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range_multi(row_start) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range_multi(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::after_line_removal(filter_dropped) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::delete_axis(at) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::insert_axis(at) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::move_axis(from) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::move_axis(to) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::purge_axis() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::reanchor_formulas() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::remove_line() | ret | Option<bool>	generic	state flag
-ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::remove_line(at) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::sort_selection(ascending) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::sort_selection_multi(has_header) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::sort_sheet(ascending) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/logic/styles.rs | crate::logic::styles | StyleRecord.bold | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/logic/styles.rs | crate::logic::styles | StyleRecord.italic | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::cell_is_numeric() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::cell_is_numeric(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::cell_is_numeric(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::displayed_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::displayed_text(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::displayed_text(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display(_col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display(_row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display(text) | param | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::merge_master() | ret | (u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::merge_master(cell) | param | (u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::stored_style(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::write_cell_style(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::write_cell_style(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session(entry) | param | Vec<u8>	debt	planned: lot B 11 ripple (PeerEntry from SessionIdentity.entry)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::apply_ephemeral(_payload) | param | &[u8]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
@@ -7266,43 +6970,23 @@ ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::sheet_name_to
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::sheet_name_to_id(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | write_entry() | ret | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/logic/sync.rs | crate::logic::sync | write_entry(entry) | param | Vec<u8>	debt	planned: lot B 11 ripple (PeerEntry from SessionIdentity.entry)
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex.col_to_pos | field | HashMap<Uid,usize>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex.row_to_pos | field | HashMap<Uid,usize>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::apply_delete_col(pos) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::apply_delete_row(pos) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::apply_insert_col(pos) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::apply_insert_row(pos) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::apply_move_row(from) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::apply_move_row(to) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::col_id(pos) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::col_len() | ret | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::col_letter() | ret | String	debt	finding: (FINDING, confirmed): duplicate column-letter codec
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::col_letter(index) | param | usize	debt	finding: (FINDING, confirmed): duplicate column-letter codec
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::col_pos() | ret | Option<usize>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
+ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
+ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::to_index() | ret | Option<usize>	math	count, size or local index: a Loro list index or length
+ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
+ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::to_index() | ret | Option<usize>	math	count, size or local index: a Loro list index or length
+ambre-trame | src/model/line.rs | crate::model::line | Line::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
+ambre-trame | src/model/line.rs | crate::model::line | Line::to_index() | ret | Option<usize>	math	count, size or local index: a Loro list index or length
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::letter_to_index() | ret | usize	debt	finding: (FINDING, confirmed): duplicate column-letter codec
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::letter_to_index(s) | param | &str	debt	finding: (FINDING, confirmed): duplicate column-letter codec
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::reindex_cols_from(from) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::reindex_rows_from(from) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::resolve(col) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::resolve(row) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::row_id(pos) | param | usize	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::row_len() | ret | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::row_pos() | ret | Option<usize>	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid.counter | field | u32	newtype-inner	Uid's own field, key-part formatter and parser
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	newtype-inner	Uid's own field, key-part formatter and parser
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	newtype-inner	Uid's own field, key-part formatter and parser
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | cell_key() | ret | String	debt	finding: (FINDING, confirmed): cell key is a formatted String
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | collect_ids() | ret | (Vec<Uid>,HashMap<Uid,usize>)	debt	finding: (FINDING, confirmed): SheetIndex positions are usize while grid rows are u32
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	debt	finding: (FINDING, confirmed): cell key is a formatted String
 ambre-trame | src/render/cells.rs | crate::render::cells | draw_cells_on() | ret | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/render/cells.rs | crate::render::cells | draw_cells_on(text_enabled) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/cells.rs | crate::render::cells | spill_width(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width(need) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/cells.rs | crate::render::cells | spill_width(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/cells.rs | crate::render::cells | spill_width(step) | param | i64	debt	finding: (FINDING, confirmed): closed sets held as int, char or bool
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.bold | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.font | field | Option<&'a str>	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.italic | field | bool	generic	independent state or style flag, not a mode selector
@@ -7324,52 +7008,26 @@ ambre-trame | src/render/content.rs | crate::render::content | styled_segment(x0
 ambre-trame | src/render/content.rs | crate::render::content | styled_segment(x1) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | styled_segment(y0) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | styled_segment(y1) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/headers.rs | crate::render::headers | draw_col_headers_on(active_col) | param | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/headers.rs | crate::render::headers | draw_col_headers_on(hover_col) | param | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/headers.rs | crate::render::headers | draw_col_headers_on(text_enabled) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/render/headers.rs | crate::render::headers | draw_row_headers_on(active_row) | param | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/headers.rs | crate::render::headers | draw_row_headers_on(hover_corner) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/render/headers.rs | crate::render::headers | draw_row_headers_on(hover_row) | param | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/headers.rs | crate::render::headers | draw_row_headers_on(text_enabled) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.col_width | field | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.col_widths | field | &'a HashMap<u32,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
+ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.col_widths | field | &'a HashMap<Col,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.header_height | field | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.header_width | field | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.height | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.hidden_rows | field | &'a[u32]	debt	finding: (FINDING, confirmed): visible slot vs grid row
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.origin_col | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.origin_row | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.row_height | field | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.row_heights | field | &'a HashMap<u32,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
+ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.row_heights | field | &'a HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.top | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.total_cols | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.total_rows | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.width | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.zoom | field | f64	debt	planned: lot B 7 (ZoomFactor, layout.rs:72)
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::cell_rect(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::cell_rect(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_at() | ret | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_at(px) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_left() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_left(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_w() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_w(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::is_hidden(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::merge_rect(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::merge_rect(col_span) | param | u32	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::merge_rect(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::merge_rect(row_span) | param | u32	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_at() | ret | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_at(py) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_at_slot() | ret | Option<u32>	debt	finding: (FINDING, confirmed): visible slot vs grid row
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_at_slot(slot) | param | u32	debt	finding: (FINDING, confirmed): visible slot vs grid row
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_h() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_h(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_top() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_top(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::visible_offset() | ret | i64	debt	finding: (FINDING, confirmed): visible slot vs grid row
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::visible_offset(row) | param | u32	debt	finding: (FINDING, confirmed): visible slot vs grid row
 ambre-trame | src/render/merges.rs | crate::render::merges | draw_merges_on() | ret | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/render/merges.rs | crate::render::merges | draw_merges_on(text_enabled) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/render/mod.rs | crate::render | BODY_SIZE | const | f32	math	local geometry / pixel arithmetic
@@ -7377,7 +7035,6 @@ ambre-trame | src/render/mod.rs | crate::render | CELL_PAD_X | const | f64	math	
 ambre-trame | src/render/mod.rs | crate::render | HEADER_SIZE | const | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/render/mod.rs | crate::render | cell_font_px() | ret | f32	math	a value local to one algorithm
 ambre-trame | src/render/text.rs | crate::render::text | col_label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/render/text.rs | crate::render::text | col_label(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs(origin_x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs(origin_y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(font_size) | param | f32	math	local geometry / pixel arithmetic
@@ -7391,26 +7048,15 @@ ambre-trame | src/render/text.rs | crate::render::text | draw_text(origin_x) | p
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(origin_y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/text.rs | crate::render::text | row_label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/render/text.rs | crate::render::text | row_label(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes.col_width | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes.col_widths | field | &'v HashMap<u32,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes.hidden_rows | field | &'v[u32]	debt	finding: (FINDING, confirmed): visible slot vs grid row
+ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes.col_widths | field | &'v HashMap<Col,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes.row_height | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes.row_heights | field | &'v HashMap<u32,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::col_at() | ret | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
+ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes.row_heights | field | &'v HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::col_at(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::col_x() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::col_x(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::is_hidden(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::row_at() | ret | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::row_at(y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::row_y() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::row_y(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetCell.merge_span | field | Option<(u32,u32)>	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetCells::cell(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetCells::cell(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetCells::for_each_merge(f) | param | &mut dyn FnMut(u32,u32,u32,u32,CellContent<'_>)	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetView.text_enabled | field | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetWalk.cells_drawn | field | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/render/walk.rs | crate::render::walk | first() | ret | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
@@ -7419,26 +7065,16 @@ ambre-trame | src/render/walk.rs | crate::render::walk | first(pred) | param | i
 ambre-trame | src/ui/commands.rs | crate::ui::commands | context_layout(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | filter_command(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | <TrameUiState as HitTest>::hit_test() | ret | Option<(u32,u32)>	trait	HitTest trait from ambre-canvas fixes the f64 pointer signature
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | <TrameUiState as HitTest>::hit_test(x) | param | f64	trait	HitTest trait from ambre-canvas fixes the f64 pointer signature
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | <TrameUiState as HitTest>::hit_test(y) | param | f64	trait	HitTest trait from ambre-canvas fixes the f64 pointer signature
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::active_merge_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_at() | ret | Option<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_at(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_at(y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_pixel_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_pixel_rect(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_pixel_rect(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::col_at_x() | ret | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::col_at_x(px) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::col_drop_slot() | ret | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::col_drop_slot(px) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::col_width_of() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::col_width_of(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::col_x() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::col_x(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::current_region() | ret | Option<(u32,u32,u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::drag_cell_at() | ret | Option<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::drag_cell_at(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::drag_cell_at(y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::edge_scroll_speed(x) | param | f64	math	local geometry / pixel arithmetic
@@ -7447,45 +7083,25 @@ ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_handle_at(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_handle_at(y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_handle_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_source_block() | ret | (u32,u32)	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::filter_button_at() | ret | Option<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::filter_button_at(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::filter_button_at(y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::filter_button_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::filter_button_rect(band_row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::filter_button_rect(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::header_h() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::header_hit(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::header_hit(y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::header_w() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::merge_master_at() | ret | Option<(u32,u32,u32,u32)>	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::merge_master_at(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::merge_master_at(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::range_pixel_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::range_pixel_rect(c1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::range_pixel_rect(c2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::range_pixel_rect(r1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::range_pixel_rect(r2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::row_at_y() | ret | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::row_at_y(py) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::row_drop_slot() | ret | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::row_drop_slot(py) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::row_height_of() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::row_height_of(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::row_y() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::row_y(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_cell_text(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_cell_text(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_cell_text(text) | param | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_formula_error(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_formula_error(error) | param | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_formula_error(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | COL_WIDTH | const | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.bold | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.font | field | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.is_filtered | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.italic | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.merge_span | field | Option<(u32,u32)>	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.numeric | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.raw | field | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.strikethrough | field | bool	generic	independent state or style flag, not a mode selector
@@ -7493,141 +7109,50 @@ ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.text | field | Str
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.underline | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.wrap | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData::content(text) | param | &'a str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor.col | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor.row | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor.session | field | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::commit_command(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::follow() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::follow(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::follow(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::follow(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::new(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::new(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::new(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::selected_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellRect | alias | (u32,u32,u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILL_HANDLE_SIZE | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILTER_BUTTON_SIZE | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HEADER_HEIGHT | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HEADER_WIDTH | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HeaderHit::ColBody.0 | field | u32	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HeaderHit::ColBorder.0 | field | u32	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HeaderHit::ColInsert.0 | field | u32	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HeaderHit::RowBody.0 | field | u32	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HeaderHit::RowBorder.0 | field | u32	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HeaderHit::RowInsert.0 | field | u32	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | MIN_COL_WIDTH | const | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | MIN_ROW_HEIGHT | const | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | PADDING_COLS | const | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | PADDING_ROWS | const | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | RESIZE_BAND | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | ROW_HEIGHT | const | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | ResizePreview::Col.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | ResizePreview::Row.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection.active | field | (u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection.anchor | field | (u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::active() | ret | (u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::add_disjoint(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::add_disjoint(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::axis(active) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::axis(anchor) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
+ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::band_contains() | ret | bool	generic	predicate result
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_col() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_col(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_row() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_row(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::extend_axis(idx) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::extend_to(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::extend_to(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::is_multi() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::selected_cells() | ret | Vec<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::single(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::single(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.canvas_height | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.canvas_width | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.cell_cache | field | HashMap<(u32,u32),CellData>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.col_widths | field | HashMap<u32,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.dirty_cells | field | HashSet<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.filtered_col | field | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.find_matches | field | Vec<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.formula_errors | field | HashMap<(u32,u32),String>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.hidden_rows | field | Vec<u32>	debt	finding: (FINDING, confirmed): visible slot vs grid row
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.left_col | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.reorder_preview | field | Option<(SelKind,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.row_heights | field | HashMap<u32,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.top_row | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.viewport_cols | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.viewport_rows | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
+ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.col_widths | field | HashMap<Col,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
+ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.formula_errors | field | HashMap<CellPos,String>	free-text	formula error message, keyed by cell
+ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.row_heights | field | HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.zoom | field | f64	debt	planned: lot B 7 (ZoomFactor, grid/mod.rs:499)
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::ZOOM_PRESETS | const | [f64;6]	debt	planned: lot B 7 (ZoomFactor)
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::active_col() | ret | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::active_row() | ret | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::grid_bottom() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::is_row_hidden() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::is_row_hidden(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::last_content_cell() | ret | Option<(u32,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::last_content_col() | ret | Option<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::last_content_col(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::move_cursor(dc) | param | i32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::move_cursor(dr) | param | i32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::move_cursor(extend) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::move_to(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::move_to(extend) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::move_to(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::new(canvas_height) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::new(canvas_width) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::next_visible_row() | ret | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::next_visible_row(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::nth_visible_row_back() | ret | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::nth_visible_row_back(from) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::nth_visible_row_back(n) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::prev_visible_row() | ret | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::prev_visible_row(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::resize(height) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::resize(width) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::row_at_slot() | ret | u32	debt	finding: (FINDING, confirmed): visible slot vs grid row
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::row_at_slot(slot) | param | u32	debt	finding: (FINDING, confirmed): visible slot vs grid row
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_by() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_by(dc) | param | i32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_by(dr) | param | i32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_to_include() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_to_include(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_to_include(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::select(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::select(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::select_disjoint(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::select_disjoint(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::select_extend(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::select_extend(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::select_rect(c1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::select_rect(c2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::select_rect(r1) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::select_rect(r2) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::set_zoom() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::set_zoom(zoom) | param | f64	debt	planned: lot B 7 (ZoomFactor)
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::snap_active_to_master() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::snap_to_master() | ret | (u32,u32)	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::snap_to_master(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::snap_to_master(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::visible_col_span() | ret | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::visible_offset() | ret | i64	debt	finding: (FINDING, confirmed): visible slot vs grid row
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::visible_offset(row) | param | u32	debt	finding: (FINDING, confirmed): visible slot vs grid row
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::visible_row_span() | ret | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/ui/renderer/cells.rs | crate::ui::renderer::cells | <CacheCells<'_> as SheetCells>::cell(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/renderer/cells.rs | crate::ui::renderer::cells | <CacheCells<'_> as SheetCells>::cell(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/renderer/cells.rs | crate::ui::renderer::cells | <CacheCells<'_> as SheetCells>::for_each_merge(f) | param | &mut dyn FnMut(u32,u32,u32,u32,CellContent<'_>)	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/ui/renderer/cells.rs | crate::ui::renderer::cells | CacheCells.0 | field | &'a HashMap<(u32,u32),CellData>	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/ui/renderer/cells.rs | crate::ui::renderer::cells | draw_cells(text_enabled) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/renderer/edit.rs | crate::ui::renderer::edit | draw_edit(caret_visible) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan.col_end | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan.col_start | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan.row_end | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan.row_start | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan::contains() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan::contains(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan::contains(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DIRTY_VEIL_ALPHA | const | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DrawStats.bg_ms | field | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DrawStats.cells_drawn | field | u32	math	count, length, local index, limit or calendar/arith helper
@@ -7677,25 +7202,15 @@ ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::set_zoo
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::set_zoom(zoom) | param | f64	debt	planned: lot B 7 (ZoomFactor, frame.rs:566/578)
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::zoom() | ret | f64	debt	planned: lot B 7 (ZoomFactor, frame.rs:566/578)
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::apply_cursor_move() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::arm_col_resize(c) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::arm_col_resize(x) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::arm_row_resize(r) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::arm_row_resize(y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::clear_active_cell() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::disjoin_cell(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::disjoin_cell(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::extend_cell(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::extend_cell(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_input_nav() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_wheel() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_wheel(ctrl_key) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_goto() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_goto(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_goto(extend) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_goto(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_move() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_move(dc) | param | i32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_move(dr) | param | i32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_move(extend) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::set_cursor(_css) | param | &str	debt	finding: (FINDING, confirmed): CSS cursor as a string
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::set_cursor(css) | param | &str	debt	finding: (FINDING, confirmed): CSS cursor as a string
@@ -7707,10 +7222,7 @@ ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::touch_m
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::touch_move(y) | param | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::update_resize_preview(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::update_resize_preview(y) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::auto_fit_col(c) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::auto_fit_row(r) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::axis_sel_contains() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::axis_sel_contains(idx) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::clipboard_write(cut) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::copy_selection() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::cut_selection() | ret | Option<String>	free-text	free text: user content, label, message or display string
@@ -7718,41 +7230,21 @@ ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::e
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::editor_local_point(_y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::editor_local_point(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::end_fill_drag(ctrl) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::extend_axis(idx) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::grid_paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::handle_input_editing() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::insert_col_at(c) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::insert_row_at(r) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::is_editing() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::paste_clipboard(own_copy) | param | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::pointer_in_editor() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::pointer_in_editor(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::pointer_in_editor(y) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::resize_target_cols() | ret | Vec<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::resize_target_cols(c) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::resize_target_rows() | ret | Vec<u32>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::resize_target_rows(r) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::select_axis(idx) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::select_cell(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::select_cell(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::select_pasted_region(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::select_pasted_region(cols) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::select_pasted_region(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::select_pasted_region(rows) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::send_resize_col(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::send_resize_col(width) | param | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::send_resize_row(height) | param | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::send_resize_row(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | fit_column_width() | ret | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::active_cell_ref() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::begin_edit(seed) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::cell_seed() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::cell_seed(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::cell_seed(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::drop_lost_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::end_session(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::follow_moved_edit(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::follow_moved_edit(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::follow_moved_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::is_busy() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(canvas_height) | param | f64	math	local geometry / pixel arithmetic
@@ -7761,11 +7253,7 @@ ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView:
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(formula_ref) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(formula_text) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::open_session() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::open_session(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::open_session(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::open_session(seed) | param | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::park_input_on(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::park_input_on(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::send_command_lossy() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::show_formula_text(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::signal_fatal(reason) | param | &str	free-text	free text: user content, label, message or display string
@@ -7777,8 +7265,6 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.focused | field 
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.reference | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.shown | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.text | field | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | PendingCommit::Nav.0 | field | i32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | PendingCommit::Nav.1 | field | i32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.caret_on | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.cut_pending | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.data_dirty | field | bool	generic	independent state or style flag, not a mode selector
@@ -7787,26 +7273,16 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.edit_dirty | fiel
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.edit_session | field | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.editor_text_drag | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.fatal | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.fill_drag | field | Option<(CellRect,(u32,u32))>	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.formula_ref | field | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.formula_text | field | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.hover_cursor | field | String	debt	finding: (FINDING, confirmed): CSS cursor as a string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.initial_viewport_sent | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.needs_full | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.pending_column_fit | field | Option<(u32,Vec<crate::DisplayCell>)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.prev_left_col | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.prev_top_row | field | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.reorder_drag | field | Option<(crate::ui::grid::SelKind,u32)>	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.selecting_drag | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.text_enabled | field | bool	debt	finding: (FINDING, confirmed): bool parameters that select a mode
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.viewport_changed | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement(value) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | fill_dest(block) | param | (u32,u32)	debt	finding: (FINDING, confirmed): merge extent tuples in three different orders
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | fill_dest(col) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | fill_dest(row) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | formula_bar_sync(input) | param | &str	debt	finding: (FINDING, confirmed, low): formula_bar_sync(input, shown, seed)
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | formula_bar_sync(seed) | param | &str	debt	finding: (FINDING, confirmed, low): formula_bar_sync(input, shown, seed)
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | formula_bar_sync(shown) | param | &str	debt	finding: (FINDING, confirmed, low): formula_bar_sync(input, shown, seed)

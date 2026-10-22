@@ -11,8 +11,8 @@ use loro::LoroValue;
 fn with_one_edit() -> TrameState {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "kept".to_owned(),
     });
     state
@@ -24,8 +24,8 @@ fn import(state: &mut TrameState, data: &[u8], target_sheet_id: Option<String>) 
         delimiter: None,
         has_header: false,
         target_sheet_id: target_sheet_id.map(SheetId),
-        start_row: 0,
-        start_col: 0,
+        start_row: Row::new(0),
+        start_col: Col::new(0),
     })
 }
 
@@ -36,8 +36,8 @@ fn an_unknown_function_reads_as_an_error() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["1", "2"]);
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "=SUMM(A1:A2)".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 1), "#N/A");
@@ -50,8 +50,8 @@ fn a_function_name_is_read_whatever_its_case() {
     seed_col_a(&mut state, &["1", "2", "4"]);
     for (col, text) in [(1, "=sum(A1:A3)"), (2, "=Sum(A1:A3)"), (3, "=SUM(A1:A3)")] {
         state.handle_command(TrameCommand::SetCellText {
-            row: 0,
-            col,
+            row: Row::new(0),
+            col: Col::new(col),
             text: text.to_owned(),
         });
         assert_eq!(read_cell(&mut state, 0, col), "7", "{text}");
@@ -65,8 +65,8 @@ fn a_function_name_is_read_whatever_its_case() {
 fn today_reads_the_clock_of_the_recomputation() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "=TODAY()".to_owned(),
     });
     let shown: f64 = read_cell(&mut state, 0, 0).parse().expect("a serial");
@@ -92,43 +92,43 @@ fn a_paste_and_a_fill_leave_a_name_in_place() {
         reference: "A1:A3".to_owned(),
     });
     let formula = |raw: &str| crate::ClipboardCell {
-        dr: 0,
-        dc: 0,
+        dr: RowCount::new(0),
+        dc: ColCount::new(0),
         raw: raw.to_owned(),
         bold: false,
         italic: false,
         style: crate::CellStyle::default(),
     };
     state.handle_command(TrameCommand::PasteRange {
-        target_row: 2,
-        target_col: 1,
+        target_row: Row::new(2),
+        target_col: Col::new(1),
         payload: crate::ClipboardPayload {
-            src_row: 0,
-            src_col: 0,
-            rows: 1,
-            cols: 1,
+            src_row: Row::new(0),
+            src_col: Col::new(0),
+            rows: RowCount::new(1),
+            cols: ColCount::new(1),
             cells: vec![formula("=SUM(TOTAL)+A1")],
         },
     });
     assert_eq!(read_raw(&mut state, 2, 1), "=SUM(TOTAL)+B3");
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 2,
+        row: Row::new(0),
+        col: Col::new(2),
         text: "=SUM(TOTAL)*A1".to_owned(),
     });
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(crate::logic::DEFAULT_SHEET.to_owned()),
         src: crate::GridRange {
-            row: 0,
-            col: 2,
-            row_end: 0,
-            col_end: 2,
+            row: Row::new(0),
+            col: Col::new(2),
+            row_end: Row::new(0),
+            col_end: Col::new(2),
         },
         dest: crate::GridRange {
-            row: 0,
-            col: 2,
-            row_end: 1,
-            col_end: 2,
+            row: Row::new(0),
+            col: Col::new(2),
+            row_end: Row::new(1),
+            col_end: Col::new(2),
         },
         mode: crate::FillMode::Auto,
     });
@@ -183,8 +183,8 @@ fn a_file_with_no_record_leaves_the_document_alone() {
             delimiter: None,
             has_header: true,
             target_sheet_id: None,
-            start_row: 0,
-            start_col: 0,
+            start_row: Row::new(0),
+            start_col: Col::new(0),
         });
         assert!(out.update.is_none(), "{data:?}");
         assert_eq!(state.sheet_order_ids().len(), 1, "{data:?}");
@@ -230,8 +230,8 @@ fn a_separator_outside_the_three_is_named_by_the_caller() {
         delimiter: Some(b'|'),
         has_header: false,
         target_sheet_id: None,
-        start_row: 0,
-        start_col: 0,
+        start_row: Row::new(0),
+        start_col: Col::new(0),
     });
     import_result(&out);
     assert_eq!(read_cell(&mut state, 0, 1), "b");
@@ -242,8 +242,8 @@ fn a_separator_outside_the_three_is_named_by_the_caller() {
 fn a_csv_export_writes_nothing() {
     let mut state = with_one_edit();
     state.handle_command(TrameCommand::SetCellText {
-        row: 1,
-        col: 0,
+        row: Row::new(1),
+        col: Col::new(0),
         text: "=LEN(A1)".to_owned(),
     });
     let before = state.doc.len_ops();
@@ -284,13 +284,13 @@ fn a_save_leaves_the_document_alone() {
 fn a_computed_value_stays_out_of_the_document() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "=1111*2+2020".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "=A1&\"x\"".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "4242");

@@ -8,7 +8,7 @@ use super::*;
 #[test]
 fn a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell() {
     let mut state = TrameUiState::new(800.0, 600.0);
-    state.scroll_by(10, 3);
+    state.scroll_by(RowDelta::new(10), ColDelta::new(3));
     let (sx, sy) = state.edge_scroll_speed(400.0, 300.0);
     assert_eq!((sx.get(), sy.get()), (0.0, 0.0));
     let down = state.edge_scroll_speed(400.0, 900.0).1.get();
@@ -19,9 +19,9 @@ fn a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell() {
     assert!(left < 0.0 && up < 0.0, "{left} {up}");
     // Past the edges the drag still points at a cell: the nearest one.
     assert_eq!(state.cell_at(1.0, 1.0), None);
-    assert_eq!(state.drag_cell_at(1.0, 1.0), Some((10, 3)));
-    let (row, _) = state.drag_cell_at(400.0, 9_000.0).expect("an edge cell");
-    assert!(row > 10);
+    assert_eq!(state.drag_cell_at(1.0, 1.0), Some(at(10, 3)));
+    let CellPos { row, col: _ } = state.drag_cell_at(400.0, 9_000.0).expect("an edge cell");
+    assert!(row > Row::new(10));
 }
 
 /// `UI-THREAD-001`: a canvas point reaches a cell through the shared
@@ -30,11 +30,13 @@ fn a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell() {
 fn a_canvas_point_reaches_its_cell_through_the_shared_hit_test() {
     use ambre_draw::HitTest;
     let mut state = TrameUiState::new(800.0, 600.0);
-    state.scroll_by(10, 3);
+    state.scroll_by(RowDelta::new(10), ColDelta::new(3));
     assert!(state.set_zoom(2.0));
     for (row, col) in [(10, 3), (12, 4)] {
-        let (x, y, w, h) = state.cell_pixel_rect(row, col).expect("visible");
-        assert_eq!(state.hit_test(x + w / 2.0, y + h / 2.0), Some((row, col)));
+        let (x, y, w, h) = state
+            .cell_pixel_rect(CellPos::new(Row::new(row), Col::new(col)))
+            .expect("visible");
+        assert_eq!(state.hit_test(x + w / 2.0, y + h / 2.0), Some(at(row, col)));
     }
     assert_eq!(state.hit_test(1.0, 1.0), None);
 }

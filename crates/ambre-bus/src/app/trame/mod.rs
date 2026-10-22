@@ -5,6 +5,7 @@
 //!   [`AppCommand::Trame`](crate::logic::AppCommand).
 //! - `event` -- the `TrameEvent` family + `DisplayCell` (Logic -> UI), carried by
 //!   [`AppEvent::Trame`](crate::ui::AppEvent).
+//! - `grid` -- the row, column and cell coordinates both directions carry.
 //! - `style` / `clipboard` / `features` -- the shared value types both directions
 //!   reference (cell styles, filters, clipboard payloads, deferred feature
 //!   payloads).
@@ -17,10 +18,12 @@ mod clipboard;
 mod command;
 mod event;
 mod features;
+mod grid;
 mod style;
 
 pub use clipboard::*;
 pub use command::*;
 pub use event::*;
 pub use features::*;
+pub use grid::*;
 pub use style::*;

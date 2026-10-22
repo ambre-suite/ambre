@@ -25,8 +25,8 @@
 )]
 
 use ambre_bus::{
-    AppCommand, AppEvent, CellFormat, CellStyle, DocumentId, HAlign, SheetId, SheetTab,
-    TrameCommand, TrameEvent, UiEvent, VAlign,
+    AppCommand, AppEvent, CellFormat, CellStyle, Col, DocumentId, HAlign, Row, RowCount, SheetId,
+    SheetTab, TrameCommand, TrameEvent, UiEvent, VAlign,
 };
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
@@ -324,10 +324,10 @@ fn sort_dialog_adds_levels_and_emits_on_apply() {
         });
         // Open over a three-column selection (A..C), so the picker offers 3 cols.
         state.set(Some(SortDialogState {
-            r1: 0,
-            c1: 0,
-            r2: 4,
-            c2: 2,
+            r1: Row::new(0),
+            c1: Col::new(0),
+            r2: Row::new(4),
+            c2: Col::new(2),
         }));
         view! { <SortDialog state=state on_apply=on_apply /> }
     });
@@ -759,8 +759,8 @@ fn the_filter_toast_says_how_many_rows_it_hid() {
         &UiEvent::Viewport {
             document_id: DocumentId::new(),
             event: AppEvent::Trame(TrameEvent::FilterApplied {
-                hidden_row_count: 37,
-                col: 2,
+                hidden_row_count: RowCount::new(37),
+                col: Col::new(2),
             }),
         },
     );
@@ -783,10 +783,10 @@ fn the_sort_reply_opens_the_dialog_over_its_columns() {
     relay.absorb(&UiEvent::Viewport {
         document_id: DocumentId::new(),
         event: AppEvent::Trame(TrameEvent::SortRange {
-            r1: 2,
-            c1: 3,
-            r2: 9,
-            c2: 5,
+            r1: Row::new(2),
+            c1: Col::new(3),
+            r2: Row::new(9),
+            c2: Col::new(5),
         }),
     });
     let (root, _) = sort_dialog(relay.sort_dialog);
@@ -803,10 +803,10 @@ fn the_sort_reply_opens_the_dialog_over_its_columns() {
 #[wasm_bindgen_test]
 async fn the_dialog_holds_one_level_to_one_per_column() {
     let state = RwSignal::new(Some(SortDialogState {
-        r1: 0,
-        c1: 0,
-        r2: 4,
-        c2: 2,
+        r1: Row::new(0),
+        c1: Col::new(0),
+        r2: Row::new(4),
+        c2: Col::new(2),
     }));
     let (root, _) = sort_dialog(state);
     let levels = || {
@@ -833,10 +833,10 @@ async fn the_dialog_holds_one_level_to_one_per_column() {
     root.remove();
     // One column: the ceiling is the floor.
     let state = RwSignal::new(Some(SortDialogState {
-        r1: 0,
-        c1: 4,
-        r2: 9,
-        c2: 4,
+        r1: Row::new(0),
+        c1: Col::new(4),
+        r2: Row::new(9),
+        c2: Col::new(4),
     }));
     let (root, _) = sort_dialog(state);
     settle().await;
@@ -849,10 +849,10 @@ async fn the_dialog_holds_one_level_to_one_per_column() {
 #[wasm_bindgen_test]
 async fn the_open_sort_dialog_is_modal() {
     let state = RwSignal::new(Some(SortDialogState {
-        r1: 0,
-        c1: 0,
-        r2: 4,
-        c2: 1,
+        r1: Row::new(0),
+        c1: Col::new(0),
+        r2: Row::new(4),
+        c2: Col::new(1),
     }));
     let (root, _) = sort_dialog(state);
     settle().await;
@@ -878,10 +878,10 @@ async fn closing_the_sort_dialog_sorts_nothing() {
         "dialog.ambre-sort-modal",
     ] {
         let state = RwSignal::new(Some(SortDialogState {
-            r1: 0,
-            c1: 0,
-            r2: 4,
-            c2: 2,
+            r1: Row::new(0),
+            c1: Col::new(0),
+            r2: Row::new(4),
+            c2: Col::new(2),
         }));
         let (root, emitted) = sort_dialog(state);
         settle().await;

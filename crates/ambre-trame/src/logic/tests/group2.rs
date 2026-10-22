@@ -14,9 +14,9 @@ fn batch_write_is_one_undo_item() {
 
     state.handle_command(TrameCommand::SetCellsBatch {
         cells: vec![
-            (0, 0, "x".to_owned()),
-            (0, 1, "x".to_owned()),
-            (1, 0, "x".to_owned()),
+            (CellPos::new(Row::new(0), Col::new(0)), "x".to_owned()),
+            (CellPos::new(Row::new(0), Col::new(1)), "x".to_owned()),
+            (CellPos::new(Row::new(1), Col::new(0)), "x".to_owned()),
         ],
     });
     // Seal the group (cell-exit boundary), like the UI's next command would.
@@ -53,7 +53,7 @@ fn filtered_column_edit_is_one_undo_item() {
     // Hide every row whose column-A value is < 3 -> rows 0 and 1 hidden.
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId("s0".to_owned()),
-        col: 0,
+        col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gte,
             value: "3".to_owned(),
@@ -64,8 +64,8 @@ fn filtered_column_edit_is_one_undo_item() {
     // Edit a filtered cell so the hidden set is recomputed (a second commit),
     // then exit the editor.
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "9".to_owned(),
     });
     state.handle_command(TrameCommand::CommitEdit);
@@ -93,8 +93,8 @@ fn mutating_command_reports_undo_state() {
     let mut state = TrameState::new();
 
     let evts = state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "x".to_owned(),
     });
     assert!(
@@ -110,10 +110,10 @@ fn mutating_command_reports_undo_state() {
 
     // A pure selection move produces no CRDT delta -> no UndoState refresh.
     let evts = state.handle_command(TrameCommand::SetActiveCell {
-        row: 1,
-        col: 1,
-        anchor_row: 1,
-        anchor_col: 1,
+        row: Row::new(1),
+        col: Col::new(1),
+        anchor_row: Row::new(1),
+        anchor_col: Col::new(1),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -145,23 +145,23 @@ fn undo_with_empty_stack_is_a_noop() {
 fn a_command_that_changes_nothing_reports_no_undo_state() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "x".to_owned(),
     });
     for no_op in [
         TrameCommand::Redo,
         TrameCommand::SetActiveCell {
-            row: 2,
-            col: 2,
-            anchor_row: 2,
-            anchor_col: 2,
+            row: Row::new(2),
+            col: Col::new(2),
+            anchor_row: Row::new(2),
+            anchor_col: Col::new(2),
             extra: vec![],
             kind: crate::SelectionKind::Cells,
         },
         TrameCommand::SetCellText {
-            row: 0,
-            col: 0,
+            row: Row::new(0),
+            col: Col::new(0),
             text: "x".to_owned(),
         },
     ] {
@@ -191,13 +191,13 @@ fn undo_local_only_not_remote() {
     // A1 and B1 with placeholders before either peer diverges.
     let mut base = TrameState::new();
     base.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "base_a".to_owned(),
     });
     base.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "base_b".to_owned(),
     });
     let base_snap = base.export_snapshot();
@@ -211,13 +211,13 @@ fn undo_local_only_not_remote() {
 
     // A edits A1; B edits B1 locally.
     a.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "alice".to_owned(),
     });
     b.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "bob".to_owned(),
     });
 
@@ -249,18 +249,18 @@ fn undo_local_only_not_remote() {
 fn undo_insert_row_rebuilds_sheet_index() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "top".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 1,
-        col: 0,
+        row: Row::new(1),
+        col: Col::new(0),
         text: "mid".to_owned(),
     });
 
     // Insert a blank row at 1: "mid" shifts down to row 2.
-    state.handle_command(TrameCommand::InsertRow { at: 1 });
+    state.handle_command(TrameCommand::InsertRow { at: Row::new(1) });
     assert_eq!(read_cell(&mut state, 2, 0), "mid", "mid shifted down");
 
     // Undo: the index must rebuild so "mid" resolves back at row 1 and the
@@ -280,8 +280,8 @@ fn undo_insert_row_rebuilds_sheet_index() {
 fn undo_stack_cleared_on_doc_close() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "hello".to_owned(),
     });
     assert!(state.undo_manager.can_undo(), "edit is undoable in-session");
@@ -310,17 +310,17 @@ fn undo_stack_cleared_on_doc_close() {
 fn insert_row_shifts_cells_down() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "top".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 1,
-        col: 0,
+        row: Row::new(1),
+        col: Col::new(0),
         text: "mid".to_owned(),
     });
 
-    let evts = state.handle_command(TrameCommand::InsertRow { at: 1 });
+    let evts = state.handle_command(TrameCommand::InsertRow { at: Row::new(1) });
     assert!(matches!(evts.display[0], TrameEvent::DataReset));
 
     assert_eq!(read_cell(&mut state, 0, 0), "top", "row above stays put");
@@ -338,22 +338,22 @@ fn insert_row_shifts_cells_down() {
 fn delete_row_shifts_cells_up_and_purges() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "keep".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 1,
-        col: 0,
+        row: Row::new(1),
+        col: Col::new(0),
         text: "gone".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 2,
-        col: 0,
+        row: Row::new(2),
+        col: Col::new(0),
         text: "last".to_owned(),
     });
 
-    state.handle_command(TrameCommand::DeleteRow { at: 1 });
+    state.handle_command(TrameCommand::DeleteRow { at: Row::new(1) });
 
     assert_eq!(read_cell(&mut state, 0, 0), "keep");
     assert_eq!(
@@ -376,22 +376,22 @@ fn delete_row_shifts_cells_up_and_purges() {
 fn insert_and_delete_column_shift_cells() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "a".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "b".to_owned(),
     });
 
-    state.handle_command(TrameCommand::InsertColumn { at: 1 });
+    state.handle_command(TrameCommand::InsertColumn { at: Col::new(1) });
     assert_eq!(read_cell(&mut state, 0, 0), "a");
     assert_eq!(read_cell(&mut state, 0, 1), "", "inserted blank column");
     assert_eq!(read_cell(&mut state, 0, 2), "b", "old col 1 shifted right");
 
-    state.handle_command(TrameCommand::DeleteColumn { at: 1 });
+    state.handle_command(TrameCommand::DeleteColumn { at: Col::new(1) });
     assert_eq!(read_cell(&mut state, 0, 0), "a");
     assert_eq!(read_cell(&mut state, 0, 1), "b", "shift back after delete");
 }
@@ -404,21 +404,24 @@ fn move_row_carries_cells_and_formula_follows_data() {
     let mut state = TrameState::new();
     for (r, t) in ["a", "b", "c"].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: (*t).to_owned(),
         });
     }
     // B1 references A1 ("a"). After moving row 0 down to position 2 the value
     // "a" lives at A3, and the formula must resolve to it at its new home.
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "=A1".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 1), "a", "formula before move");
 
-    state.handle_command(TrameCommand::MoveRow { from: 0, to: 2 });
+    state.handle_command(TrameCommand::MoveRow {
+        from: Row::new(0),
+        to: Row::new(2),
+    });
     // Order is now b, c, a on column 0; the formula traveled with row "a".
     assert_eq!(read_cell(&mut state, 0, 0), "b");
     assert_eq!(read_cell(&mut state, 1, 0), "c");
@@ -436,12 +439,15 @@ fn move_column_carries_cells() {
     let mut state = TrameState::new();
     for (c, t) in ["x", "y", "z"].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: 0,
-            col: c as u32,
+            row: Row::new(0),
+            col: Col::new(c as u32),
             text: (*t).to_owned(),
         });
     }
-    state.handle_command(TrameCommand::MoveColumn { from: 2, to: 0 });
+    state.handle_command(TrameCommand::MoveColumn {
+        from: Col::new(2),
+        to: Col::new(0),
+    });
     assert_eq!(read_cell(&mut state, 0, 0), "z", "moved column at front");
     assert_eq!(read_cell(&mut state, 0, 1), "x");
     assert_eq!(read_cell(&mut state, 0, 2), "y");
@@ -454,13 +460,13 @@ fn move_column_carries_cells() {
 fn a_reference_to_a_deleted_row_reads_ref() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 1,
-        col: 0,
+        row: Row::new(1),
+        col: Col::new(0),
         text: "=7".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "=A2".to_owned(),
     });
     assert_eq!(
@@ -471,12 +477,12 @@ fn a_reference_to_a_deleted_row_reads_ref() {
 
     // Something sits below the source, ready to slide into its position.
     state.handle_command(TrameCommand::SetCellText {
-        row: 2,
-        col: 0,
+        row: Row::new(2),
+        col: Col::new(0),
         text: "9".to_owned(),
     });
     // Delete row 1 (the source A2): B1 breaks, it does not read the 9.
-    state.handle_command(TrameCommand::DeleteRow { at: 1 });
+    state.handle_command(TrameCommand::DeleteRow { at: Row::new(1) });
     assert_eq!(read_cell(&mut state, 0, 1), "#REF!", "deleted source");
     assert_eq!(read_raw(&mut state, 0, 1), "=#REF!", "the bar shows it");
 }
@@ -487,11 +493,11 @@ fn a_reference_to_a_deleted_row_reads_ref() {
 fn insert_beyond_used_range_is_noop() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "x".to_owned(),
     });
-    let evts = state.handle_command(TrameCommand::InsertRow { at: 50 });
+    let evts = state.handle_command(TrameCommand::InsertRow { at: Row::new(50) });
     assert!(evts.display.is_empty(), "no DataReset");
     assert!(evts.update.is_none(), "no CRDT delta");
     assert_eq!(read_cell(&mut state, 0, 0), "x");
@@ -503,17 +509,17 @@ fn insert_beyond_used_range_is_noop() {
 fn merge_marks_master_span_and_blanks_covered() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "title".to_owned(),
     });
 
     // Merge A1:B2 (2 cols x 2 rows), master = A1.
     let evts = state.handle_command(TrameCommand::MergeCells {
-        row: 0,
-        col: 0,
-        row_end: 1,
-        col_end: 1,
+        row: Row::new(0),
+        col: Col::new(0),
+        row_end: Row::new(1),
+        col_end: Col::new(1),
     });
     assert!(
         evts.display
@@ -522,7 +528,7 @@ fn merge_marks_master_span_and_blanks_covered() {
     );
 
     let master = read_display(&mut state, 0, 0);
-    assert_eq!(master.merge_span, Some((2, 2)), "master spans 2x2");
+    assert_eq!(master.merge_span, Some(span(2, 2)), "master spans 2x2");
     assert!(master.is_merged);
     assert_eq!(master.text, "title");
 
@@ -537,7 +543,10 @@ fn merge_marks_master_span_and_blanks_covered() {
     restored
         .import_snapshot(&snapshot)
         .expect("a snapshot this build wrote reads back at the current schema");
-    assert_eq!(read_display(&mut restored, 0, 0).merge_span, Some((2, 2)));
+    assert_eq!(
+        read_display(&mut restored, 0, 0).merge_span,
+        Some(span(2, 2))
+    );
 }
 
 /// A merge is rejected locally when a covered cell is non-empty, and no CRDT
@@ -546,16 +555,16 @@ fn merge_marks_master_span_and_blanks_covered() {
 fn merge_rejected_when_covered_cell_non_empty() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
         text: "busy".to_owned(),
     });
 
     let evts = state.handle_command(TrameCommand::MergeCells {
-        row: 0,
-        col: 0,
-        row_end: 0,
-        col_end: 1,
+        row: Row::new(0),
+        col: Col::new(0),
+        row_end: Row::new(0),
+        col_end: Col::new(1),
     });
     assert!(
         matches!(&evts.display[0], TrameEvent::MergeRejected { .. }),
@@ -571,15 +580,18 @@ fn merge_rejected_when_covered_cell_non_empty() {
 fn unmerge_restores_covered_cells() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::MergeCells {
-        row: 0,
-        col: 0,
-        row_end: 0,
-        col_end: 2,
+        row: Row::new(0),
+        col: Col::new(0),
+        row_end: Row::new(0),
+        col_end: Col::new(2),
     });
-    assert_eq!(read_display(&mut state, 0, 0).merge_span, Some((3, 1)));
+    assert_eq!(read_display(&mut state, 0, 0).merge_span, Some(span(1, 3)));
 
     // Unmerge by pointing at any cell inside the range.
-    state.handle_command(TrameCommand::UnmergeCells { row: 0, col: 2 });
+    state.handle_command(TrameCommand::UnmergeCells {
+        row: Row::new(0),
+        col: Col::new(2),
+    });
     assert_eq!(read_display(&mut state, 0, 0).merge_span, None);
     assert!(
         !read_display(&mut state, 0, 1).is_merged,
@@ -594,22 +606,22 @@ fn unmerge_restores_covered_cells() {
 fn insert_intents_land_relative_to_active_cell() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "r0".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 1,
-        col: 0,
+        row: Row::new(1),
+        col: Col::new(0),
         text: "r1".to_owned(),
     });
 
     // Active cell = row 1; "insert above" pushes r1 down to row 2.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 1,
-        col: 0,
-        anchor_row: 1,
-        anchor_col: 0,
+        row: Row::new(1),
+        col: Col::new(0),
+        anchor_row: Row::new(1),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -633,17 +645,17 @@ fn delete_selected_rows_drops_the_whole_span() {
     let mut state = TrameState::new();
     for (r, t) in [(0, "keep"), (1, "a"), (2, "b"), (3, "c"), (4, "tail")] {
         state.handle_command(TrameCommand::SetCellText {
-            row: r,
-            col: 0,
+            row: Row::new(r),
+            col: Col::new(0),
             text: t.to_owned(),
         });
     }
     // Select rows 1..=3 (active corner row 3, anchor row 1).
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 3,
-        col: 0,
-        anchor_row: 1,
-        anchor_col: 0,
+        row: Row::new(3),
+        col: Col::new(0),
+        anchor_row: Row::new(1),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -662,17 +674,17 @@ fn five_selected_rows() -> TrameState {
     let mut state = TrameState::new();
     for r in 0..6 {
         state.handle_command(TrameCommand::SetCellText {
-            row: r,
-            col: 0,
+            row: Row::new(r),
+            col: Col::new(0),
             text: format!("r{r}"),
         });
     }
     state.handle_command(TrameCommand::CommitEdit);
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 4,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(4),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Rows,
     });
@@ -713,26 +725,26 @@ fn deleted_line_leaves_no_formatting() {
     let mut state = TrameState::new();
     for r in 0..3 {
         state.handle_command(TrameCommand::SetCellText {
-            row: r,
-            col: 0,
+            row: Row::new(r),
+            col: Col::new(0),
             text: format!("{r}"),
         });
     }
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_bus::ViewportVersion(1),
         sheet_id: SheetId(TEST_SHEET.to_owned()),
-        row: 1,
+        row: Row::new(1),
         height_px: 40.0,
     });
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(2),
         sheet_id: SheetId(TEST_SHEET.to_owned()),
-        col: 0,
+        col: Col::new(0),
         width_px: 150.0,
     });
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId(TEST_SHEET.to_owned()),
-        col: 0,
+        col: Col::new(0),
         kind: FilterKind::Values(vec!["0".to_owned(), "2".to_owned()]),
     });
     let len = |state: &TrameState, name: String| state.doc.get_map(name).len();
@@ -742,13 +754,13 @@ fn deleted_line_leaves_no_formatting() {
         1,
         "row 1 is hidden"
     );
-    state.handle_command(TrameCommand::DeleteRow { at: 1 });
+    state.handle_command(TrameCommand::DeleteRow { at: Row::new(1) });
     assert_eq!(len(&state, row_heights_map_name(TEST_SHEET)), 0);
     assert_eq!(len(&state, filter_hidden_map_name(TEST_SHEET)), 0);
     state.handle_command(TrameCommand::ClearFilter {
         sheet_id: SheetId(TEST_SHEET.to_owned()),
     });
-    state.handle_command(TrameCommand::DeleteColumn { at: 0 });
+    state.handle_command(TrameCommand::DeleteColumn { at: Col::new(0) });
     assert_eq!(len(&state, col_widths_map_name(TEST_SHEET)), 0);
 }
 
@@ -758,23 +770,23 @@ fn deleted_line_leaves_no_formatting() {
 fn merge_and_unmerge_intents_use_the_selection() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "title".to_owned(),
     });
     // Select A1:B2.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 1,
-        col: 1,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(1),
+        col: Col::new(1),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::MergeSelection);
     assert_eq!(
         read_display(&mut state, 0, 0).merge_span,
-        Some((2, 2)),
+        Some(span(2, 2)),
         "selection merged"
     );
 

@@ -27,12 +27,12 @@ use leptos::prelude::RwSignal;
 use leptos::prelude::{GetUntracked, Set};
 
 use super::grid::{
-    COL_WIDTH, CellEditor, CellRect, CursorMove, HeaderHit, ROW_HEIGHT, SelKind, Selection,
+    AxisPos, COL_WIDTH, CellEditor, CursorMove, HeaderHit, ROW_HEIGHT, SelKind, Selection,
     TrameUiState,
 };
 use super::renderer::{self, DrawStats};
-use crate::TOTAL_COLS;
 use crate::render::{CommitDirection, FormulaAction};
+use crate::{CellPos, CellRect, Col, ColCount, ColDelta, MergeSpan, Row, RowCount, RowDelta};
 
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
 const BLINK_MS: f64 = 530.0;
@@ -63,40 +63,60 @@ impl ViewportQueue {
 }
 
 /// Compute the autofill destination rectangle from the source selection `src`
-/// and the cell `(row, col)` under the dragged handle (`trame-autofill`). The
-/// fill handle locks to a single axis: whichever direction the pointer extends
+/// and the cell `at` under the dragged handle (`trame-autofill`). The fill
+/// handle locks to a single axis: whichever direction the pointer extends
 /// farthest from the source wins, and the destination always contains the
-/// source. Returns the normalized rectangle `(r1, c1, r2, c2)`.
+/// source.
 ///
-/// `block` is the source's fill granularity `(rows, cols)`. A plain cell source
-/// is `(1, 1)`, and the destination tracks the pointer cell exactly. A
+/// `block` is the source's fill granularity. A plain cell source is
+/// [`MergeSpan::CELL`], and the destination tracks the pointer cell exactly. A
 /// merged-cell source carries its block size so the extension snaps to whole
 /// blocks (Excel behaviour). A 2x1 merge fills two rows at a time.
-fn fill_dest(src: CellRect, row: u32, col: u32, block: (u32, u32)) -> CellRect {
-    let (sr1, sc1, sr2, sc2) = src;
-    let (bh, bw) = block;
+fn fill_dest(src: CellRect, at: CellPos, block: MergeSpan) -> CellRect {
+    let (first, last) = (src.top_left, src.bottom_right);
+    let (bh, bw) = (block.rows.get().max(1), block.cols.get().max(1));
     // Extent the pointer reaches beyond the source on each axis.
-    let drow = row.saturating_sub(sr2).max(sr1.saturating_sub(row));
-    let dcol = col.saturating_sub(sc2).max(sc1.saturating_sub(col));
-    if drow >= dcol {
+    let drow = at
+        .row
+        .count_from(last.row)
+        .max(first.row.count_from(at.row));
+    let dcol = at
+        .col
+        .count_from(last.col)
+        .max(first.col.count_from(at.col));
+    // Whole blocks of `size` lines covering `reach` lines.
+    let snap = |reach: u32, size: u32| reach.div_ceil(size).saturating_mul(size);
+    if drow.get() >= dcol.get() {
         // Vertical fill: extend rows toward the pointer, snapped to whole blocks.
-        if row > sr2 {
-            let nb = (row - sr2).div_ceil(bh);
-            (sr1, sc1, sr2 + nb * bh, sc2)
-        } else if row < sr1 {
-            let nb = (sr1 - row).div_ceil(bh);
-            (sr1.saturating_sub(nb * bh), sc1, sr2, sc2)
+        if at.row > last.row {
+            let grow = RowCount::new(snap(at.row.count_from(last.row).get(), bh));
+            CellRect {
+                bottom_right: CellPos::new(last.row + grow, last.col),
+                ..src
+            }
+        } else if at.row < first.row {
+            let grow = RowCount::new(snap(first.row.count_from(at.row).get(), bh));
+            CellRect {
+                top_left: CellPos::new(first.row - grow, first.col),
+                ..src
+            }
         } else {
             src
         }
     } else {
         // Horizontal fill: extend columns, snapped to whole blocks.
-        if col > sc2 {
-            let nb = (col - sc2).div_ceil(bw);
-            (sr1, sc1, sr2, sc2 + nb * bw)
-        } else if col < sc1 {
-            let nb = (sc1 - col).div_ceil(bw);
-            (sr1, sc1.saturating_sub(nb * bw), sr2, sc2)
+        if at.col > last.col {
+            let grow = ColCount::new(snap(at.col.count_from(last.col).get(), bw));
+            CellRect {
+                bottom_right: CellPos::new(last.row, last.col + grow),
+                ..src
+            }
+        } else if at.col < first.col {
+            let grow = ColCount::new(snap(first.col.count_from(at.col).get(), bw));
+            CellRect {
+                top_left: CellPos::new(first.row, first.col - grow),
+                ..src
+            }
         } else {
             src
         }
@@ -148,9 +168,13 @@ pub(crate) enum SendError {
 }
 
 /// What a screen reader hears when the active cell moves (`CHROME-023`): its
-/// reference, then its value or "empty". Rows and columns are 0-based here.
-pub(crate) fn cell_announcement(row: u32, col: u32, value: &str) -> String {
-    let at = format!("{}{}", crate::columns::col_to_alpha(col), row + 1);
+/// reference, then its value or "empty".
+pub(crate) fn cell_announcement(at: CellPos, value: &str) -> String {
+    let at = format!(
+        "{}{}",
+        crate::columns::col_to_alpha(at.col),
+        crate::columns::row_label(at.row)
+    );
     if value.is_empty() {
         format!("{at}, empty")
     } else {
@@ -217,8 +241,8 @@ fn trigger_download(_filename: &str, _data: &[u8]) {}
 /// flushes its queued intents). Set by grid keys / clicks that finish an edit.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PendingCommit {
-    /// Commit and move the cursor by `(drow, dcol)` (Enter, Tab, Up/Down).
-    Nav(i32, i32),
+    /// Commit and move the cursor by rows and columns (Enter, Tab, Up/Down).
+    Nav(RowDelta, ColDelta),
     /// Commit in place, cursor unchanged (a click / right-click elsewhere; the
     /// click's own selection has already moved the active cell).
     Stay,
@@ -339,23 +363,23 @@ pub struct TrameView {
     /// A column auto-fit whose whole content the Logic thread returned
     /// (`TRAME-UI-128`), awaiting the font context like
     /// [`pending_autofit`](Self::pending_autofit).
-    pending_column_fit: Option<(u32, Vec<crate::DisplayCell>)>,
+    pending_column_fit: Option<(Col, Vec<crate::DisplayCell>)>,
     /// In-progress autofill drag from the fill handle, or `None`
     /// (`trame-autofill`). Holds the source rectangle the drag started from and
-    /// the source block granularity `(rows, cols)`. That is `(1, 1)` for a plain
+    /// the source block granularity. That is [`MergeSpan::CELL`] for a plain
     /// cell, or the merge span for a merged-cell source so the drag snaps block by
     /// block. Ctrl is read at *release* time, so toggling it mid-drag counts. It
     /// forces Copy on a multi-cell source and a +1 numeric Series on a single-cell
     /// one, Excel-style. Pointer moves grow [`TrameUiState::fill_preview`] and the
     /// release emits a `FillRange`.
-    fill_drag: Option<(CellRect, (u32, u32))>,
+    fill_drag: Option<(CellRect, MergeSpan)>,
     /// In-progress Excel-style header reorder drag, or `None`. Holds the grabbed
-    /// axis and the origin column/row index (`(Cols, from)` / `(Rows, from)`).
+    /// origin column or row.
     /// Pointer moves update the [`TrameUiState::reorder_preview`] insertion slot,
     /// and the release emits a `MoveColumn` / `MoveRow` (a no-op if it lands back
     /// on the origin). Armed only when the press lands on an already-selected
     /// header body, so a plain click still selects/extends the axis.
-    reorder_drag: Option<(crate::ui::grid::SelKind, u32)>,
+    reorder_drag: Option<AxisPos>,
     /// The CSS cursor currently set on `#ambre-canvas` from bare hover feedback
     /// (`trame-resize`, `trame-autofill`): `"col-resize"` / `"row-resize"` /
     /// `"pointer"` / `"crosshair"` / `""`. Tracked to avoid redundant DOM writes
@@ -404,8 +428,8 @@ pub struct TrameView {
     /// New cell data landed; promotes to Full only when no scroll happened.
     data_dirty: bool,
     /// Last rendered scroll position, used to compute the scroll delta.
-    prev_top_row: u32,
-    prev_left_col: u32,
+    prev_top_row: Row,
+    prev_left_col: Col,
 
     // -- Wheel / touchpad scroll ------------------------------------------------
     /// The scroll motion, built apart from the browser so a native test drives
@@ -501,10 +525,10 @@ mod tests {
     fn two_scrolls_in_one_frame_flush_as_one_request() {
         let scroll = |version| TrameCommand::ScrollViewport {
             version,
-            row_start: 0,
-            row_end: 10,
-            col_start: 0,
-            col_end: 5,
+            row_start: Row::ZERO,
+            row_end: Row::new(10),
+            col_start: Col::ZERO,
+            col_end: Col::new(5),
         };
         let mut queue = ViewportQueue::default();
         queue.coalesce(scroll(ambre_bus::ViewportVersion(1)));
@@ -526,8 +550,9 @@ mod tests {
     /// its value, and says an empty cell is empty rather than nothing.
     #[test]
     fn the_active_cell_is_announced_by_reference_and_value() {
-        assert_eq!(cell_announcement(1, 1, "42"), "B2, 42");
-        assert_eq!(cell_announcement(0, 26, ""), "AA1, empty");
+        let at = |row, col| CellPos::new(Row::new(row), Col::new(col));
+        assert_eq!(cell_announcement(at(1, 1), "42"), "B2, 42");
+        assert_eq!(cell_announcement(at(0, 26), ""), "AA1, empty");
     }
 
     /// Only a text the user typed opens an edit session (`TRAME-UI-155`): a
@@ -556,10 +581,10 @@ mod tests {
     fn scroll_cmd(version: u64) -> TrameCommand {
         TrameCommand::ScrollViewport {
             version: ambre_bus::ViewportVersion(version),
-            row_start: 0,
-            row_end: 0,
-            col_start: 0,
-            col_end: 0,
+            row_start: Row::ZERO,
+            row_end: Row::ZERO,
+            col_start: Col::ZERO,
+            col_end: Col::ZERO,
         }
     }
 

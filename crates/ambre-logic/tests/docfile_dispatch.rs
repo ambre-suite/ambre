@@ -26,7 +26,7 @@ use ambre_core::{
     docfile::{DocFileError, read_ambre_plaintext},
 };
 use ambre_toile::ToileState;
-use ambre_trame::TrameState;
+use ambre_trame::{Col, Row, TrameState};
 
 fn doc_id(tag: u8) -> DocumentId {
     let mut bytes = [0u8; 16];
@@ -38,8 +38,8 @@ fn doc_id(tag: u8) -> DocumentId {
 fn trame_file() -> Vec<u8> {
     let mut state = TrameState::new();
     state.handle_command(ambre_trame::TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "hello".to_owned(),
     });
     state

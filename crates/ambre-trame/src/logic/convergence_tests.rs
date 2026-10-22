@@ -33,6 +33,7 @@ use ambre_bus::{
 };
 
 use super::TrameState;
+use crate::{CellPos, Col, ColCount, MergeSpan, Row, RowCount};
 use crate::{TrameCommand, TrameEvent};
 
 /// Bounded grid the generators address. Kept small so a sort/merge/fill spans a
@@ -122,20 +123,30 @@ impl Op {
     /// Translate to the `TrameCommand` the Logic dispatcher would receive.
     fn into_command(self) -> TrameCommand {
         match self {
-            Op::SetText { row, col, text } => TrameCommand::SetCellText { row, col, text },
-            Op::InsertRow { at } => TrameCommand::InsertRow { at },
-            Op::DeleteRow { at } => TrameCommand::DeleteRow { at },
-            Op::InsertColumn { at } => TrameCommand::InsertColumn { at },
-            Op::DeleteColumn { at } => TrameCommand::DeleteColumn { at },
-            Op::MoveRow { from, to } => TrameCommand::MoveRow { from, to },
-            Op::MoveColumn { from, to } => TrameCommand::MoveColumn { from, to },
+            Op::SetText { row, col, text } => TrameCommand::SetCellText {
+                row: Row::new(row),
+                col: Col::new(col),
+                text,
+            },
+            Op::InsertRow { at } => TrameCommand::InsertRow { at: Row::new(at) },
+            Op::DeleteRow { at } => TrameCommand::DeleteRow { at: Row::new(at) },
+            Op::InsertColumn { at } => TrameCommand::InsertColumn { at: Col::new(at) },
+            Op::DeleteColumn { at } => TrameCommand::DeleteColumn { at: Col::new(at) },
+            Op::MoveRow { from, to } => TrameCommand::MoveRow {
+                from: Row::new(from),
+                to: Row::new(to),
+            },
+            Op::MoveColumn { from, to } => TrameCommand::MoveColumn {
+                from: Col::new(from),
+                to: Col::new(to),
+            },
             Op::Sort { ascending } => TrameCommand::SortRange {
                 sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
-                row_start: 0,
-                row_end: ROWS - 1,
-                col_start: 0,
-                col_end: COLS - 1,
-                sort_col: 0,
+                row_start: Row::new(0),
+                row_end: Row::new(ROWS - 1),
+                col_start: Col::new(0),
+                col_end: Col::new(COLS - 1),
+                sort_col: ColCount::new(0),
                 ascending,
                 has_header: false,
             },
@@ -145,15 +156,18 @@ impl Op {
                 row_end,
                 col_end,
             } => TrameCommand::MergeCells {
-                row,
-                col,
-                row_end,
-                col_end,
+                row: Row::new(row),
+                col: Col::new(col),
+                row_end: Row::new(row_end),
+                col_end: Col::new(col_end),
             },
-            Op::Unmerge { row, col } => TrameCommand::UnmergeCells { row, col },
+            Op::Unmerge { row, col } => TrameCommand::UnmergeCells {
+                row: Row::new(row),
+                col: Col::new(col),
+            },
             Op::Filter { op, value } => TrameCommand::ApplyFilter {
                 sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
-                col: 0,
+                col: Col::new(0),
                 kind: FilterKind::Condition {
                     op,
                     value: value.to_string(),
@@ -165,34 +179,34 @@ impl Op {
             Op::Fill => TrameCommand::FillRange {
                 sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
                 src: GridRange {
-                    row: 0,
-                    col: 0,
-                    row_end: 0,
-                    col_end: 0,
+                    row: Row::new(0),
+                    col: Col::new(0),
+                    row_end: Row::new(0),
+                    col_end: Col::new(0),
                 },
                 dest: GridRange {
-                    row: 0,
-                    col: 0,
-                    row_end: ROWS - 1,
-                    col_end: 0,
+                    row: Row::new(0),
+                    col: Col::new(0),
+                    row_end: Row::new(ROWS - 1),
+                    col_end: Col::new(0),
                 },
                 mode: FillMode::Auto,
             },
             Op::Paste { row, col, texts } => TrameCommand::PasteRange {
-                target_row: row,
-                target_col: col,
+                target_row: Row::new(row),
+                target_col: Col::new(col),
                 payload: ClipboardPayload {
-                    src_row: 0,
-                    src_col: 0,
-                    rows: texts.len() as u32,
-                    cols: 1,
+                    src_row: Row::new(0),
+                    src_col: Col::new(0),
+                    rows: RowCount::new(texts.len() as u32),
+                    cols: ColCount::new(1),
                     cells: texts
                         .into_iter()
                         .enumerate()
                         .filter(|(_, raw)| !raw.is_empty())
                         .map(|(dr, raw)| ClipboardCell {
-                            dr: dr as u32,
-                            dc: 0,
+                            dr: RowCount::new(dr as u32),
+                            dc: ColCount::new(0),
                             raw,
                             bold: false,
                             italic: false,
@@ -208,7 +222,10 @@ impl Op {
                 cols,
             } => TrameCommand::SetCellsBatch {
                 cells: (row..row + rows)
-                    .flat_map(|r| (col..col + cols).map(move |c| (r, c, String::new())))
+                    .flat_map(|r| {
+                        (col..col + cols)
+                            .map(move |c| (CellPos::new(Row::new(r), Col::new(c)), String::new()))
+                    })
                     .collect(),
             },
             Op::DefineName { reference } => TrameCommand::DefineName {
@@ -302,15 +319,15 @@ fn program_strategy() -> impl Strategy<Value = Vec<(bool, Op)>> {
 /// Captures everything two converged peers must agree on: formula results
 /// (`text`), formatting (`bold`), merge geometry, and the shared-filter hidden
 /// state (`is_filtered`) elected by LWW.
-type Snapshot = Vec<(u32, u32, String, bool, bool, Option<(u32, u32)>, bool)>;
+type Snapshot = Vec<(CellPos, String, bool, bool, Option<MergeSpan>, bool)>;
 
 fn read_window(state: &mut TrameState) -> Snapshot {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(u64::MAX),
-        row_start: 0,
-        row_end: ROWS - 1,
-        col_start: 0,
-        col_end: COLS - 1,
+        row_start: Row::new(0),
+        row_end: Row::new(ROWS - 1),
+        col_start: Col::new(0),
+        col_end: Col::new(COLS - 1),
     });
     let cells = evts
         .display
@@ -324,8 +341,7 @@ fn read_window(state: &mut TrameState) -> Snapshot {
         .iter()
         .map(|c| {
             (
-                c.row,
-                c.col,
+                CellPos::new(c.row, c.col),
                 c.text.clone(),
                 c.bold,
                 c.is_merged,
@@ -334,7 +350,7 @@ fn read_window(state: &mut TrameState) -> Snapshot {
             )
         })
         .collect();
-    rows.sort_by_key(|(r, c, ..)| (*r, *c));
+    rows.sort_by_key(|(at, ..)| *at);
     rows
 }
 
@@ -354,8 +370,8 @@ proptest! {
         let mut a = TrameState::new();
         for (r, text) in ["10", "5", "20", "1"].iter().enumerate() {
             a.handle_command(TrameCommand::SetCellText {
-                row: r as u32,
-                col: 0,
+                row: Row::new(r as u32),
+                col: Col::new(0),
                 text: (*text).to_owned(),
             });
         }
@@ -437,10 +453,10 @@ type StyleView = (
 fn read_style(state: &mut TrameState) -> StyleView {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(u64::MAX),
-        row_start: 0,
-        row_end: 0,
-        col_start: 0,
-        col_end: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(0),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
     });
     let cells = evts
         .display
@@ -452,7 +468,7 @@ fn read_style(state: &mut TrameState) -> StyleView {
         .expect("ScrollViewport yields ViewportData");
     let c = cells
         .iter()
-        .find(|c| c.row == 0 && c.col == 0)
+        .find(|c| c.row == Row::new(0) && c.col == Col::new(0))
         .expect("A1 is materialized");
     (
         c.bold,
@@ -473,10 +489,10 @@ fn read_style(state: &mut TrameState) -> StyleView {
 /// Select A1, then rewrite its whole style.
 fn apply_style(state: &mut TrameState, patch: StylePatch) {
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -567,8 +583,8 @@ fn concurrent_whole_cell_style_edits_do_not_blend_across_containers() {
     // Shared base: A1 styled, history known to both peers.
     let mut a = TrameState::new();
     a.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "42".to_owned(),
     });
     apply_style(&mut a, base_style());
@@ -623,8 +639,8 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
     // Shared base: plain A1 with a value, no style.
     let mut a = TrameState::new();
     a.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "x".to_owned(),
     });
     let base = a.export_snapshot();
@@ -638,8 +654,8 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
     // schema. The patch carries no bold, so it never touches the bold container.
     for i in 0..5 {
         a.handle_command(TrameCommand::SetCellText {
-            row: 10,
-            col: 0,
+            row: Row::new(10),
+            col: Col::new(0),
             text: i.to_string(),
         });
     }

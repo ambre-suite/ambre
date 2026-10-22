@@ -97,7 +97,7 @@ pub(crate) fn format_number(value: f64, fmt: &CellFormat, decimals: Option<u8>) 
 
 // Column-label conversion now lives in the crate-level `columns` module;
 // re-exported so `packing::col_to_alpha` call sites keep compiling.
-pub(crate) use crate::columns::col_to_alpha;
+pub(crate) use crate::columns::{col_to_alpha, row_label};
 
 #[cfg(test)]
 mod tests {

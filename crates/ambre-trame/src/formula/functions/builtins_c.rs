@@ -454,13 +454,13 @@ pub(crate) fn range_dims(args: &[CellValue]) -> Option<(usize, usize)> {
 }
 
 /// ROW()/COLUMN() -- only the no-argument form is supported (the evaluating
-/// cell's 1-based position). The reference form (`ROW(A1)`) needs
-/// reference-preserving compilation and is rejected with `#N/A` for now.
-pub(crate) fn row_col(args: &[CellValue], current: u32) -> CellValue {
-    if !args.is_empty() || current == 0 {
-        return CellValue::Error(FormulaError::NaError);
+/// cell's 1-based number, `None` when unknown). The reference form (`ROW(A1)`)
+/// needs reference-preserving compilation and is rejected with `#N/A` for now.
+pub(crate) fn row_col(args: &[CellValue], current: Option<f64>) -> CellValue {
+    match current {
+        Some(number) if args.is_empty() => CellValue::Number(number),
+        _ => CellValue::Error(FormulaError::NaError),
     }
-    CellValue::Number(current as f64)
 }
 
 /// SEARCH(find_text, within_text, [start]) -- case-insensitive `FIND`.

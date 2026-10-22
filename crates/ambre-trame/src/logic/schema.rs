@@ -17,16 +17,17 @@ use std::collections::HashMap;
 use loro::{ExportMode, LoroDoc, LoroValue};
 use serde::{Deserialize, Serialize};
 
-use ambre_bus::FilterKind;
+use ambre_bus::{CellRect, Col, ColCount, FilterKind, Row, RowCount};
 use ambre_core::schema::{
     SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
     SchemaVerdict, migrate_schema, migration_peer, verdict,
 };
 
 use super::op_from_str;
+use crate::formula::identity::{AxisEdit, LineEdit};
 use crate::formula::parser::parse_formula;
 use crate::formula::{SheetQualifier, identity, render};
-use crate::model::{SheetIndex, Uid};
+use crate::model::{Line, SheetIndex, Uid};
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
 ///
@@ -62,6 +63,12 @@ pub(crate) const NAMED_RANGES_MAP: &str = "named_ranges";
 /// down the grid" case that would otherwise create ~100k placeholder elements
 /// (see `trame-rows-and-columns`). The write path drops anything beyond it.
 pub(crate) const MATERIALIZE_CAP: usize = 10_000;
+
+/// [`MATERIALIZE_CAP`] as a number of rows.
+pub(crate) const MATERIALIZE_ROWS: RowCount = RowCount::new(MATERIALIZE_CAP as u32);
+
+/// [`MATERIALIZE_CAP`] as a number of columns.
+pub(crate) const MATERIALIZE_COLS: ColCount = ColCount::new(MATERIALIZE_CAP as u32);
 
 /// Commit origin tagging the implicit row/column scaffolding that a cell edit
 /// forces into existence (see [`TrameState::materialize`]). Construction tells
@@ -169,6 +176,41 @@ pub(crate) const MIN_ROW_HEIGHT: f32 = 12.0;
 pub(crate) enum Axis {
     Row,
     Col,
+}
+
+/// A line of the active sheet, by its position type: where its list lives and
+/// how a structural edit of it is named.
+pub(crate) trait SheetLine: Line {
+    /// The axis the position type names.
+    const AXIS: Axis;
+
+    /// The structural edit `edit`, tagged with its axis.
+    fn edit(edit: LineEdit<Self>) -> AxisEdit;
+
+    /// The first and the last line `rect` covers on this axis.
+    fn bounds(rect: CellRect) -> (Self, Self);
+}
+
+impl SheetLine for Row {
+    const AXIS: Axis = Axis::Row;
+
+    fn edit(edit: LineEdit<Self>) -> AxisEdit {
+        AxisEdit::Rows(edit)
+    }
+    fn bounds(rect: CellRect) -> (Self, Self) {
+        (rect.top_left.row, rect.bottom_right.row)
+    }
+}
+
+impl SheetLine for Col {
+    const AXIS: Axis = Axis::Col;
+
+    fn edit(edit: LineEdit<Self>) -> AxisEdit {
+        AxisEdit::Cols(edit)
+    }
+    fn bounds(rect: CellRect) -> (Self, Self) {
+        (rect.top_left.col, rect.bottom_right.col)
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -546,8 +588,8 @@ mod tests {
     fn a_workbook_from_a_newer_client_is_refused_and_changes_nothing() {
         let mut st = TrameState::new();
         st.handle_command(ambre_bus::TrameCommand::SetCellText {
-            row: 0,
-            col: 0,
+            row: Row::new(0),
+            col: Col::new(0),
             text: "kept".to_owned(),
         });
         let before = st.export_snapshot();
@@ -582,10 +624,10 @@ mod tests {
         // key before it attempts any decode, which would prove nothing.
         let mut source = TrameState::new();
         source.handle_command(TrameCommand::SetActiveCell {
-            row: 0,
-            col: 0,
-            anchor_row: 0,
-            anchor_col: 0,
+            row: Row::new(0),
+            col: Col::new(0),
+            anchor_row: Row::new(0),
+            anchor_col: Col::new(0),
             extra: vec![],
             kind: crate::SelectionKind::Cells,
         });

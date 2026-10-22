@@ -9,11 +9,11 @@ impl TrameUiState {
 
     pub fn new(canvas_width: f64, canvas_height: f64) -> Self {
         let mut s = Self {
-            top_row: 0,
-            left_col: 0,
-            selection: Selection::single(0, 0),
-            viewport_rows: 0,
-            viewport_cols: 0,
+            top_row: Row::ZERO,
+            left_col: Col::ZERO,
+            selection: Selection::single(CellPos::ORIGIN),
+            viewport_rows: RowCount::ZERO,
+            viewport_cols: ColCount::ZERO,
             canvas_width,
             canvas_height,
             zoom: 1.0,
@@ -62,8 +62,8 @@ impl TrameUiState {
         // grid area, whether fully or partially visible. scroll_to_include and
         // cell_pixel_rect must agree on this count, or the active cell can
         // appear "in viewport" to the scroll logic but off-canvas to the renderer.
-        self.viewport_rows = (grid_h / (ROW_HEIGHT * self.zoom)).ceil() as u32;
-        self.viewport_cols = (grid_w / (COL_WIDTH * self.zoom)).ceil() as u32;
+        self.viewport_rows = RowCount::new((grid_h / (ROW_HEIGHT * self.zoom)).ceil() as u32);
+        self.viewport_cols = ColCount::new((grid_w / (COL_WIDTH * self.zoom)).ceil() as u32);
     }
 
     /// Set the grid zoom factor (clamped to the preset range), keeping the
@@ -82,13 +82,18 @@ impl TrameUiState {
     }
 
     /// The active cell row (the selection's active corner).
-    pub fn active_row(&self) -> u32 {
-        self.selection.active.0
+    pub fn active_row(&self) -> Row {
+        self.selection.active.row
     }
 
     /// The active cell column (the selection's active corner).
-    pub fn active_col(&self) -> u32 {
-        self.selection.active.1
+    pub fn active_col(&self) -> Col {
+        self.selection.active.col
+    }
+
+    /// The active cell (the selection's active corner).
+    pub fn active_cell(&self) -> CellPos {
+        self.selection.active
     }
 
     /// Collapse the selection to a single cell (`trame-selection`). Used on a
@@ -97,32 +102,30 @@ impl TrameUiState {
     /// A hit inside a merged block snaps to the block's master, so the merge is
     /// always selected as a whole. Its sub-cells are never individually selectable
     /// (`trame-cell-merges`).
-    pub fn select(&mut self, row: u32, col: u32) {
-        let (row, col) = self.snap_to_master(row, col);
-        self.selection = Selection::single(row, col);
+    pub fn select(&mut self, at: CellPos) {
+        self.selection = Selection::single(self.snap_to_master(at));
     }
 
-    /// Replace the live selection with the rectangle `(r1,c1)`-`(r2,c2)` (corners
-    /// already ordered), collapsing the active cell onto the top-left corner. Used
-    /// when the Logic thread dictates a selection the canvas cannot derive
-    /// locally, such as a [`SelectRange`](ambre_bus::TrameEvent::SelectRange)
-    /// after an unmerge. The freed cells must stay selected though the
-    /// span-defining merge is gone.
-    pub fn select_rect(&mut self, r1: u32, c1: u32, r2: u32, c2: u32) {
+    /// Replace the live selection with `rect`, collapsing the active cell onto
+    /// its top-left corner. Used when the Logic thread dictates a selection the
+    /// canvas cannot derive locally, such as a
+    /// [`SelectRange`](ambre_bus::TrameEvent::SelectRange) after an unmerge.
+    /// The freed cells must stay selected though the span-defining merge is
+    /// gone.
+    pub fn select_rect(&mut self, rect: CellRect) {
         self.selection = Selection {
-            anchor: (r2, c2),
-            active: (r1, c1),
+            anchor: rect.bottom_right,
+            active: rect.top_left,
             extra: Vec::new(),
             kind: SelKind::Cells,
         };
     }
 
-    /// Resolve `(row, col)` to its merge master when inside a merged block, else
+    /// Resolve `at` to its merge master when inside a merged block, else
     /// return it unchanged. The single chokepoint that keeps the active cell on a
     /// master rather than a covered sub-cell.
-    fn snap_to_master(&self, row: u32, col: u32) -> (u32, u32) {
-        self.merge_master_at(row, col)
-            .map_or((row, col), |(mr, mc, _, _)| (mr, mc))
+    fn snap_to_master(&self, at: CellPos) -> CellPos {
+        self.merge_master_at(at).map_or(at, |block| block.top_left)
     }
 
     /// If the active cell now sits on a *covered* sub-cell of a merge, collapse
@@ -133,9 +136,9 @@ impl TrameUiState {
     /// then target the master, not a covered cell that would reject the write as
     /// a merge conflict. A no-op when the active cell is a master or unmerged.
     pub fn snap_active_to_master(&mut self) -> bool {
-        let (ar, ac) = self.selection.active;
-        match self.merge_master_at(ar, ac) {
-            Some((mr, mc, cs, rs)) if (mr, mc) != (ar, ac) => {
+        let at = self.selection.active;
+        match self.merge_master_at(at) {
+            Some(block) if block.top_left != at => {
                 // Collapse onto the master only when this one block covers the whole
                 // selection (for example drag-selected cells that just became a
                 // single merge). A selection spanning more than this block must keep
@@ -145,16 +148,14 @@ impl TrameUiState {
                 // so it stops sitting on a covered sub-cell. The bounds then
                 // re-expand through `expand_to_merges`, so the rendered selection
                 // still covers every filled block.
-                let (sr1, sc1, sr2, sc2) = self.selection.bounds();
+                let bounds = self.selection.bounds();
                 let covers_selection = self.selection.extra.is_empty()
-                    && sr1 >= mr
-                    && sc1 >= mc
-                    && sr2 < mr + rs
-                    && sc2 < mc + cs;
+                    && block.contains(bounds.top_left)
+                    && block.contains(bounds.bottom_right);
                 if covers_selection {
-                    self.selection = Selection::single(mr, mc);
+                    self.selection = Selection::single(block.top_left);
                 } else {
-                    self.selection.active = (mr, mc);
+                    self.selection.active = block.top_left;
                 }
                 true
             }
@@ -162,19 +163,19 @@ impl TrameUiState {
         }
     }
 
-    /// Extend the live rectangle's active corner to `(row, col)`, keeping the
-    /// anchor (Shift+click / drag). The selection's other corner is unchanged.
-    pub fn select_extend(&mut self, row: u32, col: u32) {
-        self.selection.extend_to(row, col);
+    /// Extend the live rectangle's active corner to `at`, keeping the anchor
+    /// (Shift+click / drag). The selection's other corner is unchanged.
+    pub fn select_extend(&mut self, at: CellPos) {
+        self.selection.extend_to(at);
     }
 
-    /// Commit the live rectangle and start a fresh single-cell range at
-    /// `(row, col)` (Ctrl+click: disjoint selection).
-    pub fn select_disjoint(&mut self, row: u32, col: u32) {
-        self.selection.add_disjoint(row, col);
+    /// Commit the live rectangle and start a fresh single-cell range at `at`
+    /// (Ctrl+click: disjoint selection).
+    pub fn select_disjoint(&mut self, at: CellPos) {
+        self.selection.add_disjoint(at);
     }
 
-    /// Move the active cell by `(dr, dc)`.
+    /// Move the active cell by `dr` rows and `dc` columns.
     ///
     /// With `extend` (Shift held) the selection's active corner moves and the
     /// anchor stays, growing a range; without it the selection collapses onto
@@ -184,37 +185,37 @@ impl TrameUiState {
     /// cell, plus an optional `ScrollViewport` to fetch newly exposed cells.
     /// The active cell always travels, so the Logic thread can retarget
     /// formatting.
-    pub fn move_cursor(&mut self, dr: i32, dc: i32, extend: bool) -> Option<CursorMove> {
-        let (ar, ac) = (self.active_row(), self.active_col());
+    pub fn move_cursor(&mut self, dr: RowDelta, dc: ColDelta, extend: bool) -> Option<CursorMove> {
+        use std::cmp::Ordering;
+        let at = self.active_cell();
         // Stepping off a merge master must clear its whole span, else the
         // candidate lands on a covered sub-cell and snaps straight back (cursor
         // trapped). Advance by the span in the travel direction.
-        let (mut tr, mut tc) = (ar as i64 + dr as i64, ac as i64 + dc as i64);
-        if let Some((mr, mc, cs, rs)) = self.merge_master_at(ar, ac) {
-            if dc > 0 {
-                tc = mc as i64 + cs as i64;
-            } else if dc < 0 {
-                tc = mc as i64 - 1;
+        let (mut row, mut col) = (at.row + dr, at.col + dc);
+        if let Some(block) = self.merge_master_at(at) {
+            match dc.cmp(&ColDelta::ZERO) {
+                Ordering::Greater => col = block.bottom_right.col.next(),
+                Ordering::Less => col = block.top_left.col - ColCount::ONE,
+                Ordering::Equal => {}
             }
-            if dr > 0 {
-                tr = mr as i64 + rs as i64;
-            } else if dr < 0 {
-                tr = mr as i64 - 1;
+            match dr.cmp(&RowDelta::ZERO) {
+                Ordering::Greater => row = block.bottom_right.row.next(),
+                Ordering::Less => row = block.top_left.row - RowCount::ONE,
+                Ordering::Equal => {}
             }
         }
-        let mut new_row = tr.clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
-        let new_col = tc.clamp(0, (TOTAL_COLS - 1) as i64) as u32;
+        let (row, col) = (row.min(LAST_ROW), col.min(LAST_COL));
         // A vertical step never lands on a collapsed (filtered) row: skip the run
         // of hidden rows in the travel direction.
-        new_row = match dr.cmp(&0) {
-            std::cmp::Ordering::Greater => self.next_visible_row(new_row),
-            std::cmp::Ordering::Less => self.prev_visible_row(new_row),
-            std::cmp::Ordering::Equal => new_row,
+        let row = match dr.cmp(&RowDelta::ZERO) {
+            Ordering::Greater => self.next_visible_row(row),
+            Ordering::Less => self.prev_visible_row(row),
+            Ordering::Equal => row,
         };
-        self.move_to(new_row, new_col, extend)
+        self.move_to(CellPos::new(row, col), extend)
     }
 
-    /// Move the active cell to absolute `(row, col)`, clamped to the grid.
+    /// Move the active cell to absolute `at`, clamped to the grid.
     ///
     /// Backs the jump-style navigation keys (Home / End / Ctrl+Home / Ctrl+End,
     /// Page Up / Page Down compute their target row first). With `extend` the
@@ -222,43 +223,45 @@ impl TrameUiState {
     /// collapsing. Same contract as [`move_cursor`](Self::move_cursor): `None`
     /// if the cell did not change, otherwise a [`CursorMove`] with the new
     /// active cell plus an optional `ScrollViewport`.
-    pub fn move_to(&mut self, row: u32, col: u32, extend: bool) -> Option<CursorMove> {
+    pub fn move_to(&mut self, at: CellPos, extend: bool) -> Option<CursorMove> {
         // Landing on a covered sub-cell snaps to its master, but only when
         // collapsing. An extension keeps its raw corner so the live rectangle
         // can grow cell by cell.
-        let (new_row, new_col) = if extend {
-            (row.min(TOTAL_ROWS - 1), col.min(TOTAL_COLS - 1))
+        let clamped = CellPos::new(at.row.min(LAST_ROW), at.col.min(LAST_COL));
+        let target = if extend {
+            clamped
         } else {
-            self.snap_to_master(row.min(TOTAL_ROWS - 1), col.min(TOTAL_COLS - 1))
+            self.snap_to_master(clamped)
         };
         // A jump target (Home/End/PageDown/click-through) may fall on a collapsed
         // row: snap to the nearest visible one so the caret stays on shown data.
-        let new_row = {
-            let fwd = self.next_visible_row(new_row);
+        let row = {
+            let fwd = self.next_visible_row(target.row);
             if self.is_row_hidden(fwd) {
-                self.prev_visible_row(new_row)
+                self.prev_visible_row(target.row)
             } else {
                 fwd
             }
         };
+        let target = CellPos::new(row, target.col);
 
-        if new_row == self.active_row() && new_col == self.active_col() {
+        if target == self.active_cell() {
             return None;
         }
         if extend {
             // Grow the live rectangle: move the active corner, keep the anchor
             // (and any committed disjoint rectangles).
-            self.selection.extend_to(new_row, new_col);
+            self.selection.extend_to(target);
         } else {
             // Plain navigation collapses the selection onto the new cell.
-            self.selection = Selection::single(new_row, new_col);
+            self.selection = Selection::single(target);
         }
 
         // Scroll viewport so the active cell stays visible. When the active cell
         // is still within the cached range, the highlight moves without a Logic
         // round-trip. We still report the new active cell (formatting target).
         let scroll = self
-            .scroll_to_include(new_row, new_col)
+            .scroll_to_include(target)
             .then(|| self.scroll_viewport_cmd());
         Some(CursorMove {
             active: self.selection.report(),
@@ -271,18 +274,18 @@ impl TrameUiState {
     /// The local cell cache is the only view of content available
     /// (`trame-grid-viewport`), making this a best-effort jump to the end of the
     /// visible data.
-    pub fn last_content_col(&self, row: u32) -> Option<u32> {
+    pub fn last_content_col(&self, row: Row) -> Option<Col> {
         self.cell_cache
             .iter()
-            .filter(|((r, _), d)| *r == row && !d.text.is_empty())
-            .map(|((_, c), _)| *c)
+            .filter(|(at, d)| at.row == row && !d.text.is_empty())
+            .map(|(at, _)| at.col)
             .max()
     }
 
-    /// Bottom-right cached non-empty cell `(row, col)`, or `None` if the cache
+    /// Bottom-right cached non-empty cell, or `None` if the cache
     /// holds no content. Backs Ctrl+End (same cache-only caveat as
     /// [`last_content_col`](Self::last_content_col)).
-    pub fn last_content_cell(&self) -> Option<(u32, u32)> {
+    pub fn last_content_cell(&self) -> Option<CellPos> {
         self.cell_cache
             .iter()
             .filter(|(_, d)| !d.text.is_empty())
@@ -290,38 +293,39 @@ impl TrameUiState {
             .max()
     }
 
-    /// Adjust top_row / left_col so that (row, col) is visible.
+    /// Adjust top_row / left_col so that `at` is visible.
     /// Returns true if the scroll position changed.
-    fn scroll_to_include(&mut self, row: u32, col: u32) -> bool {
+    fn scroll_to_include(&mut self, at: CellPos) -> bool {
         let mut changed = false;
-        if row < self.top_row {
-            self.top_row = row;
+        if at.row < self.top_row {
+            self.top_row = at.row;
             changed = true;
-        } else if self.visible_offset(row) >= self.viewport_rows as i64 {
+        } else if self.visible_offset(at.row) >= RowDelta::from_count(self.viewport_rows) {
             // `row` sits past the last visible slot: pull the top down so `row`
             // lands on the bottom slot, counting in collapsed (visible) rows.
-            self.top_row = self.nth_visible_row_back(row, self.viewport_rows.saturating_sub(1));
+            let back = self.viewport_rows.saturating_sub(RowCount::ONE);
+            self.top_row = self.nth_visible_row_back(at.row, back);
             changed = true;
         }
-        if col < self.left_col {
-            self.left_col = col;
+        if at.col < self.left_col {
+            self.left_col = at.col;
             changed = true;
-        } else if col >= self.left_col + self.viewport_cols {
-            self.left_col = col - self.viewport_cols + 1;
+        } else if at.col >= self.left_col + self.viewport_cols {
+            self.left_col = (at.col - self.viewport_cols).next();
             changed = true;
         }
         changed
     }
 
-    /// Pan the viewport by `(dr, dc)` rows/cols *without* moving the active
-    /// cell (wheel / touchpad scroll). Clamps the top-left within the grid.
-    /// Returns `true` if the scroll position actually changed.
+    /// Pan the viewport by `dr` rows and `dc` columns *without* moving the
+    /// active cell (wheel / touchpad scroll). Clamps the top-left within the
+    /// grid. Returns `true` if the scroll position actually changed.
     ///
     /// The whole cells come from the accumulator of model steps alone, so a
     /// distance the grid computed itself does not move it (`KINETIC-001`).
-    pub(crate) fn scroll_by(&mut self, dr: i32, dc: i32) -> bool {
-        let new_top = (self.top_row as i64 + dr as i64).clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
-        let new_left = (self.left_col as i64 + dc as i64).clamp(0, (TOTAL_COLS - 1) as i64) as u32;
+    pub(crate) fn scroll_by(&mut self, dr: RowDelta, dc: ColDelta) -> bool {
+        let new_top = (self.top_row + dr).min(LAST_ROW);
+        let new_left = (self.left_col + dc).min(LAST_COL);
         // Keep the top edge on a visible row so the collapsed-row slot math stays
         // consistent (`top_row` is slot 0).
         let new_top = self.next_visible_row(new_top);
@@ -336,35 +340,31 @@ impl TrameUiState {
     /// How many columns from [`left_col`](Self::left_col) start inside the
     /// canvas, walking their real widths. A screen of narrow columns holds more
     /// than the uniform `viewport_cols` counts (`TRAME-UI-144`).
-    fn visible_col_span(&self) -> u32 {
+    fn visible_col_span(&self) -> ColCount {
         let right = self.canvas_width;
         let mut x = self.header_w();
-        let mut span = 0;
         let mut col = self.left_col;
-        while x < right && col < TOTAL_COLS {
+        while x < right && col < TOTAL_COLS.as_end() {
             x += self.col_width_of(col);
-            span += 1;
-            col += 1;
+            col = col.next();
         }
-        span
+        col.count_from(self.left_col)
     }
 
     /// How many rows from [`top_row`](Self::top_row) start inside the grid area,
     /// walking their real heights (`TRAME-UI-144`). A row a filter hides counts,
     /// and takes no height.
-    fn visible_row_span(&self) -> u32 {
+    fn visible_row_span(&self) -> RowCount {
         let bottom = self.grid_bottom();
         let mut y = self.header_h();
-        let mut span = 0;
         let mut row = self.top_row;
-        while y < bottom && row < TOTAL_ROWS {
+        while y < bottom && row < TOTAL_ROWS.as_end() {
             if !self.is_row_hidden(row) {
                 y += self.row_height_of(row);
             }
-            span += 1;
-            row += 1;
+            row = row.next();
         }
-        span
+        row.count_from(self.top_row)
     }
 
     /// Build a `ScrollViewport` command for the current visible area plus padding.
@@ -386,27 +386,30 @@ impl TrameUiState {
         // the bottom padding. After the row axis collapses there are then still
         // enough *visible* rows to fill the screen. A hidden row outside that
         // span takes no slot, so it stretches nothing (`TRAME-UI-004`).
-        let reach = self.top_row.saturating_add(self.viewport_rows + row_pad);
-        let hidden_in_window = self
-            .hidden_rows
-            .iter()
-            .filter(|&&row| row >= self.top_row && row < reach)
-            .count() as u32;
+        let reach = self.top_row + (self.viewport_rows + row_pad);
+        let hidden_in_window = RowCount::from_len(
+            self.hidden_rows
+                .iter()
+                .filter(|&&row| row >= self.top_row && row < reach)
+                .count(),
+        );
         // Every cell the user can see is requested, whatever the sizes on
         // screen (`TRAME-UI-144`). The span is walked from the real metrics,
         // never less than the uniform estimate.
         let rows_shown = self
             .visible_row_span()
             .max(self.viewport_rows + hidden_in_window);
-        let row_end = (self.top_row + rows_shown + row_pad).min(TOTAL_ROWS.saturating_sub(1));
+        let row_end = (self.top_row + (rows_shown + row_pad)).min(LAST_ROW);
         let col_start = self.left_col.saturating_sub(PADDING_COLS);
         let cols_shown = self.visible_col_span().max(self.viewport_cols);
-        let col_end = (self.left_col + cols_shown + PADDING_COLS).min(TOTAL_COLS.saturating_sub(1));
+        let col_end = (self.left_col + (cols_shown + PADDING_COLS)).min(LAST_COL);
 
         // Evict cells that are no longer in the requested window.
-        self.cell_cache.retain(|&(row, col), _| {
-            row >= row_start && row <= row_end && col >= col_start && col <= col_end
-        });
+        let window = CellRect::spanning(
+            CellPos::new(row_start, col_start),
+            CellPos::new(row_end, col_end),
+        );
+        self.cell_cache.retain(|&at, _| window.contains(at));
         // The evicted cells may have carried filter flags; resync the hidden set.
         self.rebuild_hidden_rows();
 
@@ -445,16 +448,20 @@ impl TrameUiState {
         // a non-default entry is stored. A column/row reset to the default drops
         // out of the map, so it falls back to the uniform metric
         // (`trame-resize`).
-        for (i, w) in col_widths.iter().enumerate() {
-            let col = col_start + i as u32;
+        for (col, w) in ColSpan::from_count(col_start, ColCount::from_len(col_widths.len()))
+            .into_iter()
+            .zip(&col_widths)
+        {
             if (*w as f64 - COL_WIDTH).abs() > f64::EPSILON {
                 self.col_widths.insert(col, *w);
             } else {
                 self.col_widths.remove(&col);
             }
         }
-        for (i, h) in row_heights.iter().enumerate() {
-            let row = row_start + i as u32;
+        for (row, h) in RowSpan::from_count(row_start, RowCount::from_len(row_heights.len()))
+            .into_iter()
+            .zip(&row_heights)
+        {
             if (*h as f64 - ROW_HEIGHT).abs() > f64::EPSILON {
                 self.row_heights.insert(row, *h);
             } else {
@@ -464,10 +471,11 @@ impl TrameUiState {
         for cell in cells {
             // Authoritative value supersedes the optimistic one: the cell is no
             // longer dirty, and any prior error is resolved unless re-reported.
-            self.dirty_cells.remove(&(cell.row, cell.col));
-            self.formula_errors.remove(&(cell.row, cell.col));
+            let at = CellPos::new(cell.row, cell.col);
+            self.dirty_cells.remove(&at);
+            self.formula_errors.remove(&at);
             self.cell_cache.insert(
-                (cell.row, cell.col),
+                at,
                 CellData {
                     text: cell.text,
                     raw: cell.raw,
@@ -497,11 +505,11 @@ impl TrameUiState {
     /// batch arrived, or rows were evicted on scroll). The flag is row-level, so
     /// any cached cell of a row is authoritative for it.
     fn rebuild_hidden_rows(&mut self) {
-        let mut rows: Vec<u32> = self
+        let mut rows: Vec<Row> = self
             .cell_cache
             .iter()
             .filter(|(_, c)| c.is_filtered)
-            .map(|(&(row, _), _)| row)
+            .map(|(at, _)| at.row)
             .collect();
         rows.sort_unstable();
         rows.dedup();
@@ -509,7 +517,7 @@ impl TrameUiState {
     }
 
     /// True if `row` is collapsed by the active shared filter.
-    pub fn is_row_hidden(&self, row: u32) -> bool {
+    pub fn is_row_hidden(&self, row: Row) -> bool {
         self.hidden_rows.binary_search(&row).is_ok()
     }
 
@@ -517,59 +525,56 @@ impl TrameUiState {
     /// `row`. That is the vertical offset (in `ROW_HEIGHT` units) where `row` is
     /// drawn once filtered rows are collapsed out. Mirrors
     /// `GridLayout::visible_offset`.
-    pub fn visible_offset(&self, row: u32) -> i64 {
-        if self.hidden_rows.is_empty() {
-            return row as i64 - self.top_row as i64;
-        }
+    pub fn visible_offset(&self, row: Row) -> RowDelta {
+        let (lo, hi) = (row.min(self.top_row), row.max(self.top_row));
+        let hidden = self
+            .hidden_rows
+            .iter()
+            .filter(|&&r| r >= lo && r < hi)
+            .count();
+        let slots =
+            RowDelta::from_count(hi.count_from(lo).saturating_sub(RowCount::from_len(hidden)));
         if row >= self.top_row {
-            let hidden = self
-                .hidden_rows
-                .iter()
-                .filter(|&&r| r >= self.top_row && r < row)
-                .count() as i64;
-            (row - self.top_row) as i64 - hidden
+            slots
         } else {
-            let hidden = self
-                .hidden_rows
-                .iter()
-                .filter(|&&r| r >= row && r < self.top_row)
-                .count() as i64;
-            -((self.top_row - row) as i64 - hidden)
+            slots.reversed()
         }
     }
 
     /// The absolute grid row drawn at visible slot `slot` from the top of the
     /// viewport (skipping hidden rows). Saturates at the last grid row.
-    pub fn row_at_slot(&self, slot: u32) -> u32 {
+    pub fn row_at_slot(&self, slot: RowCount) -> Row {
         let mut row = self.top_row;
-        let mut seen = 0u32;
-        while row < TOTAL_ROWS {
+        let mut seen = RowCount::ZERO;
+        while row < TOTAL_ROWS.as_end() {
             if !self.is_row_hidden(row) {
                 if seen == slot {
                     return row;
                 }
-                seen += 1;
+                seen += RowCount::ONE;
             }
-            row += 1;
+            row = row.next();
         }
-        TOTAL_ROWS.saturating_sub(1)
+        LAST_ROW
     }
 
     /// The next visible row at or after `row` (skips a run of hidden rows). Used
     /// by vertical navigation so the caret never lands on a collapsed row.
-    pub fn next_visible_row(&self, row: u32) -> u32 {
+    pub fn next_visible_row(&self, row: Row) -> Row {
         let mut r = row;
-        while r < TOTAL_ROWS.saturating_sub(1) && self.is_row_hidden(r) {
-            r += 1;
+        while r < LAST_ROW && self.is_row_hidden(r) {
+            r = r.next();
         }
         r
     }
 
     /// The previous visible row at or before `row` (skips a run of hidden rows).
-    pub fn prev_visible_row(&self, row: u32) -> u32 {
+    pub fn prev_visible_row(&self, row: Row) -> Row {
         let mut r = row;
-        while r > 0 && self.is_row_hidden(r) {
-            r -= 1;
+        while self.is_row_hidden(r)
+            && let Some(prev) = r.prev()
+        {
+            r = prev;
         }
         r
     }
@@ -577,13 +582,15 @@ impl TrameUiState {
     /// Walk back from `from` until `n` visible rows have been passed, returning
     /// the resulting row (saturating at 0). Used to place a row on the bottom
     /// viewport slot when scrolling it into view under an active filter.
-    fn nth_visible_row_back(&self, from: u32, n: u32) -> u32 {
+    fn nth_visible_row_back(&self, from: Row, n: RowCount) -> Row {
         let mut r = from;
-        let mut counted = 0u32;
-        while r > 0 && counted < n {
-            r -= 1;
+        let mut counted = RowCount::ZERO;
+        while counted < n
+            && let Some(prev) = r.prev()
+        {
+            r = prev;
             if !self.is_row_hidden(r) {
-                counted += 1;
+                counted += RowCount::ONE;
             }
         }
         r

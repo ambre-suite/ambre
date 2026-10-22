@@ -10,9 +10,8 @@ use super::*;
 use crate::formula::shift::shift_formula;
 
 impl TrameState {
-    /// Paste `payload` with its top-left landing on `(target_row, target_col)`
-    /// (`trame-clipboard`). Each pasted cell lands at `(target_row + dr,
-    /// target_col + dc)`.
+    /// Paste `payload` with its top-left landing on `target`
+    /// (`trame-clipboard`). Each pasted cell lands `(dr, dc)` from it.
     ///
     /// A formula's relative references shift by the same `(target - src)` offset,
     /// since every reference is relative and AMBRE has no `$` syntax. The carried
@@ -24,16 +23,16 @@ impl TrameState {
     /// `DataReset` so the UI re-fetches the pasted region, plus the CRDT delta).
     pub(super) fn paste_range(
         &mut self,
-        target_row: u32,
-        target_col: u32,
+        target: CellPos,
         payload: ClipboardPayload,
     ) -> TrameOutcome {
         if payload.cells.is_empty() {
             return TrameOutcome::display_only(vec![]);
         }
         // The reindex offset, constant across every pasted formula.
-        let dr = target_row as i64 - payload.src_row as i64;
-        let dc = target_col as i64 - payload.src_col as i64;
+        let dr = target.row - payload.src_row;
+        let dc = target.col - payload.src_col;
+        let land = |cell: &ClipboardCell| CellPos::new(target.row + cell.dr, target.col + cell.dc);
 
         // One undo group for the whole paste (sealed by the next command's
         // fallback `group_end`). Pre-materialize every written cell first so the
@@ -42,13 +41,12 @@ impl TrameState {
         let _ = self.undo_manager.group_start();
         for cell in &payload.cells {
             if !cell.raw.is_empty() {
-                let _ = self.materialize(target_row + cell.dr, target_col + cell.dc);
+                let _ = self.materialize(land(cell));
             }
         }
 
         for cell in &payload.cells {
-            let row = target_row + cell.dr;
-            let col = target_col + cell.dc;
+            let at = land(cell);
             // A formula's relative refs reindex by the paste offset; a literal is
             // copied verbatim. The shifted text is in display form -- `write_cell`
             // re-canonicalizes it, so cross-sheet qualifiers survive
@@ -58,8 +56,8 @@ impl TrameState {
             } else {
                 cell.raw.clone()
             };
-            self.write_cell(row, col, &text);
-            self.apply_pasted_style(row, col, cell);
+            self.write_cell(at, &text);
+            self.apply_pasted_style(at, cell);
         }
 
         self.finish_cell_writes()
@@ -71,21 +69,23 @@ impl TrameState {
     /// Backs the toolbar/menu Paste button, which reads the OS clipboard
     /// asynchronously and holds no cursor.
     pub(super) fn paste_text(&mut self, text: &str) -> TrameOutcome {
-        let (row, col) = self.active;
+        let origin = self.active;
         let normalized = text.replace('\r', "");
         let mut cells = Vec::new();
-        let mut rows = 0u32;
-        let mut cols = 0u32;
+        let mut rows = RowCount::ZERO;
+        let mut cols = ColCount::ZERO;
         for (dr, line) in normalized.trim_end_matches('\n').split('\n').enumerate() {
-            rows = rows.max(dr as u32 + 1);
+            let dr = RowCount::from_len(dr);
+            rows = rows.max(dr + RowCount::ONE);
             for (dc, field) in line.split('\t').enumerate() {
-                cols = cols.max(dc as u32 + 1);
+                let dc = ColCount::from_len(dc);
+                cols = cols.max(dc + ColCount::ONE);
                 if field.is_empty() {
                     continue;
                 }
                 cells.push(ClipboardCell {
-                    dr: dr as u32,
-                    dc: dc as u32,
+                    dr,
+                    dc,
                     raw: field.to_owned(),
                     ..Default::default()
                 });
@@ -96,13 +96,13 @@ impl TrameState {
         }
         // src == target -> zero shift, so any "=..." in external text stays as-is.
         let payload = ClipboardPayload {
-            src_row: row,
-            src_col: col,
+            src_row: origin.row,
+            src_col: origin.col,
             rows,
             cols,
             cells,
         };
-        self.paste_range(row, col, payload)
+        self.paste_range(origin, payload)
     }
 
     /// Build the [`ClipboardPayload`] for the tracked selection from the document
@@ -122,17 +122,17 @@ impl TrameState {
         // The whole selection: the bounding box is the payload shape, and every
         // deduplicated cell fills it (`TRAME-UI-129`). Gaps in a disjoint
         // selection stay blank, which paste leaves untouched.
-        let (r1, c1, r2, c2) = self.selection_bounds();
+        let bounds = self.selection_bounds();
+        let first = bounds.top_left;
         let mut cells = Vec::new();
-        for (row, col) in self.selected_cells() {
-            let raw = self.cell_source(row, col);
+        for pos in self.selected_cells() {
+            let raw = self.cell_source(pos);
             if raw.is_empty() {
                 continue;
             }
-            let pos = (row, col);
             cells.push(ClipboardCell {
-                dr: row - r1,
-                dc: col - c1,
+                dr: pos.row.count_from(first.row),
+                dc: pos.col.count_from(first.col),
                 raw,
                 bold: self.bold.contains(&pos),
                 italic: self.italic.contains(&pos),
@@ -140,10 +140,10 @@ impl TrameState {
             });
         }
         let payload = ClipboardPayload {
-            src_row: r1,
-            src_col: c1,
-            rows: r2 - r1 + 1,
-            cols: c2 - c1 + 1,
+            src_row: first.row,
+            src_col: first.col,
+            rows: bounds.row_count(),
+            cols: bounds.col_count(),
             cells,
         };
         TrameOutcome::display_only(vec![TrameEvent::Clipboard(payload)])
@@ -161,8 +161,7 @@ impl TrameState {
     /// styled paste is a single undo item. Borders are taken verbatim from the
     /// source cell: no selection-level preset resolution, since the source already
     /// carries resolved per-edge borders.
-    pub(super) fn apply_pasted_style(&mut self, row: u32, col: u32, cell: &ClipboardCell) {
-        let pos = (row, col);
+    pub(super) fn apply_pasted_style(&mut self, pos: CellPos, cell: &ClipboardCell) {
         if cell.bold {
             self.bold.insert(pos);
         } else {
@@ -180,6 +179,6 @@ impl TrameState {
         } else {
             self.styles.insert(pos, cell.style.clone());
         }
-        let _ = self.write_cell_style(row, col);
+        let _ = self.write_cell_style(pos);
     }
 }

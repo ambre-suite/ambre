@@ -12,39 +12,41 @@ use super::*;
 // -----------------------------------------------------------------------------
 
 /// Width (logical px) of the consecutive *empty* neighbour columns a non-wrapped
-/// overflowing cell may spill its text over. The walk starts at `col` and steps
+/// overflowing cell may spill its text over. The walk starts at `at` and steps
 /// by `step` (`+1` right, `-1` left). It stops at whichever comes first: the
 /// first non-empty neighbour, the grid edge, or `need` pixels of spill covered
 /// (Excel/Sheets overflow, `trame-cell-rendering`). The result never exceeds
 /// `need`.
-pub(super) fn spill_width<E: Fn(u32, u32) -> bool>(
+pub(super) fn spill_width<E: Fn(CellPos) -> bool>(
     layout: &GridLayout<'_>,
-    row: u32,
-    col: u32,
-    step: i64,
+    at: CellPos,
+    step: ColDelta,
     need: f64,
     is_empty: &E,
 ) -> f64 {
     let mut acc = 0.0;
-    let mut c = col as i64 + step;
-    while acc < need && c >= 0 && (c as u32) < layout.total_cols {
-        if !is_empty(row, c as u32) {
+    let mut next = at.col.checked_offset(step);
+    while let Some(c) = next
+        && acc < need
+        && c < layout.total_cols.as_end()
+    {
+        if !is_empty(CellPos::new(at.row, c)) {
             break;
         }
-        acc += layout.col_w(c as u32);
-        c += step;
+        acc += layout.col_w(c);
+        next = c.checked_offset(step);
     }
     acc.min(need)
 }
 
 /// Draw the background fill and body text for each supplied cell.
 ///
-/// `cells` yields `(row, col, content)` for the cells that exist (on screen: the
+/// `cells` yields `(at, content)` for the cells that exist (on screen: the
 /// cells received from the Logic thread; for PDF: every used cell). Each gets an
 /// opaque `palette.content_bg` fill, followed by its text when `text_enabled`. On
 /// screen that fill is what lifts a cell out of the "pending" grey.
 ///
-/// `is_empty(row, col)` reports whether a neighbour cell carries no visible text,
+/// `is_empty(at)` reports whether a neighbour cell carries no visible text,
 /// so a non-wrapped overflowing line may spill over it. Overflow direction
 /// follows the resolved alignment: left text spills right, right text spills
 /// left, centred text both ways. The spill stops at the first non-empty neighbour
@@ -67,13 +69,14 @@ pub fn draw_cells_on<'a, S, I, E>(
 ) -> u32
 where
     S: DrawSurface,
-    I: IntoIterator<Item = (u32, u32, CellContent<'a>)>,
-    E: Fn(u32, u32) -> bool,
+    I: IntoIterator<Item = (CellPos, CellContent<'a>)>,
+    E: Fn(CellPos) -> bool,
 {
     let mut drawn = 0u32;
 
-    for (row, col, content) in cells {
-        let rect = layout.cell_rect(row, col);
+    for (at, content) in cells {
+        let CellPos { row, col } = at;
+        let rect = layout.cell_rect(at);
         // Per-cell metrics (variable column width / row height).
         let col_w = layout.col_w(col);
         let row_h = layout.row_h(row);
@@ -132,20 +135,20 @@ where
             match align {
                 Alignment::Center => {
                     let half = need / 2.0;
-                    let left = spill_width(layout, row, col, -1, half, &is_empty);
-                    let right = spill_width(layout, row, col, 1, half, &is_empty);
+                    let left = spill_width(layout, at, ColDelta::new(-1), half, &is_empty);
+                    let right = spill_width(layout, at, ColDelta::new(1), half, &is_empty);
                     let clip = Rect::new(rect.x0 - left, rect.y0, rect.x1 + right, rect.y1);
                     (-left, clip, true)
                 }
                 Alignment::End | Alignment::Right => {
-                    let left = spill_width(layout, row, col, -1, need, &is_empty);
+                    let left = spill_width(layout, at, ColDelta::new(-1), need, &is_empty);
                     let clip = Rect::new(rect.x0 - left, rect.y0, rect.x1, rect.y1);
                     // Right-anchored: keep the right edge inside the cell content
                     // box (negative offset), clipped on the left at the spill.
                     (avail - text_w, clip, true)
                 }
                 _ => {
-                    let right = spill_width(layout, row, col, 1, need, &is_empty);
+                    let right = spill_width(layout, at, ColDelta::new(1), need, &is_empty);
                     let clip = Rect::new(rect.x0, rect.y0, rect.x1 + right, rect.y1);
                     (0.0, clip, true)
                 }

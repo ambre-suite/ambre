@@ -7,8 +7,8 @@
 // ============================================================================
 
 use ambre_bus::{
-    BorderEdit, BorderPreset, BorderStyle, CellFormat, FilterKind, FilterOp, HAlign, StylePatch,
-    VAlign,
+    BorderEdit, BorderPreset, BorderStyle, CellFormat, Col, FilterKind, FilterOp, HAlign,
+    StylePatch, VAlign,
 };
 use ambre_chrome::commands::CommandId;
 use leptos::html;

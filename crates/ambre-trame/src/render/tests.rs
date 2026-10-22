@@ -2,15 +2,23 @@
 // Renderer unit tests (moved verbatim out of render.rs).
 
 use super::*;
+use crate::test_support::at;
 use ambre_canvas::{TextCache, Theme};
 use ambre_core::Rgb;
 use ambre_draw::FontContext;
 use ambre_draw::testing::{DrawOp, RecordingSurface};
 
-/// A shared empty metric map for uniform-layout fixtures (no resized axes).
-fn empty_metrics() -> &'static std::collections::HashMap<u32, f32> {
+/// A shared empty column-width map for uniform-layout fixtures.
+fn empty_widths() -> &'static std::collections::HashMap<Col, f32> {
     use std::sync::OnceLock;
-    static EMPTY: OnceLock<std::collections::HashMap<u32, f32>> = OnceLock::new();
+    static EMPTY: OnceLock<std::collections::HashMap<Col, f32>> = OnceLock::new();
+    EMPTY.get_or_init(std::collections::HashMap::new)
+}
+
+/// A shared empty row-height map for uniform-layout fixtures.
+fn empty_heights() -> &'static std::collections::HashMap<Row, f32> {
+    use std::sync::OnceLock;
+    static EMPTY: OnceLock<std::collections::HashMap<Row, f32>> = OnceLock::new();
     EMPTY.get_or_init(std::collections::HashMap::new)
 }
 
@@ -23,14 +31,14 @@ fn layout() -> GridLayout<'static> {
         top: 0.0,
         col_width: 80.0,
         row_height: 20.0,
-        col_widths: empty_metrics(),
-        row_heights: empty_metrics(),
-        origin_col: 0,
-        origin_row: 0,
+        col_widths: empty_widths(),
+        row_heights: empty_heights(),
+        origin_col: Col::new(0),
+        origin_row: Row::new(0),
         width: 800.0,
         height: 600.0,
-        total_cols: 1000,
-        total_rows: 100_000,
+        total_cols: ColCount::new(1000),
+        total_rows: RowCount::new(100_000),
         zoom: 1.0,
     }
 }
@@ -46,9 +54,9 @@ fn harness() -> (RecordingSurface, FontContext, TextCache) {
 #[test]
 fn cell_rect_maps_index_to_pixels() {
     let l = layout();
-    let r = l.cell_rect(0, 0);
+    let r = l.cell_rect(CellPos::new(Row::new(0), Col::new(0)));
     assert_eq!((r.x0, r.y0), (50.0, 24.0));
-    let r = l.cell_rect(2, 1);
+    let r = l.cell_rect(CellPos::new(Row::new(2), Col::new(1)));
     assert_eq!((r.x0, r.y0), (50.0 + 80.0, 24.0 + 2.0 * 20.0));
 }
 
@@ -56,53 +64,54 @@ fn cell_rect_maps_index_to_pixels() {
 fn variable_metrics_shift_cells_and_hit_test() {
     let mut l = layout();
     // Column 1 widened to 200, row 0 heightened to 50 (absolute keys).
-    let cols = std::collections::HashMap::from([(1u32, 200.0f32)]);
-    let rows = std::collections::HashMap::from([(0u32, 50.0f32)]);
+    let cols = std::collections::HashMap::from([(Col::new(1), 200.0f32)]);
+    let rows = std::collections::HashMap::from([(Row::new(0), 50.0f32)]);
     l.col_widths = &cols;
     l.row_heights = &rows;
 
     // col_w / row_h report the per-axis values, default elsewhere.
-    assert_eq!(l.col_w(1), 200.0);
-    assert_eq!(l.col_w(2), 80.0);
-    assert_eq!(l.row_h(0), 50.0);
-    assert_eq!(l.row_h(1), 20.0);
+    assert_eq!(l.col_w(Col::new(1)), 200.0);
+    assert_eq!(l.col_w(Col::new(2)), 80.0);
+    assert_eq!(l.row_h(Row::new(0)), 50.0);
+    assert_eq!(l.row_h(Row::new(1)), 20.0);
 
     // cell_rect: col 2 starts after the widened col 1; row 1 starts below the
     // tall row 0.
-    let r = l.cell_rect(1, 2);
+    let r = l.cell_rect(CellPos::new(Row::new(1), Col::new(2)));
     assert_eq!(r.x0, 50.0 + 80.0 + 200.0); // header + col0(80) + col1(200)
     assert_eq!(r.y0, 24.0 + 50.0); // header + row0(50)
     assert_eq!(r.x1 - r.x0, 80.0);
     assert_eq!(r.y1 - r.y0, 20.0);
 
     // col_at / row_at invert the mapping through the variable bands.
-    assert_eq!(l.col_at(50.0 + 80.0 + 10.0), Some(1)); // inside the wide col 1
-    assert_eq!(l.col_at(50.0 + 80.0 + 200.0 + 5.0), Some(2));
-    assert_eq!(l.row_at(24.0 + 25.0), Some(0)); // inside the tall row 0
-    assert_eq!(l.row_at(24.0 + 50.0 + 5.0), Some(1));
+    assert_eq!(l.col_at(50.0 + 80.0 + 10.0), Some(Col::new(1))); // inside the wide col 1
+    assert_eq!(l.col_at(50.0 + 80.0 + 200.0 + 5.0), Some(Col::new(2)));
+    assert_eq!(l.row_at(24.0 + 25.0), Some(Row::new(0))); // inside the tall row 0
+    assert_eq!(l.row_at(24.0 + 50.0 + 5.0), Some(Row::new(1)));
 }
 
 #[test]
 fn cell_rect_collapses_over_hidden_rows() {
     let mut l = layout();
     // Rows 2 and 3 are filtered out (sorted slice).
-    l.hidden_rows = &[2, 3];
-    assert!(l.is_hidden(2) && l.is_hidden(3) && !l.is_hidden(4));
+    let hidden = [Row::new(2), Row::new(3)];
+    l.hidden_rows = &hidden;
+    assert!(l.is_hidden(Row::new(2)) && l.is_hidden(Row::new(3)) && !l.is_hidden(Row::new(4)));
     // Row 4 draws on the 3rd slot (rows 0,1 above; 2,3 collapsed).
-    assert_eq!(l.visible_offset(4), 2);
-    let r = l.cell_rect(4, 0);
+    assert_eq!(l.visible_offset(Row::new(4)), RowDelta::new(2));
+    let r = l.cell_rect(CellPos::new(Row::new(4), Col::new(0)));
     assert_eq!(r.y0, 24.0 + 2.0 * 20.0);
     // Slot 2 maps back to absolute row 4, not row 2.
-    assert_eq!(l.row_at_slot(2), Some(4));
+    assert_eq!(l.row_at_slot(RowCount::new(2)), Some(Row::new(4)));
 }
 
 #[test]
 fn cell_rect_accounts_for_scroll_origin() {
     let mut l = layout();
-    l.origin_col = 3;
-    l.origin_row = 5;
+    l.origin_col = Col::new(3);
+    l.origin_row = Row::new(5);
     // The origin cell sits at the content top-left.
-    let r = l.cell_rect(5, 3);
+    let r = l.cell_rect(CellPos::new(Row::new(5), Col::new(3)));
     assert_eq!((r.x0, r.y0), (50.0, 24.0));
 }
 
@@ -113,19 +122,10 @@ fn draw_cells_on_fills_each_and_counts_nonempty_text() {
     let (mut s, mut fc, mut tc) = harness();
 
     let cells = vec![
-        (0, 0, CellContent::plain("hi", false, false)),
-        (1, 1, CellContent::plain("", false, false)),
+        (at(0, 0), CellContent::plain("hi", false, false)),
+        (at(1, 1), CellContent::plain("", false, false)),
     ];
-    let drawn = draw_cells_on(
-        &mut s,
-        &l,
-        palette,
-        &mut fc,
-        &mut tc,
-        true,
-        cells,
-        |_, _| true,
-    );
+    let drawn = draw_cells_on(&mut s, &l, palette, &mut fc, &mut tc, true, cells, |_| true);
 
     // Both cells get a content_bg fill...
     assert_eq!(
@@ -143,22 +143,61 @@ fn spill_width_stops_at_first_non_empty_neighbour() {
     let l = layout(); // col_width 80, 1000 cols
 
     // All neighbours empty: capped at `need`, not at the column boundary.
-    let all_empty = |_, _| true;
-    assert_eq!(spill_width(&l, 0, 0, 1, 100.0, &all_empty), 100.0);
+    let all_empty = |_: CellPos| true;
+    assert_eq!(
+        spill_width(
+            &l,
+            CellPos::new(Row::new(0), Col::new(0)),
+            ColDelta::new(1),
+            100.0,
+            &all_empty
+        ),
+        100.0
+    );
 
     // Column 3 is occupied: spilling right from col 0 covers cols 1+2 (160px)
     // then stops, even though `need` asks for more.
-    let occupied_3 = |_r, c| c != 3;
-    assert_eq!(spill_width(&l, 0, 0, 1, 1000.0, &occupied_3), 160.0);
+    let occupied_3 = |at: CellPos| at.col != Col::new(3);
+    assert_eq!(
+        spill_width(
+            &l,
+            CellPos::new(Row::new(0), Col::new(0)),
+            ColDelta::new(1),
+            1000.0,
+            &occupied_3
+        ),
+        160.0
+    );
 
     // Spilling left from col 5 with col 3 occupied covers cols 4 only (80px).
-    assert_eq!(spill_width(&l, 0, 5, -1, 1000.0, &occupied_3), 80.0);
+    assert_eq!(
+        spill_width(
+            &l,
+            CellPos::new(Row::new(0), Col::new(5)),
+            ColDelta::new(-1),
+            1000.0,
+            &occupied_3
+        ),
+        80.0
+    );
 
     // An immediately non-empty neighbour yields no spill (text clips to cell).
-    assert_eq!(spill_width(&l, 0, 0, 1, 1000.0, &|_, _| false), 0.0);
+    assert_eq!(
+        spill_width(&l, at(0, 0), ColDelta::new(1), 1000.0, &|_| false),
+        0.0
+    );
 
     // The grid edge bounds the leftward walk at column 0.
-    assert_eq!(spill_width(&l, 0, 1, -1, 1000.0, &all_empty), 80.0);
+    assert_eq!(
+        spill_width(
+            &l,
+            CellPos::new(Row::new(0), Col::new(1)),
+            ColDelta::new(-1),
+            1000.0,
+            &all_empty
+        ),
+        80.0
+    );
 }
 
 #[test]
@@ -181,7 +220,16 @@ fn col_headers_draw_bg_separator_and_active_tint() {
     let palette = Theme::Light.palette();
     let (mut s, mut fc, mut tc) = harness();
 
-    draw_col_headers_on(&mut s, &l, palette, Some(0), None, &mut fc, &mut tc, true);
+    draw_col_headers_on(
+        &mut s,
+        &l,
+        palette,
+        Some(Col::new(0)),
+        None,
+        &mut fc,
+        &mut tc,
+        true,
+    );
 
     // The full-width header strip.
     assert!(
@@ -216,8 +264,8 @@ fn col_headers_draw_hover_tint() {
         &mut s,
         &l,
         palette,
-        Some(0),
-        Some(1),
+        Some(Col::new(0)),
+        Some(Col::new(1)),
         &mut fc,
         &mut tc,
         true,
@@ -241,8 +289,8 @@ fn col_headers_skip_hover_tint_on_active_column() {
         &mut s,
         &l,
         palette,
-        Some(0),
-        Some(0),
+        Some(Col::new(0)),
+        Some(Col::new(0)),
         &mut fc,
         &mut tc,
         true,
@@ -268,7 +316,7 @@ fn row_headers_draw_hover_tint() {
         &l,
         palette,
         None,
-        Some(1),
+        Some(Row::new(1)),
         false,
         &mut fc,
         &mut tc,
@@ -355,7 +403,7 @@ fn row_headers_draw_active_tint() {
         &mut s,
         &l,
         palette,
-        Some(2),
+        Some(Row::new(2)),
         None,
         false,
         &mut fc,
@@ -364,7 +412,7 @@ fn row_headers_draw_active_tint() {
     );
 
     // One tint, over the band of row 2 alone.
-    let top = l.row_top(2);
+    let top = l.row_top(Row::new(2));
     assert_eq!(
         s.count(|op| matches!(
             op, DrawOp::FillRect { color, rect, .. }
@@ -377,18 +425,18 @@ fn row_headers_draw_active_tint() {
 
 #[test]
 fn row_label_is_the_one_based_number() {
-    assert_eq!(row_label(0), "1");
-    assert_eq!(row_label(9), "10");
-    assert_eq!(row_label(u32::MAX), "4294967296");
+    assert_eq!(row_label(Row::new(0)), "1");
+    assert_eq!(row_label(Row::new(9)), "10");
+    assert_eq!(row_label(Row::new(u32::MAX)), "4294967296");
 }
 
 #[test]
 fn col_label_matches_spreadsheet_convention() {
-    assert_eq!(col_label(0), "A");
-    assert_eq!(col_label(25), "Z");
-    assert_eq!(col_label(26), "AA");
-    assert_eq!(col_label(701), "ZZ");
-    assert_eq!(col_label(702), "AAA");
+    assert_eq!(col_label(Col::new(0)), "A");
+    assert_eq!(col_label(Col::new(25)), "Z");
+    assert_eq!(col_label(Col::new(26)), "AA");
+    assert_eq!(col_label(Col::new(701)), "ZZ");
+    assert_eq!(col_label(Col::new(702)), "AAA");
 }
 
 /// Draw one cell at `(row, col)` with every neighbour empty, and return the ops.
@@ -402,8 +450,8 @@ fn draw_one(l: &GridLayout<'_>, row: u32, col: u32, content: CellContent<'_>) ->
         &mut fc,
         &mut tc,
         true,
-        [(row, col, content)],
-        |_, _| true,
+        [(at(row, col), content)],
+        |_| true,
     );
     assert_eq!(drawn, 1, "the cell has text, so it is drawn");
     assert_eq!(s.clip_depth(), 0);
@@ -431,7 +479,7 @@ fn a_spill_runs_in_the_direction_of_the_alignment() {
     // `TRAME-UI-096`: left text spills right, right text spills left, centred
     // text spills both ways.
     let l = layout();
-    let rect = l.cell_rect(0, 3);
+    let rect = l.cell_rect(CellPos::new(Row::new(0), Col::new(3)));
     let with = |h_align| {
         let mut c = CellContent::plain(LONG, false, false);
         c.h_align = h_align;
@@ -461,7 +509,10 @@ fn a_wrapped_cell_is_cut_at_its_own_box() {
     let mut c = CellContent::plain(LONG, false, false);
     c.wrap = true;
     let ops = draw_one(&l, 0, 3, c);
-    assert_eq!(the_clip(&ops), l.cell_rect(0, 3));
+    assert_eq!(
+        the_clip(&ops),
+        l.cell_rect(CellPos::new(Row::new(0), Col::new(3)))
+    );
 }
 
 #[test]
@@ -470,7 +521,10 @@ fn text_taller_than_its_row_is_cut_at_the_row() {
     // cell's own rect, so nothing paints over the row below.
     let l = layout();
     let ops = draw_one(&l, 0, 0, CellContent::plain("a\nb\nc\nd", false, false));
-    assert_eq!(the_clip(&ops), l.cell_rect(0, 0));
+    assert_eq!(
+        the_clip(&ops),
+        l.cell_rect(CellPos::new(Row::new(0), Col::new(0)))
+    );
 }
 
 #[test]
@@ -492,7 +546,7 @@ fn glyphs_scale_with_the_zoom() {
     let drop = |zoom: f64| {
         let mut l = layout();
         l.zoom = zoom;
-        let top = l.cell_rect(0, 0).y0;
+        let top = l.cell_rect(CellPos::new(Row::new(0), Col::new(0))).y0;
         let mut c = CellContent::plain("Ag", false, false);
         c.v_align = ambre_bus::VAlign::Top;
         let ops = draw_one(&l, 0, 0, c);
@@ -517,7 +571,7 @@ fn a_fill_and_a_border_stop_at_the_cell_edge() {
     // `TRAME-UI-139`: the text spills, the fill does not. It takes the cell
     // rect and is emitted before the clip opens.
     let l = layout();
-    let rect = l.cell_rect(0, 3);
+    let rect = l.cell_rect(CellPos::new(Row::new(0), Col::new(3)));
     let mut c = CellContent::plain(LONG, false, false);
     c.bg = Some(Rgb::from_bits(0x00ff_0000));
     let ops = draw_one(&l, 0, 3, c);

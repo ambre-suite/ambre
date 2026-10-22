@@ -5,6 +5,7 @@
 //! value types it reuses (`CellStyle`, `HAlign`, `VAlign`, `Borders`, ...) arrive
 //! by glob from the sibling command modules of `crate::app::trame`.
 
+use super::{CellPos, CellRect, Col, ColCount, MergeSpan, Row, RowCount};
 use crate::UserId;
 use ambre_core::Rgb;
 
@@ -24,8 +25,8 @@ pub enum TrameEvent {
     /// so stale responses can be dropped.
     ViewportData {
         version: crate::ViewportVersion,
-        row_start: u32,
-        col_start: u32,
+        row_start: Row,
+        col_start: Col,
         cells: Vec<DisplayCell>,
         /// Per-column widths (physical px) for the requested column window,
         /// `col_widths[i]` being the width of column `col_start + i`
@@ -68,12 +69,12 @@ pub enum TrameEvent {
     DataReset,
 
     /// Ask the UI Thread to replace the rendered grid selection with the
-    /// rectangle `(r1,c1)`-`(r2,c2)` (inclusive, corners ordered). Emitted when a
+    /// rectangle `rect`. Emitted when a
     /// command changes the area the user should see selected and the canvas
     /// cannot derive it locally. An unmerge is the case: the freed cells must
     /// stay selected, though the merge that defined the span is gone.
     /// The active cell collapses onto the top-left corner.
-    SelectRange { r1: u32, c1: u32, r2: u32, c2: u32 },
+    SelectRange { rect: CellRect },
 
     /// A local [`MergeCells`](super::TrameCommand::MergeCells) was refused
     /// because a covered cell is non-empty (`trame-cell-merges`). The
@@ -85,10 +86,10 @@ pub enum TrameEvent {
     /// destroyed) while the merge is active; it reappears on unmerge. Purely
     /// informational for the UI.
     MergeConflictDetected {
-        master_row: u32,
-        master_col: u32,
-        covered_row: u32,
-        covered_col: u32,
+        master_row: Row,
+        master_col: Col,
+        covered_row: Row,
+        covered_col: Col,
     },
 
     /// Availability of undo/redo after a local
@@ -118,7 +119,7 @@ pub enum TrameEvent {
     /// A peer's insert, delete or move carried the cell of edit `session` to
     /// `(row, col)` on the active sheet. The open editor follows it, so the
     /// cell it shows is the cell its commit reaches.
-    EditTargetMoved { session: u64, row: u32, col: u32 },
+    EditTargetMoved { session: u64, row: Row, col: Col },
 
     /// A peer deleted the sheet, row or column under edit `session`. The Logic
     /// thread dropped the session, so its commit writes nothing; the editor
@@ -148,12 +149,12 @@ pub enum TrameEvent {
     /// The range a parameterless sort would order, replying to
     /// [`RequestSortRange`](super::TrameCommand::RequestSortRange): `(r1,c1)`-`(r2,c2)`,
     /// inclusive, corners ordered. The sort dialog opens over it (`TRAME-UI-101`).
-    SortRange { r1: u32, c1: u32, r2: u32, c2: u32 },
+    SortRange { r1: Row, c1: Col, r2: Row, c2: Col },
 
     /// Every non-empty cell of grid column `col`, all rows, replying to
     /// [`RequestColumnContent`](super::TrameCommand::RequestColumnContent). The
     /// canvas measures them for an auto-fit (`TRAME-UI-128`).
-    ColumnContent { col: u32, cells: Vec<DisplayCell> },
+    ColumnContent { col: Col, cells: Vec<DisplayCell> },
 
     /// A local [`ApplyFilter`](super::TrameCommand::ApplyFilter) finished
     /// recomputing the hidden rows (`trame-shared-filter`).
@@ -163,14 +164,17 @@ pub enum TrameEvent {
     /// filter (non-active sheet / virtual column) emits nothing. `col` is the
     /// grid column the filter targets, so the UI can draw the funnel badge on its
     /// header (`trame-shared-filter`).
-    FilterApplied { hidden_row_count: u32, col: u32 },
+    FilterApplied {
+        hidden_row_count: RowCount,
+        col: Col,
+    },
 
     /// The distinct visible values of a column, replying to
     /// [`RequestActiveColumnValues`](super::TrameCommand::RequestActiveColumnValues).
     /// Feeds the shared filter popover's "by values" checkbox list
     /// (`trame-shared-filter`). `col` is the grid column the values belong to;
     /// `values` is the deduplicated, sorted display text of every non-hidden row.
-    ColumnValues { col: u32, values: Vec<String> },
+    ColumnValues { col: Col, values: Vec<String> },
 
     /// Selection aggregates for the status bar (`trame-status-bar`), replying to
     /// [`RequestSelectionStats`](super::TrameCommand::RequestSelectionStats). `count` is
@@ -200,7 +204,7 @@ pub enum TrameEvent {
     /// scrolls the focused cell into view; it is never synced. An empty `matches` means
     /// "not found".
     FindResult {
-        matches: Vec<(u32, u32)>,
+        matches: Vec<CellPos>,
         active: Option<usize>,
     },
 
@@ -252,8 +256,8 @@ pub enum TrameEvent {
     /// [`ValidationOnInvalid::Reject`]: super::ValidationOnInvalid::Reject
     ValidationError {
         version: crate::ViewportVersion,
-        row: u32,
-        col: u32,
+        row: Row,
+        col: Col,
         message: String,
     },
 
@@ -264,8 +268,8 @@ pub enum TrameEvent {
     /// [`ValidationOnInvalid::Warn`]: super::ValidationOnInvalid::Warn
     ValidationWarning {
         version: crate::ViewportVersion,
-        row: u32,
-        col: u32,
+        row: Row,
+        col: Col,
         message: String,
     },
 
@@ -274,8 +278,8 @@ pub enum TrameEvent {
     /// produced; the chrome surfaces `description`.
     ProtectionDenied {
         version: crate::ViewportVersion,
-        row: u32,
-        col: u32,
+        row: Row,
+        col: Col,
         description: String,
     },
 
@@ -286,8 +290,8 @@ pub enum TrameEvent {
     /// `sheet_id` is the (possibly freshly created) target sheet.
     ImportComplete {
         sheet_id: SheetId,
-        rows: u32,
-        cols: u32,
+        rows: RowCount,
+        cols: ColCount,
     },
 
     /// An export ([`ExportCsv`](super::TrameCommand::ExportCsv)) produced
@@ -303,8 +307,8 @@ pub enum TrameEvent {
     /// stable
     /// [`UserId`](crate::UserId).
     ProtectionViolationWarning {
-        row: u32,
-        col: u32,
+        row: Row,
+        col: Col,
         from_user_id: UserId,
         description: String,
     },
@@ -357,12 +361,12 @@ pub struct SheetTab {
 /// A single cell ready for display.
 ///
 /// Flat, data-oriented. The UI Thread stores these in a
-/// `HashMap<(u32, u32), DisplayCell>` keyed by `(row, col)`; missing entries
+/// `HashMap<CellPos, DisplayCell>`; missing entries
 /// are blank (white background, no text), so only non-empty cells are sent.
 #[derive(Debug, Clone, Default)]
 pub struct DisplayCell {
-    pub row: u32,
-    pub col: u32,
+    pub row: Row,
+    pub col: Col,
     /// Display text (formula result or raw string).
     pub text: String,
     /// Raw cell text as stored in the CRDT (for example `=SUM(A1:B1)` for a formula).
@@ -402,10 +406,10 @@ pub struct DisplayCell {
     /// the master cell and the cells it covers; the UI distinguishes them via
     /// [`merge_span`](DisplayCell::merge_span).
     pub is_merged: bool,
-    /// `Some((col_span, row_span))` on the master (top-left) cell of a merge,
-    /// giving how many columns/rows it spans. `None` on a covered cell (rendered
+    /// `Some(span)` on the master (top-left) cell of a merge, giving how many
+    /// rows and columns it spans. `None` on a covered cell (rendered
     /// blank, swallowed by the master) and on any non-merged cell.
-    pub merge_span: Option<(u32, u32)>,
+    pub merge_span: Option<MergeSpan>,
     /// The cell's row is hidden by the active shared filter
     /// (`trame-shared-filter`). The UI Thread collapses such
     /// rows; the value is still present, and the aggregates such as `=SUM` still

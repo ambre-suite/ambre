@@ -14,11 +14,11 @@
 
 use std::collections::HashMap;
 
-use crate::model::SheetIndex;
+use crate::model::{Line, SheetIndex};
 
 use super::types::{
-    AxisId, AxisSpan, CellBytecode, CellId, CellRef, EngineSheet, Expr, LineAxis, Op, RangeDep,
-    RangeEndpoint, RangeId,
+    AxisId, AxisSpan, CellBytecode, CellId, CellRef, EngineSheet, Expr, Op, RangeDep,
+    RangeEndpoint, RangeId, SpanLines,
 };
 
 /// Per-sheet indices, keyed by the engine's local sheet index ([`EngineSheet`]), used to
@@ -41,8 +41,8 @@ pub fn compile(ast: &Expr, indices: &SheetIndices) -> CellBytecode {
 
 fn resolve_cell(r: &CellRef, indices: &SheetIndices) -> CellId {
     let idx = indices.get(&r.sheet);
-    let row = bind(idx.and_then(|i| i.row_id(r.row as usize)), r.row);
-    let col = bind(idx.and_then(|i| i.col_id(r.col as usize)), r.col);
+    let row = bind(idx, r.row);
+    let col = bind(idx, r.col);
     CellId {
         sheet: r.sheet,
         row,
@@ -59,14 +59,12 @@ fn resolve_cell(r: &CellRef, indices: &SheetIndices) -> CellId {
 /// Single-cell references, by contrast, bind to their row/column `Uid` and follow
 /// the data (see [`resolve_cell`] and `trame-formula-engine`).
 fn resolve_range(r: &RangeDep, _indices: &SheetIndices) -> RangeId {
-    let row = |p: u32| RangeEndpoint::Specific(AxisId::Virtual(p));
-    let col = |p: u32| RangeEndpoint::Specific(AxisId::Virtual(p));
     RangeId {
         sheet: r.sheet,
-        row_start: row(r.row_start),
-        row_end: row(r.row_end),
-        col_start: col(r.col_start),
-        col_end: col(r.col_end),
+        row_start: at(r.row_start),
+        row_end: at(r.row_end),
+        col_start: at(r.col_start),
+        col_end: at(r.col_end),
     }
 }
 
@@ -74,28 +72,33 @@ fn resolve_range(r: &RangeDep, _indices: &SheetIndices) -> RangeId {
 /// as a range does. The other axis is [`RangeEndpoint::EntireAxis`], which
 /// reads the used part of the sheet when the range is evaluated.
 fn resolve_span(s: &AxisSpan) -> RangeId {
-    let at = |p: u32| RangeEndpoint::Specific(AxisId::Virtual(p));
-    let (lines, whole) = (
-        (at(s.start), at(s.end)),
-        (RangeEndpoint::EntireAxis, RangeEndpoint::EntireAxis),
-    );
-    let (rows, cols) = match s.axis {
-        LineAxis::Col => (whole, lines),
-        LineAxis::Row => (lines, whole),
-    };
-    RangeId {
-        sheet: s.sheet,
-        row_start: rows.0,
-        row_end: rows.1,
-        col_start: cols.0,
-        col_end: cols.1,
+    match s.lines {
+        SpanLines::Rows { first, last } => RangeId {
+            sheet: s.sheet,
+            row_start: at(first),
+            row_end: at(last),
+            col_start: RangeEndpoint::EntireAxis,
+            col_end: RangeEndpoint::EntireAxis,
+        },
+        SpanLines::Cols { first, last } => RangeId {
+            sheet: s.sheet,
+            row_start: RangeEndpoint::EntireAxis,
+            row_end: RangeEndpoint::EntireAxis,
+            col_start: at(first),
+            col_end: at(last),
+        },
     }
+}
+
+/// A range endpoint that stays at the position `pos`.
+fn at<P>(pos: P) -> RangeEndpoint<P> {
+    RangeEndpoint::Specific(AxisId::Virtual(pos))
 }
 
 /// Bind a positional axis coordinate: the materialized `Uid` if present (a
 /// reference inside the used range, follows the data), else a virtual position.
-fn bind(uid: Option<crate::model::Uid>, pos: u32) -> AxisId {
-    match uid {
+fn bind<P: Line>(index: Option<&SheetIndex>, pos: P) -> AxisId<P> {
+    match index.and_then(|i| P::uid(i, pos)) {
         Some(u) => AxisId::Bound(u),
         None => AxisId::Virtual(pos),
     }
@@ -179,6 +182,9 @@ fn compile_into(
 mod tests {
     use super::super::parser::parse_formula;
     use super::super::test_index::index_with;
+    use crate::Col;
+
+    const COL_25: Col = Col::new(25);
     use super::*;
 
     fn compile_str(input: &str) -> CellBytecode {
@@ -242,7 +248,7 @@ mod tests {
         assert!(matches!(
             &bc.ops[0],
             Op::PushCell(CellId {
-                col: AxisId::Virtual(25),
+                col: AxisId::Virtual(COL_25),
                 ..
             })
         ));

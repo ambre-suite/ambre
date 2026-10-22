@@ -7,8 +7,17 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use super::*;
+use crate::test_support::{at, rect, span};
 use ambre_bus::conduit::Receiver;
 use ambre_draw::testing::RecordingSurface;
+
+const COL_0: Col = Col::new(0);
+const COL_1: Col = Col::new(1);
+const COL_2: Col = Col::new(2);
+const ROW_0: Row = Row::new(0);
+const ROW_1: Row = Row::new(1);
+const ROW_4: Row = Row::new(4);
+const ROW_5: Row = Row::new(5);
 
 /// A clock the test sets, shared with the view it was handed to.
 #[derive(Clone, Default)]
@@ -150,10 +159,10 @@ fn a_typed_value_reaches_the_logic_thread_through_the_view() {
         matches!(
             sent.as_slice(),
             [
-                TrameCommand::BeginCellEdit { session: s0, row: 0, col: 0 },
+                TrameCommand::BeginCellEdit { session: s0, row: ROW_0, col: COL_0 },
                 TrameCommand::CommitCellEdit { session: s1, text },
                 TrameCommand::CommitEdit,
-                TrameCommand::SetActiveCell { row: 1, col: 0, .. },
+                TrameCommand::SetActiveCell { row: ROW_1, col: COL_0, .. },
             ] if s0 == s1 && text == "42"
         ),
         "sent {sent:?}"
@@ -180,9 +189,9 @@ fn the_caret_blinks_on_the_clock_the_view_is_handed() {
 /// with `text` as its `text/plain` mirror.
 fn clip(src_row: u32, text: &str) -> ambre_bus::ClipboardBlob {
     let payload = ambre_bus::ClipboardPayload {
-        src_row,
-        rows: 1,
-        cols: 1,
+        src_row: Row::new(src_row),
+        rows: RowCount::new(1),
+        cols: ColCount::new(1),
         ..Default::default()
     };
     ambre_bus::ClipboardBlob {
@@ -223,7 +232,10 @@ fn a_cut_whose_copy_went_nowhere_arms_nothing() {
         mut view, to_logic, ..
     } = Rig::new();
     drop(to_logic);
-    view.state.select_rect(0, 0, 1, 1);
+    view.state.select_rect(CellRect::spanning(
+        CellPos::new(Row::new(0), Col::new(0)),
+        CellPos::new(Row::new(1), Col::new(1)),
+    ));
     assert_eq!(view.clipboard_write(true), ambre_bus::CopyOutcome::Nothing);
     assert!(!view.cut_pending, "no cut is armed");
     assert_eq!(view.state.clipboard_anchor, None, "no range is marked");
@@ -237,11 +249,15 @@ fn a_paste_takes_the_highest_rung_it_can_serve() {
     rig.view.last_clip = Some(clip(7, "kept"));
     rig.sent();
     rig.view.paste_clipboard(clip(3, "read"), true);
-    assert_eq!(pasted(&rig.sent()).map(|p| p.src_row), Some(7), "own copy");
+    assert_eq!(
+        pasted(&rig.sent()).map(|p| p.src_row),
+        Some(Row::new(7)),
+        "own copy"
+    );
     rig.view.paste_clipboard(clip(3, "read"), false);
     assert_eq!(
         pasted(&rig.sent()).map(|p| p.src_row),
-        Some(3),
+        Some(Row::new(3)),
         "another copy"
     );
     let foreign = ambre_bus::ClipboardBlob {
@@ -295,7 +311,11 @@ fn the_pipe_follows_the_caret_inside_the_cell() {
     rig.type_text("x");
     rig.frame();
     let first = rig.view.caret_drawn.expect("the editor drew a caret");
-    let (x, y, w, h) = rig.view.state.cell_pixel_rect(0, 0).expect("A1 is in view");
+    let (x, y, w, h) = rig
+        .view
+        .state
+        .cell_pixel_rect(CellPos::new(Row::new(0), Col::new(0)))
+        .expect("A1 is in view");
     assert!(
         first.x0 > x && first.x0 < x + w,
         "inside the cell: {first:?}"
@@ -353,12 +373,12 @@ fn a_theme_switch_repaints_the_content_in_the_new_palette() {
 }
 
 /// Whether the cell is inside the grid's visible window.
-fn in_view(rig: &Rig, (row, col): (u32, u32)) -> bool {
+fn in_view(rig: &Rig, at: CellPos) -> bool {
     let state = &rig.view.state;
-    row >= state.top_row
-        && state.visible_offset(row) < i64::from(state.viewport_rows)
-        && col >= state.left_col
-        && col < state.left_col + state.viewport_cols
+    at.row >= state.top_row
+        && state.visible_offset(at.row) < RowDelta::from_count(state.viewport_rows)
+        && at.col >= state.left_col
+        && at.col < state.left_col + state.viewport_cols
 }
 
 /// `FIND-004`: the match the Logic thread elects is brought into view, even
@@ -368,23 +388,20 @@ fn the_current_match_is_brought_into_view() {
     let mut rig = Rig::new();
     rig.frame();
     rig.sent();
-    let far = (900, 60);
+    let far = at(900, 60);
     assert!(!in_view(&rig, far), "the match starts off screen");
 
     rig.answer(TrameEvent::FindResult {
-        matches: vec![(0, 0), far],
+        matches: vec![at(0, 0), far],
         active: Some(1),
     });
     assert!(in_view(&rig, far), "the elected match is in view");
-    assert_eq!(
-        (rig.view.state.active_row(), rig.view.state.active_col()),
-        far
-    );
+    assert_eq!(rig.view.state.active_cell(), far);
     let sent = rig.sent();
     assert!(
         sent.iter().any(
             |c| matches!(c, TrameCommand::ScrollViewport { row_start, row_end, .. }
-                if (*row_start..=*row_end).contains(&far.0))
+                if (*row_start..=*row_end).contains(&far.row))
         ),
         "the window asks for the rows it now shows: {sent:?}"
     );
@@ -397,10 +414,13 @@ fn an_empty_answer_clears_the_highlight() {
     let mut rig = Rig::new();
     rig.frame();
     rig.answer(TrameEvent::FindResult {
-        matches: vec![(2, 1), (4, 1)],
+        matches: vec![
+            CellPos::new(Row::new(2), Col::new(1)),
+            CellPos::new(Row::new(4), Col::new(1)),
+        ],
         active: Some(0),
     });
-    assert_eq!(rig.view.state.find_matches, vec![(2, 1), (4, 1)]);
+    assert_eq!(rig.view.state.find_matches, vec![at(2, 1), at(4, 1)]);
     let cursor = (rig.view.state.active_row(), rig.view.state.active_col());
 
     rig.answer(TrameEvent::FindResult {
@@ -427,25 +447,29 @@ fn a_press_reaches_the_editor_in_its_own_frame() {
     }
     rig.type_text("hi");
     rig.frame();
-    let (x, y, _w, h) = rig.view.state.cell_pixel_rect(3, 3).expect("D4 is in view");
-    let at = (x + 1.0, y + h / 2.0);
+    let (x, y, _w, h) = rig
+        .view
+        .state
+        .cell_pixel_rect(CellPos::new(Row::new(3), Col::new(3)))
+        .expect("D4 is in view");
+    let point = (x + 1.0, y + h / 2.0);
     rig.view.handle_input(&InputEvent::PointerDown {
-        x: at.0,
-        y: at.1,
+        x: point.0,
+        y: point.1,
         button: 0,
         shift: false,
         ctrl: false,
     });
     rig.view.handle_input(&InputEvent::PointerUp {
-        x: at.0,
-        y: at.1,
+        x: point.0,
+        y: point.1,
         button: 0,
         ctrl: false,
     });
     rig.type_text("X");
     rig.frame();
     let editor = rig.view.editor.as_ref().expect("still open");
-    assert_eq!((editor.row, editor.col), (3, 3));
+    assert_eq!(editor.at, at(3, 3));
     assert_eq!(editor.text(), "Xhi");
 }
 
@@ -464,8 +488,15 @@ impl Rig {
     /// Store `raw` in the grid's cache, shown as `shown`, as a viewport answer
     /// would leave it.
     fn store(&mut self, (row, col): (u32, u32), raw: &str, shown: &str) {
-        self.view.state.set_cell_text(row, col, raw.to_owned());
-        if let Some(cell) = self.view.state.cell_cache.get_mut(&(row, col)) {
+        self.view
+            .state
+            .set_cell_text(CellPos::new(Row::new(row), Col::new(col)), raw.to_owned());
+        if let Some(cell) = self
+            .view
+            .state
+            .cell_cache
+            .get_mut(&CellPos::new(Row::new(row), Col::new(col)))
+        {
             cell.text = shown.to_owned();
         }
     }
@@ -477,7 +508,10 @@ impl Rig {
     }
 
     fn active(&self) -> (u32, u32) {
-        (self.view.state.active_row(), self.view.state.active_col())
+        (
+            (self.view.state.active_row()).get(),
+            (self.view.state.active_col()).get(),
+        )
     }
 }
 
@@ -508,7 +542,10 @@ fn committed(sent: &[TrameCommand]) -> Option<&str> {
 fn a_cut_clears_its_source_behind_the_paste() {
     let mut rig = Rig::new();
     rig.frame();
-    rig.view.state.select_rect(0, 0, 1, 1);
+    rig.view.state.select_rect(CellRect::spanning(
+        CellPos::new(Row::new(0), Col::new(0)),
+        CellPos::new(Row::new(1), Col::new(1)),
+    ));
     assert_eq!(
         rig.view.clipboard_write(true),
         ambre_bus::CopyOutcome::Deferred
@@ -518,16 +555,19 @@ fn a_cut_clears_its_source_behind_the_paste() {
         !writes(&copied),
         "the cut wrote before any paste: {copied:?}"
     );
-    rig.view.state.select_rect(5, 0, 5, 0);
+    rig.view.state.select_rect(CellRect::spanning(
+        CellPos::new(Row::new(5), Col::new(0)),
+        CellPos::new(Row::new(5), Col::new(0)),
+    ));
     rig.view.paste_clipboard(clip(0, "x"), false);
     let sent = rig.sent();
     assert!(
         matches!(
             sent.as_slice(),
             [
-                TrameCommand::PasteRange { target_row: 5, .. },
+                TrameCommand::PasteRange { target_row: ROW_5, .. },
                 TrameCommand::SetCellsBatch { cells },
-            ] if cells.len() == 4 && cells.iter().all(|(r, c, t)| *r <= 1 && *c <= 1 && t.is_empty())
+            ] if cells.len() == 4 && cells.iter().all(|(at, t)| at.row <= ROW_1 && at.col <= COL_1 && t.is_empty())
         ),
         "sent {sent:?}"
     );
@@ -595,7 +635,11 @@ fn only_a_text_typed_in_the_bar_opens_a_session() {
     );
     assert!(matches!(
         rig.sent().as_slice(),
-        [TrameCommand::BeginCellEdit { row: 0, col: 0, .. }]
+        [TrameCommand::BeginCellEdit {
+            row: ROW_0,
+            col: COL_0,
+            ..
+        }]
     ));
     assert_eq!(
         rig.view.text_input.focus_requests(),
@@ -698,7 +742,7 @@ fn an_open_session_writes_nothing_and_holds_the_grid() {
         "a buffer key moved the grid: {sent:?}"
     );
     assert_eq!(rig.active(), (0, 0));
-    assert_eq!(rig.view.state.selection.bounds(), (0, 0, 0, 0));
+    assert_eq!(rig.view.state.selection.bounds(), rect(0, 0, 0, 0));
     rig.view.handle_input(&InputEvent::CompositionEnd {
         text: "か".to_owned(),
     });
@@ -755,7 +799,10 @@ fn a_refused_commit_leaves_the_stored_value() {
     rig.lose_logic();
     rig.key("Enter");
     rig.frame();
-    assert_eq!(rig.view.cell_seed(0, 0), "old");
+    assert_eq!(
+        rig.view.cell_seed(CellPos::new(Row::new(0), Col::new(0))),
+        "old"
+    );
 }
 
 /// `TRAME-UI-165` and `TRAME-UI-015`: Escape closes the session with no write.
@@ -776,7 +823,10 @@ fn escape_closes_the_session_with_no_write() {
         "sent {sent:?}"
     );
     assert!(rig.view.editor.is_none());
-    assert_eq!(rig.view.cell_seed(0, 0), "old");
+    assert_eq!(
+        rig.view.cell_seed(CellPos::new(Row::new(0), Col::new(0))),
+        "old"
+    );
     assert_eq!(rig.view.formula.text, "old");
 }
 
@@ -787,7 +837,10 @@ fn escape_closes_the_session_with_no_write() {
 fn a_filled_formula_reaches_each_selected_cell_as_typed() {
     let mut rig = Rig::new();
     rig.frame();
-    rig.view.state.select_rect(0, 0, 1, 1);
+    rig.view.state.select_rect(CellRect::spanning(
+        CellPos::new(Row::new(0), Col::new(0)),
+        CellPos::new(Row::new(1), Col::new(1)),
+    ));
     rig.sent();
     rig.type_text("=A1+1");
     rig.chord("Enter", true, false, false);
@@ -799,12 +852,12 @@ fn a_filled_formula_reaches_each_selected_cell_as_typed() {
     }) else {
         panic!("no batch in {sent:?}");
     };
-    let mut at: Vec<(u32, u32)> = cells.iter().map(|(r, c, _)| (*r, *c)).collect();
-    at.sort_unstable();
-    assert_eq!(at, vec![(0, 0), (0, 1), (1, 0), (1, 1)]);
-    assert!(cells.iter().all(|(_, _, t)| t == "=A1+1"), "{cells:?}");
+    let mut placed: Vec<CellPos> = cells.iter().map(|(at, _)| *at).collect();
+    placed.sort_unstable();
+    assert_eq!(placed, vec![at(0, 0), at(0, 1), at(1, 0), at(1, 1)]);
+    assert!(cells.iter().all(|(_, t)| t == "=A1+1"), "{cells:?}");
     assert_eq!(rig.active(), (0, 0));
-    assert_eq!(rig.view.state.selection.bounds(), (0, 0, 1, 1));
+    assert_eq!(rig.view.state.selection.bounds(), rect(0, 0, 1, 1));
 }
 
 impl Rig {
@@ -827,7 +880,7 @@ impl Rig {
 
     /// The right edge of column `c` on screen.
     fn col_edge(&self, c: u32) -> f64 {
-        self.view.state.col_x(c) + self.view.state.col_width_of(c)
+        self.view.state.col_x(Col::new(c)) + self.view.state.col_width_of(Col::new(c))
     }
 }
 
@@ -845,7 +898,7 @@ fn the_inline_insert_lands_on_its_boundary_and_sizes_nothing() {
     let x = rig.col_edge(1);
     assert_eq!(
         rig.view.state.header_hit(x, 2.0),
-        Some(crate::ui::grid::HeaderHit::ColInsert(2))
+        Some(crate::ui::grid::HeaderHit::ColInsert(Col::new(2)))
     );
     rig.click(x, 2.0);
     rig.frame();
@@ -854,7 +907,7 @@ fn the_inline_insert_lands_on_its_boundary_and_sizes_nothing() {
         matches!(
             sent.as_slice(),
             [
-                TrameCommand::SetActiveCell { col: 2, .. },
+                TrameCommand::SetActiveCell { col: COL_2, .. },
                 TrameCommand::InsertColLeft,
                 ..
             ]
@@ -862,10 +915,10 @@ fn the_inline_insert_lands_on_its_boundary_and_sizes_nothing() {
         "sent {sent:?}"
     );
     // The row strip: the boundary under row 3, in the left half.
-    let y = rig.view.state.row_y(3) + rig.view.state.row_height_of(3);
+    let y = rig.view.state.row_y(Row::new(3)) + rig.view.state.row_height_of(Row::new(3));
     assert_eq!(
         rig.view.state.header_hit(2.0, y),
-        Some(crate::ui::grid::HeaderHit::RowInsert(4))
+        Some(crate::ui::grid::HeaderHit::RowInsert(Row::new(4)))
     );
     rig.click(2.0, y);
     rig.frame();
@@ -874,7 +927,7 @@ fn the_inline_insert_lands_on_its_boundary_and_sizes_nothing() {
         matches!(
             sent_rows.as_slice(),
             [
-                TrameCommand::SetActiveCell { row: 4, .. },
+                TrameCommand::SetActiveCell { row: ROW_4, .. },
                 TrameCommand::InsertRowAbove,
                 ..
             ]
@@ -909,9 +962,9 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
         let y = rig.view.state.header_h() * 0.8;
         assert_eq!(
             rig.view.state.header_hit(edge, y),
-            Some(crate::ui::grid::HeaderHit::ColBorder(1))
+            Some(crate::ui::grid::HeaderHit::ColBorder(Col::new(1)))
         );
-        let c_before = rig.view.state.col_x(2);
+        let c_before = rig.view.state.col_x(Col::new(2));
         rig.view.handle_input(&InputEvent::PointerDown {
             x: edge,
             y,
@@ -920,7 +973,7 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
             ctrl: false,
         });
         // 200 base pixels, drawn at this zoom.
-        let target = rig.view.state.col_x(1) + 200.0 * zoom;
+        let target = rig.view.state.col_x(Col::new(1)) + 200.0 * zoom;
         rig.view
             .handle_input(&InputEvent::PointerMove { x: target, y });
         rig.view.handle_input(&InputEvent::PointerUp {
@@ -934,19 +987,21 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
             .iter()
             .filter_map(|cmd| match cmd {
                 TrameCommand::ResizeCol {
-                    col: 1, width_px, ..
+                    col: COL_1,
+                    width_px,
+                    ..
                 } => Some(*width_px),
                 _ => None,
             })
             .collect();
         assert_eq!(widths, [200.0], "zoom {zoom}: sent {sent:?}");
         // No answer came back, and the grid already reflowed.
-        assert_eq!(rig.view.state.col_widths.get(&1), Some(&200.0));
+        assert_eq!(rig.view.state.col_widths.get(&COL_1), Some(&200.0));
         assert_eq!(
-            rig.view.state.col_x(2),
-            rig.view.state.col_x(1) + 200.0 * zoom
+            rig.view.state.col_x(Col::new(2)),
+            rig.view.state.col_x(Col::new(1)) + 200.0 * zoom
         );
-        assert_ne!(rig.view.state.col_x(2), c_before);
+        assert_ne!(rig.view.state.col_x(Col::new(2)), c_before);
     }
 }
 
@@ -969,7 +1024,7 @@ fn a_double_click_fits_the_column_to_its_whole_content() {
     assert!(
         matches!(
             asked.as_slice(),
-            [TrameCommand::RequestColumnContent { col: 0 }]
+            [TrameCommand::RequestColumnContent { col: COL_0 }]
         ),
         "sent {asked:?}"
     );
@@ -988,12 +1043,15 @@ fn a_double_click_fits_the_column_to_its_whole_content() {
         &mut FontContext::new(),
         &mut TextCache::new(1.0),
     );
-    rig.answer(TrameEvent::ColumnContent { col: 0, cells });
+    rig.answer(TrameEvent::ColumnContent {
+        col: Col::new(0),
+        cells,
+    });
     let sent = rig.sent();
     assert!(
         matches!(
             sent.as_slice(),
-            [TrameCommand::ResizeCol { col: 0, width_px, .. }] if *width_px == expected
+            [TrameCommand::ResizeCol { col: COL_0, width_px, .. }] if *width_px == expected
         ),
         "sent {sent:?}"
     );
@@ -1008,7 +1066,7 @@ fn a_merged_fill_previews_whole_blocks() {
     rig.frame();
     let merged = |row, span| crate::DisplayCell {
         row,
-        col: 0,
+        col: Col::new(0),
         is_merged: true,
         merge_span: span,
         ..Default::default()
@@ -1016,11 +1074,14 @@ fn a_merged_fill_previews_whole_blocks() {
     // A1:A2 is one merge of one column and two rows.
     rig.answer(TrameEvent::ViewportData {
         version: ambre_bus::ViewportVersion(0),
-        row_start: 0,
-        col_start: 0,
+        row_start: Row::new(0),
+        col_start: Col::new(0),
         col_widths: vec![],
         row_heights: vec![],
-        cells: vec![merged(0, Some((1, 2))), merged(1, None)],
+        cells: vec![
+            merged(Row::new(0), Some(span(2, 1))),
+            merged(Row::new(1), None),
+        ],
     });
     rig.sent();
     let (hx, hy, w, h) = rig.view.state.fill_handle_rect().expect("a handle");
@@ -1032,7 +1093,11 @@ fn a_merged_fill_previews_whole_blocks() {
         ctrl: false,
     });
     let mid = |rig: &Rig, row: u32| {
-        let (x, y, w, h) = rig.view.state.cell_pixel_rect(row, 0).expect("in view");
+        let (x, y, w, h) = rig
+            .view
+            .state
+            .cell_pixel_rect(CellPos::new(Row::new(row), Col::new(0)))
+            .expect("in view");
         (x + w / 2.0, y + h / 2.0)
     };
     // Row 2 is one row past the source, row 4 is three: each snaps up to the
@@ -1042,7 +1107,7 @@ fn a_merged_fill_previews_whole_blocks() {
         rig.view.handle_input(&InputEvent::PointerMove { x, y });
         assert_eq!(
             rig.view.state.fill_preview,
-            Some((0, 0, last, 0)),
+            Some(rect(0, 0, last, 0)),
             "pointer on row {row}"
         );
     }
@@ -1062,7 +1127,7 @@ impl Rig {
     }
 
     fn top(&self) -> u32 {
-        self.view.state.top_row
+        self.view.state.top_row.get()
     }
 }
 
@@ -1124,7 +1189,11 @@ fn a_ctrl_wheel_scrolls_nothing() {
 fn a_selection_held_below_the_cells_scrolls_and_follows() {
     let mut rig = Rig::new();
     rig.frame();
-    let (x, y, w, h) = rig.view.state.cell_pixel_rect(1, 1).expect("B2 is in view");
+    let (x, y, w, h) = rig
+        .view
+        .state
+        .cell_pixel_rect(CellPos::new(Row::new(1), Col::new(1)))
+        .expect("B2 is in view");
     let (px, py) = (x + w / 2.0, y + h / 2.0);
     rig.view.handle_input(&InputEvent::PointerDown {
         x: px,
@@ -1141,15 +1210,18 @@ fn a_selection_held_below_the_cells_scrolls_and_follows() {
         rig.frame();
     }
     assert!(rig.top() > 0, "the grid scrolled towards the pointer");
-    let (row, _) = rig
+    let CellPos { row, col: _ } = rig
         .view
         .state
         .drag_cell_at(px, below)
         .expect("an edge cell");
-    assert_eq!(rig.view.state.selection.anchor, (1, 1));
+    assert_eq!(
+        rig.view.state.selection.anchor,
+        CellPos::new(Row::new(1), Col::new(1))
+    );
     assert_eq!(
         rig.view.state.selection.active,
-        (row, 1),
+        CellPos::new(row, COL_1),
         "the range reaches the edge cell"
     );
 }
@@ -1193,8 +1265,8 @@ impl Rig {
     fn cell_mid(&self, row: u32, col: u32) -> (f64, f64) {
         let s = &self.view.state;
         (
-            s.col_x(col) + s.col_width_of(col) / 2.0,
-            s.row_y(row) + s.row_height_of(row) / 2.0,
+            s.col_x(Col::new(col)) + s.col_width_of(Col::new(col)) / 2.0,
+            s.row_y(Row::new(row)) + s.row_height_of(Row::new(row)) / 2.0,
         )
     }
 
@@ -1257,21 +1329,23 @@ fn a_right_click_scopes_the_menu_to_its_target() {
 /// body selects its axis, and the corner selects the sheet.
 #[test]
 fn a_right_click_outside_the_selection_reselects() {
-    use crate::ui::grid::SelKind;
     let mut rig = Rig::new();
     rig.frame();
     let range = rig.select_range((0, 0), (1, 1));
 
     let (x, y) = rig.cell_mid(4, 3);
     rig.right_click(x, y);
-    assert_eq!(rig.view.state.selection, Selection::single(4, 3));
+    assert_eq!(
+        rig.view.state.selection,
+        Selection::single(CellPos::new(Row::new(4), Col::new(3)))
+    );
 
     rig.view.state.selection = range.clone();
     let (x, y) = rig.col_header_mid(3);
     rig.right_click(x, y);
     assert_eq!(
         rig.view.state.selection,
-        Selection::axis(SelKind::Cols, 3, 3)
+        Selection::axis(AxisPos::Col(Col::new(3)), AxisPos::Col(Col::new(3)))
     );
 
     rig.view.state.selection = range.clone();
@@ -1279,7 +1353,7 @@ fn a_right_click_outside_the_selection_reselects() {
     rig.right_click(x, y);
     assert_eq!(
         rig.view.state.selection,
-        Selection::axis(SelKind::Rows, 4, 4)
+        Selection::axis(AxisPos::Row(Row::new(4)), AxisPos::Row(ROW_4))
     );
 
     rig.view.state.selection = range;
@@ -1287,7 +1361,7 @@ fn a_right_click_outside_the_selection_reselects() {
     rig.right_click(x, y);
     assert_eq!(
         rig.view.state.selection,
-        Selection::axis(SelKind::Cols, 0, TOTAL_COLS - 1),
+        Selection::axis(AxisPos::Col(COL_0), AxisPos::Col(crate::LAST_COL)),
         "every column, so the whole sheet"
     );
 }
@@ -1318,8 +1392,8 @@ fn a_menu_entry_leaves_the_selection_alone() {
     for row in 0..4 {
         for col in 0..3 {
             logic.handle_command(TrameCommand::SetCellText {
-                row,
-                col,
+                row: Row::new(row),
+                col: Col::new(col),
                 text: format!("{}", 10 - row - col),
             });
         }
@@ -1412,7 +1486,7 @@ impl Rig {
             shift: false,
             ctrl: false,
         });
-        let target = self.view.state.col_x(1) + width;
+        let target = self.view.state.col_x(Col::new(1)) + width;
         self.view
             .handle_input(&InputEvent::PointerMove { x: target, y });
         self.view.handle_input(&InputEvent::PointerUp {
@@ -1430,11 +1504,11 @@ impl Rig {
 fn a_refused_resize_leaves_the_width() {
     let mut rig = Rig::new();
     rig.frame();
-    let before = rig.view.state.col_x(2);
+    let before = rig.view.state.col_x(Col::new(2));
     rig.lose_logic();
     rig.drag_col_1_to(200.0);
-    assert_eq!(rig.view.state.col_widths.get(&1), None);
-    assert_eq!(rig.view.state.col_x(2), before);
+    assert_eq!(rig.view.state.col_widths.get(&COL_1), None);
+    assert_eq!(rig.view.state.col_x(Col::new(2)), before);
 }
 
 /// `TRAME-UI-125` and `BUS-018`: a cut whose paste never left keeps its
@@ -1444,15 +1518,24 @@ fn a_refused_paste_leaves_the_cut_source() {
     let mut rig = Rig::new();
     rig.store((0, 0), "a", "a");
     rig.frame();
-    rig.view.state.select_rect(0, 0, 0, 0);
+    rig.view.state.select_rect(CellRect::spanning(
+        CellPos::new(Row::new(0), Col::new(0)),
+        CellPos::new(Row::new(0), Col::new(0)),
+    ));
     rig.view.clipboard_write(true);
     rig.sent();
-    rig.view.state.select_rect(5, 0, 5, 0);
+    rig.view.state.select_rect(CellRect::spanning(
+        CellPos::new(Row::new(5), Col::new(0)),
+        CellPos::new(Row::new(5), Col::new(0)),
+    ));
     rig.lose_logic();
     rig.view.paste_clipboard(clip(0, "a"), false);
-    assert_eq!(rig.view.cell_seed(0, 0), "a");
-    assert_eq!(rig.view.state.clipboard_anchor, Some((0, 0, 0, 0)));
-    assert_eq!(rig.view.state.active_row(), 5);
+    assert_eq!(
+        rig.view.cell_seed(CellPos::new(Row::new(0), Col::new(0))),
+        "a"
+    );
+    assert_eq!(rig.view.state.clipboard_anchor, Some(rect(0, 0, 0, 0)));
+    assert_eq!(rig.view.state.active_row(), Row::new(5));
 }
 
 /// `TRAME-UI-125` and `TRAME-UI-142`: a source clear the Logic thread never
@@ -1463,11 +1546,14 @@ fn a_refused_source_clear_keeps_the_cut_range() {
     rig.store((0, 0), "a", "a");
     rig.frame();
     rig.view.cut_pending = true;
-    rig.view.state.clipboard_anchor = Some((0, 0, 0, 0));
+    rig.view.state.clipboard_anchor = Some(rect(0, 0, 0, 0));
     rig.lose_logic();
     let logged = errors_in(|| rig.view.finish_paste());
     assert!(logged > 0, "the refused clear left no trace");
-    assert_eq!(rig.view.cell_seed(0, 0), "a");
+    assert_eq!(
+        rig.view.cell_seed(CellPos::new(Row::new(0), Col::new(0))),
+        "a"
+    );
 }
 
 /// `TRAME-UI-133`: a fill the Logic thread never receives leaves the
@@ -1487,7 +1573,7 @@ fn a_refused_fill_leaves_the_selection() {
     });
     let (x, y) = rig.cell_mid(3, 0);
     rig.view.handle_input(&InputEvent::PointerMove { x, y });
-    assert_eq!(rig.view.state.fill_preview, Some((0, 0, 3, 0)));
+    assert_eq!(rig.view.state.fill_preview, Some(rect(0, 0, 3, 0)));
     rig.lose_logic();
     rig.view.handle_input(&InputEvent::PointerUp {
         x,
@@ -1495,7 +1581,7 @@ fn a_refused_fill_leaves_the_selection() {
         button: 0,
         ctrl: false,
     });
-    assert_eq!(rig.view.state.selection.selected_cells(), [(0, 0)]);
+    assert_eq!(rig.view.state.selection.selected_cells(), [at(0, 0)]);
 }
 
 /// `BUS-018`: a clear the Logic thread never receives leaves the cell
@@ -1507,7 +1593,10 @@ fn a_refused_clear_leaves_the_cell() {
     rig.frame();
     rig.lose_logic();
     assert!(rig.key("Delete"));
-    assert_eq!(rig.view.cell_seed(0, 0), "a");
+    assert_eq!(
+        rig.view.cell_seed(CellPos::new(Row::new(0), Col::new(0))),
+        "a"
+    );
 }
 
 /// `TRAME-UI-142`: every lossless send the outbox refuses is logged. The

@@ -28,7 +28,7 @@ use ambre_canvas::{Palette, TextCache};
 use super::TrameUiState;
 use super::grid::{self, COL_WIDTH, CellEditor, ROW_HEIGHT};
 use crate::render::{self, BODY_SIZE, CELL_PAD_X, GridLayout};
-use crate::{TOTAL_COLS, TOTAL_ROWS};
+use crate::{CellPos, ColSpan, LAST_COL, LAST_ROW, RowSpan, TOTAL_COLS, TOTAL_ROWS};
 
 // Rendering entry points are split by layer; shared layout/stats/helpers stay
 // here and reach the sub-modules via the glob mesh.
@@ -101,21 +101,18 @@ const DIRTY_VEIL_ALPHA: f32 = 0.5;
 /// a cell's top-right corner.
 const ERROR_MARK_SIZE: f64 = 7.0;
 
-/// Half-open `[row_start, row_end) x [col_start, col_end)` cell range covering a
-/// repaint strip. Bundling the four bounds keeps the per-cell helpers' argument
-/// lists short and the `in_strip` test self-documenting.
+/// The half-open rows and columns covering a repaint strip. Bundling both
+/// spans keeps the per-cell helpers' argument lists short.
 #[derive(Clone, Copy)]
 struct CellSpan {
-    row_start: u32,
-    row_end: u32,
-    col_start: u32,
-    col_end: u32,
+    rows: RowSpan,
+    cols: ColSpan,
 }
 
 impl CellSpan {
-    /// True when `(row, col)` falls inside the half-open span.
-    fn contains(&self, row: u32, col: u32) -> bool {
-        row >= self.row_start && row < self.row_end && col >= self.col_start && col < self.col_end
+    /// True when `at` falls inside the span.
+    fn contains(&self, at: CellPos) -> bool {
+        self.rows.contains(at.row) && self.cols.contains(at.col)
     }
 }
 
@@ -126,49 +123,47 @@ fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
     // left of the strip, then extend until the strip's right edge is covered.
     let mut col_start = state.left_col;
     let mut cx = state.header_w();
-    while col_start + 1 < TOTAL_COLS && cx + state.col_width_of(col_start) <= strip.x0 {
+    while col_start < LAST_COL && cx + state.col_width_of(col_start) <= strip.x0 {
         cx += state.col_width_of(col_start);
-        col_start += 1;
+        col_start = col_start.next();
     }
     let mut col_end = col_start;
     let mut ex = cx;
-    while col_end < TOTAL_COLS && ex < strip.x1 {
+    while col_end < TOTAL_COLS.as_end() && ex < strip.x1 {
         ex += state.col_width_of(col_end);
-        col_end += 1;
+        col_end = col_end.next();
     }
-    let col_end = col_end.min(TOTAL_COLS);
+    let col_end = col_end.min(TOTAL_COLS.as_end());
 
     // Same walk over the *visible* rows' variable heights (hidden rows take no
     // vertical space; the cell iterator skips them too).
     let mut row_start = state.top_row;
     let mut cy = cells_top;
-    while row_start + 1 < TOTAL_ROWS {
+    while row_start < LAST_ROW {
         if state.is_row_hidden(row_start) {
-            row_start += 1;
+            row_start = row_start.next();
             continue;
         }
         let h = state.row_height_of(row_start);
         if cy + h <= strip.y0 {
             cy += h;
-            row_start += 1;
+            row_start = row_start.next();
         } else {
             break;
         }
     }
     let mut row_end = row_start;
     let mut ey = cy;
-    while row_end < TOTAL_ROWS && ey < strip.y1 {
+    while row_end < TOTAL_ROWS.as_end() && ey < strip.y1 {
         if !state.is_row_hidden(row_end) {
             ey += state.row_height_of(row_end);
         }
-        row_end += 1;
+        row_end = row_end.next();
     }
-    let row_end = row_end.min(TOTAL_ROWS);
+    let row_end = row_end.min(TOTAL_ROWS.as_end());
     CellSpan {
-        row_start,
-        row_end,
-        col_start,
-        col_end,
+        rows: RowSpan::new(row_start, row_end),
+        cols: ColSpan::new(col_start, col_end),
     }
 }
 
@@ -183,6 +178,8 @@ mod tests {
     use ambre_draw::testing::{DrawOp, FixedClock, RecordingSurface};
 
     use super::super::grid::CellData;
+    use crate::test_support::{at, rect, span};
+    use crate::{Col, ColDelta, Row, RowDelta};
 
     /// A view state large enough to expose several rows/cols, with the given
     /// cells pre-populated in the cache.
@@ -190,7 +187,7 @@ mod tests {
         let mut state = TrameUiState::new(800.0, 600.0);
         for &(row, col, text) in cells {
             state.cell_cache.insert(
-                (row, col),
+                CellPos::new(Row::new(row), Col::new(col)),
                 CellData {
                     text: text.to_owned(),
                     raw: text.to_owned(),
@@ -208,20 +205,25 @@ mod tests {
     fn the_drawn_cell_is_the_hit_tested_cell() {
         let mut state = fixture(&[]);
         assert!(state.set_zoom(1.25));
-        state.col_widths.insert(4, 150.0);
-        state.col_widths.insert(6, 30.0);
-        state.row_heights.insert(13, 44.0);
-        state.hidden_rows = vec![12, 15];
-        assert!(state.scroll_by(10, 3));
+        state.col_widths.insert(Col::new(4), 150.0);
+        state.col_widths.insert(Col::new(6), 30.0);
+        state.row_heights.insert(Row::new(13), 44.0);
+        state.hidden_rows = vec![Row::new(12), Row::new(15)];
+        assert!(state.scroll_by(RowDelta::new(10), ColDelta::new(3)));
         let layout = screen_layout(&state);
         let mut checked = 0;
         for row in 10..22 {
             for col in 3..9 {
-                let Some((x, y, w, h)) = state.cell_pixel_rect(row, col) else {
-                    assert!(layout.is_hidden(row), "({row}, {col}) is drawn and not hit");
+                let Some((x, y, w, h)) =
+                    state.cell_pixel_rect(CellPos::new(Row::new(row), Col::new(col)))
+                else {
+                    assert!(
+                        layout.is_hidden(Row::new(row)),
+                        "({row}, {col}) is drawn and not hit"
+                    );
                     continue;
                 };
-                let drawn = layout.cell_rect(row, col);
+                let drawn = layout.cell_rect(CellPos::new(Row::new(row), Col::new(col)));
                 for (a, b) in [
                     (x, drawn.x0),
                     (y, drawn.y0),
@@ -231,7 +233,7 @@ mod tests {
                     assert!((a - b).abs() < 1e-9, "({row}, {col}): hit {a} drawn {b}");
                 }
                 let centre = drawn.center();
-                assert_eq!(state.cell_at(centre.x, centre.y), Some((row, col)));
+                assert_eq!(state.cell_at(centre.x, centre.y), Some(at(row, col)));
                 checked += 1;
             }
         }
@@ -286,15 +288,15 @@ mod tests {
                 (6, 6, "x"),
                 (9, 1, "hidden"),
             ]);
-            state.cell_cache.get_mut(&(4, 3)).unwrap().merge_span = Some((2, 2));
-            state.col_widths.insert(3, 150.0);
-            state.row_heights.insert(5, 44.0);
-            state.hidden_rows = vec![9];
-            state.dirty_cells.insert((2, 2));
+            state.cell_cache.get_mut(&at(4, 3)).unwrap().merge_span = Some(span(2, 2));
+            state.col_widths.insert(Col::new(3), 150.0);
+            state.row_heights.insert(Row::new(5), 44.0);
+            state.hidden_rows = vec![Row::new(9)];
+            state.dirty_cells.insert(CellPos::new(Row::new(2), Col::new(2)));
             state.resize(width, height);
             state.set_zoom(zoom);
-            state.left_col = left_col;
-            state.top_row = top_row;
+            state.left_col = Col::new(left_col);
+            state.top_row = Row::new(top_row);
             let palette = Theme::Light.palette();
             let (mut screen, clock, mut font_cx, mut cache, mut stats) = harness();
             draw_cells(
@@ -334,7 +336,7 @@ mod tests {
     #[test]
     fn uncoloured_border_follows_the_theme() {
         let mut state = fixture(&[(0, 0, "x")]);
-        if let Some(cell) = state.cell_cache.get_mut(&(0, 0)) {
+        if let Some(cell) = state.cell_cache.get_mut(&at(0, 0)) {
             cell.borders.top = Some(ambre_bus::CellBorder {
                 style: ambre_bus::BorderStyle::Solid,
                 color: None,
@@ -488,7 +490,7 @@ mod tests {
     fn draw_cells_renders_merge_master_over_its_span() {
         // A 2x2 merge master at (0,0) plus its three blank covered cells.
         let mut state = fixture(&[(0, 0, "merged"), (0, 1, ""), (1, 0, ""), (1, 1, "")]);
-        state.cell_cache.get_mut(&(0, 0)).unwrap().merge_span = Some((2, 2));
+        state.cell_cache.get_mut(&at(0, 0)).unwrap().merge_span = Some(span(2, 2));
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
@@ -511,7 +513,7 @@ mod tests {
         let span_rect = Rect::new(0.0, 0.0, 2.0 * COL_WIDTH, 2.0 * ROW_HEIGHT);
         assert_eq!(
             cells::sheet_camera(&state).transform_rect_bbox(span_rect),
-            screen_layout(&state).merge_rect(0, 0, 2, 2),
+            screen_layout(&state).merge_rect(at(0, 0), span(2, 2)),
         );
         assert!(
             surface.count(|op| matches!(
@@ -538,15 +540,15 @@ mod tests {
             color: None,
         });
         let mut state = fixture(&[(0, 0, "m"), (0, 1, ""), (1, 0, ""), (1, 1, ""), (3, 3, "x")]);
-        let master = state.cell_cache.get_mut(&(0, 0)).unwrap();
-        master.merge_span = Some((2, 2));
+        let master = state.cell_cache.get_mut(&at(0, 0)).unwrap();
+        master.merge_span = Some(span(2, 2));
         master.borders = ambre_bus::Borders {
             top: edge,
             right: edge,
             bottom: edge,
             left: edge,
         };
-        state.cell_cache.get_mut(&(3, 3)).unwrap().borders.top = edge;
+        state.cell_cache.get_mut(&at(3, 3)).unwrap().borders.top = edge;
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
         draw_cells(
@@ -560,7 +562,7 @@ mod tests {
             &clock,
             &mut stats,
         );
-        let span_rect = screen_layout(&state).merge_rect(0, 0, 2, 2);
+        let span_rect = screen_layout(&state).merge_rect(at(0, 0), span(2, 2));
         let ops = surface.ops();
         let is_border = |op: &DrawOp| matches!(op, DrawOp::StrokeLine { color, .. } if *color == palette.cell_border);
         let first_border = ops.iter().position(is_border).expect("a border");
@@ -642,7 +644,7 @@ mod tests {
     #[test]
     fn a_lone_selected_cell_shows_no_range_fill() {
         let mut state = fixture(&[]);
-        state.select(2, 3);
+        state.select(CellPos::new(Row::new(2), Col::new(3)));
         assert!(!state.selection.is_multi());
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
@@ -675,7 +677,7 @@ mod tests {
         // A two-column data block around the active cell (0,0): each column draws
         // one autofilter button (bordered with the grid colour) on the band row.
         let state = fixture(&[(0, 0, "a"), (0, 1, "b")]);
-        assert_eq!(state.current_region(), Some((0, 0, 0, 1)));
+        assert_eq!(state.current_region(), Some(rect(0, 0, 0, 1)));
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
@@ -708,7 +710,7 @@ mod tests {
         // has no fill_path). The secondary letter-header badge fills it too. An
         // unfiltered fixture draws no selection-coloured fills here.
         let mut state = fixture(&[(0, 0, "a"), (0, 1, "b")]);
-        state.filtered_col = Some(0);
+        state.filtered_col = Some(Col::new(0));
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
@@ -752,9 +754,9 @@ mod tests {
         // a translucent selection fill, and no 2px active-cell border is drawn;
         // the range outline alone marks the selection, as in Excel.
         let mut state = fixture(&[]);
-        state.select(0, 0);
-        state.select_extend(1, 1);
-        state.select_disjoint(3, 3);
+        state.select(CellPos::new(Row::new(0), Col::new(0)));
+        state.select_extend(CellPos::new(Row::new(1), Col::new(1)));
+        state.select_disjoint(CellPos::new(Row::new(3), Col::new(3)));
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
@@ -791,11 +793,15 @@ mod tests {
     /// columns tint the column strip, rows the row strip.
     #[test]
     fn a_whole_axis_selection_tints_its_strip() {
-        use super::super::grid::{SelKind, Selection};
+        use super::super::grid::{AxisPos, SelKind, Selection};
         let palette = Theme::Light.palette();
         for kind in [SelKind::Cols, SelKind::Rows] {
             let mut state = fixture(&[]);
-            state.selection = Selection::axis(kind, 1, 2);
+            let (from, to) = match kind {
+                SelKind::Cols => (AxisPos::Col(Col::new(1)), AxisPos::Col(Col::new(2))),
+                _ => (AxisPos::Row(Row::new(1)), AxisPos::Row(Row::new(2))),
+            };
+            state.selection = Selection::axis(from, to);
             let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
             draw_overlay(
                 &mut surface,
@@ -809,16 +815,16 @@ mod tests {
             );
             let (x0, x1, y0, y1) = match kind {
                 SelKind::Cols => (
-                    state.col_x(1),
-                    state.col_x(2) + state.col_width_of(2),
+                    state.col_x(Col::new(1)),
+                    state.col_x(Col::new(2)) + state.col_width_of(Col::new(2)),
                     0.0,
                     state.header_h(),
                 ),
                 _ => (
                     0.0,
                     state.header_w(),
-                    state.row_y(1),
-                    state.row_y(2) + state.row_height_of(2),
+                    state.row_y(Row::new(1)),
+                    state.row_y(Row::new(2)) + state.row_height_of(Row::new(2)),
                 ),
             };
             assert_eq!(
@@ -838,7 +844,7 @@ mod tests {
         // An optimistic edit marks (0,0) dirty -> a content_bg veil at reduced
         // alpha is painted over it, on top of the opaque cell fill.
         let mut state = fixture(&[(0, 0, "x")]);
-        state.set_cell_text(0, 0, "5".to_owned());
+        state.set_cell_text(CellPos::new(Row::new(0), Col::new(0)), "5".to_owned());
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
@@ -872,7 +878,7 @@ mod tests {
         // A formula error on (1,1) draws the corner marker with the error colour;
         // a clean cell draws none.
         let mut state = fixture(&[(1, 1, "")]);
-        state.set_formula_error(1, 1, "#DIV/0!".to_owned());
+        state.set_formula_error(CellPos::new(Row::new(1), Col::new(1)), "#DIV/0!".to_owned());
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 

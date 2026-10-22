@@ -44,8 +44,11 @@ impl TrameHandler {
     pub fn open_filter(&self) -> AppCommand {
         let (x, y) = client_anchor(self.anchor.get_untracked());
         // `col` is provisional; the ColumnValues reply carries the real one.
-        self.filter_popover
-            .set(Some(FilterPopoverState { col: 0, x, y }));
+        self.filter_popover.set(Some(FilterPopoverState {
+            col: ambre_bus::Col::ZERO,
+            x,
+            y,
+        }));
         self.filter_values.set(Vec::new());
         AppCommand::Trame(TrameCommand::RequestActiveColumnValues)
     }
@@ -102,8 +105,8 @@ impl CommandHandler for TrameHandler {
                         delimiter: None,
                         has_header: false,
                         target_sheet_id: None,
-                        start_row: 0,
-                        start_col: 0,
+                        start_row: ambre_bus::Row::ZERO,
+                        start_col: ambre_bus::Col::ZERO,
                     })
                 }),
             }),

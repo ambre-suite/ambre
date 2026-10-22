@@ -752,6 +752,7 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::app::toile::ToileCommand;
+    use ambre_bus::{Col, Row};
     use ambre_bus::{DocumentId, RequestId, RestCommand, RestEvent, TrameCommand};
     use std::io::Cursor;
 
@@ -1035,8 +1036,8 @@ mod tests {
         state.handle_logic_command(LogicCommand::App {
             document_id,
             command: AppCommand::Trame(TrameCommand::SetCellText {
-                row: 3,
-                col: 1,
+                row: Row::new(3),
+                col: Col::new(1),
                 text: "kept".to_owned(),
             }),
         });
@@ -1057,10 +1058,10 @@ mod tests {
         reopened.handle_logic_command(LogicCommand::App {
             document_id,
             command: AppCommand::Trame(TrameCommand::ScrollViewport {
-                row_start: 0,
-                col_start: 0,
-                row_end: 16,
-                col_end: 8,
+                row_start: Row::new(0),
+                col_start: Col::new(0),
+                row_end: Row::new(16),
+                col_end: Col::new(8),
                 version: ambre_bus::ViewportVersion(1),
             }),
         });
@@ -1070,7 +1071,7 @@ mod tests {
                 ..
             } => cells
                 .iter()
-                .any(|c| c.row == 3 && c.col == 1 && c.text == "kept"),
+                .any(|c| c.row == Row::new(3) && c.col == Col::new(1) && c.text == "kept"),
             _ => false,
         });
         assert!(kept, "the saved file reopened without the edit it carried");
@@ -1226,10 +1227,10 @@ mod tests {
     fn scroll(version: u64) -> AppCommand {
         AppCommand::Trame(TrameCommand::ScrollViewport {
             version: ambre_bus::ViewportVersion(version),
-            row_start: 0,
-            row_end: 4,
-            col_start: 0,
-            col_end: 4,
+            row_start: Row::new(0),
+            row_end: Row::new(4),
+            col_start: Col::new(0),
+            col_end: Col::new(4),
         })
     }
 
@@ -1461,8 +1462,8 @@ mod tests {
     /// A mutating Trame command (writes a cell, hence a CRDT delta).
     fn set_cell(text: &str) -> AppCommand {
         AppCommand::Trame(TrameCommand::SetCellText {
-            row: 0,
-            col: 0,
+            row: Row::new(0),
+            col: Col::new(0),
             text: text.into(),
         })
     }
@@ -1541,8 +1542,8 @@ mod tests {
                 delimiter: None,
                 has_header: false,
                 target_sheet_id: None,
-                start_row: 0,
-                start_col: 0,
+                start_row: Row::new(0),
+                start_col: Col::new(0),
             }),
         });
         let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();

@@ -5,6 +5,8 @@
 //! `Range` values transparently (so `SUM(A1:A10)` works with the range as a
 //! single argument containing 10 values).
 
+use ambre_bus::{Col, Row};
+
 use super::types::{CellValue, FormulaError, nearly_equal};
 
 // -----------------------------------------------------------------------------
@@ -26,14 +28,15 @@ pub(crate) use builtins_b::ymd_from_serial;
 /// Ambient evaluation context threaded into every built-in call.
 ///
 /// `now_serial` is the recomputation clock, shared so `TODAY()`/`NOW()` are
-/// stable within a pass. `cell_row`/`cell_col` are the 1-based grid position of
-/// the cell being evaluated, consumed by the no-argument `ROW()`/`COLUMN()`. A
-/// position of `0` means "unknown".
+/// stable within a pass. `cell_row`/`cell_col` are the grid position of the
+/// cell being evaluated, consumed by the no-argument `ROW()`/`COLUMN()`.
 #[derive(Clone, Copy)]
 pub struct FnCtx {
     pub now_serial: f64,
-    pub cell_row: u32,
-    pub cell_col: u32,
+    /// The row of the evaluating cell, `None` when it is unknown.
+    pub cell_row: Option<Row>,
+    /// The column of the evaluating cell, `None` when it is unknown.
+    pub cell_col: Option<Col>,
 }
 
 impl FnCtx {
@@ -42,8 +45,8 @@ impl FnCtx {
     fn at_clock(now_serial: f64) -> Self {
         Self {
             now_serial,
-            cell_row: 0,
-            cell_col: 0,
+            cell_row: None,
+            cell_col: None,
         }
     }
 }
@@ -138,8 +141,8 @@ pub fn call_builtin(name: &str, args: &[CellValue], ctx: FnCtx) -> CellValue {
         "CHOOSE" => choose(args),
         "ROWS" => CellValue::Number(range_dims(args).map(|(r, _)| r).unwrap_or(0) as f64),
         "COLUMNS" => CellValue::Number(range_dims(args).map(|(_, c)| c).unwrap_or(0) as f64),
-        "ROW" => row_col(args, ctx.cell_row),
-        "COLUMN" => row_col(args, ctx.cell_col),
+        "ROW" => row_col(args, ctx.cell_row.map(|r| f64::from(r.get()) + 1.0)),
+        "COLUMN" => row_col(args, ctx.cell_col.map(|c| f64::from(c.get()) + 1.0)),
 
         // Text
         "CONCAT" | "CONCATENATE" => concat_fn(args),

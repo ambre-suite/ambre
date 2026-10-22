@@ -14,8 +14,8 @@ use loro::LoroValue;
 
 fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
     state.handle_command(TrameCommand::SetCellText {
-        row,
-        col,
+        row: Row::new(row),
+        col: Col::new(col),
         text: text.to_owned(),
     });
     state.handle_command(TrameCommand::CommitEdit);
@@ -23,10 +23,10 @@ fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
 
 fn select(state: &mut TrameState, row: u32, col: u32, row_end: u32, col_end: u32) {
     state.handle_command(TrameCommand::SetActiveCell {
-        row,
-        col,
-        anchor_row: row_end,
-        anchor_col: col_end,
+        row: Row::new(row),
+        col: Col::new(col),
+        anchor_row: Row::new(row_end),
+        anchor_col: Col::new(col_end),
         extra: vec![],
         kind: SelectionKind::Cells,
     });
@@ -34,19 +34,19 @@ fn select(state: &mut TrameState, row: u32, col: u32, row_end: u32, col_end: u32
 
 fn merge(state: &mut TrameState, row: u32, col: u32, row_end: u32, col_end: u32) -> TrameOutcome {
     state.handle_command(TrameCommand::MergeCells {
-        row,
-        col,
-        row_end,
-        col_end,
+        row: Row::new(row),
+        col: Col::new(col),
+        row_end: Row::new(row_end),
+        col_end: Col::new(col_end),
     })
 }
 
 fn range(row: u32, col: u32, row_end: u32, col_end: u32) -> GridRange {
     GridRange {
-        row,
-        col,
-        row_end,
-        col_end,
+        row: Row::new(row),
+        col: Col::new(col),
+        row_end: Row::new(row_end),
+        col_end: Col::new(col_end),
     }
 }
 
@@ -75,10 +75,10 @@ fn container(state: &TrameState, name: String) -> LoroValue {
 fn metrics(state: &mut TrameState, n: u32) -> (Vec<f32>, Vec<f32>) {
     let out = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_bus::ViewportVersion(3),
-        row_start: 0,
-        row_end: n - 1,
-        col_start: 0,
-        col_end: n - 1,
+        row_start: Row::new(0),
+        row_end: Row::new(n - 1),
+        col_start: Col::new(0),
+        col_end: Col::new(n - 1),
     });
     let Some(TrameEvent::ViewportData {
         col_widths,
@@ -115,7 +115,7 @@ fn a_merge_leaves_its_neighbours() {
     }
     set(&mut state, 1, 1, "m");
     merge(&mut state, 1, 1, 2, 2);
-    assert_eq!(read_display(&mut state, 1, 1).merge_span, Some((2, 2)));
+    assert_eq!(read_display(&mut state, 1, 1).merge_span, Some(span(2, 2)));
     for r in 0..4 {
         for c in 0..4 {
             if (1..=2).contains(&r) && (1..=2).contains(&c) {
@@ -137,7 +137,10 @@ fn a_one_cell_merge_from_a_peer_is_no_merge() {
     set(&mut base, 1, 0, "b");
     let (mut a, mut b) = two_peers(&base);
     // The peer writes the entry the local command refuses to write.
-    let (rl, cl) = b.index.resolve(0, 0).expect("A1 is materialized");
+    let (rl, cl) = b
+        .index
+        .resolve(CellPos::new(Row::new(0), Col::new(0)))
+        .expect("A1 is materialized");
     b.doc
         .get_map(merges_map_name(TEST_SHEET))
         .insert(&cell_key(rl, cl), cell_key(rl, cl).as_str())
@@ -181,8 +184,8 @@ fn an_unmerge_returns_a_masked_value_to_the_formulas() {
     let merged = merge(&mut a, 0, 0, 1, 0).update.expect("the merge");
     let typed = b
         .handle_command(TrameCommand::SetCellText {
-            row: 1,
-            col: 0,
+            row: Row::new(1),
+            col: Col::new(0),
             text: "5".to_owned(),
         })
         .update
@@ -200,7 +203,10 @@ fn an_unmerge_returns_a_masked_value_to_the_formulas() {
     assert!(b.flush_delta().is_none(), "the detection owes a delta");
     assert_eq!(read_cell(&mut b, 0, 2), "0", "the masked value computed");
 
-    b.handle_command(TrameCommand::UnmergeCells { row: 0, col: 0 });
+    b.handle_command(TrameCommand::UnmergeCells {
+        row: Row::new(0),
+        col: Col::new(0),
+    });
     assert_eq!(read_cell(&mut b, 1, 0), "5");
     assert_eq!(read_cell(&mut b, 0, 2), "10", "the freed value is ignored");
 }
@@ -217,7 +223,7 @@ fn an_unmerge_crossing_no_merge_writes_nothing() {
     let out = state.handle_command(TrameCommand::UnmergeActive);
     assert!(out.update.is_none() && out.display.is_empty());
     assert_eq!(own_ops(&state), before);
-    assert_eq!(read_display(&mut state, 5, 5).merge_span, Some((2, 2)));
+    assert_eq!(read_display(&mut state, 5, 5).merge_span, Some(span(2, 2)));
 }
 
 /// A merged fill empties the covered cells of each tile and leaves the
@@ -237,7 +243,7 @@ fn a_merged_fill_clears_its_tiles_and_keeps_its_source() {
     }
     assert!(state.masked_cells.is_empty(), "a tile masks a value");
     let a1 = read_display(&mut state, 0, 0);
-    assert_eq!((a1.text.as_str(), a1.merge_span), ("x", Some((1, 2))));
+    assert_eq!((a1.text.as_str(), a1.merge_span), ("x", Some(span(2, 1))));
     let a2 = read_display(&mut state, 1, 0);
     assert_eq!((a2.raw.as_str(), a2.is_merged), ("", true));
 }
@@ -305,10 +311,10 @@ fn a_selection_move_writes_nothing() {
     ];
     for (row, col, anchor_row, anchor_col, kind) in moves {
         let out = state.handle_command(TrameCommand::SetActiveCell {
-            row,
-            col,
-            anchor_row,
-            anchor_col,
+            row: Row::new(row),
+            col: Col::new(col),
+            anchor_row: Row::new(anchor_row),
+            anchor_col: Col::new(anchor_col),
             extra: vec![],
             kind,
         });
@@ -326,8 +332,14 @@ fn a_line_released_on_its_slot_writes_nothing() {
     }
     let before = own_ops(&state);
     for cmd in [
-        TrameCommand::MoveRow { from: 1, to: 1 },
-        TrameCommand::MoveColumn { from: 2, to: 2 },
+        TrameCommand::MoveRow {
+            from: Row::new(1),
+            to: Row::new(1),
+        },
+        TrameCommand::MoveColumn {
+            from: Col::new(2),
+            to: Col::new(2),
+        },
     ] {
         let out = state.handle_command(cmd);
         assert!(out.update.is_none() && out.display.is_empty());
@@ -348,18 +360,18 @@ fn a_line_keeps_its_size_and_its_hidden_mark_when_it_moves() {
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_bus::ViewportVersion(1),
         sheet_id: sheet_id.clone(),
-        row: 1,
+        row: Row::new(1),
         height_px: 40.0,
     });
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(1),
         sheet_id: sheet_id.clone(),
-        col: 2,
+        col: Col::new(2),
         width_px: 150.0,
     });
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id,
-        col: 0,
+        col: Col::new(0),
         kind: FilterKind::Values(vec!["a".to_owned(), "c".to_owned(), "d".to_owned()]),
     });
     assert!(is_filtered(&mut state, 1, 0));
@@ -367,7 +379,10 @@ fn a_line_keeps_its_size_and_its_hidden_mark_when_it_moves() {
     let default_height = heights[0];
 
     // Row B moves to the bottom: its height and its hidden mark go with it.
-    state.handle_command(TrameCommand::MoveRow { from: 1, to: 3 });
+    state.handle_command(TrameCommand::MoveRow {
+        from: Row::new(1),
+        to: Row::new(3),
+    });
     assert_eq!(read_cell(&mut state, 3, 0), "b");
     let (_, heights) = metrics(&mut state, 6);
     assert_eq!((heights[1], heights[3]), (default_height, 40.0));
@@ -376,13 +391,16 @@ fn a_line_keeps_its_size_and_its_hidden_mark_when_it_moves() {
     // Column C is pushed right, moved, then pulled back by a delete.
     let (widths, _) = metrics(&mut state, 6);
     let default_width = widths[0];
-    state.handle_command(TrameCommand::InsertColumn { at: 0 });
+    state.handle_command(TrameCommand::InsertColumn { at: Col::new(0) });
     let (widths, _) = metrics(&mut state, 6);
     assert_eq!((widths[2], widths[3]), (default_width, 150.0));
-    state.handle_command(TrameCommand::MoveColumn { from: 3, to: 1 });
+    state.handle_command(TrameCommand::MoveColumn {
+        from: Col::new(3),
+        to: Col::new(1),
+    });
     let (widths, _) = metrics(&mut state, 6);
     assert_eq!((widths[1], widths[3]), (150.0, default_width));
-    state.handle_command(TrameCommand::DeleteColumn { at: 0 });
+    state.handle_command(TrameCommand::DeleteColumn { at: Col::new(0) });
     let (widths, _) = metrics(&mut state, 6);
     assert_eq!((widths[0], widths[1]), (150.0, default_width));
 }
@@ -397,7 +415,7 @@ fn a_column_is_never_narrower_than_its_minimum() {
         state.handle_command(TrameCommand::ResizeCol {
             version: ambre_bus::ViewportVersion(1),
             sheet_id: sheet_id.clone(),
-            col,
+            col: Col::new(col),
             width_px: width,
         });
     }
@@ -415,8 +433,8 @@ fn a_write_past_the_line_cap_is_refused() {
     state.flush_delta();
     let before = own_ops(&state);
     let out = state.handle_command(TrameCommand::SetCellText {
-        row: cap,
-        col: 0,
+        row: Row::new(cap),
+        col: Col::new(0),
         text: "far".to_owned(),
     });
     assert!(out.update.is_none(), "the refused write sent a delta");
@@ -620,8 +638,8 @@ fn two_peers_deleting_the_last_two_sheets_keep_one() {
     // A writes on the sheet while B adds one: both keep both.
     let from_a = a
         .handle_command(TrameCommand::SetCellText {
-            row: 0,
-            col: 0,
+            row: Row::new(0),
+            col: Col::new(0),
             text: "kept".to_owned(),
         })
         .update

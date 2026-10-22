@@ -4,6 +4,13 @@
 
 use super::*;
 
+const COL_0: Col = Col::new(0);
+const COL_2: Col = Col::new(2);
+const ROWS_1: RowCount = RowCount::new(1);
+const ROWS_2: RowCount = RowCount::new(2);
+const ROW_0: Row = Row::new(0);
+const ROW_2: Row = Row::new(2);
+
 /// Formula references follow the data through a sort (the `trame-formula-engine`
 /// guarantee). Each `=A{n}*10` binds to its row's `Uid` at edit time. The sort
 /// reorders rows by `mov`, and the uid-anchored bytecode is preserved (no
@@ -14,25 +21,25 @@ fn sort_range_formulas_follow_data() {
     let mut state = TrameState::new();
     for (r, a) in ["2", "1"].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: a.to_string(),
         });
         // B = A of the same row, times 10 (row0 -> =A1*10 -> 20, row1 -> =A2*10 -> 10).
         let cell = format!("=A{}*10", r + 1);
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 1,
+            row: Row::new(r as u32),
+            col: Col::new(1),
             text: cell,
         });
     }
     state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: 0,
-        row_end: 1,
-        col_start: 0,
-        col_end: 1,
-        sort_col: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(1),
+        col_start: Col::new(0),
+        col_end: Col::new(1),
+        sort_col: ColCount::new(0),
         ascending: true,
         has_header: false,
     });
@@ -55,21 +62,21 @@ fn sort_range_sum_block_is_stable_under_internal_sort() {
     let mut state = TrameState::new();
     for (r, a) in ["3", "1", "2"].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: a.to_string(),
         });
     }
     // A4 lives below the sorted block and sums the whole block, plus a
     // sub-block A1:A2 whose endpoints would invert under a naive uid binding.
     state.handle_command(TrameCommand::SetCellText {
-        row: 3,
-        col: 0,
+        row: Row::new(3),
+        col: Col::new(0),
         text: "=SUM(A1:A3)".into(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 4,
-        col: 0,
+        row: Row::new(4),
+        col: Col::new(0),
         text: "=SUM(A1:A2)".into(),
     });
     assert_eq!(read_col(&mut state, 0, 4, 1)[3], "6");
@@ -77,11 +84,11 @@ fn sort_range_sum_block_is_stable_under_internal_sort() {
 
     state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: 0,
-        row_end: 2,
-        col_start: 0,
-        col_end: 0,
-        sort_col: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(2),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
+        sort_col: ColCount::new(0),
         ascending: true,
         has_header: false,
     });
@@ -100,19 +107,19 @@ fn sort_range_noops() {
     let mut state = TrameState::new();
     for (r, a) in ["1", "2"].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: a.to_string(),
         });
     }
     // Wrong sheet: ignored.
     let other = state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId("s9".to_owned()),
-        row_start: 0,
-        row_end: 1,
-        col_start: 0,
-        col_end: 0,
-        sort_col: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(1),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
+        sort_col: ColCount::new(0),
         ascending: true,
         has_header: false,
     });
@@ -121,11 +128,11 @@ fn sort_range_noops() {
     // Already ascending: acknowledged but no delta.
     let sorted = state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: 0,
-        row_end: 1,
-        col_start: 0,
-        col_end: 0,
-        sort_col: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(1),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
+        sort_col: ColCount::new(0),
         ascending: true,
         has_header: false,
     });
@@ -146,22 +153,22 @@ fn sort_selection_resolves_against_tracked_selection() {
     let mut state = TrameState::new();
     for (r, (a, b)) in [("3", "c"), ("1", "a"), ("2", "b")].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: a.to_string(),
         });
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 1,
+            row: Row::new(r as u32),
+            col: Col::new(1),
             text: b.to_string(),
         });
     }
     // The UI reports the selection rectangle A1:B3 via SetActiveCell.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 2,
-        anchor_col: 1,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(2),
+        anchor_col: Col::new(1),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -188,23 +195,23 @@ fn sort_keeps_active_cell_and_selection_in_place() {
     let mut state = TrameState::new();
     for (r, v) in ["3", "1", "2"].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: v.to_string(),
         });
     }
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 1,
-        col: 0,
-        anchor_row: 2,
-        anchor_col: 0,
+        row: Row::new(1),
+        col: Col::new(0),
+        anchor_row: Row::new(2),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
     let before = state.selection_rects();
     let evts = state.handle_command(TrameCommand::SortSheetAsc);
     assert!(evts.update.is_some(), "the rows did move");
-    assert_eq!(state.active, (1, 0));
+    assert_eq!(state.active, CellPos::new(Row::new(1), Col::new(0)));
     assert_eq!(state.selection_rects(), before);
     assert!(
         !evts
@@ -227,17 +234,17 @@ fn sort_range_query_spans_the_used_width_of_a_row_band() {
     {
         for (col, text) in [a, b, c].iter().enumerate() {
             state.handle_command(TrameCommand::SetCellText {
-                row: r as u32,
-                col: col as u32,
+                row: Row::new(r as u32),
+                col: Col::new(col as u32),
                 text: text.to_string(),
             });
         }
     }
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 2,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(2),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Rows,
     });
@@ -246,16 +253,16 @@ fn sort_range_query_spans_the_used_width_of_a_row_band() {
     assert!(matches!(
         &evts.display[..],
         [TrameEvent::SortRange {
-            r1: 0,
-            c1: 0,
-            r2: 2,
-            c2: 2
+            r1: ROW_0,
+            c1: COL_0,
+            r2: ROW_2,
+            c2: COL_2
         }]
     ));
     // A key on the third column the dialog offered orders the rows by it.
     state.handle_command(TrameCommand::SortSelectionMulti {
         sort_keys: vec![ambre_bus::SortKey {
-            col: 2,
+            col: ColCount::new(2),
             ascending: true,
         }],
         has_header: false,
@@ -274,22 +281,22 @@ fn sort_sheet_sorts_used_range_by_active_column() {
     // Sort key in column B; column A is an aligned label that must follow.
     for (r, (a, b)) in [("x", "3"), ("y", "1"), ("z", "2")].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: a.to_string(),
         });
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 1,
+            row: Row::new(r as u32),
+            col: Col::new(1),
             text: b.to_string(),
         });
     }
     // The active cell sits in column B (a whole-column selection of B).
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 1,
-        anchor_row: 2,
-        anchor_col: 1,
+        row: Row::new(0),
+        col: Col::new(1),
+        anchor_row: Row::new(2),
+        anchor_col: Col::new(1),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -321,29 +328,29 @@ fn sort_range_multi_lexicographic_with_per_key_direction() {
         .enumerate()
     {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: a.to_string(),
         });
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 1,
+            row: Row::new(r as u32),
+            col: Col::new(1),
             text: b.to_string(),
         });
     }
     let evts = state.handle_command(TrameCommand::SortRangeMulti {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: 0,
-        row_end: 3,
-        col_start: 0,
-        col_end: 1,
+        row_start: Row::new(0),
+        row_end: Row::new(3),
+        col_start: Col::new(0),
+        col_end: Col::new(1),
         sort_keys: vec![
             SortKey {
-                col: 0,
+                col: ColCount::new(0),
                 ascending: true,
             },
             SortKey {
-                col: 1,
+                col: ColCount::new(1),
                 ascending: false,
             },
         ],
@@ -370,33 +377,33 @@ fn sort_selection_multi_resolves_against_tracked_selection() {
     let mut state = TrameState::new();
     for (r, (a, b)) in [("1", "b"), ("1", "a"), ("2", "a")].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: a.to_string(),
         });
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 1,
+            row: Row::new(r as u32),
+            col: Col::new(1),
             text: b.to_string(),
         });
     }
     // Selection A1:B3 reported via SetActiveCell.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 2,
-        anchor_col: 1,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(2),
+        anchor_col: Col::new(1),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
     let evts = state.handle_command(TrameCommand::SortSelectionMulti {
         sort_keys: vec![
             SortKey {
-                col: 0,
+                col: ColCount::new(0),
                 ascending: true,
             },
             SortKey {
-                col: 1,
+                col: ColCount::new(1),
                 ascending: true,
             },
         ],
@@ -422,29 +429,29 @@ fn sort_range_multi_pins_header_row() {
         .enumerate()
     {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: a.to_string(),
         });
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 1,
+            row: Row::new(r as u32),
+            col: Col::new(1),
             text: b.to_string(),
         });
     }
     state.handle_command(TrameCommand::SortRangeMulti {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: 0,
-        row_end: 3,
-        col_start: 0,
-        col_end: 1,
+        row_start: Row::new(0),
+        row_end: Row::new(3),
+        col_start: Col::new(0),
+        col_end: Col::new(1),
         sort_keys: vec![
             SortKey {
-                col: 0,
+                col: ColCount::new(0),
                 ascending: true,
             },
             SortKey {
-                col: 1,
+                col: ColCount::new(1),
                 ascending: true,
             },
         ],
@@ -461,18 +468,18 @@ fn sort_range_multi_no_keys_is_noop() {
     let mut state = TrameState::new();
     for (r, a) in ["3", "1", "2"].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: a.to_string(),
         });
     }
     // No keys at all.
     let empty = state.handle_command(TrameCommand::SortRangeMulti {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: 0,
-        row_end: 2,
-        col_start: 0,
-        col_end: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(2),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
         sort_keys: vec![],
         has_header: false,
     });
@@ -487,12 +494,12 @@ fn sort_range_multi_no_keys_is_noop() {
     // usable key -- same no-op.
     let out = state.handle_command(TrameCommand::SortRangeMulti {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: 0,
-        row_end: 2,
-        col_start: 0,
-        col_end: 0,
+        row_start: Row::new(0),
+        row_end: Row::new(2),
+        col_start: Col::new(0),
+        col_end: Col::new(0),
         sort_keys: vec![SortKey {
-            col: 5,
+            col: ColCount::new(5),
             ascending: true,
         }],
         has_header: false,
@@ -509,29 +516,29 @@ fn sort_range_multi_already_sorted_emits_no_delta() {
     let mut state = TrameState::new();
     for (r, (a, b)) in [("1", "a"), ("1", "b"), ("2", "a")].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 0,
+            row: Row::new(r as u32),
+            col: Col::new(0),
             text: a.to_string(),
         });
         state.handle_command(TrameCommand::SetCellText {
-            row: r as u32,
-            col: 1,
+            row: Row::new(r as u32),
+            col: Col::new(1),
             text: b.to_string(),
         });
     }
     let evts = state.handle_command(TrameCommand::SortRangeMulti {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: 0,
-        row_end: 2,
-        col_start: 0,
-        col_end: 1,
+        row_start: Row::new(0),
+        row_end: Row::new(2),
+        col_start: Col::new(0),
+        col_end: Col::new(1),
         sort_keys: vec![
             SortKey {
-                col: 0,
+                col: ColCount::new(0),
                 ascending: true,
             },
             SortKey {
-                col: 1,
+                col: ColCount::new(1),
                 ascending: true,
             },
         ],
@@ -550,12 +557,12 @@ fn sort_range_multi_already_sorted_emits_no_delta() {
 
 #[test]
 fn col_alpha_basics() {
-    assert_eq!(col_to_alpha(0), "A");
-    assert_eq!(col_to_alpha(25), "Z");
-    assert_eq!(col_to_alpha(26), "AA");
-    assert_eq!(col_to_alpha(51), "AZ");
-    assert_eq!(col_to_alpha(52), "BA");
-    assert_eq!(col_to_alpha(701), "ZZ");
+    assert_eq!(col_to_alpha(Col::new(0)), "A");
+    assert_eq!(col_to_alpha(Col::new(25)), "Z");
+    assert_eq!(col_to_alpha(Col::new(26)), "AA");
+    assert_eq!(col_to_alpha(Col::new(51)), "AZ");
+    assert_eq!(col_to_alpha(Col::new(52)), "BA");
+    assert_eq!(col_to_alpha(Col::new(701)), "ZZ");
 }
 
 /// `RequestActiveColumnValues` returns the active column's distinct visible
@@ -566,10 +573,10 @@ fn active_column_values_are_distinct_sorted_and_visible() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["cherry", "apple", "", "banana", "apple"]);
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -577,7 +584,7 @@ fn active_column_values_are_distinct_sorted_and_visible() {
     let evts = state.handle_command(TrameCommand::RequestActiveColumnValues);
     match &evts.display[0] {
         TrameEvent::ColumnValues { col, values } => {
-            assert_eq!(*col, 0);
+            assert_eq!(*col, Col::new(0));
             assert_eq!(values, &["apple", "banana", "cherry"]);
         }
         other => panic!("expected ColumnValues, got {other:?}"),
@@ -594,10 +601,10 @@ fn selection_stats_aggregate_numeric_cells() {
     seed_col_a(&mut state, &["10", "20", "", "30", "apple"]);
     // Select the whole column A range (0,0)..=(4,0).
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 4,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(4),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -631,15 +638,15 @@ fn disjoint_selection_styles_every_rectangle() {
     let mut state = TrameState::new();
     // Two blocks far apart: the committed rectangle A1 and the live one C3.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 2,
-        col: 2,
-        anchor_row: 2,
-        anchor_col: 2,
+        row: Row::new(2),
+        col: Col::new(2),
+        anchor_row: Row::new(2),
+        anchor_col: Col::new(2),
         extra: vec![crate::GridRange {
-            row: 0,
-            col: 0,
-            row_end: 0,
-            col_end: 0,
+            row: Row::new(0),
+            col: Col::new(0),
+            row_end: Row::new(0),
+            col_end: Col::new(0),
         }],
         kind: crate::SelectionKind::Cells,
     });
@@ -657,21 +664,21 @@ fn selection_stats_covers_the_whole_band() {
     let mut state = TrameState::new();
     // Content above and far below a hypothetical first screen.
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "10".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 50,
-        col: 0,
+        row: Row::new(50),
+        col: Col::new(0),
         text: "20".to_owned(),
     });
     // A whole-column band over column A carries no extent from the UI cache.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cols,
     });
@@ -698,26 +705,26 @@ fn selection_stats_covers_the_whole_band() {
 fn selection_stats_totals_a_disjoint_selection() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: 0,
-        col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
         text: "10".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: 2,
-        col: 2,
+        row: Row::new(2),
+        col: Col::new(2),
         text: "20".to_owned(),
     });
     // The committed rectangle A1 plus the live one C3.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 2,
-        col: 2,
-        anchor_row: 2,
-        anchor_col: 2,
+        row: Row::new(2),
+        col: Col::new(2),
+        anchor_row: Row::new(2),
+        anchor_col: Col::new(2),
         extra: vec![crate::GridRange {
-            row: 0,
-            col: 0,
-            row_end: 0,
-            col_end: 0,
+            row: Row::new(0),
+            col: Col::new(0),
+            row_end: Row::new(0),
+            col_end: Col::new(0),
         }],
         kind: crate::SelectionKind::Cells,
     });
@@ -745,10 +752,10 @@ fn active_column_filter_wrappers_apply_and_clear() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["10", "20", "30"]);
     state.handle_command(TrameCommand::SetActiveCell {
-        row: 0,
-        col: 0,
-        anchor_row: 0,
-        anchor_col: 0,
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -762,8 +769,8 @@ fn active_column_filter_wrappers_apply_and_clear() {
     assert!(matches!(
         applied.display[0],
         TrameEvent::FilterApplied {
-            hidden_row_count: 1,
-            col: 0
+            hidden_row_count: ROWS_1,
+            col: COL_0
         }
     ));
     assert!(is_filtered(&mut state, 0, 0), "10 hidden");
@@ -786,14 +793,14 @@ fn shared_filter_by_values_hides_nonmatching() {
 
     let evts = state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId("s0".to_owned()),
-        col: 0,
+        col: Col::new(0),
         kind: FilterKind::Values(vec!["apple".to_owned()]),
     });
     assert!(matches!(
         evts.display[0],
         TrameEvent::FilterApplied {
-            hidden_row_count: 2,
-            col: 0
+            hidden_row_count: ROWS_2,
+            col: COL_0
         }
     ));
     assert!(
@@ -817,7 +824,7 @@ fn shared_filter_condition_greater_than() {
 
     let evts = state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId("s0".to_owned()),
-        col: 0,
+        col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gt,
             value: "15".to_owned(),
@@ -826,8 +833,8 @@ fn shared_filter_condition_greater_than() {
     assert!(matches!(
         evts.display[0],
         TrameEvent::FilterApplied {
-            hidden_row_count: 1,
-            col: 0
+            hidden_row_count: ROWS_1,
+            col: COL_0
         }
     ));
     assert!(is_filtered(&mut state, 0, 0), "10 is not > 15");
@@ -851,19 +858,19 @@ fn a_selection_reaches_no_peer() {
             1,
             1,
             vec![crate::GridRange {
-                row: 5,
-                col: 5,
-                row_end: 6,
-                col_end: 6,
+                row: Row::new(5),
+                col: Col::new(5),
+                row_end: Row::new(6),
+                col_end: Col::new(6),
             }],
         ),
     ];
     for (row, col, anchor_row, anchor_col, extra) in selections {
         let out = state.handle_command(TrameCommand::SetActiveCell {
-            row,
-            col,
-            anchor_row,
-            anchor_col,
+            row: Row::new(row),
+            col: Col::new(col),
+            anchor_row: Row::new(anchor_row),
+            anchor_col: Col::new(anchor_col),
             extra,
             kind: crate::SelectionKind::Cells,
         });

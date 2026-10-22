@@ -7,6 +7,7 @@ use ambre_draw::kinetic::{EdgeScroll, EdgeSpeed, Kinetic, Release, ScrollStep};
 
 use super::ScrollOutcome;
 use crate::ui::grid::{COL_WIDTH, ROW_HEIGHT, TrameUiState};
+use crate::{ColDelta, RowDelta};
 
 /// The scroll motion of the grid, apart from the browser.
 ///
@@ -71,7 +72,7 @@ impl GridScroll {
         }
         self.accum_x -= f64::from(dc) * step_x;
         self.accum_y -= f64::from(dr) * step_y;
-        if grid.scroll_by(dr, dc) {
+        if grid.scroll_by(RowDelta::new(dr.into()), ColDelta::new(dc.into())) {
             ScrollOutcome::Moved
         } else {
             // Pinned against a grid border: the motion had nowhere to go.

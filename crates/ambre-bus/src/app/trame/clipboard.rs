@@ -2,7 +2,7 @@
 //! of a copied/cut range, moved to the Logic thread inside
 //! [`TrameCommand::PasteRange`](super::TrameCommand).
 
-use super::CellStyle;
+use super::{CellStyle, Col, ColCount, Row, RowCount};
 use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------------
@@ -23,14 +23,14 @@ use serde::{Deserialize, Serialize};
 pub struct ClipboardPayload {
     /// Source range top-left absolute row (0-based). The paste reindex shift is
     /// `target_row - src_row`.
-    pub src_row: u32,
+    pub src_row: Row,
     /// Source range top-left absolute column (0-based).
-    pub src_col: u32,
+    pub src_col: Col,
     /// Source range height in rows (so a cut can clear the whole rectangle and
     /// the renderer can draw marching-ants over it).
-    pub rows: u32,
+    pub rows: RowCount,
     /// Source range width in columns.
-    pub cols: u32,
+    pub cols: ColCount,
     /// The range's non-empty cells. Blank cells are omitted; the paste leaves
     /// the corresponding destination cells untouched (Excel/Sheets behaviour).
     pub cells: Vec<ClipboardCell>,
@@ -43,11 +43,16 @@ impl ClipboardPayload {
     /// gaps (blank source cells, omitted from `cells`) render as empty fields. A
     /// formula cell contributes its raw text (for example `=A1*2`).
     pub fn to_tsv(&self) -> String {
-        let mut grid =
-            vec![vec![String::new(); self.cols.max(1) as usize]; self.rows.max(1) as usize];
+        let width = usize::try_from(self.cols.get().max(1)).unwrap_or(1);
+        let height = usize::try_from(self.rows.get().max(1)).unwrap_or(1);
+        let mut grid = vec![vec![String::new(); width]; height];
         for cell in &self.cells {
-            if let Some(row) = grid.get_mut(cell.dr as usize)
-                && let Some(slot) = row.get_mut(cell.dc as usize)
+            if let Some(row) = usize::try_from(cell.dr.get())
+                .ok()
+                .and_then(|dr| grid.get_mut(dr))
+                && let Some(slot) = usize::try_from(cell.dc.get())
+                    .ok()
+                    .and_then(|dc| row.get_mut(dc))
             {
                 *slot = cell.raw.clone();
             }
@@ -65,9 +70,9 @@ impl ClipboardPayload {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ClipboardCell {
     /// Row offset from [`ClipboardPayload::src_row`].
-    pub dr: u32,
+    pub dr: RowCount,
     /// Column offset from [`ClipboardPayload::src_col`].
-    pub dc: u32,
+    pub dc: ColCount,
     /// Raw cell text (for example `=SUM(A1:B1)` for a formula), in display form. A
     /// formula's relative references are reindexed by the Logic thread on paste.
     pub raw: String,

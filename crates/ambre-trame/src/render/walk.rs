@@ -10,25 +10,25 @@ use std::collections::HashMap;
 use ambre_draw::DocumentWalk;
 
 use super::*;
-use crate::{TOTAL_COLS, TOTAL_ROWS};
+use crate::{LAST_COL, LAST_ROW, TOTAL_COLS, TOTAL_ROWS};
 
 /// One cell as the walk reads it.
 #[derive(Clone, Copy)]
 pub struct SheetCell<'a> {
     /// What the cell shows. A merge master carries its own text here.
     pub content: CellContent<'a>,
-    /// `Some((col_span, row_span))` on a merge master.
-    pub merge_span: Option<(u32, u32)>,
+    /// The merged block's extent on a merge master.
+    pub merge_span: Option<MergeSpan>,
 }
 
 /// The cells a sheet view holds. The screen reads its cache through it.
 pub trait SheetCells {
-    /// The cell at `(row, col)`, or `None` if the view holds none there.
-    fn cell(&self, row: u32, col: u32) -> Option<SheetCell<'_>>;
+    /// The cell at `at`, or `None` if the view holds none there.
+    fn cell(&self, at: CellPos) -> Option<SheetCell<'_>>;
 
-    /// Call `f` with `(row, col, col_span, row_span, content)` for each merge
-    /// master the view holds.
-    fn for_each_merge(&self, f: &mut dyn FnMut(u32, u32, u32, u32, CellContent<'_>));
+    /// Call `f` with `(master, span, content)` for each merge master the view
+    /// holds.
+    fn for_each_merge(&self, f: &mut dyn FnMut(CellPos, MergeSpan, CellContent<'_>));
 }
 
 /// The two axes of a sheet, in sheet coordinates at zoom 1.
@@ -43,50 +43,52 @@ pub struct SheetAxes<'v> {
     /// Height of a row with no entry in `row_heights`.
     pub row_height: f64,
     /// Explicit column widths, keyed by column.
-    pub col_widths: &'v HashMap<u32, f32>,
+    pub col_widths: &'v HashMap<Col, f32>,
     /// Explicit row heights, keyed by row.
-    pub row_heights: &'v HashMap<u32, f32>,
+    pub row_heights: &'v HashMap<Row, f32>,
     /// Rows hidden by the shared filter, sorted ascending.
-    pub hidden_rows: &'v [u32],
+    pub hidden_rows: &'v [Row],
 }
 
 impl SheetAxes<'_> {
     /// True if `row` is hidden by the shared filter.
-    pub fn is_hidden(&self, row: u32) -> bool {
+    pub fn is_hidden(&self, row: Row) -> bool {
         self.hidden_rows.binary_search(&row).is_ok()
     }
 
     /// X of column `col`'s left edge.
-    pub fn col_x(&self, col: u32) -> f64 {
+    pub fn col_x(&self, col: Col) -> f64 {
         let resized: f64 = self
             .col_widths
             .iter()
             .filter(|&(&c, _)| c < col)
             .map(|(_, &w)| w as f64 - self.col_width)
             .sum();
-        col as f64 * self.col_width + resized
+        f64::from(col.get()) * self.col_width + resized
     }
 
     /// Y of row `row`'s top edge. The hidden rows above it take no height.
-    pub fn row_y(&self, row: u32) -> f64 {
-        let hidden = self.hidden_rows.partition_point(|&r| r < row) as u32;
+    pub fn row_y(&self, row: Row) -> f64 {
+        let hidden = self.hidden_rows.partition_point(|&r| r < row) as f64;
         let resized: f64 = self
             .row_heights
             .iter()
             .filter(|&(&r, _)| r < row && !self.is_hidden(r))
             .map(|(_, &h)| h as f64 - self.row_height)
             .sum();
-        (row - hidden) as f64 * self.row_height + resized
+        (f64::from(row.get()) - hidden) * self.row_height + resized
     }
 
     /// The column whose band holds `x`, clamped to the grid.
-    pub fn col_at(&self, x: f64) -> u32 {
-        first(TOTAL_COLS, |c| self.col_x(c + 1) > x).min(TOTAL_COLS - 1)
+    pub fn col_at(&self, x: f64) -> Col {
+        let past = first(TOTAL_COLS.get(), |c| self.col_x(Col::new(c).next()) > x);
+        Col::new(past).min(LAST_COL)
     }
 
     /// The row whose band holds `y`, clamped to the grid.
-    pub fn row_at(&self, y: f64) -> u32 {
-        first(TOTAL_ROWS, |r| self.row_y(r + 1) > y).min(TOTAL_ROWS - 1)
+    pub fn row_at(&self, y: f64) -> Row {
+        let past = first(TOTAL_ROWS.get(), |r| self.row_y(Row::new(r).next()) > y);
+        Row::new(past).min(LAST_ROW)
     }
 }
 
@@ -134,8 +136,9 @@ impl DocumentWalk for SheetWalk<'_> {
         let axes = &view.axes;
         let palette = view.palette;
         let (c0, r0) = (axes.col_at(region.x0), axes.row_at(region.y0));
-        let c1 = (axes.col_at(region.x1) + 1).min(TOTAL_COLS);
-        let r1 = (axes.row_at(region.y1) + 1).min(TOTAL_ROWS);
+        let c1 = axes.col_at(region.x1).next().min(TOTAL_COLS.as_end());
+        let r1 = axes.row_at(region.y1).next().min(TOTAL_ROWS.as_end());
+        let (cols, rows) = (ColSpan::new(c0, c1), RowSpan::new(r0, r1));
         // The primitives lay out from an origin cell: pin it at its own sheet
         // position, so every rect they produce is in sheet coordinates.
         let layout = GridLayout {
@@ -164,23 +167,25 @@ impl DocumentWalk for SheetWalk<'_> {
 
         // Fills and text. A merge master's text is laid out by the merge pass
         // over its span, so this pass draws its fill only.
-        let cells = (r0..r1)
+        let cells = rows
+            .into_iter()
             .filter(|&row| !axes.is_hidden(row))
             .flat_map(|row| {
-                (c0..c1).filter_map(move |col| {
-                    let cell = view.cells.cell(row, col)?;
+                cols.into_iter().filter_map(move |col| {
+                    let at = CellPos::new(row, col);
+                    let cell = view.cells.cell(at)?;
                     let mut content = cell.content;
                     if cell.merge_span.is_some() {
                         content.text = "";
                     }
-                    Some((row, col, content))
+                    Some((at, content))
                 })
             });
         // An overflowing line spills over a neighbour with no text. A merge
         // master keeps its text, so overflow stops at a merged block.
-        let is_empty = |row: u32, col: u32| {
+        let is_empty = |at: CellPos| {
             view.cells
-                .cell(row, col)
+                .cell(at)
                 .is_none_or(|c| c.content.text.is_empty())
         };
         self.cells_drawn = draw_cells_on(
@@ -199,45 +204,45 @@ impl DocumentWalk for SheetWalk<'_> {
 
         // Merge masters over the separators of the cells they cover. A master
         // outside the region still draws the part of its span inside it.
-        view.cells
-            .for_each_merge(&mut |row, col, col_span, row_span, content| {
-                if hits(layout.merge_rect(row, col, col_span, row_span)) {
-                    draw_merges_on(
-                        surface,
-                        &layout,
-                        palette,
-                        self.font_cx,
-                        self.text_cache,
-                        view.text_enabled,
-                        std::iter::once((row, col, col_span, row_span, content)),
-                    );
-                }
-            });
+        view.cells.for_each_merge(&mut |master, span, content| {
+            if hits(layout.merge_rect(master, span)) {
+                draw_merges_on(
+                    surface,
+                    &layout,
+                    palette,
+                    self.font_cx,
+                    self.text_cache,
+                    view.text_enabled,
+                    std::iter::once((master, span, content)),
+                );
+            }
+        });
 
         // Borders last, so no separator and no merge fill paints over one. A
         // plain cell's border wraps its rect, a master's wraps its span.
-        let borders = (r0..r1)
+        let borders = rows
+            .into_iter()
             .filter(|&row| !axes.is_hidden(row))
             .flat_map(|row| {
-                (c0..c1).filter_map(move |col| {
-                    let cell = view.cells.cell(row, col)?;
+                cols.into_iter().filter_map(move |col| {
+                    let at = CellPos::new(row, col);
+                    let cell = view.cells.cell(at)?;
                     cell.merge_span
                         .is_none()
-                        .then(|| (layout.cell_rect(row, col), cell.content))
+                        .then(|| (layout.cell_rect(at), cell.content))
                 })
             });
         draw_cell_borders_on(surface, borders, palette.cell_border);
-        view.cells
-            .for_each_merge(&mut |row, col, col_span, row_span, content| {
-                let rect = layout.merge_rect(row, col, col_span, row_span);
-                if hits(rect) {
-                    draw_cell_borders_on(
-                        surface,
-                        std::iter::once((rect, content)),
-                        palette.cell_border,
-                    );
-                }
-            });
+        view.cells.for_each_merge(&mut |master, span, content| {
+            let rect = layout.merge_rect(master, span);
+            if hits(rect) {
+                draw_cell_borders_on(
+                    surface,
+                    std::iter::once((rect, content)),
+                    palette.cell_border,
+                );
+            }
+        });
 
         surface.pop_clip();
     }

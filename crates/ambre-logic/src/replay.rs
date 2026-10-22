@@ -132,6 +132,7 @@ fn take_slice(queue: &mut ReplayQueue) -> Vec<(Seq, Vec<u8>)> {
 mod tests {
     use super::*;
     use ambre_bus::TrameCommand;
+    use ambre_bus::{Col, Row};
     use ambre_core::SessionNonce;
 
     /// A delta a session of `peer` wrote, carrying `bytes` of cell text.
@@ -140,8 +141,8 @@ mod tests {
         assert!(author.adopt_session(peer, peer.0.to_le_bytes().to_vec()));
         let payload = author
             .handle_command(TrameCommand::SetCellText {
-                row: 0,
-                col: 0,
+                row: Row::new(0),
+                col: Col::new(0),
                 text: "x".repeat(bytes),
             })
             .update

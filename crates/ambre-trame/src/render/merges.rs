@@ -13,7 +13,7 @@ use super::*;
 
 /// Draw the merge masters over the base cell + grid-line layer.
 ///
-/// `merges` yields `(row, col, col_span, row_span, content)` for the visible
+/// `merges` yields `(master, span, content)` for the visible
 /// merge masters. A covered cell is *not* a master and must not appear here:
 /// it renders blank under the master's span. For each master:
 ///
@@ -38,12 +38,12 @@ pub fn draw_merges_on<'a, S, I>(
 ) -> u32
 where
     S: DrawSurface,
-    I: IntoIterator<Item = (u32, u32, u32, u32, CellContent<'a>)>,
+    I: IntoIterator<Item = (CellPos, MergeSpan, CellContent<'a>)>,
 {
     let mut drawn = 0u32;
 
-    for (row, col, col_span, row_span, content) in merges {
-        let rect = layout.merge_rect(row, col, col_span, row_span);
+    for (master, span, content) in merges {
+        let rect = layout.merge_rect(master, span);
 
         // 1. Fill the whole span with the master's fill (or the themed bg),
         // hiding the interior separators drawn through the covered cells.

@@ -149,7 +149,9 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
             ..
         } => {
             toasts.info(format!(
-                "A merge now covers a non-empty cell ({covered_row}, {covered_col}); its value is hidden until unmerge"
+                "A merge now covers a non-empty cell ({}, {}); its value is hidden until unmerge",
+                covered_row.get(),
+                covered_col.get()
             ));
         }
         // Shared sort/filter completion: confirm the action took effect (the data
@@ -157,7 +159,10 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         TrameEvent::FilterApplied {
             hidden_row_count, ..
         } => {
-            toasts.info(format!("Filter applied ({hidden_row_count} rows hidden)"));
+            toasts.info(format!(
+                "Filter applied ({} rows hidden)",
+                hidden_row_count.get()
+            ));
         }
         TrameEvent::FilterCleared => toasts.info("Filter cleared"),
         TrameEvent::SortComplete => toasts.info("Range sorted"),
@@ -170,7 +175,11 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         // Interop (`trame-import-export`): confirm an import/export finished (the
         // download itself is triggered canvas-side on ExportComplete).
         TrameEvent::ImportComplete { rows, cols, .. } => {
-            toasts.info(format!("Imported {rows} rows x {cols} columns"));
+            toasts.info(format!(
+                "Imported {} rows x {} columns",
+                rows.get(),
+                cols.get()
+            ));
         }
         TrameEvent::ExportComplete { filename, .. } => {
             toasts.info(format!("Exported {filename}"));

@@ -12,10 +12,11 @@ use nom::multi::{many0, many1, separated_list0};
 use nom::sequence::{delimited, preceded};
 
 use super::types::{
-    AxisSpan, BinOpKind, CellRef, CellValue, EngineSheet, Expr, FormulaCtx, FormulaError, LineAxis,
+    AxisSpan, BinOpKind, CellRef, CellValue, EngineSheet, Expr, FormulaCtx, FormulaError,
     NameTarget, RangeDep, SheetQualifier, StoredAxis, StoredCell, UnaryOpKind, alpha_to_col,
 };
 use crate::model::Uid;
+use ambre_bus::Row;
 
 // -----------------------------------------------------------------------------
 // Whitespace
@@ -105,10 +106,10 @@ fn col_letters(input: &str) -> nom::IResult<&str, &str> {
 /// exist: `A0` is rejected here so it falls through to the named-range parser,
 /// where it surfaces as an undefined name. Saturating it to row 1 would silently
 /// rewrite the user's `=A0` into `=A1` on the canonicalization round-trip.
-fn row_number(input: &str) -> nom::IResult<&str, u32> {
-    map_res(digit1, |s: &str| -> Result<u32, ()> {
+fn row_number(input: &str) -> nom::IResult<&str, Row> {
+    map_res(digit1, |s: &str| -> Result<Row, ()> {
         let n: u32 = s.parse().map_err(|_| ())?;
-        n.checked_sub(1).ok_or(())
+        n.checked_sub(1).map(Row::new).ok_or(())
     })
     .parse(input)
 }
@@ -179,14 +180,14 @@ fn range(input: &str) -> nom::IResult<&str, Expr> {
 fn whole_cols(input: &str) -> nom::IResult<&str, AxisSpan> {
     let col = || map_res(col_letters, alpha_to_col);
     let (input, (a, _, b)) = (col(), char(':'), col()).parse(input)?;
-    Ok((input, AxisSpan::new(LineAxis::Col, a, b)))
+    Ok((input, AxisSpan::cols(a, b)))
 }
 
 /// A range of whole rows, `2:5` (`TRAME-048`). Tried before a number, which
 /// would otherwise read its first row.
 fn whole_rows(input: &str) -> nom::IResult<&str, AxisSpan> {
     let (input, (a, _, b)) = (row_number, char(':'), row_number).parse(input)?;
-    Ok((input, AxisSpan::new(LineAxis::Row, a, b)))
+    Ok((input, AxisSpan::rows(a, b)))
 }
 
 /// Try to parse a cell reference, a range or a range of whole lines.

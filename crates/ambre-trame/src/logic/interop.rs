@@ -19,8 +19,7 @@ impl TrameState {
         delimiter: Option<u8>,
         has_header: bool,
         target_sheet_id: Option<String>,
-        start_row: u32,
-        start_col: u32,
+        start: CellPos,
     ) -> TrameOutcome {
         let delim = delimiter.unwrap_or_else(|| detect_csv_delimiter(&data));
         let mut reader = csv::ReaderBuilder::new()
@@ -75,8 +74,14 @@ impl TrameState {
         self.active_sheet = sheet_id.clone();
         self.reseed_active_sheet();
 
-        let rows = records.len() as u32;
-        let cols = records.iter().map(Vec::len).max().unwrap_or(0) as u32;
+        let rows = RowCount::from_len(records.len());
+        let cols = ColCount::from_len(records.iter().map(Vec::len).max().unwrap_or(0));
+        let land = |r: usize, c: usize| {
+            CellPos::new(
+                start.row + RowCount::from_len(r),
+                start.col + ColCount::from_len(c),
+            )
+        };
 
         // Pre-materialize every written cell first (same reasoning as
         // `SetCellsBatch`). A `materialize` commit carries the excluded origin,
@@ -84,7 +89,7 @@ impl TrameState {
         for (r, record) in records.iter().enumerate() {
             for (c, value) in record.iter().enumerate() {
                 if !value.is_empty() {
-                    let _ = self.materialize(start_row + r as u32, start_col + c as u32);
+                    let _ = self.materialize(land(r, c));
                 }
             }
         }
@@ -106,7 +111,7 @@ impl TrameState {
         for (r, record) in records.into_iter().enumerate() {
             for (c, value) in record.into_iter().enumerate() {
                 if !value.is_empty() {
-                    self.write_cell(start_row + r as u32, start_col + c as u32, &value);
+                    self.write_cell(land(r, c), &value);
                 }
             }
         }
@@ -150,11 +155,14 @@ impl TrameState {
         } else {
             self.build_sheet_index(sheet_id)
         };
-        let (row_start, row_end, col_start, col_end) = match range {
-            Some(r) => (r.row, r.row_end, r.col, r.col_end),
+        let rect = match range {
+            Some(r) => CellRect {
+                top_left: CellPos::new(r.row, r.col),
+                bottom_right: CellPos::new(r.row_end, r.col_end),
+            },
             None => match self.used_extent(sheet_id, &index) {
                 None => return nothing("the sheet is empty: there is nothing to export"),
-                Some((max_row, max_col)) => (0, max_row, 0, max_col),
+                Some(last) => CellRect::spanning(CellPos::ORIGIN, last),
             },
         };
 
@@ -162,9 +170,11 @@ impl TrameState {
         let mut writer = csv::WriterBuilder::new()
             .delimiter(delim)
             .from_writer(Vec::new());
-        for row in row_start..=row_end {
-            let record: Vec<String> = (col_start..=col_end)
-                .map(|col| self.export_cell_text(sheet_id, idx, &index, row, col))
+        for row in rect.rows() {
+            let record: Vec<String> = rect
+                .cols()
+                .into_iter()
+                .map(|col| self.export_cell_text(sheet_id, idx, &index, CellPos::new(row, col)))
                 .collect();
             let _ = writer.write_record(&record);
         }
@@ -185,13 +195,13 @@ impl TrameState {
         }])
     }
 
-    /// Inclusive `(max_row, max_col)` grid position holding actual content on
+    /// The bottom-right corner of the content on
     /// `sheet_id`, or `None` when the sheet is empty. Scans the `cells_{sheet}` map
     /// (the source of truth) rather than the row/column lists. Those lists stay
     /// materialized at their high-water mark after a scroll or a since-cleared
     /// edit. Using their length would therefore export a rectangle padded with
     /// empty trailing rows/columns.
-    fn used_extent(&self, sheet_id: &str, index: &SheetIndex) -> Option<(u32, u32)> {
+    fn used_extent(&self, sheet_id: &str, index: &SheetIndex) -> Option<CellPos> {
         let LoroValue::Map(cells) = self.doc.get_map(cells_map_name(sheet_id)).get_value() else {
             return None;
         };
@@ -206,12 +216,12 @@ impl TrameState {
             let Some((rl, cl)) = parse_cell_key(key) else {
                 continue;
             };
-            if let (Some(r), Some(c)) = (index.row_pos(&rl), index.col_pos(&cl)) {
-                max_row = Some(max_row.map_or(r, |m: usize| m.max(r)));
-                max_col = Some(max_col.map_or(c, |m: usize| m.max(c)));
+            if let Some(at) = index.pos_of(&rl, &cl) {
+                max_row = Some(max_row.map_or(at.row, |m: Row| m.max(at.row)));
+                max_col = Some(max_col.map_or(at.col, |m: Col| m.max(at.col)));
             }
         }
-        Some((max_row? as u32, max_col? as u32))
+        Some(CellPos::new(max_row?, max_col?))
     }
 
     /// Displayed value of a cell on an arbitrary sheet, for CSV export. That is
@@ -222,10 +232,9 @@ impl TrameState {
         sheet_id: &str,
         idx: EngineSheet,
         index: &SheetIndex,
-        row: u32,
-        col: u32,
+        at: CellPos,
     ) -> String {
-        let Some((rl, cl)) = index.resolve(row as usize, col as usize) else {
+        let Some((rl, cl)) = index.resolve(at) else {
             return String::new();
         };
         let cell = CellId::bound(idx, rl, cl);
@@ -242,7 +251,7 @@ impl TrameState {
             },
         };
         match self.stored_style(sheet_id, rl, cl) {
-            Some(style) => self.format_display(row, col, text, &style),
+            Some(style) => self.format_display(at, text, &style),
             None => text,
         }
     }

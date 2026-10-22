@@ -2,6 +2,7 @@
 // Parser unit tests (descendant module: sees the private combinators).
 
 use super::*;
+use crate::{Col, Row};
 
 fn parse(input: &str) -> Expr {
     parse_formula(input).unwrap_or_else(|e| panic!("parse failed: {e}"))
@@ -40,17 +41,25 @@ fn literal_bool() {
 fn cell_reference() {
     assert!(matches!(
         parse("A1"),
-        Expr::CellRef(CellRef { row: 0, col: 0, .. })
+        Expr::CellRef(CellRef {
+            row: ROW_0,
+            col: COL_0,
+            ..
+        })
     ));
     assert!(matches!(
         parse("B2"),
-        Expr::CellRef(CellRef { row: 1, col: 1, .. })
+        Expr::CellRef(CellRef {
+            row: ROW_1,
+            col: COL_1,
+            ..
+        })
     ));
     assert!(matches!(
         parse("AA100"),
         Expr::CellRef(CellRef {
-            row: 99,
-            col: 26,
+            row: ROW_99,
+            col: COL_26,
             ..
         })
     ));
@@ -60,10 +69,10 @@ fn cell_reference() {
 fn cell_range() {
     match parse("A1:B10") {
         Expr::Range(r) => {
-            assert_eq!(r.row_start, 0);
-            assert_eq!(r.row_end, 9);
-            assert_eq!(r.col_start, 0);
-            assert_eq!(r.col_end, 1);
+            assert_eq!(r.row_start, Row::new(0));
+            assert_eq!(r.row_end, Row::new(9));
+            assert_eq!(r.col_start, Col::new(0));
+            assert_eq!(r.col_end, Col::new(1));
         }
         other => panic!("expected Range, got {other:?}"),
     }
@@ -182,6 +191,16 @@ fn function_single_arg() {
 
 use super::super::types::{EngineSheet, FormulaCtx, NameTarget, RangeDep};
 
+const COL_0: Col = Col::new(0);
+const COL_1: Col = Col::new(1);
+const COL_26: Col = Col::new(26);
+const ROW_0: Row = Row::new(0);
+const ROW_1: Row = Row::new(1);
+const ROW_2: Row = Row::new(2);
+const ROW_4: Row = Row::new(4);
+const ROW_9: Row = Row::new(9);
+const ROW_99: Row = Row::new(99);
+
 const S0: EngineSheet = EngineSheet::ACTIVE;
 const S2: EngineSheet = EngineSheet::new(2);
 const S3: EngineSheet = EngineSheet::new(3);
@@ -207,8 +226,18 @@ impl FormulaCtx for TestCtx {
     }
     fn resolve_name(&self, name: &str) -> Option<NameTarget> {
         match name {
-            "TOTAL" => Some(NameTarget::Range(RangeDep::with_sheet(S2, 0, 2, 1, 1))),
-            "PIVOT" => Some(NameTarget::Cell(CellRef::with_sheet(S0, 4, 0))),
+            "TOTAL" => Some(NameTarget::Range(RangeDep::with_sheet(
+                S2,
+                Row::new(0),
+                Row::new(2),
+                Col::new(1),
+                Col::new(1),
+            ))),
+            "PIVOT" => Some(NameTarget::Cell(CellRef::with_sheet(
+                S0,
+                Row::new(4),
+                Col::new(0),
+            ))),
             _ => None,
         }
     }
@@ -228,8 +257,8 @@ fn sheet_qualified_resolves_index() {
     match resolve("Sheet2!A1", S0).unwrap() {
         Expr::CellRef(CellRef {
             sheet: S2,
-            row: 0,
-            col: 0,
+            row: ROW_0,
+            col: COL_0,
         }) => {}
         other => panic!("expected sheet-2 cell, got {other:?}"),
     }
@@ -240,8 +269,8 @@ fn quoted_sheet_name_with_space() {
     match resolve("'My Sheet'!B2", S0).unwrap() {
         Expr::CellRef(CellRef {
             sheet: S5,
-            row: 1,
-            col: 1,
+            row: ROW_1,
+            col: COL_1,
         }) => {}
         other => panic!("expected sheet-5 cell, got {other:?}"),
     }
@@ -252,8 +281,8 @@ fn sheet_qualified_range_resolves() {
     match resolve("Sheet2!A1:A10", S0).unwrap() {
         Expr::Range(RangeDep {
             sheet: S2,
-            row_start: 0,
-            row_end: 9,
+            row_start: ROW_0,
+            row_end: ROW_9,
             ..
         }) => {}
         other => panic!("expected sheet-2 range, got {other:?}"),
@@ -265,8 +294,8 @@ fn id_qualified_cell_resolves_index() {
     match resolve("#s2!A1", S0).unwrap() {
         Expr::CellRef(CellRef {
             sheet: S2,
-            row: 0,
-            col: 0,
+            row: ROW_0,
+            col: COL_0,
         }) => {}
         other => panic!("expected sheet-2 cell, got {other:?}"),
     }
@@ -299,8 +328,8 @@ fn unqualified_ref_takes_default_sheet() {
     match resolve("A1", S3).unwrap() {
         Expr::CellRef(CellRef {
             sheet: S3,
-            row: 0,
-            col: 0,
+            row: ROW_0,
+            col: COL_0,
         }) => {}
         other => panic!("expected default-sheet cell, got {other:?}"),
     }
@@ -320,8 +349,8 @@ fn named_range_resolves() {
                 &args[0],
                 Expr::Range(RangeDep {
                     sheet: S2,
-                    row_start: 0,
-                    row_end: 2,
+                    row_start: ROW_0,
+                    row_end: ROW_2,
                     ..
                 })
             ));
@@ -339,8 +368,8 @@ fn named_cell_in_arithmetic() {
                 *lhs,
                 Expr::CellRef(CellRef {
                     sheet: S0,
-                    row: 4,
-                    col: 0
+                    row: ROW_4,
+                    col: COL_0
                 })
             ));
         }
@@ -438,7 +467,7 @@ fn row_zero_is_not_a_reference() {
     // Rows are 1-based in A1 syntax, so `A0` names nothing. It must fall through
     // to the named-range parser rather than silently aliasing row 1.
     assert!(matches!(parse("A0"), Expr::Name(n) if n == "A0"));
-    assert!(matches!(parse("A1"), Expr::CellRef(r) if r.row == 0));
+    assert!(matches!(parse("A1"), Expr::CellRef(r) if r.row == Row::new(0)));
 }
 
 #[test]

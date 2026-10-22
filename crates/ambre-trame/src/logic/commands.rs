@@ -43,15 +43,20 @@ impl TrameState {
                 extra,
                 kind,
             } => {
-                self.active = (row, col);
+                self.active = CellPos::new(row, col);
                 // Store the whole selection: the anchor corner, every committed
                 // disjoint rectangle, and the band kind. The readers resolve the
                 // live rectangle and the used range from these.
                 self.selection = TrackedSelection {
-                    anchor: (anchor_row, anchor_col),
+                    anchor: CellPos::new(anchor_row, anchor_col),
                     extra: extra
                         .into_iter()
-                        .map(|r| (r.row, r.col, r.row_end, r.col_end))
+                        .map(|r| {
+                            CellRect::spanning(
+                                CellPos::new(r.row, r.col),
+                                CellPos::new(r.row_end, r.col_end),
+                            )
+                        })
                         .collect(),
                     kind,
                 };
@@ -68,7 +73,7 @@ impl TrameState {
             }
             TrameCommand::SetCellText { row, col, text } => {
                 tracing::info!(
-                    "[Logic] SetCellText row={} col={} text='{:.80}'",
+                    "[Logic] SetCellText row={:?} col={:?} text='{:.80}'",
                     row,
                     col,
                     text,
@@ -77,11 +82,11 @@ impl TrameState {
                 // commit (filter recompute) merge into a single undo item. The
                 // next `CommitEdit` seals it, or the fallback seal above.
                 let _ = self.undo_manager.group_start();
-                self.write_cell(row, col, &text);
+                self.write_cell(CellPos::new(row, col), &text);
                 self.finish_cell_writes()
             }
             TrameCommand::BeginCellEdit { session, row, col } => {
-                self.begin_cell_edit(session, row, col)
+                self.begin_cell_edit(session, CellPos::new(row, col))
             }
             TrameCommand::CommitCellEdit { session, text } => {
                 tracing::info!("[Logic] CommitCellEdit session={session} text='{text:.80}'");
@@ -100,13 +105,13 @@ impl TrameState {
                 // the value commits would split the batch into one undo item per
                 // cell (see `write_cell`). Doing them first leaves the value writes
                 // in a single trailing commit -> one undo item for the batch.
-                for (row, col, text) in &cells {
+                for (at, text) in &cells {
                     if !text.is_empty() {
-                        let _ = self.materialize(*row, *col);
+                        let _ = self.materialize(*at);
                     }
                 }
-                for (row, col, text) in cells {
-                    self.write_cell(row, col, &text);
+                for (at, text) in cells {
+                    self.write_cell(at, &text);
                 }
                 self.finish_cell_writes()
             }
@@ -119,8 +124,8 @@ impl TrameState {
                 col_end,
             } => {
                 // Clamp to grid bounds.
-                let row_end = row_end.min(TOTAL_ROWS.saturating_sub(1));
-                let col_end = col_end.min(TOTAL_COLS.saturating_sub(1));
+                let row_end = row_end.min(crate::LAST_ROW);
+                let col_end = col_end.min(crate::LAST_COL);
 
                 if row_start > row_end || col_start > col_end {
                     return TrameOutcome::display_only(vec![]);
@@ -131,13 +136,25 @@ impl TrameState {
                 let indices = self.engine_indices();
                 self.engine.compute_all_dirty(&indices);
 
-                let cells = self.pack_cells(row_start, row_end, col_start, col_end);
+                let window = CellRect::spanning(
+                    CellPos::new(row_start, col_start),
+                    CellPos::new(row_end, col_end),
+                );
+                let cells = self.pack_cells(window);
 
                 // Per-axis metric slices for the requested window: the UI feeds
                 // them straight into its variable-metric GridLayout
                 // (`trame-resize`).
-                let col_widths = (col_start..=col_end).map(|c| self.col_width(c)).collect();
-                let row_heights = (row_start..=row_end).map(|r| self.row_height(r)).collect();
+                let col_widths = window
+                    .cols()
+                    .into_iter()
+                    .map(|c| self.col_width(c))
+                    .collect();
+                let row_heights = window
+                    .rows()
+                    .into_iter()
+                    .map(|r| self.row_height(r))
+                    .collect();
 
                 let mut display = vec![TrameEvent::ViewportData {
                     version,
@@ -155,19 +172,22 @@ impl TrameState {
                 }
                 TrameOutcome::display_only(display)
             }
-            TrameCommand::InsertRow { at } => self.insert_axis(at, Axis::Row),
-            TrameCommand::DeleteRow { at } => self.delete_axis(at, Axis::Row),
-            TrameCommand::InsertColumn { at } => self.insert_axis(at, Axis::Col),
-            TrameCommand::DeleteColumn { at } => self.delete_axis(at, Axis::Col),
-            TrameCommand::MoveRow { from, to } => self.move_axis(from, to, Axis::Row),
-            TrameCommand::MoveColumn { from, to } => self.move_axis(from, to, Axis::Col),
+            TrameCommand::InsertRow { at } => self.insert_axis(at),
+            TrameCommand::DeleteRow { at } => self.delete_axis(at),
+            TrameCommand::InsertColumn { at } => self.insert_axis(at),
+            TrameCommand::DeleteColumn { at } => self.delete_axis(at),
+            TrameCommand::MoveRow { from, to } => self.move_axis(from, to),
+            TrameCommand::MoveColumn { from, to } => self.move_axis(from, to),
             TrameCommand::MergeCells {
                 row,
                 col,
                 row_end,
                 col_end,
-            } => self.merge_cells(row, col, row_end, col_end),
-            TrameCommand::UnmergeCells { row, col } => self.unmerge_cells(row, col),
+            } => self.merge_cells(CellRect::spanning(
+                CellPos::new(row, col),
+                CellPos::new(row_end, col_end),
+            )),
+            TrameCommand::UnmergeCells { row, col } => self.unmerge_cells(CellPos::new(row, col)),
             TrameCommand::ResizeCol {
                 version: _,
                 sheet_id,
@@ -182,16 +202,13 @@ impl TrameState {
             } => self.resize_row(&sheet_id.0, row, height_px),
             // -- Parameterless structural intents (grid context menu). Geometry
             // comes from the tracked active cell / selection (`SetActiveCell`).
-            TrameCommand::InsertRowAbove => self.insert_axis(self.active.0, Axis::Row),
-            TrameCommand::InsertRowBelow => self.insert_axis(self.active.0 + 1, Axis::Row),
-            TrameCommand::InsertColLeft => self.insert_axis(self.active.1, Axis::Col),
-            TrameCommand::InsertColRight => self.insert_axis(self.active.1 + 1, Axis::Col),
-            TrameCommand::DeleteSelectedRows => self.delete_selected_axis(Axis::Row),
-            TrameCommand::DeleteSelectedCols => self.delete_selected_axis(Axis::Col),
-            TrameCommand::MergeSelection => {
-                let (r1, c1, r2, c2) = self.live_selection_rect();
-                self.merge_cells(r1, c1, r2, c2)
-            }
+            TrameCommand::InsertRowAbove => self.insert_axis(self.active.row),
+            TrameCommand::InsertRowBelow => self.insert_axis(self.active.row.next()),
+            TrameCommand::InsertColLeft => self.insert_axis(self.active.col),
+            TrameCommand::InsertColRight => self.insert_axis(self.active.col.next()),
+            TrameCommand::DeleteSelectedRows => self.delete_selected_axis::<Row>(),
+            TrameCommand::DeleteSelectedCols => self.delete_selected_axis::<Col>(),
+            TrameCommand::MergeSelection => self.merge_cells(self.live_selection_rect()),
             TrameCommand::UnmergeActive => self.unmerge_selection(),
             // Single-column shared sort over the tracked selection
             // (`trame-sort`). Reference column = the range's first column
@@ -230,16 +247,10 @@ impl TrameState {
                 sort_col,
                 ascending,
                 has_header,
-            } => self.sort_range(
-                &sheet_id.0,
-                row_start,
-                row_end,
-                col_start,
-                col_end,
-                sort_col,
-                ascending,
-                has_header,
-            ),
+            } => match ordered_rect(row_start, row_end, col_start, col_end) {
+                Some(rect) => self.sort_range(&sheet_id.0, rect, sort_col, ascending, has_header),
+                None => TrameOutcome::display_only(vec![]),
+            },
             TrameCommand::SortRangeMulti {
                 sheet_id,
                 row_start,
@@ -248,15 +259,10 @@ impl TrameState {
                 col_end,
                 sort_keys,
                 has_header,
-            } => self.sort_range_multi(
-                &sheet_id.0,
-                row_start,
-                row_end,
-                col_start,
-                col_end,
-                &sort_keys,
-                has_header,
-            ),
+            } => match ordered_rect(row_start, row_end, col_start, col_end) {
+                Some(rect) => self.sort_range_multi(&sheet_id.0, rect, &sort_keys, has_header),
+                None => TrameOutcome::display_only(vec![]),
+            },
             TrameCommand::ApplyFilter {
                 sheet_id,
                 col,
@@ -274,7 +280,7 @@ impl TrameState {
             TrameCommand::CopyRange => self.copy_range(),
             TrameCommand::ApplyFilterToActiveColumn { kind } => {
                 let sheet = self.active_sheet.clone();
-                self.apply_filter(&sheet, self.active.1, kind)
+                self.apply_filter(&sheet, self.active.col, kind)
             }
             TrameCommand::ClearActiveFilter => {
                 let sheet = self.active_sheet.clone();
@@ -284,11 +290,10 @@ impl TrameState {
                 target_row,
                 target_col,
                 payload,
-            } => self.paste_range(target_row, target_col, payload),
+            } => self.paste_range(CellPos::new(target_row, target_col), payload),
             TrameCommand::PasteText { text } => self.paste_text(&text),
             TrameCommand::PasteClipboardAtActive { payload } => {
-                let (row, col) = self.active;
-                self.paste_range(row, col, payload)
+                self.paste_range(self.active, payload)
             }
             TrameCommand::FillRange {
                 sheet_id,
@@ -329,8 +334,7 @@ impl TrameState {
                 delimiter,
                 has_header,
                 target_sheet_id.map(|s| s.0),
-                start_row,
-                start_col,
+                CellPos::new(start_row, start_col),
             ),
             TrameCommand::ExportCsv {
                 sheet_id,
@@ -428,71 +432,75 @@ impl TrameState {
     }
 }
 
+/// The rectangle a range command names, `None` when an end comes before its
+/// start: such a command is a no-op.
+fn ordered_rect(row_start: Row, row_end: Row, col_start: Col, col_end: Col) -> Option<CellRect> {
+    (row_start <= row_end && col_start <= col_end).then(|| {
+        CellRect::spanning(
+            CellPos::new(row_start, col_start),
+            CellPos::new(row_end, col_end),
+        )
+    })
+}
+
 impl TrameState {
-    /// The display cells of the window `(row_start, col_start)`-`(row_end,
-    /// col_end)`, as the viewport serves them: computed text through its number
-    /// format, the raw text, and the resolved style. The formula cache must be
-    /// current.
-    pub(super) fn pack_cells(
-        &self,
-        row_start: u32,
-        row_end: u32,
-        col_start: u32,
-        col_end: u32,
-    ) -> Vec<DisplayCell> {
-        let mut cells =
-            Vec::with_capacity(((row_end - row_start + 1) * (col_end - col_start + 1)) as usize);
+    /// The display cells of `window`, as the viewport serves them: computed
+    /// text through its number format, the raw text, and the resolved style.
+    /// The formula cache must be current.
+    pub(super) fn pack_cells(&self, window: CellRect) -> Vec<DisplayCell> {
+        let mut cells = Vec::with_capacity(
+            window.row_count().get() as usize * window.col_count().get() as usize,
+        );
         // One set of sheet layouts for the whole window: a cross-sheet formula
         // builds its sheet's index once, not once per cell.
         let lines = self.sheet_lines();
 
-        for row in row_start..=row_end {
-            for col in col_start..=col_end {
-                // A merge master carries its span; a covered cell renders
-                // blank (swallowed by the master). Both flag `is_merged`.
-                let merge_span = self
-                    .merges
-                    .get(&(row, col))
-                    .map(|&(end_row, end_col)| (end_col - col + 1, end_row - row + 1));
-                let is_covered = self.covered.contains(&(row, col));
-                let style = self.styles.get(&(row, col)).cloned().unwrap_or_default();
-                let text = if is_covered {
+        for at in window.cells() {
+            let CellPos { row, col } = at;
+            // A merge master carries its span; a covered cell renders
+            // blank (swallowed by the master). Both flag `is_merged`.
+            let merge_span = self
+                .merges
+                .get(&at)
+                .map(|&end| CellRect::spanning(at, end).extent());
+            let is_covered = self.covered.contains(&at);
+            let style = self.styles.get(&at).cloned().unwrap_or_default();
+            let text = if is_covered {
+                String::new()
+            } else {
+                // Apply the cell's number format to its computed value
+                // (`trame-number-formats`): a `General` cell is verbatim.
+                self.format_display(at, self.cell_text(at), &style)
+            };
+            cells.push(DisplayCell {
+                row,
+                col,
+                text,
+                raw: if is_covered {
                     String::new()
                 } else {
-                    // Apply the cell's number format to its computed value
-                    // (`trame-number-formats`): a `General` cell is verbatim.
-                    self.format_display(row, col, self.cell_text(row, col), &style)
-                };
-                cells.push(DisplayCell {
-                    row,
-                    col,
-                    text,
-                    raw: if is_covered {
-                        String::new()
-                    } else {
-                        // Reconstruct positions from the stored lines, and
-                        // cross-sheet qualifiers from the stable id to the
-                        // display name (`TRAME-228`, `trame-sheets`).
-                        self.formula_display(&self.cell_raw(row, col), &self.active_sheet, &lines)
-                    },
-                    bold: self.bold.contains(&(row, col)),
-                    italic: self.italic.contains(&(row, col)),
-                    underline: style.underline,
-                    strikethrough: style.strikethrough,
-                    h_align: style.h_align,
-                    numeric: !is_covered && self.cell_is_numeric(row, col),
-                    v_align: style.v_align,
-                    wrap: style.wrap,
-                    fg: style.fg,
-                    bg: style.bg,
-                    font: style.font.clone(),
-                    size: style.size,
-                    borders: style.borders,
-                    is_merged: merge_span.is_some() || is_covered,
-                    merge_span,
-                    is_filtered: self.hidden_rows.contains(&row),
-                });
-            }
+                    // Reconstruct positions from the stored lines, and
+                    // cross-sheet qualifiers from the stable id to the
+                    // display name (`TRAME-228`, `trame-sheets`).
+                    self.formula_display(&self.cell_raw(at), &self.active_sheet, &lines)
+                },
+                bold: self.bold.contains(&at),
+                italic: self.italic.contains(&at),
+                underline: style.underline,
+                strikethrough: style.strikethrough,
+                h_align: style.h_align,
+                numeric: !is_covered && self.cell_is_numeric(at),
+                v_align: style.v_align,
+                wrap: style.wrap,
+                fg: style.fg,
+                bg: style.bg,
+                font: style.font.clone(),
+                size: style.size,
+                borders: style.borders,
+                is_merged: merge_span.is_some() || is_covered,
+                merge_span,
+                is_filtered: self.hidden_rows.contains(&row),
+            });
         }
         cells
     }
@@ -500,17 +508,19 @@ impl TrameState {
     /// Every non-empty cell of grid column `col`, all rows, for an auto-fit
     /// (`TRAME-UI-128`). The viewport cache holds only the loaded window, so the
     /// canvas cannot measure a column whose content lies outside it.
-    pub(super) fn column_content(&mut self, col: u32) -> TrameOutcome {
+    pub(super) fn column_content(&mut self, col: Col) -> TrameOutcome {
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
-        let rows = self.index.row_len() as u32;
-        let cells = if rows == 0 {
-            Vec::new()
-        } else {
-            self.pack_cells(0, rows - 1, col, col)
+        let cells = match Row::last(&self.index) {
+            None => Vec::new(),
+            Some(last) => self
+                .pack_cells(CellRect::spanning(
+                    CellPos::new(Row::ZERO, col),
+                    CellPos::new(last, col),
+                ))
                 .into_iter()
                 .filter(|cell| !cell.text.is_empty())
-                .collect()
+                .collect(),
         };
         TrameOutcome::display_only(vec![TrameEvent::ColumnContent { col, cells }])
     }

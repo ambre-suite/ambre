@@ -105,8 +105,8 @@ impl TrameView {
             needs_full: true,
             viewport_changed: false,
             data_dirty: false,
-            prev_top_row: 0,
-            prev_left_col: 0,
+            prev_top_row: Row::ZERO,
+            prev_left_col: Col::ZERO,
             scroll: Default::default(),
             drag_point: None,
             cut_pending: false,
@@ -235,10 +235,9 @@ impl TrameView {
     /// every selection change so navigating the grid is audible, like a native
     /// spreadsheet.
     pub(crate) fn announce_active(&self) {
-        let (row, col) = (self.state.active_row(), self.state.active_col());
-        let value = self.cell_seed(row, col);
-        self.text_input
-            .announce(&cell_announcement(row, col, &value));
+        let at = self.state.active_cell();
+        let value = self.cell_seed(at);
+        self.text_input.announce(&cell_announcement(at, &value));
         self.refresh_selection_stats();
     }
 
@@ -268,7 +267,7 @@ impl TrameView {
         format!(
             "{}{}",
             crate::columns::col_to_alpha(self.state.active_col()),
-            self.state.active_row() + 1
+            crate::columns::row_label(self.state.active_row())
         )
     }
 
@@ -280,7 +279,7 @@ impl TrameView {
     pub(crate) fn publish_anchor(&mut self) {
         let next = self
             .state
-            .cell_pixel_rect(self.state.active_row(), self.state.active_col())
+            .cell_pixel_rect(self.state.active_cell())
             .map(|(x, y, w, _h)| Anchor { x: x + w / 2.0, y });
         if next != self.last_anchor {
             self.last_anchor = next;
@@ -303,20 +302,20 @@ impl TrameView {
         performance_mark("ambre:input");
     }
 
-    /// Seed text for an editor opened on `(row, col)`: the cell's current text,
-    /// or empty if not cached.
-    pub(crate) fn cell_seed(&self, row: u32, col: u32) -> String {
+    /// Seed text for an editor opened on `at`: the cell's current text, or
+    /// empty if not cached.
+    pub(crate) fn cell_seed(&self, at: CellPos) -> String {
         self.state
             .cell_cache
-            .get(&(row, col))
+            .get(&at)
             .map(|c| c.raw.clone())
             .unwrap_or_default()
     }
 
     /// Slide the textarea pipe onto a cell (CSS px) so the IME popup anchors
     /// there. The grid lays out in CSS px too (`CANVAS-032`).
-    pub(crate) fn park_input_on(&self, row: u32, col: u32) {
-        if let Some((x, y, _, h)) = self.state.cell_pixel_rect(row, col) {
+    pub(crate) fn park_input_on(&self, at: CellPos) {
+        if let Some((x, y, _, h)) = self.state.cell_pixel_rect(at) {
             self.text_input.set_caret(x, y, h);
         }
     }
@@ -324,14 +323,14 @@ impl TrameView {
     /// Open an edit session on the active cell, seeded with `seed`. Focuses the
     /// pipe (clearing its buffer) and positions it on the cell.
     pub(crate) fn begin_edit(&mut self, seed: String) {
-        let (row, col) = (self.state.active_row(), self.state.active_col());
-        if !self.open_session(row, col, seed.clone()) {
+        let at = self.state.active_cell();
+        if !self.open_session(at, seed.clone()) {
             return;
         }
         self.editor_text_drag = false;
         self.text_input.clear();
         self.text_input.focus();
-        self.park_input_on(row, col);
+        self.park_input_on(at);
         self.reset_blink();
         self.show_formula_text(seed);
     }
@@ -342,27 +341,31 @@ impl TrameView {
     /// only the rendering/commit vehicle. Stealing focus to the textarea pipe
     /// (as [`begin_edit`](Self::begin_edit) does) would abort the user's typing.
     pub(crate) fn begin_edit_external(&mut self) {
-        let (row, col) = (self.state.active_row(), self.state.active_col());
-        let seed = self.cell_seed(row, col);
-        if !self.open_session(row, col, seed) {
+        let at = self.state.active_cell();
+        let seed = self.cell_seed(at);
+        if !self.open_session(at, seed) {
             return;
         }
         self.editor_text_drag = false;
         self.reset_blink();
     }
 
-    /// Open the editor on `(row, col)` under a fresh session token, once the
+    /// Open the editor on `at` under a fresh session token, once the
     /// Logic thread has been asked to pin that cell (`TRAME-UI-160`). A session
     /// Logic never heard of could not commit, so a refused request opens none.
-    fn open_session(&mut self, row: u32, col: u32, seed: String) -> bool {
+    fn open_session(&mut self, at: CellPos, seed: String) -> bool {
         self.edit_session += 1;
         let session = self.edit_session;
-        let begin = TrameCommand::BeginCellEdit { session, row, col };
+        let begin = TrameCommand::BeginCellEdit {
+            session,
+            row: at.row,
+            col: at.col,
+        };
         if self.send_command_lossless(begin).is_err() {
             tracing::error!("Trame: the outbox is full, the edit session did not open");
             return false;
         }
-        let mut editor = CellEditor::new(row, col, seed);
+        let mut editor = CellEditor::new(at, seed);
         editor.session = session;
         self.editor = Some(editor);
         true
@@ -382,23 +385,19 @@ impl TrameView {
         self.text_input.clear();
         self.text_input
             .announce("A collaborator deleted the cell you were editing. Nothing was written.");
-        self.show_formula_text(self.cell_seed(self.state.active_row(), self.state.active_col()));
+        self.show_formula_text(self.cell_seed(self.state.active_cell()));
     }
 
-    /// Carry session `session` to `(row, col)`, where a peer moved its cell. The
+    /// Carry session `session` to `at`, where a peer moved its cell. The
     /// editor and the active cell follow, so the cell on screen is the one the
     /// commit reaches (`TRAME-UI-160`).
-    pub(crate) fn follow_moved_edit(&mut self, session: u64, row: u32, col: u32) {
-        if !self
-            .editor
-            .as_mut()
-            .is_some_and(|e| e.follow(session, row, col))
-        {
+    pub(crate) fn follow_moved_edit(&mut self, session: u64, at: CellPos) {
+        if !self.editor.as_mut().is_some_and(|e| e.follow(session, at)) {
             return;
         }
         self.edit_dirty = true;
         self.needs_full = true;
-        let mv = self.state.move_to(row, col, false);
+        let mv = self.state.move_to(at, false);
         self.apply_cursor_move(mv);
     }
 
@@ -412,8 +411,8 @@ impl TrameView {
         tracing::info!(
             "[UI] commit_edit -> session {} at row={} col={} text='{:.80}'",
             editor.session,
-            editor.row,
-            editor.col,
+            editor.at.row.get(),
+            editor.at.col.get(),
             text,
         );
         let sent = self.send_command_lossless(editor.commit_command(text.clone()));
@@ -435,7 +434,7 @@ impl TrameView {
         // as the document holds it. The user then reads the loss, rather than a
         // value no peer will ever receive.
         if sent.is_ok() {
-            self.state.set_cell_text(editor.row, editor.col, text);
+            self.state.set_cell_text(editor.at, text);
         } else {
             tracing::error!("[UI] the edit was refused, the cell keeps its stored value");
         }
@@ -470,14 +469,14 @@ impl TrameView {
         );
         // One batch command so the whole fill is a single undo item (a stream of
         // SetCellText would be one undo item per cell).
-        let batch = cells.iter().map(|&(r, c)| (r, c, text.clone())).collect();
+        let batch = cells.iter().map(|&at| (at, text.clone())).collect();
         let sent = self.send_command_lossless(TrameCommand::SetCellsBatch { cells: batch });
         self.end_session(editor.session);
         // The optimistic update mirrors the batch, so it runs only when the
         // batch is on its way (`BUS-018`).
         if sent.is_ok() {
-            for &(row, col) in &cells {
-                self.state.set_cell_text(row, col, text.clone());
+            for &at in &cells {
+                self.state.set_cell_text(at, text.clone());
             }
         } else {
             tracing::error!("[UI] the fill was refused, the cells keep their stored values");
@@ -510,9 +509,7 @@ impl TrameView {
             // and could re-open an edit that clears the cell.
             self.edit_dirty = true;
             self.text_input.clear();
-            self.show_formula_text(
-                self.cell_seed(self.state.active_row(), self.state.active_col()),
-            );
+            self.show_formula_text(self.cell_seed(self.state.active_cell()));
         }
     }
 
@@ -533,7 +530,7 @@ impl TrameView {
                     self.edit_dirty = true;
                 }
             } else {
-                let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
+                let seed = self.cell_seed(self.state.active_cell());
                 match super::formula_bar_sync(&text, &self.formula.shown, &seed) {
                     // The first character typed in the bar opens a session on
                     // the active cell, seeded with what was typed. The focus
@@ -555,7 +552,7 @@ impl TrameView {
                 self.show_formula_text(buffer);
             }
         } else {
-            let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
+            let seed = self.cell_seed(self.state.active_cell());
             if self.formula.text != seed {
                 self.show_formula_text(seed);
             }
@@ -577,10 +574,10 @@ impl TrameView {
                 self.commit_edit();
                 match dir {
                     CommitDirection::Down => {
-                        self.nav_move(1, 0, false);
+                        self.nav_move(RowDelta::new(1), ColDelta::ZERO, false);
                     }
                     CommitDirection::Right => {
-                        self.nav_move(0, 1, false);
+                        self.nav_move(RowDelta::ZERO, ColDelta::new(1), false);
                     }
                     CommitDirection::Stay => {}
                 }
@@ -590,9 +587,7 @@ impl TrameView {
                 // above then reads that value as typed on the new cell. It
                 // opens an edit there and writes the value into that cell too.
                 self.text_input.focus();
-                self.show_formula_text(
-                    self.cell_seed(self.state.active_row(), self.state.active_col()),
-                );
+                self.show_formula_text(self.cell_seed(self.state.active_cell()));
             }
             // Ctrl/Cmd+Enter: fill the value into every selected cell and keep
             // the selection put (no cursor advance).
@@ -602,9 +597,7 @@ impl TrameView {
                 }
                 self.commit_edit_filled();
                 self.text_input.focus();
-                self.show_formula_text(
-                    self.cell_seed(self.state.active_row(), self.state.active_col()),
-                );
+                self.show_formula_text(self.cell_seed(self.state.active_cell()));
             }
             FormulaAction::Cancel => {
                 self.cancel_edit();

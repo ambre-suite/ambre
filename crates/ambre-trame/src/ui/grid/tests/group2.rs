@@ -15,13 +15,16 @@ fn snap_active_to_master_rehomes_after_merge() {
     // Simulate the post-merge selection: active on the bottom-right covered
     // sub-cell (2,2), as left by a drag that ended there.
     state.selection = Selection {
-        anchor: (1, 1),
-        active: (2, 2),
+        anchor: CellPos::new(Row::new(1), Col::new(1)),
+        active: CellPos::new(Row::new(2), Col::new(2)),
         extra: Vec::new(),
         kind: SelKind::Cells,
     };
     assert!(state.snap_active_to_master(), "covered active cell snaps");
-    assert_eq!(state.selection, Selection::single(1, 1));
+    assert_eq!(
+        state.selection,
+        Selection::single(CellPos::new(Row::new(1), Col::new(1)))
+    );
     // Already on the master: nothing to do.
     assert!(!state.snap_active_to_master());
 }
@@ -47,24 +50,24 @@ fn snap_keeps_multi_block_fill_selection() {
     // filled down into two more, as a merge-aware autofill leaves them.
     state.on_viewport_data(TrameEvent::ViewportData {
         version: ambre_bus::ViewportVersion(0),
-        row_start: 0,
-        col_start: 0,
+        row_start: Row::new(0),
+        col_start: Col::new(0),
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![
-            cell(0, 0, Some((1, 2))), // master, rows 0..=1
-            cell(1, 0, None),
-            cell(2, 0, Some((1, 2))), // master, rows 2..=3
-            cell(3, 0, None),
-            cell(4, 0, Some((1, 2))), // master, rows 4..=5
-            cell(5, 0, None),
+            cell(Row::new(0), Col::new(0), Some(span(2, 1))), // master, rows 0..=1
+            cell(Row::new(1), Col::new(0), None),
+            cell(Row::new(2), Col::new(0), Some(span(2, 1))), // master, rows 2..=3
+            cell(Row::new(3), Col::new(0), None),
+            cell(Row::new(4), Col::new(0), Some(span(2, 1))), // master, rows 4..=5
+            cell(Row::new(5), Col::new(0), None),
         ],
     });
     // Post-fill selection: anchor on the source master, active on the last
     // block's covered bottom sub-cell.
     state.selection = Selection {
-        anchor: (0, 0),
-        active: (5, 0),
+        anchor: CellPos::new(Row::new(0), Col::new(0)),
+        active: CellPos::new(Row::new(5), Col::new(0)),
         extra: Vec::new(),
         kind: SelKind::Cells,
     };
@@ -74,11 +77,17 @@ fn snap_keeps_multi_block_fill_selection() {
     );
     // The selection still spans all three blocks (rows 0..=4 after re-homing
     // the active corner onto the last master); it did not collapse.
-    assert_eq!(state.selection.anchor, (0, 0));
-    assert_eq!(state.selection.active, (4, 0));
-    assert_eq!(state.selection.bounds(), (0, 0, 4, 0));
+    assert_eq!(
+        state.selection.anchor,
+        CellPos::new(Row::new(0), Col::new(0))
+    );
+    assert_eq!(
+        state.selection.active,
+        CellPos::new(Row::new(4), Col::new(0))
+    );
+    assert_eq!(state.selection.bounds(), rect(0, 0, 4, 0));
     // expand_to_merges re-grows the last block, so the render covers row 5 too.
-    assert_eq!(state.selection_rects(), vec![(0, 0, 5, 0)]);
+    assert_eq!(state.selection_rects(), vec![rect(0, 0, 5, 0)]);
 }
 
 /// Feed a single column of cells, flagging `filtered` rows as collapsed
@@ -88,8 +97,8 @@ fn snap_keeps_multi_block_fill_selection() {
 fn filtered_rows_collapse_geometry_and_nav() {
     let mut state = TrameUiState::new(800.0, 600.0);
     let cell = |row: u32, filtered: bool| DisplayCell {
-        row,
-        col: 0,
+        row: Row::new(row),
+        col: Col::new(0),
         text: format!("v{row}"),
         raw: format!("v{row}"),
         bold: false,
@@ -102,8 +111,8 @@ fn filtered_rows_collapse_geometry_and_nav() {
     // Rows 0..=4; rows 2 and 3 are filtered out.
     state.on_viewport_data(TrameEvent::ViewportData {
         version: ambre_bus::ViewportVersion(0),
-        row_start: 0,
-        col_start: 0,
+        row_start: Row::new(0),
+        col_start: Col::new(0),
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![
@@ -117,33 +126,46 @@ fn filtered_rows_collapse_geometry_and_nav() {
 
     assert_eq!(
         state.hidden_rows,
-        vec![2, 3],
+        vec![Row::new(2), Row::new(3)],
         "filtered rows tracked, sorted"
     );
-    assert!(state.is_row_hidden(2) && state.is_row_hidden(3));
+    assert!(state.is_row_hidden(Row::new(2)) && state.is_row_hidden(Row::new(3)));
 
     // Row 4 draws on the 3rd visible slot (rows 0,1 above it; 2,3 collapsed).
-    assert_eq!(state.visible_offset(4), 2);
+    assert_eq!(state.visible_offset(Row::new(4)), RowDelta::new(2));
     assert!(
-        state.cell_pixel_rect(2, 0).is_none(),
+        state
+            .cell_pixel_rect(CellPos::new(Row::new(2), Col::new(0)))
+            .is_none(),
         "a hidden row is not drawn"
     );
-    let r1 = state.cell_pixel_rect(1, 0).expect("row 1 visible");
-    let r4 = state.cell_pixel_rect(4, 0).expect("row 4 visible");
+    let r1 = state
+        .cell_pixel_rect(CellPos::new(Row::new(1), Col::new(0)))
+        .expect("row 1 visible");
+    let r4 = state
+        .cell_pixel_rect(CellPos::new(Row::new(4), Col::new(0)))
+        .expect("row 4 visible");
     // Row 4 sits exactly one slot below row 1 (the two hidden rows took none).
     assert_eq!(r4.1 - r1.1, super::super::ROW_HEIGHT);
 
     // Hit-testing the second visible slot resolves to row 4, not row 2.
-    let (hit_row, _) = state.cell_at(r4.0 + 1.0, r4.1 + 1.0).expect("hit");
-    assert_eq!(hit_row, 4);
+    let CellPos {
+        row: hit_row,
+        col: _,
+    } = state.cell_at(r4.0 + 1.0, r4.1 + 1.0).expect("hit");
+    assert_eq!(hit_row, Row::new(4));
 
     // Arrow-down from row 1 jumps straight to row 4, skipping 2 and 3.
-    state.select(1, 0);
-    state.move_cursor(1, 0, false).expect("moved");
-    assert_eq!(state.active_row(), 4);
+    state.select(CellPos::new(Row::new(1), Col::new(0)));
+    state
+        .move_cursor(RowDelta::new(1), ColDelta::new(0), false)
+        .expect("moved");
+    assert_eq!(state.active_row(), Row::new(4));
     // Arrow-up returns to row 1.
-    state.move_cursor(-1, 0, false).expect("moved");
-    assert_eq!(state.active_row(), 1);
+    state
+        .move_cursor(RowDelta::new(-1), ColDelta::new(0), false)
+        .expect("moved");
+    assert_eq!(state.active_row(), Row::new(1));
 }
 
 // The CellEditor caret / selection / word / IME internals are now the shared
@@ -158,30 +180,40 @@ fn move_to_and_content_scans() {
     let mut state = TrameUiState::new(800.0, 600.0);
 
     // No change -> None.
-    assert!(state.move_to(0, 0, false).is_none());
+    assert!(
+        state
+            .move_to(CellPos::new(Row::new(0), Col::new(0)), false)
+            .is_none()
+    );
     // Clamped to the last valid index.
     state
-        .move_to(crate::TOTAL_ROWS + 10, crate::TOTAL_COLS + 10, false)
+        .move_to(
+            CellPos::new(
+                crate::LAST_ROW + RowCount::new(10),
+                crate::LAST_COL + ColCount::new(10),
+            ),
+            false,
+        )
         .expect("moved");
     assert_eq!(
         (state.active_row(), state.active_col()),
-        (crate::TOTAL_ROWS - 1, crate::TOTAL_COLS - 1),
+        (crate::LAST_ROW, crate::LAST_COL),
     );
 
     // Empty cache: no content cells.
-    assert_eq!(state.last_content_col(0), None);
+    assert_eq!(state.last_content_col(Row::new(0)), None);
     assert_eq!(state.last_content_cell(), None);
 
     state.on_viewport_data(TrameEvent::ViewportData {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        col_start: 0,
+        row_start: Row::new(0),
+        col_start: Col::new(0),
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![
             DisplayCell {
-                row: 2,
-                col: 5,
+                row: Row::new(2),
+                col: Col::new(5),
                 text: "x".into(),
                 raw: "x".into(),
                 bold: false,
@@ -192,8 +224,8 @@ fn move_to_and_content_scans() {
                 ..Default::default()
             },
             DisplayCell {
-                row: 2,
-                col: 1,
+                row: Row::new(2),
+                col: Col::new(1),
                 text: "y".into(),
                 raw: "y".into(),
                 bold: false,
@@ -204,8 +236,8 @@ fn move_to_and_content_scans() {
                 ..Default::default()
             },
             DisplayCell {
-                row: 4,
-                col: 3,
+                row: Row::new(4),
+                col: Col::new(3),
                 text: "".into(),
                 raw: "".into(),
                 bold: false,
@@ -218,10 +250,10 @@ fn move_to_and_content_scans() {
         ],
     });
     // Rightmost non-empty col in row 2 is col 5; row 4's only cell is empty.
-    assert_eq!(state.last_content_col(2), Some(5));
-    assert_eq!(state.last_content_col(4), None);
+    assert_eq!(state.last_content_col(Row::new(2)), Some(Col::new(5)));
+    assert_eq!(state.last_content_col(Row::new(4)), None);
     // Bottom-right non-empty cell ignores the empty (4, 3): max is (2, 5).
-    assert_eq!(state.last_content_cell(), Some((2, 5)));
+    assert_eq!(state.last_content_cell(), Some(at(2, 5)));
 }
 
 /// A formula cell arriving in a viewport batch keeps its computed result in
@@ -233,13 +265,13 @@ fn viewport_data_preserves_formula_raw_for_editing() {
     let mut state = TrameUiState::new(800.0, 600.0);
     state.on_viewport_data(TrameEvent::ViewportData {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        col_start: 0,
+        row_start: Row::new(0),
+        col_start: Col::new(0),
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![DisplayCell {
-            row: 0,
-            col: 2,
+            row: Row::new(0),
+            col: Col::new(2),
             text: "3".to_owned(),
             raw: "=SUM(A1:B1)".to_owned(),
             bold: false,
@@ -251,7 +283,7 @@ fn viewport_data_preserves_formula_raw_for_editing() {
         }],
     });
 
-    let cell = state.cell_cache.get(&(0, 2)).expect("cell cached");
+    let cell = state.cell_cache.get(&at(0, 2)).expect("cell cached");
     assert_eq!(cell.text, "3", "renders the result");
     assert_eq!(cell.raw, "=SUM(A1:B1)", "editor reopens on the formula");
 }
@@ -264,13 +296,16 @@ fn viewport_data_preserves_formula_raw_for_editing() {
 fn optimistic_commit_does_not_echo_formula_as_result() {
     let mut state = TrameUiState::new(800.0, 600.0);
 
-    state.set_cell_text(0, 0, "5".to_owned());
-    let plain = state.cell_cache.get(&(0, 0)).unwrap();
+    state.set_cell_text(CellPos::new(Row::new(0), Col::new(0)), "5".to_owned());
+    let plain = state.cell_cache.get(&at(0, 0)).unwrap();
     assert_eq!(plain.text, "5");
     assert_eq!(plain.raw, "5");
 
-    state.set_cell_text(0, 2, "=SUM(A1:B1)".to_owned());
-    let formula = state.cell_cache.get(&(0, 2)).unwrap();
+    state.set_cell_text(
+        CellPos::new(Row::new(0), Col::new(2)),
+        "=SUM(A1:B1)".to_owned(),
+    );
+    let formula = state.cell_cache.get(&at(0, 2)).unwrap();
     assert_eq!(formula.text, "", "result blank until recomputed");
     assert_eq!(formula.raw, "=SUM(A1:B1)", "formula kept for editing");
 }
@@ -282,25 +317,25 @@ fn optimistic_commit_does_not_echo_formula_as_result() {
 fn dirty_and_error_lifecycle() {
     let mut state = TrameUiState::new(800.0, 600.0);
 
-    state.set_cell_text(0, 0, "=A2".to_owned());
-    assert!(state.dirty_cells.contains(&(0, 0)), "edit marks dirty");
+    state.set_cell_text(CellPos::new(Row::new(0), Col::new(0)), "=A2".to_owned());
+    assert!(state.dirty_cells.contains(&at(0, 0)), "edit marks dirty");
 
-    state.set_formula_error(0, 0, "#REF!".to_owned());
-    assert!(!state.dirty_cells.contains(&(0, 0)), "error clears dirty");
+    state.set_formula_error(CellPos::new(Row::new(0), Col::new(0)), "#REF!".to_owned());
+    assert!(!state.dirty_cells.contains(&at(0, 0)), "error clears dirty");
     assert_eq!(
-        state.formula_errors.get(&(0, 0)).map(String::as_str),
+        state.formula_errors.get(&at(0, 0)).map(String::as_str),
         Some("#REF!")
     );
 
     state.on_viewport_data(TrameEvent::ViewportData {
         version: ambre_bus::ViewportVersion(1),
-        row_start: 0,
-        col_start: 0,
+        row_start: Row::new(0),
+        col_start: Col::new(0),
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![DisplayCell {
-            row: 0,
-            col: 0,
+            row: Row::new(0),
+            col: Col::new(0),
             text: "42".to_owned(),
             raw: "=A2".to_owned(),
             bold: false,
@@ -312,11 +347,11 @@ fn dirty_and_error_lifecycle() {
         }],
     });
     assert!(
-        !state.formula_errors.contains_key(&(0, 0)),
+        !state.formula_errors.contains_key(&at(0, 0)),
         "valid value clears error"
     );
     assert!(
-        !state.dirty_cells.contains(&(0, 0)),
+        !state.dirty_cells.contains(&at(0, 0)),
         "valid value clears dirty"
     );
 }
@@ -338,10 +373,12 @@ fn header_strip_starts_at_top_of_canvas() {
             super::super::HEADER_WIDTH + 1.0,
             super::super::HEADER_HEIGHT + 1.0
         ),
-        Some((0, 0)),
+        Some(at(0, 0)),
     );
     // (0,0)'s pixel rect sits at the cell-area top-left.
-    let (_, y, _, _) = state.cell_pixel_rect(0, 0).expect("visible");
+    let (_, y, _, _) = state
+        .cell_pixel_rect(CellPos::new(Row::new(0), Col::new(0)))
+        .expect("visible");
     assert_eq!(y, super::super::HEADER_HEIGHT);
 }
 
@@ -360,16 +397,16 @@ fn grid_bottom_floors_at_header_on_tiny_canvas() {
 fn scroll_requests_every_narrow_column_on_screen() {
     let mut state = TrameUiState::new(800.0, 600.0);
     for col in 0..200 {
-        state.col_widths.insert(col, 24.0);
+        state.col_widths.insert(Col::new(col), 24.0);
     }
     for row in 0..200 {
-        state.row_heights.insert(row, 8.0);
+        state.row_heights.insert(Row::new(row), 8.0);
     }
     let last_col_on_screen = state
         .col_at_x(799.0)
         .expect("a column under the right edge");
     let last_row_on_screen = (0..200u32)
-        .take_while(|&r| state.row_y(r) < state.grid_bottom())
+        .take_while(|&r| state.row_y(Row::new(r)) < state.grid_bottom())
         .last()
         .expect("a row on screen");
     let crate::TrameCommand::ScrollViewport {
@@ -380,11 +417,11 @@ fn scroll_requests_every_narrow_column_on_screen() {
     };
     assert!(
         col_end >= last_col_on_screen,
-        "{col_end} < {last_col_on_screen}"
+        "{col_end:?} < {last_col_on_screen:?}"
     );
     assert!(
-        row_end >= last_row_on_screen,
-        "{row_end} < {last_row_on_screen}"
+        row_end >= Row::new(last_row_on_screen),
+        "{row_end:?} < {last_row_on_screen}"
     );
 }
 
@@ -395,20 +432,20 @@ fn a_stale_viewport_answer_is_dropped_by_its_version() {
     let mut state = TrameUiState::new(800.0, 600.0);
     let answer = |version, text: &str| TrameEvent::ViewportData {
         version,
-        row_start: 0,
-        col_start: 0,
+        row_start: Row::new(0),
+        col_start: Col::new(0),
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![DisplayCell {
-            row: 0,
-            col: 0,
+            row: Row::new(0),
+            col: Col::new(0),
             text: text.to_owned(),
             ..Default::default()
         }],
     };
     state.on_viewport_data(answer(ambre_bus::ViewportVersion(5), "new"));
     state.on_viewport_data(answer(ambre_bus::ViewportVersion(3), "old"));
-    let text = |state: &TrameUiState| state.cell_cache.get(&(0, 0)).map(|c| c.text.clone());
+    let text = |state: &TrameUiState| state.cell_cache.get(&at(0, 0)).map(|c| c.text.clone());
     assert_eq!(
         text(&state).as_deref(),
         Some("new"),

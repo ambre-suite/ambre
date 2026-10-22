@@ -1,6 +1,8 @@
 use std::fmt;
 
-use crate::model::{SheetIndex, Uid};
+use ambre_bus::{CellPos, Col, Row};
+
+use crate::model::{Line, SheetIndex, Uid};
 
 // -----------------------------------------------------------------------------
 // EngineSheet -- the engine's local sheet index
@@ -50,13 +52,13 @@ impl EngineSheet {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CellRef {
     pub sheet: EngineSheet,
-    pub row: u32,
-    pub col: u32,
+    pub row: Row,
+    pub col: Col,
 }
 
 impl CellRef {
     /// Cell on the default sheet (index 0). Used by single-sheet call sites.
-    pub const fn new(row: u32, col: u32) -> Self {
+    pub const fn new(row: Row, col: Col) -> Self {
         Self {
             sheet: EngineSheet::ACTIVE,
             row,
@@ -64,9 +66,19 @@ impl CellRef {
         }
     }
 
+    /// The cell at `at` on the default sheet.
+    pub const fn at(at: CellPos) -> Self {
+        Self::new(at.row, at.col)
+    }
+
     /// Cell on an explicit sheet index.
-    pub const fn with_sheet(sheet: EngineSheet, row: u32, col: u32) -> Self {
+    pub const fn with_sheet(sheet: EngineSheet, row: Row, col: Col) -> Self {
         Self { sheet, row, col }
+    }
+
+    /// The grid position of the cell, its sheet left out.
+    pub const fn pos(self) -> CellPos {
+        CellPos::new(self.row, self.col)
     }
 }
 
@@ -74,7 +86,12 @@ impl fmt::Display for CellRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Sheet is intentionally omitted: Display is used for in-cell error and
         // debug text, where the local sheet index carries no user meaning.
-        write!(f, "{}{}", col_to_alpha(self.col), self.row + 1)
+        write!(
+            f,
+            "{}{}",
+            col_to_alpha(self.col),
+            u64::from(self.row.get()) + 1
+        )
     }
 }
 
@@ -91,15 +108,15 @@ pub struct RangeDep {
     /// Local sheet index (see [`CellRef::sheet`]). Defaults to 0 via
     /// [`RangeDep::new`]; a cross-sheet range carries the resolved index.
     pub sheet: EngineSheet,
-    pub row_start: u32,
-    pub row_end: u32,
-    pub col_start: u32,
-    pub col_end: u32,
+    pub row_start: Row,
+    pub row_end: Row,
+    pub col_start: Col,
+    pub col_end: Col,
 }
 
 impl RangeDep {
     /// Range on the default sheet (index 0). Used by single-sheet call sites.
-    pub fn new(row_start: u32, row_end: u32, col_start: u32, col_end: u32) -> Self {
+    pub fn new(row_start: Row, row_end: Row, col_start: Col, col_end: Col) -> Self {
         Self {
             sheet: EngineSheet::ACTIVE,
             row_start,
@@ -112,10 +129,10 @@ impl RangeDep {
     /// Range on an explicit sheet index.
     pub fn with_sheet(
         sheet: EngineSheet,
-        row_start: u32,
-        row_end: u32,
-        col_start: u32,
-        col_end: u32,
+        row_start: Row,
+        row_end: Row,
+        col_start: Col,
+        col_end: Col,
     ) -> Self {
         Self {
             sheet,
@@ -136,14 +153,8 @@ impl RangeDep {
 
     /// Number of cells spanned by this range.
     pub fn len(&self) -> usize {
-        let rows = self
-            .row_end
-            .saturating_sub(self.row_start)
-            .saturating_add(1) as usize;
-        let cols = self
-            .col_end
-            .saturating_sub(self.col_start)
-            .saturating_add(1) as usize;
+        let rows = self.row_end.count_from(self.row_start).get() as usize + 1;
+        let cols = self.col_end.count_from(self.col_start).get() as usize + 1;
         rows * cols
     }
 
@@ -153,34 +164,45 @@ impl RangeDep {
     }
 }
 
-/// Which axis of a sheet: its rows or its columns.
+/// The lines a range takes whole, on one axis. Both bounds are inclusive, and
+/// the first never comes after the last.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum LineAxis {
-    Row,
-    Col,
+pub enum SpanLines {
+    Rows { first: Row, last: Row },
+    Cols { first: Col, last: Col },
 }
 
 /// A range of whole lines: `A:C` takes three whole columns, `2:5` four whole
-/// rows (`TRAME-048`). Bounds are inclusive and ordered. On the other axis the
-/// range covers the used part of the sheet when it is read.
+/// rows (`TRAME-048`). On the other axis the range covers the used part of the
+/// sheet when it is read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AxisSpan {
     /// Local sheet index (see [`CellRef::sheet`]).
     pub sheet: EngineSheet,
-    /// The axis whose lines the range takes whole.
-    pub axis: LineAxis,
-    pub start: u32,
-    pub end: u32,
+    /// The lines the range takes whole.
+    pub lines: SpanLines,
 }
 
 impl AxisSpan {
-    /// The lines between `a` and `b` on the default sheet, in either order.
-    pub fn new(axis: LineAxis, a: u32, b: u32) -> Self {
+    /// The rows between `a` and `b` on the default sheet, in either order.
+    pub fn rows(a: Row, b: Row) -> Self {
         Self {
             sheet: EngineSheet::ACTIVE,
-            axis,
-            start: a.min(b),
-            end: a.max(b),
+            lines: SpanLines::Rows {
+                first: a.min(b),
+                last: a.max(b),
+            },
+        }
+    }
+
+    /// The columns between `a` and `b` on the default sheet, in either order.
+    pub fn cols(a: Col, b: Col) -> Self {
+        Self {
+            sheet: EngineSheet::ACTIVE,
+            lines: SpanLines::Cols {
+                first: a.min(b),
+                last: a.max(b),
+            },
         }
     }
 }
@@ -206,11 +228,29 @@ impl AxisSpan {
 /// keeps the grid position it was typed at, and evaluates `Empty` until that
 /// line is materialized. A re-edit then re-binds it to the new `Uid`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum AxisId {
+pub enum AxisId<P> {
     /// Bound to a materialized row/column `Uid`. `#REF!` once that id is deleted.
     Bound(Uid),
     /// A virtual position beyond the used range; stays positional, reads `Empty`.
-    Virtual(u32),
+    Virtual(P),
+}
+
+impl<P: Line> AxisId<P> {
+    /// The bound `Uid`, or `None` when the axis is virtual.
+    pub fn uid(self) -> Option<Uid> {
+        match self {
+            Self::Bound(u) => Some(u),
+            Self::Virtual(_) => None,
+        }
+    }
+
+    /// The axis's position under `index`, or `None` for a deleted line.
+    pub fn pos(self, index: &SheetIndex) -> Option<P> {
+        match self {
+            Self::Bound(u) => P::pos(index, &u),
+            Self::Virtual(p) => Some(p),
+        }
+    }
 }
 
 /// Engine-side cell identity: a sheet plus a row and column [`AxisId`]. This is
@@ -218,12 +258,12 @@ pub enum AxisId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CellId {
     pub sheet: EngineSheet,
-    pub row: AxisId,
-    pub col: AxisId,
+    pub row: AxisId<Row>,
+    pub col: AxisId<Col>,
 }
 
 impl CellId {
-    pub const fn new(sheet: EngineSheet, row: AxisId, col: AxisId) -> Self {
+    pub const fn new(sheet: EngineSheet, row: AxisId<Row>, col: AxisId<Col>) -> Self {
         Self { sheet, row, col }
     }
 
@@ -238,26 +278,20 @@ impl CellId {
 
     /// The bound row `Uid`, or `None` when the row axis is virtual.
     pub fn row_uid(&self) -> Option<Uid> {
-        match self.row {
-            AxisId::Bound(u) => Some(u),
-            AxisId::Virtual(_) => None,
-        }
+        self.row.uid()
     }
     /// The bound column `Uid`, or `None` when the column axis is virtual.
     pub fn col_uid(&self) -> Option<Uid> {
-        match self.col {
-            AxisId::Bound(u) => Some(u),
-            AxisId::Virtual(_) => None,
-        }
+        self.col.uid()
     }
 }
 
 /// One bound of a compiled range, on a single axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum RangeEndpoint {
+pub enum RangeEndpoint<P> {
     /// A bounded endpoint, stable via the row/column [`AxisId`]. `#REF!` if a
     /// bound `Uid` is deleted.
-    Specific(AxisId),
+    Specific(AxisId<P>),
     /// An unbounded endpoint: entire column (`A:A`) or entire row (`1:1`). It
     /// reads the used part of the axis (`TRAME-048`).
     EntireAxis,
@@ -269,10 +303,10 @@ pub enum RangeEndpoint {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RangeId {
     pub sheet: EngineSheet,
-    pub row_start: RangeEndpoint,
-    pub row_end: RangeEndpoint,
-    pub col_start: RangeEndpoint,
-    pub col_end: RangeEndpoint,
+    pub row_start: RangeEndpoint<Row>,
+    pub row_end: RangeEndpoint<Row>,
+    pub col_start: RangeEndpoint<Col>,
+    pub col_end: RangeEndpoint<Col>,
 }
 
 impl RangeId {
@@ -280,43 +314,46 @@ impl RangeId {
     /// `None` when a `Specific(Bound(_))` endpoint refers to a deleted row
     /// (`#REF!`). A `Virtual` endpoint keeps its typed position even beyond the
     /// used range (the caller clamps iteration to the materialized rows).
-    pub fn row_range(&self, index: &SheetIndex) -> Option<(usize, usize)> {
-        let len = index.row_len();
-        let s = endpoint_pos(&self.row_start, 0, |u| index.row_pos(u))?;
-        let e = endpoint_pos(&self.row_end, len.saturating_sub(1), |u| index.row_pos(u))?;
-        Some((s, e))
+    pub fn row_range(&self, index: &SheetIndex) -> Option<(Row, Row)> {
+        axis_range(&self.row_start, &self.row_end, index)
     }
-    pub fn col_range(&self, index: &SheetIndex) -> Option<(usize, usize)> {
-        let len = index.col_len();
-        let s = endpoint_pos(&self.col_start, 0, |u| index.col_pos(u))?;
-        let e = endpoint_pos(&self.col_end, len.saturating_sub(1), |u| index.col_pos(u))?;
-        Some((s, e))
+    pub fn col_range(&self, index: &SheetIndex) -> Option<(Col, Col)> {
+        axis_range(&self.col_start, &self.col_end, index)
     }
 
     /// Whether the bound cell `(row, col)` falls inside this range under the
     /// current `index`. Used by the dependency graph to dirty range formulas
     /// when one of their member cells changes.
     pub fn contains(&self, row: Uid, col: Uid, index: &SheetIndex) -> bool {
-        let (Some(rp), Some(cp)) = (index.row_pos(&row), index.col_pos(&col)) else {
+        let Some(at) = index.pos_of(&row, &col) else {
             return false;
         };
-        matches!(self.row_range(index), Some((s, e)) if rp >= s && rp <= e)
-            && matches!(self.col_range(index), Some((s, e)) if cp >= s && cp <= e)
+        matches!(self.row_range(index), Some((s, e)) if at.row >= s && at.row <= e)
+            && matches!(self.col_range(index), Some((s, e)) if at.col >= s && at.col <= e)
     }
 }
 
+/// Resolve the two endpoints of one axis to an inclusive pair of positions. An
+/// unbounded start reads the first line, an unbounded end the last one.
+fn axis_range<P: Line>(
+    start: &RangeEndpoint<P>,
+    end: &RangeEndpoint<P>,
+    index: &SheetIndex,
+) -> Option<(P, P)> {
+    let last = P::last(index).unwrap_or(P::FIRST);
+    Some((
+        endpoint_pos(start, P::FIRST, index)?,
+        endpoint_pos(end, last, index)?,
+    ))
+}
+
 /// Resolve a single range endpoint to a grid position. `entire` is the position
-/// used for an unbounded `EntireAxis` endpoint (0 for a start, `len-1` for an
-/// end). Returns `None` only when a bound `Uid` is missing from the index.
-fn endpoint_pos(
-    ep: &RangeEndpoint,
-    entire: usize,
-    pos: impl Fn(&Uid) -> Option<usize>,
-) -> Option<usize> {
+/// used for an unbounded `EntireAxis` endpoint. Returns `None` only when a
+/// bound `Uid` is missing from the index.
+fn endpoint_pos<P: Line>(ep: &RangeEndpoint<P>, entire: P, index: &SheetIndex) -> Option<P> {
     match ep {
         RangeEndpoint::EntireAxis => Some(entire),
-        RangeEndpoint::Specific(AxisId::Bound(u)) => pos(u),
-        RangeEndpoint::Specific(AxisId::Virtual(p)) => Some(*p as usize),
+        RangeEndpoint::Specific(axis) => axis.pos(index),
     }
 }
 
@@ -549,11 +586,11 @@ pub struct CellBytecode {
 /// A position past the used range has no line to name, so it stays positional
 /// and reads empty (`TRAME-006`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum StoredAxis {
+pub enum StoredAxis<P> {
     /// The line with this identity, wherever it now sits. `#REF!` once deleted.
     Line(Uid),
     /// A zero-based position with no line behind it when the formula was stored.
-    At(u32),
+    At(P),
     /// Every line of the axis, written `*`: the far axis of a whole-column or
     /// whole-row range (`TRAME-048`).
     Whole,
@@ -563,8 +600,8 @@ pub enum StoredAxis {
 /// `{row|col}` in the stored text, each axis either a uid or a position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StoredCell {
-    pub row: StoredAxis,
-    pub col: StoredAxis,
+    pub row: StoredAxis<Row>,
+    pub col: StoredAxis<Col>,
 }
 
 impl StoredCell {
@@ -748,19 +785,19 @@ mod tests {
 
     #[test]
     fn col_to_alpha_basics() {
-        assert_eq!(col_to_alpha(0), "A");
-        assert_eq!(col_to_alpha(25), "Z");
-        assert_eq!(col_to_alpha(26), "AA");
-        assert_eq!(col_to_alpha(51), "AZ");
-        assert_eq!(col_to_alpha(52), "BA");
-        assert_eq!(col_to_alpha(701), "ZZ");
+        assert_eq!(col_to_alpha(Col::new(0)), "A");
+        assert_eq!(col_to_alpha(Col::new(25)), "Z");
+        assert_eq!(col_to_alpha(Col::new(26)), "AA");
+        assert_eq!(col_to_alpha(Col::new(51)), "AZ");
+        assert_eq!(col_to_alpha(Col::new(52)), "BA");
+        assert_eq!(col_to_alpha(Col::new(701)), "ZZ");
     }
 
     #[test]
     fn alpha_to_col_roundtrip() {
         for col in [0, 1, 25, 26, 51, 52, 100, 701] {
-            let alpha = col_to_alpha(col);
-            assert_eq!(alpha_to_col(&alpha).unwrap(), col);
+            let alpha = col_to_alpha(Col::new(col));
+            assert_eq!(alpha_to_col(&alpha).unwrap(), Col::new(col));
         }
     }
 
@@ -773,11 +810,11 @@ mod tests {
 
     #[test]
     fn range_contains() {
-        let r = RangeDep::new(0, 9, 0, 4);
-        assert!(r.contains(CellRef::new(0, 0)));
-        assert!(r.contains(CellRef::new(9, 4)));
-        assert!(!r.contains(CellRef::new(10, 0)));
-        assert!(!r.contains(CellRef::new(0, 5)));
+        let r = RangeDep::new(Row::new(0), Row::new(9), Col::new(0), Col::new(4));
+        assert!(r.contains(CellRef::new(Row::new(0), Col::new(0))));
+        assert!(r.contains(CellRef::new(Row::new(9), Col::new(4))));
+        assert!(!r.contains(CellRef::new(Row::new(10), Col::new(0))));
+        assert!(!r.contains(CellRef::new(Row::new(0), Col::new(5))));
     }
 
     #[test]
@@ -828,8 +865,8 @@ mod tests {
     fn range_id_resolves_bound_endpoints_to_positions() {
         let idx = index_with(10, 10);
         let r = bound_range(2, 5, 1, 3);
-        assert_eq!(r.row_range(&idx), Some((2, 5)));
-        assert_eq!(r.col_range(&idx), Some((1, 3)));
+        assert_eq!(r.row_range(&idx), Some((Row::new(2), Row::new(5))));
+        assert_eq!(r.col_range(&idx), Some((Col::new(1), Col::new(3))));
     }
 
     #[test]
@@ -840,11 +877,11 @@ mod tests {
         let r = RangeId {
             sheet: EngineSheet::ACTIVE,
             row_start: RangeEndpoint::Specific(AxisId::Bound(row_uid(0))),
-            row_end: RangeEndpoint::Specific(AxisId::Virtual(999)),
+            row_end: RangeEndpoint::Specific(AxisId::Virtual(Row::new(999))),
             col_start: RangeEndpoint::Specific(AxisId::Bound(col_uid(0))),
             col_end: RangeEndpoint::Specific(AxisId::Bound(col_uid(0))),
         };
-        assert_eq!(r.row_range(&idx), Some((0, 999)));
+        assert_eq!(r.row_range(&idx), Some((Row::ZERO, Row::new(999))));
     }
 
     #[test]

@@ -6,14 +6,14 @@
 // module through the `use super::*` glob.
 
 use super::*;
-use crate::formula::identity::LineEdit;
+use crate::formula::identity::{AxisEdit, LineEdit};
 
 impl TrameState {
     /// Single-column sort of a row range (`trame-sort`).
     ///
-    /// Reorders whole rows of the active sheet by the typed value in column `col_start +
-    /// sort_col`. Cells of a row outside `[col_start..=col_end]` travel with it (Google
-    /// Sheets "sort range").
+    /// Reorders whole rows of the active sheet by the typed value in the column
+    /// `sort_col` columns into `rect`. Cells of a row outside the range's columns
+    /// travel with it (Google Sheets "sort range").
     ///
     /// **Realized as a pure row-order permutation of `rows_{sheet}`**. Each sortable row
     /// is keyed by its own move-invariant `Uid`, the list element *value*, not a Loro slot
@@ -31,15 +31,11 @@ impl TrameState {
     /// [`ActivateSheet`](TrameCommand::ActivateSheet) before any range op. The formula
     /// cache the sort keys read from is pinned to index 0. A command for any other sheet,
     /// or an empty/virtual range, is a no-op.
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn sort_range(
         &mut self,
         sheet_id: &str,
-        row_start: u32,
-        row_end: u32,
-        col_start: u32,
-        col_end: u32,
-        sort_col: u32,
+        rect: CellRect,
+        sort_col: ColCount,
         ascending: bool,
         has_header: bool,
     ) -> TrameOutcome {
@@ -47,31 +43,25 @@ impl TrameState {
         if sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
-        // Clamp the range to the materialized rows; virtual rows carry no cell
-        // data to reorder and no value to sort on.
-        let last = self.index.row_len().saturating_sub(1) as u32;
-        let row_end = row_end.min(last);
-        if col_start + sort_col > col_end || row_start > row_end {
+        let sort_col_abs = rect.top_left.col + sort_col;
+        if sort_col_abs > rect.bottom_right.col {
             return TrameOutcome::display_only(vec![]);
         }
-        let sort_col_abs = col_start + sort_col;
-        // First sortable position: the header row (if any) stays pinned in place.
-        let sort_start = if has_header { row_start + 1 } else { row_start };
-        if sort_start >= row_end {
-            // Zero or one sortable row: nothing to reorder.
+        let Some(rows) = self.sortable_rows(rect, RowCount::new(u32::from(has_header))) else {
             return TrameOutcome::display_only(vec![]);
-        }
+        };
 
         // Key each sortable row by its uid and the evaluated value of its sort
         // column. `evaluated_value` returns the formula result or parsed literal;
         // an empty cell sorts as `Empty` (last). Whole rows travel by uid, so no
         // cell contents are read or rewritten -- the sort is a pure permutation.
-        let mut keyed: Vec<(Uid, CellValue)> = (sort_start..=row_end)
+        let mut keyed: Vec<(Uid, CellValue)> = rows
+            .into_iter()
             .filter_map(|pos| {
-                let row_uid = self.index.row_id(pos as usize)?;
+                let row_uid = self.index.row_id(pos)?;
                 let value = self
                     .engine
-                    .evaluated_value(self.active_cell_id(pos, sort_col_abs))
+                    .evaluated_value(self.active_cell_id(CellPos::new(pos, sort_col_abs)))
                     .unwrap_or(CellValue::Empty);
                 Some((row_uid, value))
             })
@@ -85,7 +75,21 @@ impl TrameState {
             if ascending { ord } else { ord.reverse() }
         });
         let target: Vec<Uid> = keyed.into_iter().map(|(uid, _)| uid).collect();
-        self.realize_sort(sort_start, &before, target)
+        self.realize_sort(rows.start, &before, target)
+    }
+
+    /// The rows of `rect` a sort reorders: clamped to the materialized rows,
+    /// past its `header` rows. `None` with fewer than two rows to order.
+    fn sortable_rows(&self, rect: CellRect, header: RowCount) -> Option<RowSpan> {
+        // Virtual rows carry no cell data to reorder and no value to sort on.
+        let row_end = rect.bottom_right.row.min(Row::last(&self.index)?);
+        if rect.top_left.row > row_end {
+            return None;
+        }
+        // The header rows stay pinned in place.
+        let sort_start = rect.top_left.row + header;
+        // Zero or one sortable row: nothing to reorder.
+        (sort_start < row_end).then(|| sort_start.through(row_end))
     }
 
     /// Multi-column sort of a row range (`trame-sort`).
@@ -93,18 +97,14 @@ impl TrameState {
     /// Same pure row-order permutation as [`sort_range`](Self::sort_range), only
     /// the comparator changes. Rows are ordered lexicographically by `sort_keys` in
     /// decreasing priority (`[primary, secondary, ...]`), each key applying its own
-    /// ascending/descending direction. Each `SortKey::col` is an index within the
-    /// range (`0` = `col_start`). Keys whose column falls outside the range are
+    /// ascending/descending direction. Each `SortKey::col` is an offset within the
+    /// range (`0` = its first column). Keys whose column falls outside the range are
     /// skipped. Cells follow their move-invariant row `Uid`, references follow the
     /// data (`trame-formula-engine`); LWW resolves concurrent sorts.
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn sort_range_multi(
         &mut self,
         sheet_id: &str,
-        row_start: u32,
-        row_end: u32,
-        col_start: u32,
-        col_end: u32,
+        rect: CellRect,
         sort_keys: &[SortKey],
         has_header: bool,
     ) -> TrameOutcome {
@@ -114,37 +114,29 @@ impl TrameState {
         }
         // Resolve the keys to absolute columns inside the range; drop out-of-range
         // ones. With no usable key there is nothing to order by.
-        let keys: Vec<(u32, bool)> = sort_keys
+        let keys: Vec<(Col, bool)> = sort_keys
             .iter()
-            .filter(|k| col_start + k.col <= col_end)
-            .map(|k| (col_start + k.col, k.ascending))
+            .map(|k| (rect.top_left.col + k.col, k.ascending))
+            .filter(|(col, _)| *col <= rect.bottom_right.col)
             .collect();
         if keys.is_empty() {
             return TrameOutcome::display_only(vec![]);
         }
-        // Clamp the range to the materialized rows (virtual rows carry no data).
-        let last = self.index.row_len().saturating_sub(1) as u32;
-        let row_end = row_end.min(last);
-        if row_start > row_end {
+        let Some(rows) = self.sortable_rows(rect, RowCount::new(u32::from(has_header))) else {
             return TrameOutcome::display_only(vec![]);
-        }
-        // First sortable position: the header row (if any) stays pinned in place.
-        let sort_start = if has_header { row_start + 1 } else { row_start };
-        if sort_start >= row_end {
-            // Zero or one sortable row: nothing to reorder.
-            return TrameOutcome::display_only(vec![]);
-        }
+        };
 
         // Key each sortable row by its uid and the evaluated value in every sort
         // column. Whole rows travel by uid, so no cell contents are rewritten.
-        let mut keyed: Vec<(Uid, Vec<CellValue>)> = (sort_start..=row_end)
+        let mut keyed: Vec<(Uid, Vec<CellValue>)> = rows
+            .into_iter()
             .filter_map(|pos| {
-                let row_uid = self.index.row_id(pos as usize)?;
+                let row_uid = self.index.row_id(pos)?;
                 let values = keys
                     .iter()
                     .map(|&(col, _)| {
                         self.engine
-                            .evaluated_value(self.active_cell_id(pos, col))
+                            .evaluated_value(self.active_cell_id(CellPos::new(pos, col)))
                             .unwrap_or(CellValue::Empty)
                     })
                     .collect();
@@ -166,7 +158,7 @@ impl TrameState {
             std::cmp::Ordering::Equal
         });
         let target: Vec<Uid> = keyed.into_iter().map(|(uid, _)| uid).collect();
-        self.realize_sort(sort_start, &before, target)
+        self.realize_sort(rows.start, &before, target)
     }
 
     /// Realize a computed row permutation as `mov` ops on `rows_{sheet}` and
@@ -175,7 +167,7 @@ impl TrameState {
     /// desired one (same multiset), and `sort_start` the first sortable position.
     /// Returns [`TrameEvent::SortComplete`] alone (no CRDT delta) when the order
     /// is already correct.
-    fn realize_sort(&mut self, sort_start: u32, before: &[Uid], target: Vec<Uid>) -> TrameOutcome {
+    fn realize_sort(&mut self, sort_start: Row, before: &[Uid], target: Vec<Uid>) -> TrameOutcome {
         if before == target {
             // Stable sort left the order untouched: acknowledge, no CRDT delta.
             return TrameOutcome::display_only(vec![TrameEvent::SortComplete]);
@@ -189,8 +181,10 @@ impl TrameState {
         let list = self
             .doc
             .get_movable_list(rows_list_name(&self.active_sheet));
-        let mut cur: Vec<Uid> = self.index.row_ids().to_vec();
-        let base = sort_start as usize;
+        let mut cur: Vec<Uid> = self.index.row_ids().as_slice().to_vec();
+        let Some(base) = sort_start.to_index() else {
+            return TrameOutcome::display_only(vec![TrameEvent::SortComplete]);
+        };
         for (offset, want) in target.into_iter().enumerate() {
             let dst = base + offset;
             if cur.get(dst) == Some(&want) {
@@ -207,7 +201,7 @@ impl TrameState {
             let u = cur.remove(src);
             cur.insert(dst, u);
         }
-        let rewritten = self.reanchor_formulas(Axis::Row, LineEdit::Reorder);
+        let rewritten = self.reanchor_formulas(AxisEdit::Rows(LineEdit::Reorder));
         self.doc.commit();
 
         let mut outcome = self.after_reorder(rewritten);

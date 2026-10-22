@@ -103,11 +103,11 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
 }
 
 /// Spreadsheet column label for a 0-based column index (0 -> "A", 26 -> "AA").
-pub fn col_label(col: u32) -> String {
+pub fn col_label(col: Col) -> String {
     crate::columns::col_to_alpha(col)
 }
 
 /// Row label for a 0-based row index: its one-based number (0 -> "1").
-pub fn row_label(row: u32) -> String {
-    (u64::from(row) + 1).to_string()
+pub fn row_label(row: Row) -> String {
+    crate::columns::row_label(row)
 }

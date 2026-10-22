@@ -7,7 +7,7 @@
 
 use super::*;
 use crate::formula::SheetQualifier;
-use crate::formula::identity::{self, LineAxis, LineEdit};
+use crate::formula::identity::{self, AxisEdit, LineEdit};
 
 impl TrameState {
     /// Carry every formula that reads the active sheet across one structural
@@ -17,13 +17,9 @@ impl TrameState {
     /// on a delete (`TRAME-230`). Runs before the commit, so the rewrite and
     /// the edit are one undo step. Only a formula whose text changes is
     /// written. Returns whether any was.
-    pub(super) fn reanchor_formulas(&self, axis: Axis, edit: LineEdit) -> bool {
+    pub(super) fn reanchor_formulas(&self, edit: AxisEdit) -> bool {
         let active = &self.active_sheet;
         let new = self.build_sheet_index(active);
-        let axis = match axis {
-            Axis::Row => LineAxis::Row,
-            Axis::Col => LineAxis::Col,
-        };
         let mut rewritten = false;
         for sheet in &self.sheets_by_idx {
             let map = self.doc.get_map(cells_map_name(sheet));
@@ -55,7 +51,7 @@ impl TrameState {
                     continue;
                 };
                 let before = render::render(&ast);
-                let after = identity::reanchor(ast, &edited, axis, &self.index, &new, edit);
+                let after = identity::reanchor(ast, &edited, &self.index, &new, edit);
                 let after = render::render(&after);
                 if after != before {
                     let _ = map.insert(key, format!("={after}").as_str());
@@ -70,37 +66,24 @@ impl TrameState {
     /// down/right. One `LoroMovableList` op; cells keyed by stable id pairs
     /// follow their element automatically. A no-op past the materialized used
     /// range (those rows/columns are already virtual blanks, nothing to shift).
-    pub(super) fn insert_axis(&mut self, at: u32, axis: Axis) -> TrameOutcome {
-        let at = at as usize;
-        let used = match axis {
-            Axis::Row => self.index.row_len(),
-            Axis::Col => self.index.col_len(),
-        };
-        if at > used {
+    pub(super) fn insert_axis<P: SheetLine>(&mut self, at: P) -> TrameOutcome {
+        if at > P::end(&self.index) {
             return TrameOutcome::display_only(vec![]);
         }
-        let list_name = match axis {
-            Axis::Row => rows_list_name(&self.active_sheet),
-            Axis::Col => cols_list_name(&self.active_sheet),
+        let Some(index) = at.to_index() else {
+            return TrameOutcome::display_only(vec![]);
         };
         // The new line carries a freshly minted, move-invariant uid value
         // (`trame-rows-and-columns`).
         let uid = self.mint_uid();
         if self
-            .doc
-            .get_movable_list(list_name)
-            .insert(at, uid.to_key_part().as_str())
+            .line_list::<P>()
+            .insert(index, uid.to_key_part().as_str())
             .is_err()
         {
             return TrameOutcome::display_only(vec![]);
         }
-        self.reanchor_formulas(
-            axis,
-            LineEdit::Insert {
-                at: at as u32,
-                n: 1,
-            },
-        );
+        self.reanchor_formulas(P::edit(LineEdit::Insert { at, n: P::ONE }));
         self.doc.commit();
         self.after_structural()
     }
@@ -111,11 +94,11 @@ impl TrameState {
     /// (`TRAME-008`). One below it follows its cell up, and a range shrinks
     /// ([`reanchor_formulas`](Self::reanchor_formulas)). A no-op in virtual
     /// space.
-    pub(super) fn delete_axis(&mut self, at: u32, axis: Axis) -> TrameOutcome {
-        let Some(filter_dropped) = self.remove_line(at, axis) else {
+    pub(super) fn delete_axis<P: SheetLine>(&mut self, at: P) -> TrameOutcome {
+        let Some(filter_dropped) = self.remove_line(at) else {
             return TrameOutcome::display_only(vec![]);
         };
-        self.reanchor_formulas(axis, LineEdit::Delete { at, n: 1 });
+        self.reanchor_formulas(P::edit(LineEdit::Delete { at, n: P::ONE }));
         self.doc.commit();
         self.after_line_removal(filter_dropped)
     }
@@ -130,27 +113,27 @@ impl TrameState {
         outcome
     }
 
+    /// The list that orders the lines of axis `P` on the active sheet.
+    fn line_list<P: SheetLine>(&self) -> loro::LoroMovableList {
+        self.doc.get_movable_list(match P::AXIS {
+            Axis::Row => rows_list_name(&self.active_sheet),
+            Axis::Col => cols_list_name(&self.active_sheet),
+        })
+    }
+
     /// Remove the row/column at grid position `at` and purge what it carried,
     /// with no commit, so several removals land as one. `None` when the line is
     /// virtual and nothing was removed, else whether the active filter went
     /// with it.
-    fn remove_line(&mut self, at: u32, axis: Axis) -> Option<bool> {
-        let at = at as usize;
-        let removed = match axis {
-            Axis::Row => self.index.row_id(at),
-            Axis::Col => self.index.col_id(at),
-        };
-        let Some(removed) = removed else {
-            return None; // virtual: nothing materialized
-        };
-        let list_name = match axis {
-            Axis::Row => rows_list_name(&self.active_sheet),
-            Axis::Col => cols_list_name(&self.active_sheet),
-        };
-        if self.doc.get_movable_list(list_name).delete(at, 1).is_err() {
+    fn remove_line<P: SheetLine>(&mut self, at: P) -> Option<bool> {
+        // A virtual line has nothing materialized to remove.
+        let removed = P::uid(&self.index, at)?;
+        let index = at.to_index()?;
+        let list = self.line_list::<P>();
+        if list.delete(index, 1).is_err() {
             return None;
         }
-        Some(self.purge_axis(removed, axis))
+        Some(self.purge_axis(removed, P::AXIS))
     }
 
     /// Move the row/column at grid position `from` to grid position `to`
@@ -160,23 +143,19 @@ impl TrameState {
     /// cell, while a range keeps its rectangle (`after_reorder`, `TRAME-227`). A no-op
     /// if `from == to` or either index is outside the materialized used range
     /// (virtual lines carry nothing to move).
-    pub(super) fn move_axis(&mut self, from: u32, to: u32, axis: Axis) -> TrameOutcome {
-        let used = match axis {
-            Axis::Row => self.index.row_len(),
-            Axis::Col => self.index.col_len(),
-        };
-        let (from, to) = (from as usize, to as usize);
-        if from == to || from >= used || to >= used {
+    pub(super) fn move_axis<P: SheetLine>(&mut self, from: P, to: P) -> TrameOutcome {
+        let end = P::end(&self.index);
+        if from == to || from >= end || to >= end {
             return TrameOutcome::display_only(vec![]);
         }
-        let list_name = match axis {
-            Axis::Row => rows_list_name(&self.active_sheet),
-            Axis::Col => cols_list_name(&self.active_sheet),
+        let (Some(from), Some(to)) = (from.to_index(), to.to_index()) else {
+            return TrameOutcome::display_only(vec![]);
         };
-        if self.doc.get_movable_list(list_name).mov(from, to).is_err() {
+        let list = self.line_list::<P>();
+        if list.mov(from, to).is_err() {
             return TrameOutcome::display_only(vec![]);
         }
-        let rewritten = self.reanchor_formulas(axis, LineEdit::Reorder);
+        let rewritten = self.reanchor_formulas(P::edit(LineEdit::Reorder));
         self.doc.commit();
         self.after_reorder(rewritten)
     }
@@ -187,25 +166,28 @@ impl TrameState {
     /// and one delta carrying every line to the peers (`TRAME-175`). The
     /// selection is left untouched -- the UI owns it and re-reports it on the
     /// next cursor move.
-    pub(super) fn delete_selected_axis(&mut self, axis: Axis) -> TrameOutcome {
+    pub(super) fn delete_selected_axis<P: SheetLine>(&mut self) -> TrameOutcome {
         // The span of every selected rectangle across the axis (`TRAME-UI-129`).
-        let (start, end) = self.selection_rects().into_iter().fold(
-            (u32::MAX, 0u32),
-            |(lo, hi), (r1, c1, r2, c2)| match axis {
-                Axis::Row => (lo.min(r1), hi.max(r2)),
-                Axis::Col => (lo.min(c1), hi.max(c2)),
-            },
-        );
-        let removals: Vec<bool> = (start..=end)
-            .rev()
-            .filter_map(|at| self.remove_line(at, axis))
-            .collect();
+        let Some((start, end)) = self
+            .selection_rects()
+            .into_iter()
+            .map(P::bounds)
+            .reduce(|(lo, hi), (a, b)| (lo.min(a), hi.max(b)))
+        else {
+            return TrameOutcome::display_only(vec![]);
+        };
+        let mut removals: Vec<bool> = Vec::new();
+        let mut at = Some(end);
+        while let Some(line) = at.filter(|line| *line >= start) {
+            removals.extend(self.remove_line(line));
+            at = line.before();
+        }
         if removals.is_empty() {
             return TrameOutcome::display_only(vec![]);
         }
         // The removed lines are the materialized run from `start`.
-        let n = removals.len() as u32;
-        self.reanchor_formulas(axis, LineEdit::Delete { at: start, n });
+        let n = P::count_of(removals.len());
+        self.reanchor_formulas(P::edit(LineEdit::Delete { at: start, n }));
         self.doc.commit();
         self.after_line_removal(removals.contains(&true))
     }
@@ -215,8 +197,13 @@ impl TrameState {
     /// [`selection_bounds`](Self::selection_bounds), so the columns the dialog
     /// offers are the columns the sort orders.
     pub(super) fn sort_range_query(&self) -> TrameOutcome {
-        let (r1, c1, r2, c2) = self.selection_bounds();
-        TrameOutcome::display_only(vec![TrameEvent::SortRange { r1, c1, r2, c2 }])
+        let rect = self.selection_bounds();
+        TrameOutcome::display_only(vec![TrameEvent::SortRange {
+            r1: rect.top_left.row,
+            c1: rect.top_left.col,
+            r2: rect.bottom_right.row,
+            c2: rect.bottom_right.col,
+        }])
     }
 
     /// Single-column shared sort resolved against the tracked selection rectangle
@@ -227,9 +214,9 @@ impl TrameState {
     /// sheet, which guards the empty/single-row cases and replies with
     /// [`TrameEvent::SortComplete`].
     pub(super) fn sort_selection(&mut self, ascending: bool) -> TrameOutcome {
-        let (r1, c1, r2, c2) = self.selection_bounds();
+        let rect = self.selection_bounds();
         let sheet = self.active_sheet.clone();
-        self.sort_range(&sheet, r1, r2, c1, c2, 0, ascending, false)
+        self.sort_range(&sheet, rect, ColCount::ZERO, ascending, false)
     }
 
     /// Whole-sheet single-column sort by the active cell's column (`trame-sort`,
@@ -240,11 +227,16 @@ impl TrameState {
     /// header row. Delegates to [`sort_range`](Self::sort_range), which guards the
     /// empty range and replies with [`TrameEvent::SortComplete`].
     pub(super) fn sort_sheet(&mut self, ascending: bool) -> TrameOutcome {
-        let row_end = self.index.row_len().saturating_sub(1) as u32;
-        let col_end = self.index.col_len().saturating_sub(1) as u32;
-        let sort_col = self.active.1;
+        let rect = CellRect::spanning(
+            CellPos::ORIGIN,
+            CellPos::new(
+                Row::last(&self.index).unwrap_or(Row::ZERO),
+                Col::last(&self.index).unwrap_or(Col::ZERO),
+            ),
+        );
+        let sort_col = self.active.col.count_from(Col::ZERO);
         let sheet = self.active_sheet.clone();
-        self.sort_range(&sheet, 0, row_end, 0, col_end, sort_col, ascending, false)
+        self.sort_range(&sheet, rect, sort_col, ascending, false)
     }
 
     /// Multi-column sort over the tracked selection rectangle (`trame-sort`,
@@ -259,9 +251,9 @@ impl TrameState {
         sort_keys: &[SortKey],
         has_header: bool,
     ) -> TrameOutcome {
-        let (r1, c1, r2, c2) = self.selection_bounds();
+        let rect = self.selection_bounds();
         let sheet = self.active_sheet.clone();
-        self.sort_range_multi(&sheet, r1, r2, c1, c2, sort_keys, has_header)
+        self.sort_range_multi(&sheet, rect, sort_keys, has_header)
     }
 
     /// Drop every cell and formatting entry whose key references the removed

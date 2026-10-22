@@ -14,9 +14,10 @@
 //! and Sheets reformat typed formulas the same way).
 
 use super::types::{
-    AxisSpan, BinOpKind, CellRef, CellValue, Expr, LineAxis, RangeDep, SheetQualifier, StoredAxis,
+    AxisSpan, BinOpKind, CellRef, CellValue, Expr, RangeDep, SheetQualifier, SpanLines, StoredAxis,
     StoredCell, UnaryOpKind, col_to_alpha,
 };
+use crate::columns::row_label;
 use crate::model::Uid;
 
 // -----------------------------------------------------------------------------
@@ -210,24 +211,26 @@ fn render_literal(v: &CellValue) -> String {
 }
 
 fn render_cell(r: &CellRef) -> String {
-    format!("{}{}", col_to_alpha(r.col), r.row + 1)
+    format!("{}{}", col_to_alpha(r.col), row_label(r.row))
 }
 
 fn render_range(r: &RangeDep) -> String {
     format!(
         "{}{}:{}{}",
         col_to_alpha(r.col_start),
-        r.row_start + 1,
+        row_label(r.row_start),
         col_to_alpha(r.col_end),
-        r.row_end + 1
+        row_label(r.row_end)
     )
 }
 
 /// A range of whole lines as typed: `A:C` or `2:5`.
 fn render_span(s: &AxisSpan) -> String {
-    match s.axis {
-        LineAxis::Col => format!("{}:{}", col_to_alpha(s.start), col_to_alpha(s.end)),
-        LineAxis::Row => format!("{}:{}", u64::from(s.start) + 1, u64::from(s.end) + 1),
+    match s.lines {
+        SpanLines::Cols { first, last } => {
+            format!("{}:{}", col_to_alpha(first), col_to_alpha(last))
+        }
+        SpanLines::Rows { first, last } => format!("{}:{}", row_label(first), row_label(last)),
     }
 }
 
@@ -240,7 +243,7 @@ fn render_stored(c: &StoredCell) -> String {
     }
     let row = match c.row {
         StoredAxis::Line(uid) => render_uid(uid),
-        StoredAxis::At(row) => (u64::from(row) + 1).to_string(),
+        StoredAxis::At(row) => row_label(row),
         StoredAxis::Whole => "*".to_owned(),
     };
     let col = match c.col {

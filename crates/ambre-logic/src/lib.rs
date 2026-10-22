@@ -1601,6 +1601,7 @@ mod authorship_tests {
 
     use super::*;
     use ambre_bus::TrameCommand;
+    use ambre_bus::{Col, Row};
     use ambre_core::SessionNonce;
     use ambre_core::authorship::{PEERS_MAP, peer_key};
     use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
@@ -1645,8 +1646,8 @@ mod authorship_tests {
         assert!(author.adopt_session(peer, peer.0.to_le_bytes().to_vec()));
         author
             .handle_command(TrameCommand::SetCellText {
-                row: 0,
-                col: 0,
+                row: Row::new(0),
+                col: Col::new(0),
                 text: text.to_owned(),
             })
             .update
@@ -1688,8 +1689,8 @@ mod authorship_tests {
         rig.state.handle_logic_command(LogicCommand::App {
             document_id: rig.document_id,
             command: AppCommand::Trame(TrameCommand::SetCellText {
-                row: 1,
-                col: 1,
+                row: Row::new(1),
+                col: Col::new(1),
                 text: text.to_owned(),
             }),
         });
@@ -2057,8 +2058,8 @@ mod authorship_tests {
         rig.state.handle_logic_command(LogicCommand::App {
             document_id: rig.document_id,
             command: AppCommand::Trame(TrameCommand::SetCellText {
-                row: 1,
-                col: 1,
+                row: Row::new(1),
+                col: Col::new(1),
                 text: "early".to_owned(),
             }),
         });
@@ -2167,8 +2168,8 @@ mod authorship_tests {
             .map(|text| {
                 author
                     .handle_command(TrameCommand::SetCellText {
-                        row: 0,
-                        col: 0,
+                        row: Row::new(0),
+                        col: Col::new(0),
                         text: (*text).to_owned(),
                     })
                     .update
