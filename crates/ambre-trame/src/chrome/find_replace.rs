@@ -4,7 +4,7 @@
 // with two modes (find / replace), pinned top-right. Ctrl+F opens find mode,
 // Ctrl+H opens/expands replace mode (the launcher sets `state` accordingly);
 // Escape closes. The panel holds the query, replacement and the search options
-// (match_case / whole_cell / in_formulas / all_sheets) as its own state. It emits
+// (case, extent, formula scope and sheet scope) as its own state. It emits
 // two intents: `on_find` (-> TrameCommand::FindNext) and `on_replace_all`
 // (-> TrameCommand::ReplaceAll). The launcher resolves the search origin from
 // the tracked active cell, so the panel never carries the cursor.
@@ -13,6 +13,8 @@
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
+
+use crate::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
 /// Which row set the panel shows. Find mode hides the replacement row and the
 /// replace-only toggles; replace mode shows everything.
@@ -30,13 +32,13 @@ pub struct FindReplaceState {
     pub mode: FindMode,
 }
 
-/// A `FindNext` request: the query plus the two matching options that also apply
-/// to find. The launcher forwards it as [`ambre_bus::TrameCommand::FindNext`].
+/// A `FindNext` request: the query plus the options. A find reads only the
+/// case and the extent. The launcher forwards it as
+/// [`ambre_bus::TrameCommand::FindNext`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FindQuery {
     pub query: String,
-    pub match_case: bool,
-    pub whole_cell: bool,
+    pub options: FindOptions,
 }
 
 /// A `ReplaceAll` request. The launcher forwards it as
@@ -45,10 +47,7 @@ pub struct FindQuery {
 pub struct ReplaceRequest {
     pub query: String,
     pub replacement: String,
-    pub match_case: bool,
-    pub whole_cell: bool,
-    pub in_formulas: bool,
-    pub all_sheets: bool,
+    pub options: FindOptions,
 }
 
 /// Where the last search left the counter: the focused match, counted from one,
@@ -96,6 +95,30 @@ pub fn FindReplace(
 
     let find_ref = NodeRef::<html::Input>::new();
 
+    // The checkbox states, read as the typed options of a request.
+    let options = move || FindOptions {
+        case: if match_case.get_untracked() {
+            CaseMatch::Sensitive
+        } else {
+            CaseMatch::Insensitive
+        },
+        extent: if whole_cell.get_untracked() {
+            MatchExtent::WholeCell
+        } else {
+            MatchExtent::Substring
+        },
+        scope: if in_formulas.get_untracked() {
+            SearchScope::Formulas
+        } else {
+            SearchScope::Values
+        },
+        sheets: if all_sheets.get_untracked() {
+            SheetScope::All
+        } else {
+            SheetScope::Active
+        },
+    };
+
     // Focus the find field whenever the panel (re)opens.
     Effect::new(move |_| {
         if state.get().is_some()
@@ -111,8 +134,7 @@ pub fn FindReplace(
     let emit_find = move || {
         on_find.run(FindQuery {
             query: query.get_untracked(),
-            match_case: match_case.get_untracked(),
-            whole_cell: whole_cell.get_untracked(),
+            options: options(),
         });
     };
 
@@ -129,10 +151,7 @@ pub fn FindReplace(
     let replace_request = move || ReplaceRequest {
         query: query.get_untracked(),
         replacement: replacement.get_untracked(),
-        match_case: match_case.get_untracked(),
-        whole_cell: whole_cell.get_untracked(),
-        in_formulas: in_formulas.get_untracked(),
-        all_sheets: all_sheets.get_untracked(),
+        options: options(),
     };
     let run_replace = move || {
         if query.get_untracked().is_empty() {

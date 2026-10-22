@@ -306,7 +306,7 @@ impl TrameState {
                 query,
                 match_case,
                 whole_cell,
-            } => self.find_next(query, match_case, whole_cell),
+            } => self.find_next(query, find_options(match_case, whole_cell, false, false)),
             TrameCommand::ReplaceAll {
                 query,
                 replacement,
@@ -317,10 +317,7 @@ impl TrameState {
             } => self.replace_all(
                 query,
                 replacement,
-                match_case,
-                whole_cell,
-                in_formulas,
-                all_sheets,
+                find_options(match_case, whole_cell, in_formulas, all_sheets),
             ),
             TrameCommand::ImportCsv {
                 data,
@@ -364,7 +361,11 @@ impl TrameState {
                 match_case,
                 whole_cell,
                 in_formulas,
-            } => self.replace_one(query, replacement, match_case, whole_cell, in_formulas),
+            } => self.replace_one(
+                query,
+                replacement,
+                find_options(match_case, whole_cell, in_formulas, false),
+            ),
 
             // Deferred feature surface (`trame-engine`): the command vocabulary
             // is complete and typed. These handlers land in later phases
@@ -428,6 +429,38 @@ impl TrameState {
             can_undo: self.undo_manager.can_undo(),
             can_redo: self.undo_manager.can_redo(),
         }
+    }
+}
+
+/// The typed options of a find or replace command. The bus keeps the four
+/// checkbox states as bools; the scan reads them as enums from here on.
+fn find_options(
+    match_case: bool,
+    whole_cell: bool,
+    in_formulas: bool,
+    all_sheets: bool,
+) -> FindOptions {
+    FindOptions {
+        case: if match_case {
+            CaseMatch::Sensitive
+        } else {
+            CaseMatch::Insensitive
+        },
+        extent: if whole_cell {
+            MatchExtent::WholeCell
+        } else {
+            MatchExtent::Substring
+        },
+        scope: if in_formulas {
+            SearchScope::Formulas
+        } else {
+            SearchScope::Values
+        },
+        sheets: if all_sheets {
+            SheetScope::All
+        } else {
+            SheetScope::Active
+        },
     }
 }
 

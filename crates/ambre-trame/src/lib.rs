@@ -48,7 +48,9 @@ pub use ambre_bus::{
     SortOrder, StylePatch, TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };
 pub use logic::docfile::{export_ambre_plaintext, import_ambre_plaintext};
-pub use logic::{TrameOutcome, TrameState};
+pub use logic::{
+    CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope, TrameOutcome, TrameState,
+};
 
 /// Total number of rows in a Trame grid (0-based indices `0..TOTAL_ROWS`).
 pub const TOTAL_ROWS: RowCount = RowCount::new(100_000);

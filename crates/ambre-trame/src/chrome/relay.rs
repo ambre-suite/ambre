@@ -23,6 +23,7 @@ use super::popovers::FilterPopoverState;
 use super::sheet_tabs::ReorderSheet;
 use super::sort_dialog::{SortApply, SortDialogState};
 use super::status::SelStats;
+use crate::{CaseMatch, MatchExtent, SearchScope, SheetScope};
 
 /// What one of Trame's panels asks of the sheet.
 pub enum TrameIntent {
@@ -83,23 +84,23 @@ impl TrameRelay {
             },
             TrameIntent::Find(q) => TrameCommand::FindNext {
                 query: q.query,
-                match_case: q.match_case,
-                whole_cell: q.whole_cell,
+                match_case: q.options.case == CaseMatch::Sensitive,
+                whole_cell: q.options.extent == MatchExtent::WholeCell,
             },
             TrameIntent::Replace(r) => TrameCommand::ReplaceOne {
                 query: r.query,
                 replacement: r.replacement,
-                match_case: r.match_case,
-                whole_cell: r.whole_cell,
-                in_formulas: r.in_formulas,
+                match_case: r.options.case == CaseMatch::Sensitive,
+                whole_cell: r.options.extent == MatchExtent::WholeCell,
+                in_formulas: r.options.scope == SearchScope::Formulas,
             },
             TrameIntent::ReplaceAll(r) => TrameCommand::ReplaceAll {
                 query: r.query,
                 replacement: r.replacement,
-                match_case: r.match_case,
-                whole_cell: r.whole_cell,
-                in_formulas: r.in_formulas,
-                all_sheets: r.all_sheets,
+                match_case: r.options.case == CaseMatch::Sensitive,
+                whole_cell: r.options.extent == MatchExtent::WholeCell,
+                in_formulas: r.options.scope == SearchScope::Formulas,
+                all_sheets: r.options.sheets == SheetScope::All,
             },
             TrameIntent::ActivateSheet(sheet_id) => TrameCommand::ActivateSheet { sheet_id },
             TrameIntent::CreateSheet => TrameCommand::CreateSheet {

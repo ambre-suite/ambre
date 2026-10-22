@@ -31,6 +31,7 @@ use ambre_bus::{
     SelectionKind, SheetId, SheetTab, SortKey, StylePatch,
 };
 pub(crate) use ambre_bus::{HeaderRow, SortOrder};
+pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
 // -----------------------------------------------------------------------------
 // FormulaCtx bridge

@@ -5943,15 +5943,9 @@ ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPos
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPosition::label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPosition::new(active) | param | Option<usize>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPosition::new(total) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindQuery.match_case | field | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindQuery.query | field | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindQuery.whole_cell | field | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.all_sheets | field | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.in_formulas | field | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.match_case | field | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.query | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.replacement | field | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.whole_cell | field | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/chrome/formula_bar.rs | crate::chrome::formula_bar | FormulaBar(cell_ref) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/formula_bar.rs | crate::chrome::formula_bar | FormulaBar(content) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | <TrameHandler as CommandHandler>::sealed_save(passphrase) | param | String	trait	ambre-chrome CommandHandler trait fixes the signature (passphrase typing belongs to that trait)
@@ -6223,6 +6217,10 @@ ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_sou
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_source(stored) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::write_cell(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
+ambre-trame | src/logic/commands.rs | crate::logic::commands | find_options(all_sheets) | param | bool	generic	bus boundary: the TrameCommand find and replace fields stay bools on the wire
+ambre-trame | src/logic/commands.rs | crate::logic::commands | find_options(in_formulas) | param | bool	generic	bus boundary: the TrameCommand find and replace fields stay bools on the wire
+ambre-trame | src/logic/commands.rs | crate::logic::commands | find_options(match_case) | param | bool	generic	bus boundary: the TrameCommand find and replace fields stay bools on the wire
+ambre-trame | src/logic/commands.rs | crate::logic::commands | find_options(whole_cell) | param | bool	generic	bus boundary: the TrameCommand find and replace fields stay bools on the wire
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -6248,63 +6246,40 @@ ambre-trame | src/logic/fill.rs | crate::logic::fill | series_params() | ret | O
 ambre-trame | src/logic/fill.rs | crate::logic::fill | series_params(sources) | param | &[String]	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/filters.rs | crate::logic::filters | TrameState::apply_filter(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/filters.rs | crate::logic::filters | TrameState::clear_filter(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::find_next(match_case) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::find_next(query) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::find_next(whole_cell) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(in_formulas) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(match_case) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(needle) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(whole_cell) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_all(all_sheets) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_all(in_formulas) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_all(match_case) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_all(query) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_all(replacement) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_all(whole_cell) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active() | ret | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active(in_formulas) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active(match_case) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active(needle) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active(whole_cell) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other() | ret | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(in_formulas) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(match_case) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(needle) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(whole_cell) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_one(in_formulas) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_one(match_case) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_one(query) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_one(replacement) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_one(whole_cell) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(haystack) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(match_case) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(needle) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(whole_cell) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len() | ret | Option<usize>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len(hay) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len(needle_lower) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | fold() | ret | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | fold(match_case) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | rewrite() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/find.rs | crate::logic::find | rewrite(match_case) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | rewrite(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | rewrite(raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/find.rs | crate::logic::find | rewrite(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | rewrite(whole_cell) | param | bool	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::build() | ret | Vec<u8>	trait	fixture trait from the shared fixtures harness
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::generator_version() | ret | u32	trait	fixture trait from the shared fixtures harness
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::name() | ret | &'static str	trait	fixture trait from the shared fixtures harness
