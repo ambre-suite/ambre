@@ -23,7 +23,8 @@ use crate::logic::interop::{
 };
 use crate::logic::model::{ElementId, ElementStyle};
 
-use super::{MEDIA, ToileState};
+use super::ToileState;
+use super::names::{Fields, MediaKey, Root};
 
 /// Rewrite the `pending:{slot}` placeholder to the real blake2b `hash` in both
 /// the `media` blob at `slot` and every `image` element that referenced it
@@ -459,7 +460,7 @@ impl ToileState {
     /// Commit-free by design: the caller (`apply_import`) folds this into the one
     /// import undo group alongside the element creates.
     pub(super) fn seed_media(&mut self, blobs: &[MediaBlob]) -> usize {
-        let media = self.doc.get_map(MEDIA);
+        let media = self.doc.get_map(Root::Media.as_str());
         let mut created = 0;
         for blob in blobs {
             let key = blob.hash.as_str();
@@ -468,13 +469,19 @@ impl ToileState {
                 // (dedup). A placeholder token never becomes a key.
                 continue;
             }
-            let Ok(entry) = media.insert_container(key, LoroMap::new()) else {
+            let Ok(entry) = media
+                .insert_container(key, LoroMap::new())
+                .map(Fields::<MediaKey>::of)
+            else {
                 continue;
             };
-            let _ = entry.insert("w", blob.width as i64);
-            let _ = entry.insert("h", blob.height as i64);
-            let _ = entry.insert("mime", blob.mime.as_str());
-            let _ = entry.insert("thumb", LoroValue::Binary(blob.thumb.clone().into()));
+            let _ = entry.insert(MediaKey::W, blob.width as i64);
+            let _ = entry.insert(MediaKey::H, blob.height as i64);
+            let _ = entry.insert(MediaKey::Mime, blob.mime.as_str());
+            let _ = entry.insert(
+                MediaKey::Thumb,
+                LoroValue::Binary(blob.thumb.clone().into()),
+            );
             created += 1;
         }
         created
@@ -482,7 +489,7 @@ impl ToileState {
 
     /// Number of entries in the `media` map. Test / integration accessor.
     pub fn media_count(&self) -> usize {
-        match self.doc.get_map(MEDIA).get_deep_value() {
+        match self.doc.get_map(Root::Media.as_str()).get_deep_value() {
             LoroValue::Map(m) => m.len(),
             _ => 0,
         }
@@ -491,21 +498,22 @@ impl ToileState {
     /// The `(w, h, mime)` load-info of a media entry, if present. Test accessor.
     #[cfg(test)]
     pub(super) fn media_meta(&self, hash: &str) -> Option<(i64, i64, String)> {
-        let LoroValue::Map(m) = self.doc.get_map(MEDIA).get_deep_value() else {
+        let LoroValue::Map(m) = self.doc.get_map(Root::Media.as_str()).get_deep_value() else {
             return None;
         };
         let LoroValue::Map(entry) = m.get(hash)? else {
             return None;
         };
-        let w = match entry.get("w")? {
+        let entry = super::names::FieldValues::<MediaKey>::of(entry);
+        let w = match entry.get(MediaKey::W)? {
             LoroValue::I64(v) => *v,
             _ => return None,
         };
-        let h = match entry.get("h")? {
+        let h = match entry.get(MediaKey::H)? {
             LoroValue::I64(v) => *v,
             _ => return None,
         };
-        let mime = match entry.get("mime")? {
+        let mime = match entry.get(MediaKey::Mime)? {
             LoroValue::String(s) => s.to_string(),
             _ => return None,
         };
@@ -809,7 +817,7 @@ mod tests {
                 _ => None,
             })
             .expect("a minted id");
-        let before = st.element_map(&held).expect("held").get_deep_value();
+        let before = st.element_map(&held).expect("held").map().get_deep_value();
 
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g><rect x="0" y="0" width="5" height="5" fill="#ff0000"/><rect x="10" y="0" width="5" height="5"/></g></svg>"##;
         st.handle_command(ToileCommand::ImportSvg {
@@ -818,7 +826,7 @@ mod tests {
         });
         assert!(st.element_count() > 1, "the file landed");
         assert_eq!(
-            st.element_map(&held).expect("held").get_deep_value(),
+            st.element_map(&held).expect("held").map().get_deep_value(),
             before
         );
     }

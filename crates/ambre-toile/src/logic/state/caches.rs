@@ -9,24 +9,27 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use kurbo::Rect;
 use loro::event::{ContainerDiff, Diff, DiffEvent};
-use loro::{ContainerID, Index, LoroDoc, LoroMap, LoroValue, Subscription};
+use loro::{ContainerID, Index, LoroDoc, LoroValue, Subscription};
 
 use crate::logic::index::{ElementBounds, SpatialIndex};
 use crate::logic::model::{ConnectorId, ElementId, NodeId};
 
-use super::codec::{expanded_aabb, f64_of, map_f64, str_of};
-use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, ToileState};
+use super::ToileState;
+use super::codec::{expanded_aabb, f64_of, map_f64};
+use super::codec::{has_type, value_has_type};
+use super::names::{ElementKey, FieldValues, Fields, Root, entry, root_map};
+use crate::logic::model::ElementKind;
 
 impl ToileState {
     /// Recompute one element's AABB from its map and mirror it into `bounds` and
     /// the R-tree.
-    pub(super) fn update_bounds(&mut self, id: &ElementId, em: &LoroMap) {
+    pub(super) fn update_bounds(&mut self, id: &ElementId, em: &Fields<ElementKey>) {
         let rect = expanded_aabb(
-            f64_of(em, "x"),
-            f64_of(em, "y"),
-            f64_of(em, "w"),
-            f64_of(em, "h"),
-            f64_of(em, "rot"),
+            f64_of(em, ElementKey::X),
+            f64_of(em, ElementKey::Y),
+            f64_of(em, ElementKey::W),
+            f64_of(em, ElementKey::H),
+            f64_of(em, ElementKey::Rot),
         );
         self.bounds.insert(id.clone(), rect);
         self.index
@@ -43,9 +46,10 @@ impl ToileState {
         if let LoroValue::Map(m) = self.walk_elements() {
             for (key, v) in m.iter() {
                 if let LoroValue::Map(fields) = v {
+                    let fields = FieldValues::<ElementKey>::of(fields);
                     // Groups and frames name their members; the same pass
                     // indexes them, so the parent lookup costs no walk of its own.
-                    if let Some(LoroValue::List(kids)) = fields.get(CHILDREN) {
+                    if let Some(LoroValue::List(kids)) = fields.get(ElementKey::Children) {
                         let container = ElementId(key.clone());
                         for kid in kids.iter() {
                             if let LoroValue::String(s) = kid {
@@ -55,15 +59,14 @@ impl ToileState {
                     }
                     // Groups carry no stored geometry; their bounds are derived
                     // from members by `recompute_groups` after this leaf pass.
-                    if matches!(fields.get("type"), Some(LoroValue::String(t)) if t.as_str() == "group")
-                    {
+                    if value_has_type(fields, ElementKind::Group) {
                         continue;
                     }
-                    let x = map_f64(fields, "x");
-                    let y = map_f64(fields, "y");
-                    let w = map_f64(fields, "w");
-                    let h = map_f64(fields, "h");
-                    let rot = map_f64(fields, "rot");
+                    let x = map_f64(fields, ElementKey::X);
+                    let y = map_f64(fields, ElementKey::Y);
+                    let w = map_f64(fields, ElementKey::W);
+                    let h = map_f64(fields, ElementKey::H);
+                    let rot = map_f64(fields, ElementKey::Rot);
                     let id = ElementId(key.clone());
                     let rect = expanded_aabb(x, y, w, h, rot);
                     self.bounds.insert(id.clone(), rect);
@@ -122,7 +125,7 @@ impl ToileState {
         };
         let kids = self.children_of(id);
         self.relink_members(id, kids);
-        if str_of(&em, "type") != "group" {
+        if !has_type(&em, ElementKind::Group) {
             self.update_bounds(id, &em);
         }
     }
@@ -140,7 +143,7 @@ impl ToileState {
             }
             if self
                 .element_map(&id)
-                .is_some_and(|em| str_of(&em, "type") == "group")
+                .is_some_and(|em| has_type(&em, ElementKind::Group))
             {
                 groups.push(id.clone());
             }
@@ -183,7 +186,7 @@ impl ToileState {
     pub(super) fn walk_elements(&self) -> LoroValue {
         self.board_walks
             .set(self.board_walks.get().saturating_add(1));
-        self.doc.get_map(ELEMENTS).get_deep_value()
+        self.doc.get_map(Root::Elements.as_str()).get_deep_value()
     }
 
     /// Record that `parent`'s `children` list names `child` once more.
@@ -233,7 +236,11 @@ impl ToileState {
     pub(super) fn rematerialize_layers(&mut self) {
         let mut seen = HashSet::new();
         let mut out = Vec::new();
-        if let LoroValue::List(list) = self.doc.get_movable_list(LAYERS).get_deep_value() {
+        if let LoroValue::List(list) = self
+            .doc
+            .get_movable_list(Root::Layers.as_str())
+            .get_deep_value()
+        {
             for v in list.iter() {
                 if let LoroValue::String(s) = v
                     && let Some(node) = NodeId::decode(s)
@@ -253,7 +260,7 @@ impl ToileState {
     /// It is preserved verbatim (`TOILE-129`), not destroyed by an unrelated
     /// delete.
     pub(super) fn strip_layers(&self, keep: impl Fn(&NodeId) -> bool) {
-        let list = self.doc.get_movable_list(LAYERS);
+        let list = self.doc.get_movable_list(Root::Layers.as_str());
         let mut dropped: Vec<usize> = Vec::new();
         if let LoroValue::List(cur) = list.get_deep_value() {
             for (i, v) in cur.iter().enumerate() {
@@ -271,15 +278,9 @@ impl ToileState {
         }
     }
 
-    /// The `LoroMap` handle for an element, or `None` if absent.
-    pub(super) fn element_map(&self, id: &ElementId) -> Option<LoroMap> {
-        self.doc
-            .get_map(ELEMENTS)
-            .get(id.as_str())?
-            .into_container()
-            .ok()?
-            .into_map()
-            .ok()
+    /// The map of an element, or `None` if absent.
+    pub(super) fn element_map(&self, id: &ElementId) -> Option<Fields<ElementKey>> {
+        entry(&root_map(&self.doc, Root::Elements), id.as_str())
     }
 }
 
@@ -346,12 +347,13 @@ pub(super) fn watch(doc: &LoroDoc) -> (TouchedSink, Subscription) {
 /// Place one container change: the paint order, or the entries of the element
 /// map or the arrow map it lands under.
 fn note(change: &ContainerDiff<'_>, touched: &mut Touched) {
-    if matches!(change.target, ContainerID::Root { name, .. } if name.as_str() == LAYERS) {
+    if matches!(change.target, ContainerID::Root { name, .. } if name.as_str() == Root::Layers.as_str())
+    {
         touched.board.layers = true;
         return;
     }
     let board = &mut touched.board;
-    if let Some(keys) = keys_under(change, ELEMENTS) {
+    if let Some(keys) = keys_under(change, Root::Elements) {
         match keys {
             Some(keys) => board.elements.extend(keys.into_iter().map(ElementId)),
             None => board.unplaced = true,
@@ -359,7 +361,7 @@ fn note(change: &ContainerDiff<'_>, touched: &mut Touched) {
         return;
     }
     let wires = &mut touched.wires;
-    if let Some(keys) = keys_under(change, CONNECTORS) {
+    if let Some(keys) = keys_under(change, Root::Connectors) {
         match keys {
             Some(keys) => wires.ids.extend(keys.into_iter().map(ConnectorId)),
             None => wires.unplaced = true,
@@ -371,9 +373,8 @@ fn note(change: &ContainerDiff<'_>, touched: &mut Touched) {
 /// it updated on the map itself, or the one entry its container sits under.
 /// `None` when the change is not under `root`, and `Some(None)` when
 /// it is but names no entry.
-fn keys_under(change: &ContainerDiff<'_>, root: &str) -> Option<Option<Vec<String>>> {
-    let is_root =
-        |c: &ContainerID| matches!(c, ContainerID::Root { name, .. } if name.as_str() == root);
+fn keys_under(change: &ContainerDiff<'_>, root: Root) -> Option<Option<Vec<String>>> {
+    let is_root = |c: &ContainerID| matches!(c, ContainerID::Root { name, .. } if name.as_str() == root.as_str());
     if is_root(change.target) {
         return Some(match &change.diff {
             Diff::Map(map) => Some(map.updated.keys().map(ToString::to_string).collect()),

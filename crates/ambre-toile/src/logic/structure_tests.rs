@@ -16,7 +16,7 @@ use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType,
     ShapeKind, StrokePoint,
 };
-use crate::logic::state::{CONNECTORS, ELEMENTS, ToileState};
+use crate::logic::state::{Root, ToileState};
 
 fn create(st: &mut ToileState, kind: ElementKind, at: Point, size: Size) -> ToileOutcome {
     let content = match kind {
@@ -768,13 +768,16 @@ fn every_id_the_board_writes_has_the_minted_width() {
             .to_vec(),
         style: ElementStyle::default(),
     });
-    let keys = |name: &str| -> Vec<String> {
-        match st.crdt().get_map(name).get_deep_value() {
+    let keys = |root: Root| -> Vec<String> {
+        match st.crdt().get_map(root.as_str()).get_deep_value() {
             LoroValue::Map(m) => m.keys().cloned().collect(),
             _ => Vec::new(),
         }
     };
-    let ids: HashSet<String> = keys(ELEMENTS).into_iter().chain(keys(CONNECTORS)).collect();
+    let ids: HashSet<String> = keys(Root::Elements)
+        .into_iter()
+        .chain(keys(Root::Connectors))
+        .collect();
     assert_eq!(
         ids.len(),
         6,

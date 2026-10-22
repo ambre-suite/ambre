@@ -13,7 +13,10 @@ use crate::logic::command::{FindOptions, FindResults, ToileEvent, ToileOutcome};
 use crate::logic::model::{ElementId, NodeId};
 
 use super::ToileState;
+use super::codec::has_type;
 use super::codec::{body_of, str_of};
+use super::names::ElementKey;
+use crate::logic::model::ElementKind;
 
 impl ToileState {
     /// Scan the text-bearing elements for `query`, returning the matching ids in
@@ -69,11 +72,13 @@ impl ToileState {
         let Some(em) = self.element_map(id) else {
             return false;
         };
-        let body = match str_of(&em, "type").as_str() {
-            "sticky" | "text" => body_of(&em),
+        let body = if has_type(&em, ElementKind::Sticky) || has_type(&em, ElementKind::Text) {
+            body_of(&em)
+        } else if has_type(&em, ElementKind::Frame) {
             // A frame title lives in its `name` field (empty until named).
-            "frame" => str_of(&em, "name"),
-            _ => return false,
+            str_of(&em, ElementKey::Name)
+        } else {
+            return false;
         };
         text_matches(&body, query, options)
     }

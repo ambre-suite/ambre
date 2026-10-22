@@ -48,6 +48,7 @@ mod find;
 pub mod fixtures;
 mod groups;
 mod import;
+mod names;
 mod presence;
 pub use presence::PRESENCE_TTL_MS;
 pub(crate) mod presentation;
@@ -78,41 +79,23 @@ use crate::logic::command::{
     ToileError, ToileEvent, ToileOutcome,
 };
 use crate::logic::index::{SpatialIndex, Viewport};
-use crate::logic::model::{ConnectorId, ElementId, ElementStyle, FrameId, NodeId, PlaybackState};
+use crate::logic::model::{
+    ConnectorId, ElementId, ElementKind, ElementStyle, FrameId, NodeId, PlaybackState,
+};
 use crate::logic::schema;
 use crate::logic::text_merge::Edit;
 
-// Root container names.
-pub(crate) const ELEMENTS: &str = "elements";
-pub(crate) use codec::BODY;
-pub(crate) const CONNECTORS: &str = "connectors";
-const LAYERS: &str = "layers";
-const BOARD: &str = "board";
-/// Per-group / per-frame membership list key inside an element map.
-const CHILDREN: &str = "children";
-/// Collaborative speaker-notes LoroText key inside a frame element map.
-const NOTES: &str = "notes";
-/// Auto-layout spec LWW register key inside a frame element map.
-const AUTOLAYOUT: &str = "autolayout";
-/// Slide sequence root movable list (`toile-presentation`). A root container's
-/// identity is the name itself. Every peer therefore addresses the same list,
-/// and none mints a rival one by writing into it first (`TOILE-029`).
-pub(crate) const PRESENTATION_ORDER: &str = "presentation_order";
-/// Presentation config root map, a root container for the same reason.
-pub(crate) const PRESENTATION_CONFIG: &str = "presentation_config";
-/// Reactions root map key: `reactions[target_id][user_id]`.
-const REACTIONS: &str = "reactions";
-/// Comment threads root map key: `comments[thread_id]` (`toile-comments`).
-const COMMENTS: &str = "comments";
+pub(crate) use names::{
+    BoardKey, ConnectorKey, ElementKey, Fields, LegacyDeckKey, LegacyRoot, Root, entry, root_list,
+    root_map,
+};
+#[cfg(test)]
+pub(crate) use names::{ConfigKey, MediaKey, MessageKey, ThreadKey, board};
+
 /// The commit origin every comment write carries. The `UndoManager` excludes
 /// the prefix, so `Ctrl+Z` on the board never retracts a message a teammate has
 /// already read (`TOILE-FEAT-017`).
 const COMMENT_ORIGIN: &str = "cmt";
-/// Media root map key: `media[blake2b(plaintext)]` -> `{w, h, mime, thumb}`
-/// (`ambre-spec-toile-schema.md`). Created and populated by `toile-media`; an
-/// `image` element's `hash` field is a key here. Dedup: N elements may share one
-/// entry, so `seed_media` never overwrites an existing key.
-const MEDIA: &str = "media";
 
 /// Per-document Toile engine.
 pub struct ToileState {
@@ -248,10 +231,10 @@ fn write_edits(text: &loro::LoroText, edits: &[Edit]) -> loro::LoroResult<()> {
 
 /// The board scaffolding, which every peer writes on open, before any edit.
 fn write_scaffold(doc: &LoroDoc) {
-    let board = doc.get_map(BOARD);
-    let _ = board.insert("bg_color", 0xFF1E_1E1Eu32 as i64);
-    let _ = board.insert("grid_size", 32.0);
-    let _ = board.insert("grid_snap", false);
+    let board = names::board(doc);
+    let _ = board.insert(BoardKey::BgColor, 0xFF1E_1E1Eu32 as i64);
+    let _ = board.insert(BoardKey::GridSize, 32.0);
+    let _ = board.insert(BoardKey::GridSnap, false);
     // The presentation defaults sit in a root map, so they are registers on
     // a container every peer already addresses (`TOILE-029`).
     presentation::seed_presentation_config(doc);
@@ -1035,7 +1018,7 @@ impl ToileState {
         // is on the board, and the paint walk already draws it (`TOILE-058`).
         // Reading the order here would leave select-all short of exactly the
         // elements that fallback exists for.
-        let elems = self.doc.get_map(ELEMENTS);
+        let elems = self.doc.get_map(Root::Elements.as_str());
         let LoroValue::Map(entries) = elems.get_value() else {
             return ToileOutcome::display_only(vec![ToileEvent::BoardIds(Vec::new())]);
         };
@@ -1044,7 +1027,9 @@ impl ToileState {
             .filter_map(|key| {
                 let id = ElementId(key.to_string());
                 let em = self.element_map(&id)?;
-                if codec::bool_of(&em, "locked") || codec::str_of(&em, "type") == "group" {
+                if codec::bool_of(&em, ElementKey::Locked)
+                    || codec::has_type(&em, ElementKind::Group)
+                {
                     None
                 } else {
                     Some(id)
@@ -1231,7 +1216,7 @@ impl ToileState {
     /// Test helper.
     pub fn style_of(&self, id: &ElementId) -> ElementStyle {
         self.element_map(id)
-            .map(|em| self.style_read(&codec::bin_of(&em, "style")))
+            .map(|em| self.style_read(&codec::bin_of(&em, ElementKey::Style)))
             .unwrap_or_default()
     }
 
@@ -1249,7 +1234,8 @@ impl ToileState {
     /// Overwrite one raw string field of an element's map, behind the engine's
     /// back. Test helper: it exists to forge the state a newer or broken peer
     /// could merge into us, which no command of ours can produce.
-    pub fn debug_set_element_field(&mut self, id: &ElementId, key: &str, value: &str) {
+    #[cfg(test)]
+    pub(crate) fn debug_set_element_field(&mut self, id: &ElementId, key: ElementKey, value: &str) {
         if let Some(em) = self.element_map(id) {
             let _ = em.insert(key, value);
         }
@@ -1261,7 +1247,11 @@ impl ToileState {
     /// (`TOILE-129`).
     pub fn debug_raw_layers(&self) -> Vec<String> {
         let mut out = Vec::new();
-        if let LoroValue::List(cur) = self.doc.get_movable_list(LAYERS).get_deep_value() {
+        if let LoroValue::List(cur) = self
+            .doc
+            .get_movable_list(Root::Layers.as_str())
+            .get_deep_value()
+        {
             for v in cur.iter() {
                 if let LoroValue::String(s) = v {
                     out.push(s.as_str().to_owned());
@@ -1275,7 +1265,7 @@ impl ToileState {
     /// it forges an entry a future version wrote and this build cannot read
     /// (`TOILE-129`).
     pub fn debug_push_layer_raw(&mut self, s: &str) {
-        let _ = self.doc.get_movable_list(LAYERS).push(s);
+        let _ = self.doc.get_movable_list(Root::Layers.as_str()).push(s);
         self.rematerialize_layers();
     }
 
@@ -1283,7 +1273,7 @@ impl ToileState {
     /// document. Test helper: it forges the concurrent drop `TOILE-058` names, a
     /// state no command of ours can produce.
     pub fn debug_remove_layer_entry(&mut self, node: &NodeId) {
-        let list = self.doc.get_movable_list(LAYERS);
+        let list = self.doc.get_movable_list(Root::Layers.as_str());
         if let LoroValue::List(cur) = list.get_deep_value() {
             for (i, v) in cur.iter().enumerate() {
                 if let LoroValue::String(s) = v
@@ -1300,7 +1290,7 @@ impl ToileState {
     /// Connector ids currently in the CRDT, sorted. Test helper.
     pub fn connector_ids(&self) -> Vec<ConnectorId> {
         let mut ids = Vec::new();
-        if let LoroValue::Map(m) = self.doc.get_map(CONNECTORS).get_deep_value() {
+        if let LoroValue::Map(m) = self.doc.get_map(Root::Connectors.as_str()).get_deep_value() {
             ids.extend(m.keys().map(|k| ConnectorId(k.clone())));
         }
         ids.sort();
@@ -1341,7 +1331,7 @@ mod schema_tests {
     use crate::logic::command::{InitContent, ToileCommand};
     use crate::logic::model::{ElementKind, ShapeKind};
     use crate::logic::schema::SCHEMA_VERSION;
-    use crate::logic::state::ToileState;
+    use crate::logic::state::{ElementKey, Root, ToileState};
 
     fn board_with_one_rect() -> ToileState {
         let mut st = ToileState::new();
@@ -1369,7 +1359,7 @@ mod schema_tests {
                     i64::from(SCHEMA_VERSION + 1),
                 )
                 .expect("stamp");
-            doc.get_map("elements")
+            doc.get_map(Root::Elements.as_str())
                 .insert_container("xx", loro::LoroMap::new())
                 .expect("an element the refusal must not import");
             doc.commit();
@@ -1407,8 +1397,11 @@ mod schema_tests {
         let em = source.element_map(&id).expect("the rect is there");
         // A blob no `ElementStyle` layout can produce: a register written by a
         // client this build does not know.
-        em.insert("style", loro::LoroValue::Binary(vec![0xFFu8; 8].into()))
-            .expect("overwrite the style register");
+        em.insert(
+            ElementKey::Style,
+            loro::LoroValue::Binary(vec![0xFFu8; 8].into()),
+        )
+        .expect("overwrite the style register");
         source.doc.commit();
         let payload = source.export_snapshot();
 

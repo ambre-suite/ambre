@@ -32,13 +32,12 @@ use std::collections::{BTreeMap, HashSet};
 
 use loro::LoroValue;
 
-use ambre_bus::UserId;
-
 use crate::ToileError;
 use crate::logic::command::{Reaction, ReactionKind, ReactionTally, ToileEvent, ToileOutcome};
 use crate::logic::model::{ElementId, TargetId};
 
-use super::{REACTIONS, ToileState};
+use super::ToileState;
+use super::names::{ReactionKey, Root};
 
 /// Encode a value for storage under a reactions key. A failure is a refusal
 /// the user has to see (`TOILE-FEAT-064`). It becomes a typed error, not a
@@ -47,11 +46,6 @@ use super::{REACTIONS, ToileState};
 /// refuse, and the mapping is what the test holds.
 fn encode<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, ToileError> {
     postcard::to_allocvec(value).map_err(|e| ToileError::WriteFailed(e.to_string()))
-}
-
-/// The composite reactions key for a `(target, user)` pair (see module docs).
-fn reaction_key(target: &TargetId, user: &UserId) -> String {
-    format!("{}/{}", target.as_str(), user)
 }
 
 /// Fold one decoded reaction into a per-target accumulator: emoji counts (a
@@ -86,8 +80,8 @@ impl ToileState {
         if self.element_map(target).is_none() {
             return self.err_no_element(target);
         }
-        let key = reaction_key(target, &user_id);
-        let map = self.doc.get_map(REACTIONS);
+        let key = ReactionKey::of(target, &user_id);
+        let map = self.doc.get_map(Root::Reactions.as_str());
 
         match reaction {
             Some(r) => {
@@ -97,20 +91,20 @@ impl ToileState {
                 };
                 // Skip a byte-identical re-write so an unchanged reaction is not a
                 // spurious commit / undo item.
-                if let Some(cur) = map.get(&key).and_then(|v| v.into_value().ok())
+                if let Some(cur) = map.get(key.as_str()).and_then(|v| v.into_value().ok())
                     && let LoroValue::Binary(cur) = cur
                     && cur.as_slice() == bytes.as_slice()
                 {
                     return ToileOutcome::display_only(Vec::new());
                 }
-                let _ = map.insert(&key, bytes);
+                let _ = map.insert(key.as_str(), bytes);
             }
             None => {
                 // Nothing to remove if the user has no entry on this target.
-                if map.get(&key).is_none() {
+                if map.get(key.as_str()).is_none() {
                     return ToileOutcome::display_only(Vec::new());
                 }
-                let _ = map.delete(&key);
+                let _ = map.delete(key.as_str());
             }
         }
         self.doc.commit();
@@ -127,12 +121,12 @@ impl ToileState {
         if self.element_map(target).is_none() {
             return ReactionTally::default();
         }
-        let prefix = format!("{}/", target.as_str());
         let mut emoji: BTreeMap<String, u32> = BTreeMap::new();
         let mut tally = ReactionTally::default();
-        if let LoroValue::Map(entries) = self.doc.get_map(REACTIONS).get_deep_value() {
+        if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
+        {
             for (k, value) in entries.iter() {
-                if !k.starts_with(&prefix) {
+                if ReactionKey::target_of(k) != Some(target.as_str()) {
                     continue;
                 }
                 let LoroValue::Binary(bytes) = value else {
@@ -161,9 +155,10 @@ impl ToileState {
     ) -> BTreeMap<TargetId, ReactionTally> {
         let mut emoji: BTreeMap<TargetId, BTreeMap<String, u32>> = BTreeMap::new();
         let mut tallies: BTreeMap<TargetId, ReactionTally> = BTreeMap::new();
-        if let LoroValue::Map(entries) = self.doc.get_map(REACTIONS).get_deep_value() {
+        if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
+        {
             for (k, value) in entries.iter() {
-                let Some((target, _)) = k.split_once('/') else {
+                let Some(target) = ReactionKey::target_of(k) else {
                     continue;
                 };
                 let target = ElementId(target.to_string());
@@ -196,8 +191,13 @@ impl ToileState {
     /// accessor.
     pub fn my_reaction(&self, target: &TargetId) -> Option<Reaction> {
         let user_id = self.my_user_id?;
-        let key = reaction_key(target, &user_id);
-        let LoroValue::Binary(bytes) = self.doc.get_map(REACTIONS).get(&key)?.into_value().ok()?
+        let key = ReactionKey::of(target, &user_id);
+        let LoroValue::Binary(bytes) = self
+            .doc
+            .get_map(Root::Reactions.as_str())
+            .get(key.as_str())?
+            .into_value()
+            .ok()?
         else {
             return None;
         };

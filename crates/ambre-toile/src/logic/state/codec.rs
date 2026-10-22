@@ -5,6 +5,7 @@
 //! is stateless and shared by both the mutation and derivation impls via `use
 //! super::codec::*`.
 
+use ambre_core::crdt::FieldKey;
 use kurbo::{Affine, Point, Rect, Vec2};
 use loro::{Container, LoroMap, LoroText, LoroValue, ValueOrContainer};
 
@@ -14,6 +15,8 @@ use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, PathType, ShapeKind,
     StrokePoint,
 };
+
+use super::names::{ConnectorKey, ElementKey, FieldValues, Fields};
 
 /// Rotation-expanded axis-aligned bounds of a rect rotated by `rot` about its
 /// center. For `rot == 0` this is the rect itself.
@@ -68,12 +71,12 @@ pub(super) fn stroke_aabb(points: &[StrokePoint]) -> Rect {
 /// is a derived union, so it carries no x/y/w/h. Only the type flag, lock state,
 /// rotation and default style live in the CRDT; the `children` list is attached
 /// by the caller.
-pub(super) fn em_seed_group(em: &LoroMap) {
-    let _ = em.insert("type", "group");
-    let _ = em.insert("rot", 0.0);
-    let _ = em.insert("locked", false);
+pub(super) fn em_seed_group(em: &Fields<ElementKey>) {
+    let _ = em.insert(ElementKey::Type, ElementKind::Group.type_tag());
+    let _ = em.insert(ElementKey::Rot, 0.0);
+    let _ = em.insert(ElementKey::Locked, false);
     let _ = em.insert(
-        "style",
+        ElementKey::Style,
         LoroValue::Binary(ElementStyle::default().to_bytes().into()),
     );
 }
@@ -83,13 +86,13 @@ pub(super) fn em_seed_group(em: &LoroMap) {
 /// are naturally skipped -- they arrive as `LoroValue::List` / `Map`, which do
 /// not match a leaf kind. `skip` drops named fields the caller remaps itself
 /// (connector endpoints).
-pub(super) fn capture_scalars(
-    fields: &loro::LoroMapValue,
-    skip: &[&str],
+pub(super) fn capture_scalars<K: FieldKey>(
+    fields: FieldValues<'_, K>,
+    skip: &[K],
 ) -> Vec<(String, ClipValue)> {
     let mut out = Vec::new();
-    for (k, v) in fields.iter() {
-        if skip.contains(&k.as_str()) {
+    for (k, v) in fields.map().iter() {
+        if skip.iter().any(|key| key.as_str() == k.as_str()) {
             continue;
         }
         let cv = match v {
@@ -111,9 +114,9 @@ pub(super) fn write_clip_fields(m: &LoroMap, fields: &[(String, ClipValue)], off
     for (k, v) in fields {
         match v {
             ClipValue::F64(d) => {
-                let d = match k.as_str() {
-                    "x" => d + offset.x,
-                    "y" => d + offset.y,
+                let d = match ElementKey::parse(k) {
+                    Some(ElementKey::X) => d + offset.x,
+                    Some(ElementKey::Y) => d + offset.y,
                     _ => *d,
                 };
                 let _ = m.insert(k.as_str(), d);
@@ -124,7 +127,9 @@ pub(super) fn write_clip_fields(m: &LoroMap, fields: &[(String, ClipValue)], off
             // A body and a caption are text containers on the board, which
             // the capture read as their string. Written back as a string they
             // would race whole (`TOILE-030`, `TOILE-047`).
-            ClipValue::Str(s) if k == BODY || k == LABEL => {
+            ClipValue::Str(s)
+                if k == ElementKey::Body.as_str() || k == ConnectorKey::Label.as_str() =>
+            {
                 if let Ok(text) = m.insert_container(k.as_str(), LoroText::new())
                     && !s.is_empty()
                 {
@@ -157,9 +162,13 @@ pub(super) fn content_matches(kind: ElementKind, content: &InitContent) -> bool 
     )
 }
 
-pub(super) fn kind_from_tags(type_tag: &str, shape: Option<ShapeKind>) -> ElementKind {
-    match type_tag {
-        "shape" => ElementKind::Shape(shape.unwrap_or(ShapeKind::Rect)),
+/// The kind an element map's type tag names. An unknown tag reads as a
+/// rectangle, and so does a shape with no readable shape tag.
+pub(super) fn kind_of(em: &Fields<ElementKey>) -> ElementKind {
+    match str_of(em, ElementKey::Type).as_str() {
+        "shape" => ElementKind::Shape(
+            ShapeKind::from_tag(&str_of(em, ElementKey::Shape)).unwrap_or(ShapeKind::Rect),
+        ),
         "sticky" => ElementKind::Sticky,
         "text" => ElementKind::Text,
         "image" => ElementKind::Image,
@@ -170,6 +179,17 @@ pub(super) fn kind_from_tags(type_tag: &str, shape: Option<ShapeKind>) -> Elemen
         "doc_embed" => ElementKind::DocEmbed,
         _ => ElementKind::Shape(ShapeKind::Rect),
     }
+}
+
+/// Whether an element map's type tag is the tag of `kind`. Every shape kind
+/// carries one tag.
+pub(super) fn has_type(em: &Fields<ElementKey>, kind: ElementKind) -> bool {
+    str_of(em, ElementKey::Type) == kind.type_tag()
+}
+
+/// Whether an element read whole carries the type tag of `kind`.
+pub(super) fn value_has_type(fields: FieldValues<'_, ElementKey>, kind: ElementKind) -> bool {
+    matches!(fields.get(ElementKey::Type), Some(LoroValue::String(t)) if t.as_str() == kind.type_tag())
 }
 
 pub(super) fn doc_type_from_tag(s: &str) -> Option<ambre_core::DocType> {
@@ -187,7 +207,7 @@ pub(super) fn doc_type_from_tag(s: &str) -> Option<ambre_core::DocType> {
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn write_connector(
-    cm: &LoroMap,
+    cm: &Fields<ConnectorKey>,
     from: &ElementId,
     from_anch: Anchor,
     to: &ElementId,
@@ -195,18 +215,18 @@ pub(super) fn write_connector(
     path_type: PathType,
     arrows: EndCaps,
 ) {
-    let _ = cm.insert("from", from.as_str());
-    let _ = cm.insert("from_anch", encode_anchor(from_anch));
-    let _ = cm.insert("to", to.as_str());
-    let _ = cm.insert("to_anch", encode_anchor(to_anch));
-    let _ = cm.insert("path_type", encode_path_type(path_type));
-    let _ = cm.insert("arrow_start", arrows.start);
-    let _ = cm.insert("arrow_end", arrows.end);
+    let _ = cm.insert(ConnectorKey::From, from.as_str());
+    let _ = cm.insert(ConnectorKey::FromAnch, encode_anchor(from_anch));
+    let _ = cm.insert(ConnectorKey::To, to.as_str());
+    let _ = cm.insert(ConnectorKey::ToAnch, encode_anchor(to_anch));
+    let _ = cm.insert(ConnectorKey::PathType, encode_path_type(path_type));
+    let _ = cm.insert(ConnectorKey::ArrowStart, arrows.start);
+    let _ = cm.insert(ConnectorKey::ArrowEnd, arrows.end);
     // The style register is seeded like an element's: an LWW binary the
     // deriver reads back. So an arrow carries its own colour and width rather
     // than borrowing a default (`TOILE-046`).
     let _ = cm.insert(
-        "style",
+        ConnectorKey::Style,
         LoroValue::Binary(ElementStyle::default().to_bytes().into()),
     );
     // The caption is seeded at birth, not on first edit. Seeding here gives
@@ -214,16 +234,13 @@ pub(super) fn write_connector(
     // travels in the creation delta. Two concurrent captions then merge inside
     // one text. A lazy seed on each peer would mint rival containers under the
     // same key, and LWW would drop one side's caption whole (`TOILE-047`).
-    let _ = cm.insert_container(LABEL, LoroText::new());
+    let _ = cm.insert_container(ConnectorKey::Label, LoroText::new());
 }
-
-/// The connector field holding the edge caption.
-pub(super) const LABEL: &str = "label";
 
 /// The caption text of a connector map, empty when the connector predates the
 /// field or carries none.
-pub(super) fn connector_label(cm: &LoroMap) -> String {
-    cm.get(LABEL)
+pub(super) fn connector_label(cm: &Fields<ConnectorKey>) -> String {
+    cm.get(ConnectorKey::Label)
         .and_then(|v| v.into_container().ok())
         .and_then(|c| c.into_text().ok())
         .map(|t| t.to_string())
@@ -233,28 +250,29 @@ pub(super) fn connector_label(cm: &LoroMap) -> String {
 /// The caption `LoroText` of a connector map, seeding one for a connector
 /// minted before the field existed. The seed is the LWW-collision window
 /// `write_connector` avoids for every connector it makes.
-pub(super) fn connector_label_or_seed(cm: &LoroMap) -> Option<LoroText> {
+pub(super) fn connector_label_or_seed(cm: &Fields<ConnectorKey>) -> Option<LoroText> {
     if let Some(text) = cm
-        .get(LABEL)
+        .get(ConnectorKey::Label)
         .and_then(|v| v.into_container().ok())
         .and_then(|c| c.into_text().ok())
     {
         return Some(text);
     }
-    cm.insert_container(LABEL, LoroText::new()).ok()
+    cm.insert_container(ConnectorKey::Label, LoroText::new())
+        .ok()
 }
 
-pub(super) fn read_connector(id: ConnectorId, cm: &LoroMap) -> Option<Connector> {
+pub(super) fn read_connector(id: ConnectorId, cm: &Fields<ConnectorKey>) -> Option<Connector> {
     Some(Connector {
         id,
-        from: ElementId(str_of(cm, "from")),
-        from_anch: decode_anchor(&str_of(cm, "from_anch")),
-        to: ElementId(str_of(cm, "to")),
-        to_anch: decode_anchor(&str_of(cm, "to_anch")),
-        path_type: decode_path_type(&str_of(cm, "path_type")),
+        from: ElementId(str_of(cm, ConnectorKey::From)),
+        from_anch: decode_anchor(&str_of(cm, ConnectorKey::FromAnch)),
+        to: ElementId(str_of(cm, ConnectorKey::To)),
+        to_anch: decode_anchor(&str_of(cm, ConnectorKey::ToAnch)),
+        path_type: decode_path_type(&str_of(cm, ConnectorKey::PathType)),
         arrows: EndCaps {
-            start: bool_of(cm, "arrow_start"),
-            end: bool_of(cm, "arrow_end"),
+            start: bool_of(cm, ConnectorKey::ArrowStart),
+            end: bool_of(cm, ConnectorKey::ArrowEnd),
         },
     })
 }
@@ -309,28 +327,22 @@ pub(super) fn decode_path_type(s: &str) -> PathType {
 
 // -- LoroMap handle field readers ---------------------------------------------
 
-pub(super) fn f64_of(m: &LoroMap, k: &str) -> f64 {
-    match m.get(k).map(|v| v.into_value()) {
-        Some(Ok(LoroValue::Double(d))) => d,
+pub(super) fn f64_of<K: FieldKey>(m: &Fields<K>, k: K) -> f64 {
+    match m.value(k) {
+        Some(LoroValue::Double(d)) => d,
         _ => 0.0,
     }
 }
 
-pub(super) fn bool_of(m: &LoroMap, k: &str) -> bool {
-    matches!(
-        m.get(k).map(|v| v.into_value()),
-        Some(Ok(LoroValue::Bool(true)))
-    )
+pub(super) fn bool_of<K: FieldKey>(m: &Fields<K>, k: K) -> bool {
+    matches!(m.value(k), Some(LoroValue::Bool(true)))
 }
-
-/// The element field holding the body of a sticky or a text element.
-pub(crate) const BODY: &str = "text";
 
 /// The body of a sticky or text element, read from its `LoroText`
 /// (`TOILE-030`). A flat string reads as itself: a board before version 4
 /// carries one, and so does a write from a client on an older build.
-pub(super) fn body_of(m: &LoroMap) -> String {
-    match m.get(BODY) {
+pub(super) fn body_of(m: &Fields<ElementKey>) -> String {
+    match m.get(ElementKey::Body) {
         Some(ValueOrContainer::Container(Container::Text(t))) => t.to_string(),
         Some(ValueOrContainer::Value(LoroValue::String(s))) => s.to_string(),
         _ => String::new(),
@@ -340,23 +352,23 @@ pub(super) fn body_of(m: &LoroMap) -> String {
 /// The body `LoroText` of an element map, seeding one in place of a missing
 /// field or a flat string. The caller writes the whole body next, so the
 /// string a seed replaces is not lost.
-pub(super) fn body_text_or_seed(m: &LoroMap) -> Option<LoroText> {
-    if let Some(ValueOrContainer::Container(Container::Text(t))) = m.get(BODY) {
+pub(super) fn body_text_or_seed(m: &Fields<ElementKey>) -> Option<LoroText> {
+    if let Some(ValueOrContainer::Container(Container::Text(t))) = m.get(ElementKey::Body) {
         return Some(t);
     }
-    m.insert_container(BODY, LoroText::new()).ok()
+    m.insert_container(ElementKey::Body, LoroText::new()).ok()
 }
 
-pub(super) fn str_of(m: &LoroMap, k: &str) -> String {
-    match m.get(k).map(|v| v.into_value()) {
-        Some(Ok(LoroValue::String(s))) => s.to_string(),
+pub(super) fn str_of<K: FieldKey>(m: &Fields<K>, k: K) -> String {
+    match m.value(k) {
+        Some(LoroValue::String(s)) => s.to_string(),
         _ => String::new(),
     }
 }
 
-pub(super) fn bin_of(m: &LoroMap, k: &str) -> Vec<u8> {
-    match m.get(k).map(|v| v.into_value()) {
-        Some(Ok(LoroValue::Binary(b))) => b.to_vec(),
+pub(super) fn bin_of<K: FieldKey>(m: &Fields<K>, k: K) -> Vec<u8> {
+    match m.value(k) {
+        Some(LoroValue::Binary(b)) => b.to_vec(),
         _ => Vec::new(),
     }
 }
@@ -366,14 +378,14 @@ pub(super) fn bin_of(m: &LoroMap, k: &str) -> Vec<u8> {
 // Used on the from-scratch rebuild path (`rebuild_caches`), which reads whole
 // container deep-values rather than per-field handles.
 
-pub(super) fn map_f64(m: &loro::LoroMapValue, k: &str) -> f64 {
+pub(super) fn map_f64<K: FieldKey>(m: FieldValues<'_, K>, k: K) -> f64 {
     match m.get(k) {
         Some(LoroValue::Double(d)) => *d,
         _ => 0.0,
     }
 }
 
-pub(super) fn map_str(m: &loro::LoroMapValue, k: &str) -> String {
+pub(super) fn map_str<K: FieldKey>(m: FieldValues<'_, K>, k: K) -> String {
     match m.get(k) {
         Some(LoroValue::String(s)) => s.to_string(),
         _ => String::new(),

@@ -20,7 +20,8 @@ use crate::ui::label::LABEL_W;
 use super::codec::{
     bin_of, connector_label_or_seed, encode_anchor, map_str, read_connector, write_connector,
 };
-use super::{CONNECTORS, LAYERS, ToileState, write_edits};
+use super::names::{ConnectorKey, FieldValues, Fields, Root, entry, root_map};
+use super::{ToileState, write_edits};
 
 /// One arrow as the cull reads it: its ends, and how far its paint reaches
 /// past the box of its outline. The caption box rides the outline, so half
@@ -77,14 +78,17 @@ impl ToileState {
         arrows: EndCaps,
     ) -> Option<ConnectorId> {
         let id = self.mint_connector_id();
-        let conns = self.doc.get_map(CONNECTORS);
-        let Ok(cm) = conns.insert_container(id.as_str(), LoroMap::new()) else {
+        let conns = self.doc.get_map(Root::Connectors.as_str());
+        let Ok(cm) = conns
+            .insert_container(id.as_str(), LoroMap::new())
+            .map(Fields::<ConnectorKey>::of)
+        else {
             return None;
         };
         write_connector(&cm, &from, from_anch, &to, to_anch, path_type, arrows);
         let _ = self
             .doc
-            .get_movable_list(LAYERS)
+            .get_movable_list(Root::Layers.as_str())
             .push(NodeId::Connector(id.clone()).encode().as_str());
         self.layers.push(NodeId::Connector(id.clone()));
         Some(id)
@@ -102,12 +106,12 @@ impl ToileState {
         };
         match endpoint {
             End::From => {
-                let _ = cm.insert("from", to.as_str());
-                let _ = cm.insert("from_anch", encode_anchor(anch));
+                let _ = cm.insert(ConnectorKey::From, to.as_str());
+                let _ = cm.insert(ConnectorKey::FromAnch, encode_anchor(anch));
             }
             End::To => {
-                let _ = cm.insert("to", to.as_str());
-                let _ = cm.insert("to_anch", encode_anchor(anch));
+                let _ = cm.insert(ConnectorKey::To, to.as_str());
+                let _ = cm.insert(ConnectorKey::ToAnch, encode_anchor(anch));
             }
         }
         self.doc.commit();
@@ -130,7 +134,10 @@ impl ToileState {
         let Some(cm) = self.connector_map(&id) else {
             return self.err_no_connector(&id);
         };
-        let _ = cm.insert("style", LoroValue::Binary(style.to_bytes().into()));
+        let _ = cm.insert(
+            ConnectorKey::Style,
+            LoroValue::Binary(style.to_bytes().into()),
+        );
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
     }
@@ -159,7 +166,7 @@ impl ToileState {
     }
 
     pub(super) fn delete_connector(&mut self, id: ConnectorId) -> ToileOutcome {
-        let conns = self.doc.get_map(CONNECTORS);
+        let conns = self.doc.get_map(Root::Connectors.as_str());
         if conns.get(id.as_str()).is_none() {
             return self.err_no_connector(&id);
         }
@@ -176,14 +183,8 @@ impl ToileState {
         read_connector(id.clone(), &self.connector_map(id)?)
     }
 
-    pub(super) fn connector_map(&self, id: &ConnectorId) -> Option<LoroMap> {
-        self.doc
-            .get_map(CONNECTORS)
-            .get(id.as_str())?
-            .into_container()
-            .ok()?
-            .into_map()
-            .ok()
+    pub(super) fn connector_map(&self, id: &ConnectorId) -> Option<Fields<ConnectorKey>> {
+        entry(&root_map(&self.doc, Root::Connectors), id.as_str())
     }
 
     /// Every connector of the board whose endpoint the board no longer holds
@@ -219,7 +220,7 @@ impl ToileState {
                 ids.extend(wires.keys().cloned());
                 ids.extend(
                     self.doc
-                        .get_map(CONNECTORS)
+                        .get_map(Root::Connectors.as_str())
                         .keys()
                         .map(|k| ConnectorId(k.to_string())),
                 );
@@ -254,7 +255,11 @@ impl ToileState {
     fn read_wire(&self, id: &ConnectorId) -> Option<Wire> {
         let cm = self.connector_map(id)?;
         let conn = read_connector(id.clone(), &cm)?;
-        let stroke = f64::from(self.style_read(&bin_of(&cm, "style")).stroke_w.max(1.0));
+        let stroke = f64::from(
+            self.style_read(&bin_of(&cm, ConnectorKey::Style))
+                .stroke_w
+                .max(1.0),
+        );
         Some(Wire {
             conn,
             reach: LABEL_W / 2.0 + stroke / 2.0,
@@ -264,11 +269,12 @@ impl ToileState {
     /// Ids of every connector referencing one of `del` at either endpoint.
     pub(super) fn connectors_touching(&self, del: &HashSet<&ElementId>) -> HashSet<ConnectorId> {
         let mut out = HashSet::new();
-        if let LoroValue::Map(m) = self.doc.get_map(CONNECTORS).get_deep_value() {
+        if let LoroValue::Map(m) = self.doc.get_map(Root::Connectors.as_str()).get_deep_value() {
             for (key, v) in m.iter() {
                 if let LoroValue::Map(f) = v {
-                    let from = map_str(f, "from");
-                    let to = map_str(f, "to");
+                    let f = FieldValues::<ConnectorKey>::of(f);
+                    let from = map_str(f, ConnectorKey::From);
+                    let to = map_str(f, ConnectorKey::To);
                     if del.contains(&ElementId(from)) || del.contains(&ElementId(to)) {
                         out.insert(ConnectorId(key.clone()));
                     }

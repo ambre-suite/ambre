@@ -13,7 +13,7 @@ use std::collections::HashSet;
 
 use ambre_bus::UserId;
 use ambre_core::{CharCount, char_len};
-use loro::{LoroDoc, LoroMap, LoroMovableList, LoroText, LoroValue};
+use loro::{LoroDoc, LoroMovableList, LoroText, LoroValue};
 
 #[cfg(feature = "pdf")]
 use kurbo::Rect;
@@ -27,11 +27,13 @@ use crate::logic::command::{
     Broadcast, DeckFrame, DeckView, PresencePayload, PresentMode, SlideChange, SlidePosition,
     TextDelta, ToileError, ToileEvent, ToileOutcome,
 };
-use crate::logic::model::{ElementId, FrameId, NodeId};
+use crate::logic::model::{ElementId, ElementKind, FrameId, NodeId};
 use crate::logic::text_merge::{Merge, merge_edits};
 
+use super::codec::has_type;
 use super::codec::str_of;
-use super::{CHILDREN, NOTES, PRESENTATION_CONFIG, PRESENTATION_ORDER, ToileState, write_edits};
+use super::names::{ConfigKey, ElementKey, Fields, Root, config};
+use super::{ToileState, write_edits};
 
 /// The slide transition length a fresh board is seeded with, in milliseconds.
 /// The deck's `transition_ms` register carries an editable value over it, and a
@@ -112,14 +114,14 @@ impl ToileState {
     /// Whether `id` still names a frame on the board.
     pub(super) fn is_frame(&self, id: &ElementId) -> bool {
         self.element_map(id)
-            .is_some_and(|em| str_of(&em, "type") == "frame")
+            .is_some_and(|em| has_type(&em, ElementKind::Frame))
     }
 
     /// One deck row: the frame's id and its title, empty until it is named.
     fn deck_frame(&self, id: &ElementId) -> DeckFrame {
         let name = self
             .element_map(id)
-            .map(|em| str_of(&em, "name"))
+            .map(|em| str_of(&em, ElementKey::Name))
             .unwrap_or_default();
         DeckFrame {
             id: id.clone(),
@@ -297,10 +299,7 @@ impl ToileState {
     /// that would edit it is not built (this spec section 6).
     #[cfg(test)]
     pub(crate) fn set_transition_ms_for_test(&mut self, ms: f64) {
-        let _ = self
-            .doc
-            .get_map(PRESENTATION_CONFIG)
-            .insert("transition_ms", ms);
+        let _ = config(&self.doc).insert(ConfigKey::TransitionMs, ms);
         self.doc.commit();
     }
 
@@ -318,10 +317,8 @@ impl ToileState {
     /// or the default (see [`Self::transition`]).
     pub(super) fn transition_ms(&self) -> f64 {
         const MAX_TRANSITION_MS: f64 = 10_000.0;
-        self.doc
-            .get_map(PRESENTATION_CONFIG)
-            .get("transition_ms")
-            .and_then(|v| v.into_value().ok())
+        config(&self.doc)
+            .value(ConfigKey::TransitionMs)
             .and_then(|v| match v {
                 LoroValue::Double(ms) => Some(ms),
                 LoroValue::I64(ms) => Some(ms as f64),
@@ -384,7 +381,7 @@ impl ToileState {
             return self.err_no_element(frame);
         };
         // Only a frame carries notes; `children` is seeded at frame birth.
-        if em.get(CHILDREN).is_none() {
+        if em.get(ElementKey::Children).is_none() {
             return ToileOutcome::display_only(vec![ToileEvent::Error(
                 ToileError::ContentKindMismatch,
             )]);
@@ -433,7 +430,7 @@ impl ToileState {
     /// has no notes yet or does not exist). Test / integration accessor.
     pub fn notes(&self, frame: &FrameId) -> String {
         self.element_map(frame)
-            .and_then(|em| em.get(NOTES))
+            .and_then(|em| em.get(ElementKey::Notes))
             .and_then(|v| v.into_container().ok())
             .and_then(|c| c.into_text().ok())
             .map(|t| t.to_string())
@@ -547,7 +544,7 @@ impl ToileState {
     /// The slide sequence: a root container, so it exists in every peer's
     /// document from the start and is created by nobody (`TOILE-029`).
     fn order_list(&self) -> LoroMovableList {
-        self.doc.get_movable_list(PRESENTATION_ORDER)
+        self.doc.get_movable_list(Root::PresentationOrder.as_str())
     }
 }
 
@@ -570,11 +567,11 @@ fn silent_presence_frame() -> Option<Vec<u8>> {
 /// older board. The map is a root container, so this writes registers into a
 /// container every peer already addresses, never a container of its own.
 pub(crate) fn seed_presentation_config(doc: &LoroDoc) {
-    let cfg = doc.get_map(PRESENTATION_CONFIG);
-    if cfg.get("transition_ms").is_none() {
-        let _ = cfg.insert("transition_ms", DEFAULT_TRANSITION_MS);
-        let _ = cfg.insert("autoplay", false);
-        let _ = cfg.insert("loop", false);
+    let cfg = config(doc);
+    if cfg.get(ConfigKey::TransitionMs).is_none() {
+        let _ = cfg.insert(ConfigKey::TransitionMs, DEFAULT_TRANSITION_MS);
+        let _ = cfg.insert(ConfigKey::Autoplay, false);
+        let _ = cfg.insert(ConfigKey::Loop, false);
     }
 }
 
@@ -591,15 +588,15 @@ fn splice(base: &str, delta: &TextDelta) -> String {
 /// The frame's `notes` LoroText, seeding an empty one on first use. The
 /// `em` map is already known to be a frame (checked by the caller). `None`
 /// when the map holds no text and refuses a new one, and the edit is dropped.
-fn notes_text_or_seed(em: &LoroMap) -> Option<LoroText> {
+fn notes_text_or_seed(em: &Fields<ElementKey>) -> Option<LoroText> {
     if let Some(text) = em
-        .get(NOTES)
+        .get(ElementKey::Notes)
         .and_then(|v| v.into_container().ok())
         .and_then(|c| c.into_text().ok())
     {
         return Some(text);
     }
-    em.insert_container(NOTES, LoroText::new()).ok()
+    em.insert_container(ElementKey::Notes, LoroText::new()).ok()
 }
 
 /// Read a movable list's string entries in order.

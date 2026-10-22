@@ -25,7 +25,9 @@ use ambre_core::schema::{
 };
 
 use crate::logic::model::ElementStyle;
-use crate::logic::state::{BODY, CONNECTORS, ELEMENTS, PRESENTATION_CONFIG, PRESENTATION_ORDER};
+use crate::logic::state::{
+    ConnectorKey, ElementKey, Fields, LegacyDeckKey, LegacyRoot, Root, entry, root_list, root_map,
+};
 
 /// The schema version this build writes into every board it creates
 /// (`SCHEMA-004`).
@@ -163,31 +165,36 @@ fn style_version_step(doc: &LoroDoc) -> Result<(), String> {
 /// `rewrite` has new bytes for. A register `rewrite` refuses is left verbatim
 /// (`SCHEMA-003`).
 fn rewrite_styles(doc: &LoroDoc, rewrite: impl Fn(&[u8]) -> Option<Vec<u8>>) -> Result<(), String> {
-    for container in [ELEMENTS, CONNECTORS] {
-        let root = doc.get_map(container);
-        let LoroValue::Map(entries) = root.get_value() else {
+    rewrite_style_registers(doc, Root::Elements, ElementKey::Style, &rewrite)?;
+    rewrite_style_registers(doc, Root::Connectors, ConnectorKey::Style, &rewrite)
+}
+
+/// Rewrite the register `key` of every entry of the dictionary `root`. A
+/// register `rewrite` refuses is left verbatim (`SCHEMA-003`).
+fn rewrite_style_registers<K: ambre_core::crdt::FieldKey>(
+    doc: &LoroDoc,
+    root: Root,
+    key: K,
+    rewrite: &impl Fn(&[u8]) -> Option<Vec<u8>>,
+) -> Result<(), String> {
+    let dict = root_map(doc, root);
+    let LoroValue::Map(entries) = dict.get_value() else {
+        return Ok(());
+    };
+    // Sorted: two peers migrating one history write the same operations only
+    // if they write them in the same order (`SCHEMA-020`).
+    let mut ids: Vec<&String> = entries.keys().collect();
+    ids.sort();
+    for id in ids {
+        let Some(map) = entry::<K>(&dict, id) else {
             continue;
         };
-        // Sorted: two peers migrating one history write the same operations
-        // only if they write them in the same order (`SCHEMA-020`).
-        let mut ids: Vec<&String> = entries.keys().collect();
-        ids.sort();
-        for id in ids {
-            let Some(map) = root
-                .get(id.as_str())
-                .and_then(|v| v.into_container().ok())
-                .and_then(|c| c.into_map().ok())
-            else {
-                continue;
-            };
-            let Some(Ok(LoroValue::Binary(bytes))) = map.get("style").map(|v| v.into_value())
-            else {
-                continue;
-            };
-            if let Some(upgraded) = rewrite(&bytes) {
-                map.insert("style", LoroValue::Binary(upgraded.into()))
-                    .map_err(|e| format!("rewriting the style register of {id} failed: {e}"))?;
-            }
+        let Some(LoroValue::Binary(bytes)) = map.value(key) else {
+            continue;
+        };
+        if let Some(upgraded) = rewrite(&bytes) {
+            map.insert(key, LoroValue::Binary(upgraded.into()))
+                .map_err(|e| format!("rewriting the style register of {id} failed: {e}"))?;
         }
     }
     Ok(())
@@ -217,21 +224,21 @@ fn font_points_step(doc: &LoroDoc) -> Result<(), String> {
 ///
 /// A version 2 board holds `presentation.order` and `presentation.config`, two
 /// sub-containers created by the first peer to write a deck. The step copies
-/// the slide order into [`PRESENTATION_ORDER`] and the config registers into
-/// [`PRESENTATION_CONFIG`]. A root container's identity is its name, so every
+/// the slide order into [`Root::PresentationOrder`] and the config registers into
+/// [`Root::PresentationConfig`]. A root container's identity is its name, so every
 /// peer addresses the same one.
 ///
 /// The old map is left verbatim (`SCHEMA-003`): this build names neither key
 /// again, and rewriting a container it no longer reads buys nothing.
 fn presentation_root_step(doc: &LoroDoc) -> Result<(), String> {
-    let pres = doc.get_map("presentation");
+    let pres = Fields::<LegacyDeckKey>::of(doc.get_map(LegacyRoot::Presentation.as_str()));
     if let Some(old) = pres
-        .get("order")
+        .get(LegacyDeckKey::Order)
         .and_then(|v| v.into_container().ok())
         .and_then(|c| c.into_movable_list().ok())
         && let LoroValue::List(items) = old.get_deep_value()
     {
-        let root = doc.get_movable_list(PRESENTATION_ORDER);
+        let root = root_list(doc, Root::PresentationOrder);
         for value in items.iter() {
             if let LoroValue::String(id) = value {
                 root.push(id.as_str())
@@ -239,9 +246,9 @@ fn presentation_root_step(doc: &LoroDoc) -> Result<(), String> {
             }
         }
     }
-    let root_cfg = doc.get_map(PRESENTATION_CONFIG);
+    let root_cfg = root_map(doc, Root::PresentationConfig);
     if let Some(old) = pres
-        .get("config")
+        .get(LegacyDeckKey::Config)
         .and_then(|v| v.into_container().ok())
         .and_then(|c| c.into_map().ok())
         && let LoroValue::Map(entries) = old.get_deep_value()
@@ -272,7 +279,7 @@ fn presentation_root_step(doc: &LoroDoc) -> Result<(), String> {
 /// Two peers migrating one board write as one derived peer, so both mint the
 /// same text and an edit typed into either survives (`SCHEMA-020`).
 fn body_text_step(doc: &LoroDoc) -> Result<(), String> {
-    let root = doc.get_map(ELEMENTS);
+    let root = root_map(doc, Root::Elements);
     let LoroValue::Map(entries) = root.get_value() else {
         return Ok(());
     };
@@ -280,18 +287,14 @@ fn body_text_step(doc: &LoroDoc) -> Result<(), String> {
     let mut ids: Vec<&String> = entries.keys().collect();
     ids.sort();
     for id in ids {
-        let Some(map) = root
-            .get(id.as_str())
-            .and_then(|v| v.into_container().ok())
-            .and_then(|c| c.into_map().ok())
-        else {
+        let Some(map) = entry::<ElementKey>(&root, id) else {
             continue;
         };
-        let Some(Ok(LoroValue::String(body))) = map.get(BODY).map(|v| v.into_value()) else {
+        let Some(LoroValue::String(body)) = map.value(ElementKey::Body) else {
             continue;
         };
         let text = map
-            .insert_container(BODY, LoroText::new())
+            .insert_container(ElementKey::Body, LoroText::new())
             .map_err(|e| format!("seeding the body text of {id} failed: {e}"))?;
         if !body.is_empty() {
             text.insert(0, &body)
@@ -364,7 +367,8 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logic::state::ToileState;
+    use crate::logic::model::ElementKind;
+    use crate::logic::state::{BoardKey, ConfigKey, ToileState};
     use ambre_core::Argb;
 
     /// A snapshot of a board carrying `version` in its register. A `None`
@@ -372,7 +376,9 @@ mod tests {
     /// `ARCH P8`.
     fn snapshot_at(version: Option<u32>) -> Vec<u8> {
         let doc = LoroDoc::new();
-        doc.get_map("board").insert("bg_color", 0i64).expect("seed");
+        crate::logic::state::board(&doc)
+            .insert(BoardKey::BgColor, 0i64)
+            .expect("seed");
         if let Some(v) = version {
             doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
                 .insert(
@@ -414,7 +420,7 @@ mod tests {
         // The migration stamps and does nothing else: the board it carried is
         // still there.
         assert!(
-            migrated.get_map("board").get("bg_color").is_some(),
+            crate::logic::state::board(&migrated).contains(BoardKey::BgColor),
             "the migration must not drop what it migrates"
         );
     }
@@ -424,14 +430,21 @@ mod tests {
     fn unversioned_board(style: &ElementStyle) -> Vec<u8> {
         let doc = LoroDoc::new();
         let bare = postcard::to_allocvec(style).expect("the layout before the version byte");
-        for (container, id) in [(ELEMENTS, "e1"), (CONNECTORS, "c1")] {
-            let map = doc
-                .get_map(container)
-                .insert_container(id, loro::LoroMap::new())
-                .expect("seed");
-            map.insert("style", LoroValue::Binary(bare.clone().into()))
-                .expect("seed the style register");
-        }
+        let style = LoroValue::Binary(bare.into());
+        Fields::<ElementKey>::of(
+            root_map(&doc, Root::Elements)
+                .insert_container("e1", loro::LoroMap::new())
+                .expect("seed"),
+        )
+        .insert(ElementKey::Style, style.clone())
+        .expect("seed the style register");
+        Fields::<ConnectorKey>::of(
+            root_map(&doc, Root::Connectors)
+                .insert_container("c1", loro::LoroMap::new())
+                .expect("seed"),
+        )
+        .insert(ConnectorKey::Style, style)
+        .expect("seed the style register");
         doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
             .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 1i64)
             .expect("stamp");
@@ -443,17 +456,16 @@ mod tests {
     fn styles_of(bytes: &[u8]) -> Vec<Option<ElementStyle>> {
         let doc = LoroDoc::new();
         doc.import(bytes).expect("the migrated snapshot imports");
-        [(ELEMENTS, "e1"), (CONNECTORS, "c1")]
+        let element = entry::<ElementKey>(&root_map(&doc, Root::Elements), "e1")
+            .expect("the migration must not drop the map")
+            .value(ElementKey::Style);
+        let connector = entry::<ConnectorKey>(&root_map(&doc, Root::Connectors), "c1")
+            .expect("the migration must not drop the map")
+            .value(ConnectorKey::Style);
+        [element, connector]
             .into_iter()
-            .map(|(container, id)| {
-                let map = doc
-                    .get_map(container)
-                    .get(id)
-                    .and_then(|v| v.into_container().ok())
-                    .and_then(|c| c.into_map().ok())
-                    .expect("the migration must not drop the map");
-                let Some(Ok(LoroValue::Binary(b))) = map.get("style").map(|v| v.into_value())
-                else {
+            .map(|register| {
+                let Some(LoroValue::Binary(b)) = register else {
                     panic!("the migration must not drop the register");
                 };
                 ElementStyle::try_from_bytes(&b)
@@ -492,16 +504,17 @@ mod tests {
     #[test]
     fn a_board_whose_deck_sits_in_the_presentation_map_keeps_it() {
         let doc = LoroDoc::new();
-        let pres = doc.get_map("presentation");
+        let pres = Fields::<LegacyDeckKey>::of(doc.get_map(LegacyRoot::Presentation.as_str()));
         let old = pres
-            .insert_container("order", loro::LoroMovableList::new())
+            .insert_container(LegacyDeckKey::Order, loro::LoroMovableList::new())
             .expect("the layout before the root list");
         old.push("f1").expect("seed");
         old.push("f2").expect("seed");
         let cfg = pres
-            .insert_container("config", loro::LoroMap::new())
+            .insert_container(LegacyDeckKey::Config, loro::LoroMap::new())
             .expect("seed");
-        cfg.insert("transition_ms", 800.0).expect("seed");
+        cfg.insert(ConfigKey::TransitionMs.as_str(), 800.0)
+            .expect("seed");
         doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
             .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 2i64)
             .expect("stamp");
@@ -521,10 +534,8 @@ mod tests {
         let migrated = LoroDoc::new();
         migrated.import(&gated).expect("imports");
         assert_eq!(
-            migrated
-                .get_map(PRESENTATION_CONFIG)
-                .get("transition_ms")
-                .and_then(|v| v.into_value().ok()),
+            Fields::<ConfigKey>::of(root_map(&migrated, Root::PresentationConfig))
+                .value(ConfigKey::TransitionMs),
             Some(LoroValue::Double(800.0)),
             "the config the board carried must survive the move"
         );
@@ -536,13 +547,17 @@ mod tests {
     #[test]
     fn a_board_whose_bodies_are_strings_keeps_them_as_text() {
         let doc = LoroDoc::new();
-        let elements = doc.get_map(ELEMENTS);
+        let elements = doc.get_map(Root::Elements.as_str());
         for (id, body) in [("e1", "buy milk"), ("e2", "")] {
-            let em = elements
-                .insert_container(id, loro::LoroMap::new())
+            let em = Fields::<ElementKey>::of(
+                elements
+                    .insert_container(id, loro::LoroMap::new())
+                    .expect("seed"),
+            );
+            em.insert(ElementKey::Type, ElementKind::Sticky.type_tag())
                 .expect("seed");
-            em.insert("type", "sticky").expect("seed");
-            em.insert(BODY, body).expect("the layout before the text");
+            em.insert(ElementKey::Body, body)
+                .expect("the layout before the text");
         }
         doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
             .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 3i64)
@@ -555,11 +570,11 @@ mod tests {
         migrated.import(&gated).expect("imports");
         for (id, body) in [("e1", "buy milk"), ("e2", "")] {
             let text = migrated
-                .get_map(ELEMENTS)
+                .get_map(Root::Elements.as_str())
                 .get(id)
                 .and_then(|v| v.into_container().ok())
                 .and_then(|c| c.into_map().ok())
-                .and_then(|em| em.get(BODY))
+                .and_then(|em| em.get(ElementKey::Body.as_str()))
                 .and_then(|v| v.into_container().ok())
                 .and_then(|c| c.into_text().ok())
                 .expect("the body is a text");
@@ -573,14 +588,17 @@ mod tests {
     #[test]
     fn a_board_whose_font_sizes_are_px_keeps_their_height() {
         let doc = LoroDoc::new();
-        let elements = doc.get_map(ELEMENTS);
+        let elements = doc.get_map(Root::Elements.as_str());
         for (id, px) in [("e1", 16), ("e2", 0)] {
             let mut style = ElementStyle::default();
             style.font.size = ambre_core::FontSize::from_whole_points(px);
             elements
                 .insert_container(id, loro::LoroMap::new())
                 .expect("seed")
-                .insert("style", LoroValue::Binary(style.to_bytes().into()))
+                .insert(
+                    ElementKey::Style.as_str(),
+                    LoroValue::Binary(style.to_bytes().into()),
+                )
                 .expect("a version 4 style");
         }
         doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
@@ -593,13 +611,9 @@ mod tests {
         let migrated = LoroDoc::new();
         migrated.import(&gated).expect("imports");
         let size_of = |id: &str| {
-            let Some(Ok(LoroValue::Binary(raw))) = migrated
-                .get_map(ELEMENTS)
-                .get(id)
-                .and_then(|v| v.into_container().ok())
-                .and_then(|c| c.into_map().ok())
-                .and_then(|em| em.get("style"))
-                .map(|v| v.into_value())
+            let Some(LoroValue::Binary(raw)) =
+                entry::<ElementKey>(&root_map(&migrated, Root::Elements), id)
+                    .and_then(|em| em.value(ElementKey::Style))
             else {
                 panic!("{id} lost its style");
             };
@@ -619,13 +633,16 @@ mod tests {
     #[test]
     fn two_peers_migrating_one_board_keep_both_edits() {
         let doc = LoroDoc::new();
-        let elements = doc.get_map(ELEMENTS);
+        let elements = doc.get_map(Root::Elements.as_str());
         for i in 0..24 {
-            let em = elements
-                .insert_container(&format!("e{i}"), loro::LoroMap::new())
+            let em = Fields::<ElementKey>::of(
+                elements
+                    .insert_container(&format!("e{i}"), loro::LoroMap::new())
+                    .expect("seed"),
+            );
+            em.insert(ElementKey::Type, ElementKind::Sticky.type_tag())
                 .expect("seed");
-            em.insert("type", "sticky").expect("seed");
-            em.insert(BODY, "buy milk")
+            em.insert(ElementKey::Body, "buy milk")
                 .expect("the layout before the text");
         }
         doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
@@ -642,11 +659,11 @@ mod tests {
             live
         };
         let body = |live: &LoroDoc| {
-            live.get_map(ELEMENTS)
+            live.get_map(Root::Elements.as_str())
                 .get("e7")
                 .and_then(|v| v.into_container().ok())
                 .and_then(|c| c.into_map().ok())
-                .and_then(|em| em.get(BODY))
+                .and_then(|em| em.get(ElementKey::Body.as_str()))
                 .and_then(|v| v.into_container().ok())
                 .and_then(|c| c.into_text().ok())
                 .expect("the body is a text")

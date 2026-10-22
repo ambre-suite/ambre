@@ -48,26 +48,13 @@ use crate::logic::command::{
 };
 use crate::logic::model::{ElementId, ThreadId};
 
-use super::{COMMENT_ORIGIN, COMMENTS, ToileState};
+use super::names::{FieldValues, Fields, MessageKey, Root, ThreadKey, entry, root_map};
+use super::{COMMENT_ORIGIN, ToileState};
 
 /// How many characters of the opening message the board-wide list carries. The
 /// panel shows a row per thread, and a row is a line: the rest of the
 /// conversation arrives when the thread is opened (`TOILE-205`).
 const PREVIEW_CHARS: usize = 80;
-
-/// The thread's anchor: `Binary(postcard(CommentAnchor))`.
-const ANCHOR: &str = "anchor";
-/// The thread's resolved flag: a `bool`.
-const RESOLVED: &str = "resolved";
-/// The thread's ordered messages.
-const MESSAGES: &str = "messages";
-/// The message's author: the canonical `UserId`, rendered.
-const AUTHOR: &str = "author";
-/// The message's wall clock. The reader sees it, and nothing orders by it
-/// (`TOILE-FEAT-012`).
-const TS: &str = "ts";
-/// The message's body, a `LoroText` (`TOILE-FEAT-013`).
-const BODY: &str = "body";
 
 impl ToileState {
     /// Open a thread at `anchor`, seeded with its first message.
@@ -127,13 +114,14 @@ impl ToileState {
     ) -> Option<()> {
         let map = self
             .doc
-            .get_map(COMMENTS)
+            .get_map(Root::Comments.as_str())
             .insert_container(thread.as_str(), LoroMap::new())
+            .map(Fields::<ThreadKey>::of)
             .ok()?;
-        map.insert(ANCHOR, anchor).ok()?;
-        map.insert(RESOLVED, false).ok()?;
+        map.insert(ThreadKey::Anchor, anchor).ok()?;
+        map.insert(ThreadKey::Resolved, false).ok()?;
         let messages = map
-            .insert_container(MESSAGES, LoroMovableList::new())
+            .insert_container(ThreadKey::Messages, LoroMovableList::new())
             .ok()?;
         push_message(&messages, author, ts, body)
     }
@@ -215,12 +203,10 @@ impl ToileState {
         let Some(map) = self.thread_map(thread) else {
             return self.err_no_element(thread);
         };
-        if matches!(map.get(RESOLVED).and_then(|v| v.into_value().ok()),
-            Some(LoroValue::Bool(cur)) if cur == resolved)
-        {
+        if matches!(map.value(ThreadKey::Resolved), Some(LoroValue::Bool(cur)) if cur == resolved) {
             return ToileOutcome::display_only(Vec::new());
         }
-        let _ = map.insert(RESOLVED, resolved);
+        let _ = map.insert(ThreadKey::Resolved, resolved);
         self.doc.set_next_commit_origin(COMMENT_ORIGIN);
         self.doc.commit();
         self.emit_with_update(vec![ToileEvent::CommentsUpdated(thread.clone())])
@@ -233,7 +219,8 @@ impl ToileState {
     /// reader still opens it. Only the pin derivation skips it
     /// (`TOILE-FEAT-016`).
     pub fn comment_thread_ids(&self) -> Vec<ThreadId> {
-        let LoroValue::Map(threads) = self.doc.get_map(COMMENTS).get_deep_value() else {
+        let LoroValue::Map(threads) = self.doc.get_map(Root::Comments.as_str()).get_deep_value()
+        else {
             return Vec::new();
         };
         let mut ids: Vec<ThreadId> = threads.keys().map(|k| ElementId(k.to_string())).collect();
@@ -248,15 +235,16 @@ impl ToileState {
     /// alone (`TOILE-026`). `None` when the thread does not exist or its anchor
     /// fails to decode.
     pub fn comment_thread(&self, id: &ThreadId) -> Option<CommentThread> {
-        let LoroValue::Map(fields) = self.thread_map(id)?.get_deep_value() else {
+        let LoroValue::Map(fields) = self.thread_map(id)?.map().get_deep_value() else {
             return None;
         };
-        let Some(LoroValue::Binary(bytes)) = fields.get(ANCHOR) else {
+        let fields = FieldValues::<ThreadKey>::of(&fields);
+        let Some(LoroValue::Binary(bytes)) = fields.get(ThreadKey::Anchor) else {
             return None;
         };
         let anchor: CommentAnchor = postcard::from_bytes(bytes).ok()?;
-        let resolved = matches!(fields.get(RESOLVED), Some(LoroValue::Bool(true)));
-        let messages = match fields.get(MESSAGES) {
+        let resolved = matches!(fields.get(ThreadKey::Resolved), Some(LoroValue::Bool(true)));
+        let messages = match fields.get(ThreadKey::Messages) {
             Some(LoroValue::List(items)) => items.iter().filter_map(read_message).collect(),
             _ => Vec::new(),
         };
@@ -356,20 +344,14 @@ impl ToileState {
     }
 
     /// The thread's map container, or `None` when no thread carries `id`.
-    fn thread_map(&self, id: &ThreadId) -> Option<LoroMap> {
-        self.doc
-            .get_map(COMMENTS)
-            .get(id.as_str())?
-            .into_container()
-            .ok()?
-            .into_map()
-            .ok()
+    fn thread_map(&self, id: &ThreadId) -> Option<Fields<ThreadKey>> {
+        entry(&root_map(&self.doc, Root::Comments), id.as_str())
     }
 
     /// The thread's message list container.
     fn message_list(&self, thread: &ThreadId) -> Option<LoroMovableList> {
         self.thread_map(thread)?
-            .get(MESSAGES)?
+            .get(ThreadKey::Messages)?
             .into_container()
             .ok()?
             .into_movable_list()
@@ -378,13 +360,14 @@ impl ToileState {
 
     /// The map of one message, addressed by its position in the list. An
     /// out-of-range index yields `None`.
-    fn message_map(&self, thread: &ThreadId, index: usize) -> Option<LoroMap> {
+    fn message_map(&self, thread: &ThreadId, index: usize) -> Option<Fields<MessageKey>> {
         self.message_list(thread)?
             .get(index)?
             .into_container()
             .ok()?
             .into_map()
             .ok()
+            .map(Fields::of)
     }
 }
 
@@ -397,18 +380,20 @@ fn push_message(
     ts: ambre_core::Timestamp,
     body: &str,
 ) -> Option<()> {
-    let map = messages.push_container(LoroMap::new()).ok()?;
-    map.insert(AUTHOR, author.to_string()).ok()?;
-    map.insert(TS, ts.to_i64_saturating()).ok()?;
-    let text = map.insert_container(BODY, LoroText::new()).ok()?;
+    let map = Fields::<MessageKey>::of(messages.push_container(LoroMap::new()).ok()?);
+    map.insert(MessageKey::Author, author.to_string()).ok()?;
+    map.insert(MessageKey::Ts, ts.to_i64_saturating()).ok()?;
+    let text = map
+        .insert_container(MessageKey::Body, LoroText::new())
+        .ok()?;
     text.insert(0, body).ok()?;
     Some(())
 }
 
 /// The canonical `UserId` a message map carries, or `None` when the field is
 /// absent or unparsable.
-fn author_of(map: &LoroMap) -> Option<UserId> {
-    let LoroValue::String(author) = map.get(AUTHOR)?.into_value().ok()? else {
+fn author_of(map: &Fields<MessageKey>) -> Option<UserId> {
+    let LoroValue::String(author) = map.value(MessageKey::Author)? else {
         return None;
     };
     UserId::parse_str(&author).ok()
@@ -416,8 +401,12 @@ fn author_of(map: &LoroMap) -> Option<UserId> {
 
 /// The `LoroText` body of a message map. The seed creates the container with the
 /// message, so a missing body means a corrupt document, never a first edit.
-fn body_text(map: &LoroMap) -> Option<LoroText> {
-    map.get(BODY)?.into_container().ok()?.into_text().ok()
+fn body_text(map: &Fields<MessageKey>) -> Option<LoroText> {
+    map.get(MessageKey::Body)?
+        .into_container()
+        .ok()?
+        .into_text()
+        .ok()
 }
 
 /// Decode one message of the thread's deep value. The reader drops a message
@@ -426,15 +415,16 @@ fn read_message(value: &LoroValue) -> Option<CommentMessage> {
     let LoroValue::Map(fields) = value else {
         return None;
     };
-    let Some(LoroValue::String(author)) = fields.get(AUTHOR) else {
+    let fields = FieldValues::<MessageKey>::of(fields);
+    let Some(LoroValue::String(author)) = fields.get(MessageKey::Author) else {
         return None;
     };
     let author = UserId::parse_str(author).ok()?;
-    let ts = match fields.get(TS) {
+    let ts = match fields.get(MessageKey::Ts) {
         Some(LoroValue::I64(ts)) => ambre_core::Timestamp::from_i64(*ts),
         _ => ambre_core::Timestamp::default(),
     };
-    let body = match fields.get(BODY) {
+    let body = match fields.get(MessageKey::Body) {
         Some(LoroValue::String(body)) => body.to_string(),
         _ => String::new(),
     };

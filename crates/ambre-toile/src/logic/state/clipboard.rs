@@ -13,8 +13,9 @@ use crate::logic::command::{
 };
 use crate::logic::model::{ConnectorId, ElementId, NodeId};
 
+use super::ToileState;
 use super::codec::{capture_scalars, map_str, write_clip_fields};
-use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState};
+use super::names::{ConnectorKey, ElementKey, FieldValues, Fields, Root};
 
 impl ToileState {
     /// Read the selection into a self-contained, id-free payload. Non-mutating:
@@ -76,8 +77,10 @@ impl ToileState {
             // so it is skipped here and carried beside the fields
             // (`TOILE-137`).
             let fields = match self.element_map(id) {
-                Some(em) => match em.get_deep_value() {
-                    LoroValue::Map(f) => capture_scalars(&f, &[NOTES]),
+                Some(em) => match em.map().get_deep_value() {
+                    LoroValue::Map(f) => {
+                        capture_scalars(FieldValues::<ElementKey>::of(&f), &[ElementKey::Notes])
+                    }
                     _ => Vec::new(),
                 },
                 None => Vec::new(),
@@ -107,18 +110,19 @@ impl ToileState {
         // Connectors whose BOTH endpoints are captured: a half-copied
         // connector would dangle, so it is dropped.
         let mut connectors = Vec::new();
-        if let LoroValue::Map(m) = self.doc.get_map(CONNECTORS).get_deep_value() {
+        if let LoroValue::Map(m) = self.doc.get_map(Root::Connectors.as_str()).get_deep_value() {
             for (_key, v) in m.iter() {
                 if let LoroValue::Map(f) = v {
-                    let from = ElementId(map_str(f, "from"));
-                    let to = ElementId(map_str(f, "to"));
+                    let f = FieldValues::<ConnectorKey>::of(f);
+                    let from = ElementId(map_str(f, ConnectorKey::From));
+                    let to = ElementId(map_str(f, ConnectorKey::To));
                     if let (Some(&from_slot), Some(&to_slot)) =
                         (slot_of.get(&from), slot_of.get(&to))
                     {
                         connectors.push(ClipConnector {
                             from_slot,
                             to_slot,
-                            fields: capture_scalars(f, &["from", "to"]),
+                            fields: capture_scalars(f, &[ConnectorKey::From, ConnectorKey::To]),
                         });
                     }
                 }
@@ -148,23 +152,26 @@ impl ToileState {
             .map(|_| self.mint_connector_id())
             .collect();
 
-        let elems = self.doc.get_map(ELEMENTS);
-        let layers = self.doc.get_movable_list(LAYERS);
+        let elems = self.doc.get_map(Root::Elements.as_str());
+        let layers = self.doc.get_movable_list(Root::Layers.as_str());
         let mut created = Vec::with_capacity(new_ids.len());
         // `new_ids` and `new_conns` are minted one per payload entry. A slot
         // the payload names past them is a malformed paste, and it is skipped.
         for (id, clip) in new_ids.iter().zip(&payload.elements) {
-            let Ok(em) = elems.insert_container(id.as_str(), LoroMap::new()) else {
+            let Ok(em) = elems
+                .insert_container(id.as_str(), LoroMap::new())
+                .map(Fields::<ElementKey>::of)
+            else {
                 continue;
             };
-            write_clip_fields(&em, &clip.fields, offset);
+            write_clip_fields(em.map(), &clip.fields, offset);
             // A frame is born with its two containers, here as at every other
             // birth. The membership list makes the copy a frame an element can
             // be added to (`TOILE-138`). The notes text is the container every
             // peer must see before anyone edits it (`TOILE-137`, `TOILE-051`).
             if let Some(notes) = &clip.notes {
-                let _ = em.insert_container(CHILDREN, LoroMovableList::new());
-                if let Ok(text) = em.insert_container(NOTES, LoroText::new())
+                let _ = em.insert_container(ElementKey::Children, LoroMovableList::new());
+                if let Ok(text) = em.insert_container(ElementKey::Notes, LoroText::new())
                     && !notes.is_empty()
                 {
                     let _ = text.insert(0, notes);
@@ -177,7 +184,8 @@ impl ToileState {
         for m in &payload.membership {
             if let Some(parent) = new_ids.get(m.parent_slot)
                 && let Some(em) = self.element_map(parent)
-                && let Ok(children) = em.insert_container(CHILDREN, LoroMovableList::new())
+                && let Ok(children) =
+                    em.insert_container(ElementKey::Children, LoroMovableList::new())
             {
                 for child in m.child_slots.iter().filter_map(|&cs| new_ids.get(cs)) {
                     let _ = children.push(child.as_str());
@@ -185,17 +193,20 @@ impl ToileState {
             }
         }
         // Connectors: remap endpoints, keep anchors / path / arrows.
-        let conns = self.doc.get_map(CONNECTORS);
+        let conns = self.doc.get_map(Root::Connectors.as_str());
         for (conn_id, c) in new_conns.iter().zip(&payload.connectors) {
             let (Some(from), Some(to)) = (new_ids.get(c.from_slot), new_ids.get(c.to_slot)) else {
                 continue;
             };
-            let Ok(cm) = conns.insert_container(conn_id.as_str(), LoroMap::new()) else {
+            let Ok(cm) = conns
+                .insert_container(conn_id.as_str(), LoroMap::new())
+                .map(Fields::<ConnectorKey>::of)
+            else {
                 continue;
             };
-            write_clip_fields(&cm, &c.fields, Vec2::ZERO);
-            let _ = cm.insert("from", from.as_str());
-            let _ = cm.insert("to", to.as_str());
+            write_clip_fields(cm.map(), &c.fields, Vec2::ZERO);
+            let _ = cm.insert(ConnectorKey::From, from.as_str());
+            let _ = cm.insert(ConnectorKey::To, to.as_str());
             let _ = layers.push(NodeId::Connector(conn_id.clone()).encode().as_str());
         }
         self.doc.commit();

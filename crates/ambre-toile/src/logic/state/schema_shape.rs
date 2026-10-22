@@ -54,7 +54,10 @@ use crate::logic::model::{
 };
 use crate::logic::schema::{MIGRATIONS, SCHEMA_VERSION};
 
-use super::{BODY, CONNECTORS, ELEMENTS, ToileState};
+use super::{
+    BoardKey, ConfigKey, ConnectorKey, ElementKey, Fields, LegacyDeckKey, LegacyRoot, MediaKey,
+    MessageKey, Root, ThreadKey, ToileState, root_map,
+};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../../schema/shapes.txt");
@@ -92,8 +95,10 @@ const NOT_SCHEMA_KEYS: [&str; 1] = ["cmt"];
 /// The roots whose keys are schema words rather than data. Every other root is
 /// a dictionary keyed by an id, so its keys collapse to [`ANY`].
 pub(super) fn keys_are_schema_words(root: &str) -> bool {
-    matches!(root, "board" | "presentation_config" | "meta")
-        || root == ambre_core::crdt::FoundationRoot::Meta.as_str()
+    matches!(
+        Root::parse(root),
+        Some(Root::Board | Root::PresentationConfig | Root::Meta)
+    )
 }
 
 /// The type a value holds, named in the one spelling the freeze uses.
@@ -408,6 +413,24 @@ pub(super) fn declared_keys(source: &str) -> Vec<String> {
     found
 }
 
+/// Every name the schema enums declare: the roots and the keys of each map.
+/// The legacy deck root and its two keys are left out, since no build writes
+/// them.
+pub(super) fn schema_names() -> Vec<String> {
+    let mut found: Vec<&str> = Root::ALL.iter().map(|n| n.as_str()).collect();
+    found.extend(BoardKey::ALL.iter().map(|n| n.as_str()));
+    found.extend(ElementKey::ALL.iter().map(|n| n.as_str()));
+    found.extend(ConnectorKey::ALL.iter().map(|n| n.as_str()));
+    found.extend(MediaKey::ALL.iter().map(|n| n.as_str()));
+    found.extend(ConfigKey::ALL.iter().map(|n| n.as_str()));
+    found.extend(ThreadKey::ALL.iter().map(|n| n.as_str()));
+    found.extend(MessageKey::ALL.iter().map(|n| n.as_str()));
+    let mut found: Vec<String> = found.into_iter().map(str::to_owned).collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
 /// The id of the element a command reports as created.
 fn created(outcome: &ToileOutcome) -> ElementId {
     outcome
@@ -689,11 +712,14 @@ fn board_at(version: Option<u32>, write: impl FnOnce(&LoroDoc)) -> LoroDoc {
     doc
 }
 
-/// One element map under `container`, keyed `id`.
-fn element_map(doc: &LoroDoc, container: &str, id: &str) -> loro::LoroMap {
-    doc.get_map(container)
-        .insert_container(id, loro::LoroMap::new())
-        .expect("an element")
+/// One map under the dictionary `root`, keyed `id`, read through the schema
+/// `K`.
+fn entry_map<K: ambre_core::crdt::FieldKey>(doc: &LoroDoc, root: Root, id: &str) -> Fields<K> {
+    Fields::of(
+        root_map(doc, root)
+            .insert_container(id, loro::LoroMap::new())
+            .expect("an entry"),
+    )
 }
 
 /// The canonical board of the version a step leaves: that version's layout,
@@ -702,8 +728,8 @@ fn element_map(doc: &LoroDoc, container: &str, id: &str) -> loro::LoroMap {
 fn canonical(from: u32) -> LoroDoc {
     match from {
         0 => board_at(None, |doc| {
-            element_map(doc, ELEMENTS, "e1")
-                .insert("type", "sticky")
+            entry_map(doc, Root::Elements, "e1")
+                .insert(ElementKey::Type, ElementKind::Sticky.type_tag())
                 .expect("a type");
         }),
         // The bare style registers the `1 -> 2` step versions.
@@ -714,43 +740,59 @@ fn canonical(from: u32) -> LoroDoc {
                 ..ElementStyle::default()
             };
             let bare = postcard::to_allocvec(&style).expect("the bare layout");
-            for (container, id) in [(ELEMENTS, "e1"), (CONNECTORS, "c1")] {
-                element_map(doc, container, id)
-                    .insert("style", LoroValue::Binary(bare.clone().into()))
-                    .expect("a style register");
-            }
+            let style = LoroValue::Binary(bare.into());
+            entry_map(doc, Root::Elements, "e1")
+                .insert(ElementKey::Style, style.clone())
+                .expect("a style register");
+            entry_map(doc, Root::Connectors, "c1")
+                .insert(ConnectorKey::Style, style)
+                .expect("a style register");
         }),
         // The deck inside the `presentation` map the `2 -> 3` step moves out.
         2 => board_at(Some(2), |doc| {
-            let pres = doc.get_map("presentation");
+            let pres = Fields::<LegacyDeckKey>::of(doc.get_map(LegacyRoot::Presentation.as_str()));
             let order = pres
-                .insert_container("order", loro::LoroMovableList::new())
+                .insert_container(LegacyDeckKey::Order, loro::LoroMovableList::new())
                 .expect("the old order");
             order.push("f1").expect("a slide");
             order.push("f2").expect("a slide");
-            pres.insert_container("config", loro::LoroMap::new())
-                .expect("the old config")
-                .insert("transition_ms", 800.0)
-                .expect("a setting");
+            Fields::<ConfigKey>::of(
+                pres.insert_container(LegacyDeckKey::Config, loro::LoroMap::new())
+                    .expect("the old config"),
+            )
+            .insert(ConfigKey::TransitionMs, 800.0)
+            .expect("a setting");
         }),
         // The string bodies the `3 -> 4` step turns into texts.
         3 => board_at(Some(3), |doc| {
             for (id, body) in [("e1", "buy milk"), ("e2", "")] {
-                let element = element_map(doc, ELEMENTS, id);
-                element.insert("type", "sticky").expect("a type");
-                element.insert(BODY, body).expect("a string body");
+                let element = entry_map(doc, Root::Elements, id);
+                element
+                    .insert(ElementKey::Type, ElementKind::Sticky.type_tag())
+                    .expect("a type");
+                element
+                    .insert(ElementKey::Body, body)
+                    .expect("a string body");
             }
         }),
         // A text sized 16 world px and an auto-sized note, whose sizes the
         // `4 -> 5` step carries to points.
         4 => board_at(Some(4), |doc| {
-            for (id, kind, px) in [("e1", "text", 16), ("e2", "sticky", 0)] {
+            for (id, kind, px) in [
+                ("e1", ElementKind::Text, 16),
+                ("e2", ElementKind::Sticky, 0),
+            ] {
                 let mut style = ElementStyle::default();
                 style.font.size = ambre_core::FontSize::from_whole_points(px);
-                let element = element_map(doc, ELEMENTS, id);
-                element.insert("type", kind).expect("a type");
+                let element = entry_map(doc, Root::Elements, id);
                 element
-                    .insert("style", LoroValue::Binary(style.to_bytes().into()))
+                    .insert(ElementKey::Type, kind.type_tag())
+                    .expect("a type");
+                element
+                    .insert(
+                        ElementKey::Style,
+                        LoroValue::Binary(style.to_bytes().into()),
+                    )
                     .expect("a style register");
             }
         }),
@@ -812,8 +854,9 @@ fn each_migration_step_writes_what_its_version_froze() {
 fn every_declared_key_appears_in_the_shape() {
     let state = board_of_every_key();
     let shape = shape_of(&state.doc);
-    for source in KEY_SOURCES {
-        for key in declared_keys(source) {
+    let declared = KEY_SOURCES.iter().flat_map(|source| declared_keys(source));
+    for key in declared.chain(schema_names()) {
+        {
             assert!(
                 shape.keys.contains(&key),
                 "`{key}` is declared as a schema key and no line of the shape \
@@ -870,10 +913,8 @@ fn a_value_type_changing_moves_the_shape() {
     let before = render(&shape_of(&state.doc));
     // A board colour is stored as an `i64`; the same key under a float is the
     // drift a reviewer cannot be asked to spot.
-    state
-        .doc
-        .get_map(super::BOARD)
-        .insert("bg_color", 1.0_f64)
+    super::board(&state.doc)
+        .insert(BoardKey::BgColor, 1.0_f64)
         .expect("the register takes a key");
     assert_ne!(
         before,

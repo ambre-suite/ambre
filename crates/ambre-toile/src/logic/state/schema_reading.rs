@@ -36,11 +36,12 @@ use kurbo::ParamCurve;
 use loro::LoroValue;
 
 use super::schema_shape::{
-    ANY, KEY_SOURCES, board_of_every_key, declared_keys, keys_are_schema_words, section_of,
+    ANY, KEY_SOURCES, board_of_every_key, declared_keys, keys_are_schema_words, schema_names,
+    section_of,
 };
 use super::{
-    BOARD, COMMENTS, CONNECTORS, ELEMENTS, LAYERS, MEDIA, PRESENTATION_CONFIG, PRESENTATION_ORDER,
-    REACTIONS, ToileState,
+    BoardKey, ConfigKey, ConnectorKey, ElementKey, MediaKey, MessageKey, Root, ThreadKey,
+    ToileState,
 };
 use crate::logic::autolayout::AutoLayout;
 use crate::logic::command::{CommentAnchor, DisplayGeom};
@@ -51,9 +52,6 @@ use crate::logic::schema::SCHEMA_VERSION;
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../../schema/readings.txt");
-
-/// The foundation's `meta` root, as a pattern.
-const META_ROOT: &str = ambre_core::crdt::FoundationRoot::Meta.as_str();
 
 /// The stored paths no reader of this build reads. Each is written, kept and
 /// merged, and nothing draws or plays it yet.
@@ -278,8 +276,8 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
     if UNREAD.contains(&frozen_path(stored).as_str()) {
         return Some("read by no reader of this build".to_owned());
     }
-    match stored.root.as_str() {
-        META_ROOT if stored.key(0)? == ambre_core::schema::MetaKey::SchemaVersion.as_str() => {
+    match Root::parse(&stored.root)? {
+        Root::Meta if stored.key(0)? == ambre_core::schema::MetaKey::SchemaVersion.as_str() => {
             let LoroValue::I64(n) = stored.value else {
                 return None;
             };
@@ -289,18 +287,19 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
                 verdict(version, SCHEMA_VERSION)
             ))
         }
-        BOARD if stored.key(0)? == "grid_size" => Some(format!(
-            "grid unit {} world px",
-            reader.debug_viewport().grid_unit
-        )),
-        PRESENTATION_CONFIG if stored.key(0)? == "transition_ms" => {
+        Root::Board if BoardKey::parse(stored.key(0)?) == Some(BoardKey::GridSize) => Some(
+            format!("grid unit {} world px", reader.debug_viewport().grid_unit),
+        ),
+        Root::PresentationConfig
+            if ConfigKey::parse(stored.key(0)?) == Some(ConfigKey::TransitionMs) =>
+        {
             Some(format!("slides change over {} ms", reader.transition_ms()))
         }
-        PRESENTATION_ORDER => {
+        Root::PresentationOrder => {
             let frame = ElementId(stored.string()?.to_owned());
             Some(format!("slide {}", place(&reader.slide_order(), &frame)?))
         }
-        LAYERS => {
+        Root::Layers => {
             let node = NodeId::decode(stored.string()?)?;
             Some(format!(
                 "painted {} of {}",
@@ -308,10 +307,10 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
                 reader.layer_order().len()
             ))
         }
-        ELEMENTS => element_reading(reader, stored),
-        CONNECTORS => connector_reading(reader, stored),
-        COMMENTS => comment_reading(reader, stored),
-        REACTIONS => {
+        Root::Elements => element_reading(reader, stored),
+        Root::Connectors => connector_reading(reader, stored),
+        Root::Comments => comment_reading(reader, stored),
+        Root::Reactions => {
             let (target, _user) = stored.key(0)?.split_once('/')?;
             let tally = reader.reaction_tally(&ElementId(target.to_owned()));
             Some(format!(
@@ -319,7 +318,7 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
                 tally.emoji, tally.vote_count, tally.vote_total
             ))
         }
-        MEDIA if stored.key(1)? == "thumb" => {
+        Root::Media if MediaKey::parse(stored.key(1)?) == Some(MediaKey::Thumb) => {
             let (w, h, _) = reader.decoded_thumbnail(stored.key(0)?)?;
             Some(format!("thumbnail {w}x{h} px"))
         }
@@ -331,38 +330,40 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
 /// paints and the frame readers.
 fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
     let id = ElementId(stored.key(0)?.to_owned());
-    let field = stored.key(1)?;
+    let field = ElementKey::parse(stored.key(1)?)?;
     let shown = reader.display_element(&id)?;
     let bounds = shown.bounds;
     match (field, &shown.geom) {
-        ("type" | "shape", _) => Some(format!("kind {:?}", shown.kind)),
-        ("x", _) => Some(format!("left edge at {} px", bounds.x0)),
-        ("y", _) => Some(format!("top edge at {} px", bounds.y0)),
-        ("w", _) => Some(format!("{} px wide", bounds.width())),
-        ("h", _) => Some(format!("{} px tall", bounds.height())),
-        ("rot", _) => {
+        (ElementKey::Type | ElementKey::Shape, _) => Some(format!("kind {:?}", shown.kind)),
+        (ElementKey::X, _) => Some(format!("left edge at {} px", bounds.x0)),
+        (ElementKey::Y, _) => Some(format!("top edge at {} px", bounds.y0)),
+        (ElementKey::W, _) => Some(format!("{} px wide", bounds.width())),
+        (ElementKey::H, _) => Some(format!("{} px tall", bounds.height())),
+        (ElementKey::Rot, _) => {
             let [a, b, ..] = shown.transform.as_coeffs();
             Some(format!("turned {} degrees", b.atan2(a).to_degrees()))
         }
-        ("style", _) => Some(style_reading(&shown.style)),
-        ("link", _) => Some(link_reading(shown.link.as_ref()?)),
-        ("locked", _) => Some(if shown.locked { "locked" } else { "unlocked" }.to_owned()),
-        ("text", DisplayGeom::Sticky(body) | DisplayGeom::Text(body)) => {
+        (ElementKey::Style, _) => Some(style_reading(&shown.style)),
+        (ElementKey::Link, _) => Some(link_reading(shown.link.as_ref()?)),
+        (ElementKey::Locked, _) => {
+            Some(if shown.locked { "locked" } else { "unlocked" }.to_owned())
+        }
+        (ElementKey::Body, DisplayGeom::Sticky(body) | DisplayGeom::Text(body)) => {
             Some(format!("shows {body:?}"))
         }
-        ("name", DisplayGeom::Frame(name)) => Some(format!("titled {name:?}")),
-        ("hash", DisplayGeom::Image(hash)) => Some(format!("draws media {hash:?}")),
-        ("url", DisplayGeom::Embed(url)) => Some(format!("embeds {url:?}")),
+        (ElementKey::Name, DisplayGeom::Frame(name)) => Some(format!("titled {name:?}")),
+        (ElementKey::Hash, DisplayGeom::Image(hash)) => Some(format!("draws media {hash:?}")),
+        (ElementKey::Url, DisplayGeom::Embed(url)) => Some(format!("embeds {url:?}")),
         (
-            "doc_id" | "doc_type",
+            ElementKey::DocId | ElementKey::DocType,
             DisplayGeom::DocEmbed {
                 document_id,
                 doc_type,
                 ..
             },
         ) => Some(format!("embeds {doc_type} document {document_id}")),
-        ("path", DisplayGeom::Path(path)) => Some(format!("outline {}", path.to_svg())),
-        ("points", DisplayGeom::Stroke(points)) => {
+        (ElementKey::Path, DisplayGeom::Path(path)) => Some(format!("outline {}", path.to_svg())),
+        (ElementKey::Points, DisplayGeom::Stroke(points)) => {
             let (first, last) = (points.first()?, points.last()?);
             Some(format!(
                 "stroke of {} points from ({}, {}) to ({}, {}) px",
@@ -373,7 +374,7 @@ fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
                 last.y
             ))
         }
-        ("children", _) => {
+        (ElementKey::Children, _) => {
             let child = ElementId(stored.string()?.to_owned());
             let members = reader.membership_of(&id);
             Some(format!(
@@ -382,8 +383,8 @@ fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
                 members.len()
             ))
         }
-        ("notes", _) => Some(format!("speaker notes {:?}", reader.notes(&id))),
-        ("autolayout", _) => Some(layout_reading(&reader.auto_layout(&id)?)),
+        (ElementKey::Notes, _) => Some(format!("speaker notes {:?}", reader.notes(&id))),
+        (ElementKey::Autolayout, _) => Some(layout_reading(&reader.auto_layout(&id)?)),
         _ => None,
     }
 }
@@ -398,21 +399,20 @@ fn connector_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
     let ends = route.segments().map(|s| (s.start(), s.end()));
     let start = ends.clone().next()?.0;
     let end = ends.last()?.1;
-    match stored.key(1)? {
-        "from" => Some(format!("starts at ({}, {}) px", start.x, start.y)),
-        "to" => Some(format!("ends at ({}, {}) px", end.x, end.y)),
-        "from_anch" => Some(format!("leaves by {:?}", connector.from_anch)),
-        "to_anch" => Some(format!("arrives by {:?}", connector.to_anch)),
-        "path_type" => Some(format!(
+    match ConnectorKey::parse(stored.key(1)?)? {
+        ConnectorKey::From => Some(format!("starts at ({}, {}) px", start.x, start.y)),
+        ConnectorKey::To => Some(format!("ends at ({}, {}) px", end.x, end.y)),
+        ConnectorKey::FromAnch => Some(format!("leaves by {:?}", connector.from_anch)),
+        ConnectorKey::ToAnch => Some(format!("arrives by {:?}", connector.to_anch)),
+        ConnectorKey::PathType => Some(format!(
             "routed {:?} as {}",
             connector.path_type,
             route.to_svg()
         )),
-        "arrow_start" => Some(format!("arrowhead at start {}", shown.arrows.start)),
-        "arrow_end" => Some(format!("arrowhead at end {}", shown.arrows.end)),
-        "style" => Some(style_reading(&shown.style)),
-        "label" => Some(format!("captioned {:?}", shown.label)),
-        _ => None,
+        ConnectorKey::ArrowStart => Some(format!("arrowhead at start {}", shown.arrows.start)),
+        ConnectorKey::ArrowEnd => Some(format!("arrowhead at end {}", shown.arrows.end)),
+        ConnectorKey::Style => Some(style_reading(&shown.style)),
+        ConnectorKey::Label => Some(format!("captioned {:?}", shown.label)),
     }
 }
 
@@ -420,24 +420,22 @@ fn connector_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
 /// reader opens.
 fn comment_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
     let thread = reader.comment_thread(&ElementId(stored.key(0)?.to_owned()))?;
-    match stored.key(1)? {
-        "anchor" => Some(match &thread.anchor {
+    match ThreadKey::parse(stored.key(1)?)? {
+        ThreadKey::Anchor => Some(match &thread.anchor {
             CommentAnchor::Element(element) => format!("pinned to element {}", element.as_str()),
             CommentAnchor::Point { x, y } => format!("pinned at ({x}, {y}) px"),
         }),
-        "resolved" => Some(if thread.resolved { "resolved" } else { "open" }.to_owned()),
-        "messages" => {
+        ThreadKey::Resolved => Some(if thread.resolved { "resolved" } else { "open" }.to_owned()),
+        ThreadKey::Messages => {
             let at = stored.at(2)?;
             let message = thread.messages.get(at)?;
-            let what = match stored.key(3)? {
-                "author" => format!("by {}", message.author),
-                "ts" => format!("stamped {}", message.ts),
-                "body" => format!("reads {:?}", message.body),
-                _ => return None,
+            let what = match MessageKey::parse(stored.key(3)?)? {
+                MessageKey::Author => format!("by {}", message.author),
+                MessageKey::Ts => format!("stamped {}", message.ts),
+                MessageKey::Body => format!("reads {:?}", message.body),
             };
             Some(format!("message {} {what}", at + 1))
         }
-        _ => None,
     }
 }
 
@@ -527,8 +525,9 @@ fn every_stored_value_has_a_reading() {
 fn every_declared_key_has_a_reading() {
     let state = board_of_every_key();
     let keys = readings_of(&state, &reopened(&state)).keys;
-    for source in KEY_SOURCES {
-        for key in declared_keys(source) {
+    let declared = KEY_SOURCES.iter().flat_map(|source| declared_keys(source));
+    for key in declared.chain(schema_names()) {
+        {
             assert!(
                 keys.contains(&key),
                 "`{key}` is declared as a schema key and no reading carries it"

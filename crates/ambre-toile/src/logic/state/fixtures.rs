@@ -33,7 +33,9 @@ use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, EndCaps, NodeId, PathType, ShapeKind,
 };
 
-use super::{CONNECTORS, ELEMENTS, ToileState};
+use super::ToileState;
+use super::codec::value_has_type;
+use super::names::{FieldValues, Root};
 
 impl ToileState {
     /// The coarse shape of this board, as the manifest records it.
@@ -44,17 +46,17 @@ impl ToileState {
     pub fn fixture_shape(&self) -> FixtureShape {
         let mut elements = 0u32;
         let mut frames = 0u16;
-        if let LoroValue::Map(map) = self.doc.get_map(ELEMENTS).get_deep_value() {
+        if let LoroValue::Map(map) = self.doc.get_map(Root::Elements.as_str()).get_deep_value() {
             for value in map.values() {
                 elements = elements.saturating_add(1);
                 if let LoroValue::Map(fields) = value
-                    && matches!(fields.get("type"), Some(LoroValue::String(t)) if t.as_str() == "frame")
+                    && value_has_type(FieldValues::of(fields), ElementKind::Frame)
                 {
                     frames = frames.saturating_add(1);
                 }
             }
         }
-        let connectors = match self.doc.get_map(CONNECTORS).get_value() {
+        let connectors = match self.doc.get_map(Root::Connectors.as_str()).get_value() {
             LoroValue::Map(map) => u32::try_from(map.len()).unwrap_or(u32::MAX),
             _ => 0,
         };
@@ -105,11 +107,11 @@ impl ToileState {
             position.insert(key, i);
         }
 
-        let elements = match self.doc.get_map(ELEMENTS).get_deep_value() {
+        let elements = match self.doc.get_map(Root::Elements.as_str()).get_deep_value() {
             LoroValue::Map(m) => m,
             _ => Default::default(),
         };
-        let connectors = match self.doc.get_map(CONNECTORS).get_deep_value() {
+        let connectors = match self.doc.get_map(Root::Connectors.as_str()).get_deep_value() {
             LoroValue::Map(m) => m,
             _ => Default::default(),
         };

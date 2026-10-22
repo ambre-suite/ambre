@@ -10,11 +10,13 @@ use loro::{LoroMap, LoroMovableList, LoroValue};
 
 use crate::logic::command::{ToileError, ToileEvent, ToileOutcome};
 use crate::logic::index::ElementBounds;
-use crate::logic::model::{ElementId, NodeId};
+use crate::logic::model::{ElementId, ElementKind, NodeId};
 use ambre_bus::app::toile::FRAME_NAME_MAX;
 
+use super::ToileState;
 use super::codec::{em_seed_group, str_of};
-use super::{CHILDREN, ELEMENTS, LAYERS, ToileState};
+use super::codec::{has_type, value_has_type};
+use super::names::{ElementKey, FieldValues, Fields, Root};
 
 impl ToileState {
     // -- groups -----------------------------------------------------
@@ -106,12 +108,15 @@ impl ToileState {
             .unwrap_or(0);
 
         let id = self.mint_element_id();
-        let elems = self.doc.get_map(ELEMENTS);
-        let Ok(em) = elems.insert_container(id.as_str(), LoroMap::new()) else {
+        let elems = self.doc.get_map(Root::Elements.as_str());
+        let Ok(em) = elems
+            .insert_container(id.as_str(), LoroMap::new())
+            .map(Fields::<ElementKey>::of)
+        else {
             return None;
         };
         em_seed_group(&em);
-        let Ok(children) = em.insert_container(CHILDREN, LoroMovableList::new()) else {
+        let Ok(children) = em.insert_container(ElementKey::Children, LoroMovableList::new()) else {
             return None;
         };
         for m in &members {
@@ -122,7 +127,7 @@ impl ToileState {
         // Insert the group NodeId just below its lowest member.
         let _ = self
             .doc
-            .get_movable_list(LAYERS)
+            .get_movable_list(Root::Layers.as_str())
             .insert(insert_at, NodeId::Element(id.clone()).encode().as_str());
         if let Some(f) = shared_frame {
             if let Some(list) = self.children_list(&f)
@@ -162,7 +167,7 @@ impl ToileState {
                 None => display.push(ToileEvent::Error(ToileError::NoSuchElement(
                     group.0.clone(),
                 ))),
-                Some(gm) if str_of(&gm, "type") != "group" => {
+                Some(gm) if !has_type(&gm, ElementKind::Group) => {
                     not_a_group = not_a_group.or(Some(group));
                 }
                 Some(_) => {
@@ -200,7 +205,10 @@ impl ToileState {
         let parent = self.enclosing_group(group);
 
         // Remove the group element; the caller strips its layers node.
-        let _ = self.doc.get_map(ELEMENTS).delete(group.as_str());
+        let _ = self
+            .doc
+            .get_map(Root::Elements.as_str())
+            .delete(group.as_str());
 
         // Re-parent the children to the enclosing group (board parent is implicit).
         // Drop the ungrouped group from the parent's `children`, else it lingers as
@@ -239,7 +247,7 @@ impl ToileState {
         };
         // Refused aloud, as a rename of a non-frame is, so a surface can tell
         // the refusal from a gesture that changed nothing (`TOILE-050`).
-        if str_of(&fm, "type") != "frame" {
+        if !has_type(&fm, ElementKind::Frame) {
             return ToileOutcome::display_only(vec![ToileEvent::Error(
                 ToileError::ContentKindMismatch,
             )]);
@@ -350,7 +358,7 @@ impl ToileState {
     /// accessor; every surface reads it off the display payload instead.
     pub fn frame_name(&self, frame: &ElementId) -> String {
         self.element_map(frame)
-            .map(|em| str_of(&em, "name"))
+            .map(|em| str_of(&em, ElementKey::Name))
             .unwrap_or_default()
     }
 
@@ -367,16 +375,16 @@ impl ToileState {
         let Some(fm) = self.element_map(frame) else {
             return self.err_no_element(frame);
         };
-        if str_of(&fm, "type") != "frame" {
+        if !has_type(&fm, ElementKind::Frame) {
             return ToileOutcome::display_only(vec![ToileEvent::Error(
                 ToileError::ContentKindMismatch,
             )]);
         }
         let name: String = name.trim().chars().take(FRAME_NAME_MAX).collect();
-        if str_of(&fm, "name") == name {
+        if str_of(&fm, ElementKey::Name) == name {
             return ToileOutcome::display_only(Vec::new());
         }
-        let _ = fm.insert("name", name.as_str());
+        let _ = fm.insert(ElementKey::Name, name.as_str());
         self.doc.commit();
         // The deck panel reads a frame by its title, and holds no copy of its
         // own (`TOILE-UI-343`).
@@ -400,7 +408,7 @@ impl ToileState {
         if children.is_empty() {
             return;
         }
-        let list = self.doc.get_movable_list(LAYERS);
+        let list = self.doc.get_movable_list(Root::Layers.as_str());
         for _ in 0..=list.len() {
             let LoroValue::List(raw) = list.get_deep_value() else {
                 break;
@@ -440,7 +448,7 @@ impl ToileState {
     /// The `children` movable-list handle of a group / frame element, if present.
     fn children_list(&self, id: &ElementId) -> Option<LoroMovableList> {
         self.element_map(id)?
-            .get(CHILDREN)?
+            .get(ElementKey::Children)?
             .into_container()
             .ok()?
             .into_movable_list()
@@ -517,7 +525,7 @@ impl ToileState {
 
     fn is_group(&self, id: &ElementId) -> bool {
         self.element_map(id)
-            .map(|em| str_of(&em, "type") == "group")
+            .map(|em| has_type(&em, ElementKind::Group))
             .unwrap_or(false)
     }
 
@@ -535,7 +543,7 @@ impl ToileState {
                 if let LoroValue::Map(m) = self.walk_elements() {
                     for (key, val) in m.iter() {
                         if matches!(val, LoroValue::Map(f)
-                            if matches!(f.get("type"), Some(LoroValue::String(t)) if t.as_str() == "group"))
+                            if value_has_type(FieldValues::of(f), ElementKind::Group))
                         {
                             let id = ElementId(key.clone());
                             if self.children_of(&id).is_empty() {
@@ -550,7 +558,7 @@ impl ToileState {
                 break;
             }
             let removed: HashSet<ElementId> = empties.iter().cloned().collect();
-            let elems = self.doc.get_map(ELEMENTS);
+            let elems = self.doc.get_map(Root::Elements.as_str());
             for id in &empties {
                 let _ = elems.delete(id.as_str());
                 self.bounds.remove(id);
@@ -572,7 +580,7 @@ impl ToileState {
             if let LoroValue::Map(m) = self.walk_elements() {
                 for (key, val) in m.iter() {
                     if let LoroValue::Map(fields) = val
-                        && matches!(fields.get("type"), Some(LoroValue::String(t)) if t.as_str() == "group")
+                        && value_has_type(FieldValues::of(fields), ElementKind::Group)
                     {
                         let id = ElementId(key.clone());
                         let kids = self.children_of(&id);
@@ -618,7 +626,7 @@ mod tests {
     use crate::logic::command::{InitContent, ToileCommand, ToileEvent, ToileOutcome};
     use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
 
-    use super::super::{LAYERS, ToileState};
+    use super::super::{Root, ToileState};
 
     fn create(st: &mut ToileState, kind: ElementKind) -> ElementId {
         let out: ToileOutcome = st.handle_command(ToileCommand::CreateElement {
@@ -647,7 +655,10 @@ mod tests {
         let r = create(&mut st, ElementKind::Shape(ShapeKind::Rect));
         let f = create(&mut st, ElementKind::Frame);
         let tag = NodeId::Element(r.clone()).encode();
-        let _ = st.doc.get_movable_list(LAYERS).insert(0, tag.as_str());
+        let _ = st
+            .doc
+            .get_movable_list(Root::Layers.as_str())
+            .insert(0, tag.as_str());
         st.doc.commit();
         st.rematerialize_layers();
 

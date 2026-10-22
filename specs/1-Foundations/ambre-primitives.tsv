@@ -5141,6 +5141,8 @@ ambre-toile | src/logic/schema.rs | crate::logic::schema | gate() | ret | Result
 ambre-toile | src/logic/schema.rs | crate::logic::schema | gate(payload) | param | &[u8]	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/schema.rs | crate::logic::schema | presentation_root_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-toile | src/logic/schema.rs | crate::logic::schema | read_version() | ret | Result<u32,SchemaError>	debt	finding: The schema version is a raw u32 (confirmed): schema version as raw u32 (core SchemaMigration too)
+ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_style_registers() | ret | Result<(),String>	free-text	migration error message
+ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_style_registers(rewrite) | param | &impl Fn(&[u8])->Option<Vec<u8>>	generic	byte rewrite callback of the migration
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_styles() | ret | Result<(),String>	free-text	migration error message
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_styles(rewrite) | param | impl Fn(&[u8])->Option<Vec<u8>>	generic	byte rewrite callback of the migration
 ambre-toile | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
@@ -5150,16 +5152,10 @@ ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTou
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | WiresTouched.unplaced | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under() | ret | Option<Option<Vec<String>>>	generic	generic parser/reader/formatter over text
-ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under(root) | param | &str	generic	generic parser/reader/formatter over text
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | BODY | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | LABEL | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of() | ret | Vec<u8>	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of(k) | param | &str	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of() | ret | Vec<u8>	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | body_of() | ret | String	generic	generic parser/reader/formatter over text
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bool_of() | ret | bool	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bool_of(k) | param | &str	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | capture_scalars() | ret | Vec<(String,ClipValue)>	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | capture_scalars(skip) | param | &[&str]	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bool_of() | ret | bool	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | capture_scalars() | ret | Vec<(String,ClipValue)>	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | connector_label() | ret | String	generic	enum<->stored string codec at the CRDT boundary
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | content_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | decode_anchor(s) | param | &str	generic	enum<->stored string codec at the CRDT boundary
@@ -5172,23 +5168,14 @@ ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | expanded_a
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | expanded_aabb(w) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | expanded_aabb(x) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | expanded_aabb(y) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | f64_of() | ret | f64	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | f64_of(k) | param | &str	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | kind_from_tags(type_tag) | param | &str	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_f64() | ret | f64	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_f64(k) | param | &str	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_str() | ret | String	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_str(k) | param | &str	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | str_of() | ret | String	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | str_of(k) | param | &str	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | write_clip_fields(fields) | param | &[(String,ClipValue)]	debt	finding: "group G5: Loro field keys as inline &str literals, type tag compared as string, readers default to 0.0/"""" sentinel"
-ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ANCHOR | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | AUTHOR | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | BODY | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | MESSAGES | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | f64_of() | ret | f64	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | has_type() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_f64() | ret | f64	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_str() | ret | String	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | str_of() | ret | String	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | value_has_type() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | write_clip_fields(fields) | param | &[(String,ClipValue)]	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | PREVIEW_CHARS | const | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | RESOLVED | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | TS | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::create_comment(body) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::edit_comment(message) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::message_map(index) | param | usize	math	geometry, layout, count or size local to the algorithm
@@ -5268,19 +5255,7 @@ ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileSta
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::start_import(budget) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | rewrite_hash(hash) | param | &str	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | rewrite_hash(slot) | param | usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | AUTOLAYOUT | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | BOARD | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | CHILDREN | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | COMMENTS | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | COMMENT_ORIGIN | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | CONNECTORS | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ELEMENTS | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | LAYERS | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | MEDIA | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | NOTES | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | PRESENTATION_CONFIG | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | PRESENTATION_ORDER | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | REACTIONS | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.board_walks | field | Cell<u64>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.counter | field | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.entry_end | field | Option<i32>	generic	Loro Counter (i32) as Loro defines it
@@ -5294,8 +5269,6 @@ ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::apply_r
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::board_walks() | ret | u64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_push_layer_raw(s) | param | &str	generic	debug/test accessor over raw fields
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_raw_layers() | ret | Vec<String>	generic	debug/test accessor over raw fields
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_set_element_field(key) | param | &str	generic	debug/test accessor over raw fields
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_set_element_field(value) | param | &str	generic	debug/test accessor over raw fields
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::element_count() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::export_snapshot() | ret | Vec<u8>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::flush_delta() | ret | Option<Vec<u8>>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
@@ -5307,6 +5280,12 @@ ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::set_dis
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::take_delta() | ret | Option<Vec<u8>>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::take_delta(exported) | param | Result<Vec<u8>,E>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | waits_for_import() | ret | bool	generic	predicate or handled-flag result
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | REACTION_SEPARATOR | const | char	newtype-inner	the spelling of ReactionKey, a reactions map key
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey.0 | field | String	newtype-inner	the reactions map key ReactionKey types
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::as_str() | ret | &str	foreign-api	the reactions map key, for the Loro call that reads or writes it
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::target_of() | ret | Option<&str>	foreign-api	the target id half of a key Loro hands back from the reactions map
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::target_of(key) | param | &str	foreign-api	a reactions map key as Loro hands it back
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | entry(id) | param | &str	generic	dictionary lookup over every id type the board keys a root by
 ambre-toile | src/logic/state/presence.rs | crate::logic::state::presence | PRESENCE_TTL_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-toile | src/logic/state/presence.rs | crate::logic::state::presence | ToileState::apply_ephemeral(payload) | param | &[u8]	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/presence.rs | crate::logic::state::presence | ToileState::expire_peers() | ret | bool	generic	predicate or handled-flag result
@@ -5331,7 +5310,6 @@ ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentatio
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | accumulate(emoji) | param | &mut BTreeMap<String,u32>	debt	finding: The reaction storage key and the emoji are strings (confirmed): reaction storage key built by format!, emoji as String
 ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | encode() | ret | Result<Vec<u8>,ToileError>	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | reaction_key() | ret | String	debt	finding: The reaction storage key and the emoji are strings (confirmed): reaction storage key built by format!, emoji as String
 ambre-toile | src/logic/stroke.rs | crate::logic::stroke | SEGMENTS_PER_SPAN | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/stroke.rs | crate::logic::stroke | catmull_rom(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | EDIT_CAP | const | usize	math	diff/merge algorithm index, codepoints throughout

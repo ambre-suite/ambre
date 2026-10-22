@@ -17,11 +17,12 @@ use crate::logic::model::{
 };
 use crate::logic::text_merge::merge_edits;
 
+use super::codec::has_type;
 use super::codec::{
-    BODY, bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, f64_of, str_of,
-    stroke_aabb,
+    bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb,
 };
-use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState, write_edits};
+use super::names::{ElementKey, Fields, Root};
+use super::{ToileState, write_edits};
 
 impl ToileState {
     pub(super) fn create_element(
@@ -78,29 +79,35 @@ impl ToileState {
         }
 
         let id = self.mint_element_id();
-        let elems = self.doc.get_map(ELEMENTS);
-        let Ok(em) = elems.insert_container(id.as_str(), LoroMap::new()) else {
+        let elems = self.doc.get_map(Root::Elements.as_str());
+        let Ok(em) = elems
+            .insert_container(id.as_str(), LoroMap::new())
+            .map(Fields::<ElementKey>::of)
+        else {
             return Err(ToileError::NoSuchElement(id.0));
         };
-        let _ = em.insert("type", kind.type_tag());
-        let _ = em.insert("x", at.x);
-        let _ = em.insert("y", at.y);
-        let _ = em.insert("w", size.width);
-        let _ = em.insert("h", size.height);
-        let _ = em.insert("rot", 0.0);
-        let _ = em.insert("locked", false);
+        let _ = em.insert(ElementKey::Type, kind.type_tag());
+        let _ = em.insert(ElementKey::X, at.x);
+        let _ = em.insert(ElementKey::Y, at.y);
+        let _ = em.insert(ElementKey::W, size.width);
+        let _ = em.insert(ElementKey::H, size.height);
+        let _ = em.insert(ElementKey::Rot, 0.0);
+        let _ = em.insert(ElementKey::Locked, false);
         // Seed a per-kind default style (sticky = yellow card, others = white),
         // then apply an optional creation-time fill override.
         let mut style = ElementStyle::for_kind(kind);
         if let Some(f) = fill {
             style.fill = Some(f);
         }
-        let _ = em.insert("style", LoroValue::Binary(style.to_bytes().into()));
+        let _ = em.insert(
+            ElementKey::Style,
+            LoroValue::Binary(style.to_bytes().into()),
+        );
         self.seed_payload(&em, kind, &content);
         // Push onto the top of the z-order.
         let _ = self
             .doc
-            .get_movable_list(LAYERS)
+            .get_movable_list(Root::Layers.as_str())
             .push(NodeId::Element(id.clone()).encode().as_str());
 
         let rect = expanded_aabb(at.x, at.y, size.width, size.height, 0.0);
@@ -112,19 +119,19 @@ impl ToileState {
     }
 
     /// Seed the per-type payload fields. Kept minimal for Phase 0.
-    fn seed_payload(&self, em: &LoroMap, kind: ElementKind, content: &InitContent) {
+    fn seed_payload(&self, em: &Fields<ElementKey>, kind: ElementKind, content: &InitContent) {
         match (kind, content) {
             (ElementKind::Shape(sk), _) => {
-                let _ = em.insert("shape", sk.tag());
+                let _ = em.insert(ElementKey::Shape, sk.tag());
                 if let (ShapeKind::Path, InitContent::Path(p)) = (sk, content) {
-                    let _ = em.insert("path", p.to_svg());
+                    let _ = em.insert(ElementKey::Path, p.to_svg());
                 }
             }
             (ElementKind::Image, InitContent::Image(hash)) => {
-                let _ = em.insert("hash", hash.as_str());
+                let _ = em.insert(ElementKey::Hash, hash.as_str());
             }
             (ElementKind::Embed, InitContent::Embed(url)) => {
-                let _ = em.insert("url", url.as_str());
+                let _ = em.insert(ElementKey::Url, url.as_str());
             }
             (
                 ElementKind::DocEmbed,
@@ -133,20 +140,20 @@ impl ToileState {
                     doc_type,
                 },
             ) => {
-                let _ = em.insert("doc_id", document_id.to_string());
-                let _ = em.insert("doc_type", format!("{doc_type:?}"));
+                let _ = em.insert(ElementKey::DocId, document_id.to_string());
+                let _ = em.insert(ElementKey::DocType, format!("{doc_type:?}"));
             }
             // The body is a text seeded at birth, as a frame's notes are, so
             // every peer types into the one container (`TOILE-030`).
             (ElementKind::Sticky | ElementKind::Text, InitContent::Text(t)) => {
-                if let Ok(text) = em.insert_container(BODY, LoroText::new())
+                if let Ok(text) = em.insert_container(ElementKey::Body, LoroText::new())
                     && !t.is_empty()
                 {
                     let _ = text.insert(0, t);
                 }
             }
             (ElementKind::Sticky | ElementKind::Text, InitContent::None) => {
-                let _ = em.insert_container(BODY, LoroText::new());
+                let _ = em.insert_container(ElementKey::Body, LoroText::new());
             }
             (ElementKind::Frame, _) => {
                 // Frame content: an empty membership list plus an empty
@@ -157,8 +164,8 @@ impl ToileState {
                 // first edit on each peer would mint two rival containers under
                 // the same map key -> LWW collision, one side's notes lost.
                 // Autolayout stays lazy (absent = free positioning).
-                let _ = em.insert_container(CHILDREN, LoroMovableList::new());
-                let _ = em.insert_container(NOTES, LoroText::new());
+                let _ = em.insert_container(ElementKey::Children, LoroMovableList::new());
+                let _ = em.insert_container(ElementKey::Notes, LoroText::new());
             }
             _ => {}
         }
@@ -177,12 +184,12 @@ impl ToileState {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
-        if bool_of(&em, "locked") {
+        if bool_of(&em, ElementKey::Locked) {
             return ToileOutcome::display_only(Vec::new());
         }
         // The `"text"` field exists only on sticky / text elements (seeded at
         // creation). Reject a SetText aimed at any other kind.
-        if em.get(BODY).is_none() {
+        if em.get(ElementKey::Body).is_none() {
             return ToileOutcome::display_only(vec![ToileEvent::Error(
                 ToileError::ContentKindMismatch,
             )]);
@@ -208,17 +215,17 @@ impl ToileState {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
-        if bool_of(&em, "locked") {
+        if bool_of(&em, ElementKey::Locked) {
             return ToileOutcome::display_only(Vec::new());
         }
         match link {
             Some(l) => {
-                let _ = em.insert("link", LoroValue::Binary(l.to_bytes().into()));
+                let _ = em.insert(ElementKey::Link, LoroValue::Binary(l.to_bytes().into()));
             }
             // Absence is the value (`TOILE-230`): a cleared link is a missing
             // key, not a key holding an empty blob.
             None => {
-                let _ = em.delete("link");
+                let _ = em.delete(ElementKey::Link);
             }
         }
         self.doc.commit();
@@ -244,13 +251,13 @@ impl ToileState {
             let Some(em) = self.element_map(id) else {
                 continue;
             };
-            if bool_of(&em, "locked") {
+            if bool_of(&em, ElementKey::Locked) {
                 continue; // locked blocks edit locally (advisory)
             }
-            let x = f64_of(&em, "x") + delta.x;
-            let y = f64_of(&em, "y") + delta.y;
-            let _ = em.insert("x", x);
-            let _ = em.insert("y", y);
+            let x = f64_of(&em, ElementKey::X) + delta.x;
+            let y = f64_of(&em, ElementKey::Y) + delta.y;
+            let _ = em.insert(ElementKey::X, x);
+            let _ = em.insert(ElementKey::Y, y);
             self.update_bounds(id, &em);
             touched = true;
         }
@@ -286,7 +293,7 @@ impl ToileState {
             };
             if self
                 .element_map(id)
-                .is_some_and(|em| bool_of(&em, "locked"))
+                .is_some_and(|em| bool_of(&em, ElementKey::Locked))
             {
                 continue;
             }
@@ -306,11 +313,11 @@ impl ToileState {
                 let Some(em) = self.element_map(leaf) else {
                     continue;
                 };
-                if bool_of(&em, "locked") {
+                if bool_of(&em, ElementKey::Locked) {
                     continue; // a locked leaf inside a moving group stays put
                 }
-                let _ = em.insert("x", f64_of(&em, "x") + delta.x);
-                let _ = em.insert("y", f64_of(&em, "y") + delta.y);
+                let _ = em.insert(ElementKey::X, f64_of(&em, ElementKey::X) + delta.x);
+                let _ = em.insert(ElementKey::Y, f64_of(&em, ElementKey::Y) + delta.y);
                 self.update_bounds(leaf, &em);
                 touched = true;
             }
@@ -329,14 +336,14 @@ impl ToileState {
         };
         // A group's box is derived from its members, so a resize has nothing
         // to write (`TOILE-150`, `TOILE-155`).
-        if bool_of(&em, "locked") || str_of(&em, "type") == "group" {
+        if bool_of(&em, ElementKey::Locked) || has_type(&em, ElementKind::Group) {
             return ToileOutcome::display_only(Vec::new());
         }
         let r = new.abs();
-        let _ = em.insert("x", r.x0);
-        let _ = em.insert("y", r.y0);
-        let _ = em.insert("w", r.width());
-        let _ = em.insert("h", r.height());
+        let _ = em.insert(ElementKey::X, r.x0);
+        let _ = em.insert(ElementKey::Y, r.y0);
+        let _ = em.insert(ElementKey::W, r.width());
+        let _ = em.insert(ElementKey::H, r.height());
         self.update_bounds(id, &em);
         self.recompute_groups();
         self.doc.commit();
@@ -347,13 +354,13 @@ impl ToileState {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
-        if bool_of(&em, "locked") {
+        if bool_of(&em, ElementKey::Locked) {
             return ToileOutcome::display_only(Vec::new());
         }
-        let _ = em.insert("rot", radians);
+        let _ = em.insert(ElementKey::Rot, radians);
         // A group holds no coordinates: its box stays the union of its members'
         // (`TOILE-009`), never a leaf box read from absent fields.
-        if str_of(&em, "type") != "group" {
+        if !has_type(&em, ElementKind::Group) {
             self.update_bounds(id, &em);
         }
         self.recompute_groups();
@@ -392,12 +399,15 @@ impl ToileState {
             let Some(em) = self.element_map(id) else {
                 continue;
             };
-            if bool_of(&em, "locked") {
+            if bool_of(&em, ElementKey::Locked) {
                 continue;
             }
-            let existing = self.style_read(&bin_of(&em, "style"));
+            let existing = self.style_read(&bin_of(&em, ElementKey::Style));
             let merged = existing.merged_over(style);
-            let _ = em.insert("style", LoroValue::Binary(merged.to_bytes().into()));
+            let _ = em.insert(
+                ElementKey::Style,
+                LoroValue::Binary(merged.to_bytes().into()),
+            );
             touched = true;
         }
         touched
@@ -415,10 +425,10 @@ impl ToileState {
             let Some(em) = self.element_map(id) else {
                 continue;
             };
-            if bool_of(&em, "locked") {
+            if bool_of(&em, ElementKey::Locked) {
                 continue;
             }
-            let _ = em.insert("style", LoroValue::Binary(bytes.clone().into()));
+            let _ = em.insert(ElementKey::Style, LoroValue::Binary(bytes.clone().into()));
             touched = true;
         }
         touched
@@ -430,7 +440,7 @@ impl ToileState {
             let Some(em) = self.element_map(id) else {
                 continue;
             };
-            let _ = em.insert("locked", locked);
+            let _ = em.insert(ElementKey::Locked, locked);
             touched = true;
         }
         if !touched {
@@ -473,9 +483,10 @@ impl ToileState {
     fn holds_a_lock(&self, id: &ElementId) -> bool {
         let mut subtree = HashSet::new();
         self.collect_subtree(id, &mut subtree);
-        subtree
-            .iter()
-            .any(|e| self.element_map(e).is_some_and(|em| bool_of(&em, "locked")))
+        subtree.iter().any(|e| {
+            self.element_map(e)
+                .is_some_and(|em| bool_of(&em, ElementKey::Locked))
+        })
     }
 
     /// Remove `ids` (and, for groups, their whole subtree) from the CRDT and the
@@ -493,7 +504,7 @@ impl ToileState {
         }
         let del: HashSet<&ElementId> = expanded.iter().collect();
         let mut removed_any = false;
-        let elems = self.doc.get_map(ELEMENTS);
+        let elems = self.doc.get_map(Root::Elements.as_str());
         for id in &expanded {
             if elems.get(id.as_str()).is_some() {
                 let _ = elems.delete(id.as_str());
@@ -513,7 +524,7 @@ impl ToileState {
         // Drop locally-owned connectors whose endpoint was deleted and
         // strip both elements and orphaned connectors from `layers`.
         let orphan_conns = self.connectors_touching(&del);
-        let conns = self.doc.get_map(CONNECTORS);
+        let conns = self.doc.get_map(Root::Connectors.as_str());
         for cid in &orphan_conns {
             let _ = conns.delete(cid.as_str());
         }
@@ -559,7 +570,10 @@ impl ToileState {
         if to_idx == from_idx {
             return ToileOutcome::display_only(Vec::new());
         }
-        let _ = self.doc.get_movable_list(LAYERS).mov(from_idx, to_idx);
+        let _ = self
+            .doc
+            .get_movable_list(Root::Layers.as_str())
+            .mov(from_idx, to_idx);
         self.doc.commit();
         self.rematerialize_layers();
         self.emit_with_update(vec![self.viewport_event()])
@@ -575,25 +589,31 @@ impl ToileState {
         let id = self.mint_element_id();
         // World AABB of the raw samples.
         let rect = stroke_aabb(&points);
-        let elems = self.doc.get_map(ELEMENTS);
-        let Ok(em) = elems.insert_container(id.as_str(), LoroMap::new()) else {
+        let elems = self.doc.get_map(Root::Elements.as_str());
+        let Ok(em) = elems
+            .insert_container(id.as_str(), LoroMap::new())
+            .map(Fields::<ElementKey>::of)
+        else {
             return self.err_no_element(&id);
         };
-        let _ = em.insert("type", ElementKind::Drawing.type_tag());
-        let _ = em.insert("x", rect.x0);
-        let _ = em.insert("y", rect.y0);
-        let _ = em.insert("w", rect.width());
-        let _ = em.insert("h", rect.height());
-        let _ = em.insert("rot", 0.0);
-        let _ = em.insert("locked", false);
-        let _ = em.insert("style", LoroValue::Binary(style.to_bytes().into()));
+        let _ = em.insert(ElementKey::Type, ElementKind::Drawing.type_tag());
+        let _ = em.insert(ElementKey::X, rect.x0);
+        let _ = em.insert(ElementKey::Y, rect.y0);
+        let _ = em.insert(ElementKey::W, rect.width());
+        let _ = em.insert(ElementKey::H, rect.height());
+        let _ = em.insert(ElementKey::Rot, 0.0);
+        let _ = em.insert(ElementKey::Locked, false);
         let _ = em.insert(
-            "points",
+            ElementKey::Style,
+            LoroValue::Binary(style.to_bytes().into()),
+        );
+        let _ = em.insert(
+            ElementKey::Points,
             LoroValue::Binary(postcard::to_allocvec(&points).unwrap_or_default().into()),
         );
         let _ = self
             .doc
-            .get_movable_list(LAYERS)
+            .get_movable_list(Root::Layers.as_str())
             .push(NodeId::Element(id.clone()).encode().as_str());
         self.doc.commit();
 

@@ -4600,7 +4600,7 @@ fn doc_embed_with_an_unreadable_reference_falls_back_to_a_frame() {
         .expect("element present");
 
     // Corrupt the stored reference behind the engine's back.
-    st.debug_set_element_field(&id, "doc_id", "not-a-uuid");
+    st.debug_set_element_field(&id, crate::logic::state::ElementKey::DocId, "not-a-uuid");
 
     assert!(
         only_doc_embed(&st).is_none(),
@@ -6529,7 +6529,7 @@ fn a_caption_changes_nothing_else_on_the_arrow() {
 /// The stored value of one element, as the document holds it.
 fn stored(st: &ToileState, id: &ElementId) -> loro::LoroValue {
     st.crdt()
-        .get_map(crate::logic::state::ELEMENTS)
+        .get_map(crate::logic::state::Root::Elements.as_str())
         .get_deep_value()
         .into_map()
         .ok()

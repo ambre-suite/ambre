@@ -14,10 +14,12 @@ use loro::{LoroMap, LoroValue};
 
 use crate::logic::boolean::{FLATTEN_TOL, boolean_op};
 use crate::logic::command::{BoolOp, Sources, ToileError, ToileEvent, ToileOutcome};
-use crate::logic::model::{ElementId, ElementStyle, NodeId, ShapeKind};
+use crate::logic::model::{ElementId, ElementKind, ElementStyle, NodeId, ShapeKind};
 
+use super::ToileState;
+use super::codec::has_type;
 use super::codec::{bin_of, bool_of, f64_of, str_of};
-use super::{ELEMENTS, LAYERS, ToileState};
+use super::names::{ElementKey, Fields, Root};
 
 impl ToileState {
     /// Combine the selected shape / path elements with `op`. Needs at least
@@ -40,14 +42,14 @@ impl ToileState {
             let Some(em) = self.element_map(id) else {
                 continue;
             };
-            if bool_of(&em, "locked") {
+            if bool_of(&em, ElementKey::Locked) {
                 continue;
             }
             let Some(path) = element_world_path(&em) else {
                 continue; // not a shape / path element
             };
             if style_bytes.is_none() {
-                style_bytes = Some(bin_of(&em, "style"));
+                style_bytes = Some(bin_of(&em, ElementKey::Style));
             }
             paths.push(path);
             sources.push(id.clone());
@@ -68,24 +70,30 @@ impl ToileState {
         // exactly as `derive::geom_for` reads it back (the element's rotation is
         // identity here, so no local/world reframe is needed).
         let id = self.mint_element_id();
-        let elems = self.doc.get_map(ELEMENTS);
-        let Ok(em) = elems.insert_container(id.as_str(), LoroMap::new()) else {
+        let elems = self.doc.get_map(Root::Elements.as_str());
+        let Ok(em) = elems
+            .insert_container(id.as_str(), LoroMap::new())
+            .map(Fields::<ElementKey>::of)
+        else {
             return self.err_no_element(&id);
         };
-        let _ = em.insert("type", "shape");
-        let _ = em.insert("shape", ShapeKind::Path.tag());
-        let _ = em.insert("x", rect.x0);
-        let _ = em.insert("y", rect.y0);
-        let _ = em.insert("w", rect.width());
-        let _ = em.insert("h", rect.height());
-        let _ = em.insert("rot", 0.0);
-        let _ = em.insert("locked", false);
+        let _ = em.insert(
+            ElementKey::Type,
+            ElementKind::Shape(ShapeKind::Path).type_tag(),
+        );
+        let _ = em.insert(ElementKey::Shape, ShapeKind::Path.tag());
+        let _ = em.insert(ElementKey::X, rect.x0);
+        let _ = em.insert(ElementKey::Y, rect.y0);
+        let _ = em.insert(ElementKey::W, rect.width());
+        let _ = em.insert(ElementKey::H, rect.height());
+        let _ = em.insert(ElementKey::Rot, 0.0);
+        let _ = em.insert(ElementKey::Locked, false);
         let style = style_bytes.unwrap_or_else(|| ElementStyle::default().to_bytes());
-        let _ = em.insert("style", LoroValue::Binary(style.into()));
-        let _ = em.insert("path", result.to_svg());
+        let _ = em.insert(ElementKey::Style, LoroValue::Binary(style.into()));
+        let _ = em.insert(ElementKey::Path, result.to_svg());
         let _ = self
             .doc
-            .get_movable_list(LAYERS)
+            .get_movable_list(Root::Layers.as_str())
             .push(NodeId::Element(id.clone()).encode().as_str());
 
         // Consume the sources in the same commit so the op is one undo item.
@@ -106,18 +114,18 @@ impl ToileState {
 /// `None` when the element is not a shape kind. The local outline per
 /// [`ShapeKind`] is transformed by the same rotation-about-center affine the
 /// renderer uses (`derive::display_element`).
-fn element_world_path(em: &LoroMap) -> Option<BezPath> {
-    if str_of(em, "type") != "shape" {
+fn element_world_path(em: &Fields<ElementKey>) -> Option<BezPath> {
+    if !has_type(em, ElementKind::Shape(ShapeKind::Rect)) {
         return None;
     }
     let (x, y, w, h) = (
-        f64_of(em, "x"),
-        f64_of(em, "y"),
-        f64_of(em, "w"),
-        f64_of(em, "h"),
+        f64_of(em, ElementKey::X),
+        f64_of(em, ElementKey::Y),
+        f64_of(em, ElementKey::W),
+        f64_of(em, ElementKey::H),
     );
     let bounds = Rect::new(x, y, x + w, y + h);
-    let kind = ShapeKind::from_tag(&str_of(em, "shape")).unwrap_or(ShapeKind::Rect);
+    let kind = ShapeKind::from_tag(&str_of(em, ElementKey::Shape)).unwrap_or(ShapeKind::Rect);
     let local = match kind {
         ShapeKind::Rect => bounds.to_path(FLATTEN_TOL),
         ShapeKind::Ellipse => Ellipse::from_rect(bounds).to_path(FLATTEN_TOL),
@@ -128,10 +136,10 @@ fn element_world_path(em: &LoroMap) -> Option<BezPath> {
             p.line_to((bounds.x1, bounds.y1));
             p
         }
-        ShapeKind::Path => BezPath::from_svg(&str_of(em, "path")).unwrap_or_default(),
+        ShapeKind::Path => BezPath::from_svg(&str_of(em, ElementKey::Path)).unwrap_or_default(),
     };
     // World transform: rotation about the AABB center (derive.rs:122-124).
-    let rot = f64_of(em, "rot");
+    let rot = f64_of(em, ElementKey::Rot);
     let center = bounds.center();
     let transform = Affine::translate(center.to_vec2())
         * Affine::rotate(rot)

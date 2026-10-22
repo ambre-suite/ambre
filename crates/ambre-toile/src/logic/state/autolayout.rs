@@ -17,8 +17,10 @@ use crate::logic::autolayout::AutoLayout;
 use crate::logic::command::{ToileError, ToileEvent, ToileOutcome};
 use crate::logic::model::FrameId;
 
-use super::codec::str_of;
-use super::{AUTOLAYOUT, ToileState};
+use super::ToileState;
+use super::codec::has_type;
+use super::names::ElementKey;
+use crate::logic::model::ElementKind;
 
 impl ToileState {
     /// Set (or clear, with `None`) a frame's auto-layout spec. A single LWW
@@ -37,7 +39,7 @@ impl ToileState {
         };
         // Only a frame carries an auto-layout spec. A group also has `children`,
         // so the guard is on the concrete `type`, not on membership.
-        if str_of(&em, "type") != "frame" {
+        if !has_type(&em, ElementKind::Frame) {
             return ToileOutcome::display_only(vec![ToileEvent::Error(
                 ToileError::ContentKindMismatch,
             )]);
@@ -54,20 +56,22 @@ impl ToileState {
                 };
                 // Skip a byte-identical re-write so an unchanged spec is not a
                 // spurious commit / undo item.
-                if let Some(cur) = em.get(AUTOLAYOUT).and_then(|v| v.into_value().ok())
+                if let Some(cur) = em
+                    .get(ElementKey::Autolayout)
+                    .and_then(|v| v.into_value().ok())
                     && let LoroValue::Binary(cur) = cur
                     && cur.as_slice() == bytes.as_slice()
                 {
                     return ToileOutcome::display_only(Vec::new());
                 }
-                let _ = em.insert(AUTOLAYOUT, LoroValue::Binary(bytes.into()));
+                let _ = em.insert(ElementKey::Autolayout, LoroValue::Binary(bytes.into()));
             }
             None => {
                 // Nothing to clear if the frame has no spec.
-                if em.get(AUTOLAYOUT).is_none() {
+                if em.get(ElementKey::Autolayout).is_none() {
                     return ToileOutcome::display_only(Vec::new());
                 }
-                let _ = em.delete(AUTOLAYOUT);
+                let _ = em.delete(ElementKey::Autolayout);
             }
         }
         self.doc.commit();
@@ -81,7 +85,7 @@ impl ToileState {
     /// a frame / does not exist. Test / derivation accessor.
     pub fn auto_layout(&self, frame: &FrameId) -> Option<AutoLayout> {
         let em = self.element_map(frame)?;
-        let LoroValue::Binary(bytes) = em.get(AUTOLAYOUT)?.into_value().ok()? else {
+        let LoroValue::Binary(bytes) = em.get(ElementKey::Autolayout)?.into_value().ok()? else {
             return None;
         };
         postcard::from_bytes(&bytes).ok()

@@ -7,7 +7,6 @@
 use std::collections::HashSet;
 
 use kurbo::{Affine, BezPath, Rect};
-use loro::LoroMap;
 
 use crate::logic::animate::{FrameSnapshot, SnapElement};
 use crate::logic::command::{
@@ -21,10 +20,12 @@ use crate::logic::model::{
 use crate::logic::stroke::smooth_stroke;
 
 use super::ToileState;
+use super::codec::has_type;
 use super::codec::{
-    bin_of, body_of, bool_of, connector_label, doc_type_from_tag, f64_of, kind_from_tags,
-    read_connector, str_of,
+    bin_of, body_of, bool_of, connector_label, doc_type_from_tag, f64_of, kind_of, read_connector,
+    str_of,
 };
+use super::names::{BoardKey, ConnectorKey, ElementKey, Fields, board};
 
 impl ToileState {
     pub(super) fn viewport_event(&self) -> ToileEvent {
@@ -101,7 +102,7 @@ impl ToileState {
             viewport: vp,
             // One map lookup per frame: the register is board scaffolding,
             // and a peer can rewrite it at any time (`TOILE-UI-279`).
-            grid_unit: f64_of(&self.doc.get_map(super::BOARD), "grid_size"),
+            grid_unit: f64_of(&board(&self.doc), BoardKey::GridSize),
             reactions: self.reaction_tallies(&visible),
             pins: self.comment_pins(&visible, &vp),
             nodes,
@@ -123,24 +124,24 @@ impl ToileState {
             .into_iter()
             .filter_map(|id| {
                 let em = self.element_map(&id)?;
-                let style = self.style_read(&bin_of(&em, "style"));
+                let style = self.style_read(&bin_of(&em, ElementKey::Style));
                 // A group carries no stored geometry: its rect is the derived
                 // member-union AABB, read from the bounds cache.
-                let bounds = if str_of(&em, "type") == "group" {
+                let bounds = if has_type(&em, ElementKind::Group) {
                     self.bounds.get(&id).copied().unwrap_or_default()
                 } else {
                     let (x, y, w, h) = (
-                        f64_of(&em, "x"),
-                        f64_of(&em, "y"),
-                        f64_of(&em, "w"),
-                        f64_of(&em, "h"),
+                        f64_of(&em, ElementKey::X),
+                        f64_of(&em, ElementKey::Y),
+                        f64_of(&em, ElementKey::W),
+                        f64_of(&em, ElementKey::H),
                     );
                     Rect::new(x, y, x + w, y + h)
                 };
                 Some(SnapElement {
                     id,
                     bounds,
-                    rotation: f64_of(&em, "rot"),
+                    rotation: f64_of(&em, ElementKey::Rot),
                     opacity: style.opacity,
                     fill: style.fill,
                 })
@@ -155,14 +156,14 @@ impl ToileState {
     /// presentation camera pass as the fit target for a slide.
     pub(crate) fn element_rect(&self, id: &ElementId) -> Option<Rect> {
         let em = self.element_map(id)?;
-        if str_of(&em, "type") == "group" {
+        if has_type(&em, ElementKind::Group) {
             Some(self.bounds.get(id).copied().unwrap_or_default())
         } else {
             let (x, y, w, h) = (
-                f64_of(&em, "x"),
-                f64_of(&em, "y"),
-                f64_of(&em, "w"),
-                f64_of(&em, "h"),
+                f64_of(&em, ElementKey::X),
+                f64_of(&em, ElementKey::Y),
+                f64_of(&em, ElementKey::W),
+                f64_of(&em, ElementKey::H),
             );
             Some(Rect::new(x, y, x + w, y + h))
         }
@@ -172,24 +173,22 @@ impl ToileState {
         let em = self.element_map(id)?;
         // A group has no stored geometry: its bounds are the derived member union
         // Read them from the derived cache.
-        let is_group = str_of(&em, "type") == "group";
+        let is_group = has_type(&em, ElementKind::Group);
         let (x, y, w, h) = if is_group {
             let r = self.bounds.get(id).copied().unwrap_or_default();
             (r.x0, r.y0, r.width(), r.height())
         } else {
             (
-                f64_of(&em, "x"),
-                f64_of(&em, "y"),
-                f64_of(&em, "w"),
-                f64_of(&em, "h"),
+                f64_of(&em, ElementKey::X),
+                f64_of(&em, ElementKey::Y),
+                f64_of(&em, ElementKey::W),
+                f64_of(&em, ElementKey::H),
             )
         };
-        let rot = f64_of(&em, "rot");
-        let locked = bool_of(&em, "locked");
-        let style = self.style_read(&bin_of(&em, "style"));
-        let type_tag = str_of(&em, "type");
-        let shape_kind = ShapeKind::from_tag(&str_of(&em, "shape"));
-        let kind = kind_from_tags(&type_tag, shape_kind);
+        let rot = f64_of(&em, ElementKey::Rot);
+        let locked = bool_of(&em, ElementKey::Locked);
+        let style = self.style_read(&bin_of(&em, ElementKey::Style));
+        let kind = kind_of(&em);
         let bounds = Rect::new(x, y, x + w, y + h);
         // World transform: rotation about the AABB center.
         let center = bounds.center();
@@ -207,14 +206,14 @@ impl ToileState {
             geom,
             // The link register, absent on an element that carries none
             // (`toile-links`).
-            link: self.link_read(&bin_of(&em, "link")),
+            link: self.link_read(&bin_of(&em, ElementKey::Link)),
             // The immediate enclosing group (if any): the UI resolves group-scope
             // selection by walking this edge upward.
             group: self.enclosing_group(id),
         })
     }
 
-    fn geom_for(&self, em: &LoroMap, kind: ElementKind, bounds: Rect) -> DisplayGeom {
+    fn geom_for(&self, em: &Fields<ElementKey>, kind: ElementKind, bounds: Rect) -> DisplayGeom {
         match kind {
             ElementKind::Shape(ShapeKind::Rect) => DisplayGeom::Rect,
             ElementKind::Shape(ShapeKind::Ellipse) => DisplayGeom::Ellipse,
@@ -225,17 +224,17 @@ impl ToileState {
                 p.line_to((bounds.x1, bounds.y1));
                 DisplayGeom::Path(p)
             }
-            ElementKind::Shape(ShapeKind::Path) => {
-                DisplayGeom::Path(BezPath::from_svg(&str_of(em, "path")).unwrap_or_default())
-            }
-            ElementKind::Image => DisplayGeom::Image(str_of(em, "hash")),
-            ElementKind::Embed => DisplayGeom::Embed(str_of(em, "url")),
+            ElementKind::Shape(ShapeKind::Path) => DisplayGeom::Path(
+                BezPath::from_svg(&str_of(em, ElementKey::Path)).unwrap_or_default(),
+            ),
+            ElementKind::Image => DisplayGeom::Image(str_of(em, ElementKey::Hash)),
+            ElementKind::Embed => DisplayGeom::Embed(str_of(em, ElementKey::Url)),
             ElementKind::DocEmbed => {
                 // Parse back the reference; on any parse failure fall to Frame so
                 // the node still paints a placeholder rather than vanishing.
                 match (
-                    ambre_core::DocumentId::parse_str(&str_of(em, "doc_id")),
-                    doc_type_from_tag(&str_of(em, "doc_type")),
+                    ambre_core::DocumentId::parse_str(&str_of(em, ElementKey::DocId)),
+                    doc_type_from_tag(&str_of(em, ElementKey::DocType)),
                 ) {
                     (Ok(document_id), Some(doc_type)) => DisplayGeom::DocEmbed {
                         document_id,
@@ -245,12 +244,12 @@ impl ToileState {
                     _ => DisplayGeom::Frame(String::new()),
                 }
             }
-            ElementKind::Frame => DisplayGeom::Frame(str_of(em, "name")),
+            ElementKind::Frame => DisplayGeom::Frame(str_of(em, ElementKey::Name)),
             ElementKind::Group => DisplayGeom::Group,
             ElementKind::Sticky => DisplayGeom::Sticky(body_of(em)),
             ElementKind::Text => DisplayGeom::Text(body_of(em)),
             ElementKind::Drawing => {
-                let raw = bin_of(em, "points");
+                let raw = bin_of(em, ElementKey::Points);
                 let pts: Vec<StrokePoint> = postcard::from_bytes(&raw).unwrap_or_else(|_| {
                     // A stroke this build cannot decode draws as no stroke at
                     // all, which is an absence the user is owed a word about
@@ -303,7 +302,7 @@ impl ToileState {
             path,
             // A connector minted before the field existed reads back an empty
             // binary, which decodes to the default: the same look it had.
-            style: self.style_read(&bin_of(&cm, "style")),
+            style: self.style_read(&bin_of(&cm, ConnectorKey::Style)),
             arrows: conn.arrows,
             label: connector_label(&cm),
         })
@@ -318,7 +317,7 @@ mod tests {
         DisplayNode, DisplayViewport, InitContent, ToileCommand, ToileEvent, Viewport,
     };
     use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
-    use crate::logic::state::ToileState;
+    use crate::logic::state::{BoardKey, ToileState};
 
     fn rect_at(x: f64, y: f64) -> ToileCommand {
         ToileCommand::CreateElement {
@@ -386,10 +385,7 @@ mod tests {
     fn a_frame_carries_the_boards_grid_unit() {
         let st = ToileState::new();
         assert_eq!(st.derive_viewport().grid_unit, 32.0, "the scaffold's unit");
-        let _ = st
-            .doc
-            .get_map(super::super::BOARD)
-            .insert("grid_size", 50.0);
+        let _ = crate::logic::state::board(&st.doc).insert(BoardKey::GridSize, 50.0);
         assert_eq!(st.derive_viewport().grid_unit, 50.0, "a rewritten unit");
     }
 

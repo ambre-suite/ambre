@@ -16,7 +16,8 @@ use crate::logic::interop::{ExportElement, export_svg};
 use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
 
 use super::ToileState;
-use super::codec::{bin_of, body_of, f64_of, kind_from_tags, str_of};
+use super::codec::{bin_of, body_of, f64_of, kind_of, str_of};
+use super::names::{ElementKey, FieldValues, MediaKey, Root};
 
 /// The name an SVG export carries. The board's own title is a launcher concern:
 /// the Logic thread holds a document, not its listing entry. The name therefore
@@ -31,13 +32,16 @@ impl ToileState {
     /// ciphertext on the relay, and no path here fetches it. Both the screen and
     /// an exported page therefore get this resolution (`TOILE-IO-100`).
     pub(super) fn decoded_thumbnail(&self, hash: &str) -> Option<(u32, u32, Vec<u8>)> {
-        let loro::LoroValue::Map(entries) = self.doc.get_map(super::MEDIA).get_deep_value() else {
+        let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
+        else {
             return None;
         };
         let loro::LoroValue::Map(fields) = entries.get(hash)? else {
             return None;
         };
-        let loro::LoroValue::Binary(thumb) = fields.get("thumb")? else {
+        let loro::LoroValue::Binary(thumb) =
+            FieldValues::<MediaKey>::of(fields).get(MediaKey::Thumb)?
+        else {
             return None;
         };
         let rgba = image::load_from_memory(thumb).ok()?.to_rgba8();
@@ -48,13 +52,16 @@ impl ToileState {
     /// carries one (`toile-media`). Handed to the SVG export, which writes them
     /// inline (`TOILE-IO-087`).
     fn thumbnail_png(&self, hash: &str) -> Option<Vec<u8>> {
-        let loro::LoroValue::Map(entries) = self.doc.get_map(super::MEDIA).get_deep_value() else {
+        let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
+        else {
             return None;
         };
         let loro::LoroValue::Map(fields) = entries.get(hash)? else {
             return None;
         };
-        let loro::LoroValue::Binary(thumb) = fields.get("thumb")? else {
+        let loro::LoroValue::Binary(thumb) =
+            FieldValues::<MediaKey>::of(fields).get(MediaKey::Thumb)?
+        else {
             return None;
         };
         Some(thumb.to_vec())
@@ -109,21 +116,27 @@ impl ToileState {
     /// union for a group.
     fn export_element(&self, id: &ElementId) -> Option<ExportElement> {
         let em = self.element_map(id)?;
-        let type_tag = str_of(&em, "type");
-        let kind = kind_from_tags(&type_tag, ShapeKind::from_tag(&str_of(&em, "shape")));
-        let rect = if type_tag == "group" {
+        let kind = kind_of(&em);
+        let rect = if kind == ElementKind::Group {
             self.bounds.get(id).copied()?
         } else {
-            let (x, y) = (f64_of(&em, "x"), f64_of(&em, "y"));
-            Rect::new(x, y, x + f64_of(&em, "w"), y + f64_of(&em, "h"))
+            let (x, y) = (f64_of(&em, ElementKey::X), f64_of(&em, ElementKey::Y));
+            Rect::new(
+                x,
+                y,
+                x + f64_of(&em, ElementKey::W),
+                y + f64_of(&em, ElementKey::H),
+            )
         };
         Some(ExportElement {
             kind,
             rect,
-            rotation: f64_of(&em, "rot"),
-            style: self.style_read(&bin_of(&em, "style")),
+            rotation: f64_of(&em, ElementKey::Rot),
+            style: self.style_read(&bin_of(&em, ElementKey::Style)),
             path: match kind {
-                ElementKind::Shape(ShapeKind::Path) => BezPath::from_svg(&str_of(&em, "path")).ok(),
+                ElementKind::Shape(ShapeKind::Path) => {
+                    BezPath::from_svg(&str_of(&em, ElementKey::Path)).ok()
+                }
                 _ => None,
             },
             text: match kind {
@@ -131,13 +144,13 @@ impl ToileState {
                 _ => None,
             },
             media_hash: match kind {
-                ElementKind::Image => Some(ambre_core::ContentHash(str_of(&em, "hash"))),
+                ElementKind::Image => Some(ambre_core::ContentHash(str_of(&em, ElementKey::Hash))),
                 _ => None,
             },
             // The plaintext thumbnail, re-encoded as the PNG the export writes
             // inline (`TOILE-IO-087`).
             image_png: match kind {
-                ElementKind::Image => self.thumbnail_png(&str_of(&em, "hash")),
+                ElementKind::Image => self.thumbnail_png(&str_of(&em, ElementKey::Hash)),
                 _ => None,
             },
         })
@@ -189,14 +202,17 @@ impl ToileState {
     /// failing the export.
     pub(super) fn decoded_media(&self) -> crate::ui::render::ImageStore {
         let mut out = crate::ui::render::ImageStore::new();
-        let loro::LoroValue::Map(entries) = self.doc.get_map(super::MEDIA).get_deep_value() else {
+        let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
+        else {
             return out;
         };
         for (hash, entry) in entries.iter() {
             let loro::LoroValue::Map(fields) = entry else {
                 continue;
             };
-            let Some(loro::LoroValue::Binary(thumb)) = fields.get("thumb") else {
+            let Some(loro::LoroValue::Binary(thumb)) =
+                FieldValues::<MediaKey>::of(fields).get(MediaKey::Thumb)
+            else {
                 continue;
             };
             let Ok(img) = image::load_from_memory(thumb) else {
