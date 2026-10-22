@@ -9,7 +9,7 @@
 
 use ambre_commands::CommandId;
 
-use crate::events::{ActiveMarks, ProseCommand, TriState};
+use crate::events::{ActiveMarks, MarkAction, ProseCommand, TriState};
 use crate::layout::run::RunSpan;
 use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
@@ -117,7 +117,11 @@ impl ProseUiState {
             anchor,
             focus,
             key: key.to_owned(),
-            apply: !on,
+            action: if on {
+                MarkAction::Remove
+            } else {
+                MarkAction::Apply
+            },
         })
     }
 

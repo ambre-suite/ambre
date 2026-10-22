@@ -1539,7 +1539,7 @@ fn a_mixed_control_applies_its_mark_to_the_whole_selection() {
             anchor: (first, DocOffset::ZERO),
             focus: (second, DocOffset::new(6)),
             key: "b".to_owned(),
-            apply: true,
+            action: ambre_bus::app::prose::MarkAction::Apply,
         })
     );
     assert!(rig.all_marked(first, "b") && rig.all_marked(second, "b"));
@@ -1548,7 +1548,10 @@ fn a_mixed_control_applies_its_mark_to_the_whole_selection() {
     let sent = rig.format(crate::commands::BOLD);
     assert!(matches!(
         sent,
-        Some(ProseCommand::FormatSelection { apply: false, .. })
+        Some(ProseCommand::FormatSelection {
+            action: ambre_bus::app::prose::MarkAction::Remove,
+            ..
+        })
     ));
     rig.read_marks();
     assert_eq!(rig.ui.toolbar().active.map(|m| m.bold), Some(TriState::Off));

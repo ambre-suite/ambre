@@ -174,7 +174,7 @@ impl ProseUiState {
                 EffectiveStyle::from_parts(
                     &crate::doc::DocDefaults::default(),
                     &ambre_bus::app::prose::ParagraphStyle::default(),
-                    false,
+                    crate::layout::measure::Weight::Regular,
                 )
             });
         // Typed after a marked span, the text lands in it (`PROSE-UI-208`).

@@ -15,6 +15,13 @@ use crate::suggest;
 
 use super::ProseState;
 
+/// What resolving a suggestion does with it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Verdict {
+    Reject,
+    Accept,
+}
+
 /// The suggestion this session is extending, and the span it covers in one
 /// block. The next edit joins it when it touches that span
 /// (`PROSE-FEAT-085`), and starts another when it does not (`PROSE-FEAT-086`).
@@ -213,8 +220,12 @@ impl ProseState {
     /// `PROSE-FEAT-273`). A suggestion no longer in the document is nothing
     /// to do, so a second accept changes nothing (`PROSE-FEAT-084`,
     /// `PROSE-FEAT-274`).
-    pub(super) fn resolve_suggestion(&mut self, id: &SuggestionId, accept: bool) -> ProseOutcome {
-        match self.settle_suggestion(id, accept) {
+    pub(super) fn resolve_suggestion(
+        &mut self,
+        id: &SuggestionId,
+        verdict: Verdict,
+    ) -> ProseOutcome {
+        match self.settle_suggestion(id, verdict) {
             Ok(false) => ProseOutcome::nothing(),
             Ok(true) => {
                 let event = self.suggestions_event();
@@ -228,7 +239,7 @@ impl ProseState {
     /// own command would (`PROSE-FEAT-276`). The set is the one pending when
     /// the command starts: the command runs to its end before any remote
     /// delta is read.
-    pub(super) fn resolve_all(&mut self, accept: bool) -> ProseOutcome {
+    pub(super) fn resolve_all(&mut self, verdict: Verdict) -> ProseOutcome {
         let ids: Vec<SuggestionId> = self
             .suggestions()
             .into_iter()
@@ -236,7 +247,7 @@ impl ProseState {
             .collect();
         let mut wrote = false;
         for id in &ids {
-            match self.settle_suggestion(id, accept) {
+            match self.settle_suggestion(id, verdict) {
                 Ok(done) => wrote |= done,
                 Err(e) => return Self::err_write(&e),
             }
@@ -256,7 +267,7 @@ impl ProseState {
     /// another suggestion carries is left alone (`PROSE-FEAT-271`,
     /// `PROSE-FEAT-275`). A rejected insertion leaves no trace: its text, its
     /// mark and its entry all go (`PROSE-FEAT-004`).
-    fn settle_suggestion(&mut self, id: &SuggestionId, accept: bool) -> Result<bool, String> {
+    fn settle_suggestion(&mut self, id: &SuggestionId, verdict: Verdict) -> Result<bool, String> {
         let spans: Vec<_> = suggest::spans(&self.doc, &suggest::text_blocks(&self.doc))
             .into_iter()
             .filter(|(other, ..)| other == id)
@@ -269,8 +280,9 @@ impl ProseState {
             let body = doc::get_block_text(&self.doc, block);
             let range = DocSpan::new(*start, *end).to_usize_range();
             let removes = matches!(
-                (kind, accept),
-                (SuggestionKind::Insertion, false) | (SuggestionKind::Deletion, true)
+                (kind, verdict),
+                (SuggestionKind::Insertion, Verdict::Reject)
+                    | (SuggestionKind::Deletion, Verdict::Accept)
             );
             let written = if removes {
                 body.delete(range.start, range.len())

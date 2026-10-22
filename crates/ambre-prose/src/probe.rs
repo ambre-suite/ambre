@@ -19,6 +19,22 @@ pub fn lays_out(event: &ProseEvent) -> bool {
     matches!(event, ProseEvent::LayoutShaped { .. })
 }
 
+/// Whether a handled input sent a command to the Logic thread.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dispatch {
+    /// Nothing left: the view acted alone.
+    Kept,
+    /// A command left.
+    Sent,
+}
+
+/// Whether an event from the Logic thread laid the document out again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Answer {
+    Other,
+    Layout,
+}
+
 /// The name of the echo measure: input to draft updated.
 pub const ECHO: &str = "ambre:echo";
 /// The name of the confirmation measure: input to the Logic thread's
@@ -93,14 +109,14 @@ impl KeyProbe {
 
     /// An input the view consumed, handled from `start` to `now`. The
     /// entries it added to `draft` are echoed now and wait on their
-    /// confirmation. `sent` says whether a command left: one the draft does
-    /// not hold is drawn only once its layout arrives.
+    /// confirmation. `dispatch` says whether a command left: one the draft
+    /// does not hold is drawn only once its layout arrives.
     pub fn handled(
         &mut self,
         start: ambre_core::PageTime,
         now: ambre_core::PageTime,
         draft: &DraftBuffer,
-        sent: bool,
+        dispatch: Dispatch,
     ) -> Vec<Measure> {
         // Acknowledgement numbers only grow, so an entry above the last one
         // seen is one this input added.
@@ -116,7 +132,7 @@ impl KeyProbe {
             .extend(fresh.iter().map(|&seq| (seq, start, self.frame)));
         self.undrawn.push(Undrawn {
             start,
-            needs_layout: sent && fresh.is_empty(),
+            needs_layout: dispatch == Dispatch::Sent && fresh.is_empty(),
         });
         if fresh.is_empty() {
             return Vec::new();
@@ -134,7 +150,7 @@ impl KeyProbe {
         &mut self,
         now: ambre_core::PageTime,
         draft: &DraftBuffer,
-        laid: bool,
+        answer: Answer,
     ) -> Vec<Measure> {
         let pending: Vec<ambre_bus::app::prose::TextAck> = draft
             .entries()
@@ -156,7 +172,7 @@ impl KeyProbe {
             });
             false
         });
-        if laid {
+        if answer == Answer::Layout {
             for input in &mut self.undrawn {
                 input.needs_layout = false;
             }
@@ -227,7 +243,7 @@ mod tests {
             ambre_core::PageTime(10.0),
             ambre_core::PageTime(10.5),
             &draft,
-            true,
+            Dispatch::Sent,
         );
         assert_eq!(echo.len(), 1);
         assert_eq!(echo[0].name, ECHO);
@@ -239,12 +255,12 @@ mod tests {
 
         assert!(
             probe
-                .answered(ambre_core::PageTime(15.0), &draft, false)
+                .answered(ambre_core::PageTime(15.0), &draft, Answer::Other)
                 .is_empty(),
             "not yet confirmed"
         );
         draft.confirm(ambre_bus::app::prose::TextAck(7));
-        let confirm = probe.answered(ambre_core::PageTime(20.0), &draft, false);
+        let confirm = probe.answered(ambre_core::PageTime(20.0), &draft, Answer::Other);
         assert_eq!(confirm.len(), 1);
         assert_eq!(confirm[0].name, CONFIRM);
         assert!((confirm[0].duration() - 10.0).abs() < 1e-9);
@@ -262,7 +278,7 @@ mod tests {
                     ambre_core::PageTime(0.0),
                     ambre_core::PageTime(1.0),
                     &draft,
-                    true
+                    Dispatch::Sent
                 )
                 .is_empty(),
             "no echo without a draft"
@@ -271,7 +287,7 @@ mod tests {
             probe.painted(ambre_core::PageTime(5.0)).is_empty(),
             "the frame before the layout shows nothing"
         );
-        probe.answered(ambre_core::PageTime(30.0), &draft, true);
+        probe.answered(ambre_core::PageTime(30.0), &draft, Answer::Layout);
         let caret = probe.painted(ambre_core::PageTime(33.0));
         assert_eq!(caret.len(), 1);
         assert!((caret[0].duration() - 33.0).abs() < 1e-9);
@@ -293,12 +309,12 @@ mod tests {
             ambre_core::PageTime(0.0),
             ambre_core::PageTime(0.1),
             &draft,
-            true,
+            Dispatch::Sent,
         );
         draft.confirm(ambre_bus::app::prose::TextAck(1));
         assert_eq!(
             probe
-                .answered(ambre_core::PageTime(0.5), &draft, false)
+                .answered(ambre_core::PageTime(0.5), &draft, Answer::Other)
                 .len(),
             1
         );
@@ -312,11 +328,11 @@ mod tests {
             ambre_core::PageTime(1.0),
             ambre_core::PageTime(1.1),
             &draft,
-            true,
+            Dispatch::Sent,
         );
         assert_eq!(
             probe
-                .answered(ambre_core::PageTime(1.5), &draft, false)
+                .answered(ambre_core::PageTime(1.5), &draft, Answer::Other)
                 .len(),
             0,
             "a confirmed entry is not new"
@@ -325,7 +341,7 @@ mod tests {
         draft.laid();
         assert_eq!(
             probe
-                .answered(ambre_core::PageTime(9.0), &draft, true)
+                .answered(ambre_core::PageTime(9.0), &draft, Answer::Layout)
                 .len(),
             1
         );
@@ -347,7 +363,7 @@ mod tests {
             ambre_core::PageTime(0.0),
             ambre_core::PageTime(0.1),
             &draft,
-            true,
+            Dispatch::Sent,
         );
         draft.push_str(
             ambre_bus::app::prose::TextAck(2),
@@ -359,12 +375,12 @@ mod tests {
             ambre_core::PageTime(1.0),
             ambre_core::PageTime(1.1),
             &draft,
-            true,
+            Dispatch::Sent,
         );
         draft.confirm(ambre_bus::app::prose::TextAck(1));
         draft.confirm(ambre_bus::app::prose::TextAck(2));
         draft.laid();
-        let confirm = probe.answered(ambre_core::PageTime(9.0), &draft, true);
+        let confirm = probe.answered(ambre_core::PageTime(9.0), &draft, Answer::Layout);
         assert_eq!(confirm.len(), 2);
     }
 
@@ -379,7 +395,7 @@ mod tests {
                     ambre_core::PageTime(0.0),
                     ambre_core::PageTime(0.2),
                     &draft,
-                    false
+                    Dispatch::Kept
                 )
                 .is_empty()
         );
@@ -403,17 +419,17 @@ mod tests {
             ambre_core::PageTime(0.0),
             ambre_core::PageTime(0.1),
             &draft,
-            true,
+            Dispatch::Sent,
         );
         probe.frame();
-        probe.answered(ambre_core::PageTime(16.0), &draft, false);
+        probe.answered(ambre_core::PageTime(16.0), &draft, Answer::Other);
         assert!(
             probe.take_counts().is_empty(),
             "the echo frame has no answer"
         );
         probe.frame();
         draft.confirm(ambre_bus::app::prose::TextAck(1));
-        probe.answered(ambre_core::PageTime(33.0), &draft, false);
+        probe.answered(ambre_core::PageTime(33.0), &draft, Answer::Other);
         assert_eq!(probe.take_counts(), [2]);
         assert!(probe.take_counts().is_empty(), "a count is taken once");
     }

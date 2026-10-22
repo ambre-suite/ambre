@@ -194,8 +194,17 @@ fn hex_colour(value: u32) -> Option<String> {
 
 /// A width or a padding the format holds: finite, and not negative. A column
 /// width must also be above zero.
-fn usable(value: f32, zero_allowed: bool) -> bool {
-    value.is_finite() && (value > 0.0 || (zero_allowed && value == 0.0))
+fn usable(value: f32, floor: Floor) -> bool {
+    value.is_finite() && (value > 0.0 || (floor == Floor::ZeroAllowed && value == 0.0))
+}
+
+/// The least a width or a padding may be.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Floor {
+    /// A column width: above zero.
+    AboveZero,
+    /// A border or a padding: zero or more.
+    ZeroAllowed,
 }
 
 /// The reads a test takes of a table. The layout reads the grid and the
@@ -432,7 +441,7 @@ impl ProseState {
             return Self::err_no_block(table);
         };
         let width = width_pt.unwrap_or(doc::DEFAULT_COLUMN_WIDTH_PT);
-        if !usable(width, false) {
+        if !usable(width, Floor::AboveZero) {
             return Self::err_table(format!("a width of {width} pt"));
         }
         let Some(widths) = doc::col_widths_read(&tree, table) else {
@@ -506,7 +515,7 @@ impl ProseState {
         if Grid::read(&tree, table).is_none() {
             return Self::err_no_block(table);
         }
-        if !usable(width_pt, false) {
+        if !usable(width_pt, Floor::AboveZero) {
             return Self::err_table(format!("a width of {width_pt} pt"));
         }
         let Some(widths) = doc::col_widths_read(&tree, table) else {
@@ -659,7 +668,7 @@ impl ProseState {
             writes.push((doc::A_VALIGN, i64::from(valign.code()).into()));
         }
         if let Some(border) = border {
-            if !usable(border.width_pt, true) {
+            if !usable(border.width_pt, Floor::ZeroAllowed) {
                 return Self::err_table(format!("a border of {} pt", border.width_pt));
             }
             let Some(hex) = hex_colour(border.color) else {
@@ -676,7 +685,7 @@ impl ProseState {
             writes.push((doc::A_EDGE_COLOR, hex.into()));
         }
         if let Some(padding) = padding_pt {
-            if !usable(padding, true) {
+            if !usable(padding, Floor::ZeroAllowed) {
                 return Self::err_table(format!("a padding of {padding} pt"));
             }
             writes.push((doc::A_PADDING, f64::from(padding).into()));

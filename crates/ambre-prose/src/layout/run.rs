@@ -1179,7 +1179,7 @@ mod tests {
         EffectiveStyle::from_parts(
             &doc::DocDefaults::default(),
             &ParagraphStyle::default(),
-            false,
+            crate::layout::measure::Weight::Regular,
         )
     }
 

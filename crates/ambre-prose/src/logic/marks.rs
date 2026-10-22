@@ -208,7 +208,7 @@ impl ProseState {
         anchor: (BlockId, DocOffset),
         focus: (BlockId, DocOffset),
         key: &str,
-        apply: bool,
+        action: ambre_bus::app::prose::MarkAction,
     ) -> ProseOutcome {
         if !BAR_KEYS.contains(&key) {
             return ProseOutcome::refused(ProseRefusal::UnknownMark(key.to_owned()));
@@ -230,10 +230,9 @@ impl ProseState {
             if end > body.len_unicode() {
                 return Self::err_bad_range();
             }
-            let written = if apply {
-                body.mark(start..end, key, "")
-            } else {
-                body.unmark(start..end, key)
+            let written = match action {
+                ambre_bus::app::prose::MarkAction::Apply => body.mark(start..end, key, ""),
+                ambre_bus::app::prose::MarkAction::Remove => body.unmark(start..end, key),
             };
             if let Err(e) = written {
                 return Self::err_write(&format!("{e:?}"));

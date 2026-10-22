@@ -321,6 +321,14 @@ impl DraftBuffer {
     }
 }
 
+/// Whose change of the text an event answers: this view's, which it drew
+/// when it sent the command, or a change it never drew.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Origin {
+    Remote,
+    Local,
+}
+
 /// The UI thread's whole state for one open Prose document.
 ///
 /// Every field is either handed over by the Logic thread or local to this
@@ -602,14 +610,19 @@ impl ProseUiState {
                 edits,
                 removed,
             } => {
-                self.take_acked(*acked, *local);
-                if !*local {
+                let origin = if *local {
+                    Origin::Local
+                } else {
+                    Origin::Remote
+                };
+                self.take_acked(*acked, origin);
+                if origin == Origin::Remote {
                     self.seen = *seq;
                 }
-                self.take_text_change(*local, edits, removed);
+                self.take_text_change(origin, edits, removed);
             }
             ProseEvent::Synced { acked } => {
-                self.take_acked(*acked, true);
+                self.take_acked(*acked, Origin::Local);
                 // A split the document refused mints nothing to wait for.
                 if self.syncs.pop_front() == Some(true)
                     && self
@@ -709,16 +722,16 @@ impl ProseUiState {
     }
 
     /// Drop the text commands the Logic thread took. A command it took
-    /// as drawn confirms the draft; one it did not ends the draft, whose
-    /// text the change takes back.
-    fn take_acked(&mut self, acked: ambre_bus::app::prose::TextAck, as_drawn: bool) {
+    /// as this view drew it confirms the draft; one it did not ends the
+    /// draft, whose text the change takes back.
+    fn take_acked(&mut self, acked: ambre_bus::app::prose::TextAck, origin: Origin) {
         let mut ends_draft = false;
         while self.popped < acked {
             self.popped = self.popped.next();
             let Some(edit) = self.inflight.pop_front() else {
                 continue;
             };
-            if as_drawn {
+            if origin == Origin::Local {
                 self.draft.confirm(self.popped);
             } else {
                 // The document did not do what the view drew: the catch-up
@@ -741,8 +754,8 @@ impl ProseUiState {
     /// (`PROSE-UI-028`, `PROSE-UI-152`).
     /// A deleted block drops the draft anchored in it (`PROSE-UI-143`), and
     /// the caret collapses beside it (`PROSE-UI-178`).
-    fn take_text_change(&mut self, local: bool, edits: &[TextEdit], removed: &[BlockId]) {
-        if !local {
+    fn take_text_change(&mut self, origin: Origin, edits: &[TextEdit], removed: &[BlockId]) {
+        if origin == Origin::Remote {
             let (inflight, edits) = rebase::transform_all(self.inflight.make_contiguous(), edits);
             self.inflight = inflight.into();
             self.draft.shift(&edits);

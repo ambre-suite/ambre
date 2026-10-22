@@ -116,6 +116,13 @@ impl Default for Reader {
     }
 }
 
+/// Whether a run of text is inline code or plain text.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Inline {
+    Plain,
+    Code,
+}
+
 impl Reader {
     fn dropping(&self) -> bool {
         self.frames.iter().any(|f| matches!(f, Frame::Dropped))
@@ -137,13 +144,13 @@ impl Reader {
         match event {
             Event::Start(tag) => self.start(tag),
             Event::End(tag) => self.end(tag),
-            Event::Text(text) => self.text(&text, false),
-            Event::Code(text) => self.text(&text, true),
+            Event::Text(text) => self.text(&text, Inline::Plain),
+            Event::Code(text) => self.text(&text, Inline::Code),
             Event::SoftBreak | Event::HardBreak => {
                 if matches!(self.leaf, Some(Leaf::Code { .. })) {
-                    self.text("\n", false);
+                    self.text("\n", Inline::Plain);
                 } else {
-                    self.text(" ", false);
+                    self.text(" ", Inline::Plain);
                 }
             }
             Event::Rule => {
@@ -159,7 +166,7 @@ impl Reader {
             Event::Html(_) | Event::InlineHtml(_) => self.warnings.dropped("HTML"),
             Event::InlineMath(text) | Event::DisplayMath(text) => {
                 self.warnings.dropped("math");
-                self.text(&text, false);
+                self.text(&text, Inline::Plain);
             }
         }
     }
@@ -337,7 +344,7 @@ impl Reader {
         }
     }
 
-    fn text(&mut self, text: &str, code: bool) {
+    fn text(&mut self, text: &str, inline: Inline) {
         if self.image > 0 {
             return;
         }
@@ -350,7 +357,7 @@ impl Reader {
             bold: self.bold > 0,
             italic: self.italic > 0,
             strikethrough: self.strike > 0,
-            code,
+            code: inline == Inline::Code,
             link: self.links.last().cloned(),
             ..IrRun::default()
         };

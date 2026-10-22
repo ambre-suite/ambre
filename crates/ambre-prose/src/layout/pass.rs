@@ -211,7 +211,11 @@ impl NotePlan {
             return Self::default();
         }
         let defaults = doc::read_defaults(document);
-        let style = EffectiveStyle::from_parts(&defaults, &ParagraphStyle::default(), false);
+        let style = EffectiveStyle::from_parts(
+            &defaults,
+            &ParagraphStyle::default(),
+            crate::layout::measure::Weight::Regular,
+        );
         let width = style.text_width_px(content_width_px);
         let mut numbers = HashMap::with_capacity(key.len());
         let mut texts = Vec::with_capacity(key.len());
@@ -545,8 +549,12 @@ fn measure_one(
 ) -> MeasuredBlock {
     let (document, tree, defaults) = (scope.document, scope.tree, scope.defaults);
     let content_width_px = scope.content_width_px;
-    let bold = block_type == BlockType::Heading;
-    let style = EffectiveStyle::resolve(defaults, tree, id, bold);
+    let weight = if block_type == BlockType::Heading {
+        crate::layout::measure::Weight::Bold
+    } else {
+        crate::layout::measure::Weight::Regular
+    };
+    let style = EffectiveStyle::resolve(defaults, tree, id, weight);
     let text_width_px = style.text_width_px(content_width_px);
     let mut notes = Vec::new();
     let mut run = None;

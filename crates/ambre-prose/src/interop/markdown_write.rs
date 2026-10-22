@@ -117,7 +117,12 @@ impl Writer {
                 }
                 self.line(indent, &fence);
             }
-            IrBlock::Table { merged, rows } => self.table(*merged, rows, indent),
+            IrBlock::Table { merged, rows } => {
+                if *merged {
+                    self.warnings.unsupported("merged cells");
+                }
+                self.table(rows, indent);
+            }
             IrBlock::Image { .. } => {
                 // The picture lives encrypted in the document and has no
                 // address a Markdown file could name.
@@ -202,10 +207,7 @@ impl Writer {
         }
     }
 
-    fn table(&mut self, merged: bool, rows: &[IrTableRow], indent: &str) {
-        if merged {
-            self.warnings.unsupported("merged cells");
-        }
+    fn table(&mut self, rows: &[IrTableRow], indent: &str) {
         for cell in rows.iter().flat_map(|row| &row.cells) {
             if cell.styled {
                 self.warnings.unsupported("cell formatting");

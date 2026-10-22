@@ -508,6 +508,13 @@ pub struct WordCount {
     pub pages: u32,
 }
 
+/// What a format command does to one presence mark over a selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MarkAction {
+    Remove,
+    Apply,
+}
+
 /// One formatting control's state over a selection
 /// (`features/ambre-spec-prose-toolbar.md section 3`).
 ///
@@ -982,7 +989,7 @@ pub enum ProseCommand {
         anchor: (BlockId, DocOffset),
         focus: (BlockId, DocOffset),
         key: String,
-        apply: bool,
+        action: MarkAction,
     },
 
     // -- Headers and footers (`features/ambre-spec-prose-headers-footers.md`) --

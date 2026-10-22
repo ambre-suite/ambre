@@ -370,7 +370,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::DeleteTableCol.
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditCommentReply.new_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditFootnote.new_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EnableTrackChanges.enabled | field | bool	generic	named setting or fact flag, selects no mode
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::FormatSelection.apply | field | bool	debt	finding: Boolean mode selectors (low-medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::FormatSelection.key | field | String	debt	planned: lot C bis 8: MarkKey (bus carriers of the mark key)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ImportDocument.data | field | Vec<u8>	generic	imported file bytes
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertFootnote.note_text | field | String	free-text	user content
@@ -3422,7 +3421,6 @@ ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Rea
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.links | field | Vec<String>	debt	planned: lot C5 LinkUrl
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.strike | field | u32	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::dropping() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::text(code) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::text(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | heading_level() | ret | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | read(bytes) | param | &[u8]	math	count, size or local index
@@ -3442,7 +3440,6 @@ ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | W
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::line(indent) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::line(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::table(indent) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::table(merged) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | code_span() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | code_span(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | escape() | ret | String	free-text	text content / label / parser input
@@ -3518,8 +3515,6 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.ke
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.keep_with_next | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.space_after_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.space_before_px | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle::from_parts(bold) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle::resolve(bold) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle::text_width_px() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle::text_width_px(content_width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MAX_SEGMENTS | const | usize	math	count, size or local index
@@ -3531,7 +3526,6 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer.shaped |
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::coverage_grew() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure(width_px) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure_block(bold) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure_block(content_width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure_run(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure_run(width_px) | param | f32	math	layout geometry local to algorithm
@@ -3808,7 +3802,6 @@ ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::write_ini
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | clamp_level() | ret | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | clamp_level(level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::stamp() | ret | (bool,ambre_bus::app::prose::TextChangeSeq,ambre_bus::app::prose::TextAck,Vec<TextEdit>,)	generic	independent flag or predicate
-ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::stamp(from_command) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | BLOCKS | const | [&str;29]	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Change | alias | (&'static str,Option<String>)	debt	planned: lot C8 MarkKey
@@ -3829,11 +3822,9 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(style) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(tag) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::ends_blank() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::enter(container) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::enter(style) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::enter(tag) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::flush() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::flush(keep_empty) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::push_str(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::text(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | SKIPPED | const | [&str;14]	free-text	text content / label / parser input
@@ -3860,7 +3851,6 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | safe_link() | ret | bool	debt	planned: lot C5 LinkUrl
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | safe_link(href) | param | &str	debt	planned: lot C5 LinkUrl
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | style_marks(style) | param | &str	generic	CSS style parser over &str
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | tag_marks(in_pre) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | tag_marks(tag) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep(html) | param | &str	free-text	text content / label / parser input
@@ -3920,11 +3910,11 @@ ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_reply(text) | param | &str	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_thread() | ret | Result<LoroMap,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::insert_toc(max_level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
-ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::insert_toc(numbered) | param | bool	debt	finding: mode-selecting bools (confirmed)
+ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::insert_toc(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::update_toc_config(max_level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
-ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::update_toc_config(numbered) | param | bool	debt	finding: mode-selecting bools (confirmed)
+ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::update_toc_config(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::write_toc_settings(max_level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
-ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::write_toc_settings(numbered) | param | bool	debt	finding: mode-selecting bools (confirmed)
+ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::write_toc_settings(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/docfile.rs | crate::logic::docfile | ProseState::export_ambre_plaintext() | ret | Option<Vec<u8>>	math	count, size or local index
 ambre-prose | src/logic/docfile.rs | crate::logic::docfile | ProseState::import_ambre_plaintext(data) | param | &[u8]	math	count, size or local index
 ambre-prose | src/logic/docfile.rs | crate::logic::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	math	count, size or local index
@@ -3984,7 +3974,6 @@ ambre-prose | src/logic/marks.rs | crate::logic::marks | MarkFold.counts | field
 ambre-prose | src/logic/marks.rs | crate::logic::marks | MarkFold.link | field | Option<Option<String>>	debt	planned: lot C5 LinkUrl
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(key) | param | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::format_selection(apply) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::format_selection(key) | param | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::links_touched(key) | param | Option<&str>	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::remove_mark(key) | param | &str	debt	planned: lot C8 MarkKey
@@ -4023,7 +4012,6 @@ ambre-prose | src/logic/mod.rs | crate::logic | ProseState::schema_version() | r
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::set_display_name(name) | param | String	debt	finding: display name as String (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::show_pages(first) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::show_pages(last) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::text_changed(from_command) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | WINDOW_MARGIN | const | u32	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | WINDOW_PAGES | const | u32	math	count, size or local index
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::edit_footnote(text) | param | &str	free-text	text content / label / parser input
@@ -4042,10 +4030,7 @@ ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::resol
 ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::take_greeting() | ret | Option<Vec<u8>>	debt	finding: ephemeral payloads as Vec<u8> (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::enable_track_changes(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::is_suggesting() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::resolve_all(accept) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::resolve_suggestion(accept) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::settle_suggestion() | ret | Result<bool,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::settle_suggestion(accept) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::suggest_insert(text) | param | &str	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::write_entry() | ret | Result<SuggestionId,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | passes_while_suggesting() | ret | bool	generic	independent flag or predicate
@@ -4089,7 +4074,6 @@ ambre-prose | src/logic/tables.rs | crate::logic::tables | hex_colour(value) | p
 ambre-prose | src/logic/tables.rs | crate::logic::tables | holds_text() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/tables.rs | crate::logic::tables | usable() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/tables.rs | crate::logic::tables | usable(value) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/logic/tables.rs | crate::logic::tables | usable(zero_allowed) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/logic/text.rs | crate::logic::text | MarkedRun.marks | field | Vec<(String,loro::LoroValue)>	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/text.rs | crate::logic::text | MarkedRun.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::insert_text(text) | param | &str	free-text	text content / label / parser input
@@ -4151,8 +4135,6 @@ ambre-prose | src/probe.rs | crate::probe | ECHO | const | &str	debt	finding: pr
 ambre-prose | src/probe.rs | crate::probe | KeyProbe.counts | field | Vec<u32>	math	count, size or local index
 ambre-prose | src/probe.rs | crate::probe | KeyProbe.frame | field | u64	math	count, size or local index
 ambre-prose | src/probe.rs | crate::probe | KeyProbe.unconfirmed | field | Vec<(ambre_bus::app::prose::TextAck,ambre_core::PageTime,u64)>	math	count, size or local index
-ambre-prose | src/probe.rs | crate::probe | KeyProbe::answered(laid) | param | bool	debt	finding: mode-selecting bools (confirmed)
-ambre-prose | src/probe.rs | crate::probe | KeyProbe::handled(sent) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/probe.rs | crate::probe | KeyProbe::take_counts() | ret | Vec<u32>	math	count, size or local index
 ambre-prose | src/probe.rs | crate::probe | Measure.name | field | &'static str	debt	finding: probe names and spans as primitives (suspected)
 ambre-prose | src/probe.rs | crate::probe | Measure::duration() | ret | f64	debt	finding: probe names and spans as primitives (suspected)
@@ -4222,9 +4204,7 @@ ambre-prose | src/ui.rs | crate::ui | ProseUiState.reveal_page | field | Option<
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.suggesting | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.syncs | field | VecDeque<bool>	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.x_goal | field | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/ui.rs | crate::ui | ProseUiState::take_acked(as_drawn) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState::take_export() | ret | Option<(String,&'static str,Vec<u8>)>	debt	planned: lot B10 MediaType
-ambre-prose | src/ui.rs | crate::ui | ProseUiState::take_text_change(local) | param | bool	debt	finding: mode-selecting bools (confirmed)
 ambre-prose | src/ui.rs | crate::ui | RECOUNT_DELAY_MS | const | f64	math	layout geometry local to algorithm
 ambre-prose | src/ui.rs | crate::ui | SendResult::accepted() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | StatusFigures.characters | field | String	free-text	text content / label / parser input

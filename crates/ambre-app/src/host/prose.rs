@@ -35,7 +35,7 @@ use ambre_draw::{DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::events::BlockId;
 use ambre_prose::input::{ProseInput, ProseKey};
-use ambre_prose::probe::{CONFIRM_FRAMES, KeyProbe, Measure, SHAPE};
+use ambre_prose::probe::{Answer, CONFIRM_FRAMES, Dispatch, KeyProbe, Measure, SHAPE};
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
 use ambre_prose::view::annotate::{HoveredSuggestion, PanelThread, ScreenRect};
 use ambre_prose::view::paint::PagePalette;
@@ -199,11 +199,15 @@ impl ProseView {
                         event: AppEvent::Prose(event),
                     },
                 ) if document_id == self.document_id => {
-                    let laid = ambre_prose::probe::lays_out(&event);
+                    let answer = if ambre_prose::probe::lays_out(&event) {
+                        Answer::Layout
+                    } else {
+                        Answer::Other
+                    };
                     self.state.apply_event(&event);
                     let answered =
                         self.probe
-                            .answered(super::probe::now_ms(), &self.state.draft, laid);
+                            .answered(super::probe::now_ms(), &self.state.draft, answer);
                     self.timeline.record(answered);
                     self.timeline
                         .count(CONFIRM_FRAMES, self.probe.take_counts());
@@ -580,9 +584,13 @@ impl ProseView {
                 let consumed = self.state.handle_input(&input, &mut send);
                 // A key or typed text starts the three keystroke measures.
                 if consumed && matches!(input, ProseInput::Key { .. } | ProseInput::Text(_)) {
-                    let echoed =
-                        self.probe
-                            .handled(start, super::probe::now_ms(), &self.state.draft, sent);
+                    let dispatch = if sent { Dispatch::Sent } else { Dispatch::Kept };
+                    let echoed = self.probe.handled(
+                        start,
+                        super::probe::now_ms(),
+                        &self.state.draft,
+                        dispatch,
+                    );
                     self.timeline.record(echoed);
                 }
                 // The shell's one open-URL path takes the target
@@ -680,9 +688,12 @@ impl ProseView {
         let input = self.state.paste_input(blob, source);
         let start = super::probe::now_ms();
         if self.feed(&input) {
-            let echoed = self
-                .probe
-                .handled(start, super::probe::now_ms(), &self.state.draft, true);
+            let echoed = self.probe.handled(
+                start,
+                super::probe::now_ms(),
+                &self.state.draft,
+                Dispatch::Sent,
+            );
             self.timeline.record(echoed);
         }
     }

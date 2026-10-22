@@ -110,18 +110,36 @@ pub struct EffectiveStyle {
     pub keep_with_next: bool,
 }
 
+/// The weight a block's text is set in before its marks apply: a heading
+/// is bold.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Weight {
+    #[default]
+    Regular,
+    Bold,
+}
+
 impl EffectiveStyle {
     /// The style a block is measured in: the document defaults, with every
     /// paragraph property the block sets written over them.
     #[must_use]
-    pub fn resolve(defaults: &doc::DocDefaults, tree: &LoroTree, id: &TreeID, bold: bool) -> Self {
+    pub fn resolve(
+        defaults: &doc::DocDefaults,
+        tree: &LoroTree,
+        id: &TreeID,
+        weight: Weight,
+    ) -> Self {
         let paragraph = doc::read_paragraph_style(tree, id);
-        Self::from_parts(defaults, &paragraph, bold)
+        Self::from_parts(defaults, &paragraph, weight)
     }
 
     /// The same resolution, from parts a caller already holds.
     #[must_use]
-    pub fn from_parts(defaults: &doc::DocDefaults, paragraph: &ParagraphStyle, bold: bool) -> Self {
+    pub fn from_parts(
+        defaults: &doc::DocDefaults,
+        paragraph: &ParagraphStyle,
+        weight: Weight,
+    ) -> Self {
         // A stored size outside the range of a font size lays out at zero
         // rather than at a negative height.
         let font_size_px = ambre_core::FontSize::new(defaults.font_size_pt)
@@ -132,7 +150,7 @@ impl EffectiveStyle {
             font_size_px,
             line_height: line_height_of(paragraph, defaults),
             at_least_floor_px: at_least_floor_of(paragraph),
-            bold,
+            bold: weight == Weight::Bold,
             italic: false,
             align: paragraph.align.unwrap_or(Align::Left),
             indent_first_px: px(paragraph.indent_first.unwrap_or(0.0)),
@@ -421,10 +439,10 @@ impl Measurer {
         defaults: &doc::DocDefaults,
         id: &TreeID,
         content_width_px: f32,
-        bold: bool,
+        weight: Weight,
     ) -> (EffectiveStyle, TextMetrics) {
         let tree = document.get_tree(doc::BLOCKS);
-        let style = EffectiveStyle::resolve(defaults, &tree, id, bold);
+        let style = EffectiveStyle::resolve(defaults, &tree, id, weight);
         let text = doc::get_block_text(document, id).to_string();
         let metrics = self.measure(&text, &style, style.text_width_px(content_width_px));
         (style, metrics)
@@ -796,7 +814,7 @@ mod tests {
         EffectiveStyle::from_parts(
             &doc::DocDefaults::default(),
             &ParagraphStyle::default(),
-            false,
+            Weight::Regular,
         )
     }
 
@@ -1071,7 +1089,8 @@ mod tests {
             font_size_pt: 12.0,
             ..doc::DocDefaults::default()
         };
-        let style = EffectiveStyle::from_parts(&defaults, &ParagraphStyle::default(), false);
+        let style =
+            EffectiveStyle::from_parts(&defaults, &ParagraphStyle::default(), Weight::Regular);
         let twelve = ambre_core::FontSize::from_whole_points(12);
         assert_eq!(style.font_size_px, twelve.to_px());
         assert_eq!(style.font_size_px, 16.0);

@@ -317,7 +317,11 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         }
         "defaults" => {
             let defaults = doc::read_defaults(document);
-            let style = EffectiveStyle::from_parts(&defaults, &ParagraphStyle::default(), false);
+            let style = EffectiveStyle::from_parts(
+                &defaults,
+                &ParagraphStyle::default(),
+                crate::layout::measure::Weight::Regular,
+            );
             match stored.key(1)? {
                 "font_family" => Some(format!("body set in {:?}", style.font_family)),
                 "font_size_pt" => Some(format!("body set at {} px", style.font_size_px)),
@@ -364,7 +368,12 @@ fn block_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
             "{name} hidden, so read by no reader until restored"
         ));
     }
-    let style = EffectiveStyle::resolve(&doc::read_defaults(document), &tree, &id, false);
+    let style = EffectiveStyle::resolve(
+        &doc::read_defaults(document),
+        &tree,
+        &id,
+        crate::layout::measure::Weight::Regular,
+    );
     let what = match stored.key(1)? {
         doc::K_TYPE => format!("is a {:?}", doc::block_type_of(&tree, &id)?),
         doc::K_STYLE => format!("styled {:?}", doc::style_of(&tree, &id)?),

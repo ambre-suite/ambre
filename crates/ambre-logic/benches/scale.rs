@@ -281,7 +281,7 @@ fn bench_prose_paragraph_shape(c: &mut Criterion) {
     let style = measure::EffectiveStyle::from_parts(
         &ambre_prose::doc::DocDefaults::default(),
         &ambre_bus::app::prose::ParagraphStyle::default(),
-        false,
+        measure::Weight::Regular,
     );
     let width = style.text_width_px(600.0);
     let mut group = c.benchmark_group("prose_paragraph_shape");

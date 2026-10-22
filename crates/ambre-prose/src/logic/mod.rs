@@ -734,8 +734,8 @@ impl ProseState {
                 anchor,
                 focus,
                 key,
-                apply,
-            } => self.format_selection(anchor, focus, &key, apply),
+                action,
+            } => self.format_selection(anchor, focus, &key, action),
             ProseCommand::SetHeaderEnabled { enabled } => {
                 self.set_side_enabled(bands::Side::Header, enabled)
             }
@@ -805,13 +805,13 @@ impl ProseState {
             }
             ProseCommand::EnableTrackChanges { enabled } => self.enable_track_changes(enabled),
             ProseCommand::AcceptSuggestion { suggestion_id } => {
-                self.resolve_suggestion(&suggestion_id, true)
+                self.resolve_suggestion(&suggestion_id, suggestions::Verdict::Accept)
             }
             ProseCommand::RejectSuggestion { suggestion_id } => {
-                self.resolve_suggestion(&suggestion_id, false)
+                self.resolve_suggestion(&suggestion_id, suggestions::Verdict::Reject)
             }
-            ProseCommand::AcceptAllSuggestions => self.resolve_all(true),
-            ProseCommand::RejectAllSuggestions => self.resolve_all(false),
+            ProseCommand::AcceptAllSuggestions => self.resolve_all(suggestions::Verdict::Accept),
+            ProseCommand::RejectAllSuggestions => self.resolve_all(suggestions::Verdict::Reject),
             ProseCommand::UpdateCursor { pos } => self.update_cursor(&pos),
             ProseCommand::Undo => self.apply_history(HistoryStep::Undo),
             ProseCommand::Redo => self.apply_history(HistoryStep::Redo),
@@ -852,7 +852,7 @@ impl ProseState {
         // The repair is a write of this peer's own, so it needs a commit. The
         // next local command flushes it to the other peers.
         self.doc.commit();
-        events.extend(self.text_changed(false));
+        events.extend(self.text_changed(catchup::ChangeSource::Import));
         events
     }
 
@@ -887,7 +887,7 @@ impl ProseState {
         events.extend(self.validate_tables());
         events.extend(self.regrow_root());
         self.doc.commit();
-        events.extend(self.text_changed(false));
+        events.extend(self.text_changed(catchup::ChangeSource::Import));
         if any_failed {
             events.push(Self::err_remote());
         }
@@ -1143,7 +1143,7 @@ impl ProseState {
         if let Some(delta) = update.clone() {
             display.insert(0, ProseEvent::DocUpdated { delta });
         }
-        if let Some(moved) = self.text_changed(true) {
+        if let Some(moved) = self.text_changed(catchup::ChangeSource::Command) {
             display.insert(usize::from(update.is_some()), moved);
         }
         ProseOutcome {
@@ -1155,9 +1155,9 @@ impl ProseState {
 
     /// What the text did since the last answer, for the view that follows it
     /// (`PROSE-UI-028`). `None` when the change touched no text and deleted
-    /// no block. `from_command` tells a command's change, which the view may
-    /// have drawn, from an import.
-    fn text_changed(&mut self, from_command: bool) -> Option<ProseEvent> {
+    /// no block. `source` tells a command's change, which the view may have
+    /// drawn, from an import.
+    fn text_changed(&mut self, source: catchup::ChangeSource) -> Option<ProseEvent> {
         let moves = self.touched.take_moves();
         let removed = self.gone(moves.removed);
         let edits: Vec<crate::events::TextEdit> = moves
@@ -1169,7 +1169,7 @@ impl ProseState {
                 delta,
             })
             .collect();
-        let (local, seq, acked, edits) = self.catchup.stamp(from_command, edits);
+        let (local, seq, acked, edits) = self.catchup.stamp(source, edits);
         if edits.is_empty() && removed.is_empty() {
             return None;
         }

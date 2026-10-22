@@ -91,8 +91,11 @@ fn paragraph_shape() {
         register_faces(&mut font_cx, bytes);
     }
     let mut layout_cx = LayoutContext::new();
-    let style =
-        EffectiveStyle::from_parts(&DocDefaults::default(), &ParagraphStyle::default(), false);
+    let style = EffectiveStyle::from_parts(
+        &DocDefaults::default(),
+        &ParagraphStyle::default(),
+        ambre_prose::layout::measure::Weight::Regular,
+    );
     // The first paragraph and key, typed in its first word, whose breaks
     // run to the end. The view shapes it again whole, from its first line.
     // Shaped once here, which warms the contexts too.

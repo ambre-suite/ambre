@@ -18,6 +18,16 @@ use crate::rebase;
 
 use super::ProseState;
 
+/// Where a change of the text came from. Only a command's change may be one
+/// the view drew already.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ChangeSource {
+    /// An import or a remote update: the view never drew it.
+    Import,
+    /// A command of this view.
+    Command,
+}
+
 /// What the view drew for the command being dispatched.
 #[derive(Debug, Default)]
 pub(super) enum Prediction {
@@ -111,7 +121,7 @@ impl CatchUp {
     /// the runs the view applies. A change the view did not draw is queued.
     pub(super) fn stamp(
         &mut self,
-        from_command: bool,
+        source: ChangeSource,
         edits: Vec<TextEdit>,
     ) -> (
         bool,
@@ -119,10 +129,9 @@ impl CatchUp {
         ambre_bus::app::prose::TextAck,
         Vec<TextEdit>,
     ) {
-        let prediction = if from_command {
-            std::mem::take(&mut self.predicting)
-        } else {
-            Prediction::None
+        let prediction = match source {
+            ChangeSource::Command => std::mem::take(&mut self.predicting),
+            ChangeSource::Import => Prediction::None,
         };
         let (local, edits) = match prediction {
             Prediction::None => (false, edits),
@@ -263,7 +272,7 @@ impl ProseState {
                 anchor,
                 focus,
                 key,
-                apply,
+                action,
             } => {
                 // The view sends the selection head first, so its tail is an
                 // end: text typed there stays outside.
@@ -280,7 +289,7 @@ impl ProseState {
                     anchor,
                     focus,
                     key,
-                    apply,
+                    action,
                 }
             }
             ProseCommand::ReadMarks { anchor, focus } => {
@@ -315,7 +324,7 @@ impl ProseState {
             && !drawn.is_empty()
         {
             self.catchup.predicting = Prediction::Text(drawn);
-            let (local, seq, acked, edits) = self.catchup.stamp(true, Vec::new());
+            let (local, seq, acked, edits) = self.catchup.stamp(ChangeSource::Command, Vec::new());
             outcome.display.push(ProseEvent::TextChanged {
                 local,
                 seq,
@@ -345,7 +354,7 @@ mod tests {
     #[test]
     fn a_change_the_view_did_not_draw_is_numbered_and_queued() {
         let mut sync = CatchUp::default();
-        let (local, seq, _, _) = sync.stamp(false, vec![run(0, 3)]);
+        let (local, seq, _, _) = sync.stamp(ChangeSource::Import, vec![run(0, 3)]);
         assert!(!local);
         assert_eq!(seq, ambre_bus::app::prose::TextChangeSeq(1));
         assert_eq!(sync.rebase(run(2, 1)), Some(run(5, 1)));
@@ -354,7 +363,7 @@ mod tests {
     #[test]
     fn a_change_the_view_has_seen_moves_nothing() {
         let mut sync = CatchUp::default();
-        sync.stamp(false, vec![run(0, 3)]);
+        sync.stamp(ChangeSource::Import, vec![run(0, 3)]);
         sync.seen = ambre_bus::app::prose::TextChangeSeq(1);
         assert_eq!(sync.rebase(run(2, 1)), Some(run(2, 1)));
     }
@@ -365,7 +374,7 @@ mod tests {
             predicting: Prediction::Text(vec![run(4, 2)]),
             ..CatchUp::default()
         };
-        let (local, seq, _, edits) = sync.stamp(true, Vec::new());
+        let (local, seq, _, edits) = sync.stamp(ChangeSource::Command, Vec::new());
         assert!(!local);
         assert_eq!(seq, ambre_bus::app::prose::TextChangeSeq(1));
         assert_eq!(edits, vec![run(4, -2)]);

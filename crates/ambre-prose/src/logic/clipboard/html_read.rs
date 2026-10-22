@@ -80,7 +80,7 @@ pub(super) fn read(html: &str) -> Vec<ClipBlock> {
     let nodes = parse_document(Arena::new(), ParseOpts::default()).one(html);
     let mut reader = Reader::default();
     reader.walk(&nodes);
-    reader.flush(false);
+    reader.flush(EmptyBlock::Drop);
     reader.blocks
 }
 
@@ -164,6 +164,28 @@ fn too_deep(html: &str) -> bool {
 enum Step {
     Enter(usize),
     Leave,
+}
+
+/// Whose style an element carries: the author's for this text, or a page's
+/// theme on a block that holds blocks.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StyleOrigin {
+    Author,
+    Theme,
+}
+
+/// What a flush does with a block that holds no text.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EmptyBlock {
+    Drop,
+    Keep,
+}
+
+/// Whether the walk is inside preformatted text, where code is the block's.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Flow {
+    Normal,
+    Pre,
 }
 
 /// A block element the walk is inside.
@@ -250,14 +272,19 @@ impl Reader {
                     }
                     // A block that holds blocks is a page's theme, not formatting an
                     // author chose for this text: its style sets no mark.
-                    let container = BLOCKS.contains(&tag)
+                    let themed = BLOCKS.contains(&tag)
                         && node.children.iter().any(|child| {
                             nodes.get(*child).is_some_and(|child| {
                                 matches!(&child.data, Data::Element { name, .. }
                                     if BLOCKS.contains(&&*name.local))
                             })
                         });
-                    let frame = self.enter(tag, attrs, style, container);
+                    let origin = if themed {
+                        StyleOrigin::Theme
+                    } else {
+                        StyleOrigin::Author
+                    };
+                    let frame = self.enter(tag, attrs, style, origin);
                     self.frames.push(frame);
                     steps.push(Step::Leave);
                     steps.extend(node.children.iter().rev().map(|c| Step::Enter(*c)));
@@ -306,7 +333,7 @@ impl Reader {
         }
     }
 
-    fn enter(&mut self, tag: &str, attrs: &[Attribute], style: &str, container: bool) -> Frame {
+    fn enter(&mut self, tag: &str, attrs: &[Attribute], style: &str, origin: StyleOrigin) -> Frame {
         let mut frame = Frame::default();
         match tag {
             "br" => {
@@ -315,14 +342,18 @@ impl Reader {
                 } else {
                     // A break outside any block ends a line, and makes no
                     // empty paragraph of its own.
-                    self.flush(!self.open.is_empty());
+                    self.flush(if self.open.is_empty() {
+                        EmptyBlock::Drop
+                    } else {
+                        EmptyBlock::Keep
+                    });
                 }
             }
             "hr" => {
-                self.flush(false);
+                self.flush(EmptyBlock::Drop);
             }
             "ul" | "ol" => {
-                self.flush(false);
+                self.flush(EmptyBlock::Drop);
                 self.lists.push(if tag == "ol" {
                     ClipKind::Ordered(ordered_style(attr(attrs, "type")).code())
                 } else {
@@ -353,7 +384,7 @@ impl Reader {
             }
             _ if BLOCKS.contains(&tag) => {
                 let kind = self.block_kind(tag, attrs, style);
-                self.flush(false);
+                self.flush(EmptyBlock::Drop);
                 self.open.push(Open {
                     kind,
                     keep_empty: KEPT_EMPTY.contains(&tag),
@@ -367,8 +398,13 @@ impl Reader {
             }
             _ => {}
         }
-        let mut changes = tag_marks(tag, attrs, self.pre > 0);
-        if !container {
+        let flow = if self.pre > 0 {
+            Flow::Pre
+        } else {
+            Flow::Normal
+        };
+        let mut changes = tag_marks(tag, attrs, flow);
+        if origin == StyleOrigin::Author {
             changes.extend(style_marks(style));
         }
         for (key, value) in changes {
@@ -411,7 +447,11 @@ impl Reader {
             self.pre = self.pre.saturating_sub(1);
         }
         if frame.block {
-            let keep = self.open.last().is_some_and(|o| o.keep_empty && !o.touched);
+            let keep = if self.open.last().is_some_and(|o| o.keep_empty && !o.touched) {
+                EmptyBlock::Keep
+            } else {
+                EmptyBlock::Drop
+            };
             let wrote = self.flush(keep);
             let touched = self.open.pop().is_some_and(|o| o.touched) || wrote;
             if touched && let Some(parent) = self.open.last_mut() {
@@ -472,10 +512,10 @@ impl Reader {
     }
 
     /// Close the block being written. A block with no text is kept only when
-    /// `keep_empty` says an element asked for it. Answers whether one landed.
+    /// `empty` says an element asked for it. Answers whether one landed.
     /// Trailing spaces go, the no-break one Word writes into an empty
     /// paragraph included.
-    fn flush(&mut self, keep_empty: bool) -> bool {
+    fn flush(&mut self, empty: EmptyBlock) -> bool {
         let code = matches!(self.kind(), ClipKind::Code(_));
         while let Some(run) = self.runs.last_mut() {
             let trimmed = if code {
@@ -489,7 +529,7 @@ impl Reader {
             }
             self.runs.pop();
         }
-        if self.runs.is_empty() && !keep_empty {
+        if self.runs.is_empty() && empty == EmptyBlock::Drop {
             return false;
         }
         let runs = std::mem::take(&mut self.runs);
@@ -540,7 +580,7 @@ fn on(key: &'static str) -> Change {
 }
 
 /// The marks an element's name stands for.
-fn tag_marks(tag: &str, attrs: &[Attribute], in_pre: bool) -> Vec<Change> {
+fn tag_marks(tag: &str, attrs: &[Attribute], flow: Flow) -> Vec<Change> {
     match tag {
         "b" | "strong" => vec![on("b")],
         "i" | "em" | "cite" | "dfn" | "var" => vec![on("i")],
@@ -548,7 +588,7 @@ fn tag_marks(tag: &str, attrs: &[Attribute], in_pre: bool) -> Vec<Change> {
         "s" | "strike" | "del" => vec![on("s")],
         "sup" => vec![on("sup")],
         "sub" => vec![on("sub")],
-        "code" | "kbd" | "samp" | "tt" if !in_pre => vec![on("c")],
+        "code" | "kbd" | "samp" | "tt" if flow == Flow::Normal => vec![on("c")],
         "a" => attr(attrs, "href")
             .map(str::trim)
             .filter(|href| safe_link(href))
