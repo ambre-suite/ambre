@@ -105,6 +105,96 @@ impl TextAck {
 }
 
 // =============================================================================
+// Pages (`features/ambre-spec-prose-viewport.md`)
+// =============================================================================
+
+ambre_core::define_index! {
+    /// A page of one layout, counted from zero. The layout, the window and
+    /// the view count pages this way. A reader sees a [`PageNumber`].
+    pub struct PageIndex(u32);
+    /// A number of pages.
+    pub struct PageCount;
+    /// The signed gap between two pages.
+    pub struct PageDelta(i64);
+    /// A run of pages.
+    pub struct PageSpan;
+    /// A list indexed by page.
+    pub struct PageVec;
+}
+
+impl PageIndex {
+    /// The number a reader sees for this page: its index plus one.
+    ///
+    /// The one conversion from a page index to a page number. It saturates
+    /// at the last number the axis holds.
+    #[must_use]
+    pub const fn number(self) -> PageNumber {
+        match std::num::NonZeroU32::new(self.get().saturating_add(1)) {
+            Some(number) => PageNumber(number),
+            None => PageNumber::FIRST,
+        }
+    }
+}
+
+/// A page as a reader sees it: counted from one (`PROSE-FEAT-060`).
+///
+/// A table of contents and a page-number field show it. The layout counts
+/// pages from zero in a [`PageIndex`], and [`PageIndex::number`] is the one
+/// way from that count to this one. Zero is not a page number, so "no page
+/// known" is an `Option` and never a zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PageNumber(std::num::NonZeroU32);
+
+impl PageNumber {
+    /// The first page.
+    pub const FIRST: Self = Self(std::num::NonZeroU32::MIN);
+
+    /// The page index this number shows.
+    #[must_use]
+    pub const fn index(self) -> PageIndex {
+        PageIndex::new(self.0.get() - 1)
+    }
+
+    /// The number, for the call into a foreign API.
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+}
+
+impl fmt::Display for PageNumber {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl PageCount {
+    /// The number of pages from the first up to and with `last`.
+    #[must_use]
+    pub const fn through(last: PageIndex) -> Self {
+        last.next().count_from(PageIndex::ZERO)
+    }
+
+    /// The last of this many pages, `None` for no page.
+    #[must_use]
+    pub const fn last(self) -> Option<PageIndex> {
+        self.as_end().prev()
+    }
+
+    /// Every page of this many, from the first.
+    #[must_use]
+    pub const fn span(self) -> PageSpan {
+        PageSpan::new(PageIndex::ZERO, self.as_end())
+    }
+}
+
+impl fmt::Display for PageCount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.get().fmt(f)
+    }
+}
+
+// =============================================================================
 // Block identity (`ambre-spec-prose-schema.md section 2`)
 // =============================================================================
 
@@ -811,8 +901,9 @@ pub struct TocEntry {
     /// Present only while the block is configured as numbered
     /// (`PROSE-FEAT-062`).
     pub section_number: Option<Vec<u32>>,
-    /// The one-based page the heading starts on (`PROSE-FEAT-060`).
-    pub page: u32,
+    /// The page the heading starts on (`PROSE-FEAT-060`). `None` while the
+    /// layout places no block that holds the heading.
+    pub page: Option<PageNumber>,
 }
 
 /// The entries one table-of-contents block lists, built from the headings and
@@ -1033,8 +1124,8 @@ pub enum ProseCommand {
     /// The view sends it when the canvas nears a page the layout in force
     /// does not carry (`PROSE-UI-211`); it writes nothing.
     ShowPages {
-        first: u32,
-        last: u32,
+        first: PageIndex,
+        last: PageIndex,
     },
     /// Hand the view the pages around the page `block_id` starts on. The view
     /// sends it to reveal a block the layout in force does not carry
@@ -1590,7 +1681,7 @@ pub enum ProseEvent {
     /// Every cross reference, resolved against the last layout.
     CrossRefsUpdated { refs: Vec<ResolvedCrossRef> },
     /// Bring a block into view, from its first page (`PROSE-UI-085`).
-    RevealBlock { block: BlockId, page: u32 },
+    RevealBlock { block: BlockId, page: PageIndex },
     /// The four band blocks and their settings, after a band command
     /// (`PROSE-FEAT-160`).
     BandsUpdated { bands: BandSet },

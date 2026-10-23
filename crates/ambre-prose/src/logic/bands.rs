@@ -234,7 +234,7 @@ impl ProseState {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::events::{BlockId, ProseCommand};
+    use crate::events::{BlockId, PageCount, PageIndex, ProseCommand};
     use ambre_bus::app::prose::DocSpan;
 
     pub(crate) fn with_header() -> (ProseState, BlockId) {
@@ -618,8 +618,10 @@ pub(crate) mod tests {
         });
         send(&stamp, &mut bob);
         let header = crate::events::tree_id(alice.bands().header.expect("the header"));
-        let seen_by_alice = crate::band::resolve(alice.document(), &header, 0, 1);
-        let seen_by_bob = crate::band::resolve(bob.document(), &header, 0, 1);
+        let seen_by_alice =
+            crate::band::resolve(alice.document(), &header, PageIndex::ZERO, PageCount::ONE);
+        let seen_by_bob =
+            crate::band::resolve(bob.document(), &header, PageIndex::ZERO, PageCount::ONE);
         assert_eq!(seen_by_alice, "2026-03-05");
         assert_eq!(seen_by_bob, seen_by_alice);
     }
@@ -636,14 +638,17 @@ pub(crate) mod tests {
             now_ms: ambre_core::Timestamp(1_772_712_000_000),
         });
         let header = crate::events::tree_id(header);
-        let english = crate::band::resolve(state.document(), &header, 0, 1);
+        let english =
+            crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
         assert_eq!(english, "March 5, 2026");
         let _ = doc::meta(state.document()).insert(doc::MetaKey::Lang, "fr");
-        let french = crate::band::resolve(state.document(), &header, 0, 1);
+        let french =
+            crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
         assert_eq!(french, "5 mars 2026");
         // A peer's malformed tag is no language, not French nor English.
         let _ = doc::meta(state.document()).insert(doc::MetaKey::Lang, "fr_FR");
-        let unnamed = crate::band::resolve(state.document(), &header, 0, 1);
+        let unnamed =
+            crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
         assert_eq!(unnamed, "2026-03-05");
     }
 
@@ -667,7 +672,14 @@ pub(crate) mod tests {
         }
         let header = crate::events::tree_id(header);
         let drawn: Vec<String> = (0..3)
-            .map(|page| crate::band::resolve(state.document(), &header, page, 3))
+            .map(|page| {
+                crate::band::resolve(
+                    state.document(),
+                    &header,
+                    crate::events::PageIndex::new(page),
+                    crate::events::PageCount::new(3),
+                )
+            })
             .collect();
         assert_eq!(drawn, vec!["Page 1 of 3", "Page 2 of 3", "Page 3 of 3"]);
     }
@@ -679,18 +691,18 @@ pub(crate) mod tests {
         let set = state.bands();
         let block = |band: Option<doc::Band>| band.and_then(|b| b.block).map(block_id);
         let off = state.paginate(&[]).clone();
-        for page in 0..2 {
+        for page in (0..2).map(PageIndex::new) {
             let (header, footer) = off.bands_on_page(page);
             assert_eq!((block(header), block(footer)), (set.header, set.footer));
         }
         state.handle_command(ProseCommand::SetDifferentFirstPage { enabled: true });
         let on = state.paginate(&[]).clone();
-        let (header, footer) = on.bands_on_page(0);
+        let (header, footer) = on.bands_on_page(PageIndex::new(0));
         assert_eq!(
             (block(header), block(footer)),
             (set.header_first, set.footer_first)
         );
-        let (header, footer) = on.bands_on_page(1);
+        let (header, footer) = on.bands_on_page(PageIndex::new(1));
         assert_eq!((block(header), block(footer)), (set.header, set.footer));
     }
 
@@ -702,7 +714,7 @@ pub(crate) mod tests {
             align: Align::Center,
         });
         let layout = state.paginate(&[]).clone();
-        for page in 0..3 {
+        for page in (0..3).map(PageIndex::new) {
             let (drawn, _) = layout.bands_on_page(page);
             assert_eq!(drawn.map(|band| band.align), Some(Align::Center));
         }
@@ -739,6 +751,6 @@ pub(crate) mod tests {
         let cap = layout.content_height_px * crate::layout::geometry::BAND_SHARE;
         assert!((layout.header_height_px - cap).abs() < 0.01);
         assert!(layout.body_height_px() >= layout.content_height_px * 0.5);
-        assert_eq!(layout.page_count, 1);
+        assert_eq!(layout.page_count, crate::events::PageCount::new(1));
     }
 }

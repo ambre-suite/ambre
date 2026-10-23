@@ -6,6 +6,7 @@
 //! that paints (`PROSE-UI-006`, `PROSE-UI-114`). A run holds no GPU handle
 //! and nothing bound to a thread, so it crosses by move (`PROSE-UI-113`).
 
+use ambre_bus::app::prose::{PageIndex, PageSpan};
 use ambre_core::Rgba;
 use std::collections::HashMap;
 use std::fmt;
@@ -880,8 +881,8 @@ pub struct ShapedLayout {
     order: Arc<HashMap<TreeID, usize>>,
     /// The place in the flow of the first block of `layout`.
     first_index: usize,
-    /// The first and the last page the window carries.
-    pages: (u32, u32),
+    /// The pages the window carries.
+    pages: PageSpan,
     /// The first and the last block of the document that hold text.
     ends: Option<TextEnds>,
     /// The blocks each page of the window shows, by their place in the flow.
@@ -912,8 +913,8 @@ pub struct TextEnds {
 pub struct Window {
     /// The place in the flow of the first block the window carries.
     pub first_index: usize,
-    /// The first and the last page the window carries.
-    pub pages: (u32, u32),
+    /// The pages the window carries.
+    pub pages: PageSpan,
     /// Every block of the document, by its place in the flow.
     pub order: Arc<HashMap<TreeID, usize>>,
     pub ends: Option<TextEnds>,
@@ -936,7 +937,7 @@ impl ShapedLayout {
         }));
         let window = Window {
             first_index: 0,
-            pages: (0, layout.page_count.saturating_sub(1)),
+            pages: layout.page_count.span(),
             order: Arc::new(order_of(&layout.blocks)),
             ends,
         };
@@ -988,11 +989,11 @@ impl ShapedLayout {
     /// The same layout, read as the window `window` describes.
     #[must_use]
     pub fn with_window(mut self, window: Window) -> Self {
-        let (first, last) = window.pages;
-        let mut page_blocks = vec![Vec::new(); last.saturating_sub(first) as usize + 1];
+        let first = window.pages.start;
+        let mut page_blocks = vec![Vec::new(); window.pages.len().to_usize()];
         for (local, block) in self.layout.blocks.iter().enumerate() {
             for page in block.page_span() {
-                let at = page.checked_sub(first).map(|at| at as usize);
+                let at = page_offset(first, page);
                 if let Some(blocks) = at.and_then(|at| page_blocks.get_mut(at)) {
                     blocks.push(window.first_index + local);
                 }
@@ -1043,10 +1044,10 @@ impl ShapedLayout {
             .is_some()
     }
 
-    /// The first and the last page the window carries.
+    /// The pages the window carries.
     #[must_use]
-    pub fn pages(&self) -> std::ops::RangeInclusive<u32> {
-        self.pages.0..=self.pages.1
+    pub fn pages(&self) -> PageSpan {
+        self.pages
     }
 
     /// The two ends of the text of the document.
@@ -1058,11 +1059,16 @@ impl ShapedLayout {
     /// The indices of the blocks a page shows, in flow order. Empty for a
     /// page the window does not carry.
     #[must_use]
-    pub fn blocks_on(&self, page: u32) -> &[usize] {
-        page.checked_sub(self.pages.0)
-            .and_then(|at| self.page_blocks.get(at as usize))
+    pub fn blocks_on(&self, page: PageIndex) -> &[usize] {
+        page_offset(self.pages.start, page)
+            .and_then(|at| self.page_blocks.get(at))
             .map_or(&[], Vec::as_slice)
     }
+}
+
+/// The place of `page` in a window that starts at `first`, `None` before it.
+fn page_offset(first: PageIndex, page: PageIndex) -> Option<usize> {
+    (page >= first).then(|| page.count_from(first).to_usize())
 }
 
 /// Every block of `blocks`, by its place in the flow.

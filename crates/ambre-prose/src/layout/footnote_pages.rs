@@ -70,14 +70,17 @@ fn page_of_line(layout: &PageLayout, block: &TreeID, line: u32) -> Option<u32> {
         .iter()
         .filter(|point| **point <= line)
         .count();
-    Some(entry.page_start + u32::try_from(carried).ok()?)
+    Some(entry.page_start.get() + u32::try_from(carried).ok()?)
 }
 
 /// Every note the layout placed, by identity: its ordinal and its page.
 fn placed(layout: &PageLayout) -> Vec<(FootnoteId, u32, u32)> {
-    let mut out: Vec<(FootnoteId, u32, u32)> = (0..layout.page_count)
+    let mut out: Vec<(FootnoteId, u32, u32)> = layout
+        .page_count
+        .span()
+        .into_iter()
         .flat_map(|page| layout.footnotes_on_page(page))
-        .map(|note| (note.footnote_id, note.ordinal, note.page))
+        .map(|note| (note.footnote_id, note.ordinal, note.page.get()))
         .collect();
     out.sort_by_key(|(_, ordinal, _)| *ordinal);
     out
@@ -86,7 +89,7 @@ fn placed(layout: &PageLayout) -> Vec<(FootnoteId, u32, u32)> {
 /// No page's body text runs into the notes at its foot.
 fn nothing_runs_into_the_notes(layout: &PageLayout) {
     let body = layout.body_height_px();
-    for page in 0..layout.page_count {
+    for page in layout.page_count.span() {
         let foot: f32 = layout
             .footnotes_on_page(page)
             .iter()
@@ -100,7 +103,7 @@ fn nothing_runs_into_the_notes(layout: &PageLayout) {
             let bottom = if entry.page_start == page {
                 entry.y_in_page + entry.height_px
             } else {
-                let index = (page - entry.page_start - 1) as usize;
+                let index = page.count_from(entry.page_start).to_usize() - 1;
                 entry
                     .continuation_heights
                     .get(index)
@@ -109,7 +112,7 @@ fn nothing_runs_into_the_notes(layout: &PageLayout) {
             };
             assert!(
                 bottom <= body - foot + 0.01,
-                "page {page}: text reaches {bottom}, the notes start at {}",
+                "page {page:?}: text reaches {bottom}, the notes start at {}",
                 body - foot
             );
         }
@@ -167,7 +170,7 @@ fn a_note_sits_on_the_page_of_the_line_that_calls_it() {
                 .iter()
                 .find(|n| n.footnote_id == id)
                 .expect("the call's block carries the note");
-            assert_eq!(Some(page), Some(call.page));
+            assert_eq!(Some(page), Some(call.page.get()));
         }
         let pages: Vec<u32> = placed(&layout).iter().map(|(_, _, page)| *page).collect();
         let last_line = entry.split_points.last().copied().unwrap_or(0);
@@ -203,7 +206,7 @@ fn a_note_sits_on_the_page_of_the_line_that_calls_it() {
         .map(|e| e.page_start);
     assert_eq!(
         start,
-        Some(1),
+        Some(crate::events::PageIndex::new(1)),
         "the paragraph now starts on the second page"
     );
     check(&mut state);

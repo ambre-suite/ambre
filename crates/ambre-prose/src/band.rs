@@ -10,14 +10,19 @@ use ambre_core::{LangTag, Millis, Timestamp};
 use loro::{LoroDoc, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
-use crate::events::DateFieldFormat;
+use crate::events::{DateFieldFormat, PageCount, PageIndex};
 
 /// The span of one day.
 const DAY: Millis = Millis(86_400_000);
 
-/// The text of `block` as drawn on the zero-based `page` of `page_count`.
+/// The text of `block` as drawn on `page` of `page_count`.
 #[must_use]
-pub fn resolve(document: &LoroDoc, block: &TreeID, page: u32, page_count: u32) -> String {
+pub fn resolve(
+    document: &LoroDoc,
+    block: &TreeID,
+    page: PageIndex,
+    page_count: PageCount,
+) -> String {
     let text = doc::get_block_text(document, block);
     let mut out = String::new();
     for span in text.to_delta() {
@@ -45,9 +50,15 @@ pub fn resolve(document: &LoroDoc, block: &TreeID, page: u32, page_count: u32) -
 }
 
 /// What one field shows on one page.
-fn field_value(document: &LoroDoc, key: &str, value: &LoroValue, page: u32, count: u32) -> String {
+fn field_value(
+    document: &LoroDoc,
+    key: &str,
+    value: &LoroValue,
+    page: PageIndex,
+    count: PageCount,
+) -> String {
     match key {
-        "f:pn" => page.saturating_add(1).to_string(),
+        "f:pn" => page.number().to_string(),
         "f:pc" => count.to_string(),
         "f:ti" => doc::read_title(document),
         "f:dt" => {

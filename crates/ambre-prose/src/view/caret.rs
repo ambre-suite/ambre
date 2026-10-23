@@ -394,7 +394,7 @@ impl ProseUiState {
         let caret = run.caret_box_at(laid, affinity);
         let (y0, y1) = (caret.y0 as f32, caret.y1 as f32);
         let body_top = self.shaped.layout.body_top_px();
-        let last = *block.page_span().end();
+        let last = block.last_page();
         for page in block.page_span() {
             let (pieces, _) = self.pieces(page);
             let Some(piece) = pieces

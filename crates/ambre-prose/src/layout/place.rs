@@ -5,7 +5,7 @@
 //! (`PROSE-078`). A constraint it cannot meet is resolved by moving forward,
 //! and the constraint order of section 2 decides which one gives way.
 
-use ambre_bus::app::prose::BlockType;
+use ambre_bus::app::prose::{BlockType, PageCount, PageIndex, PageSpan};
 use ambre_core::FootnoteId;
 use std::sync::Arc;
 
@@ -43,7 +43,7 @@ pub struct FootnoteLayout {
     /// The block holding the note's text, the caret's address in it.
     pub block_id: TreeID,
     pub ordinal: u32,
-    pub page: u32,
+    pub page: PageIndex,
     pub height_px: f32,
 }
 
@@ -144,7 +144,7 @@ pub struct BlockLayout {
     pub block_type: BlockType,
     /// The height of the portion on `page_start` alone.
     pub height_px: f32,
-    pub page_start: u32,
+    pub page_start: PageIndex,
     pub y_in_page: f32,
     pub is_split: bool,
     /// Index of the first line carried by each page after `page_start`.
@@ -163,17 +163,20 @@ pub struct BlockLayout {
 impl BlockLayout {
     /// The pages this block has a fragment on, `page_start` included.
     #[must_use]
-    pub fn page_span(&self) -> std::ops::RangeInclusive<u32> {
-        let last = self
-            .page_start
-            .saturating_add(u32::try_from(self.continuation_heights.len()).unwrap_or(0));
-        self.page_start..=last
+    pub fn page_span(&self) -> PageSpan {
+        self.page_start.through(self.last_page())
+    }
+
+    /// The last page this block has a fragment on.
+    #[must_use]
+    pub fn last_page(&self) -> PageIndex {
+        self.page_start + PageCount::from_len(self.continuation_heights.len())
     }
 
     /// Whether a fragment of this block shows on a page.
     #[must_use]
-    pub fn shows_on(&self, page: u32) -> bool {
-        self.page_span().contains(&page)
+    pub fn shows_on(&self, page: PageIndex) -> bool {
+        self.page_span().contains(page)
     }
 }
 
@@ -183,13 +186,13 @@ pub struct Placement {
     pub blocks: Vec<BlockLayout>,
     /// Always at least one: an empty document is one blank page
     /// (`PROSE-011`).
-    pub page_count: u32,
+    pub page_count: PageCount,
 }
 
 impl Placement {
     /// Every fragment visible on a page, continuations of split blocks
     /// included.
-    pub fn blocks_on_page(&self, page: u32) -> impl Iterator<Item = &BlockLayout> {
+    pub fn blocks_on_page(&self, page: PageIndex) -> impl Iterator<Item = &BlockLayout> {
         self.blocks.iter().filter(move |block| block.shows_on(page))
     }
 }
@@ -200,7 +203,7 @@ impl Placement {
 /// a reflow resume at a block rather than at the first one (`PROSE-081`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Cursor {
-    pub(crate) page: u32,
+    pub(crate) page: PageIndex,
     /// The next free y in the body area of the current page.
     pub(crate) y: f32,
     /// The trailing margin of the block just placed, not yet spent
@@ -215,7 +218,7 @@ pub(crate) struct Cursor {
 impl Cursor {
     pub(crate) fn new(body_height_px: f32) -> Self {
         Self {
-            page: 0,
+            page: PageIndex::ZERO,
             y: 0.0,
             pending_margin_px: 0.0,
             body_height_px,
@@ -270,7 +273,7 @@ impl Cursor {
     }
 
     fn open_new_page(&mut self) {
-        self.page = self.page.saturating_add(1);
+        self.page = self.page.next();
         self.y = 0.0;
         self.pending_margin_px = 0.0;
         self.foot_px = 0.0;
@@ -290,7 +293,7 @@ pub fn place(blocks: &[MeasuredBlock], body_height_px: f32) -> Placement {
     place_tail(blocks, 0, &mut cursor, &mut placed);
     Placement {
         blocks: placed,
-        page_count: cursor.page.saturating_add(1),
+        page_count: PageCount::through(cursor.page),
     }
 }
 
@@ -348,10 +351,10 @@ pub(crate) fn cursor_after(
 ) -> Cursor {
     if entry.block_type == BlockType::PageBreak {
         let mut cursor = Cursor::new(body_height_px);
-        cursor.page = entry.page_start.saturating_add(1);
+        cursor.page = entry.page_start.next();
         return cursor;
     }
-    let last_page = *entry.page_span().end();
+    let last_page = entry.last_page();
     let y = match entry.continuation_heights.last() {
         Some(height) => *height,
         None => entry.y_in_page + entry.height_px,
@@ -660,8 +663,13 @@ mod tests {
     #[test]
     fn blocks_that_fit_share_one_page() {
         let placement = place(&[text(1, 3), text(2, 3), text(3, 3)], BODY);
-        assert_eq!(placement.page_count, 1);
-        assert!(placement.blocks.iter().all(|block| block.page_start == 0));
+        assert_eq!(placement.page_count, crate::events::PageCount::new(1));
+        assert!(
+            placement
+                .blocks
+                .iter()
+                .all(|block| block.page_start == crate::events::PageIndex::new(0))
+        );
         assert_eq!(placement.blocks[0].y_in_page, 0.0);
         assert_eq!(placement.blocks[1].y_in_page, 3.0 * LINE);
         nothing_overflows(&placement, BODY);
@@ -675,10 +683,16 @@ mod tests {
             text(3, 2),
         ];
         let placement = place(&blocks, BODY);
-        assert_eq!(placement.page_count, 2);
+        assert_eq!(placement.page_count, crate::events::PageCount::new(2));
         assert_eq!(placement.blocks[1].height_px, 0.0);
-        assert_eq!(placement.blocks[1].page_start, 0);
-        assert_eq!(placement.blocks[2].page_start, 1);
+        assert_eq!(
+            placement.blocks[1].page_start,
+            crate::events::PageIndex::new(0)
+        );
+        assert_eq!(
+            placement.blocks[2].page_start,
+            crate::events::PageIndex::new(1)
+        );
         assert_eq!(placement.blocks[2].y_in_page, 0.0);
     }
 
@@ -690,7 +704,7 @@ mod tests {
             of_type(3, BlockType::PageBreak, 0.0),
         ];
         let placement = place(&blocks, BODY);
-        assert_eq!(placement.page_count, 4);
+        assert_eq!(placement.page_count, crate::events::PageCount::new(4));
     }
 
     #[test]
@@ -700,7 +714,7 @@ mod tests {
         let placement = place(&[text(1, 4), text(2, 8)], BODY);
         let second = &placement.blocks[1];
         assert!(!second.is_split);
-        assert_eq!(second.page_start, 1);
+        assert_eq!(second.page_start, crate::events::PageIndex::new(1));
         assert_eq!(second.y_in_page, 0.0);
     }
 
@@ -709,12 +723,12 @@ mod tests {
         let placement = place(&[text(1, 25)], BODY);
         let block = &placement.blocks[0];
         assert!(block.is_split);
-        assert_eq!(block.page_start, 0);
-        assert_eq!(placement.page_count, 3);
+        assert_eq!(block.page_start, crate::events::PageIndex::new(0));
+        assert_eq!(placement.page_count, crate::events::PageCount::new(3));
         assert_eq!(block.split_points.len(), block.continuation_heights.len());
         // Every continuation sits at the top of its page (`PROSE-018`), which
         // is what a fragment index of the page span says.
-        assert_eq!(block.page_span().count(), 3);
+        assert_eq!(block.page_span().into_iter().count(), 3);
         nothing_overflows(&placement, BODY);
     }
 
@@ -749,7 +763,7 @@ mod tests {
         // splits rather than losing a line (`PROSE-072` relaxed).
         let placement = place(&[text(1, 9), text(2, 3)], BODY);
         let block = &placement.blocks[1];
-        assert!(block.is_split || block.page_start == 1);
+        assert!(block.is_split || block.page_start == crate::events::PageIndex::new(1));
         nothing_overflows(&placement, BODY);
     }
 
@@ -760,17 +774,23 @@ mod tests {
         let blocks = [text(1, 9), heading, text(3, 4)];
         let placement = place(&blocks, BODY);
         let placed_heading = &placement.blocks[1];
-        assert_eq!(placed_heading.page_start, 1);
+        assert_eq!(placed_heading.page_start, crate::events::PageIndex::new(1));
         assert_eq!(placed_heading.y_in_page, 0.0);
-        assert_eq!(placement.blocks[2].page_start, 1);
+        assert_eq!(
+            placement.blocks[2].page_start,
+            crate::events::PageIndex::new(1)
+        );
     }
 
     #[test]
     fn a_heading_with_room_under_it_stays_where_it_is() {
         let heading = of_type(2, BlockType::Heading, LINE);
         let placement = place(&[text(1, 4), heading, text(3, 4)], BODY);
-        assert_eq!(placement.blocks[1].page_start, 0);
-        assert_eq!(placement.page_count, 1);
+        assert_eq!(
+            placement.blocks[1].page_start,
+            crate::events::PageIndex::new(0)
+        );
+        assert_eq!(placement.page_count, crate::events::PageCount::new(1));
     }
 
     #[test]
@@ -786,7 +806,10 @@ mod tests {
         let blocks = [text(1, 5), of_type(2, BlockType::Image, 8.0 * LINE)];
         let placement = place(&blocks, BODY);
         assert!(!placement.blocks[1].is_split);
-        assert_eq!(placement.blocks[1].page_start, 1);
+        assert_eq!(
+            placement.blocks[1].page_start,
+            crate::events::PageIndex::new(1)
+        );
     }
 
     #[test]
@@ -795,7 +818,10 @@ mod tests {
         kept.keep_together = true;
         let placement = place(&[text(1, 5), kept], BODY);
         assert!(!placement.blocks[1].is_split);
-        assert_eq!(placement.blocks[1].page_start, 1);
+        assert_eq!(
+            placement.blocks[1].page_start,
+            crate::events::PageIndex::new(1)
+        );
     }
 
     #[test]
@@ -823,14 +849,17 @@ mod tests {
         let mut second = text(2, 4);
         second.space_before_px = 50.0;
         let placement = place(&[text(1, 9), second], BODY);
-        assert_eq!(placement.blocks[1].page_start, 1);
+        assert_eq!(
+            placement.blocks[1].page_start,
+            crate::events::PageIndex::new(1)
+        );
         assert_eq!(placement.blocks[1].y_in_page, 0.0);
     }
 
     #[test]
     fn an_empty_document_is_one_page() {
         let placement = place(&[], BODY);
-        assert_eq!(placement.page_count, 1);
+        assert_eq!(placement.page_count, crate::events::PageCount::new(1));
         assert!(placement.blocks.is_empty());
     }
 
@@ -852,11 +881,14 @@ mod tests {
         let placement = place(&blocks, BODY);
         for block in &placement.blocks {
             for page in block.page_span() {
-                assert!(page < placement.page_count, "page {page} is out of range");
+                assert!(
+                    placement.page_count.span().contains(page),
+                    "page {page:?} is out of range"
+                );
             }
         }
         // Every page in range answers a list, empty or not (`PROSE-011`).
-        for page in 0..placement.page_count {
+        for page in placement.page_count.span() {
             let _ = placement.blocks_on_page(page).count();
         }
     }
@@ -871,14 +903,14 @@ mod tests {
             text(5, 3),
         ];
         let placement = place(&blocks, BODY);
-        let mut highest = 0;
+        let mut highest = PageIndex::ZERO;
         for block in &placement.blocks {
             assert!(
                 block.page_start >= highest,
                 "{:?} landed behind a page already emitted",
                 block.block_id
             );
-            highest = *block.page_span().end();
+            highest = block.last_page();
         }
         nothing_overflows(&placement, BODY);
     }
@@ -892,8 +924,8 @@ mod properties {
 
     use super::tests::{nothing_overflows, of_type, text};
     use super::{
-        BlockLayout, BlockType, Cursor, MIN_LINES_AT_BREAK, MeasuredBlock, cursor_after, place,
-        place_tail,
+        BlockLayout, BlockType, Cursor, MIN_LINES_AT_BREAK, MeasuredBlock, PageCount, PageIndex,
+        cursor_after, place, place_tail,
     };
 
     /// One block of any shape placement has to take.
@@ -933,17 +965,17 @@ mod properties {
         fn every_block_reaches_a_page(blocks in any_document(), body in 1.0f32..600.0) {
             let placement = place(&blocks, body);
             prop_assert_eq!(placement.blocks.len(), blocks.len());
-            prop_assert!(placement.page_count >= 1);
+            prop_assert!(placement.page_count.get() >= 1);
         }
 
         /// Placement never revisits a page it has emitted (`PROSE-078`).
         #[test]
         fn pages_only_ever_move_forward(blocks in any_document(), body in 1.0f32..600.0) {
             let placement = place(&blocks, body);
-            let mut highest = 0;
+            let mut highest = PageIndex::ZERO;
             for block in &placement.blocks {
                 prop_assert!(block.page_start >= highest);
-                highest = *block.page_span().end();
+                highest = block.last_page();
             }
         }
 
@@ -952,7 +984,7 @@ mod properties {
         fn no_block_claims_a_page_out_of_range(blocks in any_document(), body in 1.0f32..600.0) {
             let placement = place(&blocks, body);
             for block in &placement.blocks {
-                prop_assert!(*block.page_span().end() < placement.page_count);
+                prop_assert!(placement.page_count.span().contains(block.last_page()));
             }
         }
 
@@ -1030,7 +1062,7 @@ mod properties {
             };
             place_tail(&blocks, from, &mut cursor, &mut placed);
             prop_assert_eq!(placed, full.blocks);
-            prop_assert_eq!(cursor.page.saturating_add(1), full.page_count);
+            prop_assert_eq!(PageCount::through(cursor.page), full.page_count);
         }
 
         /// A cut never leaves a single line on either side of it, unless the

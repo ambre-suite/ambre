@@ -5,7 +5,7 @@
 //! Everything here is arithmetic over the layout in force: nothing shapes,
 //! nothing reads the document, and nothing is sent.
 
-use std::ops::RangeInclusive;
+use ambre_bus::app::prose::{PageCount, PageIndex, PageSpan};
 
 use ambre_core::{DocPx, ViewPoint};
 
@@ -63,7 +63,7 @@ impl Viewport {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DocPos {
     OnPage {
-        page: u32,
+        page: PageIndex,
         x_in_page: f32,
         y_in_page: f32,
     },
@@ -79,7 +79,7 @@ pub struct PageColumn {
     pub page_height_px: f32,
     pub gutter_px: f32,
     /// Zero until a layout has arrived.
-    pub page_count: u32,
+    pub page_count: PageCount,
     pub total_height_px: f32,
 }
 
@@ -88,8 +88,8 @@ impl PageColumn {
     #[must_use]
     pub fn of(layout: &PageLayout) -> Self {
         let page_height_px = layout.page_height_px.max(0.0);
-        let count = layout.page_count as f32;
-        let total_height_px = if layout.page_count == 0 {
+        let count = layout.page_count.get() as f32;
+        let total_height_px = if layout.page_count.is_zero() {
             0.0
         } else {
             count * page_height_px + (count - 1.0) * GUTTER_PX
@@ -109,8 +109,8 @@ impl PageColumn {
 
     /// Where a page starts, from the top of the column.
     #[must_use]
-    pub fn page_top_y(&self, page: u32) -> DocPx {
-        DocPx::new(page as f32 * self.stride())
+    pub fn page_top_y(&self, page: PageIndex) -> DocPx {
+        DocPx::new(page.get() as f32 * self.stride())
     }
 
     /// The last offset the column scrolls to: its bottom at the canvas's.
@@ -136,19 +136,19 @@ impl PageColumn {
     /// first or the last page. `None` only for a layout with no page
     /// (`PROSE-UI-022`).
     #[must_use]
-    pub fn doc_y_to_page(&self, doc_y: f32) -> Option<(u32, f32)> {
-        let last = self.page_count.checked_sub(1)?;
+    pub fn doc_y_to_page(&self, doc_y: f32) -> Option<(PageIndex, f32)> {
+        let last = self.page_count.last()?;
         let stride = self.stride();
         if doc_y.is_nan() || doc_y <= 0.0 || stride <= 0.0 {
-            return Some((0, 0.0));
+            return Some((PageIndex::ZERO, 0.0));
         }
         let index = (doc_y / stride).floor();
-        if index >= last as f32 {
+        if index >= last.get() as f32 {
             let within = (doc_y - self.page_top_y(last).get()).min(self.page_height_px);
             return Some((last, within));
         }
         // `index` is below `last`, so it fits a page index.
-        let page = index as u32;
+        let page = PageIndex::new(index as u32);
         let within = doc_y - self.page_top_y(page).get();
         if within <= self.page_height_px {
             return Some((page, within));
@@ -157,7 +157,7 @@ impl PageColumn {
         if past_bottom * 2.0 <= self.gutter_px {
             Some((page, self.page_height_px))
         } else {
-            Some((page + 1, 0.0))
+            Some((page.next(), 0.0))
         }
     }
 
@@ -165,22 +165,22 @@ impl PageColumn {
     /// page; never inverted, and never a page the layout lacks
     /// (`PROSE-UI-021`, `PROSE-UI-123`).
     #[must_use]
-    pub fn visible_pages(&self, viewport: &Viewport) -> Option<RangeInclusive<u32>> {
+    pub fn visible_pages(&self, viewport: &Viewport) -> Option<PageSpan> {
         let top = viewport.scroll_y;
         let (first, _) = self.doc_y_to_page(top)?;
         let (last, _) = self.doc_y_to_page(top + viewport.visible_height())?;
-        Some(first.min(last)..=last.max(first))
+        Some(first.min(last).through(last.max(first)))
     }
 
     /// The pages a frame builds: the visible ones and one more on each side,
     /// and never the whole document (`PROSE-UI-007`).
     #[must_use]
-    pub fn built_pages(&self, viewport: &Viewport) -> Option<RangeInclusive<u32>> {
+    pub fn built_pages(&self, viewport: &Viewport) -> Option<PageSpan> {
         let visible = self.visible_pages(viewport)?;
-        let last = self.page_count.saturating_sub(1);
-        let first = visible.start().saturating_sub(1);
-        let end = visible.end().saturating_add(1).min(last);
-        Some(first..=end)
+        let last = self.page_count.last()?;
+        let first = visible.start - PageCount::ONE;
+        let end = visible.last()?.next().min(last);
+        Some(first.through(end))
     }
 
     /// The left edge of the column on the canvas, in screen pixels. A page
@@ -221,7 +221,7 @@ mod tests {
         PageColumn::of(&PageLayout {
             page_width_px: 800.0,
             page_height_px: 1000.0,
-            page_count: pages,
+            page_count: PageCount::new(pages),
             ..PageLayout::default()
         })
     }
@@ -248,8 +248,8 @@ mod tests {
             match range {
                 None => prop_assert_eq!(pages, 0),
                 Some(range) => {
-                    prop_assert!(range.start() <= range.end());
-                    prop_assert!(*range.end() < pages);
+                    prop_assert!(!range.is_empty());
+                    prop_assert!(range.end.get() <= pages);
                 }
             }
         }
@@ -263,7 +263,7 @@ mod tests {
             match column.doc_y_to_page(doc_y) {
                 None => prop_assert_eq!(pages, 0),
                 Some((page, within)) => {
-                    prop_assert!(page < pages);
+                    prop_assert!(page.get() < pages);
                     prop_assert!((0.0..=column.page_height_px).contains(&within));
                 }
             }
@@ -279,11 +279,14 @@ mod tests {
             let view = viewport(scroll, height, 1.0);
             let visible = column.visible_pages(&view).expect("a page");
             let built = column.built_pages(&view).expect("a page");
-            prop_assert_eq!(*built.start(), visible.start().saturating_sub(1));
-            prop_assert_eq!(*built.end(), (visible.end() + 1).min(pages - 1));
+            prop_assert_eq!(built.start, visible.start - PageCount::ONE);
+            prop_assert_eq!(
+                built.last().expect("a page").get(),
+                (visible.last().expect("a page").get() + 1).min(pages - 1)
+            );
             // A canvas of at most three pages builds at most five, whatever
             // the length of the document.
-            prop_assert!(built.end() - built.start() <= 5);
+            prop_assert!(built.len().get() <= 6);
         }
 
         #[test]
@@ -304,9 +307,15 @@ mod tests {
     fn a_position_in_a_gutter_goes_to_the_nearer_page_edge() {
         let column = column(3);
         let bottom = column.page_height_px;
-        assert_eq!(column.doc_y_to_page(bottom + 5.0), Some((0, bottom)));
-        let next = column.page_top_y(1).get();
-        assert_eq!(column.doc_y_to_page(next - 5.0), Some((1, 0.0)));
+        assert_eq!(
+            column.doc_y_to_page(bottom + 5.0),
+            Some((PageIndex::ZERO, bottom))
+        );
+        let next = column.page_top_y(PageIndex::new(1)).get();
+        assert_eq!(
+            column.doc_y_to_page(next - 5.0),
+            Some((PageIndex::new(1), 0.0))
+        );
     }
 
     #[test]
@@ -323,7 +332,7 @@ mod tests {
     #[test]
     fn a_screen_point_lands_on_the_page_drawn_under_it() {
         let column = column(3);
-        let view = viewport(column.page_top_y(1).get(), 800.0, 2.0);
+        let view = viewport(column.page_top_y(PageIndex::new(1)).get(), 800.0, 2.0);
         let left = column.left_px(&view);
         let DocPos::OnPage {
             page,
@@ -333,7 +342,7 @@ mod tests {
         else {
             panic!("a page is under the point");
         };
-        assert_eq!(page, 1);
+        assert_eq!(page, PageIndex::new(1));
         assert!((x_in_page - 50.0).abs() < 1e-3);
         assert!((y_in_page - 30.0).abs() < 1e-3);
     }

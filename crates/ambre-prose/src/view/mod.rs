@@ -29,13 +29,13 @@ use loro::TreeID;
 use ambre_bus::app::prose::{DocOffset, ProseCommand};
 use ambre_draw::kinetic::ScrollStep;
 
-use crate::events::{BlockId, TocEntry, tree_id};
+use crate::events::{BlockId, PageCount, TocEntry, tree_id};
 use crate::layout::run::{RunOffset, RunSpan, ShapedLayout};
 use crate::ui::ProseUiState;
 
 /// The pages asked for beyond those a frame builds, on each side, so a
 /// scroll finds its next pages laid out (`PROSE-UI-211`).
-pub const WINDOW_SLACK: u32 = 4;
+pub const WINDOW_SLACK: PageCount = PageCount::new(4);
 
 /// What an inline highlight marks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -128,11 +128,12 @@ impl ProseUiState {
         }
         let built = self.column.built_pages(&self.viewport)?;
         let carried = self.shaped.pages();
-        if carried.contains(built.start()) && carried.contains(built.end()) {
+        let built_last = built.last()?;
+        if carried.contains(built.start) && carried.contains(built_last) {
             return None;
         }
-        let first = built.start().saturating_sub(WINDOW_SLACK);
-        let last = built.end().saturating_add(WINDOW_SLACK);
+        let first = built.start - WINDOW_SLACK;
+        let last = built_last + WINDOW_SLACK;
         if self.asked_pages == Some((first, last)) {
             return None;
         }
@@ -254,7 +255,7 @@ pub(crate) mod tests {
 
     use super::*;
     use crate::events::block_id;
-    use crate::events::{BlockInit, ProseCommand};
+    use crate::events::{BlockInit, PageIndex, ProseCommand};
     use crate::layout::pass::PageLayout;
     use crate::logic::ProseState;
 
@@ -319,20 +320,23 @@ pub(crate) mod tests {
     fn a_layout_carries_the_pages_asked_for_alone() {
         let (mut state, _) = laid_out(400, 60);
         let _ = state.handle_command(ProseCommand::ShowPages {
-            first: 10,
-            last: 12,
+            first: PageIndex::new(10),
+            last: PageIndex::new(12),
         });
         let Some(crate::events::ProseEvent::LayoutShaped { layout }) = state.layout_event() else {
             panic!("a new window is handed over");
         };
         let shaped = layout.shared::<ShapedLayout>().expect("a shaped layout");
-        assert!(shaped.layout.page_count > 20);
-        assert_eq!(shaped.pages(), 10..=12);
+        assert!(shaped.layout.page_count.get() > 20);
+        assert_eq!(
+            shaped.pages(),
+            PageIndex::new(10).through(PageIndex::new(12))
+        );
         assert!(!shaped.layout.blocks.is_empty());
         for block in &shaped.layout.blocks {
             let span = block.page_span();
             assert!(
-                *span.end() >= 10 && *span.start() <= 12,
+                block.last_page() >= PageIndex::new(10) && span.start <= PageIndex::new(12),
                 "{span:?} is outside"
             );
         }
@@ -356,18 +360,21 @@ pub(crate) mod tests {
         ui.resize(1200.0, 900.0);
         ui.apply_event(&state.layout_event().expect("a layout"));
         assert_eq!(ui.window_request(), None, "the first pages are carried");
-        ui.scroll_by(down(ui.column.page_top_y(30).get() * ui.viewport.scale()));
+        ui.scroll_by(down(
+            ui.column.page_top_y(PageIndex::new(30)).get() * ui.viewport.scale(),
+        ));
         let built = ui.column.built_pages(&ui.viewport).expect("a page");
         let Some(ProseCommand::ShowPages { first, last }) = ui.window_request() else {
             panic!("the pages under the canvas are asked for");
         };
-        assert!(first <= *built.start() && last >= *built.end());
+        let built_last = built.last().expect("a page");
+        assert!(first <= built.start && last >= built_last);
         assert_eq!(ui.window_request(), None, "a request is made once");
         let _ = state.handle_command(ProseCommand::ShowPages { first, last });
         let event = state.layout_event().expect("a layout");
         ui.apply_event(&event);
-        assert!(ui.shaped.pages().contains(built.start()));
-        assert!(ui.shaped.pages().contains(built.end()));
+        assert!(ui.shaped.pages().contains(built.start));
+        assert!(ui.shaped.pages().contains(built_last));
         assert_eq!(ui.window_request(), None);
     }
 
@@ -402,7 +409,7 @@ pub(crate) mod tests {
             ui.column
                 .visible_pages(&ui.viewport)
                 .expect("a page")
-                .contains(&far.1)
+                .contains(far.1)
         );
     }
 
@@ -477,7 +484,11 @@ pub(crate) mod tests {
         );
         let last = *state.root_blocks().last().expect("a block");
         assert_eq!(ui.flow_index(&crate::events::tree_id(last)), Some(3));
-        assert_eq!(ui.blocks_on(0).len(), 4, "the page index came with it");
+        assert_eq!(
+            ui.blocks_on(crate::events::PageIndex::new(0)).len(),
+            4,
+            "the page index came with it"
+        );
     }
 
     /// `PROSE-UI-205`: a layout the view lets go of is freed on the Logic
@@ -518,7 +529,7 @@ pub(crate) mod tests {
             Arc::new(PageLayout {
                 page_width_px: 800.0,
                 page_height_px: 1000.0,
-                page_count: pages,
+                page_count: PageCount::new(pages),
                 ..PageLayout::default()
             }),
             HashMap::new(),
@@ -539,9 +550,12 @@ pub(crate) mod tests {
         assert!(ui.apply_layout(a_layout(1, 3)));
         assert!(ui.apply_layout(a_layout(2, 7)));
         assert_eq!(ui.layout_version, 2);
-        assert_eq!(ui.shaped.layout.page_count, 7);
+        assert_eq!(
+            ui.shaped.layout.page_count,
+            crate::events::PageCount::new(7)
+        );
         assert_eq!(ui.column, column::PageColumn::of(&ui.shaped.layout));
-        assert_eq!(ui.column.page_count, 7);
+        assert_eq!(ui.column.page_count, crate::events::PageCount::new(7));
     }
 
     #[test]
@@ -551,7 +565,10 @@ pub(crate) mod tests {
         assert!(!ui.apply_layout(a_layout(4, 2)));
         assert!(!ui.apply_layout(a_layout(5, 2)));
         assert_eq!(ui.layout_version, 5);
-        assert_eq!(ui.shaped.layout.page_count, 9);
+        assert_eq!(
+            ui.shaped.layout.page_count,
+            crate::events::PageCount::new(9)
+        );
     }
 
     #[test]
@@ -617,13 +634,13 @@ pub(crate) mod tests {
         let mut ui = a_view();
         ui.apply_layout(shaped);
         let far = ui.shaped.layout.blocks.last().expect("a block").clone();
-        assert!(far.page_start > 0);
+        assert!(far.page_start > PageIndex::ZERO);
         let entry = TocEntry {
             block_id: block_id(far.block_id),
             level: 1,
             text: String::new(),
             section_number: None,
-            page: far.page_start,
+            page: Some(far.page_start.number()),
         };
         ui.follow_toc_entry(&entry);
         let top = ui.column.page_top_y(far.page_start).get()
@@ -634,7 +651,7 @@ pub(crate) mod tests {
             ui.column.clamp_scroll(&ui.viewport, top)
         );
         let visible = ui.column.visible_pages(&ui.viewport).expect("pages");
-        assert!(visible.contains(&far.page_start));
+        assert!(visible.contains(far.page_start));
         assert_eq!(logic.export_snapshot(), before);
     }
 

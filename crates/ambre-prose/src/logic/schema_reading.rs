@@ -584,10 +584,12 @@ fn mark_reading(
     let name = block_name(reader, block);
     let at = stored.offset;
     let what = if mark.starts_with("f:") {
-        let pages = reader.full_layout().map_or(1, |layout| layout.page_count);
+        let pages = reader
+            .full_layout()
+            .map_or(crate::events::PageCount::ONE, |layout| layout.page_count);
         format!(
             "band shows {:?} on page 1",
-            crate::band::resolve(&reader.doc, block, 0, pages)
+            crate::band::resolve(&reader.doc, block, crate::events::PageIndex::ZERO, pages)
         )
     } else if mark == doc::K_FOOTNOTE {
         let id = ambre_core::FootnoteId::parse_str(stored.string()?).ok();

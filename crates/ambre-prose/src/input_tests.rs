@@ -679,7 +679,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
         Arc::new(crate::layout::pass::PageLayout {
             page_width_px: 800.0,
             page_height_px: 1000.0,
-            page_count: 1,
+            page_count: crate::events::PageCount::ONE,
             ..crate::layout::pass::PageLayout::default()
         }),
         HashMap::new(),
@@ -1200,6 +1200,7 @@ fn banded() -> (Rig, BlockId, BlockId) {
 
 /// Where a band's offset is drawn on `page`, as the painter places it.
 fn band_point(rig: &Rig, block: BlockId, offset: u32, page: u32) -> (f32, f32) {
+    let page = crate::events::PageIndex::new(page);
     let ui = &rig.ui;
     let layout = &ui.shaped.layout;
     let slot = ui
@@ -1230,7 +1231,7 @@ fn a_press_in_a_header_or_a_footer_lands_in_its_text() {
             (rig.caret().block_id, rig.caret().offset),
             (block, DocOffset::new(4))
         );
-        assert_eq!(rig.ui.band_page, Some(0));
+        assert_eq!(rig.ui.band_page, Some(crate::events::PageIndex::ZERO));
         assert!(
             rig.ui.caret_span().is_some(),
             "the caret is placed on its page"
@@ -1292,7 +1293,7 @@ fn noted() -> (Rig, BlockId, BlockId) {
     rig.lay();
     let note = rig
         .ui
-        .note_slots(0)
+        .note_slots(crate::events::PageIndex::new(0))
         .first()
         .map(|slot| crate::events::block_id(slot.block))
         .expect("the note is drawn on the first page");
@@ -1304,14 +1305,16 @@ fn note_point(rig: &Rig, block: BlockId, offset: u32) -> (f32, f32) {
     let ui = &rig.ui;
     let layout = &ui.shaped.layout;
     let slot = ui
-        .note_slots(0)
+        .note_slots(crate::events::PageIndex::new(0))
         .into_iter()
         .find(|slot| slot.block == crate::events::tree_id(block))
         .expect("the note is drawn");
     let run = ui.shaped.blocks[&slot.block].data();
     let caret = run.caret_box(RunOffset::new(offset));
     let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
-    let y_doc = ui.column.page_top_y(0).get() + slot.top + (caret.y0 + caret.y1) as f32 / 2.0;
+    let y_doc = ui.column.page_top_y(crate::events::PageIndex::new(0)).get()
+        + slot.top
+        + (caret.y0 + caret.y1) as f32 / 2.0;
     let scale = ui.viewport.scale();
     (
         ui.column.left_px(&ui.viewport) + x * scale,

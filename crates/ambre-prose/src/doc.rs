@@ -1211,8 +1211,8 @@ impl Bands {
     /// page's own pair while the setting is on, the regular pair otherwise
     /// (`PROSE-FEAT-169`, `PROSE-UI-133`). A hidden side draws nothing.
     #[must_use]
-    pub fn on_page(&self, page: u32) -> (Option<Band>, Option<Band>) {
-        let first = page == 0 && self.different_first_page;
+    pub fn on_page(&self, page: crate::events::PageIndex) -> (Option<Band>, Option<Band>) {
+        let first = page == crate::events::PageIndex::ZERO && self.different_first_page;
         let (header, footer) = if first {
             (self.header_first, self.footer_first)
         } else {

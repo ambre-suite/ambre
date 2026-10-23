@@ -152,7 +152,7 @@ impl ProseState {
     /// the four tallies alone (`PROSE-FEAT-126`, `PROSE-FEAT-127`).
     pub(super) fn stamp_pages(&mut self) {
         if let Some(paginator) = self.paginator.as_ref() {
-            self.word_count.pages = paginator.layout().page_count;
+            self.word_count.pages = paginator.layout().page_count.get();
         }
     }
 
@@ -276,8 +276,30 @@ mod tests {
         append(&mut state, BlockInit::PageBreak, "");
         heading(&mut state, 1, "Second");
         let built = settled(&mut state, toc);
-        let pages: Vec<u32> = built.entries.iter().map(|entry| entry.page).collect();
-        assert_eq!(pages, [1, 2]);
+        let pages: Vec<Option<u32>> = built
+            .entries
+            .iter()
+            .map(|entry| entry.page.map(|page| page.get()))
+            .collect();
+        assert_eq!(pages, [Some(1), Some(2)]);
+    }
+
+    /// A heading the layout places on no page draws no page number. It once
+    /// drew page zero, which no reader's page is.
+    #[test]
+    fn a_heading_no_layout_places_draws_no_page_number() {
+        let mut state = fresh();
+        let toc = insert_toc(&mut state, 6, false);
+        heading(&mut state, 1, "Lost");
+        let tree = doc::blocks(state.document());
+        let built = crate::toc::build(
+            state.document(),
+            &tree,
+            &tree_id(toc),
+            &std::collections::HashMap::new(),
+        )
+        .expect("a live table of contents");
+        assert_eq!(crate::toc::lines(&built), "Lost");
     }
 
     #[test]
@@ -501,7 +523,7 @@ mod tests {
         append(&mut state, BlockInit::Paragraph, "one");
         append(&mut state, BlockInit::PageBreak, "");
         append(&mut state, BlockInit::Paragraph, "two");
-        let pages = state.paginate(&[]).page_count;
+        let pages = state.paginate(&[]).page_count.get();
         assert!(pages >= 2);
         assert_eq!(state.word_count().pages, pages);
         let outcome = state.handle_command(ProseCommand::CountWords);
@@ -521,7 +543,7 @@ mod tests {
             pos: DocOffset::ZERO,
             text: "words".to_owned(),
         });
-        let pages = state.paginate(&[]).page_count;
+        let pages = state.paginate(&[]).page_count.get();
         // An edit that adds a page, and no layout taken since.
         append(&mut state, BlockInit::PageBreak, "");
         append(&mut state, BlockInit::Paragraph, "more");

@@ -134,7 +134,7 @@ pub struct PageLayout {
     pub page_height_px:    f32,
     pub content_width_px:  f32,
     pub content_height_px: f32,
-    pub page_count:        u32,
+    pub page_count:        PageCount,
     pub blocks:            Vec<BlockLayout>,
     pub header_height_px:  f32,
     pub header_first_height_px: f32,
@@ -142,7 +142,7 @@ pub struct PageLayout {
     pub footer_first_height_px: f32,
     /// The first page this layout differs from the one it replaces on (`PROSE-067`).
     /// `None` when nothing moved.
-    pub first_dirty_page: Option<u32>,
+    pub first_dirty_page: Option<PageIndex>,
     /// The scripts this document uses that no loaded face covered when it was measured
     /// (`PROSE-110`). Empty is the settled case.
     pub missing_scripts: ScriptSet,
@@ -157,7 +157,7 @@ pub struct BlockLayout {
     /// The height of the portion on `page_start` alone -- never the whole block when
     /// `is_split`. The later fragments are in `continuation_heights`.
     pub height_px:   f32,
-    pub page_start:  u32,
+    pub page_start:  PageIndex,
     pub y_in_page:   f32,
     pub is_split:    bool,
     /// Index of the first line carried by each page after `page_start`.
@@ -177,7 +177,7 @@ pub struct FootnoteLayout {
     pub footnote_id:  Uuid,
     /// Sequential across the whole document, assigned in pass 0.
     pub ordinal:      u32,
-    pub page:         u32,
+    pub page:         PageIndex,
     pub height_px:    f32,
 }
 
@@ -193,9 +193,9 @@ impl PageLayout {
     pub fn header_runs_for(&self, page: usize) -> &[ParleyRunData];
     pub fn footer_runs_for(&self, page: usize) -> &[ParleyRunData];
     /// Every fragment visible on a page, continuations of split blocks included.
-    pub fn blocks_on_page(&self, page: u32) -> impl Iterator<Item = &BlockLayout>;
+    pub fn blocks_on_page(&self, page: PageIndex) -> impl Iterator<Item = &BlockLayout>;
     /// The notes at the foot of a page, in ordinal order. Empty where it carries none.
-    pub fn footnotes_on_page(&self, page: u32) -> Vec<&FootnoteLayout>;
+    pub fn footnotes_on_page(&self, page: PageIndex) -> Vec<&FootnoteLayout>;
 }
 ```
 

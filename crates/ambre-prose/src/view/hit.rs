@@ -9,7 +9,7 @@ use ambre_core::{DocPoint, DocPx, ViewPoint, ViewPx};
 use ambre_draw::HitTest;
 use loro::TreeID;
 
-use crate::events::{BlockId, block_id, tree_id};
+use crate::events::{BlockId, PageIndex, block_id, tree_id};
 use crate::layout::place::BlockLayout;
 use crate::layout::run::{CellShape, RunOffset, TableShape};
 use crate::ui::ProseUiState;
@@ -108,7 +108,11 @@ fn cell_hit(table: &TableShape, x: f32, y: f32) -> Option<(BlockId, RunOffset)> 
 
 /// The fragment of `block` on `page`, or `None` when the block shows nothing
 /// there.
-pub(crate) fn fragment(block: &BlockLayout, page: u32, line_tops: &[f32]) -> Option<Fragment> {
+pub(crate) fn fragment(
+    block: &BlockLayout,
+    page: PageIndex,
+    line_tops: &[f32],
+) -> Option<Fragment> {
     if page == block.page_start {
         return Some(Fragment {
             top: block.y_in_page,
@@ -116,7 +120,10 @@ pub(crate) fn fragment(block: &BlockLayout, page: u32, line_tops: &[f32]) -> Opt
             run_top: 0.0,
         });
     }
-    let k = page.checked_sub(block.page_start)?.checked_sub(1)? as usize;
+    let k = page
+        .count_from(block.page_start)
+        .to_usize()
+        .checked_sub(1)?;
     let height = *block.continuation_heights.get(k)?;
     let first_line = *block.split_points.get(k)? as usize;
     Some(Fragment {
@@ -165,7 +172,7 @@ impl ProseUiState {
     /// The notes `page` draws at its foot, in the order of their ordinals,
     /// stacked up from the foot of the body. The one geometry the painter
     /// and the hit-test both read.
-    pub(crate) fn note_slots(&self, page: u32) -> Vec<NoteSlot> {
+    pub(crate) fn note_slots(&self, page: PageIndex) -> Vec<NoteSlot> {
         let layout = &self.shaped.layout;
         let mut notes: Vec<&crate::layout::place::FootnoteLayout> = self
             .blocks_on(page)
@@ -194,9 +201,9 @@ impl ProseUiState {
 
     /// The header and the footer `page` draws, where it draws them. The one
     /// geometry the painter and the hit-test both read.
-    pub(crate) fn band_slots(&self, page: u32) -> Vec<BandSlot> {
+    pub(crate) fn band_slots(&self, page: PageIndex) -> Vec<BandSlot> {
         let layout = &self.shaped.layout;
-        let first = page == 0 && layout.bands.different_first_page;
+        let first = page == PageIndex::ZERO && layout.bands.different_first_page;
         let (header_px, footer_px) = if first {
             (layout.header_first_height_px, layout.footer_first_height_px)
         } else {
@@ -228,7 +235,7 @@ impl ProseUiState {
     }
 
     /// The page a note's text is drawn on, when `block` holds a note's text.
-    pub(crate) fn note_page(&self, block: BlockId) -> Option<u32> {
+    pub(crate) fn note_page(&self, block: BlockId) -> Option<PageIndex> {
         let id = tree_id(block);
         self.shaped
             .layout
@@ -241,7 +248,12 @@ impl ProseUiState {
 
     /// The text of a band or a note under a point of `page`, when the point
     /// is in one.
-    fn band_hit(&self, page: u32, x_in_page: f32, y_in_page: f32) -> Option<(BlockId, RunOffset)> {
+    fn band_hit(
+        &self,
+        page: PageIndex,
+        x_in_page: f32,
+        y_in_page: f32,
+    ) -> Option<(BlockId, RunOffset)> {
         let bands = self
             .band_slots(page)
             .into_iter()
@@ -265,7 +277,7 @@ impl ProseUiState {
 
     /// The indices of the blocks a page shows, in flow order. Read from the
     /// index built when the layout was taken, never by walking every block.
-    pub(crate) fn blocks_on(&self, page: u32) -> &[usize] {
+    pub(crate) fn blocks_on(&self, page: PageIndex) -> &[usize] {
         self.shaped.blocks_on(page)
     }
 

@@ -9,7 +9,9 @@ use std::collections::HashMap;
 
 use ambre_core::{CommentId, DocPoint, DocPx, SuggestionId, ViewPoint, ViewPx};
 
-use crate::events::{BlockId, CommentThread, LinkSpan, ProseCommand, SuggestionKind, tree_id};
+use crate::events::{
+    BlockId, CommentThread, LinkSpan, PageIndex, ProseCommand, SuggestionKind, tree_id,
+};
 use crate::layout::run::RunSpan;
 use crate::ui::ProseUiState;
 use crate::view::column::DocPos;
@@ -106,12 +108,17 @@ pub fn stack(heights: &[ViewPx], room: ViewPx) -> Vec<ViewPx> {
 impl ProseUiState {
     /// The page and fragment of `block` that show `run_y`, a height in its
     /// run, and the top of that fragment in the page.
-    pub(crate) fn fragment_at(&self, block: BlockId, run_y: DocPx) -> Option<(u32, Fragment)> {
+    pub(crate) fn fragment_at(
+        &self,
+        block: BlockId,
+        run_y: DocPx,
+    ) -> Option<(PageIndex, Fragment)> {
         let index = self.flow_index(&tree_id(block))?;
         let layout = self.shaped.block(index)?;
         let tops = self.shaped.blocks.get(&layout.block_id)?.data().line_tops();
-        let last = layout.page_start + layout.continuation_heights.len() as u32;
-        (layout.page_start..=last)
+        layout
+            .page_span()
+            .into_iter()
             .filter_map(|page| Some((page, fragment(layout, page, &tops)?)))
             .take_while(|(_, piece)| piece.run_top <= run_y.get())
             .last()
@@ -121,7 +128,7 @@ impl ProseUiState {
     pub(crate) fn to_screen(
         &self,
         block: BlockId,
-        page: u32,
+        page: PageIndex,
         piece: Fragment,
         at: DocPoint,
     ) -> ViewPoint {
@@ -149,7 +156,7 @@ impl ProseUiState {
         &self,
         block: BlockId,
         span: RunSpan,
-        page: u32,
+        page: PageIndex,
         at: ViewPoint,
     ) -> Option<ScreenRect> {
         let index = self.flow_index(&tree_id(block))?;
@@ -176,7 +183,7 @@ impl ProseUiState {
     }
 
     /// The page under a canvas point, if any.
-    pub(crate) fn page_under(&self, at: ViewPoint) -> Option<u32> {
+    pub(crate) fn page_under(&self, at: ViewPoint) -> Option<PageIndex> {
         match self.column.screen_to_doc(&self.viewport, at) {
             DocPos::OnPage { page, .. } => Some(page),
             _ => None,

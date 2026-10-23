@@ -813,7 +813,7 @@ impl ProseUiState {
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
         let layout = &self.shaped.layout;
-        if layout.page_count == 0 {
+        if layout.page_count.is_zero() {
             return false;
         }
         if self.shaped.block_count() == 0 {

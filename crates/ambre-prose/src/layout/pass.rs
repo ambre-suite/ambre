@@ -9,7 +9,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use ambre_bus::app::prose::{BlockType, DocOffset, ParagraphStyle};
+use ambre_bus::app::prose::{
+    BlockType, DocOffset, PageCount, PageIndex, PageNumber, ParagraphStyle,
+};
 use ambre_core::{DocPx, FootnoteId, Pt};
 use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
@@ -40,16 +42,16 @@ pub struct PageLayout {
     /// Where the content box starts on the sheet.
     pub margin_left_px: f32,
     pub margin_top_px: f32,
-    pub page_count: u32,
+    pub page_count: PageCount,
     pub blocks: Vec<BlockLayout>,
     pub header_height_px: f32,
     pub header_first_height_px: f32,
     pub footer_height_px: f32,
     pub footer_first_height_px: f32,
     /// The first page this layout differs from the one it replaces on
-    /// (`PROSE-067`). `None` when nothing moved, and `Some(0)` for a layout
+    /// (`PROSE-067`). `None` when nothing moved, and the first page for a layout
     /// that replaces nothing.
-    pub first_dirty_page: Option<u32>,
+    pub first_dirty_page: Option<PageIndex>,
     /// The scripts the document uses that no loaded face covered when this
     /// layout was measured (`PROSE-110`).
     ///
@@ -67,21 +69,21 @@ impl PageLayout {
     /// its block and its alignment (`PROSE-FEAT-169`, `PROSE-UI-133`,
     /// `PROSE-FEAT-285`). `None` for a hidden side.
     #[must_use]
-    pub fn bands_on_page(&self, page: u32) -> (Option<doc::Band>, Option<doc::Band>) {
+    pub fn bands_on_page(&self, page: PageIndex) -> (Option<doc::Band>, Option<doc::Band>) {
         self.bands.on_page(page)
     }
 
     /// Every fragment visible on a page, continuations of split blocks
     /// included (`PROSE-066`). Empty for a page that carries nothing, and for
     /// one out of range (`PROSE-011`).
-    pub fn blocks_on_page(&self, page: u32) -> impl Iterator<Item = &BlockLayout> {
+    pub fn blocks_on_page(&self, page: PageIndex) -> impl Iterator<Item = &BlockLayout> {
         self.blocks.iter().filter(move |block| block.shows_on(page))
     }
 
     /// The footnotes drawn at the foot of `page`, in the order of their
     /// ordinals (`PROSE-015`). Empty for a page that carries none.
     #[must_use]
-    pub fn footnotes_on_page(&self, page: u32) -> Vec<&FootnoteLayout> {
+    pub fn footnotes_on_page(&self, page: PageIndex) -> Vec<&FootnoteLayout> {
         let mut notes: Vec<&FootnoteLayout> = self
             .blocks
             .iter()
@@ -375,7 +377,7 @@ pub(crate) fn layout_of(page_box: PageBox, placement: &Placement) -> PageLayout 
         header_first_height_px: 0.0,
         footer_height_px: 0.0,
         footer_first_height_px: 0.0,
-        first_dirty_page: Some(0),
+        first_dirty_page: Some(PageIndex::ZERO),
         // The caller knows what its measurer was missing; this one assembles
         // geometry and placement alone.
         missing_scripts: ScriptSet::new(),
@@ -459,7 +461,7 @@ pub(crate) fn measure_document_with(
         &HashMap<TreeID, &MeasuredBlock>,
         &HashMap<TreeID, &MeasuredBlock>,
     ),
-    toc_pages: &HashMap<TreeID, u32>,
+    toc_pages: &HashMap<TreeID, PageNumber>,
     notes: &NotePlan,
 ) -> Vec<MeasuredBlock> {
     // A measurement already held proves the tree exists, so taking it
@@ -498,7 +500,7 @@ struct Walk<'a> {
     content_width_px: f32,
     cached: &'a HashMap<TreeID, &'a MeasuredBlock>,
     previous: &'a HashMap<TreeID, &'a MeasuredBlock>,
-    toc_pages: &'a HashMap<TreeID, u32>,
+    toc_pages: &'a HashMap<TreeID, PageNumber>,
     notes: &'a NotePlan,
 }
 
@@ -1011,8 +1013,13 @@ mod tests {
         // A document with no register at all is the case a reader that mints
         // one would be caught by (`PROSE-079`).
         assert_eq!(format!("{:?}", document.get_deep_value()), before);
-        assert_eq!(layout.page_count, 1);
-        assert_eq!(layout.blocks_on_page(0).count(), 0);
+        assert_eq!(layout.page_count, crate::events::PageCount::new(1));
+        assert_eq!(
+            layout
+                .blocks_on_page(crate::events::PageIndex::new(0))
+                .count(),
+            0
+        );
         assert!(layout.page_width_px > 0.0);
         assert!(layout.body_height_px() > 0.0);
     }
@@ -1029,12 +1036,17 @@ mod tests {
         }
         let mut measurer = crate::layout::measure::shipped_measurer();
         let layout = lay_out(&mut measurer, &document);
-        assert_eq!(layout.page_count, 2);
+        assert_eq!(layout.page_count, crate::events::PageCount::new(2));
         let Some(last) = layout.blocks.last() else {
             return;
         };
-        assert_eq!(last.page_start, 1);
-        assert_eq!(layout.blocks_on_page(1).count(), 1);
+        assert_eq!(last.page_start, crate::events::PageIndex::new(1));
+        assert_eq!(
+            layout
+                .blocks_on_page(crate::events::PageIndex::new(1))
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -1046,10 +1058,10 @@ mod tests {
         }
         let mut measurer = crate::layout::measure::shipped_measurer();
         let layout = lay_out(&mut measurer, &document);
-        assert!(layout.page_count > 1);
+        assert!(layout.page_count.get() > 1);
         // Every page the layout reports is one a reader can ask for
         // (`PROSE-011`).
-        for page in 0..layout.page_count {
+        for page in layout.page_count.span() {
             let _ = layout.blocks_on_page(page).count();
         }
     }

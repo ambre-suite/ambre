@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use loro::{LoroDoc, LoroTree, TreeID, TreeParentId};
 
 use crate::doc;
-use crate::events::{TableOfContents, TocEntry, block_id};
+use crate::events::{PageNumber, TableOfContents, TocEntry, block_id};
 use crate::layout::place::BlockLayout;
 use crate::numbering;
 
@@ -35,14 +35,14 @@ pub fn clamp_level(level: u8) -> u8 {
 /// Every heading no deeper than the block's depth, in document order, reading
 /// its own text (`PROSE-FEAT-061`). The section number is present only while
 /// the block is numbered (`PROSE-FEAT-062`). `pages` maps a heading to the page
-/// it starts on, counted from one; a heading it does not name reads page zero.
+/// it starts on. A heading it does not name shows no page.
 /// `None` when `toc` names no live table of contents.
 #[must_use]
 pub fn build(
     document: &LoroDoc,
     tree: &LoroTree,
     toc: &TreeID,
-    pages: &HashMap<TreeID, u32>,
+    pages: &HashMap<TreeID, PageNumber>,
 ) -> Option<TableOfContents> {
     let (stored, numbered) = doc::toc_settings(tree, toc)?;
     let max_level = clamp_level(stored);
@@ -55,7 +55,7 @@ pub fn build(
                 level,
                 text: doc::get_block_text(document, &heading).to_string(),
                 section_number: numbered.then_some(number),
-                page: pages.get(&heading).copied().unwrap_or(0),
+                page: pages.get(&heading).copied(),
             })
         })
         .collect();
@@ -66,16 +66,15 @@ pub fn build(
     })
 }
 
-/// The page every heading starts on in a layout, counted from one
-/// (`PROSE-FEAT-060`).
+/// The page every heading starts on in a layout (`PROSE-FEAT-060`).
 ///
 /// A heading placed as a block of its own reads its own page. One inside a
 /// table cell is not a placed block, so it reads the page its table starts on.
 #[must_use]
-pub fn heading_pages(tree: &LoroTree, blocks: &[BlockLayout]) -> HashMap<TreeID, u32> {
-    let placed: HashMap<TreeID, u32> = blocks
+pub fn heading_pages(tree: &LoroTree, blocks: &[BlockLayout]) -> HashMap<TreeID, PageNumber> {
+    let placed: HashMap<TreeID, PageNumber> = blocks
         .iter()
-        .map(|block| (block.block_id, block.page_start.saturating_add(1)))
+        .map(|block| (block.block_id, block.page_start.number()))
         .collect();
     let mut pages = HashMap::new();
     for (heading, _) in numbering::section_numbers(tree) {
@@ -112,8 +111,10 @@ pub fn lines(toc: &TableOfContents) -> String {
             out.push(' ');
         }
         out.push_str(&entry.text);
-        out.push(' ');
-        out.push_str(&entry.page.to_string());
+        if let Some(page) = entry.page {
+            out.push(' ');
+            out.push_str(&page.to_string());
+        }
     }
     out
 }

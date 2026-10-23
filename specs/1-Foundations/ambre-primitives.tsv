@@ -330,8 +330,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetDifferentFir
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetFooterEnabled.enabled | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetHeaderEnabled.enabled | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetHeadingLevel.level | field | Option<u8>	debt	finding: Heading level as u8 (low, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ShowPages.first | field | u32	debt	finding: Prose page index: zero-based and one-based in one u32 (medium, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ShowPages.last | field | u32	debt	finding: Prose page index: zero-based and one-based in one u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::UpdateTocConfig.max_level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::UpdateTocConfig.numbered | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::is_mutating() | ret | bool	generic	predicate
@@ -346,7 +344,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.data 
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.filename | field | String	free-text	export filename
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::FindResults.current | field | Option<u32>	math	index into the match list
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::FindUpdated.current | field | Option<u32>	math	index into the match list
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::RevealBlock.page | field | u32	debt	finding: Prose page index: zero-based and one-based in one u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::SuggestionsUpdated.suggesting | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::TextChanged.local | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::UndoState.can_redo | field | bool	generic	named setting or fact flag, selects no mode
@@ -363,7 +360,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | TextAck.0 | field | u64	newty
 ambre-bus | src/app/prose.rs | crate::app::prose | TextAck::plus(n) | param | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | TextChangeSeq.0 | field | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.page | field | u32	debt	finding: Prose page index: zero-based and one-based in one u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.section_number | field | Option<Vec<u32>>	math	section number components
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::code() | ret | u8	newtype-inner	closed-set enum codec
@@ -2724,14 +2720,10 @@ ambre-primitives | src/scan.rs | crate::scan | normalise(tokens) | param | &str	
 ambre-primitives | src/scan.rs | crate::scan | path_attr() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | test_only() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-prose | src/band.rs | crate::band | field_value() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/band.rs | crate::band | field_value(count) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/band.rs | crate::band | field_value(key) | param | &str	debt	finding: header-field codec duplicated as string literals (confirmed)
-ambre-prose | src/band.rs | crate::band | field_value(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/band.rs | crate::band | format_date() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | months() | ret | Option<[&'static str;12]>	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | resolve() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/band.rs | crate::band | resolve(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/band.rs | crate::band | resolve(page_count) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/chrome/mod.rs | crate::chrome | History.can_redo | field | bool	generic	independent flag or predicate
 ambre-prose | src/chrome/mod.rs | crate::chrome | History.can_undo | field | bool	generic	independent flag or predicate
 ambre-prose | src/chrome/mod.rs | crate::chrome | MENU_DROP_PX | const | f32	math	layout geometry local to algorithm
@@ -2771,7 +2763,6 @@ ambre-prose | src/doc.rs | crate::doc | Bands.different_first_page | field | boo
 ambre-prose | src/doc.rs | crate::doc | Bands.footer_enabled | field | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Bands.header_enabled | field | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Bands::holds() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/doc.rs | crate::doc | Bands::on_page(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/doc.rs | crate::doc | BodyKey.0 | field | String	newtype-inner	the body root name BodyKey types
 ambre-prose | src/doc.rs | crate::doc | BodyKey::as_str() | ret | &str	foreign-api	the body root name, for the Loro call that opens it
 ambre-prose | src/doc.rs | crate::doc | CARRIER | const | char	free-text	text content / label / parser input
@@ -3008,23 +2999,17 @@ ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan::read(content_
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan::touches() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.content_height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.content_width_px | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.first_dirty_page | field | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.footer_first_height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.footer_height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.header_first_height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.header_height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.margin_left_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.margin_top_px | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.page_count | field | u32	math	count, size or local index
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.page_height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout.page_width_px | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout::bands_on_page(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout::blocks_on_page(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout::body_height_px() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout::body_top_px() | ret | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout::footnotes_on_page(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/pass.rs | crate::layout::pass | Walk.content_width_px | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/pass.rs | crate::layout::pass | Walk.toc_pages | field | &'a HashMap<TreeID,u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/pass.rs | crate::layout::pass | cell_blocks(width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | column_widths_px() | ret | Vec<f32>	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | column_widths_px(cols) | param | usize	math	count, size or local index
@@ -3034,7 +3019,6 @@ ambre-prose | src/layout/pass.rs | crate::layout::pass | image_height(text_width
 ambre-prose | src/layout/pass.rs | crate::layout::pass | measure_band(content_width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | measure_document(content_width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | measure_document_with((content_width_px,defaults)) | param | (f32,&doc::DocDefaults)	math	layout geometry local to algorithm
-ambre-prose | src/layout/pass.rs | crate::layout::pass | measure_document_with(toc_pages) | param | &HashMap<TreeID,u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/pass.rs | crate::layout::pass | number_at() | ret | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | string_at() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/layout/pass.rs | crate::layout::pass | table_metrics(content_width_px) | param | f32	math	layout geometry local to algorithm
@@ -3043,15 +3027,11 @@ ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout.continuat
 ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout.foot_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout.height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout.is_split | field | bool	generic	independent flag or predicate
-ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout.page_start | field | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout.split_points | field | Vec<u32>	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout.y_in_page | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout::page_span() | ret | std::ops::RangeInclusive<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout::shows_on() | ret | bool	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout::shows_on(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
+ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout::shows_on() | ret | bool	generic	predicate result: whether the block shows on a page
 ambre-prose | src/layout/place.rs | crate::layout::place | Cursor.body_height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/place.rs | crate::layout::place | Cursor.foot_px | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/place.rs | crate::layout::place | Cursor.page | field | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/place.rs | crate::layout::place | Cursor.pending_margin_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/place.rs | crate::layout::place | Cursor.y | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/place.rs | crate::layout::place | Cursor::at_page_top() | ret | bool	generic	independent flag or predicate
@@ -3061,7 +3041,6 @@ ambre-prose | src/layout/place.rs | crate::layout::place | Cursor::new(body_heig
 ambre-prose | src/layout/place.rs | crate::layout::place | Cursor::room_after_gap() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/place.rs | crate::layout::place | FootnoteLayout.height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/place.rs | crate::layout::place | FootnoteLayout.ordinal | field | u32	math	count, size or local index
-ambre-prose | src/layout/place.rs | crate::layout::place | FootnoteLayout.page | field | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/place.rs | crate::layout::place | MIN_LINES_AT_BREAK | const | u32	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | MeasuredBlock.height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/place.rs | crate::layout::place | MeasuredBlock.keep_together | field | bool	generic	independent flag or predicate
@@ -3078,8 +3057,6 @@ ambre-prose | src/layout/place.rs | crate::layout::place | NOTE_SEPARATOR_PX | c
 ambre-prose | src/layout/place.rs | crate::layout::place | NoteCall.height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/place.rs | crate::layout::place | NoteCall.line | field | u32	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | NoteCall.ordinal | field | u32	math	count, size or local index
-ambre-prose | src/layout/place.rs | crate::layout::place | Placement.page_count | field | u32	math	count, size or local index
-ambre-prose | src/layout/place.rs | crate::layout::place | Placement::blocks_on_page(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/place.rs | crate::layout::place | cursor_after(body_height_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/place.rs | crate::layout::place | fragment() | ret | u32	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | fragment(from) | param | u32	math	count, size or local index
@@ -3102,21 +3079,15 @@ ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until() | 
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(from) | param | usize	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(stop) | param | impl Fn(usize,&Cursor)->bool	generic	independent flag or predicate
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator.order | field | Arc<HashMap<TreeID,usize>>	math	count, size or local index
-ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator.toc_pages | field | HashMap<TreeID,u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator.version | field | u64	math	count, size or local index
-ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::commit(first_dirty) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::cursor_before(body_height_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::cursor_before(from) | param | usize	math	count, size or local index
-ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::page_of() | ret | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::register_faces(bytes) | param | Vec<u8>	math	count, size or local index
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::replace_tail(from) | param | usize	math	count, size or local index
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::settle_toc() | ret | usize	math	count, size or local index
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::shaped() | ret | u64	math	count, size or local index
-ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::window(first) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::window(last) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | TOC_SETTLE_PASSES | const | usize	math	count, size or local index
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | first_difference() | ret | Option<usize>	math	count, size or local index
-ambre-prose | src/layout/reflow.rs | crate::layout::reflow | first_dirty_page() | ret | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | <ShapedRun as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-prose | src/layout/run.rs | crate::layout::run | CellAt.block | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | CellAt.cell | field | usize	math	count, size or local index
@@ -3174,16 +3145,13 @@ ambre-prose | src/layout/run.rs | crate::layout::run | Segment.skip | field | us
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout.first_index | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout.order | field | Arc<HashMap<TreeID,usize>>	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout.page_blocks | field | Vec<Vec<usize>>	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout.pages | field | (u32,u32)	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout.version | field | u64	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::block(index) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::block_count() | ret | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::blocks_on() | ret | &[usize]	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::blocks_on(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
+ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::blocks_on() | ret | &[usize]	math	flow indices into the layout blocks, as index_of() and block(index) take them
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::carries() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::index_of() | ret | Option<usize>	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::new(version) | param | u64	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::pages() | ret | std::ops::RangeInclusive<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::window_blocks() | ret | impl DoubleEndedIterator<Item=(usize,&BlockLayout)>	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedRun::marked(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedRun::new(indent_px) | param | f32	math	layout geometry local to algorithm
@@ -3192,7 +3160,6 @@ ambre-prose | src/layout/run.rs | crate::layout::run | ShapedRun::styled(text) |
 ambre-prose | src/layout/run.rs | crate::layout::run | TableShape.row_tops | field | Vec<f32>	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | Window.first_index | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | Window.order | field | Arc<HashMap<TreeID,usize>>	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | Window.pages | field | (u32,u32)	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | order_of() | ret | HashMap<TreeID,usize>	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | shifted(shift) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/link.rs | crate::link | OPENABLE | const | [&str;3]	debt	finding: openable URL schemes as a &str list (confirmed)
@@ -3377,22 +3344,16 @@ ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_ru
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed | field | Option<(loro::Frontiers,usize,(u32,u32))>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed_version | field | u64	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.media_cache | field | HashMap<ambre_core::ContentHash,Vec<u8>>	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.owe_greeting | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.suggesting | field | bool	generic	independent flag or predicate
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState.window | field | (u32,u32)	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::cached_media() | ret | Option<&[u8]>	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::err_write(reason) | param | &str	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::face_count() | ret | usize	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::on_media_downloaded(data) | param | Vec<u8>	math	count, size or local index
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::show_pages(first) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::show_pages(last) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/logic/mod.rs | crate::logic | WINDOW_MARGIN | const | u32	math	count, size or local index
-ambre-prose | src/logic/mod.rs | crate::logic | WINDOW_PAGES | const | u32	math	count, size or local index
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::edit_footnote(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::insert_footnote(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
@@ -3512,10 +3473,8 @@ ambre-prose | src/suggest.rs | crate::suggest | KIND_SUGGESTION | const | &str	d
 ambre-prose | src/suggest.rs | crate::suggest | of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/suggest.rs | crate::suggest | strip_inherited() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/toc.rs | crate::toc | MAX_LEVELS | const | std::ops::RangeInclusive<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
-ambre-prose | src/toc.rs | crate::toc | build(pages) | param | &HashMap<TreeID,u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/toc.rs | crate::toc | clamp_level() | ret | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/toc.rs | crate::toc | clamp_level(level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
-ambre-prose | src/toc.rs | crate::toc | heading_pages() | ret | HashMap<TreeID,u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/toc.rs | crate::toc | lines() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | Change::Insert.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer.generation | field | u64	math	count, size or local index
@@ -3528,9 +3487,7 @@ ambre-prose | src/ui.rs | crate::ui | DraftBuffer::text_of() | ret | String	free
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::text_of(laid) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::touches() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | DraftEdit.confirmed | field | bool	generic	independent flag or predicate
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.asked_pages | field | Option<(u32,u32)>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.awaiting_block | field | bool	generic	independent flag or predicate
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.band_page | field | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.changed | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.compose_shape | field | Option<(String,ShapedRun)>	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.composing | field | String	free-text	text content / label / parser input
@@ -3539,7 +3496,6 @@ ambre-prose | src/ui.rs | crate::ui | ProseUiState.highlights_walked | field | u
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.layout_version | field | u64	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.marks_asked | field | Option<((crate::view::caret::Spot,crate::view::caret::Spot),u64)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.pending_export | field | Option<(String,ambre_core::MediaType,Vec<u8>)>	generic	export file name and bytes beside the typed MediaType
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.reveal_page | field | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.suggesting | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.syncs | field | VecDeque<bool>	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.x_goal | field | Option<f32>	math	layout geometry local to algorithm
@@ -3555,13 +3511,9 @@ ambre-prose | src/ui.rs | crate::ui | StatusFigures::labels() | ret | [&str;5]	f
 ambre-prose | src/view/a11y.rs | crate::view::a11y | ProseUiState::caret_announcement() | ret | Option<(BlockId,String)>	free-text	text content / label / parser input
 ambre-prose | src/view/a11y.rs | crate::view::a11y | TEXT_LIMIT | const | usize	math	count, size or local index
 ambre-prose | src/view/annotate.rs | crate::view::annotate | AnnotationIntent::Reply.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::fragment_at() | ret | Option<(u32,Fragment)>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::hover() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::lost_drafts() | ret | Vec<(CommentId,Option<&'static str>)>	debt	finding: lost-reply notice as &'static str (suspected)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::lost_drafts(drafts) | param | &HashMap<CommentId,String>	free-text	text content / label / parser input
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::page_under() | ret | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::span_under(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::to_screen(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | REPLY_LOST_DELETED | const | &str	debt	finding: lost-reply notice as &'static str (suspected)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | REPLY_LOST_ORPHANED | const | &str	debt	finding: lost-reply notice as &'static str (suspected)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | REPLY_LOST_RESOLVED | const | &str	debt	finding: lost-reply notice as &'static str (suspected)
@@ -3587,25 +3539,19 @@ ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step(x
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::reveal_span((top,bottom)) | param | (f32,f32)	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::shown_text() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::tick_autoscroll() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/column.rs | crate::view::column | DocPos::OnPage.page | field | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | DocPos::OnPage.x_in_page | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | DocPos::OnPage.y_in_page | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | GUTTER_PX | const | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn.gutter_px | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/column.rs | crate::view::column | PageColumn.page_count | field | u32	math	count, size or local index
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn.page_height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn.page_width_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn.total_height_px | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/column.rs | crate::view::column | PageColumn::built_pages() | ret | Option<RangeInclusive<u32>>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::clamp_scroll() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::clamp_scroll(scroll_y) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/column.rs | crate::view::column | PageColumn::doc_y_to_page() | ret | Option<(u32,f32)>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::doc_y_to_page(doc_y) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::left_px() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::max_scroll() | ret | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/column.rs | crate::view::column | PageColumn::page_top_y(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::stride() | ret | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/column.rs | crate::view::column | PageColumn::visible_pages() | ret | Option<RangeInclusive<u32>>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | Viewport.height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | Viewport.scroll_y | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | Viewport.width_px | field | f32	math	layout geometry local to algorithm
@@ -3629,24 +3575,17 @@ ambre-prose | src/view/hit.rs | crate::view::hit | Fragment.run_top | field | f3
 ambre-prose | src/view/hit.rs | crate::view::hit | Fragment.top | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | NoteSlot.bottom | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | NoteSlot.top | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::band_hit(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::band_hit(x_in_page) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::band_hit(y_in_page) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::band_slots(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::blocks_on() | ret | &[usize]	math	count, size or local index
-ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::blocks_on(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::is_band() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::note_page() | ret | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::note_slots(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/hit.rs | crate::view::hit | cell_hit(x) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | cell_hit(y) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | fragment(line_tops) | param | &[f32]	math	layout geometry local to algorithm
-ambre-prose | src/view/hit.rs | crate::view::hit | fragment(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/mod.rs | crate::view | ProseUiState::apply_layout() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/mod.rs | crate::view | ProseUiState::flow_index() | ret | Option<usize>	math	count, size or local index
 ambre-prose | src/view/mod.rs | crate::view | ProseUiState::resize(height_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/mod.rs | crate::view | ProseUiState::resize(width_px) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/mod.rs | crate::view | WINDOW_SLACK | const | u32	math	count, size or local index
 ambre-prose | src/view/paint.rs | crate::view::paint | CARET_WIDTH_PX | const | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/paint.rs | crate::view::paint | Frame.ghost_carets | field | Vec<(f64,Rect,Rect)>	math	layout geometry local to algorithm
 ambre-prose | src/view/paint.rs | crate::view::paint | LABEL_TAB_PX | const | f64	math	layout geometry local to algorithm
@@ -3658,7 +3597,6 @@ ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::local_caret
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::reshape() | ret | Option<(String,ShapedRun)>	free-text	text content / label / parser input
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::reshape(kept) | param | Option<(String,ShapedRun)>	free-text	text content / label / parser input
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::reshape(wanted) | param | Option<(BlockId,RunOffset,String)>	free-text	text, label or user content
-ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::resolve_page(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::resolve_page(top) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::table_cells((left,top_y)) | param | (f64,f64)	math	layout geometry local to algorithm
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::table_cells(page_top) | param | f64	math	layout geometry local to algorithm
@@ -3677,7 +3615,6 @@ ambre-prose | src/view/provisional.rs | crate::view::provisional | Piece.index |
 ambre-prose | src/view/provisional.rs | crate::view::provisional | Piece.provisional | field | bool	generic	independent flag or predicate
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::cell_run() | ret | Option<(&ShapedRun,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::held_text() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::pieces(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_drawn() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_fresh() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_table() | ret | (TableShape,f32)	math	layout geometry local to algorithm
@@ -5766,3 +5703,7 @@ ambre-canvas | src/density.rs | crate::density | PixelSize.height | field | u32	
 ambre-canvas | src/density.rs | crate::density | PixelSize.width | field | u32	newtype-inner	the inside of a size typed by its pixel space; the u32 is what wgpu and the canvas element take
 ambre-canvas | src/density.rs | crate::density | PixelSize<P>::new(height) | param | u32	newtype-inner	the constructor of a size typed by its pixel space
 ambre-canvas | src/density.rs | crate::density | PixelSize<P>::new(width) | param | u32	newtype-inner	the constructor of a size typed by its pixel space
+ambre-bus | src/app/prose.rs | crate::app::prose | PageNumber::get() | ret | u32	newtype-inner	PageNumber newtype accessor
+ambre-prose | src/layout/run.rs | crate::layout::run | page_offset() | ret | Option<usize>	math	slot of a page in the window vector of the pages it carries
+ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed | field | Option<(loro::Frontiers,usize,PageSpan)>	math	the usize is the number of faces the layout was shaped on, compared for equality
+ambre-prose | src/view/column.rs | crate::view::column | PageColumn::doc_y_to_page() | ret | Option<(PageIndex,f32)>	math	layout geometry local to algorithm, the y within the page as DocPos::OnPage.y_in_page

@@ -946,7 +946,7 @@ mod tests {
             view.layout_version, 2,
             "the later layout is the one in force"
         );
-        assert_eq!(view.shaped.layout.page_count, 1);
+        assert_eq!(view.shaped.layout.page_count.get(), 1);
         assert!(
             !view.shaped.blocks.is_empty(),
             "the runs arrive shaped with the layout"

@@ -301,7 +301,7 @@ impl ProseUiState {
 
     /// Resolve what `page` shows into the items the walk draws, and the
     /// blocks the screen draws around.
-    fn resolve_page(&self, frame: &mut Frame, page: u32, top: f64) {
+    fn resolve_page(&self, frame: &mut Frame, page: crate::events::PageIndex, top: f64) {
         let layout = std::sync::Arc::clone(&self.shaped.layout);
         let left = f64::from(layout.margin_left_px);
         let body_top = f64::from(layout.body_top_px());
@@ -767,15 +767,15 @@ mod tests {
         ui.resize(1200.0, 900.0);
         ui.apply_layout(shaped);
         let pages = ui.column.page_count;
-        assert!(pages > 20, "the document spans {pages} pages");
+        assert!(pages.get() > 20, "the document spans {pages} pages");
         let surface = paint(&mut ui);
         let built = ui.column.built_pages(&ui.viewport).expect("a page");
-        assert_eq!(sheets(&surface), built.clone().count());
+        assert_eq!(sheets(&surface), built.into_iter().count());
         assert!(sheets(&surface) < 5);
         // No block past the built pages holds drawing state.
         for block in &ui.shaped.layout.blocks {
             let run = &ui.shaped.blocks[&block.block_id];
-            if block.page_start > *built.end() + 1 {
+            if block.page_start > built.end {
                 assert!(!ui.runs.holds(RunKey::Block(block.block_id), run));
             }
         }
@@ -1041,7 +1041,7 @@ mod tests {
         }
         paint(&mut ui);
         let built = ui.column.built_pages(&ui.viewport).expect("a page");
-        let drawn: usize = built.map(|page| ui.blocks_on(page).len()).sum();
+        let drawn: usize = built.into_iter().map(|page| ui.blocks_on(page).len()).sum();
         assert_eq!(ui.highlights_walked, drawn as u64);
         assert!(drawn < ids.len());
     }
@@ -1376,7 +1376,7 @@ mod tests {
             .map(|at| run.data().caret_box(RunOffset::new(at)).x0)
             .fold(0.0, f64::max);
         assert!(widest <= f64::from(text_px) + 0.5, "at the column's width");
-        let (pieces, _) = ui.pieces(0);
+        let (pieces, _) = ui.pieces(crate::events::PageIndex::new(0));
         let grown = pieces
             .iter()
             .find_map(|piece| piece.table.clone())
@@ -1645,7 +1645,7 @@ mod tests {
         ui.apply_layout(shaped);
         let first = first_block(&ui);
         let top_of_second = |ui: &ProseUiState| {
-            let pieces = ui.pieces(0).0;
+            let pieces = ui.pieces(crate::events::PageIndex::new(0)).0;
             let at = pieces
                 .iter()
                 .position(|piece| {
@@ -1720,12 +1720,15 @@ mod tests {
             DocOffset::ZERO,
         );
         shape(&mut ui);
-        let at = ui.pieces(0).1.expect("the new paragraph is drawn");
+        let at = ui
+            .pieces(crate::events::PageIndex::new(0))
+            .1
+            .expect("the new paragraph is drawn");
         let run = ui.ghost().expect("shaped").run.clone();
         let caret = run.data().caret_box(RunOffset::new(3));
         let layout = &ui.shaped.layout;
         let x = layout.margin_left_px + run.data().indent_px() + caret.x0 as f32 + 0.5;
-        let y = ui.column.page_top_y(0).get()
+        let y = ui.column.page_top_y(crate::events::PageIndex::new(0)).get()
             + layout.body_top_px()
             + at.top
             + (caret.y0 + caret.y1) as f32 / 2.0;
@@ -1754,7 +1757,7 @@ mod tests {
     /// The screen point of offset `at` in the text of `block`, a cell of
     /// the table drawn on page 0.
     fn cell_point(ui: &ProseUiState, block: BlockId, at: u32) -> (f32, f32) {
-        let (pieces, _) = ui.pieces(0);
+        let (pieces, _) = ui.pieces(crate::events::PageIndex::new(0));
         let piece = pieces
             .iter()
             .find(|piece| piece.table.is_some())
@@ -1780,7 +1783,7 @@ mod tests {
         let layout = &ui.shaped.layout;
         let x =
             layout.margin_left_px + frame.text_x + run.data().indent_px() + caret.x0 as f32 + 0.5;
-        let y = ui.column.page_top_y(0).get()
+        let y = ui.column.page_top_y(crate::events::PageIndex::new(0)).get()
             + layout.body_top_px()
             + piece.fragment.top
             + frame.text_y
@@ -1998,7 +2001,7 @@ mod tests {
             ui.resize(width, height);
             ui.apply_layout(shaped);
             ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
-            let bottom = ui.column.page_top_y(1).get();
+            let bottom = ui.column.page_top_y(crate::events::PageIndex::new(1)).get();
             ui.viewport.scroll_y = ui.column.clamp_scroll(&ui.viewport, scroll * bottom);
             let id = first_block(&ui);
             ui.cursor = Some(CursorPosition {

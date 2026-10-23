@@ -14,9 +14,10 @@ pub use ambre_bus::app::prose::{
     ActiveMarks, Align, BandSet, BlockId, BlockInit, BlockType, CellBorder, CommentReply,
     CommentThread, CrossRefKind, CursorPosition, DateFieldFormat, FindMatch, FindQuery,
     FootnoteEntry, HeaderField, HfTarget, LineHeight, LineHeightMode, LinkSpan, ListStyle,
-    MarkAction, OrderedStyle, ParagraphStyle, PresencePayload, ProseCommand, ProseError,
-    ProseEvent, ProseRefusal, RemoteCursor, ResolvedCrossRef, Suggestion, SuggestionKind,
-    SuggestionSpan, TableOfContents, TextEdit, TocEntry, TriState, VAlign, WordCount,
+    MarkAction, OrderedStyle, PageCount, PageIndex, PageNumber, PageSpan, ParagraphStyle,
+    PresencePayload, ProseCommand, ProseError, ProseEvent, ProseRefusal, RemoteCursor,
+    ResolvedCrossRef, Suggestion, SuggestionKind, SuggestionSpan, TableOfContents, TextEdit,
+    TocEntry, TriState, VAlign, WordCount,
 };
 
 use loro::TreeID;

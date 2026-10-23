@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::events::{BlockId, tree_id};
+use crate::events::{BlockId, PageIndex, tree_id};
 use crate::input::ProseInput;
 use crate::layout::measure::{MarkedSpan, reshape_paragraph, shape_paragraph};
 use ambre_bus::app::prose::DocOffset;
@@ -324,7 +324,7 @@ impl ProseUiState {
     /// The blocks after a block drawn provisionally move on its last page. They
     /// move by what it grew, and by the paragraph a split opens below it. A
     /// block pushed past the foot of the body is cut there.
-    pub(crate) fn pieces(&self, page: u32) -> (Vec<Piece>, Option<Fragment>) {
+    pub(crate) fn pieces(&self, page: PageIndex) -> (Vec<Piece>, Option<Fragment>) {
         let body = self.shaped.layout.body_height_px();
         let drawn = self.provisional_drawn();
         let ghost = self.provisional.ghost.as_ref().filter(|_| drawn);
@@ -342,7 +342,7 @@ impl ProseUiState {
                 piece.top += shift;
                 let mut table = Arc::clone(table);
                 let mut provisional = false;
-                if drawn && page == *block.page_span().end() {
+                if drawn && page == block.last_page() {
                     let (grown_table, grown) = self.provisional_table(&table);
                     if grown > 0.0 || grown_table.cells != table.cells {
                         piece.height += grown;
@@ -376,7 +376,7 @@ impl ProseUiState {
                 continue;
             };
             piece.top += shift;
-            let last = page == *block.page_span().end();
+            let last = page == block.last_page();
             if last && let (Some(new), Some(old)) = (provisional, laid) {
                 let grown = new.data().height() - old.data().height();
                 piece.height = (piece.height + grown).max(0.0);

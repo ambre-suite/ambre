@@ -95,7 +95,7 @@ pub fn resolve(
             .blocks
             .iter()
             .find(|placed| placed.block_id == *target)
-            .map(|placed| placed.page_start.saturating_add(1).to_string()),
+            .map(|placed| placed.page_start.number().to_string()),
         CrossRefKind::SectionNumber => {
             let number = numbering::compute_section_number(&tree, target);
             (!number.is_empty()).then(|| {

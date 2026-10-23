@@ -80,7 +80,8 @@ use ambre_core::{HistoryStep, StepDirection, UserId};
 
 use crate::doc;
 use crate::events::{
-    ProseCommand, ProseError, ProseEvent, ProseOutcome, ProseRefusal, block_id, tree_id,
+    PageCount, PageIndex, PageSpan, ProseCommand, ProseError, ProseEvent, ProseOutcome,
+    ProseRefusal, block_id, tree_id,
 };
 use crate::layout::pass::PageLayout;
 use crate::layout::reflow::Paginator;
@@ -89,11 +90,11 @@ use crate::mark;
 use crate::schema;
 
 /// The pages a layout carries before the view asks for any (`PROSE-125`).
-pub const WINDOW_PAGES: u32 = 8;
+pub const WINDOW_PAGES: PageCount = PageCount::new(8);
 
 /// The pages carried on each side of a block the view reveals
 /// (`PROSE-UI-212`).
-pub const WINDOW_MARGIN: u32 = 4;
+pub const WINDOW_MARGIN: PageCount = PageCount::new(4);
 
 /// The per-document Prose engine.
 pub struct ProseState {
@@ -157,9 +158,9 @@ pub struct ProseState {
     /// What the last layout handed to the view was computed from: the
     /// document's state and how many faces it was shaped on. A layout from the
     /// same basis is the same picture, so it is not handed over twice.
-    handed: Option<(loro::Frontiers, usize, (u32, u32))>,
-    /// The pages the view last asked for, first and last (`PROSE-125`).
-    window: (u32, u32),
+    handed: Option<(loro::Frontiers, usize, PageSpan)>,
+    /// The pages the view last asked for (`PROSE-125`).
+    window: PageSpan,
     /// The version stamped on the last layout handed over. It only grows, even
     /// across a snapshot import that rebuilds the paginator: the view drops a
     /// layout older than the one it holds (`PROSE-UI-016`).
@@ -301,7 +302,7 @@ impl ProseState {
             paginator: None,
             faces: Vec::new(),
             handed: None,
-            window: (0, WINDOW_PAGES - 1),
+            window: WINDOW_PAGES.span(),
             handed_version: 0,
             in_view: Vec::new(),
             ids,
@@ -345,7 +346,7 @@ impl ProseState {
         } else {
             paginator.reflow_text(&self.doc, &dirty)
         };
-        self.word_count.pages = layout.page_count;
+        self.word_count.pages = layout.page_count.get();
         layout
     }
 
@@ -359,16 +360,16 @@ impl ProseState {
     /// It carries the pages the view last asked for (`PROSE-125`).
     pub fn shaped_layout(&mut self) -> ShapedLayout {
         self.paginate(&[]);
-        let (first, last) = self.window;
+        let window = self.window;
         self.paginator
             .as_ref()
-            .map(|paginator| paginator.window(first, last))
+            .map(|paginator| paginator.window(window))
             .unwrap_or_default()
     }
 
     /// Carry the pages `first` to `last` in the layouts handed from now on.
-    fn show_pages(&mut self, first: u32, last: u32) -> ProseOutcome {
-        self.window = (first.min(last), first.max(last));
+    fn show_pages(&mut self, first: PageIndex, last: PageIndex) -> ProseOutcome {
+        self.window = first.min(last).through(first.max(last));
         ProseOutcome::nothing()
     }
 
@@ -380,10 +381,7 @@ impl ProseState {
             .as_ref()
             .and_then(|paginator| paginator.page_of(block));
         match page {
-            Some(page) => self.show_pages(
-                page.saturating_sub(WINDOW_MARGIN),
-                page.saturating_add(WINDOW_MARGIN),
-            ),
+            Some(page) => self.show_pages(page - WINDOW_MARGIN, page + WINDOW_MARGIN),
             None => ProseOutcome::nothing(),
         }
     }
@@ -1582,7 +1580,7 @@ mod tests {
         });
         let before = state.doc.get_deep_value();
         let pages = state.paginate(&[]).page_count;
-        assert!(pages >= 1);
+        assert!(pages >= PageCount::ONE);
         // `PROSE-033`, `PROSE-065`, `PROSE-079`: laying out reads, and the
         // document holds no page number, no break and no height afterwards.
         assert_eq!(state.doc.get_deep_value(), before);

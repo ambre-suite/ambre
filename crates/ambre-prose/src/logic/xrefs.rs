@@ -62,7 +62,7 @@ impl ProseState {
             .blocks
             .iter()
             .find(|placed| placed.block_id == target)
-            .map_or(0, |placed| placed.page_start);
+            .map_or(crate::events::PageIndex::ZERO, |placed| placed.page_start);
         ProseOutcome::display_only(vec![ProseEvent::RevealBlock {
             block: block_id(target),
             page,
@@ -278,7 +278,7 @@ mod tests {
             outcome.display,
             vec![ProseEvent::RevealBlock {
                 block: ids[2],
-                page: 0,
+                page: crate::events::PageIndex::ZERO,
             }]
         );
         assert!(outcome.update.is_none());

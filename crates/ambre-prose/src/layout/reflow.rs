@@ -15,7 +15,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use ambre_bus::app::prose::BlockType;
+use ambre_bus::app::prose::{BlockType, PageCount, PageIndex, PageNumber, PageSpan};
 use ambre_core::FootnoteId;
 use loro::{LoroDoc, TreeID};
 
@@ -49,7 +49,7 @@ pub struct Paginator {
     layout: PageLayout,
     /// The page each heading started on when the tables of contents were
     /// last measured. Only [`Paginator::settle_toc`] moves it.
-    toc_pages: HashMap<TreeID, u32>,
+    toc_pages: HashMap<TreeID, PageNumber>,
     /// The bands the last layout was placed under (`PROSE-076`).
     bands: pass::BandHeights,
     /// The footnotes the last layout was placed with (`PROSE-117`).
@@ -122,22 +122,25 @@ impl Paginator {
     /// (`PROSE-UI-006`).
     #[must_use]
     pub fn shaped_layout(&self) -> ShapedLayout {
-        self.window(0, u32::MAX)
+        self.window(PageIndex::ZERO.through(PageIndex::MAX))
     }
 
-    /// The layout of the pages `first` to `last`, with the runs the view
-    /// draws on them (`PROSE-125`).
+    /// The layout of the pages `pages`, with the runs the view draws on them
+    /// (`PROSE-125`). An empty span asks for its start page.
     ///
     /// The page geometry and the page count stay the document's. The blocks,
     /// runs, tables and notes are the window's. A layout handed over costs
     /// what the pages shown hold, not the document. Nothing is shaped here
     /// (`PROSE-UI-006`).
     #[must_use]
-    pub fn window(&self, first: u32, last: u32) -> ShapedLayout {
-        let last = last.min(self.layout.page_count.saturating_sub(1));
-        let first = first.min(last);
+    pub fn window(&self, pages: PageSpan) -> ShapedLayout {
+        let last = pages
+            .last()
+            .unwrap_or(pages.start)
+            .min(self.layout.page_count.last().unwrap_or(PageIndex::ZERO));
+        let first = pages.start.min(last);
         let all = &self.layout.blocks;
-        let start = all.partition_point(|block| *block.page_span().end() < first);
+        let start = all.partition_point(|block| block.last_page() < first);
         let end = all.partition_point(|block| block.page_start <= last);
         let range = start..end.max(start);
         let blocks = all.get(range.clone()).unwrap_or_default();
@@ -182,7 +185,7 @@ impl Paginator {
         )
         .with_window(Window {
             first_index: start,
-            pages: (first, last),
+            pages: first.through(last),
             order: Arc::clone(&self.order),
             ends: self.ends,
         })
@@ -190,7 +193,7 @@ impl Paginator {
 
     /// The page a block starts on, when the layout holds it.
     #[must_use]
-    pub fn page_of(&self, block: &TreeID) -> Option<u32> {
+    pub fn page_of(&self, block: &TreeID) -> Option<PageIndex> {
         let index = *self.order.get(block)?;
         Some(self.layout.blocks.get(index)?.page_start)
     }
@@ -220,7 +223,7 @@ impl Paginator {
             &self.notes,
         );
         let placement = place::place(&measured, self.bands.body_height_px(&page_box));
-        self.commit(page_box, measured, placement, 0);
+        self.commit(page_box, measured, placement, PageIndex::ZERO);
         &self.layout
     }
 
@@ -332,7 +335,7 @@ impl Paginator {
 
     /// The heading pages the tables of contents were last measured on.
     #[cfg(test)]
-    pub(crate) fn toc_pages(&self) -> &HashMap<TreeID, u32> {
+    pub(crate) fn toc_pages(&self) -> &HashMap<TreeID, PageNumber> {
         &self.toc_pages
     }
 
@@ -399,7 +402,7 @@ impl Paginator {
         let Some(stop) = stopped else {
             return Placement {
                 blocks: placed,
-                page_count: cursor.page.saturating_add(1),
+                page_count: PageCount::through(cursor.page),
             };
         };
         // From here the old layout is the answer, entry for entry
@@ -427,7 +430,7 @@ impl Paginator {
         page_box: PageBox,
         measured: Vec<MeasuredBlock>,
         placement: Placement,
-        first_dirty: u32,
+        first_dirty: PageIndex,
     ) {
         self.page_box = page_box;
         let same_blocks = self.order.len() == measured.len()
@@ -473,7 +476,7 @@ fn first_difference(before: &[MeasuredBlock], after: &[MeasuredBlock]) -> Option
 ///
 /// The UI thread repaints from there rather than everywhere.
 #[must_use]
-fn first_dirty_page(before: &[BlockLayout], after: &[BlockLayout]) -> u32 {
+fn first_dirty_page(before: &[BlockLayout], after: &[BlockLayout]) -> PageIndex {
     for index in 0..before.len().max(after.len()) {
         match (before.get(index), after.get(index)) {
             (Some(old), Some(new)) if old == new => {}
@@ -483,11 +486,11 @@ fn first_dirty_page(before: &[BlockLayout], after: &[BlockLayout]) -> u32 {
                     old.map(|entry| entry.page_start),
                     new.map(|entry| entry.page_start),
                 ];
-                return pages.into_iter().flatten().min().unwrap_or(0);
+                return pages.into_iter().flatten().min().unwrap_or(PageIndex::ZERO);
             }
         }
     }
-    0
+    PageIndex::ZERO
 }
 
 /// A paginator holding the faces the application ships.
@@ -620,7 +623,7 @@ mod tests {
         let (document, ids) = document_of(60);
         let mut paginator = super::shipped_paginator();
         let before = paginator.full(&document).clone();
-        assert!(before.page_count > 1);
+        assert!(before.page_count.get() > 1);
         let Some(edited) = ids.last() else {
             return;
         };
@@ -630,7 +633,7 @@ mod tests {
             panic!("a layout that replaced another names a page");
         };
         // `PROSE-067`: the edit is at the end, so the early pages are clean.
-        assert!(dirty > 0);
+        assert!(dirty > PageIndex::ZERO);
     }
 
     #[test]

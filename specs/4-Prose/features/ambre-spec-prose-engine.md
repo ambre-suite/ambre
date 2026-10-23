@@ -520,7 +520,7 @@ pub enum ProseEvent {
     DocumentRefused { reason: String },
     /// The layout after a change. `version` lets the view drop an older one
     /// (`PROSE-UI-016`, `features/ambre-spec-prose-page-rendering.md`).
-    LayoutUpdated { layout: PageLayout, first_dirty_page: u32, version: u64 },
+    LayoutUpdated { layout: PageLayout, first_dirty_page: PageIndex, version: u64 },
     /// Pre-shaped runs for the blocks that moved, aligned with the layout above
     /// (`features/ambre-spec-prose-page-rendering.md section 2` declares the run).
     RunsUpdated   { runs: Vec<(TreeID, Vec<ParleyRunData>)>, version: u64 },

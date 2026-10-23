@@ -92,20 +92,20 @@ pub struct PageColumn {
     pub page_width_px:   f32,
     pub gutter_px:       f32,
     /// Zero for a layout that has not arrived yet.
-    pub page_count:      u32,
+    pub page_count:      PageCount,
     pub total_height_px: f32,
 }
 
 impl PageColumn {
-    /// The pages intersecting the viewport, in document pixels. Empty for an empty
+    /// The pages intersecting the viewport, in document pixels. `None` for an empty
     /// layout, and never inverted for any scroll offset (`PROSE-UI-021`).
-    pub fn visible_pages(&self, viewport: &Viewport) -> RangeInclusive<u32>;
+    pub fn visible_pages(&self, viewport: &Viewport) -> Option<PageSpan>;
     /// Where a page starts, measured from the top of the column.
-    pub fn page_top_y(&self, page_index: u32) -> f32;
+    pub fn page_top_y(&self, page: PageIndex) -> f32;
     /// The inverse: the page a document Y belongs to, and the Y within that page. A Y in
     /// a gutter is assigned to the nearer page edge (`PROSE-UI-022`). `None` only for an
     /// empty layout.
-    pub fn doc_y_to_page(&self, doc_y: f32) -> Option<(u32, f32)>;
+    pub fn doc_y_to_page(&self, doc_y: f32) -> Option<(PageIndex, f32)>;
 }
 ```
 
@@ -137,7 +137,7 @@ re-deriving which page it is on.
 pub fn screen_to_doc(x: f32, y: f32, vp: &Viewport, col: &PageColumn) -> DocPos;
 
 pub enum DocPos {
-    OnPage { page: u32, x_in_page: f32, y_in_page: f32 },
+    OnPage { page: PageIndex, x_in_page: f32, y_in_page: f32 },
     /// The layout has no page at all.
     Empty,
 }

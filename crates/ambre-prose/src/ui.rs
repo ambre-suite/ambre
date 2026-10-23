@@ -26,7 +26,7 @@ use ambre_bus::logic::{AppCommand, LogicCommand};
 use ambre_bus::{Outbox, SendOutcome};
 
 use crate::events::{
-    BandSet, BlockId, CommentThread, CursorPosition, FindMatch, FootnoteEntry, LinkSpan,
+    BandSet, BlockId, CommentThread, CursorPosition, FindMatch, FootnoteEntry, LinkSpan, PageIndex,
     ProseCommand, ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents,
     TextEdit, WordCount,
 };
@@ -366,7 +366,7 @@ pub struct ProseUiState {
     pub cross_refs: Vec<ResolvedCrossRef>,
     /// The page a followed reference asked to bring into view, until the
     /// view scrolls there.
-    pub reveal_page: Option<u32>,
+    pub reveal_page: Option<PageIndex>,
     /// The layout in force and the runs it carries, as last taken
     /// (`features/ambre-spec-prose-page-rendering.md`).
     pub shaped: Arc<ShapedLayout>,
@@ -414,7 +414,7 @@ pub struct ProseUiState {
     /// The page whose header or footer holds the caret. A band is drawn on
     /// every page, and the caret shows on the one it was placed on
     /// (`PROSE-UI-033`).
-    pub(crate) band_page: Option<u32>,
+    pub(crate) band_page: Option<PageIndex>,
     /// A drag in flight: its anchor is frozen while it lasts (`PROSE-UI-152`).
     pub(crate) dragging: Option<(BlockId, DocOffset)>,
     /// The last pointer of the drag in flight, and its autoscroll
@@ -434,7 +434,7 @@ pub struct ProseUiState {
     pub(crate) awaited_reveal: Option<BlockId>,
     /// The pages last asked of the Logic thread, first and last, so a frame
     /// does not ask twice for the same (`PROSE-UI-211`).
-    pub(crate) asked_pages: Option<(u32, u32)>,
+    pub(crate) asked_pages: Option<(PageIndex, PageIndex)>,
     /// The block last asked for in a [`ProseCommand::ShowBlock`].
     pub(crate) asked_block: Option<BlockId>,
     pub draft: DraftBuffer,
