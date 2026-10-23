@@ -26,7 +26,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
-use crate::{QuadRenderer, SurfaceSize, TextCache};
+use crate::{DeviceSize, QuadRenderer, SurfaceSize, TextCache};
 
 // -----------------------------------------------------------------------------
 // GpuState
@@ -49,7 +49,7 @@ pub struct GpuState {
 impl GpuState {
     /// Fit the surface and the offscreens to `size`, in device pixels.
     pub fn configure(&mut self, size: SurfaceSize) {
-        let (width, height) = size.physical();
+        let DeviceSize { width, height, .. } = size.physical();
         self.surface.configure(
             &self.device,
             &surface_config(self.surface_format, width, height),
@@ -61,7 +61,7 @@ impl GpuState {
     /// Reconfigure a lost or outdated swapchain at the current size. The
     /// offscreens survive, so no repaint is owed.
     pub fn reconfigure_surface(&self) {
-        let (width, height) = self.size.physical();
+        let DeviceSize { width, height, .. } = self.size.physical();
         self.surface.configure(
             &self.device,
             &surface_config(self.surface_format, width, height),
@@ -213,7 +213,7 @@ async fn create_gpu_state(
     size: SurfaceSize,
     backends: wgpu::Backends,
 ) -> Option<GpuState> {
-    let (width, height) = size.physical();
+    let DeviceSize { width, height, .. } = size.physical();
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
         backends,

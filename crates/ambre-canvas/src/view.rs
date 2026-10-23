@@ -53,9 +53,10 @@ pub struct PerfSnapshot {
 ///
 /// `content` is the persistent layer (offscreen, supports scroll-strip reuse);
 /// `overlay` is the transient swapchain layer. The driver translates this into
-/// the `QuadRenderer::flush_dirty_rect` call.
-pub struct RepaintPlan {
-    pub content: ContentRepaint,
+/// the `QuadRenderer::flush_dirty_rect` call. The scroll shift is in the pixel
+/// space `P`: view pixels from a view, device pixels for the renderer.
+pub struct RepaintPlan<P = ambre_core::ViewPx> {
+    pub content: ContentRepaint<P>,
     pub content_strip: Option<Rect>,
     pub overlay: OverlayRepaint,
     /// The colour a full rebuild clears to, read from the view's palette. The

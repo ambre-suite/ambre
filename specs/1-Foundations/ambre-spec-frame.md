@@ -127,7 +127,7 @@ application.
 
 | Layer | Kind | Plan values | Holds |
 |---|---|---|---|
-| `Layer::Content` | persistent, offscreen ping-pong | `Full`, `Scroll { dx_px, dy_px }`, `Reuse` | the document itself, plus `content_strip: Option<Rect>`, the area a scroll exposed |
+| `Layer::Content` | persistent, offscreen ping-pong | `Full`, `Scroll { dx, dy }`, in view pixels from the view and device pixels for the renderer, `Reuse` | the document itself, plus `content_strip: Option<Rect>`, the area a scroll exposed |
 | `Layer::Overlay` | transient, straight to the swapchain | `Redraw`, `Reuse` | the perf read-out, the headers, the active border |
 
 A `Scroll` shifts the previous frame with `copy_texture_to_texture` and redraws the entering strip

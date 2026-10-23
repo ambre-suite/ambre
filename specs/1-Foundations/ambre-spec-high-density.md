@@ -76,7 +76,7 @@ That value carries both sizes. Only the logical one is readable outside `ambre-c
 | the projection | `QuadRenderer::begin_frame` maps the logical size onto the whole buffer |
 | the glyphs | rasterized at the font size times the density, and drawn back over their logical box (`CANVAS-033`) |
 | the vector paths | flattened at a tolerance divided by the density, so a curve stays smooth |
-| the scroll copy | a logical shift is copied in device pixels. One that lands between two of them repaints in full (`CANVAS-071`) |
+| the scroll copy | a view shifts in `ViewPx`, and `SurfaceSize::on_device` hands the renderer a plan in `DevicePx`, so no shift reaches the copy unscaled. One that lands between two device pixels repaints in full (`CANVAS-071`) |
 
 **The resize path.** Two events reach the same handler, because the browser separates them.
 

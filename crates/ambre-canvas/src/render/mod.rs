@@ -26,6 +26,7 @@
 //   WgpuSurface   -- frame-scoped DrawSurface. Holds the clip stack.
 //                    Routes pushes to the renderer's currently active layer.
 // ============================================================================
+use crate::density::{DevicePx, DeviceSize};
 use ambre_draw::{Color, ImageKey};
 use bytemuck::{Pod, Zeroable};
 
@@ -441,7 +442,7 @@ fn make_blit_bg(
     })
 }
 
-/// Encode a `copy_texture_to_texture` that shifts `src` by `(dx_px, dy_px)`
+/// Encode a `copy_texture_to_texture` that shifts `src` by `(dx, dy)`
 /// pixels into `dst`. Negative deltas shift content left/up; positive shift
 /// right/down. The strip exposed by the shift is *not* cleared -- the caller
 /// must render fresh geometry over it in the subsequent cells pass.
@@ -452,29 +453,29 @@ fn copy_offscreen_with_offset(
     encoder: &mut wgpu::CommandEncoder,
     src: &wgpu::Texture,
     dst: &wgpu::Texture,
-    width: u32,
-    height: u32,
-    dx_px: i32,
-    dy_px: i32,
+    size: DeviceSize,
+    dx: DevicePx,
+    dy: DevicePx,
 ) {
+    let (width, height) = (size.width, size.height);
     // Compute the overlapping region: source rect that has a valid mapping
     // into the destination. Out-of-range deltas leave nothing to copy.
-    let dx_abs = dx_px.unsigned_abs();
-    let dy_abs = dy_px.unsigned_abs();
+    let dx_abs = dx.unsigned_abs();
+    let dy_abs = dy.unsigned_abs();
     if dx_abs >= width || dy_abs >= height {
         return;
     }
     let copy_w = width - dx_abs;
     let copy_h = height - dy_abs;
 
-    let (src_x, dst_x) = if dx_px >= 0 {
+    let (src_x, dst_x) = if dx >= DevicePx::ZERO {
         // Content shifts right: take src starting at x=0, place at dst x=dx.
         (0u32, dx_abs)
     } else {
         // Content shifts left: take src starting at x=dx_abs, place at dst x=0.
         (dx_abs, 0u32)
     };
-    let (src_y, dst_y) = if dy_px >= 0 {
+    let (src_y, dst_y) = if dy >= DevicePx::ZERO {
         (0u32, dy_abs)
     } else {
         (dy_abs, 0u32)

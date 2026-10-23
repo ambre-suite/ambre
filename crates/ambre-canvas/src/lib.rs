@@ -70,7 +70,7 @@ pub mod request_registry;
 pub use ambre_draw::wheel::{WHEEL_LINE_PX, WheelDelta, WheelDeltaMode};
 pub use anchor::{Anchor, AnchorPublisher};
 pub use busy::BusyPublisher;
-pub use density::SurfaceSize;
+pub use density::{CssSize, DevicePx, DeviceSize, PixelSize, SurfaceSize};
 #[cfg(target_arch = "wasm32")]
 pub use density::{DensityWatch, density_query, size_backing_store};
 pub use editor::{CARET_WIDTH, EditIntent, TextEditor, TextEditorStyle, TextSpan};

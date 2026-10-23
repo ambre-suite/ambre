@@ -143,7 +143,7 @@ impl Phases {
     /// The phases a plan asks for. A layer planned `Reuse` is neither built
     /// nor uploaded (`CANVAS-003`). The present runs on every frame: the
     /// swapchain texture is fresh and undefined each time (`CANVAS-010`).
-    pub fn of(content: ContentRepaint, overlay: OverlayRepaint) -> Self {
+    pub fn of<P>(content: ContentRepaint<P>, overlay: OverlayRepaint) -> Self {
         Self {
             build_content: !matches!(content, ContentRepaint::Reuse),
             build_overlay: matches!(overlay, OverlayRepaint::Redraw),
@@ -375,7 +375,10 @@ mod tests {
     fn a_reused_layer_is_skipped_and_the_present_always_runs() {
         let contents = [
             ContentRepaint::Full,
-            ContentRepaint::Scroll { dx_px: 0, dy_px: 4 },
+            ContentRepaint::Scroll {
+                dx: ambre_core::ViewPx::ZERO,
+                dy: ambre_core::ViewPx::new(4.0),
+            },
             ContentRepaint::Reuse,
         ];
         for content in contents {
@@ -393,7 +396,10 @@ mod tests {
                 );
             }
         }
-        let idle = Phases::of(ContentRepaint::Reuse, OverlayRepaint::Reuse);
+        let idle = Phases::of(
+            ContentRepaint::<ambre_core::ViewPx>::Reuse,
+            OverlayRepaint::Reuse,
+        );
         assert!(!idle.any_build(), "an idle frame builds no batch");
     }
 }

@@ -38,10 +38,10 @@ use web_sys::HtmlCanvasElement;
 use ambre_bus::app::toile::ElementId;
 use ambre_bus::{DocType, DocumentId, LogicCommand, PasteSource};
 use ambre_canvas::{
-    ContentRepaint, DensityWatch, FATAL_BACKDROP, FrameStats, GpuState, InputEvent, Layer,
-    OverlayRepaint, Phases, RafControl, RepaintPlan, SurfaceSize, TextCache, TextInput, Tick,
-    WgpuSurface, bootstrap_gpu, drive_frame, fatal_message, paint_fatal, size_backing_store,
-    start_raf_loop,
+    ContentRepaint, CssSize, DensityWatch, DevicePx, FATAL_BACKDROP, FrameStats, GpuState,
+    InputEvent, Layer, OverlayRepaint, Phases, RafControl, RepaintPlan, SurfaceSize, TextCache,
+    TextInput, Tick, WgpuSurface, bootstrap_gpu, drive_frame, fatal_message, paint_fatal,
+    size_backing_store, start_raf_loop,
 };
 use ambre_chrome::commands::ClipboardWrite;
 use ambre_core::CanvasId;

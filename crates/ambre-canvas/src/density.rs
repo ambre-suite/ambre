@@ -8,8 +8,78 @@
 // logical size alone (`CANVAS-044`), so it has nothing to scale by.
 // ============================================================================
 
+use std::marker::PhantomData;
+
+use ambre_core::{CssPx, ViewPx};
+
 use crate::render::ContentRepaint;
 use crate::view::RepaintPlan;
+
+/// A whole number of device pixels: a texel of the drawing buffer.
+///
+/// A shift of the buffer is signed, so the type is too. Nothing turns a CSS or
+/// a view pixel into one but the density of [`SurfaceSize`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DevicePx(i32);
+
+impl DevicePx {
+    /// No shift.
+    pub const ZERO: Self = Self(0);
+
+    /// The length of `value` device pixels.
+    #[must_use]
+    pub const fn new(value: i32) -> Self {
+        Self(value)
+    }
+
+    /// The number of device pixels, for a foreign API that takes the integer.
+    #[must_use]
+    pub const fn get(self) -> i32 {
+        self.0
+    }
+
+    /// The length without its sign, in the unsigned integer a texture
+    /// coordinate takes.
+    #[must_use]
+    pub const fn unsigned_abs(self) -> u32 {
+        self.0.unsigned_abs()
+    }
+}
+
+impl std::ops::Neg for DevicePx {
+    type Output = Self;
+    fn neg(self) -> Self {
+        Self(-self.0)
+    }
+}
+
+/// A size of whole pixels, in the pixel space `P` names: [`CssSize`] or
+/// [`DeviceSize`]. The space is a type, so a CSS size never reaches a place
+/// that sizes the buffer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PixelSize<P> {
+    pub width: u32,
+    pub height: u32,
+    space: PhantomData<P>,
+}
+
+impl<P> PixelSize<P> {
+    /// The size of `width` x `height` pixels.
+    #[must_use]
+    pub const fn new(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            space: PhantomData,
+        }
+    }
+}
+
+/// The CSS box of a canvas, the size a view lays out against.
+pub type CssSize = PixelSize<CssPx>;
+
+/// The drawing buffer, in device pixels.
+pub type DeviceSize = PixelSize<DevicePx>;
 
 /// The drawing buffer, in the two units of `ambre-spec-high-density.md`.
 ///
@@ -17,8 +87,8 @@ use crate::view::RepaintPlan;
 /// read by the renderer and the GPU bootstrap of this crate.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SurfaceSize {
-    logical: (u32, u32),
-    physical: (u32, u32),
+    logical: CssSize,
+    physical: DeviceSize,
     density: f64,
 }
 
@@ -26,8 +96,8 @@ impl SurfaceSize {
     /// The backing store a browser gives a canvas nobody sized: 300 x 150.
     /// It stands in for a canvas that has no box yet.
     pub const UNSIZED: SurfaceSize = SurfaceSize {
-        logical: (300, 150),
-        physical: (300, 150),
+        logical: CssSize::new(300, 150),
+        physical: DeviceSize::new(300, 150),
         density: 1.0,
     };
 
@@ -40,27 +110,27 @@ impl SurfaceSize {
         } else {
             1.0
         };
-        let physical = (
+        let physical = DeviceSize::new(
             (f64::from(width) * density).round() as u32,
             (f64::from(height) * density).round() as u32,
         );
-        if physical.0 == 0 || physical.1 == 0 {
+        if physical.width == 0 || physical.height == 0 {
             return None;
         }
         Some(Self {
-            logical: (width, height),
+            logical: CssSize::new(width, height),
             physical,
             density,
         })
     }
 
     /// The size a view lays out against, in CSS pixels.
-    pub fn logical(&self) -> (u32, u32) {
+    pub fn logical(&self) -> CssSize {
         self.logical
     }
 
     /// The size of the drawing buffer, in device pixels.
-    pub(crate) fn physical(&self) -> (u32, u32) {
+    pub(crate) fn physical(&self) -> DeviceSize {
         self.physical
     }
 
@@ -69,26 +139,31 @@ impl SurfaceSize {
         self.density as f32
     }
 
-    /// Turn the view's scroll shift into device pixels.
+    /// The view's plan on the drawing buffer: its scroll shift in device
+    /// pixels.
     ///
-    /// A view shifts its content by a whole number of logical pixels. At a
+    /// A view shifts its content by a whole number of view pixels. At a
     /// fractional density that shift can land between two device pixels, and
     /// the copy cannot. The plan then repaints in full rather than tear.
-    pub fn shift_in_physical(&self, plan: &mut RepaintPlan) {
-        let ContentRepaint::Scroll { dx_px, dy_px } = plan.content else {
-            return;
-        };
-        let whole = |v: i32| {
-            let p = f64::from(v) * self.density;
+    pub fn on_device(&self, plan: RepaintPlan) -> RepaintPlan<DevicePx> {
+        let whole = |v: ViewPx| {
+            let p = f64::from(v.get()) * self.density;
             let r = p.round();
-            ((p - r).abs() < 1e-6).then_some(r as i32)
+            ((p - r).abs() < 1e-6).then_some(DevicePx::new(r as i32))
         };
-        match (whole(dx_px), whole(dy_px)) {
-            (Some(dx_px), Some(dy_px)) => plan.content = ContentRepaint::Scroll { dx_px, dy_px },
-            _ => {
-                plan.content = ContentRepaint::Full;
-                plan.content_strip = None;
-            }
+        let (content, content_strip) = match plan.content {
+            ContentRepaint::Full => (ContentRepaint::Full, plan.content_strip),
+            ContentRepaint::Reuse => (ContentRepaint::Reuse, plan.content_strip),
+            ContentRepaint::Scroll { dx, dy } => match (whole(dx), whole(dy)) {
+                (Some(dx), Some(dy)) => (ContentRepaint::Scroll { dx, dy }, plan.content_strip),
+                _ => (ContentRepaint::Full, None),
+            },
+        };
+        RepaintPlan {
+            content,
+            content_strip,
+            overlay: plan.overlay,
+            backdrop: plan.backdrop,
         }
     }
 }
@@ -102,8 +177,8 @@ pub fn size_backing_store(canvas: &web_sys::HtmlCanvasElement) -> Option<Surface
         canvas.client_height().max(0) as u32,
         read(),
     )?;
-    canvas.set_width(size.physical.0);
-    canvas.set_height(size.physical.1);
+    canvas.set_width(size.physical.width);
+    canvas.set_height(size.physical.height);
     Some(size)
 }
 
@@ -186,9 +261,12 @@ mod tests {
     use super::*;
     use crate::render::OverlayRepaint;
 
-    fn scroll(dx_px: i32, dy_px: i32) -> RepaintPlan {
+    fn scroll(dx: f32, dy: f32) -> RepaintPlan {
         RepaintPlan {
-            content: ContentRepaint::Scroll { dx_px, dy_px },
+            content: ContentRepaint::Scroll {
+                dx: ViewPx::new(dx),
+                dy: ViewPx::new(dy),
+            },
             content_strip: Some(ambre_draw::Rect::new(0.0, 0.0, 10.0, 10.0)),
             overlay: OverlayRepaint::Reuse,
             backdrop: ambre_draw::Color::WHITE,
@@ -202,7 +280,7 @@ mod tests {
         let one = SurfaceSize::new(800, 600, 1.0).unwrap();
         let two = SurfaceSize::new(800, 600, 2.0).unwrap();
         assert_eq!(one.logical(), two.logical());
-        assert_eq!(two.physical(), (1600, 1200));
+        assert_eq!(two.physical(), DeviceSize::new(1600, 1200));
     }
 
     /// A density the browser could not report reads as 1, never as a buffer
@@ -211,7 +289,7 @@ mod tests {
     fn an_unusable_density_reads_as_one() {
         for density in [0.0, -2.0, f64::NAN, f64::INFINITY] {
             let size = SurfaceSize::new(300, 150, density).unwrap();
-            assert_eq!(size.physical(), (300, 150));
+            assert_eq!(size.physical(), DeviceSize::new(300, 150));
         }
         assert!(SurfaceSize::new(0, 150, 2.0).is_none());
     }
@@ -219,16 +297,12 @@ mod tests {
     /// A shift is copied in device pixels, so it is scaled with the buffer.
     #[test]
     fn a_scroll_shift_is_copied_in_device_pixels() {
-        let mut plan = scroll(0, -24);
-        SurfaceSize::new(800, 600, 2.0)
+        let plan = SurfaceSize::new(800, 600, 2.0)
             .unwrap()
-            .shift_in_physical(&mut plan);
+            .on_device(scroll(0.0, -24.0));
         assert!(matches!(
             plan.content,
-            ContentRepaint::Scroll {
-                dx_px: 0,
-                dy_px: -48
-            }
+            ContentRepaint::Scroll { dx, dy } if dx == DevicePx::ZERO && dy == DevicePx::new(-48)
         ));
         assert!(plan.content_strip.is_some());
     }
@@ -237,10 +311,9 @@ mod tests {
     /// rounded to a whole pixel would leave the strip a half pixel off.
     #[test]
     fn a_shift_between_two_device_pixels_repaints_in_full() {
-        let mut plan = scroll(0, -25);
-        SurfaceSize::new(800, 600, 1.25)
+        let plan = SurfaceSize::new(800, 600, 1.25)
             .unwrap()
-            .shift_in_physical(&mut plan);
+            .on_device(scroll(0.0, -25.0));
         assert!(matches!(plan.content, ContentRepaint::Full));
         assert!(plan.content_strip.is_none());
     }

@@ -9,6 +9,8 @@
 
 use super::*;
 use crate::SurfaceSize;
+use crate::density::{CssSize, DevicePx, DeviceSize};
+use ambre_core::ViewPx;
 use ambre_draw::{Color, ImageSource, Rect};
 use std::collections::HashMap;
 
@@ -62,10 +64,13 @@ impl OffscreenTarget {
 /// entering the viewport). `Reuse` skips all content work and re-blits the
 /// existing offscreen unchanged -- the orchestrator must NOT have called
 /// `begin_layer(Layer::Content)` in this case.
+///
+/// The shift is in the pixel space `P`. A view plans it in view pixels, and
+/// [`SurfaceSize::on_device`] scales it to the device pixels of the buffer.
 #[derive(Clone, Copy, Debug)]
-pub enum ContentRepaint {
+pub enum ContentRepaint<P = ViewPx> {
     Full,
-    Scroll { dx_px: i32, dy_px: i32 },
+    Scroll { dx: P, dy: P },
     Reuse,
 }
 
@@ -135,7 +140,7 @@ pub struct QuadRenderer {
     width: f32,
     height: f32,
     /// The buffer in device pixels, which an offscreen copy counts in.
-    physical: (u32, u32),
+    physical: DeviceSize,
     /// Device pixels per logical pixel, which a glyph is rasterized at.
     density: f32,
 }
@@ -661,7 +666,7 @@ impl QuadRenderer {
             current_offscreen_idx: 0,
             width: 1.0,
             height: 1.0,
-            physical: (1, 1),
+            physical: DeviceSize::new(1, 1),
             density: 1.0,
         }
     }
@@ -679,7 +684,7 @@ impl QuadRenderer {
     /// the wasm host has a surface to size.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) fn resize_offscreens(&mut self, device: &wgpu::Device, size: SurfaceSize) {
-        let (width, height) = size.physical();
+        let DeviceSize { width, height, .. } = size.physical();
         self.offscreens = [
             OffscreenTarget::new(
                 device,
@@ -725,7 +730,7 @@ impl QuadRenderer {
         // count and not an arbitrary order. An image the walk stops drawing is
         // the first to go when the VRAM budget binds.
         self.images.clock = self.images.clock.wrapping_add(1);
-        let (width, height) = size.logical();
+        let CssSize { width, height, .. } = size.logical();
         self.width = width as f32;
         self.height = height as f32;
         self.physical = size.physical();
@@ -1157,7 +1162,7 @@ impl QuadRenderer {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         swapchain_view: &wgpu::TextureView,
-        plan: &crate::view::RepaintPlan,
+        plan: &crate::view::RepaintPlan<DevicePx>,
     ) {
         let (cells, overlay) = (plan.content, plan.overlay);
         let backdrop = clear_color(plan.backdrop);
@@ -1197,18 +1202,10 @@ impl QuadRenderer {
             self.current_offscreen_idx
         };
 
-        if let ContentRepaint::Scroll { dx_px, dy_px } = cells {
+        if let ContentRepaint::Scroll { dx, dy } = cells {
             let src = &self.offscreen(self.current_offscreen_idx).texture;
             let dst = &self.offscreen(dst_idx).texture;
-            copy_offscreen_with_offset(
-                encoder,
-                src,
-                dst,
-                self.physical.0,
-                self.physical.1,
-                dx_px,
-                dy_px,
-            );
+            copy_offscreen_with_offset(encoder, src, dst, self.physical, dx, dy);
         }
 
         if cells_dirty {

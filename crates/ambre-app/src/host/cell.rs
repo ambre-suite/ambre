@@ -86,7 +86,7 @@ impl Cells {
             let Some(size) = size_backing_store(&canvas) else {
                 continue;
             };
-            let (width, height) = size.logical();
+            let CssSize { width, height, .. } = size.logical();
             if let Some(cell) = view
                 .cell_view(id, f64::from(width), f64::from(height))
                 .and_then(|region| Bound::bind(id, canvas, size, region, &self.typist))
@@ -341,7 +341,7 @@ impl Bound {
     /// Plan, paint and present this cell. Nothing runs before its GPU is up,
     /// so a plan is never spent on a canvas that cannot show it. Answers the
     /// plan it presented.
-    fn render(&mut self, now_ms: ambre_core::PageTime) -> Option<RepaintPlan> {
+    fn render(&mut self, now_ms: ambre_core::PageTime) -> Option<RepaintPlan<DevicePx>> {
         let mut view = self.view.borrow_mut();
         view.update();
         let mut slot = self.gpu.borrow_mut();
@@ -414,7 +414,7 @@ fn measure(
 ) {
     if let Some(measured) = size_backing_store(canvas) {
         size.set(measured);
-        let (width, height) = measured.logical();
+        let CssSize { width, height, .. } = measured.logical();
         view.borrow_mut().resize(width, height);
     }
 }
@@ -427,14 +427,12 @@ fn plan_frame(
     size: SurfaceSize,
     relayout: bool,
     now_ms: ambre_core::PageTime,
-) -> RepaintPlan {
+) -> RepaintPlan<DevicePx> {
     if relayout {
-        let (width, height) = size.logical();
+        let CssSize { width, height, .. } = size.logical();
         view.resize(width, height);
     }
-    let mut plan = view.plan_repaint(now_ms, false);
-    size.shift_in_physical(&mut plan);
-    plan
+    size.on_device(view.plan_repaint(now_ms, false))
 }
 
 /// The phase and the point of a finger on a cell, in its own pixels. `None`
@@ -526,7 +524,7 @@ fn lose_context(canvas: &HtmlCanvasElement) {
 /// Encode the layers of `plan` onto the swapchain of `gpu` and present them.
 /// A lost or outdated swapchain is fitted again and the frame skipped; the
 /// next one draws fresh. Answers whether the frame reached the screen.
-pub(super) fn present(gpu: &mut GpuState, plan: &RepaintPlan) -> bool {
+pub(super) fn present(gpu: &mut GpuState, plan: &RepaintPlan<DevicePx>) -> bool {
     let surface_tex = match gpu.surface.get_current_texture() {
         Ok(t) => t,
         // A lost/outdated surface is recoverable: the GL context was reset
@@ -981,7 +979,7 @@ mod tests {
             page.plan_repaint(ambre_bus::PageTime(32.0), false).content,
             ContentRepaint::Reuse
         ));
-        assert_eq!(bound.size.get().logical(), (140, 80));
+        assert_eq!(bound.size.get().logical(), CssSize::new(140, 80));
     }
 
     /// A canvas that left the page drops its cell, and one that replaced it

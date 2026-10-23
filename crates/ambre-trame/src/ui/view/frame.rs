@@ -404,7 +404,13 @@ impl TrameView {
                     } else {
                         Rect::new(w + dx_px as f64, hh, w, h)
                     };
-                    (ContentRepaint::Scroll { dx_px, dy_px }, Some(strip))
+                    (
+                        ContentRepaint::Scroll {
+                            dx: ambre_core::ViewPx::new(dx_px as f32),
+                            dy: ambre_core::ViewPx::new(dy_px as f32),
+                        },
+                        Some(strip),
+                    )
                 }
             }
         } else if self.data_dirty {

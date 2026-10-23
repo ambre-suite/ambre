@@ -423,7 +423,7 @@ impl FrameHost {
     /// The view hears the logical size alone (`CANVAS-044`). A density change
     /// keeps it, and still reaches the view so every layer repaints.
     pub fn resize(&mut self, size: SurfaceSize) {
-        let (width, height) = size.logical();
+        let CssSize { width, height, .. } = size.logical();
         self.view.resize(width, height);
         // The density watch lands here, and moves no cell box either.
         self.cells.remeasure();
@@ -445,7 +445,7 @@ impl FrameHost {
     /// dimensions early-returns and would leave a blank canvas.
     pub fn notify_context_restored(&mut self, size: SurfaceSize) {
         let Some(gpu) = self.gpu.as_mut() else { return };
-        let (width, height) = size.logical();
+        let CssSize { width, height, .. } = size.logical();
         tracing::info!("GPU context restored, reconfiguring {width}x{height}");
         gpu.configure(size);
         // Force the view to invalidate every cached layer for a clean repaint.
@@ -535,8 +535,8 @@ impl FrameHost {
             // sealed context and cannot fetch, so a script it never receives
             // paginates into tofu (`CANVAS-068`, `PROSE-115`).
             send_faces(&self.to_logic, new_faces);
-            if let Some((w, h)) = self.gpu.as_ref().map(|g| g.size.logical()) {
-                self.view.resize(w, h);
+            if let Some(size) = self.gpu.as_ref().map(|g| g.size.logical()) {
+                self.view.resize(size.width, size.height);
             }
         }
 
@@ -557,10 +557,8 @@ impl FrameHost {
         if self.sync_children(raf_timestamp) {
             plan.content = ContentRepaint::Full;
         }
-        // The view shifted in logical pixels; the copy runs on the buffer.
-        if let Some(gpu) = self.gpu.as_ref() {
-            gpu.size.shift_in_physical(&mut plan);
-        }
+        // The view shifted in view pixels; the copy runs on the buffer.
+        let plan = self.gpu.as_ref().map(|gpu| gpu.size.on_device(plan));
 
         // And the sandboxed frames behind the board's web embeds (`TOILE-088`).
         // Every frame, not only a dirty one. A frame is DOM sitting over the
@@ -569,7 +567,9 @@ impl FrameHost {
         self.sync_web_embeds();
 
         // rAF only starts after GPU init, so `self.gpu` is always Some here.
-        let Some(gpu) = self.gpu.as_mut() else { return };
+        let (Some(gpu), Some(plan)) = (self.gpu.as_mut(), plan) else {
+            return;
+        };
 
         let phases = Phases::of(plan.content, plan.overlay);
         let content_active = phases.build_content;
@@ -676,7 +676,11 @@ impl FrameHost {
     fn render_fatal(&mut self, message: &str) {
         let Some(gpu) = self.gpu.as_mut() else { return };
 
-        let (w, h) = gpu.size.logical();
+        let CssSize {
+            width: w,
+            height: h,
+            ..
+        } = gpu.size.logical();
         gpu.quad_renderer.begin_frame(gpu.size);
         {
             let mut surface = WgpuSurface::new(&mut gpu.quad_renderer, &gpu.device, &gpu.queue);

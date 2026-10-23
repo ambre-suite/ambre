@@ -81,7 +81,7 @@ where
     let text_input = TextInput::create(&document, &input_parent);
 
     // The view lays out in logical pixels (`CANVAS-032`).
-    let (width, height) = size.logical();
+    let CssSize { width, height, .. } = size.logical();
     let view = make_view(f64::from(width), f64::from(height), text_input.clone());
     // Wrap the launcher's child factory with the shared text pipe, so `FrameHost`
     // can build a child view (`toile-embeds`) knowing nothing about the pipe. The
