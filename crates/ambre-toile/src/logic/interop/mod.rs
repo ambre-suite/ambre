@@ -192,8 +192,8 @@ pub struct ExportElement {
     pub kind: ElementKind,
     /// World-space AABB (unrotated) the element occupies.
     pub rect: Rect,
-    /// Rotation in radians about the rect center (0.0 = axis-aligned).
-    pub rotation: f64,
+    /// The rotation about the rect center (zero is axis-aligned).
+    pub rotation: ambre_core::Radians,
     pub style: ElementStyle,
     /// For `Shape(Path)`: the vector geometry (`toile-vector-paths` stores it as SVG,
     /// so this round-trips through `BezPath::to_svg`). `None` for other kinds.
@@ -215,7 +215,7 @@ impl ExportElement {
         Self {
             kind,
             rect,
-            rotation: 0.0,
+            rotation: ambre_core::Radians::ZERO,
             style: ElementStyle::default(),
             path: None,
             text: None,

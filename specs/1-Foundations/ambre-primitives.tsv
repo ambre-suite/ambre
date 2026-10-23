@@ -471,7 +471,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | SlidePosition::index() | ret 
 ambre-bus | src/app/toile.rs | crate::app::toile | SlidePosition::new(count) | param | usize	newtype-inner	SlidePosition newtype constructor/accessor
 ambre-bus | src/app/toile.rs | crate::app::toile | SlidePosition::new(index) | param | usize	newtype-inner	SlidePosition newtype constructor/accessor
 ambre-bus | src/app/toile.rs | crate::app::toile | SnapElement.opacity | field | f32	math	board geometry, style metric, opacity or pressure
-ambre-bus | src/app/toile.rs | crate::app::toile | SnapElement.rotation | field | f64	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.pressure | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.x | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.y | field | f32	math	board geometry, style metric, opacity or pressure
@@ -491,7 +490,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::LockElements.lo
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::RenameFrame.name | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ReplyComment.body | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ResolveThread.resolved | field | bool	generic	named flag, setter of a flag, or predicate
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::RotateElement.radians | field | f64	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetConnectorLabel.base | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetConnectorLabel.text | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetText.base | field | String	free-text	user text
@@ -2832,8 +2830,6 @@ ambre-prose | src/comment.rs | crate::comment | thread_of_key(key) | param | &st
 ambre-prose | src/count.rs | crate::count | saturate() | ret | u32	math	count, size or local index
 ambre-prose | src/count.rs | crate::count | saturate(n) | param | usize	math	count, size or local index
 ambre-prose | src/count.rs | crate::count | tally(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | A4_HEIGHT_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A4_WIDTH_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | Anchor.value | field | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | BODY_SEPARATOR | const | char	newtype-inner	the spelling of BodyKey, a body root name
 ambre-prose | src/doc.rs | crate::doc | BODY_TAG | const | &str	newtype-inner	the spelling of BodyKey, a body root name
@@ -2849,7 +2845,6 @@ ambre-prose | src/doc.rs | crate::doc | CARRIER | const | char	free-text	text co
 ambre-prose | src/doc.rs | crate::doc | DEFAULT_COLUMN_WIDTH_PT | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | DEFAULT_FONT_SIZE_PT | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | DEFAULT_LINE_HEIGHT | const | f32	math	layout geometry local to algorithm
-ambre-prose | src/doc.rs | crate::doc | DEFAULT_MARGIN_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | DocDefaults.font_family | field | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | DocDefaults.font_size_pt | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | DocDefaults.line_height | field | f32	math	layout geometry local to algorithm
@@ -2857,15 +2852,7 @@ ambre-prose | src/doc.rs | crate::doc | K_COMMENT | const | &str	debt	finding: L
 ambre-prose | src/doc.rs | crate::doc | K_CROSS_REF | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | K_FOOTNOTE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with(height_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with(width_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | Orientation::as_str() | ret | &'static str	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | PageFormat.height_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_bottom_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_left_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_right_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_top_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | PageFormat.width_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/doc.rs | crate::doc | anchors(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | band_align_name() | ret | Option<&'static str>	debt	finding: band alignment as a name string (confirmed)
 ambre-prose | src/doc.rs | crate::doc | carries_hiding() | ret | bool	generic	independent flag or predicate
@@ -2889,8 +2876,6 @@ ambre-prose | src/doc.rs | crate::doc | read_title() | ret | String	free-text	te
 ambre-prose | src/doc.rs | crate::doc | style_of() | ret | Option<String>	debt	finding: built-in style ids as &str (confirmed)
 ambre-prose | src/doc.rs | crate::doc | toc_settings() | ret | Option<(u8,bool)>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/doc.rs | crate::doc | write_page_format() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/doc.rs | crate::doc | write_page_format(height_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | write_page_format(width_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/events.rs | crate::events | ProseOutcome::named(refused) | param | &'static str	free-text	text content / label / parser input
 ambre-prose | src/events.rs | crate::events | UNNAMED | const | &str	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | MULTI_PRESS_MS | const | f64	math	layout geometry local to algorithm
@@ -3022,7 +3007,6 @@ ambre-prose | src/layout/fonts.rs | crate::layout::fonts | missing_scripts(text)
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | register_faces(bytes) | param | Vec<u8>	math	count, size or local index
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | resolve(label) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/geometry.rs | crate::layout::geometry | BAND_SHARE | const | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/geometry.rs | crate::layout::geometry | PX_PER_MM | const | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/geometry.rs | crate::layout::geometry | PageBox.content_height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/geometry.rs | crate::layout::geometry | PageBox.content_width_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/geometry.rs | crate::layout::geometry | PageBox.margin_left_px | field | f32	math	layout geometry local to algorithm
@@ -4550,7 +4534,6 @@ ambre-toile | src/logic/align.rs | crate::logic::align | Axis.delta | field | fn
 ambre-toile | src/logic/align.rs | crate::logic::align | Axis.extent | field | fn(&Rect)->f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/align.rs | crate::logic::align | Axis.near | field | fn(&Rect)->f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement.opacity | field | f32	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement.rotation | field | f64	debt	finding: Rotation is a raw f64 in radians across storage, the bus and export (suspected, low): rotation radians as f64 across storage/bus/export, degrees used beside it
 ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_in(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_out(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::lerp(t) | param | f64	math	geometry, layout, count or size local to the algorithm
@@ -4602,7 +4585,6 @@ ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaC
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | PLACEHOLDER_PREFIX | const | &str	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | is_resolved() | ret | bool	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ExportElement.image_png | field | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ExportElement.rotation | field | f64	debt	finding: Rotation is a raw f64 in radians across storage, the bus and export (suspected, low): rotation radians as f64 across storage/bus/export, degrees used beside it
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ExportElement.text | field | Option<String>	free-text	label, message or user text
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Decode.0 | field | String	free-text	foreign error message
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::ImageTooLarge.height | field | u32	math	geometry, layout, count or size local to the algorithm
@@ -4678,13 +4660,10 @@ ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | decode_pat
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | doc_type_from_tag(s) | param | &str	generic	enum<->stored string codec at the CRDT boundary
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | encode_anchor() | ret | String	generic	enum<->stored string codec at the CRDT boundary
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | encode_path_type() | ret | &'static str	generic	enum<->stored string codec at the CRDT boundary
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | expanded_aabb(rot) | param | f64	debt	finding: Rotation is a raw f64 in radians across storage, the bus and export (suspected, low): rotation radians as f64 across storage/bus/export, degrees used beside it
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | f64_of() | ret | Option<f64>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | has_type() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_f64() | ret | Option<f64>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_placement() | ret | (Rect,f64)	math	board geometry, style metric, opacity or pressure
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_str() | ret | Option<String>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | rotation_of() | ret | f64	math	board geometry, style metric, opacity or pressure
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | str_of() | ret | Option<String>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | value_has_type() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | write_clip_fields(fields) | param | &[(String,ClipValue)]	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
@@ -4710,7 +4689,6 @@ ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | Toil
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::lock_elements(locked) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::restyle_inner() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::restyle_merge_inner() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::rotate_element(radians) | param | f64	debt	finding: Rotation is a raw f64 in radians across storage, the bus and export (suspected, low): rotation radians as f64 across storage/bus/export, degrees used beside it
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::set_text(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::set_text(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | SVG_FILENAME | const | &str	free-text	label, message or user text
@@ -5004,7 +4982,6 @@ ambre-toile | src/ui/palette.rs | crate::ui::palette | nearest_resize_keyword() 
 ambre-toile | src/ui/palette.rs | crate::ui::palette | nearest_resize_keyword(a) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/palette.rs | crate::ui::palette | resize_axis_base() | ret | Option<f64>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/palette.rs | crate::ui::palette | resize_cursor() | ret | Cow<'static,str>	generic	CSS cursor text
-ambre-toile | src/ui/palette.rs | crate::ui::palette | resize_cursor(theta) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor() | ret | String	generic	CSS cursor text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor(deg) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor(fallback) | param | &str	generic	CSS cursor text
@@ -5042,7 +5019,6 @@ ambre-toile | src/ui/render.rs | crate::ui::render | frame_bands() | ret | impl 
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_box(title) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label() | ret | (&str,bool)	free-text	label, message or user text
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label(title) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/render.rs | crate::ui::render | selection_rotation() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/status.rs | crate::ui::status | Bounds.h | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/status.rs | crate::ui::status | Bounds.w | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/status.rs | crate::ui::status | Bounds.x | field | f64	math	geometry, layout, count or size local to the algorithm
@@ -5065,32 +5041,22 @@ ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.stroke_w | field |
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.text_color | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.underline | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags::any() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/tool.rs | crate::ui::tool | Drag::Resize.rot | field | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/tool.rs | crate::ui::tool | Drag::Rotate.base_rot | field | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/tool.rs | crate::ui::tool | Drag::Rotate.last_angle | field | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/tool.rs | crate::ui::tool | Drag::Rotate.start_angle | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | EDGE_GRAB_PX | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | HANDLE_PICK_PX | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | HANDLE_SIZE_PX | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | MIN_DRAG | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | PEN_DEDUP | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ROTATE_OFFSET_PX | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/tool.rs | crate::ui::tool | SelectTool::gesture_overrides() | ret | Vec<(ElementId,Rect,f64)>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | SelectTool::is_dragging() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | SelectTool::pressed_empty_board() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine.pen_dragging | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine.pick | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::escape() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::gesture_overrides() | ret | Vec<(ElementId,Rect,f64)>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::is_active() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::pressed_empty_board() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | double_click_edit(editable) | param | impl Fn(&ElementId)->bool	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | drop_missing() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/tool.rs | crate::ui::tool | element_rotation() | ret | f64	debt	finding: Rotation is a raw f64 in radians across storage, the bus and export (suspected, low): rotation radians as f64 across storage/bus/export, degrees used beside it
 ambre-toile | src/ui/tool.rs | crate::ui::tool | is_group() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/tool.rs | crate::ui::tool | resize_rect_rotated(rot) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/tool.rs | crate::ui::tool | rotate_about(theta) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/tool.rs | crate::ui::tool | unrotate_point(theta) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | <ToileView as ambre_draw::HitTest>::hit_test(x) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
 ambre-toile | src/ui/view.rs | crate::ui::view | <ToileView as ambre_draw::HitTest>::hit_test(y) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
 ambre-toile | src/ui/view.rs | crate::ui::view | CARET_BLINK_MS | const | f64	math	frame-clock span compared with PageTime
@@ -5132,7 +5098,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_geometry_of() |
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_input() | ret | Option<bool>	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_key() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_key(key) | param | &str	generic	DOM KeyboardEvent.key text
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_target_geometry() | ret | Option<(Point,f32,Rect,f64)>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::float_bar_at(offset) | param | (f64,f64)	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::follow_link_under() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::grab_arrow_handle() | ret | bool	generic	predicate or handled-flag result
@@ -5221,11 +5186,9 @@ ambre-toile | src/ui/walk.rs | crate::ui::walk | style_color(opacity) | param | 
 ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | paint_text(text) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/walk.rs | crate::ui::walk | rotate_about(theta) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | roundrect_path(radius) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | sticky_font_size() | ret | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | sticky_or_style_font_size() | ret | f32	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | text_rotation() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-trame | src/chrome/bars.rs | crate::chrome::bars | label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | context_entries_for(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | new_doc_label() | ret | &'static str	free-text	free text: user content, label, message or display string
@@ -5997,3 +5960,19 @@ ambre-prose | src/band.rs | crate::band | CivilDate.year | field | i64	newtype-i
 ambre-prose | src/band.rs | crate::band | CivilDate::day() | ret | u32	newtype-inner	a component of the civil-date type, 1 to 31
 ambre-prose | src/band.rs | crate::band | CivilDate::month() | ret | u32	newtype-inner	a component of the civil-date type, 1 to 12
 ambre-prose | src/band.rs | crate::band | CivilDate::year() | ret | i64	newtype-inner	a component of the civil-date type, the proleptic Gregorian year
+ambre-core | src/unit.rs | crate::unit | Radians::to_degrees() | ret | f64	newtype-inner	the angle unwrapped in degrees, for a writer whose format takes degrees
+ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_target_geometry() | ret | Option<(Point,f32,Rect,ambre_core::Radians)>	math	geometry, layout, count or size local to the algorithm
+ambre-prose | src/doc.rs | crate::doc | A4_HEIGHT_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | A4_WIDTH_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | DEFAULT_MARGIN_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with(height_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with(width_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | PageFormat.height_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_bottom_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_left_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_right_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_top_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | PageFormat.width_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | write_page_format(height_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/doc.rs | crate::doc | write_page_format(width_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/layout/geometry.rs | crate::layout::geometry | PX_PER_MM | const | f32	math	layout geometry local to algorithm

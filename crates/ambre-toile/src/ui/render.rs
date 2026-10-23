@@ -140,7 +140,7 @@ fn selection_rotation(
     id: &ElementId,
     vp: &DisplayViewport,
     gesture: &HashMap<ElementId, AnimatedElement>,
-) -> f64 {
+) -> ambre_core::Radians {
     if let Some(a) = gesture.get(id) {
         return a.rotation;
     }
@@ -149,11 +149,11 @@ fn selection_rotation(
         .find_map(|n| match n {
             DisplayNode::Element(e) if &e.id == id => {
                 let c = e.transform.as_coeffs();
-                Some(c[1].atan2(c[0]))
+                Some(ambre_core::Radians::new(c[1].atan2(c[0])))
             }
             _ => None,
         })
-        .unwrap_or(0.0)
+        .unwrap_or(ambre_core::Radians::ZERO)
 }
 
 /// Paint the transient overlay: find highlights, the selection bounding box + 8
@@ -234,9 +234,11 @@ pub fn paint_overlay<S: DrawSurface>(
         [only] => Some(only),
         _ => None,
     };
-    let theta = single.map_or(0.0, |only| selection_rotation(only, vp, gesture));
+    let theta = single.map_or(ambre_core::Radians::ZERO, |only| {
+        selection_rotation(only, vp, gesture)
+    });
     let place = |p: Point| {
-        if theta == 0.0 {
+        if theta == ambre_core::Radians::ZERO {
             p
         } else {
             rotate_about(b.center(), theta) * p
@@ -246,7 +248,7 @@ pub fn paint_overlay<S: DrawSurface>(
     // Bounding box. Axis-aligned: the crisp `stroke_rect` fast path. Rotated: four
     // `stroke_line` edges between the rotated corners (stroke_rect would degrade to
     // an upright AABB on the WgpuSurface, see above).
-    if theta == 0.0 {
+    if theta == ambre_core::Radians::ZERO {
         surface.stroke_rect(b, palette.selection, 1.5);
     } else {
         let c = [
@@ -762,7 +764,7 @@ mod tests {
             AnimatedElement {
                 id: ElementId("a".into()),
                 bounds: Rect::new(20.0, 20.0, 70.0, 70.0),
-                rotation: 0.0,
+                rotation: ambre_core::Radians::ZERO,
                 opacity: 0.5,
                 fill: Some(Rgba::from_bits(0x0000_FFFF)),
             },
@@ -1434,7 +1436,7 @@ mod tests {
             AnimatedElement {
                 id: ElementId("r".into()),
                 bounds: preview_bounds,
-                rotation: 0.0,
+                rotation: ambre_core::Radians::ZERO,
                 opacity: 1.0,
                 fill: None,
             },
@@ -1746,7 +1748,8 @@ mod tests {
         // Still 5 handle squares (4 corners + rotate knob), each an axis-aligned
         // (screen-aligned) square positioned at its rotated center.
         let b = world_rect_to_screen(Rect::new(0.0, 0.0, 50.0, 50.0), &cam);
-        let expect_se = super::rotate_about(b.center(), FRAC_PI_4) * Point::new(b.x1, b.y1);
+        let expect_se = super::rotate_about(b.center(), ambre_core::Radians::new(FRAC_PI_4))
+            * Point::new(b.x1, b.y1);
         let half = HANDLE_SIZE_PX / 2.0;
         let se_square = Rect::new(
             expect_se.x - half,
@@ -2117,7 +2120,7 @@ mod tests {
         let tween = AnimatedElement {
             id: ElementId("a".into()),
             bounds: Rect::new(20.0, 30.0, 80.0, 60.0),
-            rotation: 0.5,
+            rotation: ambre_core::Radians::new(0.5),
             opacity: 1.0,
             fill: None,
         };

@@ -112,7 +112,7 @@ impl ToileState {
 
         let rect = expanded_aabb(
             Rect::new(at.x, at.y, at.x + size.width, at.y + size.height),
-            0.0,
+            ambre_core::Radians::ZERO,
         );
         self.bounds.insert(id.clone(), rect);
         self.index
@@ -353,14 +353,18 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event()])
     }
 
-    pub(super) fn rotate_element(&mut self, id: &ElementId, radians: f64) -> ToileOutcome {
+    pub(super) fn rotate_element(
+        &mut self,
+        id: &ElementId,
+        radians: ambre_core::Radians,
+    ) -> ToileOutcome {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
         if bool_of(&em, ElementKey::Locked) {
             return ToileOutcome::display_only(Vec::new());
         }
-        let _ = em.insert(ElementKey::Rot, radians);
+        let _ = em.insert(ElementKey::Rot, radians.get());
         // A group holds no coordinates: its box stays the union of its members'
         // (`TOILE-009`), never a leaf box read from absent fields.
         if !has_type(&em, ElementKind::Group) {

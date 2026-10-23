@@ -37,7 +37,7 @@ pub use ambre_bus::app::toile::{FrameSnapshot, SnapElement};
 pub struct AnimatedElement {
     pub id: ElementId,
     pub bounds: Rect,
-    pub rotation: f64,
+    pub rotation: ambre_core::Radians,
     pub opacity: f32,
     pub fill: Option<Rgba>,
 }
@@ -52,7 +52,7 @@ impl AnimatedElement {
             // The id is shared by construction; keep it as the animated identity.
             id: b.id.clone(),
             bounds: lerp_rect(a.bounds, b.bounds, t),
-            rotation: lerp_f64(a.rotation, b.rotation, t),
+            rotation: a.rotation + (b.rotation - a.rotation) * t,
             opacity: lerp_f32(a.opacity, b.opacity, t),
             fill: lerp_fill(a.fill, b.fill, t),
         }
@@ -187,7 +187,7 @@ mod tests {
         SnapElement {
             id: ElementId(id.to_owned()),
             bounds,
-            rotation,
+            rotation: ambre_core::Radians::new(rotation),
             opacity,
             fill,
         }
@@ -225,7 +225,7 @@ mod tests {
         assert_eq!(m.id, ElementId("e1".to_owned()));
         // Geometry / rotation / opacity are the exact midpoints.
         assert_eq!(m.bounds, rect(10.0, 20.0, 20.0, 30.0));
-        assert_eq!(m.rotation, 1.0);
+        assert_eq!(m.rotation, ambre_core::Radians::new(1.0));
         assert_eq!(m.opacity, 0.5);
         // Blue channel midpoint of 0x00 -> 0xFF is 0x80 (128), alpha stays 0xFF.
         assert_eq!(m.fill, Some(Rgba::from_bits(0x0000_80FF)));

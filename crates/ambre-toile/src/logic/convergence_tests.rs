@@ -1843,7 +1843,7 @@ fn a_group_takes_no_box_from_a_resize_or_a_rotation() {
     assert!(resized.update.is_none(), "a group resize wrote a change");
     let rotated = a.handle_command(ToileCommand::RotateElement {
         id: g.clone(),
-        radians: 0.5,
+        radians: ambre_core::Radians::new(0.5),
     });
     b.apply_remote(&rotated.update.expect("the rotation is a change"));
     let mut rebuilt = ToileState::new();
@@ -2530,7 +2530,7 @@ fn frame_snapshot_captures_declared_children_props() {
     });
     st.handle_command(ToileCommand::RotateElement {
         id: a.clone(),
-        radians: 1.0,
+        radians: ambre_core::Radians::new(1.0),
     });
 
     st.handle_command(ToileCommand::SetFrameChildren {
@@ -2550,7 +2550,7 @@ fn frame_snapshot_captures_declared_children_props() {
     );
     let sa = snap.by_id(&a).expect("a captured");
     assert_eq!(sa.bounds, Rect::new(10.0, 20.0, 40.0, 60.0));
-    assert_eq!(sa.rotation, 1.0);
+    assert_eq!(sa.rotation, ambre_core::Radians::new(1.0));
     assert_eq!(sa.opacity, 0.5);
     assert_eq!(sa.fill, Some(Rgba::from_bits(0x1234_56FF)));
 
@@ -3136,7 +3136,7 @@ fn rotate_expands_the_aabb() {
     let id = create_rect(&mut st, Point::ZERO, Size::new(100.0, 50.0));
     st.handle_command(ToileCommand::RotateElement {
         id: id.clone(),
-        radians: std::f64::consts::FRAC_PI_2,
+        radians: ambre_core::Radians::new(std::f64::consts::FRAC_PI_2),
     });
     let b = st.bounds_of(&id).expect("bounds");
     assert!((b.x0 - 25.0).abs() < 1e-6, "x0 = {}", b.x0);
@@ -5929,7 +5929,7 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<ambre_core::DeltaByte
         PeerOp::RotateNth { nth: n, radians } => match nth(*n) {
             Some(id) => st.handle_command(ToileCommand::RotateElement {
                 id,
-                radians: *radians,
+                radians: ambre_core::Radians::new(*radians),
             }),
             None => return None,
         },

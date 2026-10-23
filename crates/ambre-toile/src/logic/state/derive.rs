@@ -176,7 +176,7 @@ impl ToileState {
         // World transform: rotation about the AABB center.
         let center = bounds.center();
         let transform = Affine::translate(center.to_vec2())
-            * Affine::rotate(rot)
+            * Affine::rotate(rot.get())
             * Affine::translate(-center.to_vec2());
         let geom = self.geom_for(&em, kind, bounds);
         Some(DisplayElement {

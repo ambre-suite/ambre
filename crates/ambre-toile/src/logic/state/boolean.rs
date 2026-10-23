@@ -136,7 +136,7 @@ fn element_world_path(em: &Fields<ElementKey>) -> Option<BezPath> {
     let rot = rotation_of(em);
     let center = bounds.center();
     let transform = Affine::translate(center.to_vec2())
-        * Affine::rotate(rot)
+        * Affine::rotate(rot.get())
         * Affine::translate(-center.to_vec2());
     Some(transform * local)
 }

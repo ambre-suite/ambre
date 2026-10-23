@@ -120,7 +120,7 @@ enum Drag {
         /// The element's rotation (radians about `base.center()`), captured at
         /// press so the resize math can keep the opposite corner world-fixed on a
         /// rotated element.
-        rot: f64,
+        rot: ambre_core::Radians,
         /// Live pointer (world), updated each move so the view can preview the
         /// resize without a Logic round-trip.
         last: Point,
@@ -131,11 +131,11 @@ enum Drag {
         /// Pointer at press (world), read by the release like the resize's own
         /// (`TOILE-UI-252`).
         start: Point,
-        start_angle: f64,
-        base_rot: f64,
+        start_angle: ambre_core::Radians,
+        base_rot: ambre_core::Radians,
         /// Live pointer angle (world radians about `center`), updated each move
         /// for the live preview.
-        last_angle: f64,
+        last_angle: ambre_core::Radians,
     },
     Marquee {
         start: Point,
@@ -196,7 +196,7 @@ impl SelectTool {
                 match h {
                     Handle::Rotate => {
                         let center = sb.center();
-                        let start_angle = (world - center).atan2();
+                        let start_angle = ambre_core::Radians::new((world - center).atan2());
                         self.drag = Some(Drag::Rotate {
                             id: id.clone(),
                             center,
@@ -277,7 +277,7 @@ impl SelectTool {
             Some(Drag::Rotate {
                 center, last_angle, ..
             }) => {
-                *last_angle = (world - *center).atan2();
+                *last_angle = ambre_core::Radians::new((world - *center).atan2());
                 SelectOutcome::None
             }
             Some(Drag::Marquee { start, current, .. }) => {
@@ -327,7 +327,7 @@ impl SelectTool {
                 if (world - start).hypot2() <= f64::EPSILON {
                     return SelectOutcome::None;
                 }
-                let now = (world - center).atan2();
+                let now = ambre_core::Radians::new((world - center).atan2());
                 let radians = base_rot + (now - start_angle);
                 SelectOutcome::Command(ToileCommand::RotateElement { id, radians })
             }
@@ -403,7 +403,10 @@ impl SelectTool {
     /// rotation)` in world space. The view can paint the real object being resized
     /// / rotated / moved before the command commits on release. Empty when no
     /// gesture (or a marquee) is in flight.
-    pub fn gesture_overrides(&self, display: &DisplayViewport) -> Vec<(ElementId, Rect, f64)> {
+    pub fn gesture_overrides(
+        &self,
+        display: &DisplayViewport,
+    ) -> Vec<(ElementId, Rect, ambre_core::Radians)> {
         match &self.drag {
             Some(Drag::Resize {
                 id,
@@ -425,7 +428,7 @@ impl SelectTool {
                 ..
             }) => {
                 let bounds = element_bounds(display, id).unwrap_or_default();
-                vec![(id.clone(), bounds, base_rot + (last_angle - start_angle))]
+                vec![(id.clone(), bounds, *base_rot + (*last_angle - *start_angle))]
             }
             // A press that has not moved yet paints where it committed, so it
             // overrides nothing and costs no content repaint (`TOILE-UI-271`).
@@ -950,7 +953,10 @@ impl ToolMachine {
 
     /// Per-element live transform for the in-flight Select gesture, forwarded
     /// so the view can preview the real object during resize / rotate / move.
-    pub fn gesture_overrides(&self, display: &DisplayViewport) -> Vec<(ElementId, Rect, f64)> {
+    pub fn gesture_overrides(
+        &self,
+        display: &DisplayViewport,
+    ) -> Vec<(ElementId, Rect, ambre_core::Radians)> {
         self.select.gesture_overrides(display)
     }
 
@@ -1224,18 +1230,18 @@ fn resize_rect(base: Rect, handle: Handle, to: Point) -> Rect {
     Rect::new(x0, y0, x1, y1).abs()
 }
 
-/// A rotation of `theta` radians about `center`.
-fn rotate_about(center: Point, theta: f64) -> Affine {
+/// A rotation of `theta` about `center`.
+fn rotate_about(center: Point, theta: ambre_core::Radians) -> Affine {
     Affine::translate(center.to_vec2())
-        * Affine::rotate(theta)
+        * Affine::rotate(theta.get())
         * Affine::translate(-center.to_vec2())
 }
 
 /// De-rotate a screen point into a rotated selection box's local (axis-aligned)
 /// frame. The box is `screen_b` rotated by `theta` about its center, so a point
 /// hits a handle iff `unrotate_point(p, center, theta)` hits the axis-aligned box.
-fn unrotate_point(p: Point, center: Point, theta: f64) -> Point {
-    if theta == 0.0 {
+fn unrotate_point(p: Point, center: Point, theta: ambre_core::Radians) -> Point {
+    if theta == ambre_core::Radians::ZERO {
         return p;
     }
     rotate_about(center, -theta) * p
@@ -1270,8 +1276,8 @@ fn resize_anchor(base: Rect, handle: Handle) -> Point {
 /// single closed-form shift despite the new center depending on that shift. The
 /// shift is `shift = R_rot(c0) * anchor - R_rot(c1) * anchor`, with `c0`/`c1` the
 /// old / new centers and `anchor` invariant under the resize.
-fn resize_rect_rotated(base: Rect, handle: Handle, to: Point, rot: f64) -> Rect {
-    if rot == 0.0 {
+fn resize_rect_rotated(base: Rect, handle: Handle, to: Point, rot: ambre_core::Radians) -> Rect {
+    if rot == ambre_core::Radians::ZERO {
         return resize_rect(base, handle, to);
     }
     let c0 = base.center();
@@ -1286,16 +1292,16 @@ fn resize_rect_rotated(base: Rect, handle: Handle, to: Point, rot: f64) -> Rect 
 /// Extract the rotation angle (radians) baked into an element's transform. The
 /// Logic derive stores it as a rotation about the AABB center, so the linear part
 /// is a pure rotation and `atan2(b, a)` recovers the angle.
-pub fn element_rotation(display: &DisplayViewport, id: &ElementId) -> f64 {
+pub fn element_rotation(display: &DisplayViewport, id: &ElementId) -> ambre_core::Radians {
     for node in &display.nodes {
         if let ambre_bus::app::toile::DisplayNode::Element(e) = node
             && &e.id == id
         {
             let c = e.transform.as_coeffs();
-            return c[1].atan2(c[0]);
+            return ambre_core::Radians::new(c[1].atan2(c[0]));
         }
     }
-    0.0
+    ambre_core::Radians::ZERO
 }
 
 /// What a double-click with the select tool opens an editor on.
@@ -1698,7 +1704,7 @@ mod tests {
         let DisplayNode::Element(mut e) = rect_elem(id, bounds) else {
             panic!("rect_elem builds an element")
         };
-        e.transform = rotate_about(bounds.center(), theta);
+        e.transform = rotate_about(bounds.center(), ambre_core::Radians::new(theta));
         DisplayNode::Element(e)
     }
 
@@ -1714,7 +1720,7 @@ mod tests {
         let se_screen = to_screen(&cam, Point::new(100.0, 100.0)); // axis-aligned SE
         // The SE corner is drawn a quarter turn round the box center; the cursor
         // hits it there, not at the axis-aligned position.
-        let rotated_se = rotate_about(center, FRAC_PI_2) * se_screen;
+        let rotated_se = rotate_about(center, ambre_core::Radians::new(FRAC_PI_2)) * se_screen;
         assert_eq!(
             m.hover_handle(&sel, &disp, &cam, rotated_se),
             Some(Handle::Se)
@@ -1730,7 +1736,7 @@ mod tests {
     fn resize_rotated_pins_the_opposite_corner_in_world_space() {
         use std::f64::consts::FRAC_PI_6;
         let base = Rect::new(0.0, 0.0, 100.0, 100.0);
-        let theta = FRAC_PI_6;
+        let theta = ambre_core::Radians::new(FRAC_PI_6);
         // Drag the SE handle; the NW corner (the anchor) must not move in world.
         let to = Point::new(150.0, 140.0);
         let new = resize_rect_rotated(base, Handle::Se, to, theta);
@@ -1742,7 +1748,7 @@ mod tests {
         );
         // Degenerate case: no rotation matches the plain axis-aligned resize.
         assert_eq!(
-            resize_rect_rotated(base, Handle::Se, to, 0.0),
+            resize_rect_rotated(base, Handle::Se, to, ambre_core::Radians::ZERO),
             resize_rect(base, Handle::Se, to)
         );
     }
@@ -1763,7 +1769,7 @@ mod tests {
         assert_eq!(ov.len(), 1);
         assert_eq!(ov[0].0, ElementId("a".into()));
         assert_eq!(ov[0].1, Rect::new(0.0, 0.0, 150.0, 140.0));
-        assert_eq!(ov[0].2, 0.0);
+        assert_eq!(ov[0].2, ambre_core::Radians::ZERO);
 
         // Move: the override shifts every selected element by the drag delta.
         let mut tool = SelectTool::new();
@@ -1783,7 +1789,7 @@ mod tests {
         tool.pointer_move(Point::new(100.0, 50.0));
         let ov = tool.gesture_overrides(&disp);
         assert_eq!(ov[0].1, bounds);
-        assert!((ov[0].2 - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+        assert!((ov[0].2.get() - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
     }
 
     #[test]
@@ -2451,7 +2457,7 @@ mod tests {
         match up {
             SelectOutcome::Command(ToileCommand::RotateElement { id, radians }) => {
                 assert_eq!(id, ElementId("a".into()));
-                assert!((radians - std::f64::consts::FRAC_PI_2).abs() < 1e-6);
+                assert!((radians.get() - std::f64::consts::FRAC_PI_2).abs() < 1e-6);
             }
             other => panic!("expected RotateElement, got {other:?}"),
         }

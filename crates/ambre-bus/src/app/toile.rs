@@ -1147,8 +1147,8 @@ pub struct SnapElement {
     pub id: ElementId,
     /// Position + size, world space (the element AABB).
     pub bounds: Rect,
-    /// Rotation in radians (the element `rot` field).
-    pub rotation: f64,
+    /// The rotation (the element `rot` field).
+    pub rotation: ambre_core::Radians,
     /// Opacity `0.0 ..= 1.0` (from [`ElementStyle::opacity`]).
     pub opacity: f32,
     /// Fill color, `None` = no fill (from [`ElementStyle::fill`]).
@@ -1313,7 +1313,7 @@ pub enum ToileCommand {
     },
     RotateElement {
         id: ElementId,
-        radians: f64,
+        radians: ambre_core::Radians,
     },
     /// Ask for the pixels behind one or more media addresses
     /// (`toile-media`). The UI thread sends it when the walk meets a picture

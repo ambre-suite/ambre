@@ -231,7 +231,7 @@ fn a_write_to_a_missing_element_is_refused() {
         },
         ToileCommand::RotateElement {
             id: ghost.clone(),
-            radians: 1.0,
+            radians: ambre_core::Radians::new(1.0),
         },
         ToileCommand::SetText {
             id: ghost.clone(),
@@ -282,7 +282,7 @@ fn a_locked_element_refuses_every_command_but_the_lock() {
         },
         ToileCommand::RotateElement {
             id: note.clone(),
-            radians: 1.0,
+            radians: ambre_core::Radians::new(1.0),
         },
         ToileCommand::RestyleElements {
             ids: vec![note.clone()],

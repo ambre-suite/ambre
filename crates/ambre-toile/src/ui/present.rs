@@ -115,7 +115,7 @@ mod tests {
         SnapElement {
             id: ElementId(id.to_owned()),
             bounds,
-            rotation: 0.0,
+            rotation: ambre_core::Radians::ZERO,
             opacity: 1.0,
             fill: Some(Rgba::from_bits(0x0000_00FF)),
         }

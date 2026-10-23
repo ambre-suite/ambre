@@ -236,6 +236,14 @@ impl ViewPx {
     }
 }
 
+impl Radians {
+    /// The angle in degrees, for a writer whose format takes degrees.
+    #[must_use]
+    pub fn to_degrees(self) -> f64 {
+        self.0.to_degrees()
+    }
+}
+
 impl Pt {
     /// The length in document pixels.
     #[must_use]

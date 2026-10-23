@@ -20,12 +20,12 @@ use super::names::{ConnectorKey, ElementKey, FieldValues, Fields};
 
 /// Rotation-expanded axis-aligned bounds of `r` rotated by `rot` about its
 /// center. For `rot == 0` this is the rect itself.
-pub(super) fn expanded_aabb(r: Rect, rot: f64) -> Rect {
-    if rot == 0.0 {
+pub(super) fn expanded_aabb(r: Rect, rot: ambre_core::Radians) -> Rect {
+    if rot == ambre_core::Radians::ZERO {
         return r;
     }
     let c = r.center();
-    let a = Affine::rotate_about(rot, c);
+    let a = Affine::rotate_about(rot.get(), c);
     let corners = [
         Point::new(r.x0, r.y0),
         Point::new(r.x1, r.y0),
@@ -204,8 +204,8 @@ pub(super) fn stored_rect(em: &Fields<ElementKey>) -> Rect {
 
 /// The rotation an element map stores, in radians. A map that holds none is
 /// not rotated.
-pub(super) fn rotation_of(em: &Fields<ElementKey>) -> f64 {
-    f64_of(em, ElementKey::Rot).unwrap_or(0.0)
+pub(super) fn rotation_of(em: &Fields<ElementKey>) -> ambre_core::Radians {
+    ambre_core::Radians::new(f64_of(em, ElementKey::Rot).unwrap_or(0.0))
 }
 
 /// Whether an element map's type tag is the tag of `kind`. Every shape kind
@@ -429,9 +429,9 @@ pub(super) fn map_str<K: FieldKey>(m: FieldValues<'_, K>, k: K) -> Option<String
 }
 
 /// [`stored_rect`] and [`rotation_of`], for an element map read whole.
-pub(super) fn map_placement(fields: FieldValues<'_, ElementKey>) -> (Rect, f64) {
+pub(super) fn map_placement(fields: FieldValues<'_, ElementKey>) -> (Rect, ambre_core::Radians) {
     let read = |key| map_f64(fields, key).unwrap_or(0.0);
     let (x, y) = (read(ElementKey::X), read(ElementKey::Y));
     let rect = Rect::new(x, y, x + read(ElementKey::W), y + read(ElementKey::H));
-    (rect, read(ElementKey::Rot))
+    (rect, ambre_core::Radians::new(read(ElementKey::Rot)))
 }

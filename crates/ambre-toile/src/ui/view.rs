@@ -2934,7 +2934,7 @@ impl ToileView {
             .selection
             .first()
             .map(|id| super::tool::element_rotation(&self.display, id))
-            .unwrap_or(0.0);
+            .unwrap_or(ambre_core::Radians::ZERO);
         let css = if let Some(g) = self.machine.gesture_cursor() {
             match g {
                 GestureCursor::Handle(h) => super::palette::resize_cursor(h, theta),
@@ -3170,7 +3170,7 @@ impl ToileView {
     /// overlay rides. An element's box carries the element's angle; a connector
     /// caption's box is the arrow's mid-arc box and never rotates
     /// (`toile-connectors`). `None` when the target has left the culled set.
-    fn edit_target_geometry(&self) -> Option<(Point, f32, Rect, f64)> {
+    fn edit_target_geometry(&self) -> Option<(Point, f32, Rect, ambre_core::Radians)> {
         match self.editor.as_ref()?.target() {
             EditTarget::Element(id) => {
                 let e = self.find_element(id)?;
@@ -3179,7 +3179,7 @@ impl ToileView {
                 // display, so a pan off screen keeps the editor open
                 // (`TOILE-UI-210`).
                 let c = e.transform.as_coeffs();
-                let rot = c[1].atan2(c[0]);
+                let rot = ambre_core::Radians::new(c[1].atan2(c[0]));
                 Some((origin, wrap_w, sb, rot))
             }
             EditTarget::ConnectorLabel(id) => {
@@ -3194,7 +3194,7 @@ impl ToileView {
                 }
                 let world = live.or(self.edit_caption_box.get())?;
                 let (origin, wrap_w, sb) = self.edit_geometry_of(world);
-                Some((origin, wrap_w, sb, 0.0))
+                Some((origin, wrap_w, sb, ambre_core::Radians::ZERO))
             }
             // The title band is screen space, and the editor takes world
             // coordinates, so the band is projected back through the camera
@@ -3215,7 +3215,7 @@ impl ToileView {
                     s2w * Point::new(band.x1 + pad, band.y1 + pad),
                 );
                 let (origin, wrap_w, sb) = self.edit_geometry_of(world);
-                Some((origin, wrap_w, sb, 0.0))
+                Some((origin, wrap_w, sb, ambre_core::Radians::ZERO))
             }
         }
     }
@@ -3444,7 +3444,7 @@ impl ToileView {
         // Unrotate the pointer about the element center into its axis-aligned
         // frame, so clicks land on the rotated in-edit text. This mirrors the
         // overlay rotation in `drive_editor` (`toile-text-editing`).
-        let p = if rot != 0.0 {
+        let p = if rot != ambre_core::Radians::ZERO {
             render::rotate_about(sb.center(), -rot) * screen
         } else {
             screen
@@ -3616,7 +3616,7 @@ impl ToileView {
                 // returns next frame. Painting the committed text bridges that
                 // gap. The caret + IME anchor are for active editing only, so they
                 // are gated off while closing.
-                let rotated = rot != 0.0;
+                let rotated = rot != ambre_core::Radians::ZERO;
                 if rotated {
                     surface.push_transform(render::rotate_about(sb.center(), rot));
                 }

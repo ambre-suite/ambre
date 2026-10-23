@@ -249,12 +249,12 @@ fn rotated_resize_cursor(deg: f64, fallback: &str) -> String {
 /// the exact angle** (`resize_axis_base(h) + theta`), so the arrow tilts
 /// continuously with the box. Native resize cursors are fixed OS bitmaps and
 /// cannot be rotated. Pure and host-tested.
-pub fn resize_cursor(h: Handle, theta: f64) -> Cow<'static, str> {
+pub fn resize_cursor(h: Handle, theta: ambre_core::Radians) -> Cow<'static, str> {
     let Some(base) = resize_axis_base(h) else {
         return Cow::Borrowed(ROTATE_CURSOR.as_str());
     };
-    let angle = base + theta;
-    if theta == 0.0 {
+    let angle = base + theta.get();
+    if theta == ambre_core::Radians::ZERO {
         // Axis-aligned: the native keyword is crisper than an SVG cursor.
         Cow::Borrowed(nearest_resize_keyword(angle))
     } else {
@@ -370,16 +370,40 @@ mod tests {
     #[test]
     fn resize_cursor_uses_native_keywords_when_axis_aligned() {
         // Axis-aligned element (theta = 0): each handle keeps its native keyword.
-        assert_eq!(resize_cursor(Handle::Nw, 0.0).as_ref(), "nwse-resize");
-        assert_eq!(resize_cursor(Handle::Se, 0.0).as_ref(), "nwse-resize");
-        assert_eq!(resize_cursor(Handle::Ne, 0.0).as_ref(), "nesw-resize");
-        assert_eq!(resize_cursor(Handle::Sw, 0.0).as_ref(), "nesw-resize");
-        assert_eq!(resize_cursor(Handle::N, 0.0).as_ref(), "ns-resize");
-        assert_eq!(resize_cursor(Handle::S, 0.0).as_ref(), "ns-resize");
-        assert_eq!(resize_cursor(Handle::E, 0.0).as_ref(), "ew-resize");
-        assert_eq!(resize_cursor(Handle::W, 0.0).as_ref(), "ew-resize");
         assert_eq!(
-            resize_cursor(Handle::Rotate, 0.0).as_ref(),
+            resize_cursor(Handle::Nw, ambre_core::Radians::ZERO).as_ref(),
+            "nwse-resize"
+        );
+        assert_eq!(
+            resize_cursor(Handle::Se, ambre_core::Radians::ZERO).as_ref(),
+            "nwse-resize"
+        );
+        assert_eq!(
+            resize_cursor(Handle::Ne, ambre_core::Radians::ZERO).as_ref(),
+            "nesw-resize"
+        );
+        assert_eq!(
+            resize_cursor(Handle::Sw, ambre_core::Radians::ZERO).as_ref(),
+            "nesw-resize"
+        );
+        assert_eq!(
+            resize_cursor(Handle::N, ambre_core::Radians::ZERO).as_ref(),
+            "ns-resize"
+        );
+        assert_eq!(
+            resize_cursor(Handle::S, ambre_core::Radians::ZERO).as_ref(),
+            "ns-resize"
+        );
+        assert_eq!(
+            resize_cursor(Handle::E, ambre_core::Radians::ZERO).as_ref(),
+            "ew-resize"
+        );
+        assert_eq!(
+            resize_cursor(Handle::W, ambre_core::Radians::ZERO).as_ref(),
+            "ew-resize"
+        );
+        assert_eq!(
+            resize_cursor(Handle::Rotate, ambre_core::Radians::ZERO).as_ref(),
             ROTATE_CURSOR.as_str()
         );
         assert!(ROTATE_CURSOR.starts_with("url(\""));
@@ -395,7 +419,7 @@ mod tests {
         use std::f64::consts::{FRAC_PI_2, FRAC_PI_6};
         // A rotated element yields a custom SVG cursor tilted to the exact angle,
         // not a native keyword. The E handle at a quarter turn points along 90 deg.
-        let c = resize_cursor(Handle::E, FRAC_PI_2);
+        let c = resize_cursor(Handle::E, ambre_core::Radians::new(FRAC_PI_2));
         assert!(
             c.starts_with("url(\""),
             "rotated resize cursor is a data URI"
@@ -410,11 +434,11 @@ mod tests {
         // Only the two `url("...")` quotes survive (paths were re-quoted to `'`).
         assert_eq!(c.matches('"').count(), 2);
         // An arbitrary (non-45) angle is honoured exactly: 30 deg for the E axis.
-        let c = resize_cursor(Handle::E, FRAC_PI_6);
+        let c = resize_cursor(Handle::E, ambre_core::Radians::new(FRAC_PI_6));
         assert!(c.contains("rotate(30 12 12)"), "{c}");
         // The rotate handle stays the rotation cursor regardless of angle.
         assert_eq!(
-            resize_cursor(Handle::Rotate, FRAC_PI_6).as_ref(),
+            resize_cursor(Handle::Rotate, ambre_core::Radians::new(FRAC_PI_6)).as_ref(),
             ROTATE_CURSOR.as_str()
         );
     }

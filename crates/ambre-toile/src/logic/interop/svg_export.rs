@@ -108,7 +108,7 @@ fn element_svg(el: &ExportElement) -> Option<String> {
 /// axis-aligned. Degrees about the rect centre, which is the angle the board
 /// stores (`TOILE-IO-026`).
 fn rotation_attr(el: &ExportElement) -> Option<String> {
-    if !el.rotation.is_finite() || el.rotation == 0.0 {
+    if !el.rotation.is_finite() || el.rotation == ambre_core::Radians::ZERO {
         return None;
     }
     let c = el.rect.center();
@@ -377,7 +377,7 @@ mod tests {
     #[test]
     fn a_rotated_element_carries_its_angle() {
         let mut el = rect_el();
-        el.rotation = std::f64::consts::FRAC_PI_2;
+        el.rotation = ambre_core::Radians::new(std::f64::consts::FRAC_PI_2);
         let svg = export_svg(&[el]).document;
         assert!(
             svg.contains("transform=\"rotate(90 60 45)\""),

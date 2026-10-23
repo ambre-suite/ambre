@@ -436,16 +436,18 @@ fn paint_label<S: DrawSurface>(
 /// pass.
 pub(crate) fn anim_transform(a: &AnimatedElement) -> Affine {
     let c = a.bounds.center();
-    Affine::translate(c.to_vec2()) * Affine::rotate(a.rotation) * Affine::translate(-c.to_vec2())
+    Affine::translate(c.to_vec2())
+        * Affine::rotate(a.rotation.get())
+        * Affine::translate(-c.to_vec2())
 }
 
-/// A rotation of `theta` radians about `center`. The camera carries no
+/// A rotation of `theta` about `center`. The camera carries no
 /// rotation (pan + zoom only), so an element's world rotation is also its
 /// screen rotation. A pass in either space rotates about the element's center
 /// in that space with this affine.
-pub(crate) fn rotate_about(center: Point, theta: f64) -> Affine {
+pub(crate) fn rotate_about(center: Point, theta: ambre_core::Radians) -> Affine {
     Affine::translate(center.to_vec2())
-        * Affine::rotate(theta)
+        * Affine::rotate(theta.get())
         * Affine::translate(-center.to_vec2())
 }
 
@@ -453,12 +455,12 @@ pub(crate) fn rotate_about(center: Point, theta: f64) -> Affine {
 /// angle when overridden, else the angle baked into its display transform.
 /// That transform is a pure rotation about the AABB center, so `atan2(b, a)`
 /// recovers it.
-fn text_rotation(e: &DisplayElement, anim: Option<&AnimatedElement>) -> f64 {
+fn text_rotation(e: &DisplayElement, anim: Option<&AnimatedElement>) -> ambre_core::Radians {
     match anim {
         Some(a) => a.rotation,
         None => {
             let c = e.transform.as_coeffs();
-            c[1].atan2(c[0])
+            ambre_core::Radians::new(c[1].atan2(c[0]))
         }
     }
 }
@@ -619,7 +621,7 @@ fn paint_text<S: DrawSurface>(
     // (toile-board-rendering). `None` (no rotation) keeps the fast
     // pure-translation path.
     let rot = text_rotation(e, anim);
-    let rot_tf = (rot != 0.0).then(|| rotate_about(bounds.center(), rot));
+    let rot_tf = (rot != ambre_core::Radians::ZERO).then(|| rotate_about(bounds.center(), rot));
     for line in layout.lines() {
         for item in line.items() {
             let PositionedLayoutItem::GlyphRun(run) = item else {
