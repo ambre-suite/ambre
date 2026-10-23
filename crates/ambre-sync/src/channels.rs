@@ -116,15 +116,15 @@ impl SyncState {
     pub(crate) fn channel_answered(
         &self,
         channel_id: ChannelId,
-        result: Result<LogicEvent, String>,
+        result: Result<LogicEvent, http::HttpError>,
     ) {
         match result {
             Ok(event) => self.send_to_logic(event),
-            Err(message) => {
-                tracing::warn!("Sync: channel {channel_id} request failed: {message}");
+            Err(error) => {
+                tracing::warn!("Sync: channel {channel_id} request failed: {error}");
                 self.send_to_logic(LogicEvent::ChannelRequestFailed {
                     channel_id,
-                    message,
+                    message: error.to_string(),
                 });
             }
         }
@@ -214,7 +214,7 @@ impl SyncState {
         });
         let (tx, sealed, documents) = match prepared {
             Ok(prepared) => prepared,
-            Err(message) => return self.channel_answered(channel_id, Err(message)),
+            Err(message) => return self.channel_answered(channel_id, Err(message.into())),
         };
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
@@ -249,10 +249,7 @@ impl SyncState {
             }
             .await
             .map(|()| sealed);
-            let _ = tx.send(SyncEvent::ChannelCreated {
-                channel_id,
-                result: result.map_err(String::from),
-            });
+            let _ = tx.send(SyncEvent::ChannelCreated { channel_id, result });
         });
     }
 
@@ -319,7 +316,7 @@ impl SyncState {
         });
         let (tx, doc_key_enc, key_id, author) = match prepared {
             Ok(prepared) => prepared,
-            Err(message) => return self.channel_answered(channel_id, Err(message)),
+            Err(message) => return self.channel_answered(channel_id, Err(message.into())),
         };
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
@@ -333,7 +330,7 @@ impl SyncState {
                 let entry = self_join_entry(&author, &head, key_id)?;
                 let body = http::JoinChannelRequest { doc_key_enc, entry };
                 http::post_json_auth_ok(&url, &body, auth).await?;
-                Ok::<_, String>(())
+                Ok::<_, http::HttpError>(())
             }
             .await;
             let _ = tx.send(SyncEvent::ChannelJoined { channel_id, result });
@@ -506,7 +503,7 @@ impl SyncState {
     /// the answer and closes them, so a refusal leaves the channel whole.
     pub(crate) fn handle_delete_channel(&self, channel_id: ChannelId) {
         let Some(tx) = self.event_tx.clone() else {
-            return self.channel_answered(channel_id, Err(no_relay()));
+            return self.channel_answered(channel_id, Err(no_relay().into()));
         };
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
@@ -515,10 +512,7 @@ impl SyncState {
             let url = crate::http::ApiRoot::of(url_scheme, &api_base)
                 .route(format!("/channels/{channel_id}"));
             let result = http::delete_auth(&url, auth).await;
-            let _ = tx.send(SyncEvent::ChannelDeleted {
-                channel_id,
-                result: result.map_err(String::from),
-            });
+            let _ = tx.send(SyncEvent::ChannelDeleted { channel_id, result });
         });
     }
 
@@ -527,7 +521,7 @@ impl SyncState {
     /// refusal leaves the channel whole, as with a delete.
     pub(crate) fn handle_leave_channel(&self, channel_id: ChannelId) {
         let Some(tx) = self.event_tx.clone() else {
-            return self.channel_answered(channel_id, Err(no_relay()));
+            return self.channel_answered(channel_id, Err(no_relay().into()));
         };
         let (Some(author), Some(exchange_key)) = (self.author(), self.exchange_key.clone()) else {
             return self.channel_answered(channel_id, Err("not signed in".into()));
@@ -569,7 +563,7 @@ impl SyncState {
         });
         let (tx, exchange_key, author) = match prepared {
             Ok(prepared) => prepared,
-            Err(message) => return self.channel_answered(channel_id, Err(message)),
+            Err(message) => return self.channel_answered(channel_id, Err(message.into())),
         };
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
@@ -720,15 +714,13 @@ impl SyncState {
             let result = http::get_json_auth::<http::ActivityResponse>(&url, auth)
                 .await
                 .map(|resp| activity_of(&resp.documents));
-            let _ = tx.send(SyncEvent::ActivityFetched {
-                result: result.map_err(String::from),
-            });
+            let _ = tx.send(SyncEvent::ActivityFetched { result });
         });
     }
 
     /// The answer of [`fetch_activity`](Self::fetch_activity), on the Sync
     /// loop. A failure leaves the marks the view holds, and says so in the log.
-    pub(crate) fn activity_fetched(&self, result: Result<Vec<DocumentActivity>, String>) {
+    pub(crate) fn activity_fetched(&self, result: Result<Vec<DocumentActivity>, http::HttpError>) {
         match result {
             Ok(documents) => self.send_to_logic(LogicEvent::ChannelActivity { documents }),
             Err(message) => tracing::warn!("Sync: activity answer failed: {message}"),
@@ -751,10 +743,7 @@ impl SyncState {
             let result = http::get_json_auth::<http::SpaceChannelsResponse>(&url, auth)
                 .await
                 .map(|resp| resp.channels);
-            let _ = tx.send(SyncEvent::SpaceChannelsListed {
-                space_id,
-                result: result.map_err(String::from),
-            });
+            let _ = tx.send(SyncEvent::SpaceChannelsListed { space_id, result });
         });
     }
 
@@ -764,7 +753,7 @@ impl SyncState {
     pub(crate) fn space_channels_listed(
         &self,
         space_id: SpaceId,
-        result: Result<Vec<ChannelId>, String>,
+        result: Result<Vec<ChannelId>, http::HttpError>,
     ) {
         match result {
             Ok(channels) => self.send_to_logic(LogicEvent::SpaceChannels { space_id, channels }),
@@ -815,10 +804,7 @@ impl SyncState {
                     }
                     Err(message) => Err(message),
                 };
-            let _ = tx.send(SyncEvent::MemberChannelsListed {
-                asked,
-                result: result.map_err(String::from),
-            });
+            let _ = tx.send(SyncEvent::MemberChannelsListed { asked, result });
         });
     }
 
@@ -831,7 +817,7 @@ impl SyncState {
     pub(crate) fn member_channels_listed(
         &mut self,
         asked: u32,
-        result: Result<MemberListing, String>,
+        result: Result<MemberListing, http::HttpError>,
     ) {
         if asked != self.member_channels_asked {
             return;

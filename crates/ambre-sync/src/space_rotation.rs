@@ -174,7 +174,7 @@ impl SyncState {
         &mut self,
         space_id: SpaceId,
         channel_id: ChannelId,
-        result: Result<SealedChannelKey, String>,
+        result: Result<SealedChannelKey, crate::http::HttpError>,
     ) {
         if let Some(rotation) = self.space_rotations.get_mut(&space_id.document_id()) {
             rotation.in_flight.remove(&channel_id);

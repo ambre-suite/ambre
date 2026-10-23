@@ -353,35 +353,35 @@ enum SyncEvent {
     ChannelRotated {
         space_id: SpaceId,
         channel_id: ChannelId,
-        result: Result<ambre_bus::SealedChannelKey, String>,
+        result: Result<ambre_bus::SealedChannelKey, http::HttpError>,
     },
     /// The answer to a channel creation (`SyncCommand::CreateChannel`): the
     /// sealed key for the catalogue of a public channel.
     ChannelCreated {
         channel_id: ChannelId,
-        result: Result<Option<ambre_bus::SealedChannelKey>, String>,
+        result: Result<Option<ambre_bus::SealedChannelKey>, http::HttpError>,
     },
     /// The answer to a self-join (`SyncCommand::JoinChannel`).
     ChannelJoined {
         channel_id: ChannelId,
-        result: Result<(), String>,
+        result: Result<(), http::HttpError>,
     },
     /// The answer to a channel delete (`SyncCommand::DeleteChannel`).
     ChannelDeleted {
         channel_id: ChannelId,
-        result: Result<(), String>,
+        result: Result<(), http::HttpError>,
     },
     /// The answer to a channel leave (`SyncCommand::LeaveChannel`).
     ChannelLeft {
         channel_id: ChannelId,
-        result: Result<(), String>,
+        result: Result<(), http::HttpError>,
     },
     /// The answer to a segment close (`SyncCommand::CloseSegment`): the
     /// active segment after it, and whether it is the successor asked for.
     SegmentClosed {
         channel_id: ChannelId,
         closing: ambre_bus::SegmentId,
-        result: Result<(ambre_bus::SegmentId, bool), String>,
+        result: Result<(ambre_bus::SegmentId, bool), http::HttpError>,
     },
     /// The answer to an amendments creation (`SyncCommand::CreateAmendments`):
     /// the document the relay holds for the segment.
@@ -389,7 +389,7 @@ enum SyncEvent {
         channel_id: ChannelId,
         segment: ambre_bus::SegmentId,
         amendments: DocumentId,
-        result: Result<DocumentId, String>,
+        result: Result<DocumentId, http::HttpError>,
     },
     /// The answer to a thread creation (`SyncCommand::CreateThread`): the
     /// document the relay holds for the root.
@@ -398,7 +398,7 @@ enum SyncEvent {
         segment: ambre_bus::SegmentId,
         root: ambre_bus::MessageId,
         thread: DocumentId,
-        result: Result<DocumentId, String>,
+        result: Result<DocumentId, http::HttpError>,
     },
     /// The answer to a finalize lease request
     /// (`SyncCommand::TakeFinalizeLease`).
@@ -411,19 +411,19 @@ enum SyncEvent {
     SegmentFinalized {
         channel_id: ChannelId,
         segment: ambre_bus::SegmentId,
-        result: Result<(), String>,
+        result: Result<(), http::HttpError>,
     },
     /// The answer to a fold lease request (`SyncCommand::TakeFoldLease`).
     FoldLeaseAnswered {
         channel_id: ChannelId,
         segment: ambre_bus::SegmentId,
-        result: Result<ambre_bus::FoldAnswer, String>,
+        result: Result<ambre_bus::FoldAnswer, http::HttpError>,
     },
     /// The answer to a fold commit (`SyncCommand::FoldSegment`).
     SegmentFolded {
         channel_id: ChannelId,
         segment: ambre_bus::SegmentId,
-        result: Result<(), String>,
+        result: Result<(), http::HttpError>,
     },
     /// A confirmation of this client settled the fold of the segment
     /// `document_id`, and the relay erased `amendments` (`SRV-211`).
@@ -436,25 +436,25 @@ enum SyncEvent {
     /// under the requested id, or the one that already held its members.
     DirectMessageOpened {
         requested: ChannelId,
-        result: Result<ChannelId, String>,
+        result: Result<ChannelId, http::HttpError>,
     },
     /// The answer to a listing of a space's public channels
     /// (`SyncCommand::ListSpaceChannels`).
     SpaceChannelsListed {
         space_id: ambre_bus::SpaceId,
-        result: Result<Vec<ChannelId>, String>,
+        result: Result<Vec<ChannelId>, http::HttpError>,
     },
     /// The answer to a listing of the user's channels
     /// (`SyncCommand::ListMemberChannels`).
     MemberChannelsListed {
         /// The listing this answers, as `member_channels_asked` counted it.
         asked: u32,
-        result: Result<channels::MemberListing, String>,
+        result: Result<channels::MemberListing, http::HttpError>,
     },
     /// The relay's activity answer (`SyncCommand::FetchActivity`,
     /// `SyncCommand::MarkAllRead`).
     ActivityFetched {
-        result: Result<Vec<ambre_bus::DocumentActivity>, String>,
+        result: Result<Vec<ambre_bus::DocumentActivity>, http::HttpError>,
     },
     /// Opening a server-side document failed because its wrapped DocumentKey
     /// could not be unwrapped (wrong exchange key, tampered server row, or a

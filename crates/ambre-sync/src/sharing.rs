@@ -983,7 +983,7 @@ pub(crate) struct ChannelLeaveParams {
 pub(crate) async fn leave_channel_task<H: ShareHttp>(
     http: &H,
     p: ChannelLeaveParams,
-) -> Result<(), String> {
+) -> Result<(), http::HttpError> {
     let (scheme, base) = (p.url_scheme, &p.api_base);
     let url = crate::http::ApiRoot::of(scheme, base)
         .route(format!("/channels/{}/documents", p.channel_id));
@@ -995,7 +995,9 @@ pub(crate) async fn leave_channel_task<H: ShareHttp>(
         .find(|d| d.kind == ChannelDocumentKind::Meta)
         .ok_or("the channel has no meta document")?
         .document_id;
-    leave_document(http, meta, &p.author, scheme, base, &p.exchange_key).await
+    leave_document(http, meta, &p.author, scheme, base, &p.exchange_key)
+        .await
+        .map_err(http::HttpError::from)
 }
 
 /// Inputs for [`close_segment_task`], gathered from `SyncState` before
@@ -1025,7 +1027,7 @@ pub(crate) struct SegmentCloseParams {
 pub(crate) async fn close_segment_task<H: ShareHttp>(
     http: &H,
     p: SegmentCloseParams,
-) -> Result<(SegmentId, bool), String> {
+) -> Result<(SegmentId, bool), http::HttpError> {
     let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let successor = p.successor.document_id();
     let (doc_key_enc, entry) = creation(successor, &p.meta_key, &p.exchange_key, &p.author)?;
@@ -1081,7 +1083,7 @@ pub(crate) struct AmendmentsParams {
 pub(crate) async fn amendments_task<H: ShareHttp>(
     http: &H,
     p: AmendmentsParams,
-) -> Result<DocumentId, String> {
+) -> Result<DocumentId, http::HttpError> {
     let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let (doc_key_enc, entry) = creation(p.amendments, &p.meta_key, &p.exchange_key, &p.author)?;
     let body = http::CreateDocumentRequest {
@@ -1137,7 +1139,7 @@ pub(crate) struct ThreadParams {
 pub(crate) async fn thread_task<H: ShareHttp>(
     http: &H,
     p: ThreadParams,
-) -> Result<DocumentId, String> {
+) -> Result<DocumentId, http::HttpError> {
     let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let (doc_key_enc, entry) = creation(p.thread, &p.meta_key, &p.exchange_key, &p.author)?;
     let body = http::CreateDocumentRequest {
@@ -1395,7 +1397,7 @@ pub(crate) async fn rotate_channel_task<H: ShareHttp>(
 async fn rotate_channel<H: ShareHttp>(
     http: &H,
     p: &RotateChannelParams,
-) -> Result<ambre_bus::SealedChannelKey, String> {
+) -> Result<ambre_bus::SealedChannelKey, http::HttpError> {
     let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let head = http
         .get_json::<http::JoinHeadResponse>(&base.route(format!("/channels/{}/join", p.channel_id)))
@@ -1435,10 +1437,11 @@ async fn rotate_channel<H: ShareHttp>(
             }) => break,
             // A member joined since the read (`SYNC-143`): read them again.
             Err(e) if e.is(RefusalCode::MembersChanged) && tries < ROTATION_TRIES => {}
-            Err(e) => return Err(format!("Rotate key failed: {e}")),
+            Err(e) => return Err(format!("Rotate key failed: {e}").into()),
         }
     }
     crate::channels::seal_channel_key(p.channel_id, &new_key, &p.space_key, p.anchor)
+        .map_err(http::HttpError::from)
 }
 
 /// Inputs for [`list_members_task`].

@@ -591,15 +591,15 @@ impl Reported for Failed {
     }
 }
 
-/// A scripted failure with text alone, as a fake transport raises it.
-#[cfg(test)]
+/// A failure on this device with text alone: a step that read no answer, or
+/// a scripted failure of a fake transport.
 impl From<&str> for HttpError {
     fn from(message: &str) -> Self {
         Self::Local(message.to_owned())
     }
 }
 
-#[cfg(test)]
+/// A failure on this device, as a step that read no answer words it.
 impl From<String> for HttpError {
     fn from(message: String) -> Self {
         Self::Local(message)

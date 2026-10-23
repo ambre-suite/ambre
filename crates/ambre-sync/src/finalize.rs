@@ -44,7 +44,7 @@ pub(crate) async fn commit_final(
     segment: SegmentId,
     lease: LeaseId,
     upload: SnapshotUpload,
-) -> Result<(), String> {
+) -> Result<(), http::HttpError> {
     let snapshot_id = upload_snapshot(transport, auth, base, upload).await?;
     let url = base.route(format!(
         "/channels/{channel_id}/segments/{segment}/finalize"

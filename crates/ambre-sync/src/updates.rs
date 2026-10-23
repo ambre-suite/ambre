@@ -10,6 +10,25 @@ const RESEND_RETRY_BASE: ambre_core::Millis = ambre_core::Millis(1_000);
 /// (`ambre-spec-budgets.md` section 8, `SYNC-159`).
 const RESEND_RETRY_LIMIT: u32 = 5;
 
+/// Why a document holds its edits: the relay refused one, or failed to
+/// sequence one past the retry budget. It prints the cause the warning reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HoldCause {
+    /// A refusal the relay named.
+    Refused(ambre_core::RefusalCode),
+    /// The failures counted since the last echo.
+    Failed(u32),
+}
+
+impl std::fmt::Display for HoldCause {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Refused(code) => write!(f, "{code}"),
+            Self::Failed(failure) => write!(f, "sequencing failed {failure} times"),
+        }
+    }
+}
+
 /// The delay before sending again after the `failure`-th failure since the
 /// last echo, counted from one. Past the budget there is none.
 fn resend_retry_delay_ms(failure: u32) -> Option<ambre_core::Millis> {
@@ -1161,7 +1180,7 @@ impl SyncState {
             ambre_core::RefusalCode::SegmentLocked => {
                 self.handle_delta_locked(document_id, &signature);
             }
-            _ => self.hold_refused(document_id, &signature, &code.to_string()),
+            _ => self.hold_refused(document_id, &signature, HoldCause::Refused(code)),
         }
     }
 
@@ -1190,7 +1209,7 @@ impl SyncState {
 
     /// Drops the delta signed `signature` and every later one, and holds the
     /// document. The first hold is reported (`SYNC-155`, `SYNC-156`).
-    fn hold_refused(&mut self, document_id: DocumentId, signature: &Signature, cause: &str) {
+    fn hold_refused(&mut self, document_id: DocumentId, signature: &Signature, cause: HoldCause) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
@@ -1233,8 +1252,7 @@ impl SyncState {
                 self.arm_event_timer(retry, delay_ms);
             }
             None => {
-                let cause = format!("sequencing failed {failure} times");
-                self.hold_refused(document_id, &signature, &cause);
+                self.hold_refused(document_id, &signature, HoldCause::Failed(failure));
             }
         }
     }
@@ -1583,7 +1601,7 @@ pub(crate) async fn upload_snapshot(
     auth: &http::AuthContext,
     base: &crate::http::ApiRoot,
     upload: SnapshotUpload,
-) -> Result<SnapshotId, String> {
+) -> Result<SnapshotId, http::HttpError> {
     let SnapshotUpload {
         document_id,
         author_pubkey,

@@ -835,10 +835,10 @@ impl SyncState {
                         active,
                         created,
                     },
-                    Err(message) => LogicEvent::SegmentCloseFailed {
+                    Err(error) => LogicEvent::SegmentCloseFailed {
                         channel_id,
                         closing,
-                        message,
+                        message: error.to_string(),
                     },
                 });
             }
@@ -854,11 +854,11 @@ impl SyncState {
                         segment,
                         amendments: held,
                     },
-                    Err(message) => LogicEvent::AmendmentsLinkFailed {
+                    Err(error) => LogicEvent::AmendmentsLinkFailed {
                         channel_id,
                         segment,
                         amendments,
-                        message,
+                        message: error.to_string(),
                     },
                 });
             }
@@ -876,12 +876,12 @@ impl SyncState {
                         root,
                         thread: held,
                     },
-                    Err(message) => LogicEvent::ThreadLinkFailed {
+                    Err(error) => LogicEvent::ThreadLinkFailed {
                         channel_id,
                         segment,
                         root,
                         thread,
-                        message,
+                        message: error.to_string(),
                     },
                 });
             }
@@ -911,7 +911,9 @@ impl SyncState {
                     channel_id,
                     segment,
                 }),
-                Err(message) => self.finalize_failed(channel_id, segment, false, &message),
+                Err(error) => {
+                    self.finalize_failed(channel_id, segment, false, &error.to_string());
+                }
             },
             SyncEvent::FoldLeaseAnswered {
                 channel_id,
@@ -923,7 +925,7 @@ impl SyncState {
                     segment,
                     answer,
                 }),
-                Err(message) => self.fold_failed(channel_id, segment, &message),
+                Err(error) => self.fold_failed(channel_id, segment, &error.to_string()),
             },
             SyncEvent::SegmentFolded {
                 channel_id,
@@ -934,7 +936,7 @@ impl SyncState {
                     channel_id,
                     segment,
                 }),
-                Err(message) => self.fold_failed(channel_id, segment, &message),
+                Err(error) => self.fold_failed(channel_id, segment, &error.to_string()),
             },
             SyncEvent::AmendmentsFolded {
                 document_id,

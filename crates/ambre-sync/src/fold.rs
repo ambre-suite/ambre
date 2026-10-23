@@ -18,7 +18,7 @@ pub(crate) async fn take_fold_lease(
     base: &crate::http::ApiRoot,
     channel_id: ChannelId,
     segment: SegmentId,
-) -> Result<FoldAnswer, String> {
+) -> Result<FoldAnswer, http::HttpError> {
     let url = base.route(format!(
         "/channels/{channel_id}/segments/{segment}/fold-lease"
     ));
@@ -56,7 +56,7 @@ pub(crate) async fn commit_fold(
     segment: SegmentId,
     reach: FoldReach,
     upload: SnapshotUpload,
-) -> Result<(), String> {
+) -> Result<(), http::HttpError> {
     let snapshot_id = upload_snapshot(transport, auth, base, upload).await?;
     let url = base.route(format!("/channels/{channel_id}/segments/{segment}/fold"));
     let body = http::FoldSegmentRequest {
