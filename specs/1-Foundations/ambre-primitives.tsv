@@ -38,10 +38,6 @@ ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children(resize) 
 ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children(sizes) | param | &mut HashMap<ElementId,(u32,u32)>	math	sizes
 ambre-app | src/host/frame.rs | crate::host::frame | send_faces() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | send_faces(faces) | param | Vec<Vec<u8>>	generic	font bytes
-ambre-app | src/host/mod.rs | crate::host | AMBRE_CLIPBOARD_TOKEN_TYPE | const | &str	debt	finding: Clipboard payload strings (confirmed)
-ambre-app | src/host/mod.rs | crate::host | AMBRE_CLIPBOARD_TYPE | const | &str	debt	finding: Clipboard payload strings (confirmed)
-ambre-app | src/host/mod.rs | crate::host | AMBRE_CLIPBOARD_WEB_TOKEN_TYPE | const | &str	debt	finding: Clipboard payload strings (confirmed)
-ambre-app | src/host/mod.rs | crate::host | AMBRE_CLIPBOARD_WEB_TYPE | const | &str	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/mod.rs | crate::host | AppView::captures_pointer() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::cell_view(height) | param | f64	math	css size
 ambre-app | src/host/mod.rs | crate::host | AppView::cell_view(width) | param | f64	math	css size
@@ -58,24 +54,18 @@ ambre-app | src/host/mod.rs | crate::host | AppView::takes_text() | ret | bool	g
 ambre-app | src/host/mod.rs | crate::host | AppView::touch() | ret | bool	generic	consumed answer
 ambre-app | src/host/mod.rs | crate::host | AppView::touch(x) | param | f32	math	css position
 ambre-app | src/host/mod.rs | crate::host | AppView::touch(y) | param | f32	math	css position
-ambre-app | src/host/mod.rs | crate::host | ClipboardPaste.token | field | Option<String>	debt	finding: Clipboard payload strings (confirmed)
-ambre-app | src/host/mod.rs | crate::host | async_write_clipboard(html) | param | Option<String>	debt	finding: Clipboard payload strings (confirmed)
-ambre-app | src/host/mod.rs | crate::host | async_write_clipboard(payload_b64) | param | Option<String>	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/mod.rs | crate::host | async_write_clipboard(published) | param | Rc<std::cell::Cell<bool>>	math	flag cell
-ambre-app | src/host/mod.rs | crate::host | async_write_clipboard(tsv) | param | String	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/mod.rs | crate::host | base64_decode() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
 ambre-app | src/host/mod.rs | crate::host | base64_decode(s) | param | &str	generic	generic codec/parser/bytes API
 ambre-app | src/host/mod.rs | crate::host | base64_encode() | ret | String	generic	generic codec/parser/bytes API
 ambre-app | src/host/mod.rs | crate::host | base64_encode(bytes) | param | &[u8]	generic	generic codec/parser/bytes API
-ambre-app | src/host/mod.rs | crate::host | clipboard_item(entries) | param | &[(&str,Option<&str>)]	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/mod.rs | crate::host | desktop() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | desktop_in() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | is_other_editable() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | publish_item() | ret | Option<(T,bool)>	math	named pair: item, carries-web flag
-ambre-app | src/host/mod.rs | crate::host | publish_item(build) | param | impl Fn(&[(&str,Option<&str>)])->Option<T>	debt	finding: Clipboard payload strings (confirmed)
-ambre-app | src/host/mod.rs | crate::host | publish_item(html) | param | Option<&str>	debt	finding: Clipboard payload strings (confirmed)
-ambre-app | src/host/mod.rs | crate::host | publish_item(payload_b64) | param | Option<&str>	debt	finding: Clipboard payload strings (confirmed)
-ambre-app | src/host/mod.rs | crate::host | publish_item(tsv) | param | &str	debt	finding: Clipboard payload strings (confirmed)
+ambre-app | src/host/mod.rs | crate::host | ClipboardFormat::mime() | ret | &'static str	newtype-inner	the enum's own MIME name, unwrapped at the clipboard API call
+ambre-app | src/host/mod.rs | crate::host | clipboard_item(entries) | param | &[(ClipboardFormat,Option<&str>)]	foreign-api	each value is the string the ClipboardItem record takes; its type is already a ClipboardFormat
+ambre-app | src/host/mod.rs | crate::host | publish_item(build) | param | impl Fn(&[(ClipboardFormat,Option<&str>)])->Option<T>	foreign-api	the pairs clipboard_item hands the ClipboardItem record; its type is already a ClipboardFormat
 ambre-app | src/host/murmure.rs | crate::host::murmure | LocalTime::format() | ret | String	free-text	formatted time text
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.latest | field | HashMap<DraftKey,u64>	math	write counter per draft key
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.next | field | u64	math	write counter
@@ -151,7 +141,6 @@ ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(sile
 ambre-app | src/platform.rs | crate::platform | open_file_picker(on_bytes) | param | impl Fn(Vec<u8>)+Clone+'static	generic	bytes callback
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
 ambre-app | src/platform.rs | crate::platform | post_to_worker(bytes) | param | &[u8]	generic	bytes
-ambre-app | src/platform.rs | crate::platform | read_clipboard_blob() | ret | Option<(ambre_bus::ClipboardBlob,Option<String>)>	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
 ambre-app | src/platform.rs | crate::platform | read_container(bytes) | param | &[u8]	generic	container bytes parser
 ambre-app | src/platform.rs | crate::platform | remember_dev_user(username) | param | &str	free-text	dev username

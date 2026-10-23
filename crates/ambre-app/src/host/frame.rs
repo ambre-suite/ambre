@@ -511,11 +511,8 @@ impl FrameHost {
         // the cross-app `text/plain` mirror; the private `web ` type carries the
         // opaque Ambre bytes for a full-fidelity internal round-trip.
         if let Some(blob) = self.view.poll_clipboard() {
-            let payload_b64 = blob.ambre.as_deref().map(base64_encode);
             async_write_clipboard(
-                blob.text,
-                blob.html,
-                payload_b64,
+                blob,
                 self.clip_token.clone(),
                 Rc::clone(&self.clip_published),
             );

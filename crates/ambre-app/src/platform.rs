@@ -117,9 +117,9 @@ pub(crate) fn async_clipboard() -> Option<web_sys::Clipboard> {
 /// when the read was refused or surfaced nothing.
 pub(crate) async fn read_clipboard_blob(
     read_promise: js_sys::Promise,
-) -> Option<(ambre_bus::ClipboardBlob, Option<String>)> {
+) -> Option<(ambre_bus::ClipboardBlob, Option<ambre_bus::ClipToken>)> {
     let mut blob = ambre_bus::ClipboardBlob::default();
-    let mut token: Option<String> = None;
+    let mut token: Option<ambre_bus::ClipToken> = None;
     let mut found = false;
     let val = wasm_bindgen_futures::JsFuture::from(read_promise)
         .await
@@ -130,35 +130,31 @@ pub(crate) async fn read_clipboard_blob(
             continue;
         };
         let types = item.types();
-        let has = |t: &ambre_bus::MediaType| {
+        let has = |format: host::ClipboardFormat| {
             types
                 .iter()
-                .any(|v| v.as_string().as_deref() == Some(t.as_str()))
+                .any(|v| v.as_string().as_deref() == Some(format.mime()))
         };
-        let ambre_type = ambre_bus::MediaType::from(host::AMBRE_CLIPBOARD_WEB_TYPE);
-        if has(&ambre_type)
-            && let Some(b64) = read_clipboard_item(&item, &ambre_type).await
+        if has(host::ClipboardFormat::WebAmbre)
+            && let Some(b64) = read_clipboard_item(&item, host::ClipboardFormat::WebAmbre).await
         {
             blob.ambre = host::base64_decode(&b64);
             found = true;
         }
-        let token_type = ambre_bus::MediaType::from(host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE);
-        if has(&token_type)
-            && let Some(t) = read_clipboard_item(&item, &token_type).await
+        if has(host::ClipboardFormat::WebAmbreToken)
+            && let Some(t) = read_clipboard_item(&item, host::ClipboardFormat::WebAmbreToken).await
         {
-            token = Some(t);
+            token = Some(ambre_bus::ClipToken::new(t));
             found = true;
         }
-        let html_type = ambre_bus::MediaType::from("text/html");
-        if has(&html_type)
-            && let Some(html) = read_clipboard_item(&item, &html_type).await
+        if has(host::ClipboardFormat::Html)
+            && let Some(html) = read_clipboard_item(&item, host::ClipboardFormat::Html).await
         {
             blob.html = Some(html).filter(|h| !h.is_empty());
             found = true;
         }
-        let text_type = ambre_bus::MediaType::from("text/plain");
-        if has(&text_type)
-            && let Some(text) = read_clipboard_item(&item, &text_type).await
+        if has(host::ClipboardFormat::PlainText)
+            && let Some(text) = read_clipboard_item(&item, host::ClipboardFormat::PlainText).await
         {
             blob.text = text;
             found = true;
@@ -170,18 +166,18 @@ pub(crate) async fn read_clipboard_blob(
         blob.html
             .as_deref()
             .and_then(ambre_bus::ClipboardBlob::html_token)
-            .map(str::to_owned)
+            .map(|t| ambre_bus::ClipToken::new(t.to_owned()))
     });
     found.then_some((blob, token))
 }
 
-/// Read one MIME entry of a [`web_sys::ClipboardItem`] as a string (its blob
+/// Read one type of a [`web_sys::ClipboardItem`] as a string (its blob
 /// decoded as UTF-8). `None` on any failure.
 pub(crate) async fn read_clipboard_item(
     item: &web_sys::ClipboardItem,
-    mime: &ambre_bus::MediaType,
+    format: host::ClipboardFormat,
 ) -> Option<String> {
-    let blob_val = wasm_bindgen_futures::JsFuture::from(item.get_type(mime.as_str()))
+    let blob_val = wasm_bindgen_futures::JsFuture::from(item.get_type(format.mime()))
         .await
         .ok()?;
     let blob = blob_val.dyn_into::<web_sys::Blob>().ok()?;

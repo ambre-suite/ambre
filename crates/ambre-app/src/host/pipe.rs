@@ -51,7 +51,7 @@ impl PipeHost for FrameHost {
 /// the `paste` event, and the blob reaches the view by the same call
 /// (`UI-THREAD-024`).
 pub(crate) fn button_paste<H: PipeHost>(host: &mut H, paste: ClipboardPaste) {
-    let source = if host.clip_token().is(paste.token.as_deref()) {
+    let source = if paste.token.as_ref() == Some(host.clip_token()) {
         PasteSource::Own
     } else {
         PasteSource::Foreign
@@ -196,7 +196,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                         // straight into the event's clipboardData, as before.
                         ambre_bus::CopyOutcome::Text(text) => {
                             if let Some(data) = event.clipboard_data() {
-                                let _ = data.set_data("text/plain", &text);
+                                let _ = data.set_data(ClipboardFormat::PlainText.mime(), &text);
                                 event.prevent_default();
                             }
                         }
@@ -210,7 +210,8 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                         ambre_bus::CopyOutcome::Deferred => {
                             let token = host_e.borrow().clip_token().clone();
                             if let Some(data) = event.clipboard_data() {
-                                let _ = data.set_data(AMBRE_CLIPBOARD_TOKEN_TYPE, token.as_str());
+                                let _ = data
+                                    .set_data(ClipboardFormat::AmbreToken.mime(), token.as_str());
                             }
                             event.prevent_default();
                         }
@@ -244,14 +245,16 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                 // cross-app use or a browser that dropped the custom type. The
                 // view decides which to honor.
                 let ambre = data
-                    .get_data(AMBRE_CLIPBOARD_TYPE)
+                    .get_data(ClipboardFormat::Ambre.mime())
                     .ok()
                     .filter(|s| !s.is_empty() && !plain)
                     .and_then(|b64| base64_decode(&b64));
-                let text = data.get_data("text/plain").unwrap_or_default();
+                let text = data
+                    .get_data(ClipboardFormat::PlainText.mime())
+                    .unwrap_or_default();
                 // The formatting another editor wrote, for a view that reads it.
                 let html = data
-                    .get_data("text/html")
+                    .get_data(ClipboardFormat::Html.mime())
                     .ok()
                     .filter(|s| !s.is_empty() && !plain);
                 // Same-tab ownership: the synchronous token is here while no
@@ -260,7 +263,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                 // means paste our own in-memory copy at full fidelity.
                 let own_copy = !plain && {
                     let token = host_c.borrow().clip_token().clone();
-                    data.get_data(AMBRE_CLIPBOARD_TOKEN_TYPE)
+                    data.get_data(ClipboardFormat::AmbreToken.mime())
                         .is_ok_and(|t| !t.is_empty() && token.is(Some(t.as_str())))
                         || html
                             .as_deref()
@@ -290,7 +293,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                         let (blob, source) = match crate::platform::read_clipboard_blob(read).await
                         {
                             Some((blob, token))
-                                if host_a.borrow().clip_token().is(token.as_deref()) =>
+                                if token.as_ref() == Some(host_a.borrow().clip_token()) =>
                             {
                                 (blob, PasteSource::Own)
                             }
@@ -673,7 +676,9 @@ mod tests {
         assert!(ev.default_prevented());
         assert_eq!(data.get_data("text/plain").ok().as_deref(), Some(""));
         assert_eq!(
-            data.get_data(AMBRE_CLIPBOARD_TOKEN_TYPE).ok().as_deref(),
+            data.get_data(ClipboardFormat::AmbreToken.mime())
+                .ok()
+                .as_deref(),
             Some("ambre-test-token")
         );
 
@@ -697,7 +702,7 @@ mod tests {
             "paste",
             &transfer(&[
                 ("text/plain", "x"),
-                (AMBRE_CLIPBOARD_TOKEN_TYPE, "ambre-test-token"),
+                (ClipboardFormat::AmbreToken.mime(), "ambre-test-token"),
             ]),
         );
         assert!(ev.default_prevented(), "the native insert is prevented");
@@ -709,14 +714,14 @@ mod tests {
             &mut *rig.host.borrow_mut(),
             ClipboardPaste {
                 blob: blob.clone(),
-                token: Some("ambre-test-token".to_owned()),
+                token: Some(ambre_bus::ClipToken::new("ambre-test-token".to_owned())),
             },
         );
         button_paste(
             &mut *rig.host.borrow_mut(),
             ClipboardPaste {
                 blob: blob.clone(),
-                token: Some("another-tab".to_owned()),
+                token: Some(ambre_bus::ClipToken::new("another-tab".to_owned())),
             },
         );
         let host = rig.host.borrow();
@@ -741,10 +746,13 @@ mod tests {
     #[wasm_bindgen_test]
     async fn a_paste_after_a_landed_write_reads_the_clipboard_back() {
         let rig = Rig::new();
+        let blob = ambre_bus::ClipboardBlob {
+            text: "x".to_owned(),
+            ambre: Some(vec![1, 2, 3]),
+            ..ambre_bus::ClipboardBlob::default()
+        };
         let (item, _) = publish_item(
-            "x",
-            None,
-            Some("AQID"),
+            &blob,
             &ambre_bus::ClipToken::new("ambre-test-token".to_owned()),
             clipboard_item,
         )
@@ -797,8 +805,8 @@ mod tests {
         let rig = Rig::new();
         let entries = [
             ("text/plain", "x"),
-            (AMBRE_CLIPBOARD_TYPE, "AQID"),
-            (AMBRE_CLIPBOARD_TOKEN_TYPE, "ambre-test-token"),
+            (ClipboardFormat::Ambre.mime(), "AQID"),
+            (ClipboardFormat::AmbreToken.mime(), "ambre-test-token"),
         ];
         let data = transfer(&entries);
         rig.clip("paste", &data);

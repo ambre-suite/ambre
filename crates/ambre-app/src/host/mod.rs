@@ -96,41 +96,63 @@ pub(crate) fn open_address(url: &ambre_core::LinkUrl) {
     }
 }
 
-/// Private clipboard MIME type carrying the base64 postcard
-/// [`ClipboardPayload`](ambre_bus::ClipboardPayload) for an internal round-trip
-/// on the *synchronous* `copy`/`paste` events (Ctrl+C/Ctrl+V). Browsers that
-/// reject it fall back to `text/plain` (`ambre-spec-clipboard.md`).
-const AMBRE_CLIPBOARD_TYPE: &str = "application/x-ambre";
+/// The clipboard types Ambre reads and writes, one variant each
+/// (`ambre-spec-clipboard.md`). The browser takes a type as its MIME name,
+/// which [`ClipboardFormat::mime`] spells at the DOM call alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum ClipboardFormat {
+    /// The `text/plain` mirror every program reads.
+    PlainText,
+    /// The `text/html` a view wrote for another editor.
+    Html,
+    /// Private type carrying the base64 postcard
+    /// [`ClipboardPayload`](ambre_bus::ClipboardPayload) for an internal
+    /// round-trip on the *synchronous* `copy`/`paste` events (Ctrl+C/Ctrl+V).
+    /// Browsers that reject it fall back to `text/plain`.
+    Ambre,
+    /// Synchronous same-tab ownership marker (`UI-THREAD-007`). Written into
+    /// the clipboard event's `DataTransfer` *synchronously* during
+    /// `copy`/`cut`, it always reaches the OS clipboard. The async write that
+    /// follows replaces it. Chrome keeps it under the `web ` variant, which a
+    /// `paste` event cannot see (`UI-THREAD-054`). Firefox refuses that
+    /// variant and the write carries the standard types alone
+    /// (`UI-THREAD-055`).
+    ///
+    /// On `paste`, a value here equal to this page's token proves the
+    /// clipboard still holds THIS tab's own last copy. The view then pastes
+    /// its in-memory `last_clip` at full fidelity. Any foreign copy (another
+    /// app / tab) overwrites the clipboard and drops the marker, so its
+    /// absence correctly means "not ours".
+    AmbreToken,
+    /// [`Self::Ambre`] under the `web ` prefix the *asynchronous* Clipboard
+    /// API (`navigator.clipboard.read`/`write`) requires for a custom type.
+    /// This is the signal the toolbar/menu Paste button uses, since it cannot
+    /// ride a native `paste` event.
+    WebAmbre,
+    /// [`Self::AmbreToken`] under the `web ` prefix. The async publish writes
+    /// it beside the payload so the whole-clipboard `write` never removes the
+    /// token the copy event established (`UI-THREAD-023`). The Paste button
+    /// reads it back to answer rung 2 of the fidelity ladder.
+    WebAmbreToken,
+}
 
-/// The same payload under the `web ` prefix the *asynchronous* Clipboard API
-/// (`navigator.clipboard.read`/`write`) requires for a custom type. This is the
-/// signal the toolbar/menu Paste button uses, since it cannot ride a native
-/// `paste` event (`ambre-spec-clipboard.md`).
-pub(crate) const AMBRE_CLIPBOARD_WEB_TYPE: &str = "web application/x-ambre";
+impl ClipboardFormat {
+    /// The MIME name, for the call into the clipboard API.
+    pub(crate) const fn mime(self) -> &'static str {
+        match self {
+            Self::PlainText => "text/plain",
+            Self::Html => "text/html",
+            Self::Ambre => "application/x-ambre",
+            Self::AmbreToken => "application/x-ambre-token",
+            Self::WebAmbre => "web application/x-ambre",
+            Self::WebAmbreToken => "web application/x-ambre-token",
+        }
+    }
+}
 
 /// How often a hidden page relays, in milliseconds (`CANVAS-075`). The
 /// browser spaces a hidden page's timers to a second at least.
 const HIDDEN_RELAY_PERIOD_MS: ambre_bus::Millis = ambre_bus::Millis(1000);
-
-/// The ownership token under the `web ` prefix the asynchronous Clipboard API
-/// demands. The async publish writes it beside the payload so the whole-clipboard
-/// `write` never removes the token the copy event established (`UI-THREAD-023`).
-/// The Paste button reads it back to answer rung 2 of the fidelity ladder.
-pub(crate) const AMBRE_CLIPBOARD_WEB_TOKEN_TYPE: &str = "web application/x-ambre-token";
-
-/// Synchronous same-tab ownership marker (`ambre-spec-clipboard.md`,
-/// `UI-THREAD-007`). Written into the clipboard event's `DataTransfer`
-/// *synchronously* during `copy`/`cut`, it always reaches the OS clipboard. The
-/// async write that follows replaces it. Chrome keeps it under the `web `
-/// variant, which a `paste` event cannot see (`UI-THREAD-054`). Firefox refuses
-/// that variant and the write carries the standard types alone (`UI-THREAD-055`).
-///
-/// On `paste`, a value here equal to this page's token
-/// proves the clipboard still holds THIS tab's own last copy. The view then
-/// pastes its in-memory `last_clip` at full fidelity. Any foreign copy (another
-/// app / tab) overwrites the clipboard and drops the marker, so its absence
-/// correctly means "not ours".
-const AMBRE_CLIPBOARD_TOKEN_TYPE: &str = "application/x-ambre-token";
 
 /// Base64-encode bytes for transport as a clipboard string (UTF-8 safe).
 pub(crate) fn base64_encode(bytes: &[u8]) -> String {
@@ -174,9 +196,7 @@ pub(crate) fn desktop_in(window: &web_sys::Window) -> bool {
 /// synchronous formats stay. A success replaces them, so `published` records
 /// it and the next `paste` event reads the clipboard back (`UI-THREAD-054`).
 pub(crate) fn async_write_clipboard(
-    tsv: String,
-    html: Option<String>,
-    payload_b64: Option<String>,
+    blob: ambre_bus::ClipboardBlob,
     token: ambre_bus::ClipToken,
     published: Rc<std::cell::Cell<bool>>,
 ) {
@@ -184,13 +204,7 @@ pub(crate) fn async_write_clipboard(
         return;
     };
     wasm_bindgen_futures::spawn_local(async move {
-        let Some((item, web)) = publish_item(
-            &tsv,
-            html.as_deref(),
-            payload_b64.as_deref(),
-            &token,
-            clipboard_item,
-        ) else {
+        let Some((item, web)) = publish_item(&blob, &token, clipboard_item) else {
             return;
         };
         let items = js_sys::Array::of1(&item);
@@ -202,7 +216,8 @@ pub(crate) fn async_write_clipboard(
 }
 
 /// The item the asynchronous write publishes, and whether it carries the `web `
-/// types. `build` makes an item from `(type, value)` pairs, or refuses it.
+/// types. `build` makes an item from `(type, value)` pairs, or refuses it. The
+/// private bytes travel as base64, a clipboard string.
 ///
 /// The first attempt carries the mirror, the HTML, the prefixed private bytes
 /// and the prefixed token (`UI-THREAD-006`, `UI-THREAD-023`). Firefox rejects
@@ -211,34 +226,34 @@ pub(crate) fn async_write_clipboard(
 /// could paste the copy. The second carries the token in an HTML comment where
 /// the view wrote HTML (`UI-THREAD-055`, `UI-THREAD-057`).
 fn publish_item<T>(
-    tsv: &str,
-    html: Option<&str>,
-    payload_b64: Option<&str>,
+    blob: &ambre_bus::ClipboardBlob,
     token: &ambre_bus::ClipToken,
-    build: impl Fn(&[(&str, Option<&str>)]) -> Option<T>,
+    build: impl Fn(&[(ClipboardFormat, Option<&str>)]) -> Option<T>,
 ) -> Option<(T, bool)> {
-    let text = ("text/plain", Some(tsv));
+    let html = blob.html.as_deref();
+    let payload = blob.ambre.as_deref().map(base64_encode);
+    let text = (ClipboardFormat::PlainText, Some(blob.text.as_str()));
     let full = [
         text,
-        ("text/html", html),
-        (AMBRE_CLIPBOARD_WEB_TYPE, payload_b64),
-        (AMBRE_CLIPBOARD_WEB_TOKEN_TYPE, Some(token.as_str())),
+        (ClipboardFormat::Html, html),
+        (ClipboardFormat::WebAmbre, payload.as_deref()),
+        (ClipboardFormat::WebAmbreToken, Some(token.as_str())),
     ];
     if let Some(item) = build(&full) {
         return Some((item, true));
     }
     let marked = html.map(|h| ambre_bus::ClipboardBlob::mark_html(h, token));
-    build(&[text, ("text/html", marked.as_deref())]).map(|item| (item, false))
+    build(&[text, (ClipboardFormat::Html, marked.as_deref())]).map(|item| (item, false))
 }
 
 /// Build a ClipboardItem from `(type, value)` pairs, skipping absent values.
 /// `None` when the browser refuses one of the types.
-fn clipboard_item(entries: &[(&str, Option<&str>)]) -> Option<web_sys::ClipboardItem> {
+fn clipboard_item(entries: &[(ClipboardFormat, Option<&str>)]) -> Option<web_sys::ClipboardItem> {
     let record = js_sys::Object::new();
     for (kind, value) in entries {
         if let Some(value) = value {
             let promise = js_sys::Promise::resolve(&JsValue::from_str(value));
-            js_sys::Reflect::set(&record, &JsValue::from_str(kind), &promise).ok()?;
+            js_sys::Reflect::set(&record, &JsValue::from_str(kind.mime()), &promise).ok()?;
         }
     }
     web_sys::ClipboardItem::new_with_record_from_str_to_str_promise(&record).ok()
@@ -252,7 +267,7 @@ fn clipboard_item(entries: &[(&str, Option<&str>)]) -> Option<web_sys::Clipboard
 /// view (`UI-THREAD-025`).
 pub(crate) struct ClipboardPaste {
     pub(crate) blob: ambre_bus::ClipboardBlob,
-    pub(crate) token: Option<String>,
+    pub(crate) token: Option<ambre_bus::ClipToken>,
 }
 
 // -----------------------------------------------------------------------------
@@ -607,8 +622,7 @@ fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextArea
 #[cfg(test)]
 mod tests {
     use super::{
-        AMBRE_CLIPBOARD_WEB_TOKEN_TYPE, AMBRE_CLIPBOARD_WEB_TYPE, FrameHost, base64_decode,
-        base64_encode, clipboard_item, publish_item,
+        ClipboardFormat, FrameHost, base64_decode, base64_encode, clipboard_item, publish_item,
     };
     use std::collections::VecDeque;
     use wasm_bindgen_test::wasm_bindgen_test;
@@ -743,7 +757,7 @@ mod tests {
     /// Read an item back the way the Paste button does.
     async fn read_back(
         item: &web_sys::ClipboardItem,
-    ) -> (ambre_bus::ClipboardBlob, Option<String>) {
+    ) -> (ambre_bus::ClipboardBlob, Option<ambre_bus::ClipToken>) {
         let items: wasm_bindgen::JsValue = js_sys::Array::of1(item).into();
         let read = js_sys::Promise::resolve(&items);
         crate::platform::read_clipboard_blob(read)
@@ -763,10 +777,14 @@ mod tests {
     #[wasm_bindgen_test]
     async fn the_asynchronous_item_carries_everything_the_copy_published() {
         let bytes = [1u8, 2, 3];
+        let blob = ambre_bus::ClipboardBlob {
+            text: "a\tb".to_owned(),
+            html: Some("<p>a</p>".to_owned()),
+            ambre: Some(bytes.to_vec()),
+            ..ambre_bus::ClipboardBlob::default()
+        };
         let (item, web) = publish_item(
-            "a\tb",
-            Some("<p>a</p>"),
-            Some(&base64_encode(&bytes)),
+            &blob,
             &ambre_bus::ClipToken::new("ambre-1".to_owned()),
             clipboard_item,
         )
@@ -775,44 +793,57 @@ mod tests {
         assert_eq!(
             types(&item),
             vec![
-                "text/html",
-                "text/plain",
-                AMBRE_CLIPBOARD_WEB_TYPE,
-                AMBRE_CLIPBOARD_WEB_TOKEN_TYPE,
+                ClipboardFormat::Html.mime(),
+                ClipboardFormat::PlainText.mime(),
+                ClipboardFormat::WebAmbre.mime(),
+                ClipboardFormat::WebAmbreToken.mime(),
             ]
         );
         let (blob, token) = read_back(&item).await;
         assert_eq!(blob.text, "a\tb");
         assert_eq!(blob.html.as_deref(), Some("<p>a</p>"));
         assert_eq!(blob.ambre.as_deref(), Some(&bytes[..]));
-        assert_eq!(token.as_deref(), Some("ambre-1"));
+        assert_eq!(
+            token.as_ref().map(ambre_bus::ClipToken::as_str),
+            Some("ambre-1")
+        );
     }
 
     /// `UI-THREAD-055`: where the browser refuses the `web ` types, the second
     /// attempt still publishes the mirror and the HTML, the token in the HTML.
     #[wasm_bindgen_test]
     async fn a_browser_refusing_the_web_types_still_gets_the_mirror_and_the_html() {
-        let refusing = |entries: &[(&str, Option<&str>)]| {
+        let refusing = |entries: &[(ClipboardFormat, Option<&str>)]| {
             let web = entries
                 .iter()
-                .any(|(kind, value)| value.is_some() && kind.starts_with("web "));
+                .any(|(kind, value)| value.is_some() && kind.mime().starts_with("web "));
             if web { None } else { clipboard_item(entries) }
         };
+        let blob = ambre_bus::ClipboardBlob {
+            text: "a".to_owned(),
+            html: Some("<p>a</p>".to_owned()),
+            ambre: Some(vec![1, 2, 3]),
+            ..ambre_bus::ClipboardBlob::default()
+        };
         let (item, web) = publish_item(
-            "a",
-            Some("<p>a</p>"),
-            Some("AQID"),
+            &blob,
             &ambre_bus::ClipToken::new("ambre-2".to_owned()),
             refusing,
         )
         .expect("the second attempt");
         assert!(!web);
-        assert_eq!(types(&item), vec!["text/html", "text/plain"]);
+        assert_eq!(
+            types(&item),
+            vec![
+                ClipboardFormat::Html.mime(),
+                ClipboardFormat::PlainText.mime()
+            ]
+        );
         let (blob, token) = read_back(&item).await;
         assert_eq!(blob.text, "a");
         assert_eq!(blob.ambre, None);
         assert_eq!(
-            token.as_deref(),
+            token.as_ref().map(ambre_bus::ClipToken::as_str),
             Some("ambre-2"),
             "the token rides in the HTML"
         );
