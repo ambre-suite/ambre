@@ -12,11 +12,14 @@ use crate::events::{
 use crate::layout::run::Affinity;
 use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
+use ambre_bus::app::grid::{ColCount, RowCount};
 use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
 use ambre_core::{DocPoint, DocPx, ViewPoint};
 
-/// The rows and columns of the table the menu inserts.
-const TABLE_SIZE: u32 = 3;
+/// The rows of the table the menu inserts.
+const TABLE_ROWS: RowCount = RowCount::new(3);
+/// The columns of the table the menu inserts.
+const TABLE_COLS: ColCount = ColCount::new(3);
 
 /// The deepest heading a table of contents from the menu lists.
 const TOC_LEVEL: HeadingLevel = HeadingLevel::H3;
@@ -116,8 +119,8 @@ impl SlashCommand {
             Self::Table => ProseCommand::InsertTable {
                 parent_id: None,
                 after_id: Some(origin),
-                rows: TABLE_SIZE,
-                cols: TABLE_SIZE,
+                rows: TABLE_ROWS,
+                cols: TABLE_COLS,
             },
             Self::Code => after(BlockInit::CodeBlock {
                 lang: String::new(),

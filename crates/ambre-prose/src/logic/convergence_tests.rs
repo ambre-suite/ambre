@@ -616,8 +616,8 @@ fn merge_cells(
     state
         .handle_command(ProseCommand::MergeTableCells {
             table_id: crate::events::block_id(table),
-            start,
-            end,
+            start: crate::logic::tables::tests::pos(start),
+            end: crate::logic::tables::tests::pos(end),
         })
         .update
         .expect("a delta")
@@ -632,7 +632,15 @@ fn grid_and_regions(
     let rects = state
         .merged_rects(&table)
         .into_iter()
-        .map(|(_, rect)| (rect.top, rect.left, rect.bottom, rect.right))
+        .map(|(_, rect)| {
+            let (top_left, bottom_right) = (rect.top_left, rect.bottom_right);
+            (
+                top_left.row.to_usize(),
+                top_left.col.to_usize(),
+                bottom_right.row.to_usize(),
+                bottom_right.col.to_usize(),
+            )
+        })
         .collect();
     (rows, rects)
 }
@@ -663,7 +671,7 @@ fn a_column_insert_and_a_concurrent_edit_in_the_table_converge() {
     let from_alice = alice
         .handle_command(ProseCommand::InsertTableCol {
             table_id: crate::events::block_id(table),
-            at_col: 1,
+            at_col: crate::events::grid::Col::new(1),
             width_pt: None,
         })
         .update
@@ -708,7 +716,7 @@ fn a_column_inserted_between_the_corners_widens_the_region_on_both_peers() {
     let from_alice = alice
         .handle_command(ProseCommand::InsertTableCol {
             table_id: crate::events::block_id(table),
-            at_col: 1,
+            at_col: crate::events::grid::Col::new(1),
             width_pt: None,
         })
         .update

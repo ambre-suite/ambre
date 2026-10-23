@@ -363,15 +363,15 @@ pub enum ProseCommand {
 
     // -- Tables (`features/ambre-spec-prose-tables.md`) --
     /// A table of `rows` by `cols`, one empty paragraph per cell.
-    InsertTable      { parent_id: Option<TreeID>, after_id: Option<TreeID>, rows: u32, cols: u32 },
+    InsertTable      { parent_id: Option<TreeID>, after_id: Option<TreeID>, rows: RowCount, cols: ColCount },
     InsertTableRow   { table_id: TreeID, after_row: Option<TreeID> },
     DeleteTableRow   { row_id: TreeID },
     /// `at_col` is the index the new column takes; `None` width takes the document default
     /// (`PROSE-FEAT-232`).
-    InsertTableCol   { table_id: TreeID, at_col: u32, width_pt: Option<f32> },
-    DeleteTableCol   { table_id: TreeID, col_index: u32 },
-    ResizeTableCol   { table_id: TreeID, col_index: u32, width_pt: f32 },
-    MergeTableCells  { table_id: TreeID, start: (u32, u32), end: (u32, u32) },
+    InsertTableCol   { table_id: TreeID, at_col: Col, width_pt: Option<f32> },
+    DeleteTableCol   { table_id: TreeID, col_index: Col },
+    ResizeTableCol   { table_id: TreeID, col_index: Col, width_pt: f32 },
+    MergeTableCells  { table_id: TreeID, start: CellPos, end: CellPos },
     UnmergeTableCell { cell_id: TreeID },
     SetCellStyle     { cell_id: TreeID, bg: Option<u32>, valign: Option<VAlign>,
                        border: Option<CellBorder>, padding_pt: Option<f32> },

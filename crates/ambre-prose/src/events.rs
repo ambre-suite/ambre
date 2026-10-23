@@ -10,6 +10,7 @@
 //! dispatcher wraps them into `SyncCommand`s under the owning `DocumentId`,
 //! which the engine does not hold (`PROSE-024`).
 
+pub use ambre_bus::app::grid;
 pub use ambre_bus::app::prose::{
     ActiveMarks, Align, BandSet, BlockId, BlockInit, BlockType, CellBorder, CommentReply,
     CommentThread, CrossRefKind, CursorPosition, DateFieldFormat, FindMatch, FindQuery,

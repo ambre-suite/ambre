@@ -1,5 +1,6 @@
-//! Grid coordinates (`trame-rows-and-columns`): a row, a column, the cell at
-//! their crossing and the extent of a merge.
+//! Grid coordinates: a row, a column, the cell at their crossing and the
+//! extent of a merge. Trame's sheet (`trame-rows-and-columns`) and Prose's
+//! tables (`features/ambre-spec-prose-tables.md`) both count cells this way.
 //!
 //! A row and a column are both small unsigned integers, and most signatures of
 //! a grid carry two of them side by side. One family per axis keeps a column

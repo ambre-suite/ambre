@@ -32,6 +32,8 @@ use serde::{Deserialize, Serialize};
 
 use ambre_core::{CommentId, FootnoteId, Pt, ReplyId, Rgb, SuggestionId, UserId};
 
+use super::grid::{CellPos, Col, ColCount, RowCount};
+
 ambre_core::define_index! {
     /// A code-point offset into the body of one block, as the CRDT counts it
     /// (`PROSE-FEAT-006`). Every offset this plane carries is one. The view
@@ -1142,8 +1144,8 @@ pub enum ProseCommand {
     InsertTable {
         parent_id: Option<BlockId>,
         after_id: Option<BlockId>,
-        rows: u32,
-        cols: u32,
+        rows: RowCount,
+        cols: ColCount,
     },
     /// A row of one cell per column. `None` puts it first.
     InsertTableRow {
@@ -1157,24 +1159,24 @@ pub enum ProseCommand {
     /// count. `None` takes the document's default width (`PROSE-FEAT-232`).
     InsertTableCol {
         table_id: BlockId,
-        at_col: u32,
+        at_col: Col,
         width_pt: Option<Pt>,
     },
     DeleteTableCol {
         table_id: BlockId,
-        col_index: u32,
+        col_index: Col,
     },
     ResizeTableCol {
         table_id: BlockId,
-        col_index: u32,
+        col_index: Col,
         width_pt: Pt,
     },
-    /// Two grid positions, `(row, column)`, in either order. The handler
-    /// resolves them to two block ids before it writes (`PROSE-FEAT-241`).
+    /// Two grid positions in either order. The handler resolves them to two
+    /// block ids before it writes (`PROSE-FEAT-241`).
     MergeTableCells {
         table_id: BlockId,
-        start: (u32, u32),
-        end: (u32, u32),
+        start: CellPos,
+        end: CellPos,
     },
     UnmergeTableCell {
         cell_id: BlockId,

@@ -19,13 +19,12 @@ mod command;
 mod event;
 mod features;
 mod find;
-mod grid;
 mod style;
 
+pub use super::grid::*;
 pub use clipboard::*;
 pub use command::*;
 pub use event::*;
 pub use features::*;
 pub use find::*;
-pub use grid::*;
 pub use style::*;

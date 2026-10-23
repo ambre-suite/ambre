@@ -1056,8 +1056,8 @@ mod tests {
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let outcome = state.handle_command(ProseCommand::MergeTableCells {
             table_id: block_id(table),
-            start: (0, 0),
-            end: (0, 1),
+            start: crate::logic::tables::tests::pos((0, 0)),
+            end: crate::logic::tables::tests::pos((0, 1)),
         });
         assert!(outcome.update.is_some(), "the merge is written");
         let covered = cell_at(&state, table, 0, 1);

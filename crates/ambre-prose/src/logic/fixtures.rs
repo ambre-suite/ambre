@@ -12,6 +12,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use ambre_bus::app::grid::{CellPos, Col, ColCount, Row, RowCount};
 use ambre_bus::app::prose::{DocOffset, DocSpan};
 use ambre_core::{
     DocType, FixtureGen, FixtureShape, ShapeBody, UserId, fixture_peer_count, seeded_document_id,
@@ -411,8 +412,8 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(block_id(body)),
-            rows: 2,
-            cols: 2,
+            rows: RowCount::new(2),
+            cols: ColCount::new(2),
         },
     )?;
     let table = root_after(&state, body)?;
@@ -423,7 +424,9 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         (1, 0, "North"),
         (1, 1, "12%"),
     ] {
-        let cell = grid.cell(row, col).ok_or("no cell")?;
+        let cell = grid
+            .cell(CellPos::new(Row::new(row), Col::new(col)))
+            .ok_or("no cell")?;
         let tree = doc::blocks(&state.doc);
         let paragraph = *doc::children_of(&tree, Some(cell))
             .first()

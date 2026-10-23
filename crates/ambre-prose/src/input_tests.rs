@@ -466,8 +466,8 @@ fn deleting_a_table_drops_the_draft_in_its_cell() {
     rig.logic.handle_command(ProseCommand::InsertTable {
         parent_id: None,
         after_id: Some(first),
-        rows: 1,
-        cols: 1,
+        rows: crate::events::grid::RowCount::new(1),
+        cols: crate::events::grid::ColCount::new(1),
     });
     rig.lay();
     let table = the_table(&rig.logic);
@@ -1730,8 +1730,8 @@ fn enter_erases_the_query_then_sends_one_command() {
             ProseCommand::InsertTable {
                 parent_id: None,
                 after_id: Some(block),
-                rows: 3,
-                cols: 3,
+                rows: crate::events::grid::RowCount::new(3),
+                cols: crate::events::grid::ColCount::new(3),
             },
         ]
     );

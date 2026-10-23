@@ -513,8 +513,8 @@ fn write_a_table(state: &mut ProseState, root: crate::events::BlockId) {
     state.handle_command(ProseCommand::InsertTable {
         parent_id: None,
         after_id: Some(root),
-        rows: 2,
-        cols: 2,
+        rows: crate::events::grid::RowCount::new(2),
+        cols: crate::events::grid::ColCount::new(2),
     });
     let Some(table) = state
         .root_blocks()
@@ -525,8 +525,8 @@ fn write_a_table(state: &mut ProseState, root: crate::events::BlockId) {
     };
     state.handle_command(ProseCommand::MergeTableCells {
         table_id: table,
-        start: (0, 0),
-        end: (0, 1),
+        start: crate::logic::tables::tests::pos((0, 0)),
+        end: crate::logic::tables::tests::pos((0, 1)),
     });
     let last = crate::logic::tables::tests::cell_at(state, tree_id(table), 1, 1);
     let cell = crate::events::block_id(last);

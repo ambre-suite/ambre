@@ -169,8 +169,8 @@ mod tests {
         state.handle_command(ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(root),
-            rows: 1,
-            cols: 1,
+            rows: crate::events::grid::RowCount::new(1),
+            cols: crate::events::grid::ColCount::new(1),
         });
         let table = crate::logic::tables::tests::the_table(&state);
         let cell = crate::logic::tables::tests::cell_at(&state, table, 0, 0);

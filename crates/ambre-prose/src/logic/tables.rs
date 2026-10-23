@@ -16,6 +16,7 @@ use ambre_core::{Pt, Rgb, StepDirection};
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID, TreeParentId};
 
 use crate::doc::{self, Region};
+use crate::events::grid::{CellPos, CellRect, Col, ColCount, Row, RowCount};
 use crate::events::{
     BlockType, CellBorder, ProseEvent, ProseOutcome, ProseRefusal, VAlign, block_id,
 };
@@ -49,65 +50,38 @@ impl Grid {
     }
 
     /// The row and column a cell sits at.
-    pub(crate) fn position_of(&self, cell: &TreeID) -> Option<(usize, usize)> {
+    pub(crate) fn position_of(&self, cell: &TreeID) -> Option<CellPos> {
         self.cells.iter().enumerate().find_map(|(row, cells)| {
             cells
                 .iter()
                 .position(|candidate| candidate == cell)
-                .map(|col| (row, col))
+                .map(|col| CellPos::new(Row::from_usize(row), Col::from_usize(col)))
         })
     }
 
-    /// The cell at a row and a column, when the row holds one there.
-    pub(crate) fn cell(&self, row: usize, col: usize) -> Option<TreeID> {
-        self.cells.get(row)?.get(col).copied()
+    /// The cell at a grid position, when its row holds one there.
+    pub(crate) fn cell(&self, at: CellPos) -> Option<TreeID> {
+        self.cells
+            .get(at.row.to_usize())?
+            .get(at.col.to_usize())
+            .copied()
     }
 
-    /// The row and column of a cell, then the cell itself, in reading order.
-    fn reading_order(&self) -> impl Iterator<Item = ((usize, usize), TreeID)> + '_ {
+    /// How many rows the grid holds.
+    pub(crate) fn row_count(&self) -> RowCount {
+        RowCount::from_len(self.rows.len())
+    }
+
+    /// The grid position of a cell, then the cell itself, in reading order.
+    fn reading_order(&self) -> impl Iterator<Item = (CellPos, TreeID)> + '_ {
         self.cells.iter().enumerate().flat_map(|(row, cells)| {
-            cells
-                .iter()
-                .enumerate()
-                .map(move |(col, cell)| ((row, col), *cell))
+            cells.iter().enumerate().map(move |(col, cell)| {
+                (
+                    CellPos::new(Row::from_usize(row), Col::from_usize(col)),
+                    *cell,
+                )
+            })
         })
-    }
-}
-
-/// The rectangle a region covers, in grid positions, bounds included.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Rect {
-    pub top: usize,
-    pub left: usize,
-    pub bottom: usize,
-    pub right: usize,
-}
-
-impl Rect {
-    fn spanning(a: (usize, usize), b: (usize, usize)) -> Self {
-        Self {
-            top: a.0.min(b.0),
-            left: a.1.min(b.1),
-            bottom: a.0.max(b.0),
-            right: a.1.max(b.1),
-        }
-    }
-
-    pub(crate) fn contains(&self, (row, col): (usize, usize)) -> bool {
-        (self.top..=self.bottom).contains(&row) && (self.left..=self.right).contains(&col)
-    }
-
-    fn intersects(&self, other: &Self) -> bool {
-        self.top <= other.bottom
-            && other.top <= self.bottom
-            && self.left <= other.right
-            && other.left <= self.right
-    }
-
-    /// Every position inside, in reading order.
-    fn positions(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
-        (self.top..=self.bottom)
-            .flat_map(move |row| (self.left..=self.right).map(move |col| (row, col)))
     }
 }
 
@@ -115,10 +89,10 @@ impl Rect {
 ///
 /// `None` when either corner no longer resolves to a live cell of this table
 /// (`PROSE-009`, `PROSE-FEAT-253`).
-pub(crate) fn rect_of(grid: &Grid, region: &Region) -> Option<Rect> {
+pub(crate) fn rect_of(grid: &Grid, region: &Region) -> Option<CellRect> {
     let anchor = grid.position_of(&region.anchor)?;
     let extent = grid.position_of(&region.extent)?;
-    Some(Rect::spanning(anchor, extent))
+    Some(CellRect::spanning(anchor, extent))
 }
 
 /// The regions that stand, each with its rectangle, and the ones to drop.
@@ -131,14 +105,14 @@ pub(crate) fn rect_of(grid: &Grid, region: &Region) -> Option<Rect> {
 pub(crate) fn surviving_regions(
     grid: &Grid,
     regions: &[Region],
-) -> (Vec<(Region, Rect)>, Vec<Region>) {
+) -> (Vec<(Region, CellRect)>, Vec<Region>) {
     let mut ordered: Vec<&Region> = regions.iter().collect();
     ordered.sort_by_key(|region| std::cmp::Reverse((region.stamp, region.anchor)));
-    let mut kept: Vec<(Region, Rect)> = Vec::new();
+    let mut kept: Vec<(Region, CellRect)> = Vec::new();
     let mut dropped = Vec::new();
     for region in ordered {
         match rect_of(grid, region) {
-            Some(rect) if !kept.iter().any(|(_, other)| other.intersects(&rect)) => {
+            Some(rect) if !kept.iter().any(|(_, other)| other.overlaps(rect)) => {
                 kept.push((*region, rect));
             }
             _ => dropped.push(*region),
@@ -226,7 +200,7 @@ impl ProseState {
 
     /// The regions that stand, with the rectangle each covers today.
     #[must_use]
-    pub(crate) fn merged_rects(&self, table: &TreeID) -> Vec<(Region, Rect)> {
+    pub(crate) fn merged_rects(&self, table: &TreeID) -> Vec<(Region, CellRect)> {
         let tree = doc::blocks(&self.doc);
         let Some(grid) = Grid::read(&tree, table) else {
             return Vec::new();
@@ -258,9 +232,9 @@ impl ProseState {
     }
 
     /// Mint one row at the end of a table, holding `cols` cells.
-    fn mint_row(&self, table: &TreeID, cols: usize) -> Option<TreeID> {
+    fn mint_row(&self, table: &TreeID, cols: ColCount) -> Option<TreeID> {
         let row = doc::create_block(&self.doc, Some(*table), BlockType::TableRow)?;
-        for _ in 0..cols {
+        for _ in 0..cols.get() {
             self.mint_cell(&row)?;
         }
         Some(row)
@@ -290,7 +264,7 @@ impl ProseState {
     fn drop_regions_cornered_in(
         &self,
         grid: &Grid,
-        doomed: impl Fn((usize, usize)) -> bool,
+        doomed: impl Fn(CellPos) -> bool,
     ) -> Result<(), String> {
         let tree = doc::blocks(&self.doc);
         for region in doc::regions(&tree, &grid.table) {
@@ -312,13 +286,13 @@ impl ProseState {
         &mut self,
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
-        rows: u32,
-        cols: u32,
+        rows: RowCount,
+        cols: ColCount,
     ) -> ProseOutcome {
-        if rows == 0 || cols == 0 {
+        if rows.is_zero() || cols.is_zero() {
             // A table of no column paints nothing and accepts no text
             // (`PROSE-FEAT-228`).
-            return Self::err_table(format!("{rows} by {cols}"));
+            return Self::err_table(format!("{} by {}", rows.get(), cols.get()));
         }
         match self.mint_table(parent_id, after_id, rows, cols) {
             Ok(_) => self.commit_with(Vec::new()),
@@ -332,8 +306,8 @@ impl ProseState {
         &self,
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
-        rows: u32,
-        cols: u32,
+        rows: RowCount,
+        cols: ColCount,
     ) -> Result<TreeID, ProseOutcome> {
         let table = self.mint_placed(parent_id, after_id, BlockType::Table)?;
         let Some(attrs) = self.table_attrs(&table) else {
@@ -342,7 +316,7 @@ impl ProseState {
         let Some(widths) = doc::movable_list_at(&attrs, doc::AttrKey::ColWidths) else {
             return Err(Self::err_write("the width list refused a container"));
         };
-        for _ in 0..cols {
+        for _ in 0..cols.get() {
             if let Err(e) = widths.push(f64::from(doc::DEFAULT_COLUMN_WIDTH.get())) {
                 return Err(Self::err_write(&format!("{e:?}")));
             }
@@ -350,8 +324,7 @@ impl ProseState {
         if doc::map_at(&attrs, doc::AttrKey::Merged).is_none() {
             return Err(Self::err_write("the region map refused a container"));
         }
-        let cols = usize::try_from(cols).unwrap_or(usize::MAX);
-        for _ in 0..rows {
+        for _ in 0..rows.get() {
             if self.mint_row(&table, cols).is_none() {
                 return Err(Self::err_write("the tree refused a row"));
             }
@@ -383,7 +356,7 @@ impl ProseState {
         {
             return Err(Self::err_no_block(&after));
         }
-        let cols = doc::col_widths(&tree, table).len();
+        let cols = ColCount::from_len(doc::col_widths(&tree, table).len());
         let Some(row) = self.mint_row(table, cols) else {
             return Err(Self::err_write("the tree refused a row"));
         };
@@ -406,7 +379,7 @@ impl ProseState {
         let Some(grid) = Self::table_of(&tree, row).and_then(|t| Grid::read(&tree, &t)) else {
             return Self::err_no_block(row);
         };
-        let Some(index) = grid.rows.iter().position(|r| r == row) else {
+        let Some(index) = grid.rows.iter().position(|r| r == row).map(Row::from_usize) else {
             return Self::err_no_block(row);
         };
         let doomed = if grid.rows.len() == 1 {
@@ -414,7 +387,7 @@ impl ProseState {
         } else {
             *row
         };
-        if let Err(e) = self.drop_regions_cornered_in(&grid, |(r, _)| r == index) {
+        if let Err(e) = self.drop_regions_cornered_in(&grid, |at| at.row == index) {
             return Self::err_write(&e);
         }
         if let Err(e) = doc::hide_block(&self.doc, &tree, &doomed) {
@@ -428,7 +401,7 @@ impl ProseState {
     pub(super) fn insert_table_col(
         &mut self,
         table: &TreeID,
-        at_col: u32,
+        at_col: Col,
         width_pt: Option<Pt>,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
@@ -442,7 +415,7 @@ impl ProseState {
         let Some(widths) = doc::col_widths_read(&tree, table) else {
             return Self::err_write("the table carries no width list");
         };
-        let at = usize::try_from(at_col).unwrap_or(usize::MAX);
+        let at = at_col.to_usize();
         if at > widths.len() {
             return ProseOutcome::refused(ProseRefusal::OutsideTheGrid);
         }
@@ -465,7 +438,7 @@ impl ProseState {
     /// Remove the cell at `col_index` in every row and the matching width
     /// entry (`PROSE-FEAT-235`). The last column takes the table with it
     /// (`PROSE-FEAT-045`).
-    pub(super) fn delete_table_col(&mut self, table: &TreeID, col_index: u32) -> ProseOutcome {
+    pub(super) fn delete_table_col(&mut self, table: &TreeID, col: Col) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let Some(grid) = Grid::read(&tree, table) else {
             return Self::err_no_block(table);
@@ -473,8 +446,7 @@ impl ProseState {
         let Some(widths) = doc::col_widths_read(&tree, table) else {
             return Self::err_write("the table carries no width list");
         };
-        let col = usize::try_from(col_index).unwrap_or(usize::MAX);
-        if col >= widths.len() {
+        if col.to_usize() >= widths.len() {
             return ProseOutcome::refused(ProseRefusal::OutsideTheGrid);
         }
         if widths.len() == 1 {
@@ -483,17 +455,17 @@ impl ProseState {
             }
             return self.commit_with(Vec::new());
         }
-        if let Err(e) = self.drop_regions_cornered_in(&grid, |(_, c)| c == col) {
+        if let Err(e) = self.drop_regions_cornered_in(&grid, |at| at.col == col) {
             return Self::err_write(&e);
         }
-        for row in 0..grid.rows.len() {
-            if let Some(cell) = grid.cell(row, col)
+        for row in (0..grid.rows.len()).map(Row::from_usize) {
+            if let Some(cell) = grid.cell(CellPos::new(row, col))
                 && let Err(e) = doc::hide_block(&self.doc, &tree, &cell)
             {
                 return Self::err_write(&e);
             }
         }
-        if let Err(e) = widths.delete(col, 1) {
+        if let Err(e) = widths.delete(col.to_usize(), 1) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_with(Vec::new())
@@ -503,7 +475,7 @@ impl ProseState {
     pub(super) fn resize_table_col(
         &mut self,
         table: &TreeID,
-        col_index: u32,
+        col: Col,
         width_pt: Pt,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
@@ -516,11 +488,10 @@ impl ProseState {
         let Some(widths) = doc::col_widths_read(&tree, table) else {
             return Self::err_write("the table carries no width list");
         };
-        let col = usize::try_from(col_index).unwrap_or(usize::MAX);
-        if col >= widths.len() {
+        if col.to_usize() >= widths.len() {
             return ProseOutcome::refused(ProseRefusal::OutsideTheGrid);
         }
-        if let Err(e) = widths.set(col, f64::from(width_pt.get())) {
+        if let Err(e) = widths.set(col.to_usize(), f64::from(width_pt.get())) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_with(Vec::new())
@@ -536,39 +507,33 @@ impl ProseState {
     pub(super) fn merge_table_cells(
         &mut self,
         table: &TreeID,
-        start: (u32, u32),
-        end: (u32, u32),
+        start: CellPos,
+        end: CellPos,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let Some(grid) = Grid::read(&tree, table) else {
             return Self::err_no_block(table);
         };
-        let at = |(row, col): (u32, u32)| {
-            (
-                usize::try_from(row).unwrap_or(usize::MAX),
-                usize::try_from(col).unwrap_or(usize::MAX),
-            )
-        };
-        let rect = Rect::spanning(at(start), at(end));
-        let cols = doc::col_widths(&tree, table).len();
-        if rect.bottom >= grid.rows.len() || rect.right >= cols {
+        let rect = CellRect::spanning(start, end);
+        let cols = ColCount::from_len(doc::col_widths(&tree, table).len());
+        if rect.bottom_right.row >= grid.row_count().as_end()
+            || rect.bottom_right.col >= cols.as_end()
+        {
             return ProseOutcome::refused(ProseRefusal::OutsideTheGrid);
         }
-        if rect.top == rect.bottom && rect.left == rect.right {
+        if rect.is_single_cell() {
             // One cell is already one cell (`PROSE-FEAT-244`).
             return ProseOutcome::nothing();
         }
         let mut covered = Vec::new();
-        for position in rect.positions() {
-            let Some(cell) = grid.cell(position.0, position.1) else {
+        for position in rect.cells() {
+            let Some(cell) = grid.cell(position) else {
                 return ProseOutcome::refused(ProseRefusal::MergeNotRectangular);
             };
             covered.push(cell);
         }
-        let (Some(anchor), Some(extent)) = (
-            grid.cell(rect.top, rect.left),
-            grid.cell(rect.bottom, rect.right),
-        ) else {
+        let (Some(anchor), Some(extent)) = (grid.cell(rect.top_left), grid.cell(rect.bottom_right))
+        else {
             return ProseOutcome::refused(ProseRefusal::MergeNotRectangular);
         };
         if covered
@@ -581,7 +546,7 @@ impl ProseState {
         let stamp = next_stamp(&self.doc);
         let (standing, _) = surviving_regions(&grid, &doc::regions(&tree, table));
         for (region, other) in standing {
-            if other.intersects(&rect)
+            if other.overlaps(rect)
                 && let Err(e) = self.drop_region(table, &region.anchor)
             {
                 return Self::err_write(&e);
@@ -714,7 +679,7 @@ impl ProseState {
             return Self::err_no_block(cell);
         };
         let (standing, _) = surviving_regions(&grid, &doc::regions(&tree, &table));
-        let stop_of = |position: (usize, usize), cell: TreeID| match standing
+        let stop_of = |position: CellPos, cell: TreeID| match standing
             .iter()
             .find(|(_, rect)| rect.contains(position))
         {
@@ -782,8 +747,8 @@ impl ProseState {
                 }
             }
             for (region, rect) in standing {
-                for position in rect.positions() {
-                    let Some(cell) = grid.cell(position.0, position.1) else {
+                for position in rect.cells() {
+                    let Some(cell) = grid.cell(position) else {
                         continue;
                     };
                     if cell != region.anchor && holds_text(&self.doc, &tree, &cell) {
@@ -822,7 +787,7 @@ pub(crate) mod tests {
     pub(crate) fn cell_at(state: &ProseState, table: TreeID, row: usize, col: usize) -> TreeID {
         state
             .grid_of(&table)
-            .and_then(|grid| grid.cell(row, col))
+            .and_then(|grid| grid.cell(CellPos::new(Row::from_usize(row), Col::from_usize(col))))
             .expect("the grid holds that cell")
     }
 
@@ -842,8 +807,8 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(root),
-            rows,
-            cols,
+            rows: RowCount::new(rows),
+            cols: ColCount::new(cols),
         });
         let table = the_table(&state);
         (state, table)
@@ -906,9 +871,14 @@ pub(crate) mod tests {
     ) -> ProseOutcome {
         state.handle_command(ProseCommand::MergeTableCells {
             table_id: block_id(table),
-            start,
-            end,
+            start: pos(start),
+            end: pos(end),
         })
+    }
+
+    /// The grid position at a row and a column.
+    pub(crate) fn pos((row, col): (u32, u32)) -> CellPos {
+        CellPos::new(Row::new(row), Col::new(col))
     }
 
     // -- the state -------------------------------------------------------
@@ -931,12 +901,12 @@ pub(crate) mod tests {
             },
             ProseCommand::InsertTableCol {
                 table_id: block_id(table),
-                at_col: 1,
+                at_col: Col::new(1),
                 width_pt: None,
             },
             ProseCommand::DeleteTableCol {
                 table_id: block_id(table),
-                col_index: 0,
+                col_index: Col::new(0),
             },
             ProseCommand::DeleteTableRow {
                 row_id: block_id(first_row),
@@ -955,8 +925,8 @@ pub(crate) mod tests {
             let outcome = state.handle_command(ProseCommand::InsertTable {
                 parent_id: None,
                 after_id: None,
-                rows,
-                cols,
+                rows: RowCount::new(rows),
+                cols: ColCount::new(cols),
             });
             assert!(matches!(
                 refusal(&outcome),
@@ -1016,14 +986,14 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: 1,
+            col_index: Col::new(1),
             width_pt: ambre_core::Pt::new(100.0),
         });
         let first = cell_at(&state, table, 0, 0);
         type_in(&mut state, first, "kept");
         state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
-            at_col: 1,
+            at_col: Col::new(1),
             width_pt: Some(ambre_core::Pt::new(50.0)),
         });
         assert_eq!(
@@ -1043,7 +1013,7 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId(1), 1, 1);
         state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
-            at_col: 0,
+            at_col: Col::new(0),
             width_pt: None,
         });
         assert_eq!(
@@ -1057,7 +1027,7 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
         let outcome = state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
-            at_col: 3,
+            at_col: Col::new(3),
             width_pt: None,
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::OutsideTheGrid));
@@ -1083,7 +1053,7 @@ pub(crate) mod tests {
         assert_eq!(texts(&state, table)[3][2], "text");
         state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
-            at_col: 1,
+            at_col: Col::new(1),
             width_pt: Some(ambre_core::Pt::new(10.0)),
         });
         assert_eq!(state.regions_of(&table), regions);
@@ -1091,7 +1061,7 @@ pub(crate) mod tests {
         // The region grew by what fell between its corners (`PROSE-FEAT-230`
         // on one peer).
         let (_, rect) = state.merged_rects(&table)[0];
-        assert_eq!((rect.bottom, rect.right), (3, 2));
+        assert_eq!(rect.bottom_right, pos((3, 2)));
     }
 
     // -- delete a row or a column -----------------------------------------
@@ -1101,12 +1071,12 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 3);
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: 2,
+            col_index: Col::new(2),
             width_pt: ambre_core::Pt::new(30.0),
         });
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
-            col_index: 1,
+            col_index: Col::new(1),
         });
         assert_eq!(
             state.column_widths(&table),
@@ -1143,7 +1113,7 @@ pub(crate) mod tests {
         merge(&mut state, table, (0, 0), (1, 1));
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
-            col_index: 1,
+            col_index: Col::new(1),
         });
         assert!(state.regions_of(&table).is_empty());
     }
@@ -1159,11 +1129,11 @@ pub(crate) mod tests {
         });
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
-            col_index: 1,
+            col_index: Col::new(1),
         });
         assert_eq!(state.regions_of(&table), regions);
         let (_, rect) = state.merged_rects(&table)[0];
-        assert_eq!((rect.bottom, rect.right), (1, 1));
+        assert_eq!(rect.bottom_right, pos((1, 1)));
     }
 
     #[test]
@@ -1171,7 +1141,7 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 1);
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
-            col_index: 0,
+            col_index: Col::new(0),
         });
         assert!(state.grid_of(&table).is_none());
         assert_eq!(state.root_blocks().len(), 1);
@@ -1192,7 +1162,7 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 3);
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: 0,
+            col_index: Col::new(0),
             width_pt: ambre_core::Pt::new(20.0),
         });
         let kept = cell_at(&state, table, 1, 2);
@@ -1203,7 +1173,7 @@ pub(crate) mod tests {
         });
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
-            col_index: 1,
+            col_index: Col::new(1),
         });
         assert_eq!(
             state.column_widths(&table),
@@ -1224,7 +1194,7 @@ pub(crate) mod tests {
         type_in(&mut state, cell, "x");
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: 1,
+            col_index: Col::new(1),
             width_pt: ambre_core::Pt::new(144.0),
         });
         let d = doc::DEFAULT_COLUMN_WIDTH;
@@ -1235,7 +1205,7 @@ pub(crate) mod tests {
         assert_eq!(texts(&state, table)[0][1], "x");
         let outcome = state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: 3,
+            col_index: Col::new(3),
             width_pt: ambre_core::Pt::new(10.0),
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::OutsideTheGrid));
@@ -1388,12 +1358,12 @@ pub(crate) mod tests {
             style(Some(ambre_core::Pt::new(f32::NAN))),
             ProseCommand::ResizeTableCol {
                 table_id: block_id(table),
-                col_index: 0,
+                col_index: Col::new(0),
                 width_pt: ambre_core::Pt::new(f32::INFINITY),
             },
             ProseCommand::InsertTableCol {
                 table_id: block_id(table),
-                at_col: 0,
+                at_col: Col::new(0),
                 width_pt: Some(ambre_core::Pt::new(0.0)),
             },
         ];
@@ -1461,7 +1431,7 @@ pub(crate) mod tests {
         type_in(&mut state, last, "end");
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: 0,
+            col_index: Col::new(0),
             width_pt: ambre_core::Pt::new(12.0),
         });
         merge(&mut state, table, (0, 0), (0, 1));

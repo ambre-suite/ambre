@@ -17,6 +17,7 @@ use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 
 use crate::doc;
+use crate::events::grid::{CellPos, Col, Row};
 use crate::layout::geometry::PageBox;
 use crate::layout::measure::{EffectiveStyle, Measurer, PX_PER_PT, TextMetrics};
 use crate::layout::place::{self, BlockLayout, FootnoteLayout, MeasuredBlock, NoteCall, Placement};
@@ -708,28 +709,28 @@ fn table_metrics(
         col_x.push(col_x.last().copied().unwrap_or(0.0) + width);
     }
     let (regions, _) = surviving_regions(&grid, &doc::regions(tree, table));
-    let covered: HashSet<(usize, usize)> = regions
+    let covered: HashSet<CellPos> = regions
         .iter()
-        .flat_map(|(_, rect)| {
-            (rect.top..=rect.bottom)
-                .flat_map(move |row| (rect.left..=rect.right).map(move |col| (row, col)))
-                .filter(move |at| *at != (rect.top, rect.left))
-        })
+        .flat_map(|(_, rect)| rect.cells().filter(move |at| *at != rect.top_left))
         .collect();
 
     let mut cells = Vec::new();
     let mut heights = Vec::new();
     for (row, row_cells) in grid.cells.iter().enumerate() {
         for (col, cell) in row_cells.iter().enumerate() {
-            if covered.contains(&(row, col)) {
+            let at = CellPos::new(Row::from_usize(row), Col::from_usize(col));
+            if covered.contains(&at) {
                 continue;
             }
-            let (bottom, right) = regions
+            let last = regions
                 .iter()
-                .find(|(_, rect)| (rect.top, rect.left) == (row, col))
-                .map_or((row, col), |(_, rect)| (rect.bottom, rect.right));
+                .find(|(_, rect)| rect.top_left == at)
+                .map_or(at, |(_, rect)| rect.bottom_right);
             let x_px = col_x.get(col).copied().unwrap_or(0.0);
-            let right_x = col_x.get(right + 1).copied().unwrap_or(x_px);
+            let right_x = col_x
+                .get(last.col.next().to_usize())
+                .copied()
+                .unwrap_or(x_px);
             let width_px = right_x - x_px;
             let style = cell_style(tree, cell);
             let text_px = (width_px - 2.0 * style.padding_px).max(0.0);
@@ -748,7 +749,7 @@ fn table_metrics(
                 cell: *cell,
                 x_px,
                 width_px,
-                rows: row..bottom + 1,
+                rows: row..last.row.next().to_usize(),
                 blocks,
                 content_px: top,
                 style,

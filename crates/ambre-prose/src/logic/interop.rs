@@ -29,6 +29,7 @@ use super::ProseState;
 use super::tables::Grid;
 use super::text::{MarkedRun, body_span, marked_runs, write_runs};
 use crate::doc::{self, StoredLevel};
+use crate::events::grid::{CellPos, Col, ColCount, Row, RowCount};
 use crate::events::{ProseEvent, ProseOutcome, ProseRefusal};
 use crate::interop::{
     IrBlock, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrRun, IrTableCell, IrTableRow,
@@ -36,17 +37,27 @@ use crate::interop::{
 };
 use crate::mark::MarkRoot;
 
+ambre_core::define_index! {
+    /// The place of one operation in the list an import builds. A later
+    /// operation names its parent by it, before any block exists.
+    pub struct OpIndex(u32);
+    /// A number of operations.
+    pub struct OpCount;
+    /// The signed gap between two operations.
+    pub struct OpDelta(i64);
+    /// A run of operations.
+    pub struct OpSpan;
+    /// A list indexed by operation.
+    pub struct OpVec;
+}
+
 /// Where an operation's block goes. It sits at the root, under a block an
 /// earlier operation minted, or in a cell of a table one minted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(super) enum Parent {
     Root,
-    Op(usize),
-    Cell {
-        table: usize,
-        row: usize,
-        col: usize,
-    },
+    Op(OpIndex),
+    Cell { table: OpIndex, at: CellPos },
 }
 
 /// One write of an import. An operation names its parent by the index of the
@@ -60,8 +71,8 @@ pub(super) enum ImportOp {
     },
     Table {
         parent: Parent,
-        rows: usize,
-        cols: usize,
+        rows: RowCount,
+        cols: ColCount,
     },
 }
 
@@ -74,8 +85,8 @@ impl ImportOp {
 }
 
 /// The type an operation mints, for the nesting check.
-fn op_type(ops: &[ImportOp], index: usize) -> Option<BlockType> {
-    match ops.get(index)? {
+fn op_type(ops: &[ImportOp], index: OpIndex) -> Option<BlockType> {
+    match ops.get(index.to_usize())? {
         ImportOp::Block { init, .. } => Some(init.block_type()),
         ImportOp::Table { .. } => Some(BlockType::Table),
     }
@@ -167,16 +178,17 @@ fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &
             if rows.is_empty() || cols == 0 {
                 return;
             }
-            let table = ops.len();
+            let table = OpIndex::from_usize(ops.len());
             ops.push(ImportOp::Table {
                 parent,
-                rows: rows.len(),
-                cols,
+                rows: RowCount::from_len(rows.len()),
+                cols: ColCount::from_len(cols),
             });
             for (row, cells) in rows.iter().enumerate() {
                 for (col, cell) in cells.cells.iter().enumerate() {
+                    let at = CellPos::new(Row::from_usize(row), Col::from_usize(col));
                     let mut inner = chain.to_vec();
-                    inner.push(Parent::Cell { table, row, col });
+                    inner.push(Parent::Cell { table, at });
                     for child in &cell.blocks {
                         place(ops, child, &inner, warnings);
                     }
@@ -190,13 +202,14 @@ fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &
     }
 }
 
-fn push(ops: &mut Vec<ImportOp>, parent: Parent, init: BlockInit, runs: &[IrRun]) -> usize {
+fn push(ops: &mut Vec<ImportOp>, parent: Parent, init: BlockInit, runs: &[IrRun]) -> OpIndex {
+    let index = OpIndex::from_usize(ops.len());
     ops.push(ImportOp::Block {
         parent,
         init,
         runs: runs.iter().map(marked_of).collect(),
     });
-    ops.len() - 1
+    index
 }
 
 /// A cell stores a look of its own: a fill, a border, a padding or a
@@ -530,7 +543,7 @@ impl ProseState {
             _ => None,
         };
         let mut minted: Vec<Option<TreeID>> = Vec::with_capacity(ops.len());
-        let mut grids: HashMap<usize, Grid> = HashMap::new();
+        let mut grids: HashMap<OpIndex, Grid> = HashMap::new();
         // The last block each parent holds, so the next lands after it. A
         // cell starts at the empty paragraph the table minted in it.
         let mut last: HashMap<Parent, TreeID> = HashMap::new();
@@ -541,9 +554,9 @@ impl ProseState {
             let parent = op.parent();
             let parent_id = match parent {
                 Parent::Root => None,
-                Parent::Op(index) => minted.get(index).copied().flatten(),
-                Parent::Cell { table, row, col } => {
-                    let cell = grids.get(&table).and_then(|grid| grid.cell(row, col));
+                Parent::Op(index) => minted.get(index.to_usize()).copied().flatten(),
+                Parent::Cell { table, at } => {
+                    let cell = grids.get(&table).and_then(|grid| grid.cell(at));
                     if cell.is_none() {
                         minted.push(None);
                         continue;
@@ -595,11 +608,9 @@ impl ProseState {
                     id
                 }
                 ImportOp::Table { rows, cols, .. } => {
-                    let rows = u32::try_from(*rows).unwrap_or(u32::MAX);
-                    let cols = u32::try_from(*cols).unwrap_or(u32::MAX);
-                    let id = self.mint_table(parent_id, after, rows, cols)?;
+                    let id = self.mint_table(parent_id, after, *rows, *cols)?;
                     if let Some(grid) = Grid::read(&doc::blocks(&self.doc), &id) {
-                        grids.insert(minted.len(), grid);
+                        grids.insert(OpIndex::from_usize(minted.len()), grid);
                     }
                     id
                 }
@@ -788,7 +799,7 @@ mod tests {
         let ops = [
             paragraph(Parent::Root, "first"),
             paragraph(Parent::Root, "second"),
-            paragraph(Parent::Op(1), "refused"),
+            paragraph(Parent::Op(OpIndex::new(1)), "refused"),
         ];
         let warnings = Warnings::new(ambre_bus::app::prose::ConversionFormat::Markdown);
         let outcome = state.apply_import(&ops, warnings);
