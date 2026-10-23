@@ -332,9 +332,9 @@ pub struct TrameView {
     find_result: RwSignal<Option<crate::chrome::FindPosition>>,
     /// Active in-cell edit session, or `None` in navigation mode.
     editor: Option<CellEditor>,
-    /// The token of the last edit session opened. Each session takes the next
-    /// one, so an event about a closed session matches no open editor.
-    edit_session: u64,
+    /// The token the next edit session opens under. Each session takes it and
+    /// moves it on, so an event about a closed session matches no open editor.
+    next_edit_session: crate::EditSessionId,
     /// A commit requested from a grid key / click, deferred to the next paint. The
     /// shared editor applies edits only at paint-time flush, since a `FontContext`
     /// is live only then. The buffer is not final when the key is handled, so the

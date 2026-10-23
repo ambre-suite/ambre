@@ -602,7 +602,9 @@ fn a_lost_edit_reaches_the_user() {
         &toasts,
         &UiEvent::Viewport {
             document_id: DocumentId::new(),
-            event: AppEvent::Trame(TrameEvent::EditTargetGone { session: 1 }),
+            event: AppEvent::Trame(TrameEvent::EditTargetGone {
+                session: ambre_trame::EditSessionId::FIRST,
+            }),
         },
     );
     let root = mount_in_container(move || view! { <ambre_chrome::ToastHost toasts=toasts /> });

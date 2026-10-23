@@ -58,7 +58,7 @@ impl<P: Line> Pin<P> {
 #[derive(Debug, Clone)]
 pub(super) struct EditAnchor {
     /// The UI's token for the session, echoed in every event about it.
-    session: u64,
+    session: crate::EditSessionId,
     /// The sheet the session opened on.
     sheet: SheetId,
     row: Pin<Row>,
@@ -70,7 +70,11 @@ pub(super) struct EditAnchor {
 impl TrameState {
     /// Open edit session `session` on cell `at` of the active sheet. Writes
     /// nothing (`TRAME-UI-158`).
-    pub(super) fn begin_cell_edit(&mut self, session: u64, at: CellPos) -> TrameOutcome {
+    pub(super) fn begin_cell_edit(
+        &mut self,
+        session: crate::EditSessionId,
+        at: CellPos,
+    ) -> TrameOutcome {
         self.edit_anchor = Some(EditAnchor {
             session,
             sheet: self.active_sheet.clone(),
@@ -82,7 +86,7 @@ impl TrameState {
     }
 
     /// Close edit session `session` with no write. A no-op for another session.
-    pub(super) fn end_cell_edit(&mut self, session: u64) -> TrameOutcome {
+    pub(super) fn end_cell_edit(&mut self, session: crate::EditSessionId) -> TrameOutcome {
         if self
             .edit_anchor
             .as_ref()
@@ -96,7 +100,11 @@ impl TrameState {
     /// Commit edit session `session` with `text`, to the cell it opened on
     /// wherever that cell now stands (`TRAME-UI-160`, `TRAME-UI-162`). A session
     /// this state no longer holds writes nothing (`TRAME-UI-176`).
-    pub(super) fn commit_cell_edit(&mut self, session: u64, text: &str) -> TrameOutcome {
+    pub(super) fn commit_cell_edit(
+        &mut self,
+        session: crate::EditSessionId,
+        text: &str,
+    ) -> TrameOutcome {
         let Some(anchor) = self.edit_anchor.take_if(|a| a.session == session) else {
             // Dropped when its cell went, and the UI was told then.
             return TrameOutcome::display_only(vec![]);

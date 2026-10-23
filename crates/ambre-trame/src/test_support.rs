@@ -120,3 +120,8 @@ pub fn rect(r1: u32, c1: u32, r2: u32, c2: u32) -> crate::CellRect {
 pub fn span(rows: u32, cols: u32) -> crate::MergeSpan {
     crate::MergeSpan::new(crate::RowCount::new(rows), crate::ColCount::new(cols))
 }
+
+/// The `n`-th edit session token a view mints, counting from one.
+pub fn session(n: u64) -> crate::EditSessionId {
+    (1..n).fold(crate::EditSessionId::FIRST, |token, _| token.next())
+}

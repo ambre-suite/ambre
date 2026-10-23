@@ -43,9 +43,9 @@ pub mod test_support;
 pub use ambre_bus::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
     CellStyle, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan, ColVec,
-    CondFormatKind, CondStyle, DisplayCell, FillMode, FilterKind, FilterOp, HAlign, HeaderRow,
-    MergeSpan, Row, RowCount, RowDelta, RowSpan, RowVec, SelectionKind, SortKey, SortOrder,
-    StylePatch, TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
+    CondFormatKind, CondStyle, DisplayCell, EditSessionId, FillMode, FilterKind, FilterOp, HAlign,
+    HeaderRow, MergeSpan, Row, RowCount, RowDelta, RowSpan, RowVec, SelectionKind, SortKey,
+    SortOrder, StylePatch, TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };
 use ambre_core::DocPx;
 pub use logic::docfile::{export_ambre_plaintext, import_ambre_plaintext};

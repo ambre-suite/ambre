@@ -1431,25 +1431,14 @@ pub struct SlideChange {
     pub transition: std::time::Duration,
 }
 
-/// The token a `CreateElement` carries and its `ElementCreated` echoes, so
-/// the view that asked claims the element it created and no other
-/// (`TOILE-UI-194`).
-///
-/// No token is zero, so "no deferred open" is an `Option` and never a
-/// reserved value. The view mints the tokens, one after another.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct CorrelationToken(std::num::NonZeroU64);
-
-impl CorrelationToken {
-    /// The first token a view mints.
-    pub const FIRST: Self = Self(std::num::NonZeroU64::MIN);
-
-    /// The token after this one. It saturates at the last token, which a
-    /// view minting one per placement never reaches.
-    #[must_use]
-    pub const fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
+crate::token::define_token! {
+    /// The token a `CreateElement` carries and its `ElementCreated` echoes, so
+    /// the view that asked claims the element it created and no other
+    /// (`TOILE-UI-194`).
+    ///
+    /// No token is zero, so "no deferred open" is an `Option` and never a
+    /// reserved value. The view mints the tokens, one after another.
+    pub struct CorrelationToken;
 }
 
 /// Command from the UI / Logic thread to `ToileState` (in `ambre-toile`).

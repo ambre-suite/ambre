@@ -5,6 +5,7 @@
 // Once a peer deleted it, it lands nowhere (`TRAME-UI-176`, `TRAME-075`).
 
 use super::*;
+use crate::test_support::session;
 
 const COL_1: Col = Col::new(1);
 const ROW_4: Row = Row::new(4);
@@ -60,7 +61,7 @@ fn relay(from: &mut TrameState, to: &mut TrameState, cmd: TrameCommand) -> Vec<T
     to.apply_remote(&update)
 }
 
-fn commit(state: &mut TrameState, session: u64, text: &str) -> TrameOutcome {
+fn commit(state: &mut TrameState, session: crate::EditSessionId, text: &str) -> TrameOutcome {
     let out = state.handle_command(TrameCommand::CommitCellEdit {
         session,
         text: text.to_owned(),
@@ -73,7 +74,7 @@ fn commit(state: &mut TrameState, session: u64, text: &str) -> TrameOutcome {
 fn a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above() {
     let (mut a, mut b) = two_peers();
     a.handle_command(TrameCommand::BeginCellEdit {
-        session: 1,
+        session: session(1),
         row: Row::new(3),
         col: Col::new(1),
     });
@@ -82,16 +83,13 @@ fn a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above() {
     assert!(
         events.iter().any(|e| matches!(
             e,
-            TrameEvent::EditTargetMoved {
-                session: 1,
-                row: ROW_4,
-                col: COL_1
-            }
+            TrameEvent::EditTargetMoved { session: s, row: ROW_4, col: COL_1 }
+                if *s == session(1)
         )),
         "the editor is told its cell moved down one row: {events:?}"
     );
     let before = cells(&mut a);
-    commit(&mut a, 1, "typed");
+    commit(&mut a, session(1), "typed");
 
     // `b4` now sits on row 5 and takes the text; `b3`, which the insert moved
     // onto the position the session opened on, keeps its value.
@@ -111,7 +109,7 @@ fn a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above() {
 fn a_commit_past_the_used_range_follows_an_insert_above() {
     let (mut a, mut b) = two_peers();
     a.handle_command(TrameCommand::BeginCellEdit {
-        session: 2,
+        session: session(2),
         row: Row::new(6),
         col: Col::new(3),
     });
@@ -122,7 +120,7 @@ fn a_commit_past_the_used_range_follows_an_insert_above() {
         &mut a,
         TrameCommand::InsertColumn { at: Col::new(0) },
     );
-    commit(&mut a, 2, "far");
+    commit(&mut a, session(2), "far");
 
     assert!(
         cells(&mut a).contains(&(7, 4, "far".into())),
@@ -138,20 +136,20 @@ fn a_peer_delete_of_the_row_or_column_closes_the_session_with_no_write() {
     ] {
         let (mut a, mut b) = two_peers();
         a.handle_command(TrameCommand::BeginCellEdit {
-            session: 3,
+            session: session(3),
             row: Row::new(2),
             col: Col::new(1),
         });
 
         let events = relay(&mut b, &mut a, delete);
         assert!(
-            events
-                .iter()
-                .any(|e| matches!(e, TrameEvent::EditTargetGone { session: 3 })),
+            events.iter().any(
+                |e| matches!(e, TrameEvent::EditTargetGone { session: s } if *s == session(3))
+            ),
             "the session is told its cell is gone: {events:?}"
         );
         let before = cells(&mut a);
-        let out = commit(&mut a, 3, "lost");
+        let out = commit(&mut a, session(3), "lost");
         assert!(out.update.is_none(), "the commit wrote nothing");
         assert_eq!(cells(&mut a), before, "no cell took the text");
     }
@@ -165,7 +163,7 @@ fn a_commit_after_a_tab_switch_lands_on_the_session_sheet() {
     });
     let two = second_sheet_id(&a);
     a.handle_command(TrameCommand::BeginCellEdit {
-        session: 6,
+        session: session(6),
         row: Row::new(0),
         col: Col::new(1),
     });
@@ -173,7 +171,7 @@ fn a_commit_after_a_tab_switch_lands_on_the_session_sheet() {
         sheet_id: two.clone(),
     });
 
-    let out = commit(&mut a, 6, "kept");
+    let out = commit(&mut a, session(6), "kept");
     assert!(
         !out.display
             .iter()
@@ -194,13 +192,15 @@ fn a_commit_after_a_tab_switch_lands_on_the_session_sheet() {
 fn an_ended_session_writes_nothing() {
     let (mut a, _) = two_peers();
     a.handle_command(TrameCommand::BeginCellEdit {
-        session: 4,
+        session: session(4),
         row: Row::new(0),
         col: Col::new(0),
     });
-    a.handle_command(TrameCommand::EndCellEdit { session: 4 });
+    a.handle_command(TrameCommand::EndCellEdit {
+        session: session(4),
+    });
 
-    let out = commit(&mut a, 4, "late");
+    let out = commit(&mut a, session(4), "late");
     assert!(out.update.is_none(), "a closed session holds no cell");
 }
 
@@ -219,7 +219,7 @@ fn a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another() {
         sheet_id: two.clone(),
     });
     a.handle_command(TrameCommand::BeginCellEdit {
-        session: 5,
+        session: session(5),
         row: Row::new(0),
         col: Col::new(0),
     });
@@ -246,10 +246,10 @@ fn a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another() {
     assert!(
         events
             .iter()
-            .any(|e| matches!(e, TrameEvent::EditTargetGone { session: 5 })),
+            .any(|e| matches!(e, TrameEvent::EditTargetGone { session: s } if *s == session(5))),
         "the open session on the deleted sheet closes: {events:?}"
     );
-    let out = commit(&mut a, 5, "ghost");
+    let out = commit(&mut a, session(5), "ghost");
     assert!(out.update.is_none(), "nothing lands on the deleted sheet");
     assert!(
         cells(&mut a).iter().all(|(_, _, v)| v != "ghost"),

@@ -11,6 +11,13 @@ use crate::UserId;
 // Trame (spreadsheet) -- commands (UI -> Logic)
 // -----------------------------------------------------------------------------
 
+crate::token::define_token! {
+    /// The token the UI knows an open cell-edit session by, echoed in every
+    /// event about it (`trame-cell-editing`). The view mints the tokens, one
+    /// per session, so an event about a closed session matches no open editor.
+    pub struct EditSessionId;
+}
+
 /// Shape of a Trame selection band (`trame-selection`), the bus-side mirror of
 /// `ambre_trame`'s `SelKind`. `Cells` is the ordinary rectangle; `Cols`/`Rows`
 /// are whole-axis bands the Logic thread resolves to the used range.
@@ -85,18 +92,25 @@ pub enum TrameCommand {
     /// resolves the position once, to the sheet and the two lines under it, and
     /// writes nothing. A later commit reaches that cell wherever a peer moved it.
     /// A new session replaces the previous one.
-    BeginCellEdit { session: u64, row: Row, col: Col },
+    BeginCellEdit {
+        session: EditSessionId,
+        row: Row,
+        col: Col,
+    },
 
     /// Commit session `session` with `text`, written to the cell it opened on.
     /// A session the Logic thread no longer holds writes nothing: its cell is
     /// gone, and [`EditTargetGone`](super::TrameEvent::EditTargetGone) said so.
     /// Opens the undo group [`CommitEdit`](TrameCommand::CommitEdit) seals.
-    CommitCellEdit { session: u64, text: String },
+    CommitCellEdit {
+        session: EditSessionId,
+        text: String,
+    },
 
     /// Close session `session` with no write: an Escape, or a fill that writes
     /// the selection instead. A no-op for a session the Logic thread no longer
     /// holds.
-    EndCellEdit { session: u64 },
+    EndCellEdit { session: EditSessionId },
 
     /// Set the plaintext content of many cells in one shot, as `(row, col, text)`
     /// triples. Emitted for a multi-cell fill (Ctrl+Enter) or a clear over a

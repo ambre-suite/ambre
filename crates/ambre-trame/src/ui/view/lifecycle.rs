@@ -80,7 +80,7 @@ impl TrameView {
             #[cfg(target_arch = "wasm32")]
             find_result,
             editor: None,
-            edit_session: 0,
+            next_edit_session: crate::EditSessionId::FIRST,
             pending_commit: None,
             editor_text_drag: false,
             selecting_drag: false,
@@ -354,8 +354,8 @@ impl TrameView {
     /// Logic thread has been asked to pin that cell (`TRAME-UI-160`). A session
     /// Logic never heard of could not commit, so a refused request opens none.
     fn open_session(&mut self, at: CellPos, seed: String) -> bool {
-        self.edit_session += 1;
-        let session = self.edit_session;
+        let session = self.next_edit_session;
+        self.next_edit_session = session.next();
         let begin = TrameCommand::BeginCellEdit {
             session,
             row: at.row,
@@ -365,16 +365,14 @@ impl TrameView {
             tracing::error!("Trame: the outbox is full, the edit session did not open");
             return false;
         }
-        let mut editor = CellEditor::new(at, seed);
-        editor.session = session;
-        self.editor = Some(editor);
+        self.editor = Some(CellEditor::new(at, session, seed));
         true
     }
 
     /// Close session `session` with no write, because a peer deleted its cell
     /// (`TRAME-UI-176`). The chrome toasts the loss; this side drops the editor
     /// and announces it. A no-op once the session closed.
-    pub(crate) fn drop_lost_edit(&mut self, session: u64) {
+    pub(crate) fn drop_lost_edit(&mut self, session: crate::EditSessionId) {
         if self.editor.as_ref().is_none_or(|e| e.session != session) {
             return;
         }
@@ -391,7 +389,7 @@ impl TrameView {
     /// Carry session `session` to `at`, where a peer moved its cell. The
     /// editor and the active cell follow, so the cell on screen is the one the
     /// commit reaches (`TRAME-UI-160`).
-    pub(crate) fn follow_moved_edit(&mut self, session: u64, at: CellPos) {
+    pub(crate) fn follow_moved_edit(&mut self, session: crate::EditSessionId, at: CellPos) {
         if !self.editor.as_mut().is_some_and(|e| e.follow(session, at)) {
             return;
         }
@@ -490,7 +488,7 @@ impl TrameView {
     /// Release session `session` on the Logic side with no write. A lost
     /// release leaves Logic pinning a cell no editor shows, so a later delete
     /// of it would report a session already closed.
-    fn end_session(&mut self, session: u64) {
+    fn end_session(&mut self, session: crate::EditSessionId) {
         if self
             .send_command_lossless(TrameCommand::EndCellEdit { session })
             .is_err()

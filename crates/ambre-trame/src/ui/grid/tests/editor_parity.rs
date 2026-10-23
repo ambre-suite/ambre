@@ -99,7 +99,11 @@ fn intent(op: &Op) -> EditIntent {
 /// both each step, and assert the buffer text and selected text match.
 fn assert_parity(seed: &str, ops: &[Op]) {
     let mut fcx = FontContext::default();
-    let mut cell = CellEditor::new(CellPos::new(Row::ZERO, Col::ZERO), seed.to_owned());
+    let mut cell = CellEditor::new(
+        CellPos::new(Row::ZERO, Col::ZERO),
+        crate::EditSessionId::FIRST,
+        seed.to_owned(),
+    );
     let mut core = TextEditor::new(seed, style());
     // First flush seeds both carets at text end.
     cell.core.flush(&mut fcx, 1000.0, 1.0);

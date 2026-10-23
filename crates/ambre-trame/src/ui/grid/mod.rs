@@ -18,8 +18,9 @@ use ambre_draw::Color;
 
 use crate::render::BODY_SIZE;
 use crate::{
-    CellPos, CellRect, Col, ColCount, ColDelta, ColSpan, LAST_COL, LAST_ROW, MergeSpan, Row,
-    RowCount, RowDelta, RowSpan, SelectionKind, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent,
+    CellPos, CellRect, Col, ColCount, ColDelta, ColSpan, EditSessionId, LAST_COL, LAST_ROW,
+    MergeSpan, Row, RowCount, RowDelta, RowSpan, SelectionKind, TOTAL_COLS, TOTAL_ROWS,
+    TrameCommand, TrameEvent,
 };
 
 // Cell layout.
@@ -116,7 +117,7 @@ pub struct CellEditor {
     /// The cell the editor is open on.
     pub at: CellPos,
     /// The token the Logic thread knows this session by (`TRAME-UI-160`).
-    pub session: u64,
+    pub session: EditSessionId,
     /// The shared editor core (drawn by `renderer::draw_edit`).
     pub(crate) core: TextEditor,
 }
@@ -125,7 +126,7 @@ impl CellEditor {
     /// Open an editor on cell `at` seeded with `text`, caret at the end. The
     /// pinned style is a placeholder; `draw_edit` re-pins it from the cell's
     /// formatting each paint before flushing.
-    pub fn new(at: CellPos, text: String) -> Self {
+    pub fn new(at: CellPos, session: EditSessionId, text: String) -> Self {
         let style = TextEditorStyle {
             weight: 400,
             italic: false,
@@ -137,7 +138,7 @@ impl CellEditor {
         };
         Self {
             at,
-            session: 0,
+            session,
             core: TextEditor::new(&text, style),
         }
     }
@@ -154,7 +155,7 @@ impl CellEditor {
 
     /// Carry the editor to `at` when `session` is its own, where a peer moved
     /// its cell. Returns whether it moved.
-    pub fn follow(&mut self, session: u64, at: CellPos) -> bool {
+    pub fn follow(&mut self, session: EditSessionId, at: CellPos) -> bool {
         if session != self.session {
             return false;
         }

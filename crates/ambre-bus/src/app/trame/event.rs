@@ -5,7 +5,7 @@
 //! value types it reuses (`CellStyle`, `HAlign`, `VAlign`, `Borders`, ...) arrive
 //! by glob from the sibling command modules of `crate::app::trame`.
 
-use super::{CellPos, CellRect, Col, ColCount, MergeSpan, Row, RowCount};
+use super::{CellPos, CellRect, Col, ColCount, EditSessionId, MergeSpan, Row, RowCount};
 use crate::UserId;
 use ambre_core::{DocPx, Rgb};
 
@@ -119,12 +119,16 @@ pub enum TrameEvent {
     /// A peer's insert, delete or move carried the cell of edit `session` to
     /// `(row, col)` on the active sheet. The open editor follows it, so the
     /// cell it shows is the cell its commit reaches.
-    EditTargetMoved { session: u64, row: Row, col: Col },
+    EditTargetMoved {
+        session: EditSessionId,
+        row: Row,
+        col: Col,
+    },
 
     /// A peer deleted the sheet, row or column under edit `session`. The Logic
     /// thread dropped the session, so its commit writes nothing; the editor
     /// closes and the user is told the cell is gone.
-    EditTargetGone { session: u64 },
+    EditTargetGone { session: EditSessionId },
 
     /// The workbook was written by a newer client and was refused whole (`SCHEMA-008`).
     /// Nothing was applied, and the grid on screen is the one that was already open.

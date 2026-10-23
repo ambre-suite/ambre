@@ -486,14 +486,11 @@ ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | Clipboar
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardPayload::to_tsv() | ret | String	generic	TSV rendering of the payload
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddCondFormat.priority | field | i64	math	rule priority order
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddValidation.message | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::BeginCellEdit.session | field | u64	debt	finding: Trame edit `session: u64` (medium-low, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CommitCellEdit.session | field | u64	debt	finding: Trame edit `session: u64` (medium-low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CommitCellEdit.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CreateSheet.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.reference | field | String	free-text	A1 reference text, parsed by the formula engine
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DeleteName.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::EndCellEdit.session | field | u64	debt	finding: Trame edit `session: u64` (medium-low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ExportCsv.delimiter | field | Option<u8>	debt	finding: CSV delimiter as Option<u8> (low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.data | field | Vec<u8>	generic	imported CSV bytes
@@ -530,8 +527,6 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetId::as_str(
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetTab.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ColumnValues.values | field | Vec<String>	free-text	cell text / query / user message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::DocumentRefused.reason | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::EditTargetGone.session | field | u64	debt	finding: Trame edit `session: u64` (medium-low, confirmed)
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::EditTargetMoved.session | field | u64	debt	finding: Trame edit `session: u64` (medium-low, confirmed)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Error.message | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ExportComplete.data | field | Vec<u8>	generic	exported file bytes
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ExportComplete.filename | field | String	free-text	export filename
@@ -5018,11 +5013,7 @@ ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::export_
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | EditAnchor.session | field | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::begin_cell_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::commit_cell_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::commit_cell_edit(text) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::end_cell_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::write_at_anchor(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term.0 | field | i64	newtype-inner	newtype inner field
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(series) | param | Option<(f64,f64)>	math	local geometry / pixel arithmetic
@@ -5313,10 +5304,8 @@ ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.text | field | Str
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.underline | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.wrap | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData::content(text) | param | &'a str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor.session | field | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::commit_command(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::follow() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::follow(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::new(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::selected_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILL_HANDLE_SIZE | const | f64	math	local geometry / pixel arithmetic
@@ -5424,9 +5413,6 @@ ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::p
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::active_cell_ref() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::begin_edit(seed) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::cell_seed() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::drop_lost_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::end_session(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::follow_moved_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::is_busy() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(canvas_height) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(canvas_width) | param | f64	math	local geometry / pixel arithmetic
@@ -5450,7 +5436,6 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.cut_pending | fie
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.data_dirty | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.drag_point | field | Option<(f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.edit_dirty | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.edit_session | field | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.editor_text_drag | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.fatal | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.formula_ref | field | RwSignal<String>	free-text	free text: user content, label, message or display string
