@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
-use crate::error::AppError;
+use crate::error::{AppError, Resource};
 use crate::extract::{Json, PathId};
 use crate::s3;
 use crate::state::AppState;
@@ -48,7 +48,7 @@ pub async fn get_snapshot_metadata(
     let snap = db::get_latest_snapshot(&state.db, &doc_id)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "snapshot",
+            resource: Resource::Snapshot,
         })?;
     let reference = match snap.status {
         db::SnapshotStatus::SelfConfirmed => db::get_reference_snapshot(&state.db, &doc_id)
@@ -98,7 +98,7 @@ pub async fn confirm_snapshot(
     let status = db::confirm_snapshot(&state.db, &doc_id, &snap_id, confirmer)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "snapshot",
+            resource: Resource::Snapshot,
         })?;
     if status != db::SnapshotStatus::Confirmed {
         return Ok(axum::Json(ConfirmedSnapshotJson { folded: None }));
@@ -147,7 +147,7 @@ pub async fn report_snapshot(
     let snap = db::get_snapshot(&state.db, &doc_id, &snap_id)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "snapshot",
+            resource: Resource::Snapshot,
         })?;
     let author = snap.author_pubkey;
     let signature = hex::decode(req.signature.as_str())
@@ -369,7 +369,7 @@ pub async fn snapshot_download_url(
     let snap = db::get_snapshot(&state.db, &doc_id, &snap_id)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "snapshot",
+            resource: Resource::Snapshot,
         })?;
     let url = s3::generate_presigned_download_url(
         &state.s3,

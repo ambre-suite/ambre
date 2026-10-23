@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
-use crate::error::AppError;
+use crate::error::{AppError, Resource};
 use crate::extract::{Json, OpaquePathId};
 use crate::routes::share::{Expected, checked_entry};
 use crate::state::AppState;
@@ -766,7 +766,9 @@ pub async fn create_direct_message(
     for member in &req.members {
         db::get_user(&state.db, &member.user_id)
             .await?
-            .ok_or(AppError::NotFound { resource: "user" })?;
+            .ok_or(AppError::NotFound {
+                resource: Resource::User,
+            })?;
     }
     let mut keys = vec![(auth.user_id, req.doc_key_enc.clone())];
     for member in &req.members {

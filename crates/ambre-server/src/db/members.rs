@@ -487,7 +487,7 @@ pub(super) async fn lock_document(
             .fetch_optional(&mut **tx)
             .await?;
     found.map(|_| ()).ok_or(AppError::NotFound {
-        resource: "document",
+        resource: crate::error::Resource::Document,
     })
 }
 

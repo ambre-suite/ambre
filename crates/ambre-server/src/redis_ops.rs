@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use crate::error::{AppError, Resource};
 use rustis::client::Client;
 use rustis::commands::{
     GenericCommands, HashCommands, ListCommands, PubSubCommands, ScriptingCommands, StringCommands,
@@ -108,7 +108,7 @@ pub async fn verify_clock_and_assign_seq(
 fn clock_refusal(error: &str, got: Clock) -> AppError {
     if error.contains(DOCUMENT_GONE) {
         return AppError::NotFound {
-            resource: "document",
+            resource: Resource::Document,
         };
     }
     if error.contains(ROTATION_OWED) {
@@ -292,7 +292,7 @@ const SEGMENT_LOCKED: &str = "SEGMENT_LOCKED";
 fn store_refusal(error: &str, what: &str) -> AppError {
     if error.contains(DOCUMENT_GONE) {
         AppError::NotFound {
-            resource: "document",
+            resource: Resource::Document,
         }
     } else {
         AppError::Redis(format!("{what}: {error}"))

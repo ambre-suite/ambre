@@ -42,10 +42,13 @@ pub enum MurmureError {
     NotListed(ChannelId),
 
     /// The header names another kind of document.
-    #[error("document {document_id} is a {found}, where a {expected} was expected")]
+    #[error(
+        "document {document_id} is a {found}, where a {} was expected",
+        .expected.as_str()
+    )]
     WrongKind {
         document_id: DocumentId,
-        expected: &'static str,
+        expected: crate::schema::DocumentKind,
         found: String,
     },
 

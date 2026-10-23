@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
-use crate::error::AppError;
+use crate::error::{AppError, Resource};
 use crate::extract::Json;
 use crate::state::AppState;
 
@@ -127,7 +127,9 @@ pub async fn get_master_keys(
     let s = auth;
     let u = db::get_user(&state.db, &s.user_id)
         .await?
-        .ok_or(AppError::NotFound { resource: "user" })?;
+        .ok_or(AppError::NotFound {
+            resource: Resource::User,
+        })?;
     Ok(axum::Json(MasterKeysResponse {
         master_key_enc: u.master_key_enc,
         master_key_salt: u.master_key_salt,

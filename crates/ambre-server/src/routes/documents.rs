@@ -7,7 +7,7 @@ use ambre_core::Role;
 
 use crate::auth::{self};
 use crate::db;
-use crate::error::AppError;
+use crate::error::{AppError, Resource};
 use crate::extract::{Json, PathId};
 use crate::redis_ops;
 use crate::state::AppState;
@@ -113,7 +113,9 @@ pub async fn me(
     let s = auth;
     let u = db::get_user(&state.db, &s.user_id)
         .await?
-        .ok_or(AppError::NotFound { resource: "user" })?;
+        .ok_or(AppError::NotFound {
+            resource: Resource::User,
+        })?;
     let uid = u.id;
     Ok(axum::Json(MeResponse {
         user_id: uid,
@@ -280,7 +282,7 @@ pub async fn create_document(
     // legitimate owner's idempotent retry still succeeds below.
     if !created && owner_uuid != s.user_id {
         return Err(AppError::NotFound {
-            resource: "document",
+            resource: Resource::Document,
         });
     }
     if created || owner_uuid == s.user_id {
@@ -346,7 +348,7 @@ pub async fn get_document(
     let doc = db::get_document(&state.db, &doc_id)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "document",
+            resource: Resource::Document,
         })?;
     let mem = db::get_document_member(&state.db, &doc_id, &auth.user_id).await?;
     // Non-members get nothing: leaking `owner_id`/`doc_type` (and even the
@@ -356,7 +358,7 @@ pub async fn get_document(
     let is_owner = auth.user_id == doc.owner_id;
     if mem.is_none() && !is_owner {
         return Err(AppError::NotFound {
-            resource: "document",
+            resource: Resource::Document,
         });
     }
     Ok(axum::Json(GetDocumentResponse {
@@ -483,12 +485,16 @@ pub async fn get_pubkeys(
     let _s = auth;
     let u = db::get_user(&state.db, &uid)
         .await?
-        .ok_or(AppError::NotFound { resource: "user" })?;
+        .ok_or(AppError::NotFound {
+            resource: Resource::User,
+        })?;
     // An account that has not registered its keys has none to share to, and
     // answers like an unknown one (`SRV-163`).
     let (Some(signing_pubkey), Some(exchange_pubkey)) = (u.signing_pubkey, u.exchange_pubkey)
     else {
-        return Err(AppError::NotFound { resource: "user" });
+        return Err(AppError::NotFound {
+            resource: Resource::User,
+        });
     };
     Ok(axum::Json(PubkeysResponse {
         signing_pubkey: ambre_core::SigningKeyHex::encode(signing_pubkey),
@@ -539,7 +545,7 @@ pub async fn list_document_members(
         && !super::space_admin_of_public_meta(&state, &doc_id, &s.user_id).await?
     {
         return Err(AppError::NotFound {
-            resource: "document",
+            resource: Resource::Document,
         });
     }
     let members = db::list_document_members(&state.db, &doc_id).await?;

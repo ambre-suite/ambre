@@ -407,7 +407,7 @@ fn a_segment_in_the_place_of_meta_is_refused() {
     assert!(matches!(
         refused,
         Err(MurmureError::WrongKind {
-            expected: "meta",
+            expected: DocumentKind::Meta,
             ..
         })
     ));

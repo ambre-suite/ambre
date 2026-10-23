@@ -691,7 +691,7 @@ fn check_kind(
     if found != kind.as_str() {
         return Err(MurmureError::WrongKind {
             document_id,
-            expected: kind.as_str(),
+            expected: kind,
             found,
         });
     }

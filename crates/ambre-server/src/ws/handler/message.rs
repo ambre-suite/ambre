@@ -2336,7 +2336,7 @@ mod refusal_tests {
         assert!(!fences.holds(&doc), "the author's answer lifts it");
 
         let deleted = AppError::NotFound {
-            resource: "document",
+            resource: crate::error::Resource::Document,
         };
         fences.raise_for(&update_refusal(&update, &deleted));
         fences.raise_for(&update_refusal(&update, &AppError::RotationOwed));
@@ -2370,7 +2370,7 @@ mod refusal_tests {
             Some(RefusalCode::Forbidden)
         );
         let unseen = AppError::NotFound {
-            resource: "document",
+            resource: crate::error::Resource::Document,
         };
         assert_eq!(
             code_of(subscribe_refusal(doc, &unseen)),

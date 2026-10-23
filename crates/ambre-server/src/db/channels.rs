@@ -350,7 +350,7 @@ pub async fn close_segment(
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "channel",
+            resource: crate::error::Resource::Channel,
         })?;
     let live: Vec<(uuid::Uuid, String)> = sqlx::query_as(
         "SELECT document_id, state FROM channel_documents \
@@ -469,7 +469,7 @@ pub async fn register_amendments(
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "channel",
+            resource: crate::error::Resource::Channel,
         })?;
     let segment = id_to_uuid(segment.document_id());
     let locked: Option<bool> = sqlx::query_scalar(
@@ -530,7 +530,7 @@ pub async fn register_thread(
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "channel",
+            resource: crate::error::Resource::Channel,
         })?;
     let held: Option<uuid::Uuid> = sqlx::query_scalar(
         "SELECT document_id FROM channel_documents WHERE channel_id = $1 AND thread_root = $2",

@@ -32,7 +32,7 @@ pub enum AppError {
     SetupRequired,
 
     #[error("Not found: {resource}")]
-    NotFound { resource: &'static str },
+    NotFound { resource: Resource },
 
     #[error("Conflict: {detail}")]
     Conflict { detail: String },
@@ -161,6 +161,46 @@ impl AppError {
     }
 }
 
+/// What a 404 says is missing. Its word ends the refusal text the caller
+/// reads, so a new kind of resource is a new variant, never a new spelling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Resource {
+    Document,
+    Snapshot,
+    User,
+    Organization,
+    OrganizationMember,
+    OrgMasterKey,
+    Channel,
+    Space,
+    Segment,
+    Media,
+}
+
+impl Resource {
+    /// The words the refusal text names it by.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Document => "document",
+            Self::Snapshot => "snapshot",
+            Self::User => "user",
+            Self::Organization => "organization",
+            Self::OrganizationMember => "organization member",
+            Self::OrgMasterKey => "org master key",
+            Self::Channel => "channel",
+            Self::Space => "space",
+            Self::Segment => "segment",
+            Self::Media => "media",
+        }
+    }
+}
+
+impl std::fmt::Display for Resource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let code = self.code();
@@ -238,12 +278,24 @@ mod tests {
     #[tokio::test]
     async fn not_found_returns_404() {
         let r = AppError::NotFound {
-            resource: "document",
+            resource: Resource::Document,
         }
         .into_response();
         assert_eq!(r.status(), StatusCode::NOT_FOUND);
         let b = extract_body(r).await;
         assert_eq!(b["error"], "NOT_FOUND");
+    }
+
+    /// A resource reads by its words, so the refusal text is as it was.
+    #[test]
+    fn a_missing_resource_names_it_in_words() {
+        let missing = |resource| AppError::NotFound { resource }.to_string();
+        assert_eq!(missing(Resource::Document), "Not found: document");
+        assert_eq!(
+            missing(Resource::OrganizationMember),
+            "Not found: organization member"
+        );
+        assert_eq!(missing(Resource::OrgMasterKey), "Not found: org master key");
     }
 
     #[tokio::test]
@@ -321,7 +373,10 @@ mod tests {
 
     #[tokio::test]
     async fn application_errors_return_their_message() {
-        let r = AppError::NotFound { resource: "user" }.into_response();
+        let r = AppError::NotFound {
+            resource: Resource::User,
+        }
+        .into_response();
         let b = extract_body(r).await;
         assert_eq!(b["message"], "Not found: user");
     }

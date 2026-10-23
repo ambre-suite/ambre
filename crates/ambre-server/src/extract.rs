@@ -13,7 +13,7 @@ use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use serde::de::DeserializeOwned;
 
-use crate::error::AppError;
+use crate::error::{AppError, Resource};
 
 /// A request body read as JSON. A body that does not parse, or that names a
 /// word outside a closed set, answers `409` (`SRV-178`). A missing content
@@ -71,36 +71,36 @@ pub trait PathPart: Sized {
 
     /// The segment's value, or the resource a 404 names when it does not
     /// parse.
-    fn part(raw: Self::Raw) -> Result<Self, &'static str>;
+    fn part(raw: Self::Raw) -> Result<Self, Resource>;
 }
 
 macro_rules! path_id {
-    ($($id:ty => $resource:literal),* $(,)?) => {
+    ($($id:ty => $resource:ident),* $(,)?) => {
         $(impl PathPart for $id {
             type Raw = String;
 
-            fn part(raw: String) -> Result<Self, &'static str> {
-                <$id>::parse_str(&raw).map_err(|_| $resource)
+            fn part(raw: String) -> Result<Self, Resource> {
+                <$id>::parse_str(&raw).map_err(|_| Resource::$resource)
             }
         })*
     };
 }
 
 path_id!(
-    ambre_core::DocumentId => "document",
-    ambre_core::SnapshotId => "snapshot",
-    ambre_core::UserId => "user",
-    ambre_core::OrgId => "organization",
-    ambre_core::ChannelId => "channel",
-    ambre_core::SpaceId => "space",
-    ambre_core::SegmentId => "segment",
+    ambre_core::DocumentId => Document,
+    ambre_core::SnapshotId => Snapshot,
+    ambre_core::UserId => User,
+    ambre_core::OrgId => Organization,
+    ambre_core::ChannelId => Channel,
+    ambre_core::SpaceId => Space,
+    ambre_core::SegmentId => Segment,
 );
 
 /// A content address reads as the framework reads it: it checks nothing.
 impl PathPart for ambre_core::ContentHash {
     type Raw = ambre_core::ContentHash;
 
-    fn part(raw: Self::Raw) -> Result<Self, &'static str> {
+    fn part(raw: Self::Raw) -> Result<Self, Resource> {
         Ok(raw)
     }
 }
@@ -108,7 +108,7 @@ impl PathPart for ambre_core::ContentHash {
 impl<A: PathPart, B: PathPart> PathPart for (A, B) {
     type Raw = (A::Raw, B::Raw);
 
-    fn part((a, b): Self::Raw) -> Result<Self, &'static str> {
+    fn part((a, b): Self::Raw) -> Result<Self, Resource> {
         Ok((A::part(a)?, B::part(b)?))
     }
 }
@@ -118,7 +118,7 @@ impl<A: PathPart, B: PathPart> PathPart for (A, B) {
 async fn read_path<T: PathPart, S: Send + Sync>(
     parts: &mut Parts,
     state: &S,
-) -> Result<Result<T, &'static str>, Response> {
+) -> Result<Result<T, Resource>, Response> {
     let Path(raw) = Path::<T::Raw>::from_request_parts(parts, state)
         .await
         .map_err(IntoResponse::into_response)?;
@@ -256,11 +256,11 @@ mod tests {
         let missing = |resource| read(AppError::NotFound { resource }.into_response());
         assert_eq!(
             path_answer(&format!("/d/nope/u/{id}")).await,
-            missing("document").await
+            missing(Resource::Document).await
         );
         assert_eq!(
             path_answer(&format!("/d/{id}/u/nope")).await,
-            missing("user").await
+            missing(Resource::User).await
         );
         assert_eq!(path_answer(&format!("/c/{id}")).await.0, StatusCode::OK);
         assert_eq!(

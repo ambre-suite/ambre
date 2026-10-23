@@ -6,7 +6,7 @@ use ambre_core::Role;
 
 use crate::auth;
 use crate::db;
-use crate::error::AppError;
+use crate::error::{AppError, Resource};
 use crate::extract::{Json, PathId};
 use crate::state::AppState;
 
@@ -226,7 +226,7 @@ pub async fn get_org(
     let org = db::get_organization(&state.db, &org_id)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "organization",
+            resource: Resource::Organization,
         })?;
     Ok(axum::Json(org_to_response(&org)))
 }
@@ -247,7 +247,7 @@ pub async fn update_org(
     let org = db::update_organization(&state.db, &org_id, &name)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "organization",
+            resource: Resource::Organization,
         })?;
     Ok(axum::Json(org_to_response(&org)))
 }
@@ -266,7 +266,7 @@ pub async fn delete_org(
     let deleted = db::delete_organization(&state.db, &org_id).await?;
     if !deleted {
         return Err(AppError::NotFound {
-            resource: "organization",
+            resource: Resource::Organization,
         });
     }
     Ok(super::Done::json(ambre_core::WriteStatus::Deleted))
@@ -384,7 +384,7 @@ pub async fn remove_member(
     let removed = db::remove_org_member(&state.db, &org_id, &target_uid).await?;
     if !removed {
         return Err(AppError::NotFound {
-            resource: "organization member",
+            resource: Resource::OrganizationMember,
         });
     }
     Ok(super::Done::json(ambre_core::WriteStatus::Removed))
@@ -439,14 +439,14 @@ pub async fn recover_master_key(
     db::get_org_member(&state.db, &org_id, &target_uid)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "organization member",
+            resource: Resource::OrganizationMember,
         })?;
 
     // Get the target user's encrypted org master key.
     let org_master_key_enc = db::get_user_org_master_key_enc(&state.db, &target_uid)
         .await?
         .ok_or(AppError::NotFound {
-            resource: "org master key",
+            resource: Resource::OrgMasterKey,
         })?;
 
     // Log the recovery.

@@ -6,7 +6,7 @@ use ambre_core::Role;
 
 use crate::auth;
 use crate::db;
-use crate::error::AppError;
+use crate::error::{AppError, Resource};
 use crate::extract::{Json, PathId};
 use crate::state::AppState;
 
@@ -175,7 +175,9 @@ pub async fn invite_to_document(
     };
     let invitee = found
         .filter(|u| u.exchange_pubkey.is_some())
-        .ok_or(AppError::NotFound { resource: "user" })?;
+        .ok_or(AppError::NotFound {
+            resource: Resource::User,
+        })?;
     let invitee_id = invitee.id;
     // A channel of a space admits the members of that space alone; a direct
     // message lies in no space (`SRV-225`).

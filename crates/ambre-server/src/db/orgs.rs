@@ -166,7 +166,9 @@ fn map_member_user_fk(e: sqlx::Error) -> AppError {
             if db.is_foreign_key_violation()
                 && db.constraint() == Some("organization_members_user_id_fkey") =>
         {
-            AppError::NotFound { resource: "user" }
+            AppError::NotFound {
+                resource: crate::error::Resource::User,
+            }
         }
         _ => AppError::Database(e),
     }

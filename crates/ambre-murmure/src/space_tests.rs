@@ -5,7 +5,7 @@ use ambre_bus::{SealedChannelKey, Timestamp, Topic};
 use ambre_core::{CategoryId, ChannelId, SpaceId};
 use loro::{LoroDoc, LoroValue};
 
-use crate::schema::{HeaderKey, read_version};
+use crate::schema::{DocumentKind, HeaderKey, read_version};
 use crate::{ChannelState, ChannelType, Listing, MurmureError, SCHEMA_VERSION, SpaceState};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
@@ -120,7 +120,7 @@ fn a_channel_document_is_no_space() {
     assert!(matches!(
         refused,
         Err(MurmureError::WrongKind {
-            expected: "space",
+            expected: DocumentKind::Space,
             ..
         })
     ));

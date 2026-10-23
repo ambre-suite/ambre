@@ -2157,7 +2157,6 @@ ambre-murmure | src/emoji.rs | crate::emoji | entry(name) | param | &'static str
 ambre-murmure | src/emoji.rs | crate::emoji | name_of() | ret | Option<&'static str>	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/emoji.rs | crate::emoji | search(query) | param | &str	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/error.rs | crate::error | MurmureError::Crdt.0 | field | String	free-text	untrusted word / Loro error text (not Eq)
-ambre-murmure | src/error.rs | crate::error | MurmureError::WrongKind.expected | field | &'static str	debt	finding: `WrongKind.expected` is `&'static str`
 ambre-murmure | src/error.rs | crate::error | MurmureError::WrongKind.found | field | String	free-text	untrusted word / Loro error text (not Eq)
 ambre-murmure | src/list.rs | crate::list | BAND_DAMAGED | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | BAND_KEYS | const | &str	free-text	UI text/label const
@@ -3513,7 +3512,6 @@ ambre-server | src/deletion.rs | crate::deletion | finish_one(rows_left) | param
 ambre-server | src/error.rs | crate::error | AppError::BadRequest.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Conflict.detail | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Internal.0 | field | String	free-text	user text or error message
-ambre-server | src/error.rs | crate::error | AppError::NotFound.resource | field | &'static str	debt	finding: AppError::NotFound.resource is a closed set held as text (confirmed)
 ambre-server | src/error.rs | crate::error | AppError::Oidc.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::PayloadTooLarge.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Redis.0 | field | String	free-text	user text or error message
@@ -3523,10 +3521,7 @@ ambre-server | src/error.rs | crate::error | AppError::caller_message() | ret | 
 ambre-server | src/error.rs | crate::error | AppError::is_infrastructure() | ret | bool	generic	predicate result
 ambre-server | src/error.rs | crate::error | ErrorBody.message | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | ErrorBody::json(message) | param | impl Into<String>	free-text	user text or error message
-ambre-server | src/extract.rs | crate::extract | <(A,B) as PathPart>::part() | ret | Result<Self,&'static str>	trait	signature set by the trait
-ambre-server | src/extract.rs | crate::extract | <ambre_core::ContentHash as PathPart>::part() | ret | Result<Self,&'static str>	trait	signature set by the trait
-ambre-server | src/extract.rs | crate::extract | PathPart::part() | ret | Result<Self,&'static str>	generic	generic codec/parser/bytes API
-ambre-server | src/extract.rs | crate::extract | read_path() | ret | Result<Result<T,&'static str>,Response>	generic	generic codec/parser/bytes API
+ambre-server | src/error.rs | crate::error | Resource::as_str() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
 ambre-server | src/hot_tail.rs | crate::hot_tail | IDLE_PASS_LIMIT | const | i64	math	pass limit count
 ambre-server | src/hot_tail.rs | crate::hot_tail | batch_key(env_prefix) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
 ambre-server | src/hot_tail.rs | crate::hot_tail | kept_after_move() | ret | usize	math	count

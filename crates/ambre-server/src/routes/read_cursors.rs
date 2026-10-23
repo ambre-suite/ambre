@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
-use crate::error::AppError;
+use crate::error::{AppError, Resource};
 use crate::extract::{Json, PathId};
 use crate::state::AppState;
 
@@ -51,7 +51,7 @@ pub async fn set_read_cursor(
     Json(req): Json<ReadCursorRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let not_found = || AppError::NotFound {
-        resource: "document",
+        resource: Resource::Document,
     };
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
