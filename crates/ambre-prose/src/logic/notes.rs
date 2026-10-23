@@ -44,10 +44,10 @@ impl ProseState {
         }
         let id = self.ids.mint();
         if let Err(e) = self.write_note(&id, text) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         if let Err(e) = Self::write_carrier(&body, at, MarkRoot::Footnote, &id.to_hyphenated()) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         self.commit_notes()
     }
@@ -58,7 +58,7 @@ impl ProseState {
             return ProseOutcome::refused(ProseRefusal::NoSuchFootnote(*id));
         };
         if let Err(e) = body.update(text, UpdateOptions::default()) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_notes()
     }
@@ -80,16 +80,16 @@ impl ProseState {
         for call in calls.iter().rev() {
             let body = doc::get_block_text(&self.doc, &call.block);
             if let Err(e) = body.delete(call.offset.to_usize(), 1) {
-                return Self::err_write(&format!("{e:?}"));
+                return Self::err_write(e);
             }
         }
         if let Some(block) = note::block(&self.doc, id)
             && let Err(e) = doc::blocks(&self.doc).delete(block)
         {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         if let Err(e) = doc::annots(&self.doc).delete(&key) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_notes()
     }
@@ -103,20 +103,17 @@ impl ProseState {
     /// The entry of a new note, and the block holding its text. That block is a
     /// root paragraph marked as a note, so the body flow never meets it
     /// (`PROSE-FEAT-305`).
-    fn write_note(&self, id: &FootnoteId, text: &str) -> Result<(), String> {
+    fn write_note(&self, id: &FootnoteId, text: &str) -> Result<(), doc::WriteError> {
         let block = write_note_block(&self.doc, text)?;
         let annots = doc::annots(&self.doc);
         let entry = annots
             .insert_container(&id.to_hyphenated(), LoroMap::new())
-            .map(doc::Fields::<doc::AnnotKey>::of)
-            .map_err(|e| format!("{e:?}"))?;
-        entry
-            .insert(doc::AnnotKey::Kind, doc::AnnotKind::Footnote.as_str())
-            .map_err(|e| format!("{e:?}"))?;
+            .map(doc::Fields::<doc::AnnotKey>::of)?;
+        entry.insert(doc::AnnotKey::Kind, doc::AnnotKind::Footnote.as_str())?;
         entry
             .insert(doc::AnnotKey::NoteBlock, block.to_string())
             .map(|_| ())
-            .map_err(|e| format!("{e:?}"))
+            .map_err(doc::WriteError::from)
     }
 
     /// One carrier character at `at`, marked `key` = `value`. The mark never
@@ -126,13 +123,12 @@ impl ProseState {
         at: DocOffset,
         key: MarkRoot,
         value: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), doc::WriteError> {
         let at = at.to_usize();
         let mut buffer = [0_u8; 4];
-        body.insert(at, doc::CARRIER.encode_utf8(&mut buffer))
-            .map_err(|e| format!("{e:?}"))?;
+        body.insert(at, doc::CARRIER.encode_utf8(&mut buffer))?;
         body.mark(at..at + 1, key.as_str(), value)
-            .map_err(|e| format!("{e:?}"))
+            .map_err(doc::WriteError::from)
     }
 
     /// Commit a footnote command and answer the list it leaves.
@@ -144,17 +140,19 @@ impl ProseState {
 
 /// A root paragraph marked as a note, holding `text`. The schema migration
 /// writes a note's block through here too, so both mint it alike.
-pub(crate) fn write_note_block(document: &loro::LoroDoc, text: &str) -> Result<TreeID, String> {
+pub(crate) fn write_note_block(
+    document: &loro::LoroDoc,
+    text: &str,
+) -> Result<TreeID, doc::WriteError> {
     let block = doc::create_block(document, None, BlockType::Paragraph)
-        .ok_or_else(|| "the tree refused a note block".to_owned())?;
+        .ok_or(doc::WriteError::Refused("the tree refused a note block"))?;
     let tree = doc::blocks(document);
     doc::node_of(&tree, &block)
-        .ok_or_else(|| "the note block is not in the tree".to_owned())?
-        .insert(doc::NodeKey::Note, true)
-        .map_err(|e| format!("{e:?}"))?;
-    doc::get_block_text(document, &block)
-        .insert(0, text)
-        .map_err(|e| format!("{e:?}"))?;
+        .ok_or(doc::WriteError::Refused(
+            "the note block is not in the tree",
+        ))?
+        .insert(doc::NodeKey::Note, true)?;
+    doc::get_block_text(document, &block).insert(0, text)?;
     Ok(block)
 }
 

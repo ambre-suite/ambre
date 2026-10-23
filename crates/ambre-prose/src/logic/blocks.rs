@@ -116,14 +116,14 @@ impl ProseState {
             Err(refused) => return refused,
         };
         if let Err(e) = self.write_init(&id, init) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         let tree = doc::blocks(&self.doc);
         if let Some(style_id) = style_id
             && let Some(node) = doc::node_of(&tree, &id)
             && let Err(e) = node.insert(doc::NodeKey::Style, style_id.0.as_str())
         {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -163,26 +163,31 @@ impl ProseState {
             return Err(Self::err_nesting());
         }
         let Some(id) = doc::create_block(&self.doc, parent_id, block_type) else {
-            return Err(Self::err_write("the tree refused a block"));
+            return Err(Self::err_write(doc::WriteError::Refused(
+                "the tree refused a block",
+            )));
         };
         if let Some(after) = after_id
             && let Err(e) = tree.mov_after(id, after)
         {
-            return Err(Self::err_write(&format!("{e:?}")));
+            return Err(Self::err_write(e));
         }
         Ok(id)
     }
 
     /// Write the attributes one initializer carries.
-    pub(super) fn write_init(&self, id: &TreeID, init: &BlockInit) -> Result<(), String> {
+    pub(super) fn write_init(&self, id: &TreeID, init: &BlockInit) -> Result<(), doc::WriteError> {
         let tree = doc::blocks(&self.doc);
         let Some(node) = doc::node_of(&tree, id) else {
-            return Err("the block vanished before its attributes landed".to_owned());
+            return Err(doc::WriteError::Refused(
+                "the block vanished before its attributes landed",
+            ));
         };
-        let attrs = |key: doc::AttrKey, value: loro::LoroValue| -> Result<(), String> {
-            let map = doc::attrs_at(&node)
-                .ok_or_else(|| "the attribute map refused a container".to_owned())?;
-            map.insert(key, value).map_err(|e| format!("{e:?}"))
+        let attrs = |key: doc::AttrKey, value: loro::LoroValue| -> Result<(), doc::WriteError> {
+            let map = doc::attrs_at(&node).ok_or(doc::WriteError::Refused(
+                "the attribute map refused a container",
+            ))?;
+            map.insert(key, value).map_err(doc::WriteError::from)
         };
         match init {
             BlockInit::Heading { level } => {
@@ -190,8 +195,9 @@ impl ProseState {
             }
             BlockInit::CodeBlock { lang } => attrs(doc::AttrKey::Lang, lang.as_str().into()),
             BlockInit::ListItem { style } => {
-                let map = doc::attrs_at(&node)
-                    .ok_or_else(|| "the attribute map refused a container".to_owned())?;
+                let map = doc::attrs_at(&node).ok_or(doc::WriteError::Refused(
+                    "the attribute map refused a container",
+                ))?;
                 Self::write_list_style(&map, *style)
             }
             // The three remaining types carry no attribute, so they carry no
@@ -235,7 +241,7 @@ impl ProseState {
             return Self::err_nesting();
         }
         if let Err(e) = doc::hide_block(&self.doc, &tree, id) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -285,12 +291,12 @@ impl ProseState {
         }
         let parent: TreeParentId = new_parent.into();
         if let Err(e) = tree.mov(*id, parent) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         if let Some(after) = after_id
             && let Err(e) = tree.mov_after(*id, after)
         {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -312,7 +318,7 @@ impl ProseState {
             return Self::err_no_block(id);
         };
         if let Err(e) = node.insert(doc::NodeKey::Style, style_id.0.as_str()) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -351,7 +357,7 @@ impl ProseState {
                 && let Err(e) =
                     node.insert(doc::NodeKey::Type, i64::from(BlockType::Heading.code()))
             {
-                return Self::err_write(&format!("{e:?}"));
+                return Self::err_write(e);
             }
         }
         self.write_attr(id, doc::AttrKey::Level, i64::from(level.get()).into())
@@ -371,10 +377,10 @@ impl ProseState {
             return self.commit_with(Vec::new());
         }
         if let Err(e) = node.insert(doc::NodeKey::Type, i64::from(BlockType::Paragraph.code())) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         if let Err(e) = node.delete(doc::NodeKey::Attrs) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -399,10 +405,12 @@ impl ProseState {
             return Self::err_no_block(id);
         };
         let Some(attrs) = doc::attrs_at(&node) else {
-            return Self::err_write("the attribute map refused a container");
+            return Self::err_write(doc::WriteError::Refused(
+                "the attribute map refused a container",
+            ));
         };
         if let Err(e) = attrs.insert(key, value) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -428,7 +436,7 @@ impl ProseState {
             return ProseOutcome::nothing();
         }
         if let Err(e) = doc::write_paragraph_style(&node, &changed) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -438,34 +446,34 @@ impl ProseState {
     /// The split reads it, because the new paragraph carries the source's type
     /// and paragraph style (`PROSE-038`). A heading carries its level too, or
     /// the copy would leave a heading with no level at all.
-    pub(super) fn carry_style(&self, source: &TreeID, target: &TreeID) -> Result<(), String> {
+    pub(super) fn carry_style(
+        &self,
+        source: &TreeID,
+        target: &TreeID,
+    ) -> Result<(), doc::WriteError> {
         let tree = doc::blocks(&self.doc);
         let Some(target_node) = doc::node_of(&tree, target) else {
-            return Err("the new block vanished before its style landed".to_owned());
+            return Err(doc::WriteError::Refused(
+                "the new block vanished before its style landed",
+            ));
         };
         if let Some(style_id) = doc::style_of(&tree, source) {
-            target_node
-                .insert(doc::NodeKey::Style, style_id.0.as_str())
-                .map_err(|e| format!("{e:?}"))?;
+            target_node.insert(doc::NodeKey::Style, style_id.0.as_str())?;
         }
-        doc::write_paragraph_style(&target_node, &doc::read_paragraph_style(&tree, source))
-            .map_err(|e| format!("{e:?}"))?;
+        doc::write_paragraph_style(&target_node, &doc::read_paragraph_style(&tree, source))?;
         // The attributes the split must carry. Without them the second half
         // of a heading has no level, and that of a code block no language.
         let level = self.heading_level_of(&crate::events::block_id(*source));
         let lang = self.code_lang_of(&crate::events::block_id(*source));
         if level.is_some() || lang.is_some() {
-            let attrs = doc::attrs_at(&target_node)
-                .ok_or_else(|| "the attribute map refused a container".to_owned())?;
+            let attrs = doc::attrs_at(&target_node).ok_or(doc::WriteError::Refused(
+                "the attribute map refused a container",
+            ))?;
             if let Some(level) = level {
-                attrs
-                    .insert(doc::AttrKey::Level, i64::from(level.get()))
-                    .map_err(|e| format!("{e:?}"))?;
+                attrs.insert(doc::AttrKey::Level, i64::from(level.get()))?;
             }
             if let Some(lang) = lang {
-                attrs
-                    .insert(doc::AttrKey::Lang, lang.as_str())
-                    .map_err(|e| format!("{e:?}"))?;
+                attrs.insert(doc::AttrKey::Lang, lang.as_str())?;
             }
         }
         Ok(())

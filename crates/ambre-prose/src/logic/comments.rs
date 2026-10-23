@@ -56,11 +56,12 @@ impl ProseState {
             end,
         };
         let written = self.write_thread(&id, span).and_then(|entry| {
-            let replies = comment::replies_of(&entry).ok_or("no reply list")?;
+            let replies =
+                comment::replies_of(&entry).ok_or(doc::WriteError::Refused("no reply list"))?;
             self.write_reply(&replies, text, now_ms)
         });
         if let Err(e) = written {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         let key = comment::mark_key(&id);
         if let Err(e) = body.mark(
@@ -68,7 +69,7 @@ impl ProseState {
             key.as_str(),
             id.to_hyphenated(),
         ) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_comments()
     }
@@ -88,13 +89,13 @@ impl ProseState {
             return ProseOutcome::refused(ProseRefusal::NoIdentity);
         }
         let Some(replies) = comment::replies_of(&entry) else {
-            return Self::err_write("no reply list");
+            return Self::err_write(doc::WriteError::Refused("no reply list"));
         };
         if let Err(e) = self.write_reply(&replies, text, now_ms) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         if let Err(e) = entry.insert(doc::AnnotKey::Resolved, false) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_comments()
     }
@@ -105,7 +106,7 @@ impl ProseState {
             return ProseOutcome::refused(ProseRefusal::NoSuchComment(*id));
         };
         if let Err(e) = entry.insert(doc::AnnotKey::Resolved, resolved) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_comments()
     }
@@ -120,7 +121,7 @@ impl ProseState {
             return ProseOutcome::refused(ProseRefusal::NoSuchComment(*id));
         }
         if let Err(e) = self.remove_thread(id) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         self.commit_comments()
     }
@@ -136,10 +137,10 @@ impl ProseState {
         let removed = if index == 0 {
             self.remove_thread(id)
         } else {
-            list.delete(index, 1).map_err(|e| format!("{e:?}"))
+            list.delete(index, 1).map_err(doc::WriteError::from)
         };
         if let Err(e) = removed {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         self.commit_comments()
     }
@@ -162,10 +163,10 @@ impl ProseState {
                 _ => None,
             });
         let Some(body) = body else {
-            return Self::err_write("the reply holds no text");
+            return Self::err_write(doc::WriteError::Refused("the reply holds no text"));
         };
         if let Err(e) = body.update(text, UpdateOptions::default()) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_comments()
     }
@@ -237,35 +238,24 @@ impl ProseState {
         &self,
         id: &CommentId,
         span: Span,
-    ) -> Result<doc::Fields<doc::AnnotKey>, String> {
+    ) -> Result<doc::Fields<doc::AnnotKey>, doc::WriteError> {
         let annots = doc::annots(&self.doc);
         let entry = annots
             .insert_container(&id.to_hyphenated(), LoroMap::new())
-            .map(doc::Fields::of)
-            .map_err(|e| format!("{e:?}"))?;
-        entry
-            .insert(doc::AnnotKey::Kind, doc::AnnotKind::Comment.as_str())
-            .map_err(|e| format!("{e:?}"))?;
-        entry
-            .insert(doc::AnnotKey::Resolved, false)
-            .map_err(|e| format!("{e:?}"))?;
+            .map(doc::Fields::of)?;
+        entry.insert(doc::AnnotKey::Kind, doc::AnnotKind::Comment.as_str())?;
+        entry.insert(doc::AnnotKey::Resolved, false)?;
         Self::write_anchor(&entry, span)?;
-        entry
-            .insert_container(doc::AnnotKey::Replies, LoroList::new())
-            .map_err(|e| format!("{e:?}"))?;
+        entry.insert_container(doc::AnnotKey::Replies, LoroList::new())?;
         Ok(entry)
     }
 
-    fn write_anchor(entry: &doc::Fields<doc::AnnotKey>, span: Span) -> Result<(), String> {
-        entry
-            .insert(doc::AnnotKey::AnchorBlock, span.block.to_string())
-            .map_err(|e| format!("{e:?}"))?;
-        entry
-            .insert(doc::AnnotKey::AnchorStart, i64::from(span.start.get()))
-            .map_err(|e| format!("{e:?}"))?;
+    fn write_anchor(entry: &doc::Fields<doc::AnnotKey>, span: Span) -> Result<(), doc::WriteError> {
+        entry.insert(doc::AnnotKey::AnchorBlock, span.block.to_string())?;
+        entry.insert(doc::AnnotKey::AnchorStart, i64::from(span.start.get()))?;
         entry
             .insert(doc::AnnotKey::AnchorEnd, i64::from(span.end.get()))
-            .map_err(|e| format!("{e:?}"))
+            .map_err(doc::WriteError::from)
     }
 
     /// One reply at the end of `list`, stamped from the session identity and
@@ -275,37 +265,26 @@ impl ProseState {
         list: &LoroList,
         text: &str,
         now_ms: ambre_core::Timestamp,
-    ) -> Result<(), String> {
-        let user = self.my_user_id.ok_or("no identity")?;
+    ) -> Result<(), doc::WriteError> {
+        let user = self.my_user_id.ok_or(doc::WriteError::NoIdentity)?;
         let reply = list
             .push_container(LoroMap::new())
-            .map(doc::Fields::<doc::ReplyKey>::of)
-            .map_err(|e| format!("{e:?}"))?;
-        reply
-            .insert(
-                doc::ReplyKey::Id,
-                self.ids.mint::<ReplyId>().to_hyphenated(),
-            )
-            .map_err(|e| format!("{e:?}"))?;
-        reply
-            .insert(
-                doc::ReplyKey::Author,
-                self.my_name
-                    .clone()
-                    .map(ambre_core::DisplayName::into_string)
-                    .unwrap_or_default(),
-            )
-            .map_err(|e| format!("{e:?}"))?;
-        reply
-            .insert(doc::ReplyKey::User, user.to_string())
-            .map_err(|e| format!("{e:?}"))?;
-        reply
-            .insert(doc::ReplyKey::Created, now_ms.to_i64_saturating())
-            .map_err(|e| format!("{e:?}"))?;
-        let body = reply
-            .insert_container(doc::ReplyKey::Text, LoroText::new())
-            .map_err(|e| format!("{e:?}"))?;
-        body.insert(0, text).map_err(|e| format!("{e:?}"))
+            .map(doc::Fields::<doc::ReplyKey>::of)?;
+        reply.insert(
+            doc::ReplyKey::Id,
+            self.ids.mint::<ReplyId>().to_hyphenated(),
+        )?;
+        reply.insert(
+            doc::ReplyKey::Author,
+            self.my_name
+                .clone()
+                .map(ambre_core::DisplayName::into_string)
+                .unwrap_or_default(),
+        )?;
+        reply.insert(doc::ReplyKey::User, user.to_string())?;
+        reply.insert(doc::ReplyKey::Created, now_ms.to_i64_saturating())?;
+        let body = reply.insert_container(doc::ReplyKey::Text, LoroText::new())?;
+        body.insert(0, text).map_err(doc::WriteError::from)
     }
 
     /// The list holding reply `reply` of thread `id`, and its place, when the
@@ -338,17 +317,16 @@ impl ProseState {
     }
 
     /// Take thread `id`'s mark off every run it covers, then its entry.
-    fn remove_thread(&self, id: &CommentId) -> Result<(), String> {
+    fn remove_thread(&self, id: &CommentId) -> Result<(), doc::WriteError> {
         let key = comment::mark_key(id);
         let runs = comment::runs(&self.doc, &comment::text_blocks(&self.doc));
         for (_, span) in runs.iter().filter(|(thread, _)| thread == id) {
             doc::get_block_text(&self.doc, &span.block)
-                .unmark(span.start.to_usize()..span.end.to_usize(), key.as_str())
-                .map_err(|e| format!("{e:?}"))?;
+                .unmark(span.start.to_usize()..span.end.to_usize(), key.as_str())?;
         }
         doc::annots(&self.doc)
             .delete(&id.to_hyphenated())
-            .map_err(|e| format!("{e:?}"))
+            .map_err(doc::WriteError::from)
     }
 
     /// Commit a comment command out of the undo stack, and answer the list

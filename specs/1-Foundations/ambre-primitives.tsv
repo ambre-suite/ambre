@@ -2749,7 +2749,6 @@ ambre-prose | src/doc.rs | crate::doc | DocDefaults.line_height | field | f32	ma
 ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Orientation::as_str() | ret | &'static str	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | carries_hiding() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/doc.rs | crate::doc | hide_block() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/doc.rs | crate::doc | is_ancestor_of() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | is_aside() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | is_band() | ret | bool	generic	independent flag or predicate
@@ -3115,11 +3114,9 @@ ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	predic
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	free-text	text content / label / parser input
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_different_first_page(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_side_enabled(enabled) | param | bool	generic	independent flag or predicate
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::carry_style() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::code_lang_of() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::set_code_lang(lang) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::write_init() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::stamp() | ret | (bool,ambre_bus::app::prose::TextChangeSeq,ambre_bus::app::prose::TextAck,Vec<TextEdit>,)	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | BLOCKS | const | [&str;29]	free-text	text content / label / parser input
@@ -3210,14 +3207,10 @@ ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::add_c
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::edit_reply(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::own_reply() | ret | Result<(LoroList,usize),ProseOutcome>	math	count, size or local index
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::refresh_anchors() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::remove_thread() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::reply_to_comment(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::set_resolved(resolved) | param | bool	generic	independent flag or predicate
-ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_anchor() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_anchors() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_reply() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_reply(text) | param | &str	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_thread() | ret | Result<doc::Fields<doc::AnnotKey>,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::insert_toc(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::update_toc_config(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::write_toc_settings(numbered) | param | bool	generic	named setting or fact flag, selects no mode
@@ -3237,7 +3230,6 @@ ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | <ProseFixture as 
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | <ProseFixture as FixtureGen>::seed() | ret | u64	trait	signature fixed by foreign trait
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | AUTHOR_SEED | const | u64	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | ProseState::canonical_dump() | ret | String	generic	fixtures feature, test support
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | build_styled_document() | ret | Result<ProseState,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | build_styled_document(seed) | param | u64	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename() | ret | String	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename(names) | param | &HashMap<String,String>	generic	fixtures feature, test support
@@ -3249,8 +3241,6 @@ ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render() | ret | 
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render(names) | param | &HashMap<String,String>	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render_delta() | ret | String	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render_delta(names) | param | &HashMap<String,String>	generic	fixtures feature, test support
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | root_after() | ret | Result<TreeID,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | run() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/ids.rs | crate::logic::ids | IdSource::Seeded.next | field | Cell<u64>	math	count, size or local index
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack() | ret | u128	generic	generic primitive API
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack(counter) | param | u64	math	count, size or local index
@@ -3265,7 +3255,6 @@ ambre-prose | src/logic/interop.rs | crate::logic::interop | file_stem() | ret |
 ambre-prose | src/logic/interop.rs | crate::logic::interop | file_stem(title) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/interop.rs | crate::logic::interop | ir_run(notes) | param | &HashMap<FootnoteId,u32>	math	count, size or local index
 ambre-prose | src/logic/interop.rs | crate::logic::interop | type_name() | ret | &'static str	free-text	text content / label / parser input
-ambre-prose | src/logic/lists.rs | crate::logic::lists | ProseState::write_list_style() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/marks.rs | crate::logic::marks | MarkFold.counts | field | [(u32,u32);5]	math	count, size or local index
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_runs() | ret | Vec<(String,ResolvedStyle)>	free-text	text content / label / parser input
@@ -3277,35 +3266,26 @@ ambre-prose | src/logic/mod.rs | crate::logic | ProseState.owe_greeting | field 
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.suggesting | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::cached_media() | ret | Option<&[u8]>	math	count, size or local index
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::err_write(reason) | param | &str	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::face_count() | ret | usize	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::on_media_downloaded(data) | param | Vec<u8>	math	count, size or local index
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::edit_footnote(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::insert_footnote(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier(value) | param | &str	free-text	mark value text: its grammar is set by the key, and validate_value checks it
-ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_note() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_note(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/notes.rs | crate::logic::notes | write_note_block() | ret | Result<TreeID,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/notes.rs | crate::logic::notes | write_note_block(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::is_live() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::enable_track_changes(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::is_suggesting() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::settle_suggestion() | ret | Result<bool,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::suggest_insert(text) | param | &str	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::write_entry() | ret | Result<SuggestionId,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | passes_while_suggesting() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/sweep.rs | crate::logic::sweep | ProseState::session_runs() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::drop_region() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::drop_regions_cornered_in() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/tables.rs | crate::logic::tables | holds_text() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/tables.rs | crate::logic::tables | usable() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/text.rs | crate::logic::text | MarkedRun.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::insert_text(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::text_of() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/logic/text.rs | crate::logic::text | whole_graphemes(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/text.rs | crate::logic::text | write_runs() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched::only_typed() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched::take_structural() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/touched.rs | crate::logic::touched | plain_text() | ret | bool	generic	independent flag or predicate
@@ -3343,8 +3323,6 @@ ambre-prose | src/probe.rs | crate::probe | percentiles() | ret | Option<(f64,f6
 ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	layout geometry local to algorithm
 ambre-prose | src/schema.rs | crate::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	debt	finding: snapshot payloads as Vec<u8> (confirmed)
 ambre-prose | src/schema.rs | crate::schema | gate(payload) | param | &[u8]	debt	finding: snapshot payloads as Vec<u8> (confirmed)
-ambre-prose | src/schema.rs | crate::schema | notes_to_blocks() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/schema.rs | crate::schema | stamp_step() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/style.rs | crate::style | HEADING_SCALE | const | [f32;6]	math	layout geometry local to algorithm
 ambre-prose | src/style.rs | crate::style | MONOSPACE | const | &str	free-text	text content / label / parser input
 ambre-prose | src/style.rs | crate::style | MarkSet | alias | BTreeMap<MarkKey,String>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
@@ -3357,7 +3335,6 @@ ambre-prose | src/style.rs | crate::style | ResolvedStyle.subscript | field | bo
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.superscript | field | bool	generic	independent flag or predicate
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.underline | field | bool	generic	independent flag or predicate
 ambre-prose | src/suggest.rs | crate::suggest | of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
-ambre-prose | src/suggest.rs | crate::suggest | strip_inherited() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/toc.rs | crate::toc | lines() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | Change::Insert.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer.generation | field | u64	math	count, size or local index
@@ -4269,7 +4246,7 @@ ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_style_registe
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_style_registers(rewrite) | param | &impl Fn(&[u8])->Option<Vec<u8>>	generic	byte rewrite callback of the migration
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_styles() | ret | Result<(),String>	free-text	migration error message
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_styles(rewrite) | param | impl Fn(&[u8])->Option<Vec<u8>>	generic	byte rewrite callback of the migration
-ambre-toile | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
+ambre-toile | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step cannot fail
 ambre-toile | src/logic/schema.rs | crate::logic::schema | style_version_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.layers | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.unplaced | field | bool	math	local state flag or value, not a mode selector
@@ -5340,6 +5317,8 @@ ambre-trame | src/ui/commands.rs | crate::ui::commands | filter_command(filter_a
 ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | <TrameUiState as HitTest>::hit_test(x) | param | f64	trait	HitTest trait from ambre-canvas fixes the f64 pointer signature
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | <TrameUiState as HitTest>::hit_test(y) | param | f64	trait	HitTest trait from ambre-canvas fixes the f64 pointer signature
+ambre-prose | src/schema.rs | crate::schema | notes_to_blocks() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step body uses doc::WriteError and converts once at this edge
+ambre-prose | src/schema.rs | crate::schema | stamp_step() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step body uses doc::WriteError and converts once at this edge
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::active_merge_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_at(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_at(y) | param | f64	math	local geometry / pixel arithmetic
@@ -5601,4 +5580,7 @@ ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::get() | re
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::new(value) | param | u64	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/view/provisional.rs | crate::view::provisional | Key | alias | (u64,LayoutVersion,Option<Splitting>,String)	free-text	text content / label / parser input
 ambre-prose | src/view/annotate.rs | crate::view::annotate | LostReply::notice() | ret | &'static str	free-text	the sentence a toast shows the user for a lost reply
+ambre-prose | src/doc.rs | crate::doc | WriteError::Refused.0 | field | &'static str	free-text	a diagnostic sentence naming what the document could not do; it only reaches ProseRefusal::WriteFailed as text
+ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Missing.0 | field | &'static str	free-text	a diagnostic sentence naming the part a fixture build could not find
+ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Refused.command | field | &'static str	free-text	the literal name of the fixture command, printed in the failure message only
 ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor

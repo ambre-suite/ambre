@@ -68,14 +68,14 @@ impl ProseState {
             return ProseOutcome::nothing();
         }
         if let Err(e) = body.insert(pos.to_usize(), text) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         // Plain text typed inside a suggestion is no part of it
         // (`PROSE-FEAT-307`).
         if let Err(e) =
             crate::suggest::strip_inherited(&body, DocSpan::from_count(pos, DocCount::of(text)))
         {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -96,7 +96,7 @@ impl ProseState {
         // body, so the range is widened against the body itself (`PROSE-124`).
         let range = whole_graphemes(&body.to_string(), range);
         if let Err(e) = body.delete(range.start.to_usize(), range.len().to_usize()) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -149,10 +149,10 @@ impl ProseState {
             head_off.to_usize(),
             head_len.count_from(head_off).to_usize(),
         ) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         if let Err(e) = write_runs(&head_body, head_off, &surviving) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         // Every block the deletion emptied goes (`PROSE-101`). The head is the
         // exception the frame condition names: it keeps its identity and its
@@ -224,21 +224,21 @@ impl ProseState {
             _ => return Self::err_no_block(id),
         };
         let Some(new_block) = doc::create_block(&self.doc, parent, block_type) else {
-            return Self::err_write("the tree refused a block");
+            return Self::err_write(doc::WriteError::Refused("the tree refused a block"));
         };
         if let Err(e) = tree.mov_after(new_block, *id) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         if let Err(e) = self.carry_style(id, &new_block) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         if pos < len {
             if let Err(e) = body.delete(pos.to_usize(), len.count_from(pos).to_usize()) {
-                return Self::err_write(&format!("{e:?}"));
+                return Self::err_write(e);
             }
             let new_body = doc::get_block_text(&self.doc, &new_block);
             if let Err(e) = write_runs(&new_body, DocOffset::ZERO, &tail) {
-                return Self::err_write(&e);
+                return Self::err_write(e);
             }
         }
         self.commit_with(vec![ProseEvent::BlockSplit {
@@ -320,11 +320,11 @@ pub(super) fn write_runs(
     target: &LoroText,
     dest: DocOffset,
     runs: &[MarkedRun],
-) -> Result<(), String> {
+) -> Result<(), doc::WriteError> {
     let dest = dest.to_usize();
     let mut at = dest;
     for run in runs {
-        target.insert(at, &run.text).map_err(|e| format!("{e:?}"))?;
+        target.insert(at, &run.text)?;
         at += run.text.chars().count();
     }
     let mut at = dest;

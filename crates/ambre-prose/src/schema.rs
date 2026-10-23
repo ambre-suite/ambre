@@ -170,6 +170,11 @@ fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
 /// An entry that already names a block, or holds no text, is left alone, so
 /// the step read twice writes nothing the second time.
 fn notes_to_blocks(doc: &LoroDoc) -> Result<(), String> {
+    move_notes_to_blocks(doc).map_err(|error| error.to_string())
+}
+
+/// The body of [`notes_to_blocks`], whose signature the registry fixes.
+fn move_notes_to_blocks(doc: &LoroDoc) -> Result<(), crate::doc::WriteError> {
     use loro::{Container, ValueOrContainer};
 
     use crate::doc as d;
@@ -197,15 +202,9 @@ fn notes_to_blocks(doc: &LoroDoc) -> Result<(), String> {
     crate::mark::configure(doc);
     for (entry, text) in entries {
         let block = crate::logic::notes::write_note_block(doc, "")?;
-        d::get_block_text(doc, &block)
-            .apply_delta(&text.to_delta())
-            .map_err(|e| format!("{e:?}"))?;
-        entry
-            .insert(d::AnnotKey::NoteBlock, block.to_string())
-            .map_err(|e| format!("{e:?}"))?;
-        entry
-            .delete(d::AnnotKey::Text)
-            .map_err(|e| format!("{e:?}"))?;
+        d::get_block_text(doc, &block).apply_delta(&text.to_delta())?;
+        entry.insert(d::AnnotKey::NoteBlock, block.to_string())?;
+        entry.delete(d::AnnotKey::Text)?;
     }
     stamp(doc);
     doc.commit();

@@ -1355,9 +1355,9 @@ impl ProseState {
         ))
     }
 
-    /// The refusal a write the CRDT engine itself rejected answers with.
-    fn err_write(reason: &str) -> ProseOutcome {
-        ProseOutcome::refused(ProseRefusal::WriteFailed(reason.to_owned()))
+    /// The refusal a write that did not land answers with.
+    fn err_write(error: impl Into<doc::WriteError>) -> ProseOutcome {
+        ProseOutcome::refused(ProseRefusal::from(error.into()))
     }
 }
 

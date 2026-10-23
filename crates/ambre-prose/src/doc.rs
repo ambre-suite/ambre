@@ -29,6 +29,58 @@ use ambre_bus::app::prose::{
 
 ambre_core::loro_fields!(pub(crate));
 
+/// Why a write to the document did not land.
+#[derive(Debug)]
+pub(crate) enum WriteError {
+    /// The CRDT engine refused the write.
+    Engine(loro::LoroError),
+    /// The engine gave up diffing a whole body's new text.
+    TextUpdate(loro::UpdateTimeoutError),
+    /// A part of the document the write needs was not there, or could not be
+    /// made. The sentence names it, for the log and the refusal alike.
+    Refused(&'static str),
+    /// A write that names its author, made before the session named its user.
+    NoIdentity,
+}
+
+impl From<loro::LoroError> for WriteError {
+    fn from(error: loro::LoroError) -> Self {
+        Self::Engine(error)
+    }
+}
+
+impl From<loro::UpdateTimeoutError> for WriteError {
+    fn from(error: loro::UpdateTimeoutError) -> Self {
+        Self::TextUpdate(error)
+    }
+}
+
+impl std::fmt::Display for WriteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // The engine's refusal reads as it always has: its debug form.
+            Self::Engine(error) => write!(f, "{error:?}"),
+            Self::TextUpdate(error) => write!(f, "{error:?}"),
+            Self::Refused(what) => f.write_str(what),
+            Self::NoIdentity => f.write_str("the session has no user"),
+        }
+    }
+}
+
+impl std::error::Error for WriteError {}
+
+/// The refusal a command whose write did not land answers with.
+impl From<WriteError> for ambre_bus::app::prose::ProseRefusal {
+    fn from(error: WriteError) -> Self {
+        match error {
+            WriteError::NoIdentity => Self::NoIdentity,
+            WriteError::Engine(_) | WriteError::TextUpdate(_) | WriteError::Refused(_) => {
+                Self::WriteFailed(error.to_string())
+            }
+        }
+    }
+}
+
 ambre_core::crdt_names! {
     /// The root containers a Prose document opens by name. A body is a root as
     /// well, and [`BodyKey`] names it, since its name carries a tree id.
@@ -485,11 +537,11 @@ fn carries_hiding(tree: &LoroTree, id: &TreeID) -> bool {
 /// undo can bring it back.
 ///
 /// # Errors
-/// The CRDT engine's refusal, as text.
-pub(crate) fn hide_block(doc: &LoroDoc, tree: &LoroTree, id: &TreeID) -> Result<(), String> {
-    let node = Fields::of(tree.get_meta(*id).map_err(|e| format!("{e:?}"))?);
-    node.insert(NodeKey::Hidden, doc.peer_id().to_string())
-        .map_err(|e| format!("{e:?}"))
+/// The CRDT engine's refusal.
+pub(crate) fn hide_block(doc: &LoroDoc, tree: &LoroTree, id: &TreeID) -> Result<(), WriteError> {
+    let node = Fields::of(tree.get_meta(*id)?);
+    node.insert(NodeKey::Hidden, doc.peer_id().to_string())?;
+    Ok(())
 }
 
 /// The type a live block carries, or `None` when the id names no live block or

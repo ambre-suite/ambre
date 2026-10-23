@@ -37,7 +37,7 @@ impl ProseState {
         }
         let value = xref::encode(*target, kind);
         if let Err(e) = Self::write_carrier(&body, at, MarkRoot::CrossRef, &value) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         let mut outcome = self.commit_with(Vec::new());
         outcome.display.push(self.cross_refs_event());

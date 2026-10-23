@@ -13,7 +13,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use ambre_bus::app::grid::{CellPos, Col, ColCount, Row, RowCount};
-use ambre_bus::app::prose::{DocOffset, DocSpan};
+use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
 use ambre_core::{
     DocType, FixtureGen, FixtureShape, ShapeBody, UserId, fixture_peer_count, seeded_document_id,
 };
@@ -21,7 +21,7 @@ use loro::{LoroTree, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
 use crate::events::{
-    BlockInit, HeaderField, HfTarget, ProseCommand, ProseEvent, block_id, tree_id,
+    BlockInit, HeaderField, HfTarget, ProseCommand, ProseEvent, ProseRefusal, block_id, tree_id,
 };
 
 use super::ProseState;
@@ -322,38 +322,71 @@ const AUTHOR_SEED: u64 = 0x5EED_9905_A117_0001;
 /// The comment's clock, pinned: a real one would differ run to run.
 const COMMENT_AT: ambre_core::Timestamp = ambre_core::Timestamp(1_700_000_000_000);
 
+/// Why the fixture document was not built.
+#[derive(Debug)]
+enum FixtureError {
+    /// The engine refused a command the fixture runs.
+    Refused {
+        command: &'static str,
+        reason: ProseRefusal,
+    },
+    /// A part the fixture writes into was not there. The sentence names it.
+    Missing(&'static str),
+    /// The author's name was refused.
+    Name(ambre_core::InvalidDisplayName),
+}
+
+impl std::fmt::Display for FixtureError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Refused { command, reason } => write!(f, "{command} was refused: {reason:?}"),
+            Self::Missing(what) => f.write_str(what),
+            Self::Name(error) => write!(f, "{error}"),
+        }
+    }
+}
+
 /// Run one command, and name it if the engine refuses it.
-fn run(state: &mut ProseState, command: ProseCommand) -> Result<(), String> {
+fn run(state: &mut ProseState, command: ProseCommand) -> Result<(), FixtureError> {
     let name = command.name();
     let outcome = state.handle_command(command);
     match outcome.display.iter().find_map(|e| match e {
         ProseEvent::Error(e) => Some(e.reason.clone()),
         _ => None,
     }) {
-        Some(reason) => Err(format!("{name} was refused: {reason:?}")),
+        Some(reason) => Err(FixtureError::Refused {
+            command: name,
+            reason,
+        }),
         None => Ok(()),
     }
 }
 
 /// The block that follows `after` at the root.
-fn root_after(state: &ProseState, after: TreeID) -> Result<TreeID, String> {
+fn root_after(state: &ProseState, after: TreeID) -> Result<TreeID, FixtureError> {
     let roots = state.root_blocks();
     roots
         .iter()
         .position(|b| tree_id(*b) == after)
         .and_then(|i| roots.get(i + 1))
         .map(|b| tree_id(*b))
-        .ok_or_else(|| "no block after the one just written".to_owned())
+        .ok_or(FixtureError::Missing("no block after the one just written"))
 }
 
-fn build_styled_document(seed: u64) -> Result<ProseState, String> {
-    let mut state = ProseState::with_peer(ambre_core::PeerId(seed)).ok_or("no document")?;
+fn build_styled_document(seed: u64) -> Result<ProseState, FixtureError> {
+    let mut state = ProseState::with_peer(ambre_core::PeerId(seed))
+        .ok_or(FixtureError::Missing("no document"))?;
     state.set_user_id(UserId::from_uuid(seeded_document_id(AUTHOR_SEED).into()));
     state.set_display_name(
-        ambre_core::DisplayName::new("Fixture Author").map_err(|e| e.to_string())?,
+        ambre_core::DisplayName::new("Fixture Author").map_err(FixtureError::Name)?,
     );
 
-    let title = tree_id(*state.root_blocks().first().ok_or("no root block")?);
+    let title = tree_id(
+        *state
+            .root_blocks()
+            .first()
+            .ok_or(FixtureError::Missing("no root block"))?,
+    );
     run(
         &mut state,
         ProseCommand::InsertText {
@@ -418,7 +451,8 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         },
     )?;
     let table = root_after(&state, body)?;
-    let grid = super::tables::Grid::read(&doc::blocks(&state.doc), &table).ok_or("no grid")?;
+    let grid = super::tables::Grid::read(&doc::blocks(&state.doc), &table)
+        .ok_or(FixtureError::Missing("no grid"))?;
     for (row, col, cell_text) in [
         (0, 0, "Region"),
         (0, 1, "Growth"),
@@ -427,11 +461,11 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
     ] {
         let cell = grid
             .cell(CellPos::new(Row::new(row), Col::new(col)))
-            .ok_or("no cell")?;
+            .ok_or(FixtureError::Missing("no cell"))?;
         let tree = doc::blocks(&state.doc);
         let paragraph = *doc::children_of(&tree, Some(cell))
             .first()
-            .ok_or("an empty cell")?;
+            .ok_or(FixtureError::Missing("an empty cell"))?;
         run(
             &mut state,
             ProseCommand::InsertText {
@@ -444,7 +478,10 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
 
     run(&mut state, ProseCommand::SetHeaderEnabled { enabled: true })?;
     run(&mut state, ProseCommand::SetFooterEnabled { enabled: true })?;
-    let header = state.bands().header.ok_or("no header block")?;
+    let header = state
+        .bands()
+        .header
+        .ok_or(FixtureError::Missing("no header block"))?;
     run(
         &mut state,
         ProseCommand::InsertText {
@@ -462,12 +499,12 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         },
     )?;
 
-    let end = u32::try_from(text.chars().count()).map_err(|e| e.to_string())?;
+    let end = DocOffset::ZERO + DocCount::of(text);
     run(
         &mut state,
         ProseCommand::InsertFootnote {
             block_id: block_id(body),
-            pos: DocOffset::new(end),
+            pos: end,
             note_text: "Against the same quarter last year.".to_owned(),
         },
     )?;
@@ -484,7 +521,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         .comments()
         .first()
         .map(|t| t.comment_id)
-        .ok_or("no thread")?;
+        .ok_or(FixtureError::Missing("no thread"))?;
     run(
         &mut state,
         ProseCommand::ReplyToComment {

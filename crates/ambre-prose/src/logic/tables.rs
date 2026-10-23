@@ -247,15 +247,17 @@ impl ProseState {
     }
 
     /// Drop one region record.
-    fn drop_region(&self, table: &TreeID, anchor: &TreeID) -> Result<(), String> {
+    fn drop_region(&self, table: &TreeID, anchor: &TreeID) -> Result<(), doc::WriteError> {
         let Some(map) = self
             .table_attrs(table)
             .and_then(|attrs| doc::map_at(&attrs, doc::AttrKey::Merged))
         else {
-            return Err("the region map refused a container".to_owned());
+            return Err(doc::WriteError::Refused(
+                "the region map refused a container",
+            ));
         };
         map.delete(&anchor.to_string())
-            .map_err(|e| format!("{e:?}"))
+            .map_err(doc::WriteError::from)
     }
 
     /// Drop every region with a corner in the given positions
@@ -265,7 +267,7 @@ impl ProseState {
         &self,
         grid: &Grid,
         doomed: impl Fn(CellPos) -> bool,
-    ) -> Result<(), String> {
+    ) -> Result<(), doc::WriteError> {
         let tree = doc::blocks(&self.doc);
         for region in doc::regions(&tree, &grid.table) {
             let cornered = [region.anchor, region.extent]
@@ -311,22 +313,30 @@ impl ProseState {
     ) -> Result<TreeID, ProseOutcome> {
         let table = self.mint_placed(parent_id, after_id, BlockType::Table)?;
         let Some(attrs) = self.table_attrs(&table) else {
-            return Err(Self::err_write("the attribute map refused a container"));
+            return Err(Self::err_write(doc::WriteError::Refused(
+                "the attribute map refused a container",
+            )));
         };
         let Some(widths) = doc::movable_list_at(&attrs, doc::AttrKey::ColWidths) else {
-            return Err(Self::err_write("the width list refused a container"));
+            return Err(Self::err_write(doc::WriteError::Refused(
+                "the width list refused a container",
+            )));
         };
         for _ in 0..cols.get() {
             if let Err(e) = widths.push(f64::from(doc::DEFAULT_COLUMN_WIDTH.get())) {
-                return Err(Self::err_write(&format!("{e:?}")));
+                return Err(Self::err_write(e));
             }
         }
         if doc::map_at(&attrs, doc::AttrKey::Merged).is_none() {
-            return Err(Self::err_write("the region map refused a container"));
+            return Err(Self::err_write(doc::WriteError::Refused(
+                "the region map refused a container",
+            )));
         }
         for _ in 0..rows.get() {
             if self.mint_row(&table, cols).is_none() {
-                return Err(Self::err_write("the tree refused a row"));
+                return Err(Self::err_write(doc::WriteError::Refused(
+                    "the tree refused a row",
+                )));
             }
         }
         Ok(table)
@@ -358,13 +368,15 @@ impl ProseState {
         }
         let cols = ColCount::from_len(doc::col_widths(&tree, table).len());
         let Some(row) = self.mint_row(table, cols) else {
-            return Err(Self::err_write("the tree refused a row"));
+            return Err(Self::err_write(doc::WriteError::Refused(
+                "the tree refused a row",
+            )));
         };
         let moved = match after_row {
             Some(after) => tree.mov_after(row, after),
             None => tree.mov_to(row, *table, 0),
         };
-        moved.map_err(|e| Self::err_write(&format!("{e:?}")))?;
+        moved.map_err(Self::err_write)?;
         Ok(row)
     }
 
@@ -388,10 +400,10 @@ impl ProseState {
             *row
         };
         if let Err(e) = self.drop_regions_cornered_in(&grid, |at| at.row == index) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         if let Err(e) = doc::hide_block(&self.doc, &tree, &doomed) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -413,7 +425,7 @@ impl ProseState {
             return Self::err_table(TableValue::Width(width));
         }
         let Some(widths) = doc::col_widths_read(&tree, table) else {
-            return Self::err_write("the table carries no width list");
+            return Self::err_write(doc::WriteError::Refused("the table carries no width list"));
         };
         let at = at_col.to_usize();
         if at > widths.len() {
@@ -421,16 +433,16 @@ impl ProseState {
         }
         for row in &grid.rows {
             let Some(cell) = self.mint_cell(row) else {
-                return Self::err_write("the tree refused a cell");
+                return Self::err_write(doc::WriteError::Refused("the tree refused a cell"));
             };
             // A row a concurrent edit left short takes the cell at its end.
             let index = at.min(doc::children_of(&tree, Some(*row)).len().saturating_sub(1));
             if let Err(e) = tree.mov_to(cell, *row, index) {
-                return Self::err_write(&format!("{e:?}"));
+                return Self::err_write(e);
             }
         }
         if let Err(e) = widths.insert(at, f64::from(width.get())) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -444,29 +456,29 @@ impl ProseState {
             return Self::err_no_block(table);
         };
         let Some(widths) = doc::col_widths_read(&tree, table) else {
-            return Self::err_write("the table carries no width list");
+            return Self::err_write(doc::WriteError::Refused("the table carries no width list"));
         };
         if col.to_usize() >= widths.len() {
             return ProseOutcome::refused(ProseRefusal::OutsideTheGrid);
         }
         if widths.len() == 1 {
             if let Err(e) = doc::hide_block(&self.doc, &tree, table) {
-                return Self::err_write(&e);
+                return Self::err_write(e);
             }
             return self.commit_with(Vec::new());
         }
         if let Err(e) = self.drop_regions_cornered_in(&grid, |at| at.col == col) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         for row in (0..grid.rows.len()).map(Row::from_usize) {
             if let Some(cell) = grid.cell(CellPos::new(row, col))
                 && let Err(e) = doc::hide_block(&self.doc, &tree, &cell)
             {
-                return Self::err_write(&e);
+                return Self::err_write(e);
             }
         }
         if let Err(e) = widths.delete(col.to_usize(), 1) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -486,13 +498,13 @@ impl ProseState {
             return Self::err_table(TableValue::Width(width_pt));
         }
         let Some(widths) = doc::col_widths_read(&tree, table) else {
-            return Self::err_write("the table carries no width list");
+            return Self::err_write(doc::WriteError::Refused("the table carries no width list"));
         };
         if col.to_usize() >= widths.len() {
             return ProseOutcome::refused(ProseRefusal::OutsideTheGrid);
         }
         if let Err(e) = widths.set(col.to_usize(), f64::from(width_pt.get())) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -549,14 +561,16 @@ impl ProseState {
             if other.overlaps(rect)
                 && let Err(e) = self.drop_region(table, &region.anchor)
             {
-                return Self::err_write(&e);
+                return Self::err_write(e);
             }
         }
         let Some(map) = self
             .table_attrs(table)
             .and_then(|attrs| doc::map_at(&attrs, doc::AttrKey::Merged))
         else {
-            return Self::err_write("the region map refused a container");
+            return Self::err_write(doc::WriteError::Refused(
+                "the region map refused a container",
+            ));
         };
         let record = LoroValue::Map(
             [
@@ -574,7 +588,7 @@ impl ProseState {
             .into(),
         );
         if let Err(e) = map.insert(&anchor.to_string(), record) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -598,7 +612,7 @@ impl ProseState {
             return ProseOutcome::nothing();
         };
         if let Err(e) = self.drop_region(&grid.table, &region.anchor) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -649,11 +663,13 @@ impl ProseState {
             return ProseOutcome::nothing();
         }
         let Some(attrs) = doc::node_of(&tree, cell).and_then(|n| doc::attrs_at(&n)) else {
-            return Self::err_write("the attribute map refused a container");
+            return Self::err_write(doc::WriteError::Refused(
+                "the attribute map refused a container",
+            ));
         };
         for (key, value) in writes {
             if let Err(e) = attrs.insert(key, value) {
-                return Self::err_write(&format!("{e:?}"));
+                return Self::err_write(e);
             }
         }
         self.commit_with(Vec::new())
@@ -712,7 +728,7 @@ impl ProseState {
         };
         let tree = doc::blocks(&self.doc);
         let Some(first) = doc::children_of(&tree, Some(row)).first().copied() else {
-            return Self::err_write("the appended row holds no cell");
+            return Self::err_write(doc::WriteError::Refused("the appended row holds no cell"));
         };
         let entered = Self::entered(&tree, first);
         self.commit_with(vec![entered])

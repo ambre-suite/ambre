@@ -207,12 +207,10 @@ impl ProseState {
             return Err(Self::err_bad_range());
         }
         if start < end {
-            body.delete(start, end - start)
-                .map_err(|e| Self::err_write(&format!("{e:?}")))?;
+            body.delete(start, end - start).map_err(Self::err_write)?;
         }
         if !replacement.is_empty() {
-            body.insert(start, replacement)
-                .map_err(|e| Self::err_write(&format!("{e:?}")))?;
+            body.insert(start, replacement).map_err(Self::err_write)?;
         }
         Ok(())
     }

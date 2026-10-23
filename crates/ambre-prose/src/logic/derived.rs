@@ -65,14 +65,16 @@ impl ProseState {
         let tree = doc::blocks(&self.doc);
         let attrs = doc::node_of(&tree, id).and_then(|node| doc::attrs_at(&node));
         let Some(attrs) = attrs else {
-            return Self::err_write("the block refused its attribute map");
+            return Self::err_write(doc::WriteError::Refused(
+                "the block refused its attribute map",
+            ));
         };
         let level = i64::from(max_level.get());
         let written = attrs
             .insert(doc::AttrKey::MaxLevel, LoroValue::I64(level))
             .and_then(|()| attrs.insert(doc::AttrKey::Numbered, LoroValue::Bool(numbered)));
         if let Err(e) = written {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         let mut outcome = self.commit_with(Vec::new());
         // A settings change is a gesture of its own, never a keystroke, so it

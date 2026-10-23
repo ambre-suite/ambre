@@ -74,6 +74,15 @@ pub(super) fn passes_while_suggesting(command: &ProseCommand) -> bool {
         )
 }
 
+/// What resolving one suggestion did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Settled {
+    /// The suggestion was no longer in the document: nothing was written.
+    Gone,
+    /// Its spans and its entry were acted on.
+    Written,
+}
+
 impl ProseState {
     /// Turn suggestion mode on or off. Nothing pending is touched
     /// (`PROSE-FEAT-089`), and the burst closes: the next edit starts a
@@ -136,20 +145,20 @@ impl ProseState {
             Some(id) => id,
             None => match self.write_entry() {
                 Ok(id) => id,
-                Err(e) => return Self::err_write(&e),
+                Err(e) => return Self::err_write(e),
             },
         };
         let end = pos + length;
         let inserted = DocSpan::new(pos, end);
         if let Err(e) = body.insert(pos.to_usize(), text) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         if let Err(e) = suggest::strip_inherited(&body, inserted) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         let key = suggest::mark_key(SuggestionKind::Insertion, &id);
         if let Err(e) = body.mark(inserted.to_usize_range(), key.as_str(), id.to_hyphenated()) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.extend_burst(id, SuggestionKind::Insertion, block, pos, end);
         self.commit_with(Vec::new())
@@ -190,7 +199,7 @@ impl ProseState {
                     Some(id) => Some(id),
                     None => match self.write_entry() {
                         Ok(id) => Some(id),
-                        Err(e) => return Self::err_write(&e),
+                        Err(e) => return Self::err_write(e),
                     },
                 }
             }
@@ -209,7 +218,7 @@ impl ProseState {
                 _ => Ok(()),
             };
             if let Err(e) = written {
-                return Self::err_write(&format!("{e:?}"));
+                return Self::err_write(e);
             }
         }
         self.after_delete(&plan, id);
@@ -226,12 +235,12 @@ impl ProseState {
         verdict: Verdict,
     ) -> ProseOutcome {
         match self.settle_suggestion(id, verdict) {
-            Ok(false) => ProseOutcome::nothing(),
-            Ok(true) => {
+            Ok(Settled::Gone) => ProseOutcome::nothing(),
+            Ok(Settled::Written) => {
                 let event = self.suggestions_event();
                 self.commit_with(vec![event])
             }
-            Err(e) => Self::err_write(&e),
+            Err(e) => Self::err_write(e),
         }
     }
 
@@ -248,8 +257,8 @@ impl ProseState {
         let mut wrote = false;
         for id in &ids {
             match self.settle_suggestion(id, verdict) {
-                Ok(done) => wrote |= done,
-                Err(e) => return Self::err_write(&e),
+                Ok(settled) => wrote |= settled == Settled::Written,
+                Err(e) => return Self::err_write(e),
             }
         }
         if !wrote {
@@ -259,7 +268,7 @@ impl ProseState {
         self.commit_with(vec![event])
     }
 
-    /// Resolve one suggestion without committing. Returns whether anything
+    /// Resolve one suggestion without committing, and say whether anything
     /// was written.
     ///
     /// Each span is acted on from its mark, never from the current text around
@@ -267,14 +276,18 @@ impl ProseState {
     /// another suggestion carries is left alone (`PROSE-FEAT-271`,
     /// `PROSE-FEAT-275`). A rejected insertion leaves no trace: its text, its
     /// mark and its entry all go (`PROSE-FEAT-004`).
-    fn settle_suggestion(&mut self, id: &SuggestionId, verdict: Verdict) -> Result<bool, String> {
+    fn settle_suggestion(
+        &mut self,
+        id: &SuggestionId,
+        verdict: Verdict,
+    ) -> Result<Settled, doc::WriteError> {
         let spans: Vec<_> = suggest::spans(&self.doc, &suggest::text_blocks(&self.doc))
             .into_iter()
             .filter(|(other, ..)| other == id)
             .collect();
         let entry = suggest::entry(&self.doc, id);
         if spans.is_empty() && entry.is_none() {
-            return Ok(false);
+            return Ok(Settled::Gone);
         }
         for (_, kind, block, start, end) in spans.iter().rev() {
             let body = doc::get_block_text(&self.doc, block);
@@ -289,17 +302,15 @@ impl ProseState {
             } else {
                 body.unmark(range, suggest::mark_key(*kind, id).as_str())
             };
-            written.map_err(|e| format!("{e:?}"))?;
+            written?;
         }
         if entry.is_some() {
-            doc::annots(&self.doc)
-                .delete(&id.to_hyphenated())
-                .map_err(|e| format!("{e:?}"))?;
+            doc::annots(&self.doc).delete(&id.to_hyphenated())?;
         }
         if self.burst.is_some_and(|burst| burst.id == *id) {
             self.burst = None;
         }
-        Ok(true)
+        Ok(Settled::Written)
     }
 
     /// A header, a footer or a note is refused while suggesting. The pending
@@ -468,28 +479,21 @@ impl ProseState {
     /// A new suggestion's entry: its kind and its author, from the session's
     /// identity and never from a command (`PROSE-FEAT-262`,
     /// `PROSE-FEAT-082`).
-    fn write_entry(&self) -> Result<SuggestionId, String> {
-        let user = self.my_user_id.ok_or("no identity")?;
+    fn write_entry(&self) -> Result<SuggestionId, doc::WriteError> {
+        let user = self.my_user_id.ok_or(doc::WriteError::NoIdentity)?;
         let id: SuggestionId = self.ids.mint();
         let entry = doc::annots(&self.doc)
             .insert_container(&id.to_hyphenated(), LoroMap::new())
-            .map(doc::Fields::<doc::AnnotKey>::of)
-            .map_err(|e| format!("{e:?}"))?;
-        entry
-            .insert(doc::AnnotKey::Kind, doc::AnnotKind::Suggestion.as_str())
-            .map_err(|e| format!("{e:?}"))?;
-        entry
-            .insert(
-                doc::AnnotKey::Author,
-                self.my_name
-                    .clone()
-                    .map(ambre_core::DisplayName::into_string)
-                    .unwrap_or_default(),
-            )
-            .map_err(|e| format!("{e:?}"))?;
-        entry
-            .insert(doc::AnnotKey::User, user.to_string())
-            .map_err(|e| format!("{e:?}"))?;
+            .map(doc::Fields::<doc::AnnotKey>::of)?;
+        entry.insert(doc::AnnotKey::Kind, doc::AnnotKind::Suggestion.as_str())?;
+        entry.insert(
+            doc::AnnotKey::Author,
+            self.my_name
+                .clone()
+                .map(ambre_core::DisplayName::into_string)
+                .unwrap_or_default(),
+        )?;
+        entry.insert(doc::AnnotKey::User, user.to_string())?;
         Ok(id)
     }
 }

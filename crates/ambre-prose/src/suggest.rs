@@ -110,11 +110,9 @@ pub(crate) fn runs(
 /// its expansion. Typed text would then grow a suggestion its typist never
 /// made (`PROSE-FEAT-266`). Only the inserted range is read, so a keystroke
 /// pays for its own characters and not for the block.
-pub(crate) fn strip_inherited(body: &LoroText, span: DocSpan) -> Result<(), String> {
+pub(crate) fn strip_inherited(body: &LoroText, span: DocSpan) -> Result<(), doc::WriteError> {
     let (start, end) = (span.start.to_usize(), span.end.to_usize());
-    let delta = body
-        .slice_delta(start, end, loro::cursor::PosType::Unicode)
-        .map_err(|e| format!("{e:?}"))?;
+    let delta = body.slice_delta(start, end, loro::cursor::PosType::Unicode)?;
     let mut keys: Vec<String> = delta
         .iter()
         .filter_map(|run| match run {
@@ -128,8 +126,7 @@ pub(crate) fn strip_inherited(body: &LoroText, span: DocSpan) -> Result<(), Stri
     keys.sort();
     keys.dedup();
     for key in keys {
-        body.unmark(start..end, &key)
-            .map_err(|e| format!("{e:?}"))?;
+        body.unmark(start..end, &key)?;
     }
     Ok(())
 }

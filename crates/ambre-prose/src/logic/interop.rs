@@ -469,7 +469,9 @@ impl ProseState {
     pub(super) fn export_document(&self, format: ExportFormat) -> ProseOutcome {
         let ExportFormat::Markdown(flavor) = format else {
             // The native file is the Logic dispatcher's (`PROSE-IO-028`).
-            return Self::err_write("the file is written by the Logic thread, not by the document");
+            return Self::err_write(doc::WriteError::Refused(
+                "the file is written by the Logic thread, not by the document",
+            ));
         };
         let ir = self.walk();
         let stem = ir
@@ -516,7 +518,9 @@ impl ProseState {
             return ProseOutcome::display_only(vec![ProseEvent::ImportCompleted { report }]);
         }
         let Some(mut rehearsal) = Self::new() else {
-            return Self::err_write("the scratch document for the import was not built");
+            return Self::err_write(doc::WriteError::Refused(
+                "the scratch document for the import was not built",
+            ));
         };
         if let Err(refused) = rehearsal.write_import(ops) {
             return refused;
@@ -588,7 +592,7 @@ impl ProseState {
                     DocOffset::ZERO,
                     runs,
                 ) {
-                    return Err(Self::err_write(&e));
+                    return Err(Self::err_write(e));
                 }
                 last.insert(parent, first);
                 minted.push(Some(first));
@@ -599,13 +603,13 @@ impl ProseState {
                 ImportOp::Block { init, runs, .. } => {
                     let id = self.mint_placed(parent_id, after, init.block_type())?;
                     if let Err(e) = self.write_init(&id, init) {
-                        return Err(Self::err_write(&e));
+                        return Err(Self::err_write(e));
                     }
                     if init.block_type().has_body()
                         && let Err(e) =
                             write_runs(&doc::get_block_text(&self.doc, &id), DocOffset::ZERO, runs)
                     {
-                        return Err(Self::err_write(&e));
+                        return Err(Self::err_write(e));
                     }
                     id
                 }
@@ -623,7 +627,7 @@ impl ProseState {
         if let Some(blank) = blank
             && let Err(e) = doc::hide_block(&self.doc, &doc::blocks(&self.doc), &blank)
         {
-            return Err(Self::err_write(&e));
+            return Err(Self::err_write(e));
         }
         Ok(())
     }

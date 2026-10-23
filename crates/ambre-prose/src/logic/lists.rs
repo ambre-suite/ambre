@@ -47,25 +47,22 @@ impl ProseState {
     pub(super) fn write_list_style(
         attrs: &doc::Fields<doc::AttrKey>,
         style: ListStyle,
-    ) -> Result<(), String> {
-        let fail = |e: loro::LoroError| format!("{e:?}");
+    ) -> Result<(), doc::WriteError> {
         match style {
             ListStyle::Bullet => {
-                attrs.insert(doc::AttrKey::Marker, 0_i64).map_err(fail)?;
-                attrs.delete(doc::AttrKey::Spelling).map_err(fail)?;
-                attrs.delete(doc::AttrKey::Ticked).map_err(fail)?;
+                attrs.insert(doc::AttrKey::Marker, 0_i64)?;
+                attrs.delete(doc::AttrKey::Spelling)?;
+                attrs.delete(doc::AttrKey::Ticked)?;
             }
             ListStyle::Ordered(ordered) => {
-                attrs.insert(doc::AttrKey::Marker, 1_i64).map_err(fail)?;
-                attrs
-                    .insert(doc::AttrKey::Spelling, i64::from(ordered.code()))
-                    .map_err(fail)?;
-                attrs.delete(doc::AttrKey::Ticked).map_err(fail)?;
+                attrs.insert(doc::AttrKey::Marker, 1_i64)?;
+                attrs.insert(doc::AttrKey::Spelling, i64::from(ordered.code()))?;
+                attrs.delete(doc::AttrKey::Ticked)?;
             }
             ListStyle::Todo(ticked) => {
-                attrs.insert(doc::AttrKey::Marker, 2_i64).map_err(fail)?;
-                attrs.delete(doc::AttrKey::Spelling).map_err(fail)?;
-                attrs.insert(doc::AttrKey::Ticked, ticked).map_err(fail)?;
+                attrs.insert(doc::AttrKey::Marker, 2_i64)?;
+                attrs.delete(doc::AttrKey::Spelling)?;
+                attrs.insert(doc::AttrKey::Ticked, ticked)?;
             }
         }
         Ok(())
@@ -85,10 +82,12 @@ impl ProseState {
             return Self::err_no_block(id);
         };
         let Some(attrs) = doc::attrs_at(&node) else {
-            return Self::err_write("the attribute map refused a container");
+            return Self::err_write(doc::WriteError::Refused(
+                "the attribute map refused a container",
+            ));
         };
         if let Err(e) = Self::write_list_style(&attrs, style) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -111,7 +110,7 @@ impl ProseState {
             return Self::err_nesting();
         }
         if let Err(e) = tree.mov(*id, TreeParentId::Node(previous)) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -134,7 +133,7 @@ impl ProseState {
             return self.leave_the_list(id);
         };
         if let Err(e) = tree.mov_after(*id, parent) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -147,10 +146,10 @@ impl ProseState {
             return Self::err_no_block(id);
         };
         if let Err(e) = node.insert(doc::NodeKey::Type, i64::from(BlockType::Paragraph.code())) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         if let Err(e) = node.delete(doc::NodeKey::Attrs) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }

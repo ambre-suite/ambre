@@ -55,7 +55,7 @@ impl ProseState {
             Err(refusal) => return ProseOutcome::refused(refused_as(key, value, &refusal)),
         };
         if let Err(e) = body.mark(start..end, key.as_str(), stored.as_str()) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(self.links_touched(Some(key)))
     }
@@ -93,7 +93,7 @@ impl ProseState {
             return Self::err_bad_range();
         }
         if let Err(e) = body.unmark(start..end, key.as_str()) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_with(self.links_touched(Some(key)))
     }
@@ -243,7 +243,7 @@ impl ProseState {
                 ambre_bus::app::prose::MarkAction::Remove => body.unmark(start..end, key.as_str()),
             };
             if let Err(e) = written {
-                return Self::err_write(&format!("{e:?}"));
+                return Self::err_write(e);
             }
         }
         self.commit_with(Vec::new())

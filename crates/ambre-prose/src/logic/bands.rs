@@ -69,7 +69,9 @@ impl ProseState {
             .register(regular)
             .and_then(|map| map.insert(doc::BandKey::Enabled, enabled).ok());
         if written.is_none() {
-            return Self::err_write("the band register refused the setting");
+            return Self::err_write(doc::WriteError::Refused(
+                "the band register refused the setting",
+            ));
         }
         self.commit_bands()
     }
@@ -79,7 +81,7 @@ impl ProseState {
     pub(super) fn set_different_first_page(&mut self, enabled: bool) -> ProseOutcome {
         let meta = doc::meta(&self.doc);
         if let Err(e) = meta.insert(doc::MetaKey::DifferentFirstPage, enabled) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_bands()
     }
@@ -112,10 +114,10 @@ impl ProseState {
         let (key, value) = crate::band::field_mark(field);
         let mut buffer = [0_u8; 4];
         if let Err(e) = body.insert(at, FIELD_CHAR.encode_utf8(&mut buffer)) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         if let Err(e) = body.mark(at..at + 1, key, value) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.commit_bands()
     }
@@ -133,7 +135,9 @@ impl ProseState {
             .register(register)
             .and_then(|map| map.insert(doc::BandKey::Align, band_align.as_str()).ok());
         if written.is_none() {
-            return Self::err_write("the band register refused the alignment");
+            return Self::err_write(doc::WriteError::Refused(
+                "the band register refused the alignment",
+            ));
         }
         self.commit_bands()
     }
@@ -151,7 +155,7 @@ impl ProseState {
         }
         let now = now_ms.to_i64_saturating();
         if let Err(e) = doc::meta(&self.doc).insert(doc::MetaKey::UpdatedAt, now) {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         self.doc
             .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Stamp.as_str());
@@ -188,7 +192,9 @@ impl ProseState {
             return Ok(id);
         }
         let Some(id) = doc::create_block(&self.doc, None, BlockType::Paragraph) else {
-            return Err(Self::err_write("the tree refused a band block"));
+            return Err(Self::err_write(doc::WriteError::Refused(
+                "the tree refused a band block",
+            )));
         };
         let tree = doc::blocks(&self.doc);
         let marked =
@@ -197,7 +203,9 @@ impl ProseState {
             .register(register)
             .and_then(|map| map.insert(doc::BandKey::Block, id.to_string()).ok());
         if marked.is_none() || named.is_none() {
-            return Err(Self::err_write("the band block could not be named"));
+            return Err(Self::err_write(doc::WriteError::Refused(
+                "the band block could not be named",
+            )));
         }
         Ok(id)
     }

@@ -296,7 +296,7 @@ impl ProseState {
         }
         let Some((last, middle)) = rest.split_last() else {
             if let Err(e) = write_runs(&body, pos, &marked(first)) {
-                return Self::err_write(&e);
+                return Self::err_write(e);
             }
             return self.commit_with(vec![ProseEvent::CaretPlaced {
                 block: block_id(at.0),
@@ -311,10 +311,10 @@ impl ProseState {
         if pos < len
             && let Err(e) = body.delete(pos.to_usize(), len.count_from(pos).to_usize())
         {
-            return Self::err_write(&format!("{e:?}"));
+            return Self::err_write(e);
         }
         if let Err(e) = write_runs(&body, pos, &marked(first)) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         let mut previous = at.0;
         for block in middle.iter().chain([last]) {
@@ -324,18 +324,18 @@ impl ProseState {
                 Err(refused) => return refused,
             };
             if let Err(e) = self.write_init(&id, &init) {
-                return Self::err_write(&e);
+                return Self::err_write(e);
             }
             let text = doc::get_block_text(&self.doc, &id);
             if let Err(e) = write_runs(&text, DocOffset::ZERO, &marked(block)) {
-                return Self::err_write(&e);
+                return Self::err_write(e);
             }
             previous = id;
         }
         let text = doc::get_block_text(&self.doc, &previous);
         let offset = len_of(last).as_end();
         if let Err(e) = write_runs(&text, offset, &tail) {
-            return Self::err_write(&e);
+            return Self::err_write(e);
         }
         self.commit_with(vec![ProseEvent::CaretPlaced {
             block: block_id(previous),
@@ -369,9 +369,9 @@ impl ProseState {
             return Err(Self::err_no_block(id));
         };
         if let Err(e) = node.insert(doc::NodeKey::Type, i64::from(kind.code())) {
-            return Err(Self::err_write(&format!("{e:?}")));
+            return Err(Self::err_write(e));
         }
-        self.write_init(id, &init).map_err(|e| Self::err_write(&e))
+        self.write_init(id, &init).map_err(Self::err_write)
     }
 }
 
