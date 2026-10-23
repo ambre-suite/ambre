@@ -3437,7 +3437,9 @@ ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirWire.shamir_threshold | 
 ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirWire.shamir_total | field | i16	newtype-inner	the wire form ShamirParams decodes through and validates
 ambre-server | src/db/users.rs | crate::db::users | UserInfoRow.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/db/users.rs | crate::db::users | UserRow.email_verified | field | bool	math	named state or style flag, local
-ambre-server | src/db/users.rs | crate::db::users | search_users(query) | param | &str	free-text	search text
+ambre-server | src/db/users.rs | crate::db::users | UserSearch.0 | field | String	newtype-inner	the trimmed search text of UserSearch
+ambre-server | src/db/users.rs | crate::db::users | UserSearch::as_str() | ret | &str	newtype-inner	the trimmed search text of UserSearch
+ambre-server | src/db/users.rs | crate::db::users | UserSearch::new(text) | param | &str	newtype-inner	the query text the fallible constructor of UserSearch trims and checks
 ambre-server | src/deletion.rs | crate::deletion | PASS_LIMIT | const | i64	math	pass limit count
 ambre-server | src/deletion.rs | crate::deletion | finish_one(rows_left) | param | bool	math	named state or style flag, local
 ambre-server | src/error.rs | crate::error | AppError::BadRequest.0 | field | String	free-text	user text or error message
@@ -3533,7 +3535,6 @@ ambre-server | src/routes/documents.rs | crate::routes::documents | DocumentSumm
 ambre-server | src/routes/documents.rs | crate::routes::documents | MemberInfoJson.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | MembersResponse.rotation_owed | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | UserInfoJson.email_verified | field | bool	math	named state or style flag, local
-ambre-server | src/routes/documents.rs | crate::routes::documents | search_users(Query(params)) | param | Query<HashMap<String,String>>	debt	finding: search_users takes an untyped query (confirmed)
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgRequest.name | field | String	free-text	validated into db::OrgName by org_name() at the seam
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.name | field | String	free-text	echo of a validated OrgName
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | OrgMemberResponse.has_shamir_share | field | Option<bool>	math	named state or style flag, local

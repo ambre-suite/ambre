@@ -306,16 +306,37 @@ pub async fn dev_upsert_user(
     })
 }
 
+/// The text a user search matches, trimmed and at least two characters long.
+/// A shorter text would match a near-arbitrary slice of the user table, email
+/// and keys with it, and turn the sharing lookup into a directory listing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserSearch(String);
+
+impl UserSearch {
+    /// The search for `text`, `None` when its trimmed text is shorter than two
+    /// characters.
+    pub fn new(text: &str) -> Option<Self> {
+        let text = text.trim();
+        (text.chars().count() >= 2).then(|| Self(text.to_owned()))
+    }
+
+    /// The trimmed text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Full-text search over users by email or display name (ILIKE).
 ///
 /// An account without keys is left out: nothing can be shared with it until it
 /// registers them (`SRV-163`).
-pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>, AppError> {
+pub async fn search_users(pool: &PgPool, query: &UserSearch) -> Result<Vec<UserInfoRow>, AppError> {
     // Escape the LIKE metacharacters (`\ % _`) in the user-supplied query so they
     // match literally. Without this a caller could pass `%` / `_` as wildcards and
     // widen `ILIKE '%q%'` into a directory-enumeration primitive, defeating the
     // minimum-length guard at the route. `ESCAPE '\'` binds the escape char.
     let escaped = query
+        .as_str()
         .replace('\\', "\\\\")
         .replace('%', "\\%")
         .replace('_', "\\_");
@@ -361,6 +382,17 @@ pub async fn update_master_key(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A search keeps its trimmed text, and refuses one shorter than two
+    /// characters, counted as characters rather than bytes.
+    #[test]
+    fn a_search_is_two_characters_or_none() {
+        assert_eq!(UserSearch::new("  al ").map(|s| s.0), Some("al".to_owned()));
+        for short in ["", "   ", "a", " é "] {
+            assert_eq!(UserSearch::new(short), None, "{short:?}");
+        }
+        assert!(UserSearch::new("éé").is_some());
+    }
 
     /// `ZK-018`: the account row holds what the relay may learn of a user in
     /// the clear. Beside it sit the identifier it mints and the sealed keys.

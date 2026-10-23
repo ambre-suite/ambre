@@ -1,6 +1,5 @@
 use axum::extract::{Query, State};
 use axum::response::IntoResponse;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use ambre_core::Role;
@@ -446,20 +445,32 @@ pub struct PubkeysResponse {
     pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 
+/// The query string of `GET /users/search`. A text too short to search reads
+/// as no search, and answers no user.
+#[derive(serde::Deserialize)]
+pub struct SearchUsersParams {
+    #[serde(default, deserialize_with = "search_text")]
+    query: Option<db::UserSearch>,
+}
+
+/// Reads the `query` parameter as a [`db::UserSearch`].
+fn search_text<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<db::UserSearch>, D::Error> {
+    let text: std::borrow::Cow<'de, str> = serde::Deserialize::deserialize(deserializer)?;
+    Ok(db::UserSearch::new(&text))
+}
+
 pub async fn search_users(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Query(params): Query<HashMap<String, String>>,
+    Query(params): Query<SearchUsersParams>,
 ) -> Result<impl IntoResponse, AppError> {
     let _s = auth;
-    let q = params.get("query").map(|s| s.as_str()).unwrap_or("").trim();
-    // Require a minimum query length. A 1-char (or empty) `ILIKE '%q%'` returns a
-    // near-arbitrary slice of the whole user table, email + pubkeys. It turns the
-    // sharing lookup into a directory-enumeration primitive.
-    if q.chars().count() < 2 {
+    let Some(query) = params.query else {
         return Ok(axum::Json(UserSearchResult { users: Vec::new() }));
-    }
-    let users = db::search_users(&state.db, q).await?;
+    };
+    let users = db::search_users(&state.db, &query).await?;
     let json: Vec<_> = users
         .into_iter()
         .map(|u| {
