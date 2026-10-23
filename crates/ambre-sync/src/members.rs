@@ -275,10 +275,13 @@ impl SyncState {
     ) {
         // Number the listing, so an answer older than the directory held
         // changes nothing (`SYNC-037`). A document not open holds no directory.
-        let asked = self.documents.get_mut(&document_id).map_or(0, |doc| {
-            doc.directory_asked += 1;
-            doc.directory_asked
-        });
+        let asked = self.documents.get_mut(&document_id).map_or(
+            crate::generation::RequestGeneration::ZERO,
+            |doc| {
+                doc.directory_asked = doc.directory_asked.next();
+                doc.directory_asked
+            },
+        );
         let event_tx = self.event_tx.clone();
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;

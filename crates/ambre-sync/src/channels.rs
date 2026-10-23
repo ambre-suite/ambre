@@ -767,7 +767,7 @@ impl SyncState {
     /// on each share of a Murmure document. That share is how the relay tells
     /// a member a channel added them (`SRV-192`).
     pub(crate) fn handle_list_member_channels(&mut self) {
-        self.member_channels_asked = self.member_channels_asked.wrapping_add(1);
+        self.member_channels_asked = self.member_channels_asked.next();
         let asked = self.member_channels_asked;
         let Some(tx) = self.event_tx.clone() else {
             tracing::warn!("Sync: no relay on this transport, no channels of the user");
@@ -816,7 +816,7 @@ impl SyncState {
     /// which `meta` it may watch.
     pub(crate) fn member_channels_listed(
         &mut self,
-        asked: u32,
+        asked: crate::generation::RequestGeneration,
         result: Result<MemberListing, http::HttpError>,
     ) {
         if asked != self.member_channels_asked {
@@ -1587,7 +1587,11 @@ pub(crate) mod tests {
                 doc_type,
             });
         }
-        assert_eq!(state.member_channels_asked, 1, "one listing");
+        assert_eq!(
+            state.member_channels_asked,
+            crate::generation::RequestGeneration::nth(1),
+            "one listing"
+        );
         let shared = rx
             .try_iter()
             .filter(|e| matches!(e, LogicEvent::DocumentShared { .. }))
@@ -1614,7 +1618,8 @@ pub(crate) mod tests {
             });
         }
         assert_eq!(
-            state.member_channels_asked, 2,
+            state.member_channels_asked,
+            crate::generation::RequestGeneration::nth(2),
             "one listing per channel loss"
         );
         let revoked = rx
@@ -1669,10 +1674,19 @@ pub(crate) mod tests {
             keys,
         };
         let empty = (Vec::new(), Vec::new(), Vec::new());
-        state.member_channels_listed(1, Ok(listing(empty, Vec::new(), Vec::new())));
+        state.member_channels_listed(
+            crate::generation::RequestGeneration::nth(1),
+            Ok(listing(empty, Vec::new(), Vec::new())),
+        );
         let keys = vec![(listed, key.clone())];
-        state.member_channels_listed(2, Ok(listing(answer.listing(), named.clone(), keys)));
-        state.member_channels_listed(2, Err("HTTP 500".into()));
+        state.member_channels_listed(
+            crate::generation::RequestGeneration::nth(2),
+            Ok(listing(answer.listing(), named.clone(), keys)),
+        );
+        state.member_channels_listed(
+            crate::generation::RequestGeneration::nth(2),
+            Err("HTTP 500".into()),
+        );
         let events: Vec<_> = rx
             .try_iter()
             .filter_map(|e| match e {

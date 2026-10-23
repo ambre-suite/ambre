@@ -440,7 +440,7 @@ enum SyncEvent {
     /// (`SyncCommand::ListMemberChannels`).
     MemberChannelsListed {
         /// The listing this answers, as `member_channels_asked` counted it.
-        asked: u32,
+        asked: generation::RequestGeneration,
         result: Result<channels::MemberListing, http::HttpError>,
     },
     /// The relay's activity answer (`SyncCommand::FetchActivity`,
@@ -517,7 +517,7 @@ enum SyncEvent {
         /// The request to answer, `None` for a refresh of the directory alone.
         id: Option<RequestId>,
         /// Which listing of this document answered (`SYNC-037`).
-        asked: u64,
+        asked: generation::RequestGeneration,
         document_id: DocumentId,
         /// What the walked log says a channel listed in this space must heed.
         word: membership_log::SpaceWord,
@@ -711,8 +711,8 @@ struct SyncDocumentState {
     /// the directory holds. Two listings can cross on the way, and the answer
     /// to the older one changes nothing. It cannot bring back the key of a
     /// member the newer one dropped (`SYNC-037`, `SYNC-094`).
-    directory_asked: u64,
-    directory_held: u64,
+    directory_asked: generation::RequestGeneration,
+    directory_held: generation::RequestGeneration,
     /// When the document is a space: what a channel it lists must heed, from
     /// the latest walk of its log (the Murmure spaces spec).
     word: membership_log::SpaceWord,
@@ -799,8 +799,8 @@ impl SyncDocumentState {
             chain: chain::Chain::default(),
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
-            directory_asked: 0,
-            directory_held: 0,
+            directory_asked: generation::RequestGeneration::ZERO,
+            directory_held: generation::RequestGeneration::ZERO,
             word: membership_log::SpaceWord::default(),
             role: Role::Owner,
             awaiting_initial_hydration: false,
@@ -1095,7 +1095,7 @@ pub struct SyncState {
     /// The listings of the user's channels asked so far. Each answer is
     /// whole, so only the latest one is handed on: an older one that
     /// crossed it would drop a channel just added.
-    member_channels_asked: u32,
+    member_channels_asked: generation::RequestGeneration,
     /// The key of each channel's `meta` the latest listing wrapped for this
     /// user. A channel never opened is watched under it (the Murmure
     /// notifications spec).
@@ -1183,7 +1183,7 @@ impl SyncState {
             resend_ticket: generation::ResendTicket::ZERO,
             #[cfg(not(target_arch = "wasm32"))]
             socket_opens: 0,
-            member_channels_asked: 0,
+            member_channels_asked: generation::RequestGeneration::ZERO,
             listed_keys: HashMap::new(),
             new_spaces: HashSet::new(),
             mock_ws_tx: None,

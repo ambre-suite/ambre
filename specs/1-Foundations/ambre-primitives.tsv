@@ -3589,7 +3589,6 @@ ambre-sync | src/auth.rs | crate::auth | SyncState::handle_dev_login(username) |
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::BAD_PASS | const | &str	free-text	message text
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::CORRUPT | const | &str	free-text	message text
 ambre-sync | src/channels.rs | crate::channels | SyncState::channel_creation() | ret | Result<(ambre_bus::conduit::UnboundedSender<SyncEvent>,DocumentKey,StaticSecret,crate::sharing::Author,),String,>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
-ambre-sync | src/channels.rs | crate::channels | SyncState::member_channels_listed(asked) | param | u32	debt	finding: request generation counters ("asked")
 ambre-sync | src/channels.rs | crate::channels | SyncState::seal_channel_name() | ret | Result<ambre_core::SealedName,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | SyncState::space_keys() | ret | Result<(crate::chain::Keyring,StaticSecret),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | channel_key_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
@@ -3667,8 +3666,6 @@ ambre-sync | src/lib.rs | crate | QUARANTINE_ALERT | const | usize	math	count, s
 ambre-sync | src/lib.rs | crate | QUARANTINE_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncDocumentState.awaiting_initial_hydration | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState.creating | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | SyncDocumentState.directory_asked | field | u64	debt	finding: request generation counters ("asked")
-ambre-sync | src/lib.rs | crate | SyncDocumentState.directory_held | field | u64	debt	finding: request generation counters ("asked")
 ambre-sync | src/lib.rs | crate | SyncDocumentState.gap_requested | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState.pending_updates | field | Vec<Vec<u8>>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/lib.rs | crate | SyncDocumentState.server_created | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3678,10 +3675,8 @@ ambre-sync | src/lib.rs | crate | SyncDocumentState::new(server_created) | param
 ambre-sync | src/lib.rs | crate | SyncDocumentState::open_update_named() | ret | Result<Vec<u8>,pipeline::PipelineError>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_len() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncEvent::DebtUnsettled.message | field | String	free-text	free text: message, label, name or report
-ambre-sync | src/lib.rs | crate | SyncEvent::DocumentMembersReady.asked | field | u64	debt	finding: request generation counters ("asked")
 ambre-sync | src/lib.rs | crate | SyncEvent::DocumentMembersReady.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::HttpError.message | field | String	free-text	free text: message, label, name or report
-ambre-sync | src/lib.rs | crate | SyncEvent::MemberChannelsListed.asked | field | u32	debt	finding: request generation counters ("asked")
 ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentFailed.message | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentReady.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentReady.server_created | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3692,7 +3687,6 @@ ambre-sync | src/lib.rs | crate | SyncEvent::WsDisconnected.reason | field | Str
 ambre-sync | src/lib.rs | crate | SyncState.dev_username | field | Option<String>	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncState.held_outbox | field | RefCell<Vec<Vec<u8>>>	generic	generic byte/text API or codec
 ambre-sync | src/lib.rs | crate | SyncState.inbound_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | SyncState.member_channels_asked | field | u32	debt	finding: request generation counters ("asked")
 ambre-sync | src/lib.rs | crate | SyncState.mock_ws_tx | field | Option<ambre_bus::conduit::UnboundedSender<Vec<u8>>>	generic	generic byte/text API or codec
 ambre-sync | src/lib.rs | crate | SyncState.setup_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncState.socket_opens | field | u32	math	count, size, limit, index or jitter local to an algorithm
@@ -3822,7 +3816,6 @@ ambre-sync | src/rekey.rs | crate::rekey | Rekey::settled() | ret | bool	generic
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::take_from() | ret | Option<(Clock,Vec<Vec<u8>>)>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | SentFrame.payload | field | Vec<u8>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | UNCONFIRMED_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/sharing.rs | crate::sharing | ListMembersParams.asked | field | u64	debt	finding: request generation counters ("asked")
 ambre-sync | src/sharing.rs | crate::sharing | ROTATION_TRIES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/sharing.rs | crate::sharing | api_error(message) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/sharing.rs | crate::sharing | build_invite_request() | ret | Result<http::InviteRequest,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix

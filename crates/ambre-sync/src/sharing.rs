@@ -1453,7 +1453,7 @@ pub(crate) struct ListMembersParams {
     pub id: Option<RequestId>,
     /// Which listing of this document this is, so an answer older than the
     /// directory held changes nothing (`SYNC-037`).
-    pub asked: u64,
+    pub asked: crate::generation::RequestGeneration,
     pub document_id: DocumentId,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
@@ -3031,7 +3031,7 @@ mod tests {
     fn list_params() -> ListMembersParams {
         ListMembersParams {
             id: Some(RequestId::next()),
-            asked: 1,
+            asked: crate::generation::RequestGeneration::nth(1),
             document_id: DocumentId::new(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),

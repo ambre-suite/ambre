@@ -2482,13 +2482,17 @@ mod tests {
     fn a_change_of_members_costs_one_listing_whose_rows_reach_logic() {
         let (mut state, rx, doc, _key, _signing_key, _snap) = setup();
         state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
-        assert_eq!(state.documents[&doc].directory_asked, 1, "one listing");
+        assert_eq!(
+            state.documents[&doc].directory_asked,
+            crate::generation::RequestGeneration::nth(1),
+            "one listing"
+        );
         assert_eq!(rows_handed(&drain(&rx)), None, "nothing before the answer");
 
         let carol = UserId::new();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: 1,
+            asked: crate::generation::RequestGeneration::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: false,
@@ -2505,7 +2509,7 @@ mod tests {
 
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: 1,
+            asked: crate::generation::RequestGeneration::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: false,
@@ -2522,7 +2526,10 @@ mod tests {
         state.handle_ws_message(WsServerMsg::MembersChanged {
             document_id: elsewhere,
         });
-        assert_eq!(state.documents[&doc].directory_asked, 1);
+        assert_eq!(
+            state.documents[&doc].directory_asked,
+            crate::generation::RequestGeneration::nth(1)
+        );
         assert_eq!(rows_handed(&drain(&rx)), None, "a document not open here");
     }
 
@@ -2544,7 +2551,8 @@ mod tests {
         state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
         state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
         assert_eq!(
-            state.documents[&doc].directory_asked, 2,
+            state.documents[&doc].directory_asked,
+            crate::generation::RequestGeneration::nth(2),
             "each word lists again"
         );
         drain(&rx);
@@ -2552,7 +2560,7 @@ mod tests {
         let carol = UserId::new();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: 2,
+            asked: crate::generation::RequestGeneration::nth(2),
             document_id: doc,
             word: Default::default(),
             rotation_owed: false,
@@ -2562,7 +2570,7 @@ mod tests {
         let bob = UserId::new();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: 1,
+            asked: crate::generation::RequestGeneration::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: false,
@@ -2603,11 +2611,15 @@ mod tests {
         );
 
         state.handle_ws_message(WsServerMsg::Subscribed { document_id: doc });
-        assert_eq!(state.documents[&doc].directory_asked, 1, "one listing");
+        assert_eq!(
+            state.documents[&doc].directory_asked,
+            crate::generation::RequestGeneration::nth(1),
+            "one listing"
+        );
         drain(&rx);
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: 1,
+            asked: crate::generation::RequestGeneration::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: false,
@@ -2631,7 +2643,10 @@ mod tests {
         for document_id in [local, DocumentId::new()] {
             state.handle_ws_message(WsServerMsg::Subscribed { document_id });
         }
-        assert_eq!(state.documents[&local].directory_asked, 0);
+        assert_eq!(
+            state.documents[&local].directory_asked,
+            crate::generation::RequestGeneration::nth(0)
+        );
         assert!(
             !drain(&rx)
                 .iter()
