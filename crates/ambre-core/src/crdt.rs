@@ -252,6 +252,57 @@ crate::crdt_names! {
     }
 }
 
+/// The origin a commit carries, which an undo manager reads to keep a write
+/// that no user gesture made off its stack.
+///
+/// An undo manager excludes an origin by prefix, so no spelling here starts
+/// another one. Loro keeps the origin on the local commit event and exports
+/// none of it, so a spelling may change without moving a stored byte.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CommitOrigin {
+    /// A write of the peer registry: the entry is no gesture of the user.
+    Peers,
+    /// A write opening a document makes, so an undo on a restored document
+    /// retracts what its author wrote and never what opening it did.
+    Load,
+    /// A clock a document stamps on itself, such as the date it was last
+    /// modified.
+    Stamp,
+    /// A comment write, which an undo of the document never retracts once a
+    /// teammate may have read it.
+    Comment,
+    /// A pass that removes for good what an ended session left hidden.
+    Sweep,
+    /// The scaffolding an edit forces into existence around the value the user
+    /// wrote.
+    Materialize,
+}
+
+impl CommitOrigin {
+    /// Every origin, in declaration order.
+    pub const ALL: [Self; 6] = [
+        Self::Peers,
+        Self::Load,
+        Self::Stamp,
+        Self::Comment,
+        Self::Sweep,
+        Self::Materialize,
+    ];
+
+    /// The spelling the commit carries, for the call that sets or excludes it.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Peers => "ambre-peers",
+            Self::Load => "load",
+            Self::Stamp => "stamp",
+            Self::Comment => "comment",
+            Self::Sweep => "sweep",
+            Self::Materialize => "mat",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     crate::crdt_names! {
@@ -267,6 +318,21 @@ mod tests {
         enum Key: FieldKey {
             Board = Root::Board.as_str(),
             Width = "w",
+        }
+    }
+
+    #[test]
+    fn no_commit_origin_is_a_prefix_of_another() {
+        use super::CommitOrigin;
+        for a in CommitOrigin::ALL {
+            for b in CommitOrigin::ALL {
+                if a != b {
+                    assert!(
+                        !b.as_str().starts_with(a.as_str()),
+                        "excluding {a:?} by prefix would also exclude {b:?}"
+                    );
+                }
+            }
         }
     }
 

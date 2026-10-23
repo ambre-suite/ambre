@@ -25,10 +25,6 @@ use super::ProseState;
 /// The character a field occupies in its block's text.
 pub const FIELD_CHAR: char = doc::CARRIER;
 
-/// The commit origin of the last-modified stamp. The undo manager excludes it:
-/// `Ctrl+Z` retracts an edit, never the clock that dated it.
-pub(super) const STAMP_ORIGIN: &str = "stamp";
-
 /// One side of the page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Side {
@@ -174,7 +170,8 @@ impl ProseState {
         if let Err(e) = doc::meta(&self.doc).insert(doc::MetaKey::UpdatedAt, now) {
             return Self::err_write(&format!("{e:?}"));
         }
-        self.doc.set_next_commit_origin(STAMP_ORIGIN);
+        self.doc
+            .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Stamp.as_str());
         let outcome = self.commit_with(Vec::new());
         self.stamped_counter = self.doc.oplog_vv().get(&self.peer.0).copied().unwrap_or(0);
         outcome

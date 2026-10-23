@@ -2,7 +2,7 @@
 //!
 //! A thread is an entry of `annots` and a mark of its own key over the
 //! passage. The identity is minted once, by the peer that opens the thread
-//! (`PROSE-FEAT-001`). Every command commits under [`COMMENT_ORIGIN`], which
+//! (`PROSE-FEAT-001`). Every command commits under [`CommitOrigin::Comment`](ambre_core::crdt::CommitOrigin::Comment), which
 //! the undo manager excludes: `Ctrl+Z` never retracts a message a collaborator
 //! may have read.
 
@@ -17,9 +17,6 @@ use crate::doc;
 use crate::events::{ProseEvent, ProseOutcome, ProseRefusal};
 
 use super::ProseState;
-
-/// The commit origin of every comment command, and of the anchor cache.
-pub(super) const COMMENT_ORIGIN: &str = "comment";
 
 impl ProseState {
     /// A thread over `range` in `block`, opened by a reply holding `text`
@@ -358,7 +355,8 @@ impl ProseState {
     /// it leaves.
     fn commit_comments(&mut self) -> ProseOutcome {
         let threads = comment::threads(&self.doc);
-        self.doc.set_next_commit_origin(COMMENT_ORIGIN);
+        self.doc
+            .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Comment.as_str());
         self.commit_with(vec![ProseEvent::CommentsUpdated { threads }])
     }
 }

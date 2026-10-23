@@ -1357,7 +1357,6 @@ ambre-core | src/activity.rs | crate::activity | MAX_ANCHOR_LEN | const | usize	
 ambre-core | src/activity.rs | crate::activity | MAX_MENTIONS | const | usize	generic	bound / bit constant
 ambre-core | src/activity.rs | crate::activity | SummaryError::UnknownKind.0 | field | u8	newtype-inner	error carries the unknown byte
 ambre-core | src/authorship.rs | crate::authorship | ENTRY_SIGNATURE_LEN | const | usize	generic	length constant
-ambre-core | src/authorship.rs | crate::authorship | PEERS_ORIGIN | const | &str	debt	finding: Loro root and key names as &str / String (low, suspected)
 ambre-core | src/authorship.rs | crate::authorship | PEER_ENTRY_LEN | const | usize	generic	length constant
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry::from_bytes(bytes) | param | &[u8]	generic	PeerEntry byte codec
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry::to_bytes() | ret | Vec<u8>	generic	PeerEntry byte codec
@@ -1391,6 +1390,7 @@ ambre-core | src/color.rs | crate::color | Rgba::from_channels(a) | param | u8	n
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(b) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(g) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(r) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
+ambre-core | src/crdt.rs | crate::crdt | CommitOrigin::as_str() | ret | &'static str	newtype-inner	the spelling of a typed commit origin, for the Loro call that sets or excludes it
 ambre-core | src/crdt.rs | crate::crdt | ContainerFamily::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed container family, which the application joins to an id
 ambre-core | src/crdt.rs | crate::crdt | ContainerName::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed root name, for the call that opens the container
 ambre-core | src/crdt.rs | crate::crdt | FieldKey::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed map key, for the call into the map
@@ -3312,7 +3312,6 @@ ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	predic
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	free-text	text content / label / parser input
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_different_first_page(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_side_enabled(enabled) | param | bool	generic	independent flag or predicate
-ambre-prose | src/logic/bands.rs | crate::logic::bands | STAMP_ORIGIN | const | &str	debt	finding: commit origins as a closed set of &str (confirmed, no collision)
 ambre-prose | src/logic/bands.rs | crate::logic::bands | field_mark() | ret | (&'static str,&'static str)	debt	finding: header-field codec duplicated as string literals (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | HEADING_LEVELS | const | std::ops::RangeInclusive<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::carry_style() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
@@ -3415,7 +3414,6 @@ ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Data
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Handle.id | field | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Node.children | field | Vec<usize>	math	count, size or local index
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Node.parent | field | Option<usize>	math	count, size or local index
-ambre-prose | src/logic/comments.rs | crate::logic::comments | COMMENT_ORIGIN | const | &str	debt	finding: commit origins as a closed set of &str (confirmed, no collision)
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::add_comment(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::edit_reply(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::own_reply() | ret | Result<(LoroList,usize),ProseOutcome>	math	count, size or local index
@@ -3494,7 +3492,6 @@ ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_ru
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
-ambre-prose | src/logic/mod.rs | crate::logic | LOAD_ORIGIN | const | &str	debt	finding: commit origins as a closed set of &str (confirmed, no collision)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.entry_end | field | Option<i32>	debt	finding: peer ids and op counters as bare integers (confirmed for peer)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed | field | Option<(loro::Frontiers,usize,(u32,u32))>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed_version | field | u64	math	count, size or local index
@@ -3531,7 +3528,6 @@ ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState:
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | passes_while_suggesting() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/sweep.rs | crate::logic::sweep | ProseState::marker_of() | ret | Option<u64>	debt	finding: peer ids and op counters as bare integers (confirmed for peer)
 ambre-prose | src/logic/sweep.rs | crate::logic::sweep | ProseState::session_runs() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/sweep.rs | crate::logic::sweep | SWEEP_ORIGIN | const | &str	debt	finding: commit origins as a closed set of &str (confirmed, no collision)
 ambre-prose | src/logic/tables.rs | crate::logic::tables | Grid::cell(col) | param | usize	debt	finding: table (row, col) pairs as bare u32 (confirmed)
 ambre-prose | src/logic/tables.rs | crate::logic::tables | Grid::cell(row) | param | usize	debt	finding: table (row, col) pairs as bare u32 (confirmed)
 ambre-prose | src/logic/tables.rs | crate::logic::tables | Grid::position_of() | ret | Option<(usize,usize)>	debt	finding: table (row, col) pairs as bare u32 (confirmed)
@@ -4787,7 +4783,6 @@ ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileSta
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::seed_media() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::start_import(budget) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | rewrite_hash(slot) | param | usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | COMMENT_ORIGIN | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.board_walks | field | Cell<u64>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.counter | field | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.entry_end | field | Option<i32>	generic	Loro Counter (i32) as Loro defines it
@@ -5666,7 +5661,6 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | DEFAULT_COL_WIDTH | c
 ambre-trame | src/logic/schema.rs | crate::logic::schema | DEFAULT_ROW_HEIGHT | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterRecord.col | field | String	debt	finding: (FINDING, confirmed): FilterRecord.col holds a Uid key part as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_CAP | const | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_ORIGIN | const | &str	debt	finding: (FINDING, confirmed): Loro container names as strings
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MIN_COL_WIDTH | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MIN_ROW_HEIGHT | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types

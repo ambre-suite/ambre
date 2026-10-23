@@ -21,10 +21,6 @@ use crate::events::{ProseEvent, ProseOutcome};
 
 use super::ProseState;
 
-/// The commit origin of the pass. An undo never retracts it: no user gesture
-/// wrote it.
-pub(super) const SWEEP_ORIGIN: &str = "sweep";
-
 impl ProseState {
     /// Remove for good every hidden block whose session has ended, and every
     /// block under it (`PROSE-121`).
@@ -70,7 +66,8 @@ impl ProseState {
                 tracing::warn!("Prose: the tree refused to remove a hidden block: {e:?}");
             }
         }
-        self.doc.set_next_commit_origin(SWEEP_ORIGIN);
+        self.doc
+            .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Sweep.as_str());
         self.doc.commit();
         let update = self.flush_delta();
         let display = update

@@ -221,14 +221,15 @@ impl TrameState {
             grew = true;
         }
         // Commit the implicit scaffolding under the excluded origin so it stays
-        // OUT of the undo stack (see [`MATERIALIZE_ORIGIN`]). A cell edit's intent
+        // OUT of the undo stack (see `CommitOrigin::Materialize`). A cell edit's intent
         // is the value, not the row/column placeholders it forced into existence.
         // Keeping those off the stack means undo reverts only the value. On redo,
         // the cell's key then still resolves to the same (never-removed) list
         // element ids. Without this split, Loro would recreate those elements with
         // fresh ids on redo and orphan the cell. A no-op when nothing grew.
         if grew {
-            self.doc.set_next_commit_origin(MATERIALIZE_ORIGIN);
+            self.doc
+                .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Materialize.as_str());
             self.doc.commit();
         }
         self.index.resolve(at)
@@ -292,7 +293,7 @@ impl TrameState {
     ///
     /// Does not commit -- the caller commits once after the write(s). The batch
     /// path must pre-materialize every cell first (see the `SetCellsBatch` arm).
-    /// A `materialize` commit carries the excluded [`MATERIALIZE_ORIGIN`]. An
+    /// A `materialize` commit carries the excluded [`CommitOrigin::Materialize`](ambre_core::crdt::CommitOrigin::Materialize). An
     /// excluded commit interleaved between two value commits splits them into
     /// separate undo items. Materializing up front keeps all value writes in one
     /// final commit, hence one undo item.

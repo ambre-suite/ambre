@@ -32,7 +32,7 @@
 //! **Why a comment leaves no undo item.** `Ctrl+Z` reverts what the user drew.
 //! A teammate has already read the message, so a withdrawal is a deletion
 //! nobody asked for. Every write here commits under
-//! [`COMMENT_ORIGIN`](super::COMMENT_ORIGIN), which the `UndoManager` excludes
+//! [`CommitOrigin::Comment`](ambre_core::crdt::CommitOrigin::Comment), which the `UndoManager` excludes
 //! (`TOILE-FEAT-017`).
 
 use std::collections::HashSet;
@@ -48,8 +48,8 @@ use crate::logic::command::{
 };
 use crate::logic::model::{ElementId, ThreadId};
 
+use super::ToileState;
 use super::names::{FieldValues, Fields, MessageKey, Root, ThreadKey, entry, root_map};
-use super::{COMMENT_ORIGIN, ToileState};
 
 /// How many characters of the opening message the board-wide list carries. The
 /// panel shows a row per thread, and a row is a line: the rest of the
@@ -89,7 +89,8 @@ impl ToileState {
         // Commit in both outcomes. Loro carries an uncommitted op into the next
         // commit, so a partial seed would join the next user edit and land on
         // its undo item.
-        self.doc.set_next_commit_origin(COMMENT_ORIGIN);
+        self.doc
+            .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Comment.as_str());
         self.doc.commit();
         if !seeded {
             tracing::warn!("Toile: comment thread seed failed");
@@ -147,7 +148,8 @@ impl ToileState {
         if push_message(&messages, author, ts, body).is_none() {
             tracing::warn!("Toile: comment reply write failed");
         }
-        self.doc.set_next_commit_origin(COMMENT_ORIGIN);
+        self.doc
+            .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Comment.as_str());
         self.doc.commit();
         self.emit_with_update(vec![ToileEvent::CommentsUpdated(thread.clone())])
     }
@@ -191,7 +193,8 @@ impl ToileState {
         if !delta.insert.is_empty() {
             let _ = text.insert(at.to_usize(), &delta.insert);
         }
-        self.doc.set_next_commit_origin(COMMENT_ORIGIN);
+        self.doc
+            .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Comment.as_str());
         self.doc.commit();
         self.emit_with_update(vec![ToileEvent::CommentsUpdated(thread.clone())])
     }
@@ -207,7 +210,8 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         }
         let _ = map.insert(ThreadKey::Resolved, resolved);
-        self.doc.set_next_commit_origin(COMMENT_ORIGIN);
+        self.doc
+            .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Comment.as_str());
         self.doc.commit();
         self.emit_with_update(vec![ToileEvent::CommentsUpdated(thread.clone())])
     }

@@ -88,12 +88,6 @@ use crate::layout::run::ShapedLayout;
 use crate::mark;
 use crate::schema;
 
-/// The commit origin every load-time write carries.
-///
-/// The undo manager excludes the prefix, so `Ctrl+Z` on a restored document
-/// retracts what its author wrote and never what opening it did.
-const LOAD_ORIGIN: &str = "load";
-
 /// The pages a layout carries before the view asks for any (`PROSE-125`).
 pub const WINDOW_PAGES: u32 = 8;
 
@@ -277,14 +271,14 @@ impl ProseState {
         // peer grew on opening, and that write lands after this manager exists.
         // Excluded by origin, an undo on a restored document retracts the
         // author's own edits and never the load (`UNDO-001`).
-        undo.add_exclude_origin_prefix(LOAD_ORIGIN);
-        undo.add_exclude_origin_prefix(bands::STAMP_ORIGIN);
-        undo.add_exclude_origin_prefix(comments::COMMENT_ORIGIN);
+        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Load.as_str());
+        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Stamp.as_str());
+        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Comment.as_str());
         // A removal for good is no gesture either (`PROSE-121`).
-        undo.add_exclude_origin_prefix(sweep::SWEEP_ORIGIN);
+        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Sweep.as_str());
         // The registry entry is bookkeeping, not prose: an undo never
         // retracts it (`AUTHOR-009`).
-        undo.add_exclude_origin_prefix(ambre_core::authorship::PEERS_ORIGIN);
+        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
         let stamped_counter = doc.oplog_vv().get(&peer).copied().unwrap_or(0);
         // After the scaffolding: a document never laid out measures whole.
         let touched = touched::Touched::watch(&doc);
@@ -485,7 +479,6 @@ impl ProseState {
         peer: ambre_core::PeerId,
         entry: ambre_core::PeerEntry,
     ) -> bool {
-        use ambre_core::authorship::PEERS_ORIGIN;
         self.doc.commit();
         if let Err(e) = self.doc.set_peer_id(peer.0) {
             tracing::error!("Prose: the session identity was refused: {e:?}");
@@ -499,8 +492,10 @@ impl ProseState {
             .insert(ambre_core::PeerKey::of(peer).as_str(), entry.to_bytes())
         {
             Ok(()) => {
-                self.doc
-                    .commit_with(loro::CommitOptions::new().origin(PEERS_ORIGIN));
+                self.doc.commit_with(
+                    loro::CommitOptions::new()
+                        .origin(ambre_core::crdt::CommitOrigin::Peers.as_str()),
+                );
                 self.doc.oplog_vv().get(&peer.0).copied()
             }
             Err(e) => {
@@ -974,8 +969,9 @@ impl ProseState {
         {
             tracing::warn!("Prose: the scaffolding paragraph could not be dropped: {e:?}");
         }
-        self.doc
-            .commit_with(loro::CommitOptions::new().origin(LOAD_ORIGIN));
+        self.doc.commit_with(
+            loro::CommitOptions::new().origin(ambre_core::crdt::CommitOrigin::Load.as_str()),
+        );
         if let Err(e) = self.doc.import(&payload) {
             tracing::warn!("Prose: the snapshot import failed: {e:?}");
             return Err(SchemaError::PayloadRejected);
@@ -1172,7 +1168,8 @@ impl ProseState {
         // undo stack. An undo takes the edit back, and the next commit
         // re-reads the mark (`PROSE-FEAT-076`).
         if self.refresh_anchors() {
-            self.doc.set_next_commit_origin(comments::COMMENT_ORIGIN);
+            self.doc
+                .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Comment.as_str());
             self.doc.commit();
         }
         // Typed text grows a block and never empties one, so the tree cannot

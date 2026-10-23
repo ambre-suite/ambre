@@ -92,11 +92,6 @@ pub(crate) use names::{
 #[cfg(test)]
 pub(crate) use names::{ConfigKey, MediaKey, MessageKey, ThreadKey, board};
 
-/// The commit origin every comment write carries. The `UndoManager` excludes
-/// the prefix, so `Ctrl+Z` on the board never retracts a message a teammate has
-/// already read (`TOILE-FEAT-017`).
-const COMMENT_ORIGIN: &str = "cmt";
-
 /// Per-document Toile engine.
 pub struct ToileState {
     doc: LoroDoc,
@@ -346,10 +341,10 @@ impl ToileState {
         let mut undo = UndoManager::new(&doc);
         // Keep every comment write off the undo stack (`TOILE-FEAT-017`): undo
         // reverts what the user drew, never a message a teammate has read.
-        undo.add_exclude_origin_prefix(COMMENT_ORIGIN);
+        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Comment.as_str());
         // The registry entry is bookkeeping, not a drawing: an undo never
         // retracts it (`AUTHOR-009`).
-        undo.add_exclude_origin_prefix(ambre_core::authorship::PEERS_ORIGIN);
+        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
         let (touched, watch) = caches::watch(&doc);
         Self {
             doc,
@@ -399,7 +394,6 @@ impl ToileState {
         peer: ambre_core::PeerId,
         entry: ambre_core::PeerEntry,
     ) -> bool {
-        use ambre_core::authorship::PEERS_ORIGIN;
         self.doc.commit();
         if let Err(e) = self.doc.set_peer_id(peer.0) {
             tracing::error!("Toile: the session identity was refused: {e:?}");
@@ -413,8 +407,10 @@ impl ToileState {
             .insert(ambre_core::PeerKey::of(peer).as_str(), entry.to_bytes())
         {
             Ok(()) => {
-                self.doc
-                    .commit_with(loro::CommitOptions::new().origin(PEERS_ORIGIN));
+                self.doc.commit_with(
+                    loro::CommitOptions::new()
+                        .origin(ambre_core::crdt::CommitOrigin::Peers.as_str()),
+                );
                 self.doc.oplog_vv().get(&peer.0).copied()
             }
             Err(e) => {

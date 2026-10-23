@@ -193,13 +193,6 @@ pub(crate) const MATERIALIZE_ROWS: RowCount = RowCount::new(MATERIALIZE_CAP as u
 /// [`MATERIALIZE_CAP`] as a number of columns.
 pub(crate) const MATERIALIZE_COLS: ColCount = ColCount::new(MATERIALIZE_CAP as u32);
 
-/// Commit origin tagging the implicit row/column scaffolding that a cell edit
-/// forces into existence (see [`TrameState::materialize`]). Construction tells
-/// the `UndoManager` to exclude this prefix, so scaffolding never lands on the
-/// undo stack -- only the user-intended value change does. Explicit structural
-/// ops such as `InsertRow` use the default origin and stay undoable.
-pub(crate) const MATERIALIZE_ORIGIN: &str = "mat";
-
 /// The whole shared-filter definition as one CRDT record
 /// (`trame-shared-filter`). postcard-encoded into the single `filters_{sheet}`
 /// register under [`FILTER_KEY`], mirroring `cellstyle_{sheet}` (`TRAME-016`).

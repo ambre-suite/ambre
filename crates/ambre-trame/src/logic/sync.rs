@@ -18,7 +18,6 @@ fn write_entry(
     peer: ambre_core::PeerId,
     entry: &ambre_core::PeerEntry,
 ) -> Option<i32> {
-    use ambre_core::authorship::PEERS_ORIGIN;
     if let Err(e) = doc
         .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
         .insert(ambre_core::PeerKey::of(peer).as_str(), entry.to_bytes())
@@ -26,7 +25,9 @@ fn write_entry(
         tracing::error!("[Logic] the registry entry was refused: {e:?}");
         return None;
     }
-    doc.commit_with(loro::CommitOptions::new().origin(PEERS_ORIGIN));
+    doc.commit_with(
+        loro::CommitOptions::new().origin(ambre_core::crdt::CommitOrigin::Peers.as_str()),
+    );
     doc.oplog_vv().get(&peer.0).copied()
 }
 

@@ -88,7 +88,7 @@ pub(super) const KEY_SOURCES: [&str; 10] = [
 pub(super) const ANY: &str = "*";
 
 /// The declared `&str` constants that name something other than a schema key,
-/// and so carry no line of their own. `COMMENT_ORIGIN` is a Loro commit origin,
+/// and so carry no line of their own. `CommitOrigin::Comment` is a Loro commit origin,
 /// read back from a subscription rather than written into a register.
 const NOT_SCHEMA_KEYS: [&str; 1] = ["cmt"];
 

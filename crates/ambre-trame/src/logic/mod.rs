@@ -370,11 +370,12 @@ impl TrameState {
         // sit on the undo stack.
         let mut undo_manager = UndoManager::new(&doc);
         // Keep implicit row/column materialization off the undo stack (see
-        // [`MATERIALIZE_ORIGIN`]); only user-intended edits are undoable.
-        undo_manager.add_exclude_origin_prefix(MATERIALIZE_ORIGIN);
+        // `CommitOrigin::Materialize`); only user-intended edits are undoable.
+        undo_manager
+            .add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Materialize.as_str());
         // The registry entry is bookkeeping, not an edit: an undo never
         // retracts it (`AUTHOR-009`).
-        undo_manager.add_exclude_origin_prefix(ambre_core::authorship::PEERS_ORIGIN);
+        undo_manager.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
         let mut state = Self {
             active: CellPos::ORIGIN,
             selection: TrackedSelection {

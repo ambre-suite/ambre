@@ -66,7 +66,7 @@ const SCHEMA_SOURCE: &str = include_str!("schema.rs");
 pub(super) const ANY: &str = "*";
 
 /// The declared `&str` constants that name something other than a schema key,
-/// and so carry no line of their own. `MATERIALIZE_ORIGIN` is a Loro commit
+/// and so carry no line of their own. `CommitOrigin::Materialize` is a Loro commit
 /// origin, read back from a subscription rather than written into a register.
 const NOT_SCHEMA_KEYS: [&str; 1] = ["mat"];
 

@@ -20,10 +20,6 @@ pub const ENTRY_SIGNATURE_LEN: usize = 64;
 /// Length of an encoded [`PeerEntry`]: the user, the nonce, the signature.
 pub const PEER_ENTRY_LEN: usize = 16 + SESSION_NONCE_LEN + ENTRY_SIGNATURE_LEN;
 
-/// The commit origin of a registry write. An application keeps it off its undo
-/// stack: the entry is no gesture of the user.
-pub const PEERS_ORIGIN: &str = "ambre-peers";
-
 /// The Loro PeerID of one writing session (`AUTHOR-001`). A distinct type,
 /// so an op counter, a sequence number or a lamport stamp never takes its
 /// place. `#[serde(transparent)]`, so it reads and writes the bare integer.
