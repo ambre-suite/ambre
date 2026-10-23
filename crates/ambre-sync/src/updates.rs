@@ -1531,12 +1531,7 @@ impl SyncState {
             key_id: doc_state.doc_key.id(),
             counter: doc_state.ephemeral_counter,
         };
-        match pipeline::ephemeral_frame(
-            payload.as_bytes(),
-            public_data,
-            &doc_state.doc_key,
-            &signing_key,
-        ) {
+        match pipeline::ephemeral_frame(&payload, public_data, &doc_state.doc_key, &signing_key) {
             Ok(frame) => self.ws_send_sealed(&frame),
             Err(e) => tracing::error!("Sync: SendEphemeral seal failed for {document_id:?}: {e}"),
         }

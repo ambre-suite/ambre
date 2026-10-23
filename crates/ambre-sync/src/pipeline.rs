@@ -13,7 +13,7 @@ use std::io::Read;
 
 use ambre_core::activity::{ActivitySummary, SummaryError};
 use ambre_core::authorship::{SESSION_NONCE_LEN, SessionNonce};
-use ambre_core::{KEY_ID_LEN, KeyId, PublicKey, SnapshotBytes};
+use ambre_core::{EphemeralBytes, KEY_ID_LEN, KeyId, PublicKey, SnapshotBytes};
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -47,10 +47,27 @@ const MIN_DECOMPRESS_CEILING: usize = 1 << 20; // 1 MiB
 const ABSOLUTE_DECOMPRESS_CAP: usize = 64 << 20; // 64 MiB
 
 /// Compression scheme of a sealed plaintext, encoded as the first plaintext byte.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 enum CompressionVersion {
     Raw = 0x00,
     Zstd = 0x01,
+}
+
+impl CompressionVersion {
+    /// The byte that opens the plaintext.
+    const fn byte(self) -> u8 {
+        self as u8
+    }
+
+    /// The scheme `byte` names, refused when no build writes it.
+    fn from_byte(byte: u8) -> Result<Self, PipelineError> {
+        match byte {
+            0x00 => Ok(Self::Raw),
+            0x01 => Ok(Self::Zstd),
+            other => Err(PipelineError::UnknownVersion(other)),
+        }
+    }
 }
 
 /// Failure of the compression/crypto pipeline. Any variant means the caller
@@ -87,12 +104,32 @@ pub enum PipelineError {
 
 // -- Update body ---------------------------------------------------------------
 
-/// The marker byte of an update body with no activity summary.
-const NO_SUMMARY: u8 = 0x00;
-
-/// The marker byte of an update body whose activity summary follows it
+/// The marker byte of an update body: whether an activity summary follows it
 /// (`SYNC-113`).
-const WITH_SUMMARY: u8 = 0x01;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum SummaryMarker {
+    /// No activity summary: the delta follows the marker.
+    Absent = 0x00,
+    /// The activity summary follows the marker, then the delta.
+    Present = 0x01,
+}
+
+impl SummaryMarker {
+    /// The byte the body carries.
+    const fn byte(self) -> u8 {
+        self as u8
+    }
+
+    /// The marker `byte` names, refused when no build writes it.
+    fn from_byte(byte: u8) -> Result<Self, PipelineError> {
+        match byte {
+            0x00 => Ok(Self::Absent),
+            0x01 => Ok(Self::Present),
+            _ => Err(PipelineError::UnknownSummary),
+        }
+    }
+}
 
 /// What an update carries inside its ciphertext: the session nonce of its
 /// author, its activity summary when one was written, then the delta
@@ -126,10 +163,10 @@ pub fn update_body(
     body.extend_from_slice(&nonce.0);
     match summary {
         Some(summary) => {
-            body.push(WITH_SUMMARY);
+            body.push(SummaryMarker::Present.byte());
             body.extend_from_slice(&summary);
         }
-        None => body.push(NO_SUMMARY),
+        None => body.push(SummaryMarker::Absent.byte()),
     }
     body.extend_from_slice(delta.as_bytes());
     Ok(body)
@@ -149,13 +186,12 @@ pub fn split_update_body(body: Vec<u8>) -> Result<UpdateBody, PipelineError> {
         .ok_or(PipelineError::ShortBody)?;
     let nonce = SessionNonce(*nonce);
     let (&marker, rest) = rest.split_first().ok_or(PipelineError::ShortBody)?;
-    let (summary, delta) = match marker {
-        NO_SUMMARY => (None, rest),
-        WITH_SUMMARY => {
+    let (summary, delta) = match SummaryMarker::from_byte(marker)? {
+        SummaryMarker::Absent => (None, rest),
+        SummaryMarker::Present => {
             let (summary, delta) = ActivitySummary::decode(rest)?;
             (Some(summary), delta)
         }
-        _ => return Err(PipelineError::UnknownSummary),
     };
     Ok(UpdateBody {
         nonce,
@@ -178,24 +214,23 @@ fn check_key(named: KeyId, doc_key: &DocumentKey) -> Result<(), PipelineError> {
 // -- Compression layer ---------------------------------------------------------
 
 /// Compresses `data` when it exceeds [`COMPRESS_THRESHOLD`], returning the
-/// version byte and the (possibly compressed) body.
-fn compress(data: &[u8]) -> (u8, Vec<u8>) {
+/// scheme and the (possibly compressed) body.
+fn compress(data: &[u8]) -> (CompressionVersion, Vec<u8>) {
     if data.len() > COMPRESS_THRESHOLD {
         (
-            CompressionVersion::Zstd as u8,
+            CompressionVersion::Zstd,
             compress_to_vec(data, CompressionLevel::Fastest),
         )
     } else {
-        (CompressionVersion::Raw as u8, data.to_vec())
+        (CompressionVersion::Raw, data.to_vec())
     }
 }
 
-/// Reverses [`compress`] given the version byte and body.
-fn decompress(version: u8, body: &[u8]) -> Result<Vec<u8>, PipelineError> {
+/// Reverses [`compress`] given the scheme and body.
+fn decompress(version: CompressionVersion, body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     match version {
-        v if v == CompressionVersion::Raw as u8 => Ok(body.to_vec()),
-        v if v == CompressionVersion::Zstd as u8 => decompress_zstd_bounded(body),
-        other => Err(PipelineError::UnknownVersion(other)),
+        CompressionVersion::Raw => Ok(body.to_vec()),
+        CompressionVersion::Zstd => decompress_zstd_bounded(body),
     }
 }
 
@@ -241,7 +276,7 @@ fn seal_payload(
 ) -> Result<Sealed, PipelineError> {
     let (version, body) = compress(payload);
     let mut plaintext = Vec::with_capacity(1 + body.len());
-    plaintext.push(version);
+    plaintext.push(version.byte());
     plaintext.extend_from_slice(&body);
     Ok(envelope::seal(&plaintext, aad, doc_key, signing_key)?)
 }
@@ -254,7 +289,7 @@ fn open_payload(
 ) -> Result<Vec<u8>, PipelineError> {
     let plaintext = envelope::open(sealed, aad, doc_key, author_pub)?;
     let (version, body) = plaintext.split_first().ok_or(PipelineError::Decompress)?;
-    decompress(*version, body)
+    decompress(CompressionVersion::from_byte(*version)?, body)
 }
 
 fn aad_of<T: serde::Serialize>(public_data: &T) -> Result<Vec<u8>, PipelineError> {
@@ -398,14 +433,14 @@ pub fn open_snapshot(
 
 /// Compresses, encrypts and signs `payload` into an [`Ephemeral`].
 pub fn seal_ephemeral(
-    payload: &[u8],
+    payload: &EphemeralBytes,
     public_data: EphemeralPublicData,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Ephemeral, PipelineError> {
     check_key(public_data.key_id, doc_key)?;
     let aad = aad_of(&public_data)?;
-    let sealed = seal_payload(payload, &aad, doc_key, signing_key)?;
+    let sealed = seal_payload(payload.as_bytes(), &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
     Ok(Ephemeral {
         ciphertext,
@@ -421,7 +456,7 @@ pub fn seal_ephemeral(
 pub fn open_ephemeral(
     ephemeral: &Ephemeral,
     doc_key: &DocumentKey,
-) -> Result<Vec<u8>, PipelineError> {
+) -> Result<EphemeralBytes, PipelineError> {
     check_key(ephemeral.public_data.key_id, doc_key)?;
     let aad = aad_of(&ephemeral.public_data)?;
     let sealed = sealed_from(
@@ -430,7 +465,7 @@ pub fn open_ephemeral(
         &ephemeral.commitment_tag,
         &ephemeral.signature,
     );
-    open_payload(&sealed, &aad, doc_key, &ephemeral.public_data.pub_key)
+    open_payload(&sealed, &aad, doc_key, &ephemeral.public_data.pub_key).map(EphemeralBytes::new)
 }
 
 // -- What leaves the worker ----------------------------------------------------
@@ -523,7 +558,7 @@ pub fn update_frame(
 ///
 /// Every error [`seal_ephemeral`] raises.
 pub fn ephemeral_frame(
-    payload: &[u8],
+    payload: &EphemeralBytes,
     public_data: EphemeralPublicData,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
@@ -940,8 +975,8 @@ mod tests {
         assert_eq!(readable_part(&raw), readable_part(&packed));
 
         for (update, version) in [
-            (&raw, CompressionVersion::Raw as u8),
-            (&packed, CompressionVersion::Zstd as u8),
+            (&raw, CompressionVersion::Raw.byte()),
+            (&packed, CompressionVersion::Zstd.byte()),
         ] {
             let aad = aad_of(&update.public_data).unwrap();
             let sealed = sealed_from(
@@ -1048,7 +1083,7 @@ mod tests {
             Err(PipelineError::UnknownSummary)
         ));
         let mut cut = vec![1; SESSION_NONCE_LEN];
-        cut.extend_from_slice(&[WITH_SUMMARY, 0, 0]);
+        cut.extend_from_slice(&[SummaryMarker::Present.byte(), 0, 0]);
         assert!(matches!(
             split_update_body(cut),
             Err(PipelineError::Summary(SummaryError::Short))
@@ -1114,7 +1149,13 @@ mod tests {
             key_id: key_id(),
             counter: Counter(7),
         };
-        let eph = seal_ephemeral(payload, pd, &doc_key, &signing).unwrap();
+        let eph = seal_ephemeral(
+            &EphemeralBytes::new(payload.to_vec()),
+            pd,
+            &doc_key,
+            &signing,
+        )
+        .unwrap();
         assert_eq!(open_ephemeral(&eph, &doc_key).unwrap(), payload);
     }
 
@@ -1189,11 +1230,11 @@ mod tests {
     fn compression_threshold() {
         let small = vec![0u8; COMPRESS_THRESHOLD];
         let (v_small, _) = compress(&small);
-        assert_eq!(v_small, CompressionVersion::Raw as u8);
+        assert_eq!(v_small, CompressionVersion::Raw);
 
         let large = vec![0u8; COMPRESS_THRESHOLD + 1];
         let (v_large, body) = compress(&large);
-        assert_eq!(v_large, CompressionVersion::Zstd as u8);
+        assert_eq!(v_large, CompressionVersion::Zstd);
         assert_eq!(decompress(v_large, &body).unwrap(), large);
     }
 
@@ -1205,7 +1246,7 @@ mod tests {
         let compressed = compress_to_vec(bomb.as_slice(), CompressionLevel::Fastest);
         assert!(compressed.len() * MAX_DECOMPRESS_RATIO < bomb.len());
         assert!(matches!(
-            decompress(CompressionVersion::Zstd as u8, &compressed),
+            decompress(CompressionVersion::Zstd, &compressed),
             Err(PipelineError::DecompressTooLarge)
         ));
     }
@@ -1216,7 +1257,7 @@ mod tests {
         let payload = vec![0x5Au8; 4096];
         let compressed = compress_to_vec(payload.as_slice(), CompressionLevel::Fastest);
         assert_eq!(
-            decompress(CompressionVersion::Zstd as u8, &compressed).unwrap(),
+            decompress(CompressionVersion::Zstd, &compressed).unwrap(),
             payload
         );
     }
@@ -1224,7 +1265,7 @@ mod tests {
     #[test]
     fn decompress_unknown_version_rejected() {
         assert!(matches!(
-            decompress(0xFF, b"x"),
+            CompressionVersion::from_byte(0xFF),
             Err(PipelineError::UnknownVersion(0xFF))
         ));
     }

@@ -1866,7 +1866,6 @@ ambre-logic | src/channels.rs | crate::channels | LogicState::channel_document_r
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_open_failed(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_sample_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::channel_sample_heard(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-logic | src/channels.rs | crate::channels | LogicState::count_closed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::end_opening(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/channels.rs | crate::channels | LogicState::holds_murmure() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2020,7 +2019,6 @@ ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_members_changed(
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_open_failed(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_presence_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_presence_heard(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta.immutable | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta.unsent | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::LEN | const | usize	generic	generic byte/text API or codec
@@ -2385,8 +2383,6 @@ ambre-murmure | src/members.rs | crate::members | Roster::tick() | ret | bool	ma
 ambre-murmure | src/members.rs | crate::members | SAMPLE_TAG | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/members.rs | crate::members | find_members(query) | param | &str	free-text	text, label or user content
 ambre-murmure | src/members.rs | crate::members | is_presence_sample() | ret | bool	math	state flag/predicate
-ambre-murmure | src/members.rs | crate::members | is_presence_sample(payload) | param | &[u8]	debt	finding: Ephemeral samples as `Vec<u8>`
-ambre-murmure | src/members.rs | crate::members | presence_sample() | ret | Vec<u8>	debt	finding: Ephemeral samples as `Vec<u8>`
 ambre-murmure | src/mention.rs | crate::mention | CONFIRM_CHANNEL_PAST | const | usize	math	local count/index/counter
 ambre-murmure | src/mention.rs | crate::mention | Screened::Confirm.members | field | usize	math	local count/index/counter
 ambre-murmure | src/mention.rs | crate::mention | fits() | ret | bool	math	state flag/predicate
@@ -2692,8 +2688,6 @@ ambre-murmure | src/view.rs | crate::view | SECONDARY_BUTTON | const | i16	debt	
 ambre-murmure | src/view.rs | crate::view | SaveFile | alias | Rc<dyn Fn(&Attachment,Vec<u8>)>	generic	opaque file content bytes
 ambre-murmure | src/watchers.rs | crate::watchers | ON | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/watchers.rs | crate::watchers | SAMPLE_LEN | const | usize	newtype-inner	private wire tag behind Sample enum
-ambre-murmure | src/watchers.rs | crate::watchers | Sample::bytes() | ret | Vec<u8>	debt	finding: Ephemeral samples as `Vec<u8>`
-ambre-murmure | src/watchers.rs | crate::watchers | Sample::read(payload) | param | &[u8]	debt	finding: Ephemeral samples as `Vec<u8>`
 ambre-murmure | src/watchers.rs | crate::watchers | TYPING_IN_TAG | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/watchers.rs | crate::watchers | TYPING_TAG | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/watchers.rs | crate::watchers | WATCHING_TAG | const | u8	newtype-inner	private wire tag behind Sample enum
@@ -4089,10 +4083,8 @@ ambre-sync | src/channels.rs | crate::channels | seal_channel_key() | ret | Resu
 ambre-sync | src/channels.rs | crate::channels | self_join_entry() | ret | Result<Option<ambre_core::EncodedLogEntry>,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | unseal_channel_key() | ret | Result<(DocumentKey,Option<ambre_protocol::EntryDigest>),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/documents.rs | crate::documents | ListedName<'_>::open() | ret | Option<String>	free-text	free text: message, label, name or report
-ambre-sync | src/documents.rs | crate::documents | ListedName<'_>::sealed() | ret | Option<Vec<u8>>	debt	finding: sealed document name bytes
 ambre-sync | src/documents.rs | crate::documents | SyncState::created_document() | ret | Result<DocumentId,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/documents.rs | crate::documents | open_name() | ret | Option<String>	free-text	free text: message, label, name or report
-ambre-sync | src/documents.rs | crate::documents | open_name(bytes) | param | &[u8]	debt	finding: sealed document name bytes
 ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(withdrawn) | param | bool	generic	the fact LogicEvent::SegmentFinalizeFailed.withdrawn carries
 ambre-sync | src/fold.rs | crate::fold | SyncState::fold_failed(message) | param | &str	free-text	free text: message, label, name or report
@@ -4161,15 +4153,12 @@ ambre-sync | src/lib.rs | crate | SyncDocumentState.awaiting_initial_hydration |
 ambre-sync | src/lib.rs | crate | SyncDocumentState.creating | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState.directory_asked | field | u64	debt	finding: request generation counters ("asked")
 ambre-sync | src/lib.rs | crate | SyncDocumentState.directory_held | field | u64	debt	finding: request generation counters ("asked")
-ambre-sync | src/lib.rs | crate | SyncDocumentState.ephemeral_remote_counters | field | HashMap<ambre_core::PublicKey,u64>	debt	finding: ephemeral counter and mock sequence unwrapped
 ambre-sync | src/lib.rs | crate | SyncDocumentState.gap_requested | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState.pending_updates | field | Vec<Vec<u8>>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/lib.rs | crate | SyncDocumentState.server_created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter(counter) | param | u64	debt	finding: ephemeral counter and mock sequence unwrapped
 ambre-sync | src/lib.rs | crate | SyncDocumentState::first_arrival() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::new(server_created) | param | bool	generic	initial value of the server_created fact field
-ambre-sync | src/lib.rs | crate | SyncDocumentState::open_ephemeral_named() | ret | Result<Vec<u8>,pipeline::PipelineError>	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-sync | src/lib.rs | crate | SyncDocumentState::open_update_named() | ret | Result<Vec<u8>,pipeline::PipelineError>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_len() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncEvent::DebtUnsettled.message | field | String	free-text	free text: message, label, name or report
@@ -4237,7 +4226,6 @@ ambre-sync | src/membership_log.rs | crate::membership_log | signed_by() | ret |
 ambre-sync | src/membership_log.rs | crate::membership_log | LogHead::is_empty() | ret | bool	math	named predicate of the log head
 ambre-sync | src/mock.rs | crate::mock | MockWsTransport.client_tx | field | ambre_bus::conduit::UnboundedSender<Vec<u8>>	generic	generic byte/text API or codec
 ambre-sync | src/mock.rs | crate::mock | MockWsTransport.server_rx | field | ambre_bus::conduit::Receiver<Vec<u8>>	generic	generic byte/text API or codec
-ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay.next_seq | field | u64	debt	finding: ephemeral counter and mock sequence unwrapped
 ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::connect() | ret | (ambre_bus::conduit::UnboundedSender<Vec<u8>>,ambre_bus::conduit::Receiver<WsServerMsg>,)	generic	generic byte/text API or codec
 ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::drain_client() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::drain_client(client_rx) | param | &ambre_bus::conduit::Receiver<Vec<u8>>	generic	generic byte/text API or codec
@@ -4255,7 +4243,6 @@ ambre-sync | src/pipeline.rs | crate::pipeline | MAX_DECOMPRESS_RATIO | const | 
 ambre-sync | src/pipeline.rs | crate::pipeline | MEDIA_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | MIN_DECOMPRESS_CEILING | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/pipeline.rs | crate::pipeline | NAME_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | NO_SUMMARY | const | u8	debt	finding: compression version and summary marker as `u8` though an enum exists
 ambre-sync | src/pipeline.rs | crate::pipeline | OBJECT_HEADER_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/pipeline.rs | crate::pipeline | OBJECT_LAYOUT | const | u8	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownLayout.0 | field | u8	generic	generic byte/text API or codec
@@ -4263,17 +4250,13 @@ ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownVersion.0
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob.0 | field | Vec<u8>	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob::as_bytes() | ret | &[u8]	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob::len() | ret | usize	newtype-inner	newtype field, constructor or accessor
-ambre-sync | src/pipeline.rs | crate::pipeline | WITH_SUMMARY | const | u8	debt	finding: compression version and summary marker as `u8` though an enum exists
 ambre-sync | src/pipeline.rs | crate::pipeline | aad_of() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | check_layout(bytes) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | compress() | ret | (u8,Vec<u8>)	debt	finding: compression version and summary marker as `u8` though an enum exists
 ambre-sync | src/pipeline.rs | crate::pipeline | compress(data) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress(body) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | decompress(version) | param | u8	debt	finding: compression version and summary marker as `u8` though an enum exists
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress_zstd_bounded() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress_zstd_bounded(body) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | ephemeral_frame(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-sync | src/pipeline.rs | crate::pipeline | link_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | media_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | name_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
@@ -4285,14 +4268,12 @@ ambre-sync | src/pipeline.rs | crate::pipeline | object_blob(plaintext) | param 
 ambre-sync | src/pipeline.rs | crate::pipeline | object_bytes() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | object_key(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | object_parts(bytes) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | open_ephemeral() | ret | Result<Vec<u8>,PipelineError>	generic	bytes of a codec or a transport
 ambre-sync | src/pipeline.rs | crate::pipeline | open_object() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_object(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_object(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_payload() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_payload(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_update() | ret | Result<Vec<u8>,PipelineError>	generic	bytes of a codec or a transport
-ambre-sync | src/pipeline.rs | crate::pipeline | seal_ephemeral(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_object() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_object(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_object(plaintext) | param | &[u8]	generic	generic byte/text API or codec
@@ -4302,6 +4283,11 @@ ambre-sync | src/pipeline.rs | crate::pipeline | seal_update(payload) | param | 
 ambre-sync | src/pipeline.rs | crate::pipeline | split_update_body(body) | param | Vec<u8>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/pipeline.rs | crate::pipeline | update_body() | ret | Result<Vec<u8>,PipelineError>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/pipeline.rs | crate::pipeline | update_frame(payload) | param | &[u8]	debt	finding: update body vs delta, both `Vec<u8>`
+ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::byte() | ret | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
+ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::from_byte(byte) | param | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
+ambre-sync | src/pipeline.rs | crate::pipeline | SummaryMarker::byte() | ret | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
+ambre-sync | src/pipeline.rs | crate::pipeline | SummaryMarker::from_byte(byte) | param | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
+ambre-sync | src/pipeline.rs | crate::pipeline | compress() | ret | (CompressionVersion,Vec<u8>)	generic	bytes of a codec: the plaintext body after its scheme
 ambre-sync | src/rekey.rs | crate::rekey | RefusedFrames | alias | Vec<(Clock,Vec<u8>)>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | Rekey.failed | field | Option<(Signature,u64)>	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/rekey.rs | crate::rekey | Rekey.failures | field | u32	math	count, size, limit, index or jitter local to an algorithm

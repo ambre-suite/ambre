@@ -27,7 +27,7 @@ pub struct MockBlindRelay {
     /// Connected clients: user_id -> (client_tx for server->client msgs).
     clients: HashMap<UserId, ambre_bus::conduit::UnboundedSender<WsServerMsg>>,
     /// Global sequence number, monotonically increasing per relay instance.
-    next_seq: u64,
+    next_seq: Seq,
 }
 
 struct DocumentState {
@@ -42,7 +42,7 @@ impl MockBlindRelay {
         Self {
             documents: HashMap::new(),
             clients: HashMap::new(),
-            next_seq: 1,
+            next_seq: Seq(1),
         }
     }
 
@@ -90,7 +90,7 @@ impl MockBlindRelay {
                 for (_seq, update) in &doc_state.updates {
                     for tx in self.clients.values() {
                         let _ = tx.send(WsServerMsg::Update {
-                            seq: Seq(self.next_seq),
+                            seq: self.next_seq,
                             update: update.clone(),
                         });
                     }
@@ -110,11 +110,11 @@ impl MockBlindRelay {
                         subscribers: Vec::new(),
                     });
                 let seq = self.next_seq;
-                self.next_seq += 1;
-                state.updates.push((Seq(seq), update.clone()));
+                self.next_seq = seq.after();
+                state.updates.push((seq, update.clone()));
                 for tx in self.clients.values() {
                     let _ = tx.send(WsServerMsg::Update {
-                        seq: Seq(seq),
+                        seq,
                         update: update.clone(),
                     });
                 }

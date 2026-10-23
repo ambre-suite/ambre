@@ -61,7 +61,7 @@ impl Sample {
     /// The bytes of the sample: its tag, the state, then a thread's root or
     /// zeros. They name no channel, so a sample cannot show which other
     /// channel a member reads (`MURMURE-127`).
-    pub fn bytes(self) -> Vec<u8> {
+    pub fn bytes(self) -> ambre_core::EphemeralBytes {
         let (tag, root) = match self {
             Self::Watching => (WATCHING_TAG, [0; 16]),
             Self::Typing => (TYPING_TAG, [0; 16]),
@@ -70,13 +70,13 @@ impl Sample {
         let mut bytes = Vec::with_capacity(SAMPLE_LEN);
         bytes.extend([tag, ON]);
         bytes.extend(root);
-        bytes
+        ambre_core::EphemeralBytes::new(bytes)
     }
 
     /// The sample `payload` holds. One that does not decode is `None`, and
     /// is dropped without an error (`PRESENCE-013`).
-    pub fn read(payload: &[u8]) -> Option<Self> {
-        let [tag, ON, rest @ ..] = payload else {
+    pub fn read(payload: &ambre_core::EphemeralBytes) -> Option<Self> {
+        let [tag, ON, rest @ ..] = payload.as_bytes() else {
             return None;
         };
         let root: [u8; 16] = rest.try_into().ok()?;
@@ -296,11 +296,11 @@ mod tests {
             assert_eq!(Sample::read(&sample.bytes()), Some(sample));
         }
         assert_ne!(Sample::Watching.bytes(), crate::presence_sample());
-        let mut zero_root = Sample::Typing.bytes();
+        let mut zero_root = Sample::Typing.bytes().into_bytes();
         zero_root[0] = TYPING_IN_TAG;
-        let mut rooted_watch = Sample::TypingIn(root).bytes();
+        let mut rooted_watch = Sample::TypingIn(root).bytes().into_bytes();
         rooted_watch[0] = WATCHING_TAG;
-        let short = &Sample::Typing.bytes()[..SAMPLE_LEN - 1];
+        let short = &Sample::Typing.bytes().into_bytes()[..SAMPLE_LEN - 1];
         for payload in [
             &[][..],
             &[WATCHING_TAG, ON],
@@ -308,7 +308,8 @@ mod tests {
             &zero_root,
             &rooted_watch,
         ] {
-            assert_eq!(Sample::read(payload), None);
+            let payload = ambre_core::EphemeralBytes::new(payload.to_vec());
+            assert_eq!(Sample::read(&payload), None);
         }
     }
 

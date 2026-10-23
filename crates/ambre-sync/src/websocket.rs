@@ -1300,7 +1300,7 @@ impl SyncState {
                 // the same author. The counter map is bounded (see
                 // `accept_ephemeral_counter` / `MAX_EPHEMERAL_REMOTE_AUTHORS`).
                 let author_pk = eph.public_data.pub_key.clone();
-                if !doc_state.accept_ephemeral_counter(&author_pk, eph.public_data.counter.0) {
+                if !doc_state.accept_ephemeral_counter(&author_pk, eph.public_data.counter) {
                     tracing::debug!(
                         "Sync: dropping replayed ephemeral from {:?} (counter {})",
                         author_pk,
@@ -1328,7 +1328,7 @@ impl SyncState {
                     LogicEvent::RemoteEphemeral {
                         document_id: doc_id,
                         from_user_id,
-                        payload: ambre_core::EphemeralBytes::new(payload),
+                        payload,
                     }
                 });
             }

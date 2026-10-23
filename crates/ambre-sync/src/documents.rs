@@ -364,14 +364,13 @@ impl ListedName<'_> {
         auth: &http::AuthContext,
     ) -> Option<String> {
         let current = self.unwrap_key(exchange_key)?;
-        let bytes = self.sealed()?;
         // One request more, and only for a name older than the current key.
-        let links = if pipeline::object_key(&bytes).ok()? == current.id() {
+        let links = if pipeline::object_key(self.name_enc.as_bytes()).ok()? == current.id() {
             Vec::new()
         } else {
             http::fetch_key_links(url_scheme, api_base, self.document_id, auth.clone()).await
         };
-        open_name(self.document_id, &current, &bytes, links)
+        open_name(self.document_id, &current, self.name_enc, links)
     }
 
     /// The current key, ECDH-unwrapped against the wrapper's exchange key.
@@ -381,10 +380,6 @@ impl ListedName<'_> {
             self.wrapper_exchange_pub_key,
             exchange_key,
         )
-    }
-
-    fn sealed(&self) -> Option<Vec<u8>> {
-        Some(self.name_enc.as_bytes().to_vec())
     }
 }
 
@@ -419,9 +414,10 @@ pub(crate) fn unwrap_listed_key(
 pub(crate) fn open_name(
     document_id: DocumentId,
     current: &DocumentKey,
-    bytes: &[u8],
+    sealed: &ambre_core::SealedName,
     links: Vec<ambre_protocol::KeyLink>,
 ) -> Option<String> {
+    let bytes = sealed.as_bytes();
     let chain = crate::chain::Chain::new(document_id, links);
     let wanted = pipeline::object_key(bytes).ok()?;
     let key = crate::chain::find_key(document_id, current, &[], &chain, wanted)?;
@@ -454,11 +450,11 @@ mod tests {
         assert!(!bytes.windows(name.len()).any(|w| w == name.as_bytes()));
         assert_eq!(pipeline::object_key(&bytes).unwrap(), doc_key.id());
         assert_eq!(
-            open_name(document_id, &doc_key, &bytes, Vec::new()).as_deref(),
+            open_name(document_id, &doc_key, &sent, Vec::new()).as_deref(),
             Some(name)
         );
         let other = DocumentKey::generate();
-        assert_eq!(open_name(document_id, &other, &bytes, Vec::new()), None);
+        assert_eq!(open_name(document_id, &other, &sent, Vec::new()), None);
     }
 
     /// `SYNC-178`: a name past its budget is refused before it is sealed: no
@@ -506,15 +502,14 @@ mod tests {
             &ambre_core::Name::new("Budget").unwrap(),
         )
         .unwrap();
-        let bytes = name.as_bytes().to_vec();
         let current = &keys[3];
         assert_eq!(
-            open_name(document_id, current, &bytes, links.clone()).as_deref(),
+            open_name(document_id, current, &name, links.clone()).as_deref(),
             Some("Budget")
         );
-        assert_eq!(open_name(document_id, current, &bytes, Vec::new()), None);
+        assert_eq!(open_name(document_id, current, &name, Vec::new()), None);
         // Another document's chain opens nothing here.
-        assert_eq!(open_name(DocumentId::new(), current, &bytes, links), None);
+        assert_eq!(open_name(DocumentId::new(), current, &name, links), None);
     }
 
     /// A create answer that names another document, or no document, fails:

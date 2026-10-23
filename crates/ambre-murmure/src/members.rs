@@ -32,14 +32,14 @@ const ONLINE: u8 = 1;
 /// The presence sample of a space: its tag, then the state, and nothing else.
 /// It names no channel, so it cannot show which channel a member reads
 /// (`MURMURE-446`).
-pub fn presence_sample() -> Vec<u8> {
-    vec![SAMPLE_TAG, ONLINE]
+pub fn presence_sample() -> ambre_core::EphemeralBytes {
+    ambre_core::EphemeralBytes::new(vec![SAMPLE_TAG, ONLINE])
 }
 
 /// Whether `payload` is a presence sample of a space. A sample that does not
 /// decode is dropped without an error (`PRESENCE-013`).
-pub fn is_presence_sample(payload: &[u8]) -> bool {
-    payload == [SAMPLE_TAG, ONLINE]
+pub fn is_presence_sample(payload: &ambre_core::EphemeralBytes) -> bool {
+    payload.as_bytes() == [SAMPLE_TAG, ONLINE]
 }
 
 /// The members of `members` whose display name answers `query`, in the order
@@ -287,10 +287,11 @@ mod tests {
         let sample = presence_sample();
         assert_eq!(sample.len(), 2);
         assert!(is_presence_sample(&sample));
-        assert!(!is_presence_sample(&[]));
-        assert!(!is_presence_sample(&[SAMPLE_TAG]));
-        assert!(!is_presence_sample(&[SAMPLE_TAG, ONLINE, 0]));
-        assert!(!is_presence_sample(&[0, ONLINE]));
+        let sample_of = |bytes: &[u8]| ambre_core::EphemeralBytes::new(bytes.to_vec());
+        assert!(!is_presence_sample(&sample_of(&[])));
+        assert!(!is_presence_sample(&sample_of(&[SAMPLE_TAG])));
+        assert!(!is_presence_sample(&sample_of(&[SAMPLE_TAG, ONLINE, 0])));
+        assert!(!is_presence_sample(&sample_of(&[0, ONLINE])));
     }
 
     /// The filter keeps the members whose name holds what the user types,

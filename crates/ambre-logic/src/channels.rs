@@ -1731,7 +1731,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         from: UserId,
-        payload: &[u8],
+        payload: &ambre_core::EphemeralBytes,
     ) -> bool {
         let Some(channel_id) = self.channel_of_meta(document_id) else {
             return false;
@@ -4013,14 +4013,14 @@ mod tests {
 
     /// The ephemerals that left for the Sync worker, by document. Any other
     /// command fails the test.
-    fn ephemerals(sync: &Receiver<SyncCommand>) -> Vec<(DocumentId, Vec<u8>)> {
+    fn ephemerals(sync: &Receiver<SyncCommand>) -> Vec<(DocumentId, ambre_core::EphemeralBytes)> {
         drain(sync)
             .into_iter()
             .map(|sent| match sent {
                 SyncCommand::SendEphemeral {
                     document_id,
                     payload,
-                } => (document_id, payload.into_bytes()),
+                } => (document_id, payload),
                 other => panic!("only an ephemeral leaves, got {other:?}"),
             })
             .collect()

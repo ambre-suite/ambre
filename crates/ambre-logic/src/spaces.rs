@@ -670,7 +670,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         from: UserId,
-        payload: &[u8],
+        payload: &ambre_core::EphemeralBytes,
     ) -> bool {
         let space_id = SpaceId::from_document(document_id);
         if self.space_opening.contains_key(&space_id) {
@@ -2085,13 +2085,13 @@ mod tests {
     }
 
     /// Every presence sample sent, with the document it went on.
-    fn samples(sent: &[SyncCommand]) -> Vec<(DocumentId, Vec<u8>)> {
+    fn samples(sent: &[SyncCommand]) -> Vec<(DocumentId, ambre_core::EphemeralBytes)> {
         sent.iter()
             .filter_map(|c| match c {
                 SyncCommand::SendEphemeral {
                     document_id,
                     payload,
-                } => Some((*document_id, payload.clone().into_bytes())),
+                } => Some((*document_id, payload.clone())),
                 _ => None,
             })
             .collect()
@@ -2147,11 +2147,16 @@ mod tests {
         space_id
     }
 
-    fn sample_from(state: &mut LogicState, space_id: SpaceId, from: UserId, payload: Vec<u8>) {
+    fn sample_from(
+        state: &mut LogicState,
+        space_id: SpaceId,
+        from: UserId,
+        payload: ambre_core::EphemeralBytes,
+    ) {
         state.handle_logic_event(LogicEvent::RemoteEphemeral {
             document_id: space_id.document_id(),
             from_user_id: from,
-            payload: payload.into(),
+            payload,
         });
     }
 
@@ -2387,7 +2392,12 @@ mod tests {
         let (mut state, ui, sync) = harness();
         let bob = UserId::new();
         let space_id = space_with(&mut state, &ui, &sync, vec![member(bob, "Bob")]);
-        sample_from(&mut state, space_id, bob, vec![9, 9, 9]);
+        sample_from(
+            &mut state,
+            space_id,
+            bob,
+            ambre_core::EphemeralBytes::new(vec![9, 9, 9]),
+        );
         assert!(drain(&ui).is_empty());
         assert!(drain(&sync).is_empty());
     }

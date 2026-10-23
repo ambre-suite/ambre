@@ -1815,7 +1815,8 @@ pub(crate) mod tests {
         let sealed = state.seal_channel_name(meta, &key, &design).unwrap();
         let bytes = sealed.as_bytes().to_vec();
         assert!(!bytes.windows(6).any(|w| w == b"Design"));
-        let open = |document_id| crate::documents::open_name(document_id, &key, &bytes, Vec::new());
+        let open =
+            |document_id| crate::documents::open_name(document_id, &key, &sealed, Vec::new());
         assert_eq!(open(meta.document_id()).as_deref(), Some("Design"));
         assert_eq!(open(DocumentId::new()), None);
     }

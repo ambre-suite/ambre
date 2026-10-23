@@ -695,7 +695,7 @@ struct SyncDocumentState {
     /// Per-author ephemeral anti-replay counter. Keyed by the author's Ed25519
     /// verifying key bytes. An inbound ephemeral whose counter is <= the stored
     /// value is silently dropped.
-    ephemeral_remote_counters: HashMap<ambre_core::PublicKey, u64>,
+    ephemeral_remote_counters: HashMap<ambre_core::PublicKey, Counter>,
     /// Directory of this document's members' Ed25519 signing keys, mapping an
     /// ephemeral author's verifying key to their canonical `UserId`
     /// (`ambre-spec-membership.md`). Built from the members response already fetched at open and
@@ -857,7 +857,7 @@ impl SyncDocumentState {
     fn open_ephemeral_named(
         &self,
         eph: &ambre_protocol::Ephemeral,
-    ) -> Result<Vec<u8>, pipeline::PipelineError> {
+    ) -> Result<ambre_core::EphemeralBytes, pipeline::PipelineError> {
         let key = self
             .key_named(eph.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;
@@ -876,13 +876,15 @@ impl SyncDocumentState {
     fn accept_ephemeral_counter(
         &mut self,
         author_pk: &ambre_core::PublicKey,
-        counter: u64,
+        counter: Counter,
     ) -> bool {
+        // A sender counts from 1, so the floor of an author not seen yet is
+        // the counter before its first send.
         let last = self
             .ephemeral_remote_counters
             .get(author_pk)
             .copied()
-            .unwrap_or(0);
+            .unwrap_or(Counter(0));
         if counter <= last {
             return false;
         }
@@ -1884,13 +1886,13 @@ mod ephemeral_tests {
     fn monotonic_counter_accepted_replay_dropped() {
         let mut d = doc_state();
         let author = ambre_core::PublicKey::from_array([1u8; 32]);
-        assert!(d.accept_ephemeral_counter(&author, 1));
-        assert!(d.accept_ephemeral_counter(&author, 2));
+        assert!(d.accept_ephemeral_counter(&author, Counter(1)));
+        assert!(d.accept_ephemeral_counter(&author, Counter(2)));
         // Replay / stale counters are dropped.
-        assert!(!d.accept_ephemeral_counter(&author, 2));
-        assert!(!d.accept_ephemeral_counter(&author, 1));
+        assert!(!d.accept_ephemeral_counter(&author, Counter(2)));
+        assert!(!d.accept_ephemeral_counter(&author, Counter(1)));
         // Forward progress resumes.
-        assert!(d.accept_ephemeral_counter(&author, 3));
+        assert!(d.accept_ephemeral_counter(&author, Counter(3)));
     }
 
     #[test]
@@ -1901,7 +1903,7 @@ mod ephemeral_tests {
             let mut author = [0u8; 32];
             author[..8].copy_from_slice(&i.to_le_bytes());
             let author = ambre_core::PublicKey::from_array(author);
-            assert!(d.accept_ephemeral_counter(&author, 1));
+            assert!(d.accept_ephemeral_counter(&author, Counter(1)));
         }
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
     }
