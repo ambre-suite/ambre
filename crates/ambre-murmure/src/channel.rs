@@ -1080,7 +1080,7 @@ impl ChannelState {
         now: Timestamp,
     ) -> Result<Option<Sent>, MurmureError> {
         let at = at.into();
-        if !reaction::is_emoji(emoji.as_str()) {
+        if !reaction::is_emoji(emoji) {
             return Err(MurmureError::NotEmoji);
         }
         let key = reaction::ReactionKey::of(user, emoji);

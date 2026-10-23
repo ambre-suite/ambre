@@ -274,8 +274,8 @@ pub(crate) fn check_amendments(
     update: &JsonSchema,
     signer: Signer,
     registered: impl Fn(ambre_core::PeerId) -> Option<UserId>,
-    author_of: impl Fn(&str) -> Option<UserId>,
-    thread_of: impl Fn(&str) -> Option<String>,
+    author_of: impl Fn(MessageId) -> Option<UserId>,
+    thread_of: impl Fn(MessageId) -> Option<String>,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
     if update.changes.iter().any(|c| c.id.peer != signer.peer.0) {
@@ -306,7 +306,7 @@ pub(crate) fn check_amendments(
                 JsonOpContent::Map(MapOp::Insert {
                     key,
                     value: LoroValue::Container(_),
-                }) => match author_of(key) {
+                }) => match message_key(key).and_then(&author_of) {
                     None => return Err(Refusal::NotInSegment),
                     Some(author) if author != user => return Err(Refusal::ForeignMessage),
                     Some(_) => {}
@@ -318,10 +318,10 @@ pub(crate) fn check_amendments(
                     key,
                     value: LoroValue::String(value),
                 }) => {
-                    if author_of(key).is_none() {
+                    let Some(message) = message_key(key).filter(|m| author_of(*m).is_some()) else {
                         return Err(Refusal::NotInSegment);
-                    }
-                    let named = thread_of(key);
+                    };
+                    let named = thread_of(message);
                     if DocumentId::parse_str(value).is_err()
                         || named.is_some_and(|set| set.as_str() != value.as_str())
                     {
@@ -340,9 +340,20 @@ pub(crate) fn check_amendments(
     Ok(())
 }
 
+/// The message an amendment or a thread key names, spelled as the engine
+/// writes an identifier. Any other spelling names no message: a reader looks
+/// the key up as written, and would never find it.
+fn message_key(key: &str) -> Option<MessageId> {
+    MessageId::parse_str(key)
+        .ok()
+        .filter(|id| id.to_string() == key)
+}
+
 /// The author `segment` holds for the message `key` names, `None` when it
 /// holds no such message.
-pub(crate) fn author_in(segment: &LoroDoc, key: &str) -> Option<UserId> {
+pub(crate) fn author_in(segment: &LoroDoc, key: MessageId) -> Option<UserId> {
+    let key = key.to_string();
+    let key = key.as_str();
     let list = crate::schema::root_list(segment, Root::Messages);
     (0..list.len()).find_map(|index| {
         let map = list.get(index).and_then(schema::fields_of::<MessageKey>)?;
@@ -355,7 +366,9 @@ pub(crate) fn author_in(segment: &LoroDoc, key: &str) -> Option<UserId> {
 
 /// The `thread` field `segment` holds for the message `key` names, `None`
 /// when it holds no such message or no thread.
-fn thread_in(segment: &LoroDoc, key: &str) -> Option<String> {
+fn thread_in(segment: &LoroDoc, key: MessageId) -> Option<String> {
+    let key = key.to_string();
+    let key = key.as_str();
     let list = crate::schema::root_list(segment, Root::Messages);
     (0..list.len()).find_map(|index| {
         let map = list.get(index).and_then(schema::fields_of::<MessageKey>)?;
@@ -556,8 +569,10 @@ pub(crate) fn verdict(
             |peer| registered(doc, peer),
             |key| author_in(segment, key),
             |key| {
-                schema::string_value(crate::schema::root_map(doc, Root::Threads).get(key))
-                    .or_else(|| thread_in(segment, key))
+                schema::string_value(
+                    crate::schema::root_map(doc, Root::Threads).get(&key.to_string()),
+                )
+                .or_else(|| thread_in(segment, key))
             },
         ),
     }

@@ -396,7 +396,7 @@ pub struct MurmureRelay {
     pub picking: RwSignal<Option<Picking>>,
     /// The emoji the picker picked for a composer, until its region takes
     /// it (`MURMURE-139`).
-    picked_emoji: RwSignal<Option<(Region, String)>>,
+    picked_emoji: RwSignal<Option<(Region, ambre_bus::Emoji)>>,
     /// The files dropped on the channel's canvas, until its region takes
     /// them to upload (`MURMURE-132`).
     dropped_files: RwSignal<Vec<PickedFile>>,
@@ -519,20 +519,20 @@ impl MurmureRelay {
     /// pick for a composer waits for its region, and a pick for a message
     /// is the reaction to send (`MURMURE-139`, `MURMURE-140`). `None` with
     /// the picker closed, or for a composer.
-    pub fn pick_emoji(&self, emoji: &str, now: Timestamp) -> Option<LogicCommand> {
+    pub fn pick_emoji(&self, emoji: ambre_bus::Emoji, now: Timestamp) -> Option<LogicCommand> {
         let picking = self.picking.get_untracked()?;
         self.picking.set(None);
         match picking {
             Picking::Composer { region } => {
-                self.picked_emoji.set(Some((region, emoji.to_owned())));
+                self.picked_emoji.set(Some((region, emoji)));
                 None
             }
-            Picking::Reaction(pending) => Some(pending.command(ambre_bus::Emoji::from(emoji), now)),
+            Picking::Reaction(pending) => Some(pending.command(emoji, now)),
         }
     }
 
     /// The emoji picked for the composer of `region`, taken once.
-    pub fn take_emoji(&self, region: Region) -> Option<String> {
+    pub fn take_emoji(&self, region: Region) -> Option<ambre_bus::Emoji> {
         let (picked, emoji) = self.picked_emoji.get_untracked()?;
         if picked != region {
             return None;
@@ -1681,7 +1681,7 @@ pub fn EmojiPicker(
         open.set(picking);
     });
     let pick = move |emoji: &str| {
-        if let Some(command) = relay.pick_emoji(emoji, now.run(())) {
+        if let Some(command) = relay.pick_emoji(ambre_bus::Emoji::from(emoji), now.run(())) {
             send.run(command);
         }
     };

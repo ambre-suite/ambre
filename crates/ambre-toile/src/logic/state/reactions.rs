@@ -52,7 +52,11 @@ fn encode<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, ToileError> {
 /// `BTreeMap` for stable, sorted rendering order) and the running vote total /
 /// count. Shared by the single-target [`ToileState::reaction_tally`] and the
 /// whole-viewport [`ToileState::reaction_tallies`] so both derive identically.
-fn accumulate(kind: ReactionKind, emoji: &mut BTreeMap<String, u32>, tally: &mut ReactionTally) {
+fn accumulate(
+    kind: ReactionKind,
+    emoji: &mut BTreeMap<ambre_bus::Emoji, u32>,
+    tally: &mut ReactionTally,
+) {
     match kind {
         ReactionKind::Emoji(e) => *emoji.entry(e).or_default() += 1,
         ReactionKind::Vote(w) => {
@@ -121,7 +125,7 @@ impl ToileState {
         if self.element_map(target).is_none() {
             return ReactionTally::default();
         }
-        let mut emoji: BTreeMap<String, u32> = BTreeMap::new();
+        let mut emoji: BTreeMap<ambre_bus::Emoji, u32> = BTreeMap::new();
         let mut tally = ReactionTally::default();
         if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
         {
@@ -153,7 +157,7 @@ impl ToileState {
         &self,
         visible: &HashSet<ElementId>,
     ) -> BTreeMap<TargetId, ReactionTally> {
-        let mut emoji: BTreeMap<TargetId, BTreeMap<String, u32>> = BTreeMap::new();
+        let mut emoji: BTreeMap<TargetId, BTreeMap<ambre_bus::Emoji, u32>> = BTreeMap::new();
         let mut tallies: BTreeMap<TargetId, ReactionTally> = BTreeMap::new();
         if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
         {
@@ -234,7 +238,7 @@ mod tests {
     #[test]
     fn a_reaction_encodes() {
         let reaction = Reaction {
-            kind: ReactionKind::Emoji("+1".to_owned()),
+            kind: ReactionKind::Emoji(ambre_bus::Emoji::from("+1")),
             ts: ambre_bus::Timestamp(0),
         };
         assert!(encode(&reaction).is_ok());

@@ -81,7 +81,7 @@ fn paint_chip_row<S: DrawSurface>(
 
     // Emoji chips first, in the tally's stable sorted order.
     for (emoji, count) in &tally.emoji {
-        let label = format!("{emoji} {count}");
+        let label = format!("{} {count}", emoji.as_str());
         x = paint_chip(surface, &label, x, y, font_cx, text_cache, palette) + CHIP_GAP;
     }
 
@@ -222,7 +222,10 @@ mod tests {
 
     fn tally(emoji: &[(&str, u32)], vote_total: i64, vote_count: u32) -> ReactionTally {
         ReactionTally {
-            emoji: emoji.iter().map(|(e, n)| ((*e).to_owned(), *n)).collect(),
+            emoji: emoji
+                .iter()
+                .map(|(e, n)| (ambre_bus::Emoji::from(*e), *n))
+                .collect(),
             vote_total,
             vote_count,
         }

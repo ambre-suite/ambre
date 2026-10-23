@@ -765,7 +765,7 @@ pub struct Reaction {
 /// a signed vote weight (for example `+1` / `-1` / a weighted ballot).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ReactionKind {
-    Emoji(String),
+    Emoji(crate::app::murmure::Emoji),
     Vote(i32),
 }
 
@@ -776,7 +776,7 @@ pub enum ReactionKind {
 /// aggregate the `Vote` entries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionTally {
-    pub emoji: Vec<(String, u32)>,
+    pub emoji: Vec<(crate::app::murmure::Emoji, u32)>,
     pub vote_total: i64,
     pub vote_count: u32,
 }

@@ -2504,7 +2504,7 @@ fn a_shared_board(peer: UserId) -> Rig {
     reactions.insert(
         eid("a"),
         ambre_bus::app::toile::ReactionTally {
-            emoji: vec![("+1".to_owned(), 2)],
+            emoji: vec![(ambre_bus::Emoji::from("+1"), 2)],
             vote_total: 0,
             vote_count: 0,
         },

@@ -468,8 +468,10 @@ pub fn resolve_menu_command(
             let emoji = REACTION_EMOJI
                 .iter()
                 .find(|(cid, _)| *cid == id)
-                .map(|(_, e)| (*e).to_string())
-                .unwrap_or_default();
+                .map_or_else(
+                    || ambre_bus::Emoji::from(""),
+                    |(_, e)| ambre_bus::Emoji::from(*e),
+                );
             react_each(
                 selection,
                 Some(Reaction {
@@ -660,7 +662,10 @@ mod tests {
                     reaction: Some(Reaction { kind, .. }),
                 } => {
                     assert_eq!(target.as_str(), want);
-                    assert_eq!(*kind, ReactionKind::Emoji("\u{1F44D}".to_string()));
+                    assert_eq!(
+                        *kind,
+                        ReactionKind::Emoji(ambre_bus::Emoji::from("\u{1F44D}"))
+                    );
                 }
                 other => panic!("expected React Some, got {other:?}"),
             }

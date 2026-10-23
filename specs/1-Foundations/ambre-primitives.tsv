@@ -497,9 +497,8 @@ ambre-bus | src/app/toile.rs | crate::app::toile | PlaybackState.active | field 
 ambre-bus | src/app/toile.rs | crate::app::toile | PlaybackState.focus | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | PresencePayload.present_slide | field | Option<usize>	debt	finding: Toile slide index as usize (low, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | PresentMode::is_presenting() | ret | bool	generic	named flag, setter of a flag, or predicate
-ambre-bus | src/app/toile.rs | crate::app::toile | ReactionKind::Emoji.0 | field | String	debt	finding: Toile ReactionKind::Emoji(String) while murmure's Emoji exists (low, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | ReactionKind::Vote.0 | field | i32	math	vote weight / tally
-ambre-bus | src/app/toile.rs | crate::app::toile | ReactionTally.emoji | field | Vec<(String,u32)>	debt	finding: Toile ReactionKind::Emoji(String) while murmure's Emoji exists (low, confirmed)
+ambre-bus | src/app/toile.rs | crate::app::toile | ReactionTally.emoji | field | Vec<(crate::app::murmure::Emoji,u32)>	math	count, size, limit, index or jitter local to an algorithm
 ambre-bus | src/app/toile.rs | crate::app::toile | ReactionTally.vote_count | field | u32	math	vote weight / tally
 ambre-bus | src/app/toile.rs | crate::app::toile | ReactionTally.vote_total | field | i64	math	vote weight / tally
 ambre-bus | src/app/toile.rs | crate::app::toile | STICKY_CORNER | const | f32	math	board geometry, style metric, opacity or pressure
@@ -2319,16 +2318,13 @@ ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::choose(key) | pa
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::run() | ret | bool	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.keys | field | RwSignal<bool>	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.picked | field | RwSignal<Option<(Region,usize)>>	debt	finding: the region is typed; the picked entry is still a bare usize index
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.picked_emoji | field | RwSignal<Option<(Region,String)>>	debt	finding: the region is typed; the picked emoji is still a bare String
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::channel_name() | ret | Signal<Option<String>>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::choose(key) | param | [u8;16]	debt	finding: The palette key `[u8; 16]` is an untagged union of `UserId` and `ChannelId`
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::has_members() | ret | Signal<bool>	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::in_channel() | ret | bool	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::notice(visible) | param | bool	math	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::pick_emoji(emoji) | param | &str	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::pick_mention(index) | param | usize	math	local count/index/counter
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::take_emoji() | ret | Option<String>	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::take_pick() | ret | Option<usize>	math	local count/index/counter
 ambre-murmure | src/chrome.rs | crate::chrome | Notice.title | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | ROOT_LOST | const | &str	free-text	UI text/label const
@@ -2465,21 +2461,19 @@ ambre-murmure | src/delta.rs | crate::delta | Arrival::Bytes.0 | field | Vec<u8>
 ambre-murmure | src/delta.rs | crate::delta | JSON_SCHEMA_VERSION | const | u8	debt	finding: Two schema-version spaces, and a duplicated frame magic
 ambre-murmure | src/delta.rs | crate::delta | Refusal::Version.0 | field | u8	debt	finding: Two schema-version spaces, and a duplicated frame magic
 ambre-murmure | src/delta.rs | crate::delta | Refusal::asks_update() | ret | bool	math	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | author_in(key) | param | &str	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | binary_by() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | binary_by(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/delta.rs | crate::delta | check(reactions) | param | impl Fn(&ContainerID)->bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | check(thread_of) | param | impl Fn(&ContainerID)->Option<Option<String>>	debt	finding: The delta validator passes message keys and thread ids as strings
-ambre-murmure | src/delta.rs | crate::delta | check_amendments(author_of) | param | impl Fn(&str)->Option<UserId>	debt	finding: The delta validator passes message keys and thread ids as strings
-ambre-murmure | src/delta.rs | crate::delta | check_amendments(thread_of) | param | impl Fn(&str)->Option<String>	debt	finding: The delta validator passes message keys and thread ids as strings
+ambre-murmure | src/delta.rs | crate::delta | check_amendments(thread_of) | param | impl Fn(MessageId)->Option<String>	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | encode() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/delta.rs | crate::delta | is_root() | ret | bool	math	state flag/predicate
+ambre-murmure | src/delta.rs | crate::delta | message_key(key) | param | &str	foreign-api	an amendments or threads map key as Loro hands it back
 ambre-murmure | src/delta.rs | crate::delta | names() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | read(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/delta.rs | crate::delta | read::Version.schema_version | field | u8	debt	schema version as a bare integer
 ambre-murmure | src/delta.rs | crate::delta | thread_field() | ret | Option<Option<String>>	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | thread_in() | ret | Option<String>	debt	finding: The delta validator passes message keys and thread ids as strings
-ambre-murmure | src/delta.rs | crate::delta | thread_in(key) | param | &str	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | thread_set(current) | param | Option<Option<String>>	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::load(rows) | param | Vec<(String,String)>	debt	planned: lot C7 DraftKey
@@ -2729,7 +2723,6 @@ ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey.0 | field | Stri
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::as_str() | ret | &str	foreign-api	the reaction key as the Loro map stores it
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::read(stored) | param | &str	foreign-api	a reaction key the Loro map returns
 ambre-murmure | src/reaction.rs | crate::reaction | is_emoji() | ret | bool	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
-ambre-murmure | src/reaction.rs | crate::reaction | is_emoji(emoji) | param | &str	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/reaction.rs | crate::reaction | is_map() | ret | bool	math	state flag/predicate
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | TEXT_LIMIT | const | usize	math	local count/index/counter
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | char_name() | ret | String	free-text	text, label or user content
@@ -2913,7 +2906,6 @@ ambre-murmure | src/view.rs | crate::view | PRIMARY_BUTTON | const | i16	debt	fi
 ambre-murmure | src/view.rs | crate::view | PageReads.announce | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.open_link | field | Rc<dyn Fn(&str)>	debt	finding: Link addresses as `String`
 ambre-murmure | src/view.rs | crate::view | PageReads.still | field | Rc<dyn Fn()->bool>	math	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | PageReads.take_emoji | field | Rc<dyn Fn(Region)->Option<String>>	debt	finding: the region is typed; the picked emoji is still a bare String
 ambre-murmure | src/view.rs | crate::view | PageReads.take_pick | field | Rc<dyn Fn(Region)->Option<usize>>	debt	finding: the region is typed; the picked entry is still a bare usize index
 ambre-murmure | src/view.rs | crate::view | PageReads.time_of | field | Rc<dyn Fn(Timestamp)->String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.warn | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
@@ -5192,7 +5184,7 @@ ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentatio
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | slide_order_of() | ret | Vec<String>	debt	finding: Frame ids are read back as strings (confirmed): frame ids read back as Vec<String>
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice() | ret | String	free-text	label, message or user text
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice(base) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | accumulate(emoji) | param | &mut BTreeMap<String,u32>	debt	finding: The reaction storage key and the emoji are strings (confirmed): reaction storage key built by format!, emoji as String
+ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | accumulate(emoji) | param | &mut BTreeMap<ambre_bus::Emoji,u32>	math	count, size, limit, index or jitter local to an algorithm
 ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | encode() | ret | Result<Vec<u8>,ToileError>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/stroke.rs | crate::logic::stroke | SEGMENTS_PER_SPAN | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/stroke.rs | crate::logic::stroke | catmull_rom(t) | param | f64	math	geometry, layout, count or size local to the algorithm

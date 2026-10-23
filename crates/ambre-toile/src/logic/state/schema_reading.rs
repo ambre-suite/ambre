@@ -313,9 +313,14 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
         Root::Reactions => {
             let (target, _user) = stored.key(0)?.split_once('/')?;
             let tally = reader.reaction_tally(&ElementId(target.to_owned()));
+            let emoji: Vec<(&str, u32)> = tally
+                .emoji
+                .iter()
+                .map(|(emoji, count)| (emoji.as_str(), *count))
+                .collect();
             Some(format!(
-                "tallies {:?}, {} votes summing {}",
-                tally.emoji, tally.vote_count, tally.vote_total
+                "tallies {emoji:?}, {} votes summing {}",
+                tally.vote_count, tally.vote_total
             ))
         }
         Root::Media if MediaKey::parse(stored.key(1)?) == Some(MediaKey::Thumb) => {

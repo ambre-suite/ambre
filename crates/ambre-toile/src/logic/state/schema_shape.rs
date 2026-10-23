@@ -310,7 +310,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
         (
             format!("reactions/{ANY}#emoji"),
             hex(&encode(&Reaction {
-                kind: ReactionKind::Emoji("e".to_owned()),
+                kind: ReactionKind::Emoji(ambre_bus::Emoji::from("e")),
                 ts: ambre_bus::Timestamp(1),
             })),
         ),
@@ -611,7 +611,7 @@ pub(super) fn board_of_every_key() -> ToileState {
     st.handle_command(ToileCommand::React {
         target: rect.clone(),
         reaction: Some(Reaction {
-            kind: ReactionKind::Emoji("+1".to_owned()),
+            kind: ReactionKind::Emoji(ambre_bus::Emoji::from("+1")),
             ts: ambre_bus::Timestamp(1),
         }),
     });

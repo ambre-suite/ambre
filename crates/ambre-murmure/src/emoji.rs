@@ -184,7 +184,10 @@ mod tests {
     fn every_emoji_of_the_table_is_one_reaction_key() {
         let mut seen = std::collections::HashSet::new();
         for &(emoji, name) in EMOJI {
-            assert!(crate::reaction::is_emoji(emoji), "{emoji} ({name})");
+            assert!(
+                crate::reaction::is_emoji(&ambre_bus::Emoji::from(emoji)),
+                "{emoji} ({name})"
+            );
             assert!(seen.insert(emoji), "{emoji} repeats");
             assert_eq!(name, name.to_lowercase(), "{name}");
         }

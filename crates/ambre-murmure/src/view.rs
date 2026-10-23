@@ -116,7 +116,7 @@ pub struct PageReads {
     pub ask_emoji: Rc<dyn Fn(Region)>,
     /// Take the emoji the picker picked for the composer. Given `true`, it
     /// takes a pick for the thread's composer alone (`MURMURE-139`).
-    pub take_emoji: Rc<dyn Fn(Region) -> Option<String>>,
+    pub take_emoji: Rc<dyn Fn(Region) -> Option<ambre_bus::Emoji>>,
     /// Take the files the member dropped on the channel's canvas since the
     /// last frame. The channel's composer uploads them (`MURMURE-132`).
     pub take_files: Rc<dyn Fn() -> Vec<PickedFile>>,
@@ -1070,7 +1070,7 @@ impl MurmureView {
         if let Some(emoji) = (self.reads.take_emoji)(self.region)
             && let Some(of) = self.writes_in()
         {
-            self.composer.text(of, &emoji);
+            self.composer.text(of, emoji.as_str());
             self.reads.pipe.focus();
             self.typed();
             self.dirty = true;
@@ -1793,7 +1793,7 @@ mod tests {
         /// Each region the view opened the emoji picker for, oldest first.
         asked_emoji: Rc<RefCell<Vec<Region>>>,
         /// The emoji the picker picked, for the region it names.
-        emoji: Rc<RefCell<Option<(Region, String)>>>,
+        emoji: Rc<RefCell<Option<(Region, ambre_bus::Emoji)>>>,
         /// The files dropped on the canvas, for the view to take.
         dropped: Rc<RefCell<Vec<PickedFile>>>,
         /// Each file the view opened or saved, and its bytes, oldest first.
@@ -1850,7 +1850,7 @@ mod tests {
         let pressed = Rc::clone(&press);
         let asked_emoji = Rc::new(RefCell::new(Vec::new()));
         let asks = Rc::clone(&asked_emoji);
-        let emoji = Rc::new(RefCell::new(None::<(Region, String)>));
+        let emoji = Rc::new(RefCell::new(None::<(Region, ambre_bus::Emoji)>));
         let picked_emoji = Rc::clone(&emoji);
         let dropped = Rc::new(RefCell::new(Vec::new()));
         let taken = Rc::clone(&dropped);
@@ -2354,10 +2354,10 @@ mod tests {
         key(&mut page, "ArrowLeft", false, ambre_bus::PageTime(0.0));
         assert!(key(&mut page, ";", true, ambre_bus::PageTime(0.0)));
         assert_eq!(*page.asked_emoji.borrow(), [Region::Channel]);
-        *page.emoji.borrow_mut() = Some((Region::Thread, "\u{1F680}".to_owned()));
+        *page.emoji.borrow_mut() = Some((Region::Thread, ambre_bus::Emoji::from("\u{1F680}")));
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().draft(channel).as_deref(), Some("ab"));
-        *page.emoji.borrow_mut() = Some((Region::Channel, "\u{1F680}".to_owned()));
+        *page.emoji.borrow_mut() = Some((Region::Channel, ambre_bus::Emoji::from("\u{1F680}")));
         frame_with_fonts(&mut page.view);
         assert_eq!(
             page.view.composer().draft(channel).as_deref(),

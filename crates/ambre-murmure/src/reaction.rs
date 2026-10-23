@@ -47,7 +47,8 @@ impl ReactionKey {
 
 /// Whether `emoji` is one emoji: one grapheme, with no space or control
 /// character, inside [`EMOJI_MAX_BYTES`].
-pub(crate) fn is_emoji(emoji: &str) -> bool {
+pub(crate) fn is_emoji(emoji: &Emoji) -> bool {
+    let emoji = emoji.as_str();
     emoji.len() <= EMOJI_MAX_BYTES
         && emoji.graphemes(true).count() == 1
         && !emoji.chars().any(|c| c.is_whitespace() || c.is_control())

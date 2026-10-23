@@ -4440,7 +4440,7 @@ fn concurrent_auto_layout_edits_converge() {
 
 fn emoji(s: &str) -> Reaction {
     Reaction {
-        kind: ReactionKind::Emoji(s.to_owned()),
+        kind: ReactionKind::Emoji(ambre_bus::Emoji::from(s)),
         ts: ambre_bus::Timestamp(0),
     }
 }
@@ -4471,7 +4471,7 @@ fn react_add_change_remove_updates_tally() {
         reaction: Some(emoji("thumbsup")),
     });
     let tally = st.reaction_tally(&t);
-    assert_eq!(tally.emoji, vec![("thumbsup".to_owned(), 1)]);
+    assert_eq!(tally.emoji, vec![(ambre_bus::Emoji::from("thumbsup"), 1)]);
     assert_eq!(tally.vote_count, 0);
 
     // Change the same user's reaction: one entry per user, so it replaces (LWW on
@@ -4511,7 +4511,7 @@ fn derive_viewport_carries_tally_and_skips_deleted_target() {
         .reactions
         .get(&t)
         .expect("tally present for reacted target");
-    assert_eq!(tally.emoji, vec![("thumbsup".to_owned(), 1)]);
+    assert_eq!(tally.emoji, vec![(ambre_bus::Emoji::from("thumbsup"), 1)]);
 
     // Deleting the target drops it from the derived map. Its orphan reaction
     // entries survive in the CRDT, and derivation skips them.
@@ -4780,7 +4780,7 @@ fn concurrent_reactions_distinct_users_converge() {
     assert_eq!(ta, b.reaction_tally(&t), "concurrent reactions diverged");
     assert_eq!(
         ta.emoji,
-        vec![("thumbsup".to_owned(), 2)],
+        vec![(ambre_bus::Emoji::from("thumbsup"), 2)],
         "two distinct users must both count, no double-count"
     );
 }
@@ -4876,7 +4876,7 @@ fn a_reacted_target_out_of_view_is_left_out_of_the_frame() {
     );
     assert_eq!(
         st.reaction_tally(&far).emoji,
-        vec![("heart".to_owned(), 1)],
+        vec![(ambre_bus::Emoji::from("heart"), 1)],
         "the board still holds the reaction out of view"
     );
 }
@@ -4887,7 +4887,10 @@ fn a_reacted_target_out_of_view_is_left_out_of_the_frame() {
 fn the_chips_of_a_target_keep_one_order() {
     let (one, t) = reacted_by(&[emoji("zebra"), emoji("apple"), emoji("zebra")]);
     let (other, u) = reacted_by(&[emoji("apple"), emoji("zebra"), emoji("zebra")]);
-    let expected = vec![("apple".to_owned(), 1), ("zebra".to_owned(), 2)];
+    let expected = vec![
+        (ambre_bus::Emoji::from("apple"), 1),
+        (ambre_bus::Emoji::from("zebra"), 2),
+    ];
 
     assert_eq!(one.reaction_tally(&t).emoji, expected);
     assert_eq!(one.reaction_tally(&t), one.reaction_tally(&t), "two reads");
@@ -4913,7 +4916,7 @@ fn votes_fold_into_one_signed_total_and_one_count() {
     assert_eq!((tally.vote_total, tally.vote_count), (1, 3));
     assert_eq!(
         tally.emoji,
-        vec![("heart".to_owned(), 1)],
+        vec![(ambre_bus::Emoji::from("heart"), 1)],
         "a vote is no chip"
     );
     assert_eq!(st.debug_viewport().reactions.get(&t), Some(&tally));
