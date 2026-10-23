@@ -12,7 +12,7 @@
 //!     through `web-sys` (ARIA roles, the `AppShell` canvas cell, toast text).
 //!
 //! On host the whole file is gated out (the `cfg` below), so `just test-native`
-//! skips it. The pure decision logic (`key_from_dom`, `place_menu`) is covered by
+//! skips it. The pure decision logic (`Key::from_dom`, `place_menu`) is covered by
 //! the `#[test]`s in `src/`.
 #![cfg(target_arch = "wasm32")]
 #![allow(

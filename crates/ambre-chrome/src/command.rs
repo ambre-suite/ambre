@@ -99,101 +99,11 @@ impl CommandStates {
 /// Returns `None` for keys not modelled by [`Key`] (dead keys, IME, unknown
 /// named keys), which the caller treats as "no command chord".
 pub fn keybinding_from_event(ev: &web_sys::KeyboardEvent) -> Option<KeyBinding> {
-    Some(KeyBinding::new(modifiers_of(ev), key_from_dom(&ev.key())?))
+    Some(KeyBinding::new(modifiers_of(ev), Key::from_dom(&ev.key())?))
 }
 
 /// The modifier set of a DOM keyboard event, the control and the command keys
 /// folded into the primary accelerator (`UI-THREAD-028`).
 pub(crate) fn modifiers_of(ev: &web_sys::KeyboardEvent) -> Modifiers {
     Modifiers::from_event(ev.ctrl_key(), ev.alt_key(), ev.shift_key(), ev.meta_key())
-}
-
-/// Map a DOM `KeyboardEvent.key` string to a logical [`Key`].
-fn key_from_dom(s: &str) -> Option<Key> {
-    Some(match s {
-        "Enter" => Key::Enter,
-        "Escape" | "Esc" => Key::Escape,
-        "Tab" => Key::Tab,
-        "Backspace" => Key::Backspace,
-        "Delete" | "Del" => Key::Delete,
-        " " | "Spacebar" => Key::Space,
-        "Insert" => Key::Insert,
-        "ArrowUp" => Key::ArrowUp,
-        "ArrowDown" => Key::ArrowDown,
-        "ArrowLeft" => Key::ArrowLeft,
-        "ArrowRight" => Key::ArrowRight,
-        "Home" => Key::Home,
-        "End" => Key::End,
-        "PageUp" => Key::PageUp,
-        "PageDown" => Key::PageDown,
-        other => {
-            // Function keys "F1".."F24".
-            if let Some(n) = other.strip_prefix('F').and_then(|d| d.parse::<u8>().ok()) {
-                if (1..=24).contains(&n) {
-                    return Some(Key::F(n));
-                }
-                return None;
-            }
-            // Single printable character (letters arrive as "a"/"A").
-            let mut chars = other.chars();
-            let c = chars.next()?;
-            if chars.next().is_some() {
-                return None; // multi-char named key we don't model
-            }
-            Key::char(c)
-        }
-    })
-}
-
-// -- Tests (host tier) -------------------------------------------------------
-// `key_from_dom` is pure (`&str -> Option<Key>`), the host-testable seam of the
-// keybinding manager: `keybinding_from_event` is reduced to wrapping it with the
-// modifier bits read off a `web_sys::KeyboardEvent` (covered in the wasm tier).
-// ambre-chrome compiles on host (leptos CSR + web-sys types), so this runs under
-// `cargo test -p ambre-chrome` -- see ambre-spec-testing.md.
-#[cfg(test)]
-mod tests {
-    use super::key_from_dom;
-    use ambre_commands::Key;
-
-    #[test]
-    fn named_keys_map() {
-        assert_eq!(key_from_dom("Enter"), Some(Key::Enter));
-        assert_eq!(key_from_dom("Escape"), Some(Key::Escape));
-        assert_eq!(key_from_dom("Esc"), Some(Key::Escape));
-        assert_eq!(key_from_dom("Del"), Some(Key::Delete));
-        assert_eq!(key_from_dom("Delete"), Some(Key::Delete));
-        assert_eq!(key_from_dom(" "), Some(Key::Space));
-        assert_eq!(key_from_dom("Spacebar"), Some(Key::Space));
-        assert_eq!(key_from_dom("Insert"), Some(Key::Insert));
-        assert_eq!(key_from_dom("ArrowUp"), Some(Key::ArrowUp));
-        assert_eq!(key_from_dom("PageDown"), Some(Key::PageDown));
-    }
-
-    #[test]
-    fn function_keys_in_range() {
-        assert_eq!(key_from_dom("F1"), Some(Key::F(1)));
-        assert_eq!(key_from_dom("F24"), Some(Key::F(24)));
-    }
-
-    #[test]
-    fn function_keys_out_of_range_rejected() {
-        assert_eq!(key_from_dom("F0"), None);
-        assert_eq!(key_from_dom("F25"), None);
-    }
-
-    #[test]
-    fn single_printable_char_maps() {
-        assert_eq!(key_from_dom("a"), Some(Key::char('a')));
-        assert_eq!(key_from_dom("A"), Some(Key::char('A')));
-        assert_eq!(key_from_dom("="), Some(Key::char('=')));
-    }
-
-    #[test]
-    fn unmodelled_keys_rejected() {
-        // Empty string (dead key / IME), multi-char named keys we don't model.
-        assert_eq!(key_from_dom(""), None);
-        assert_eq!(key_from_dom("MediaPlayPause"), None);
-        assert_eq!(key_from_dom("Unidentified"), None);
-    }
 }

@@ -111,6 +111,45 @@ impl Key {
     pub const fn char(c: char) -> Self {
         Self::Char(c.to_ascii_lowercase())
     }
+
+    /// The key a DOM `KeyboardEvent.key` names, `None` for a key the set does
+    /// not model: a dead key, an IME composition, an unknown named key. The
+    /// caller treats it as no chord.
+    pub fn from_dom(name: &str) -> Option<Self> {
+        Some(match name {
+            "Enter" => Self::Enter,
+            "Escape" | "Esc" => Self::Escape,
+            "Tab" => Self::Tab,
+            "Backspace" => Self::Backspace,
+            "Delete" | "Del" => Self::Delete,
+            " " | "Spacebar" => Self::Space,
+            "Insert" => Self::Insert,
+            "ArrowUp" => Self::ArrowUp,
+            "ArrowDown" => Self::ArrowDown,
+            "ArrowLeft" => Self::ArrowLeft,
+            "ArrowRight" => Self::ArrowRight,
+            "Home" => Self::Home,
+            "End" => Self::End,
+            "PageUp" => Self::PageUp,
+            "PageDown" => Self::PageDown,
+            other => {
+                // Function keys "F1".."F24".
+                if let Some(n) = other.strip_prefix('F').and_then(|d| d.parse::<u8>().ok()) {
+                    if (1..=24).contains(&n) {
+                        return Some(Self::F(n));
+                    }
+                    return None;
+                }
+                // Single printable character (letters arrive as "a"/"A").
+                let mut chars = other.chars();
+                let c = chars.next()?;
+                if chars.next().is_some() {
+                    return None; // multi-char named key we don't model
+                }
+                Self::char(c)
+            }
+        })
+    }
 }
 
 /// A fully-specified keyboard chord, for example Ctrl+Shift+B.
@@ -243,5 +282,46 @@ mod tests {
             KeyBinding::new(Modifiers::NONE, Key::F(5)).to_string(),
             "F5"
         );
+    }
+
+    #[test]
+    fn named_keys_map() {
+        assert_eq!(Key::from_dom("Enter"), Some(Key::Enter));
+        assert_eq!(Key::from_dom("Escape"), Some(Key::Escape));
+        assert_eq!(Key::from_dom("Esc"), Some(Key::Escape));
+        assert_eq!(Key::from_dom("Del"), Some(Key::Delete));
+        assert_eq!(Key::from_dom("Delete"), Some(Key::Delete));
+        assert_eq!(Key::from_dom(" "), Some(Key::Space));
+        assert_eq!(Key::from_dom("Spacebar"), Some(Key::Space));
+        assert_eq!(Key::from_dom("Insert"), Some(Key::Insert));
+        assert_eq!(Key::from_dom("ArrowUp"), Some(Key::ArrowUp));
+        assert_eq!(Key::from_dom("PageDown"), Some(Key::PageDown));
+    }
+
+    #[test]
+    fn function_keys_in_range() {
+        assert_eq!(Key::from_dom("F1"), Some(Key::F(1)));
+        assert_eq!(Key::from_dom("F24"), Some(Key::F(24)));
+    }
+
+    #[test]
+    fn function_keys_out_of_range_rejected() {
+        assert_eq!(Key::from_dom("F0"), None);
+        assert_eq!(Key::from_dom("F25"), None);
+    }
+
+    #[test]
+    fn single_printable_char_maps() {
+        assert_eq!(Key::from_dom("a"), Some(Key::char('a')));
+        assert_eq!(Key::from_dom("A"), Some(Key::char('A')));
+        assert_eq!(Key::from_dom("="), Some(Key::char('=')));
+    }
+
+    #[test]
+    fn unmodelled_keys_rejected() {
+        // Empty string (dead key / IME), multi-char named keys we don't model.
+        assert_eq!(Key::from_dom(""), None);
+        assert_eq!(Key::from_dom("MediaPlayPause"), None);
+        assert_eq!(Key::from_dom("Unidentified"), None);
     }
 }

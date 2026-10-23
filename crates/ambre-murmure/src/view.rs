@@ -24,7 +24,7 @@ use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PointerButton, RepaintPlan, TextCache,
     TextInput, Theme, ThemeControl,
 };
-use ambre_commands::{ClipboardWrite, Modifiers};
+use ambre_commands::{ClipboardWrite, Key, KeyBinding, Modifiers};
 use ambre_core::{ViewPoint, ViewPx};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
@@ -1671,10 +1671,11 @@ impl MurmureView {
                 // the composer's chords hold on every platform
                 // (`UI-THREAD-028`).
                 let mods = Modifiers::from_event(ctrl, alt, shift, meta);
+                let pressed = Key::from_dom(key);
                 // Up in an empty composer edits the member's latest message,
                 // or reply in a thread (`MURMURE-178`, `MURMURE-527`). With
                 // none, it moves the caret as ever.
-                if key == "ArrowUp"
+                if pressed == Some(Key::ArrowUp)
                     && mods == Modifiers::NONE
                     && self.composer.blank(channel)
                     && let Some(edit) = self.last_own_edit(channel)
@@ -1682,16 +1683,16 @@ impl MurmureView {
                     self.composer.start_edit(edit);
                     return Some(true);
                 }
-                if mods == Modifiers::PRIMARY && key.chars().eq([EMOJI_KEY]) {
+                if pressed.map(|key| KeyBinding::new(mods, key)) == Some(EMOJI_KEY) {
                     (self.reads.ask_emoji)(self.region);
                     return Some(true);
                 }
-                if !self.composer.key(channel, key, mods) {
+                if !pressed.is_some_and(|key| self.composer.key(channel, key, mods)) {
                     return None;
                 }
                 // The box is drawn, so its turn by Alt+Enter is said
                 // (`MURMURE-535`).
-                if key == "Enter"
+                if pressed == Some(Key::Enter)
                     && mods.alt
                     && !mods.shift
                     && matches!(channel, DraftOf::Thread(..))

@@ -557,7 +557,7 @@ const fn region_key(keys: KeyBinding, action: &'static str, place: KeyPlace) -> 
 
 /// The key that, with the primary modifier, opens the emoji picker on the
 /// composer (`MURMURE-139`).
-pub const EMOJI_KEY: char = ';';
+pub const EMOJI_KEY: KeyBinding = KeyBinding::primary(';');
 
 /// The keys inside a conversation, one row each (the Murmure keyboard spec).
 pub const REGION_KEYS: &[RegionKey] = &[
@@ -603,11 +603,7 @@ pub const REGION_KEYS: &[RegionKey] = &[
     ),
     // Unshifted on a QWERTY and on a French keyboard alike, and a chord no
     // browser services.
-    region_key(
-        KeyBinding::primary(EMOJI_KEY),
-        "Insert an emoji",
-        KeyPlace::Composer,
-    ),
+    region_key(EMOJI_KEY, "Insert an emoji", KeyPlace::Composer),
     region_key(
         KeyBinding::new(Modifiers::ALT, Key::Enter),
         "Also send the reply to the channel",

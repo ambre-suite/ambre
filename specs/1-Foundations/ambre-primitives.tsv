@@ -1138,7 +1138,6 @@ ambre-chrome | src/command.rs | crate::command | CommandStates::enabled_signal()
 ambre-chrome | src/command.rs | crate::command | CommandStates::set_enabled(value) | param | bool	math	state flag/predicate
 ambre-chrome | src/command.rs | crate::command | CommandStates::set_toggled(value) | param | bool	math	state flag/predicate
 ambre-chrome | src/command.rs | crate::command | CommandStates::toggled_signal() | ret | Option<RwSignal<bool>>	math	local value
-ambre-chrome | src/command.rs | crate::command | key_from_dom(s) | param | &str	generic	DOM key parser
 ambre-chrome | src/composed.rs | crate::composed | BRAND | const | &str	free-text	UI text/label const
 ambre-chrome | src/composed.rs | crate::composed | ComposedName.0 | field | String	newtype-inner	newtype inner
 ambre-chrome | src/composed.rs | crate::composed | ComposedName::or_placeholder(name) | param | Option<&str>	free-text	text, label or user content
@@ -1185,7 +1184,8 @@ ambre-chrome | src/menu.rs | crate::menu | initial() | ret | char	free-text	text
 ambre-chrome | src/menu.rs | crate::menu | initial(label) | param | &str	free-text	text, label or user content
 ambre-chrome | src/menu.rs | crate::menu | menu_key(at) | param | usize	math	local count/index/counter
 ambre-chrome | src/menu.rs | crate::menu | menu_key(initials) | param | &[char]	free-text	text, label or user content
-ambre-chrome | src/menu.rs | crate::menu | menu_key(key) | param | &str	debt	finding: DOM key names passed as `&str`
+ambre-chrome | src/menu.rs | crate::menu | event_menu_key(at) | param | usize	math	local count/index/counter
+ambre-chrome | src/menu.rs | crate::menu | event_menu_key(initials) | param | &[char]	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | CommandPalette(open) | param | RwSignal<bool>	math	state flag/predicate
 ambre-chrome | src/palette.rs | crate::palette | PaletteEntry.hint | field | Option<&'static str>	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | PaletteEntry.label | field | String	free-text	text, label or user content
@@ -1221,6 +1221,7 @@ ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::from_event(a
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::from_event(ctrl) | param | bool	newtype-inner	enum/newtype own accessor or constructor
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::from_event(meta) | param | bool	newtype-inner	enum/newtype own accessor or constructor
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::from_event(shift) | param | bool	newtype-inner	enum/newtype own accessor or constructor
+ambre-commands | src/keybinding.rs | crate::keybinding | Key::from_dom(name) | param | &str	foreign-api	DOM KeyboardEvent.key string parsed into Key
 ambre-commands | src/lib.rs | crate | Command.title | field | fn(&Locale)->String	free-text	text, label or user content
 ambre-commands | src/lib.rs | crate | CommandCategory.0 | field | &'static str	newtype-inner	newtype inner
 ambre-commands | src/lib.rs | crate | CommandId.0 | field | &'static str	newtype-inner	newtype inner
@@ -2021,7 +2022,6 @@ ambre-murmure | src/chrome.rs | crate::chrome | panel_open() | ret | bool	math	s
 ambre-murmure | src/chrome.rs | crate::chrome | segments() | ret | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | segments(count) | param | usize	math	local count/index/counter
 ambre-murmure | src/commands.rs | crate::commands | AskedAll.members | field | usize	math	local count/index/counter
-ambre-murmure | src/commands.rs | crate::commands | EMOJI_KEY | const | char	debt	bug: The composer reads raw `ctrl` and drops `meta`, so the primary chords are dead on macOS
 ambre-murmure | src/commands.rs | crate::commands | KeyPlace::words() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
 ambre-murmure | src/commands.rs | crate::commands | KeyRow.action | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | MessageAction::Copy.0 | field | String	newtype-inner	newtype inner
@@ -2082,9 +2082,7 @@ ambre-murmure | src/composer.rs | crate::composer | Composer::flush(size) | para
 ambre-murmure | src/composer.rs | crate::composer | Composer::focused() | ret | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::has_files() | ret | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::key() | ret | bool	math	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::key(key) | param | &str	debt	finding: DOM key names passed as `&str`
-ambre-murmure | src/composer.rs | crate::composer | Composer::list_key() | ret | bool	debt	finding: DOM key names passed as `&str`
-ambre-murmure | src/composer.rs | crate::composer | Composer::list_key(key) | param | &str	debt	finding: DOM key names passed as `&str`
+ambre-murmure | src/composer.rs | crate::composer | Composer::list_key() | ret | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::on_also() | ret | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::on_also(y) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Composer::paint() | ret | Option<(f32,f32,f32)>	math	layout geometry in logical px
@@ -2226,7 +2224,6 @@ ambre-murmure | src/markers.rs | crate::markers | QUOTE_MARKER | const | &str	fr
 ambre-murmure | src/markers.rs | crate::markers | bold(line) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | change(new) | param | &[char]	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/markers.rs | crate::markers | change(old) | param | &[char]	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/markers.rs | crate::markers | chord_style(key) | param | &str	debt	finding: DOM key names passed as `&str`
 ambre-murmure | src/markers.rs | crate::markers | closed(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | closed_at_send(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | closed_by_break(text) | param | &str	free-text	text, label or user content

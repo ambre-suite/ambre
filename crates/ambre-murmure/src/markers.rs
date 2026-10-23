@@ -7,6 +7,7 @@
 //! mentions do (`MURMURE-553`).
 
 use ambre_bus::{StyleMark, TextStyle};
+use ambre_commands::Key;
 use ambre_core::{
     ByteCount, ByteOffset, ByteSpan, CharOffset, CharSpan, ViewPoint, byte_to_char, char_len,
 };
@@ -66,14 +67,13 @@ pub fn cover(styles: &[StyleMark], style: &TextStyle, range: CharSpan) -> Cover 
 }
 
 /// The style of a chord's key, `None` for a key no style takes.
-pub fn chord_style(key: &str) -> Option<TextStyle> {
-    let mut chars = key.chars();
-    let (Some(key), None) = (chars.next(), chars.next()) else {
+pub fn chord_style(key: Key) -> Option<TextStyle> {
+    let Key::Char(key) = key else {
         return None;
     };
     MARK_CHORDS
         .iter()
-        .find(|(chord, _)| *chord == key.to_ascii_lowercase())
+        .find(|(chord, _)| *chord == key)
         .map(|(_, style)| style.clone())
 }
 
@@ -628,11 +628,11 @@ mod tests {
     /// (`MURMURE-431`).
     #[test]
     fn a_chord_names_its_style() {
-        assert_eq!(chord_style("b"), Some(TextStyle::Bold));
-        assert_eq!(chord_style("I"), Some(TextStyle::Italic));
-        assert_eq!(chord_style("e"), Some(TextStyle::Code));
-        for key in ["x", "bb", "", "Enter"] {
-            assert_eq!(chord_style(key), None, "{key}");
+        assert_eq!(chord_style(Key::char('b')), Some(TextStyle::Bold));
+        assert_eq!(chord_style(Key::char('I')), Some(TextStyle::Italic));
+        assert_eq!(chord_style(Key::char('e')), Some(TextStyle::Code));
+        for key in [Key::char('x'), Key::Space, Key::Enter, Key::F(2)] {
+            assert_eq!(chord_style(key), None, "{key:?}");
         }
         for key in ["*", "_", "`", ")"] {
             assert!(closes(key), "{key}");

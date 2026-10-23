@@ -555,7 +555,7 @@ fn the_palette_lists_the_other_members_of_the_space_after_the_channels() {
 }
 
 /// A channel entry shows its channel, even beside a member whose id holds
-/// the same sixteen bytes: the entry's key says which of the two it names,
+/// the same sixteen bytes. The entry's key says which of the two it names,
 /// and no key is fetched for the member.
 #[wasm_bindgen_test]
 fn a_channel_entry_shows_its_channel_beside_a_member_of_the_same_bytes() {

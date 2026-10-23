@@ -49,7 +49,7 @@ pub fn filter<'a>(table: &'a [Command], query: &str, locale: &Locale) -> Vec<&'a
 }
 
 /// What a palette entry names: a channel to open, or a member to write to.
-/// The palette hands it back when the entry is chosen, so a list that changed
+/// The palette hands it back when the entry is chosen. A list that changed
 /// meanwhile picks no other, and a member is never read as a channel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PaletteKey {

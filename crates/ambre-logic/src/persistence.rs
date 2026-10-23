@@ -147,9 +147,9 @@ impl IdbKey {
         Self(id.as_uuid().to_simple())
     }
 
-    /// A key no other delta of `document` holds: the document's key, then the
-    /// time, a counter for this page, and a random draw for another tab
-    /// writing in the same millisecond.
+    /// A key no other delta of `document` holds. It is the document's key,
+    /// then the time and a counter for this page. A random draw last parts
+    /// another tab writing in the same millisecond.
     fn fresh_delta(document: DocumentId) -> Self {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);

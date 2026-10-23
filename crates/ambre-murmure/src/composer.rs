@@ -33,7 +33,7 @@ use ambre_bus::{
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
-use ambre_commands::Modifiers;
+use ambre_commands::{Key, Modifiers};
 use ambre_core::{
     ByteCount, ByteOffset, CharSpan, HistoryStep, ViewPoint, byte_span_to_chars, byte_to_char,
     char_len, char_span_to_bytes,
@@ -811,7 +811,7 @@ impl Composer {
     /// An open `@` list takes its own keys first (`MURMURE-554`). Answers
     /// whether the composer took the key. `Ctrl` here is the primary
     /// accelerator, the command key on macOS (`UI-THREAD-028`).
-    pub fn key(&mut self, of: DraftOf, key: &str, mods: Modifiers) -> bool {
+    pub fn key(&mut self, of: DraftOf, key: Key, mods: Modifiers) -> bool {
         if self.composing {
             return false;
         }
@@ -833,29 +833,29 @@ impl Composer {
         }
         let word = primary || alt;
         let intent = match key {
-            "Enter" if shift => {
+            Key::Enter if shift => {
                 // A line break closes the block marker of its line.
                 self.breaking = Some(of);
                 EditIntent::Newline
             }
-            "Enter" if alt && matches!(of, DraftOf::Thread(..)) => {
+            Key::Enter if alt && matches!(of, DraftOf::Thread(..)) => {
                 self.toggle_also(of);
                 return true;
             }
-            "Enter" => {
+            Key::Enter => {
                 self.send = Some(of);
                 return true;
             }
-            "Escape" if self.editing(of) => {
+            Key::Escape if self.editing(of) => {
                 self.end_edit(of);
                 return true;
             }
-            "Escape" => {
+            Key::Escape => {
                 self.blur();
                 return true;
             }
-            "z" | "Z" | "y" | "Y" if primary => {
-                let step = if shift || key.eq_ignore_ascii_case("y") {
+            Key::Char('z' | 'y') if primary => {
+                let step = if shift || key == Key::Char('y') {
                     HistoryStep::Redo
                 } else {
                     HistoryStep::Undo
@@ -866,21 +866,21 @@ impl Composer {
                 self.saying = Some((of, Say::Draft));
                 return true;
             }
-            "a" | "A" if primary => EditIntent::SelectAll,
-            "Backspace" => EditIntent::Backspace,
-            "Delete" => EditIntent::Delete,
-            "ArrowLeft" => EditIntent::Left {
+            Key::Char('a') if primary => EditIntent::SelectAll,
+            Key::Backspace => EditIntent::Backspace,
+            Key::Delete => EditIntent::Delete,
+            Key::ArrowLeft => EditIntent::Left {
                 select: shift,
                 word,
             },
-            "ArrowRight" => EditIntent::Right {
+            Key::ArrowRight => EditIntent::Right {
                 select: shift,
                 word,
             },
-            "ArrowUp" => EditIntent::Up { select: shift },
-            "ArrowDown" => EditIntent::Down { select: shift },
-            "Home" => EditIntent::LineStart { select: shift },
-            "End" => EditIntent::LineEnd { select: shift },
+            Key::ArrowUp => EditIntent::Up { select: shift },
+            Key::ArrowDown => EditIntent::Down { select: shift },
+            Key::Home => EditIntent::LineStart { select: shift },
+            Key::End => EditIntent::LineEnd { select: shift },
             _ => return false,
         };
         let edits = matches!(
@@ -913,7 +913,7 @@ impl Composer {
     /// A key while the `@` list of the draft `of` shows an entry. Up and Down
     /// move the choice round the list, Enter and Tab pick it, and Escape
     /// closes the list until its query ends (`MURMURE-554`).
-    fn list_key(&mut self, of: DraftOf, key: &str) -> bool {
+    fn list_key(&mut self, of: DraftOf, key: Key) -> bool {
         let Some(asking) = self
             .asking
             .as_mut()
@@ -923,13 +923,13 @@ impl Composer {
         };
         let len = asking.offers.len();
         match key {
-            "ArrowDown" => asking.chosen = asking.chosen.after(len),
-            "ArrowUp" => asking.chosen = asking.chosen.before(len),
-            "Enter" | "Tab" => {
+            Key::ArrowDown => asking.chosen = asking.chosen.after(len),
+            Key::ArrowUp => asking.chosen = asking.chosen.before(len),
+            Key::Enter | Key::Tab => {
                 let chosen = asking.chosen;
                 self.pick(of, chosen);
             }
-            "Escape" => {
+            Key::Escape => {
                 self.dismissed = Some((of, asking.at));
                 self.asking = None;
             }

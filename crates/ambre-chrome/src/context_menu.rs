@@ -281,8 +281,7 @@ pub fn ContextMenu(
         // because its items are commands, not clickable DOM handlers.
         let on_keydown = move |ev: web_sys::KeyboardEvent| {
             let at = focused.get_untracked();
-            match crate::menu::menu_key(&ev.key(), crate::command::modifiers_of(&ev), at, &initials)
-            {
+            match crate::menu::event_menu_key(&ev, at, &initials) {
                 MenuKey::Focus(i) => {
                     ev.prevent_default();
                     focused.set(i);
