@@ -10,7 +10,7 @@ use loro::{TreeID, TreeParentId};
 use crate::doc;
 use crate::doc::StoredLevel;
 use crate::events::{
-    BlockId, BlockInit, BlockType, HeadingLevel, ParagraphStyle, ProseOutcome, tree_id,
+    BlockId, BlockInit, BlockType, HeadingLevel, ParagraphStyle, ProseOutcome, StyleId, tree_id,
 };
 
 use super::ProseState;
@@ -54,7 +54,7 @@ impl ProseState {
 
     /// The style id a live block carries, or `None` for the type's built-in.
     #[must_use]
-    pub fn style_of(&self, id: &BlockId) -> Option<String> {
+    pub fn style_of(&self, id: &BlockId) -> Option<StyleId> {
         doc::style_of(&doc::blocks(&self.doc), &tree_id(*id))
     }
 
@@ -109,7 +109,7 @@ impl ProseState {
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
         init: &BlockInit,
-        style_id: Option<&str>,
+        style_id: Option<&StyleId>,
     ) -> ProseOutcome {
         let id = match self.mint_placed(parent_id, after_id, init.block_type()) {
             Ok(id) => id,
@@ -121,7 +121,7 @@ impl ProseState {
         let tree = doc::blocks(&self.doc);
         if let Some(style_id) = style_id
             && let Some(node) = doc::node_of(&tree, &id)
-            && let Err(e) = node.insert(doc::NodeKey::Style, style_id)
+            && let Err(e) = node.insert(doc::NodeKey::Style, style_id.0.as_str())
         {
             return Self::err_write(&format!("{e:?}"));
         }
@@ -445,7 +445,7 @@ impl ProseState {
         };
         if let Some(style_id) = doc::style_of(&tree, source) {
             target_node
-                .insert(doc::NodeKey::Style, style_id.as_str())
+                .insert(doc::NodeKey::Style, style_id.0.as_str())
                 .map_err(|e| format!("{e:?}"))?;
         }
         doc::write_paragraph_style(&target_node, &doc::read_paragraph_style(&tree, source))

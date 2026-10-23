@@ -415,7 +415,9 @@ impl ProseState {
         Some(match doc::block_type_of(tree, &id)? {
             BlockType::Paragraph => IrBlock::Paragraph {
                 styled: !doc::read_paragraph_style(tree, &id).is_empty()
-                    || doc::style_of(tree, &id).is_some_and(|style| style != "body"),
+                    || doc::style_of(tree, &id).is_some_and(|style| {
+                        doc::BuiltInStyle::of(&style) != Some(doc::BuiltInStyle::Body)
+                    }),
                 runs: runs(),
             },
             // The stored level, unclamped (`PROSE-FEAT-091`).

@@ -400,7 +400,7 @@ fn block_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     );
     let what = match field {
         doc::NodeKey::Type => format!("is a {:?}", doc::block_type_of(&tree, &id)?),
-        doc::NodeKey::Style => format!("styled {:?}", doc::style_of(&tree, &id)?),
+        doc::NodeKey::Style => format!("styled {:?}", doc::style_of(&tree, &id)?.0),
         doc::NodeKey::Hidden => format!("hidden {}", doc::is_hidden(&tree, &id)),
         doc::NodeKey::Regrown => format!(
             "counted among the grown empty roots {}",

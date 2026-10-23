@@ -17,8 +17,8 @@ pub use ambre_bus::app::prose::{
     FootnoteEntry, HeaderField, HeadingLevel, HfTarget, LineHeight, LineHeightMode, LinkSpan,
     ListStyle, MarkAction, OrderedStyle, PageCount, PageIndex, PageNumber, PageSpan,
     ParagraphStyle, PresencePayload, ProseCommand, ProseError, ProseEvent, ProseRefusal,
-    RemoteCursor, ResolvedCrossRef, Suggestion, SuggestionKind, SuggestionSpan, TableOfContents,
-    TextEdit, TocEntry, TriState, VAlign, WordCount,
+    RemoteCursor, ResolvedCrossRef, StyleId, Suggestion, SuggestionKind, SuggestionSpan,
+    TableOfContents, TextEdit, TocEntry, TriState, VAlign, WordCount,
 };
 
 use loro::TreeID;

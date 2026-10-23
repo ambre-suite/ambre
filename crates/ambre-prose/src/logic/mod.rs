@@ -641,7 +641,7 @@ impl ProseState {
                 parent_id.map(tree_id),
                 after_id.map(tree_id),
                 &init,
-                style_id.as_ref().map(|s| s.0.as_str()),
+                style_id.as_ref(),
             ),
             ProseCommand::DeleteBlock { block_id } => self.delete_block(&tree_id(block_id)),
             ProseCommand::MoveBlock {

@@ -20,7 +20,7 @@ use loro::{
 
 use ambre_bus::app::prose::{
     Align, BlockType, DocCount, DocOffset, DocSpan, HeadingLevel, LineHeight, LineHeightMode,
-    ListStyle, OrderedStyle, ParagraphStyle,
+    ListStyle, OrderedStyle, ParagraphStyle, StyleId,
 };
 
 // -----------------------------------------------------------------------------
@@ -316,25 +316,60 @@ pub(crate) fn fields_of<K: ambre_core::crdt::FieldKey>(
 /// (`PROSE-FEAT-232`): one inch.
 pub const DEFAULT_COLUMN_WIDTH: Pt = Pt::new(72.0);
 
-/// The nine built-in style names. A document written by an older client renders
+/// The nine built-in styles. A document written by an older client renders
 /// them from the client rather than from stale copies of its own
 /// (`PROSE-093`).
-pub const BUILT_IN_STYLES: [&str; 9] = [
-    "body",
-    "heading-1",
-    "heading-2",
-    "heading-3",
-    "heading-4",
-    "heading-5",
-    "heading-6",
-    "code",
-    "quote",
-];
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BuiltInStyle {
+    Body,
+    Heading(HeadingLevel),
+    Code,
+    Quote,
+}
+
+impl BuiltInStyle {
+    /// The nine, body first.
+    pub const ALL: [Self; 9] = [
+        Self::Body,
+        Self::Heading(HeadingLevel::H1),
+        Self::Heading(HeadingLevel::H2),
+        Self::Heading(HeadingLevel::H3),
+        Self::Heading(HeadingLevel::H4),
+        Self::Heading(HeadingLevel::H5),
+        Self::Heading(HeadingLevel::H6),
+        Self::Code,
+        Self::Quote,
+    ];
+
+    /// The name the tree stores for it.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Body => "body",
+            Self::Heading(HeadingLevel::H1) => "heading-1",
+            Self::Heading(HeadingLevel::H2) => "heading-2",
+            Self::Heading(HeadingLevel::H3) => "heading-3",
+            Self::Heading(HeadingLevel::H4) => "heading-4",
+            Self::Heading(HeadingLevel::H5) => "heading-5",
+            Self::Heading(HeadingLevel::H6) => "heading-6",
+            Self::Code => "code",
+            Self::Quote => "quote",
+        }
+    }
+
+    /// The built-in style a style id names, or `None` for a user's own.
+    #[must_use]
+    pub fn of(style_id: &StyleId) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|style| style.name() == style_id.0)
+    }
+}
 
 /// Whether `style_id` is one of the nine names every build compiles in.
 #[must_use]
-pub fn is_built_in_style(style_id: &ambre_bus::app::prose::StyleId) -> bool {
-    BUILT_IN_STYLES.contains(&style_id.0.as_str())
+pub fn is_built_in_style(style_id: &StyleId) -> bool {
+    BuiltInStyle::of(style_id).is_some()
 }
 
 // -----------------------------------------------------------------------------
@@ -658,9 +693,9 @@ pub(crate) fn regions(tree: &LoroTree, table: &TreeID) -> Vec<Region> {
 /// The style id a block carries, or `None` when it carries none. An absent key
 /// means the block type's own built-in style (`PROSE-096`).
 #[must_use]
-pub fn style_of(tree: &LoroTree, id: &TreeID) -> Option<String> {
+pub fn style_of(tree: &LoroTree, id: &TreeID) -> Option<StyleId> {
     let node = node_of(tree, id)?;
-    read_string(&node, NodeKey::Style)
+    read_string(&node, NodeKey::Style).map(StyleId)
 }
 
 /// The live children of a parent, or of the root when `parent` is `None`.

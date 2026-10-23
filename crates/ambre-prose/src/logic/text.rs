@@ -495,7 +495,10 @@ mod tests {
             focus: (ids[1], DocOffset::ZERO),
         });
         assert_eq!(state.root_blocks(), vec![ids[0]]);
-        assert_eq!(state.style_of(&ids[0]).as_deref(), Some("quote"));
+        assert_eq!(
+            state.style_of(&ids[0]),
+            Some(ambre_bus::app::prose::StyleId("quote".to_owned()))
+        );
     }
 
     #[test]

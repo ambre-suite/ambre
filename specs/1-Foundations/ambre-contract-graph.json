@@ -6714,7 +6714,7 @@
   {"edge": "cites-document", "from": "PROSE-092", "section": "2.D", "to": "architecture"},
   {"edge": "verified-by", "from": "PROSE-092", "to": "ambre_prose::logic::convergence_tests::two_peers_setting_two_paragraph_properties_lose_neither"},
   {"edge": "cites-section", "from": "PROSE-093", "section": "5", "to": "4-Prose/ambre-spec-prose-schema.md"},
-  {"edge": "verified-by", "from": "PROSE-093", "to": "ambre_prose::doc::BUILT_IN_STYLES"},
+  {"edge": "verified-by", "from": "PROSE-093", "to": "ambre_prose::doc::BuiltInStyle"},
   {"edge": "verified-by", "from": "PROSE-093", "to": "ambre_prose::doc::tests::the_nine_built_in_style_names_are_not_user_styles"},
   {"edge": "cites-section", "from": "PROSE-031", "section": "3", "to": "4-Prose/ambre-spec-prose-schema.md"},
   {"edge": "verified-by", "from": "PROSE-031", "to": "ambre_prose::logic::notes::tests::an_entry_is_a_note_by_its_declared_kind_and_by_nothing_else"},

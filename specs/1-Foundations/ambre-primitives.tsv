@@ -2743,7 +2743,6 @@ ambre-prose | src/count.rs | crate::count | tally(text) | param | &str	free-text
 ambre-prose | src/doc.rs | crate::doc | Anchor.value | field | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | BODY_SEPARATOR | const | char	newtype-inner	the spelling of BodyKey, a body root name
 ambre-prose | src/doc.rs | crate::doc | BODY_TAG | const | &str	newtype-inner	the spelling of BodyKey, a body root name
-ambre-prose | src/doc.rs | crate::doc | BUILT_IN_STYLES | const | [&str;9]	debt	finding: built-in style ids as &str (confirmed)
 ambre-prose | src/doc.rs | crate::doc | Bands.different_first_page | field | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Bands.footer_enabled | field | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Bands.header_enabled | field | bool	generic	independent flag or predicate
@@ -2777,7 +2776,6 @@ ambre-prose | src/doc.rs | crate::doc | read_f64() | ret | Option<f64>	math	layo
 ambre-prose | src/doc.rs | crate::doc | read_i64() | ret | Option<i64>	math	count, size or local index
 ambre-prose | src/doc.rs | crate::doc | read_string() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | read_title() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | style_of() | ret | Option<String>	debt	finding: built-in style ids as &str (confirmed)
 ambre-prose | src/doc.rs | crate::doc | write_page_format() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/events.rs | crate::events | ProseOutcome::named(refused) | param | &'static str	free-text	text content / label / parser input
 ambre-prose | src/events.rs | crate::events | UNNAMED | const | &str	free-text	text content / label / parser input
@@ -3132,10 +3130,8 @@ ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_side_en
 ambre-prose | src/logic/bands.rs | crate::logic::bands | field_mark() | ret | (&'static str,&'static str)	debt	finding: header-field codec duplicated as string literals (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::carry_style() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::code_lang_of() | ret | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::insert_block(style_id) | param | Option<&str>	debt	finding: built-in style ids as &str (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::set_code_lang(lang) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::style_of() | ret | Option<String>	debt	finding: built-in style ids as &str (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::write_init() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::stamp() | ret | (bool,ambre_bus::app::prose::TextChangeSeq,ambre_bus::app::prose::TextAck,Vec<TextEdit>,)	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
@@ -5628,3 +5624,4 @@ ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion.0 | field |
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::get() | ret | u64	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::new(value) | param | u64	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/view/provisional.rs | crate::view::provisional | Key | alias | (u64,LayoutVersion,Option<Splitting>,String)	free-text	text content / label / parser input
+ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
