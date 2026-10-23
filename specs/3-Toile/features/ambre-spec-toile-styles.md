@@ -100,14 +100,14 @@ separate from the fill, because on a note the fill is the card:
 ```rust
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ElementStyle {
-    pub fill:       Option<u32>,   // ARGB; None = no fill
-    pub stroke:     Option<u32>,
+    pub fill:       Option<Rgba>,  // 0xRRGGBBAA; None = no fill
+    pub stroke:     Option<Rgba>,
     pub stroke_w:   f32,
     pub opacity:    f32,           // 0.0 ..= 1.0
     pub corner:     f32,           // corner radius
     pub font:       FontSpec,      // family, size (points), weight, italic, underline, strikethrough
     pub shadow:     Option<Shadow>,
-    pub text_color: Option<u32>,   // None = the kind's default ink
+    pub text_color: Option<Rgba>,  // None = the kind's default ink
 }
 ```
 

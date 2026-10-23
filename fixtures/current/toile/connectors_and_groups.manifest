@@ -1,11 +1,11 @@
 {
   "generator": "toile/connectors_and_groups",
-  "generator_version": 1,
+  "generator_version": 2,
   "seed": 1669982087086082,
   "doc_type": "Toile",
   "ambre_version": 1,
   "schema_version": 5,
-  "digest": "119d48fec1bd40e23c3f7c18753c5d1183cae9eefa98cc787b9b0d56e67a2caa",
+  "digest": "c42b14d7879e7539eb46e15f8825b7b42664a455ce54278a96b46a662ebdc532",
   "shape": {
     "peers": 1,
     "body": {

@@ -44,7 +44,7 @@
 //! enforced while walking. Any breach aborts the whole import atomically: the
 //! returned `Err` carries no commands.
 
-use ambre_core::{Argb, Rgb};
+use ambre_core::{Rgb, Rgba};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
 
@@ -459,15 +459,15 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
         ..ElementStyle::default()
     };
     if let Some(fill) = path.fill() {
-        match paint_argb(fill.paint(), fill.opacity().get()) {
-            Some(argb) => style.fill = Some(argb),
+        match paint_rgba(fill.paint(), fill.opacity().get()) {
+            Some(rgba) => style.fill = Some(rgba),
             None => batch.report.skip("path fill: non-solid paint dropped"),
         }
     }
     if let Some(stroke) = path.stroke() {
-        match paint_argb(stroke.paint(), stroke.opacity().get()) {
-            Some(argb) => {
-                style.stroke = Some(argb);
+        match paint_rgba(stroke.paint(), stroke.opacity().get()) {
+            Some(rgba) => {
+                style.stroke = Some(rgba);
                 style.stroke_w = stroke.width().get();
             }
             None => batch.report.skip("path stroke: non-solid paint dropped"),
@@ -476,13 +476,13 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
     style
 }
 
-/// A solid paint as packed ARGB (`ElementStyle` color encoding), or `None` for a
+/// A solid paint as packed RGBA (`ElementStyle` color encoding), or `None` for a
 /// gradient / pattern paint.
-fn paint_argb(paint: &usvg::Paint, opacity: f32) -> Option<Argb> {
+fn paint_rgba(paint: &usvg::Paint, opacity: f32) -> Option<Rgba> {
     match paint {
         usvg::Paint::Color(c) => {
             let a = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
-            Some(Rgb::from_channels(c.red, c.green, c.blue).to_argb(a))
+            Some(Rgb::from_channels(c.red, c.green, c.blue).to_rgba(a))
         }
         _ => None,
     }

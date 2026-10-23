@@ -20,7 +20,7 @@
 
 use crate::debounce::{DRAG_DEBOUNCE, Debouncer};
 
-use ambre_core::{Argb, Rgb, Rgba};
+use ambre_core::{Rgb, Rgba};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -93,18 +93,6 @@ impl PickedColour for Rgba {
 
     fn from_rgba(rgba: Rgba) -> Self {
         rgba
-    }
-}
-
-impl PickedColour for Argb {
-    const ALPHA: AlphaEdit = AlphaEdit::Slider;
-
-    fn as_rgba(self) -> Rgba {
-        self.to_rgba()
-    }
-
-    fn from_rgba(rgba: Rgba) -> Self {
-        rgba.to_argb()
     }
 }
 

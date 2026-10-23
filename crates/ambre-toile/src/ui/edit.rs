@@ -13,7 +13,7 @@
 
 use ambre_bus::app::toile::{ConnectorId, DisplayElement, ElementId, ElementStyle};
 use ambre_canvas::{Palette, TextEditor, TextEditorStyle};
-use ambre_core::Argb;
+use ambre_core::Rgba;
 use ambre_draw::{Alignment, BoundingBox, Color, DrawSurface, FontContext, Point};
 
 // Re-export the shared intent type so the view keeps its `super::edit::EditIntent`
@@ -83,7 +83,7 @@ impl InlineEditor {
         // body matches its committed look. The element opacity is baked into
         // the alpha, as the committed pass does (`TOILE-UI-186`).
         let color = super::walk::resolved_text_ink(host, elem.style.text_color, elem.style.fill)
-            .map(|c| argb_text(c, elem.style.opacity))
+            .map(|c| ink_color(c, elem.style.opacity))
             .unwrap_or(palette.cell_text);
         // Size: sticky auto-sizes from bounds unless overridden. A zero size is
         // kept, not floored, so an invisible body stays invisible under edit
@@ -221,8 +221,8 @@ impl InlineEditor {
 
 /// A text colour to a `Color`, pre-multiplying the element `opacity` into the
 /// alpha channel (`TOILE-UI-186`), as the committed pass does.
-fn argb_text(v: Argb, opacity: f32) -> Color {
-    super::walk::argb(v, opacity)
+fn ink_color(v: Rgba, opacity: f32) -> Color {
+    super::walk::style_color(v, opacity)
 }
 
 #[cfg(test)]
@@ -280,7 +280,7 @@ mod tests {
     #[test]
     fn the_pinned_style_carries_opacity_and_decorations() {
         let style = ElementStyle {
-            text_color: Some(Argb::from_bits(0xffff_0000)),
+            text_color: Some(Rgba::from_bits(0xff00_00ff)),
             opacity: 0.5,
             font: FontSpec {
                 underline: true,

@@ -1436,11 +1436,6 @@ ambre-core | src/channel_kind.rs | crate::channel_kind | ChannelDocumentKind::as
 ambre-core | src/channel_kind.rs | crate::channel_kind | ChannelDocumentKind::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/channel_kind.rs | crate::channel_kind | SegmentState::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/channel_kind.rs | crate::channel_kind | SegmentState::parse(word) | param | &str	newtype-inner	closed-set enum word codec
-ambre-core | src/color.rs | crate::color | Argb.0 | field | u32	debt	planned: lot D bis 3: Argb removed
-ambre-core | src/color.rs | crate::color | Argb::alpha() | ret | u8	debt	planned: lot D bis 3: Argb removed
-ambre-core | src/color.rs | crate::color | Argb::bits() | ret | u32	debt	planned: lot D bis 3: Argb removed
-ambre-core | src/color.rs | crate::color | Argb::channels() | ret | [u8;4]	debt	planned: lot D bis 3: Argb removed
-ambre-core | src/color.rs | crate::color | Argb::from_bits(bits) | param | u32	debt	planned: lot D bis 3: Argb removed
 ambre-core | src/color.rs | crate::color | Rgb.0 | field | u32	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgb::bits() | ret | u32	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgb::channels() | ret | [u8;3]	newtype-inner	Rgba/Rgb constructor or accessor
@@ -1448,7 +1443,6 @@ ambre-core | src/color.rs | crate::color | Rgb::from_bits(bits) | param | u32	ne
 ambre-core | src/color.rs | crate::color | Rgb::from_channels(b) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgb::from_channels(g) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgb::from_channels(r) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
-ambre-core | src/color.rs | crate::color | Rgb::to_argb(alpha) | param | u8	debt	planned: lot D bis 3: Argb removed
 ambre-core | src/color.rs | crate::color | Rgb::to_rgba(alpha) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba.0 | field | u32	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::bits() | ret | u32	newtype-inner	Rgba/Rgb constructor or accessor
@@ -4874,7 +4868,7 @@ ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fa
 ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::lerp(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | ease_in_out_cubic() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | ease_in_out_cubic(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_argb(t) | param | f64	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_rgba(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f32() | ret | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f32(a) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f32(b) | param | f32	math	geometry, layout, count or size local to the algorithm
@@ -4958,7 +4952,6 @@ ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | mime
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | pending_hash(index) | param | usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.document | field | String	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.skipped | field | Vec<String>	generic	SVG serialisation text
-ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | argb_hex_opacity() | ret | (String,f32)	debt	planned: lot D item 3 drop Argb (hex+opacity pair)
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | element_shape() | ret | Option<String>	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | element_svg() | ret | Option<String>	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | f() | ret | String	generic	SVG serialisation text
@@ -4974,7 +4967,7 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | import_image(media_counter) | param | &mut usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | import_svg(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | paint_argb(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | paint_rgba(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | push_element() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | walk_group(depth) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | walk_group(media_counter) | param | &mut usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
@@ -5251,7 +5244,7 @@ ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::pad() | ret | f64
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::pad(zoom) | param | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::render(show_caret) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::selected_text() | ret | Option<String>	free-text	label, message or user text
-ambre-toile | src/ui/edit.rs | crate::ui::edit | argb_text(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/edit.rs | crate::ui::edit | ink_color(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/embed.rs | crate::ui::embed | AddressError::message() | ret | &'static str	free-text	AddressError message text
 ambre-toile | src/ui/embed.rs | crate::ui::embed | CLICK_SLOP | const | f64	math	click slop px; duplicated in view.rs and embed.rs, values agree (4.0)
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EMBED_CLOSE_DEBOUNCE_MS | const | f64	math	frame-clock span compared with PageTime
@@ -5584,7 +5577,7 @@ ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	geomet
 ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | STICKY_SHADOW_OFFSET | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | TEXT_PAD | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | argb(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/walk.rs | crate::ui::walk | style_color(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | paint_text(text) | param | &str	free-text	label, message or user text

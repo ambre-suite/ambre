@@ -26,7 +26,7 @@
 
 use ambre_bus::app::toile::STICKY_AUTO_FONT_SIZE;
 use ambre_chrome::commands::{CommandId, Locale};
-use ambre_core::{Argb, FontSize};
+use ambre_core::{FontSize, Rgba};
 
 use super::icons;
 use crate::ui::commands as registry;
@@ -54,8 +54,8 @@ pub fn SelectionToolbar(
     // published bar / model each time the view republishes them, and updated on
     // every pick so the trigger strips track. Reading `bar` / `model` here never
     // re-triggers a picker.
-    let fill = RwSignal::new(None::<Argb>);
-    let text_color = RwSignal::new(None::<Argb>);
+    let fill = RwSignal::new(None::<Rgba>);
+    let text_color = RwSignal::new(None::<Rgba>);
     let font_family = RwSignal::new(None::<String>);
     let font_size = RwSignal::new(FontSize::default());
     let bold = RwSignal::new(false);
@@ -82,11 +82,11 @@ pub fn SelectionToolbar(
     });
 
     // Fill / text-colour picks: track the local swatch and emit the field edit.
-    let on_fill = Callback::new(move |c: Option<Argb>| {
+    let on_fill = Callback::new(move |c: Option<Rgba>| {
         fill.set(c);
         on_style.run(StyleEdit::Fill(c));
     });
-    let on_text_color = Callback::new(move |c: Option<Argb>| {
+    let on_text_color = Callback::new(move |c: Option<Rgba>| {
         text_color.set(c);
         on_style.run(StyleEdit::TextColor(c));
     });
@@ -205,7 +205,7 @@ pub fn SelectionToolbar(
                                 title="Text colour"
                                 icon=icondata::MdiFormatColorText
                                 current=text_color
-                                default=Signal::derive(|| Argb::from_bits(0xff1a_1a1a))
+                                default=Signal::derive(|| Rgba::from_bits(0x1a1a_1aff))
                                 reset_label="Default"
                                 on_pick=on_text_color
                             />
@@ -214,7 +214,7 @@ pub fn SelectionToolbar(
                                 title="Fill"
                                 icon=icondata::MdiFormatColorFill
                                 current=fill
-                                default=Signal::derive(|| Argb::from_bits(0xffff_ffff))
+                                default=Signal::derive(|| Rgba::from_bits(0xffff_ffff))
                                 reset_label="No fill"
                                 on_pick=on_fill
                             />

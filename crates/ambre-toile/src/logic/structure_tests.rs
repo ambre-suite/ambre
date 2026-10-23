@@ -2,7 +2,7 @@
 //! covers the birth of an element, the lock, groups and frame membership. It
 //! also covers the paint order, the culling camera and the ids.
 
-use ambre_core::Argb;
+use ambre_core::Rgba;
 use std::collections::HashSet;
 
 use kurbo::{Point, Rect, Size, Vec2};
@@ -270,7 +270,7 @@ fn a_locked_element_refuses_every_command_but_the_lock() {
     });
     let before = (order(&st), st.bounds_of(&note), st.style_of(&note));
     let red = ElementStyle {
-        fill: Some(Argb::from_bits(0xffff_0000)),
+        fill: Some(Rgba::from_bits(0xff00_00ff)),
         ..ElementStyle::default()
     };
     for cmd in [

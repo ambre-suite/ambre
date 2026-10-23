@@ -4,8 +4,9 @@
 # it reads back, for every value of the shape belt's board. A line reads
 # `path = stored => reading`. The path collapses ids and list positions as
 # `shapes.txt` does. The reading is taken by a second board that reopened the
-# first one's snapshot, in absolute units: world px, degrees, ms, `#aarrggbb`,
-# one-based positions. A register no reader of the build reads says so.
+# first one's snapshot, in absolute units: world px, degrees, ms, a colour as
+# `#aarrggbb` up to v4 and as `#rrggbbaa` from v5, one-based positions. A
+# register no reader of the build reads says so.
 #
 # Written by `logic::state::schema_reading`, which fails when a build stores or
 # reads a value otherwise than the section frozen for its version. A reading
@@ -92,7 +93,7 @@ presentation_order/* = "0000000000000001_00000003" => slide 1
 reactions/* = 00022b3102 => tallies [("+1", 1)], 0 votes summing 0
 
 == v5
-board/bg_color = 4280163870 => read by no reader of this build
+board/bg_color = 505290495 => read by no reader of this build
 board/grid_size = 32 => grid unit 32 world px
 board/grid_snap = false => read by no reader of this build
 comments/*/anchor = 0019303030303030303030303030303030315f3030303030303031 => pinned to element 0000000000000001_00000001
@@ -109,7 +110,7 @@ connectors/*/from = "0000000000000001_00000001" => starts at (10, 5) px
 connectors/*/from_anch = "r" => leaves by Right
 connectors/*/label = "edge" => captioned "edge"
 connectors/*/path_type = "s" => routed Straight as M10,5 L40,5
-connectors/*/style = 0101ffffffff0f01b3e6ccf90f0000803f0000803f000000000a73616e732d73657269660000404190030000000000 => fill #ffffffff, stroke #ff333333 1 px, opacity 1, corner 0 px, font "sans-serif" 12 pt weight 400, ink none
+connectors/*/style = 0101ffffffff0f01ffe7cc99030000803f0000803f000000000a73616e732d73657269660000404190030000000000 => fill #ffffffff, stroke #333333ff 1 px, opacity 1, corner 0 px, font "sans-serif" 12 pt weight 400, ink none
 connectors/*/to = "0000000000000001_00000002" => ends at (40, 5) px
 connectors/*/to_anch = "l" => arrives by Left
 elements/*/autolayout = 00000000000000204000000000000010400000000000001040000000000000104000000000000010400000 => flows Horizontal, gap 8 px, padding [4.0, 4.0, 4.0, 4.0] px, aligned Start, sized Hug
@@ -129,8 +130,8 @@ elements/*/points = 0200000000000000000000803f0000803f0000803f0000803f => stroke
 elements/*/rot = 0 => turned 0 degrees
 elements/*/shape = "path" => kind Shape(Path)
 elements/*/shape = "rect" => kind Shape(Rect)
-elements/*/style = 01018ae1fbff0f00000000000000803f000000000a73616e732d73657269660000000090030000000000 => fill #fffef08a, stroke none 0 px, opacity 1, corner 0 px, font "sans-serif" 0 pt weight 400, ink none
-elements/*/style = 0101ffffffff0f01b3e6ccf90f0000803f0000803f000000000a73616e732d73657269660000404190030000000000 => fill #ffffffff, stroke #ff333333 1 px, opacity 1, corner 0 px, font "sans-serif" 12 pt weight 400, ink none
+elements/*/style = 0101ff95c2f70f00000000000000803f000000000a73616e732d73657269660000000090030000000000 => fill #fef08aff, stroke none 0 px, opacity 1, corner 0 px, font "sans-serif" 0 pt weight 400, ink none
+elements/*/style = 0101ffffffff0f01ffe7cc99030000803f0000803f000000000a73616e732d73657269660000404190030000000000 => fill #ffffffff, stroke #333333ff 1 px, opacity 1, corner 0 px, font "sans-serif" 12 pt weight 400, ink none
 elements/*/text = "hello" => shows "hello"
 elements/*/type = "doc_embed" => kind DocEmbed
 elements/*/type = "drawing" => kind Drawing

@@ -264,7 +264,9 @@ impl FixtureGen for ToileFixture {
     }
 
     fn generator_version(&self) -> u32 {
-        1
+        // 2: a colour is stored `0xRRGGBBAA`. An artifact frozen before
+        // stores `0xAARRGGBB`, and no migration rewrites it.
+        2
     }
 
     fn build(&self) -> Vec<u8> {

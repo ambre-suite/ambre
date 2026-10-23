@@ -17,7 +17,7 @@
 use std::fmt::Write as _;
 
 use ambre_bus::app::toile::STICKY_AUTO_FONT_SIZE;
-use ambre_core::Argb;
+use ambre_core::Rgba;
 use base64::Engine as _;
 use kurbo::Rect;
 
@@ -176,12 +176,11 @@ fn element_shape(el: &ExportElement) -> Option<String> {
             } else {
                 r.height()
             };
-            let (hex, op) =
-                argb_hex_opacity(el.style.text_color.unwrap_or(Argb::from_bits(0xFF00_0000)));
-            let mut attrs = format!(" font-size=\"{}\" fill=\"{hex}\"", f(size));
-            if op < 1.0 {
-                let _ = write!(attrs, " fill-opacity=\"{}\"", f(f64::from(op)));
-            }
+            let paint = SvgPaint {
+                attribute: PaintAttribute::Fill,
+                colour: el.style.text_color.unwrap_or(Rgba::from_bits(0x0000_00FF)),
+            };
+            let attrs = format!(" font-size=\"{}\"{paint}", f(size));
             Some(format!(
                 "<text x=\"{}\" y=\"{}\"{attrs}>{body}</text>",
                 f(r.x0),
@@ -210,34 +209,63 @@ fn element_shape(el: &ExportElement) -> Option<String> {
 }
 
 /// The `fill`/`stroke`/`stroke-width` attribute string for a styled shape, in a
-/// fixed order for byte-stability. Colors come from the ARGB `ElementStyle`.
+/// fixed order for byte-stability. Colors come from the RGBA `ElementStyle`.
 fn paint_attrs(el: &ExportElement) -> String {
     let mut s = String::new();
     match el.style.fill {
-        Some(argb) => {
-            let (hex, op) = argb_hex_opacity(argb);
-            let _ = write!(s, " fill=\"{hex}\"");
-            if op < 1.0 {
-                let _ = write!(s, " fill-opacity=\"{}\"", f(f64::from(op)));
-            }
+        Some(colour) => {
+            let paint = SvgPaint {
+                attribute: PaintAttribute::Fill,
+                colour,
+            };
+            let _ = write!(s, "{paint}");
         }
         None => s.push_str(" fill=\"none\""),
     }
-    if let Some(argb) = el.style.stroke {
-        let (hex, op) = argb_hex_opacity(argb);
-        let _ = write!(s, " stroke=\"{hex}\"");
-        if op < 1.0 {
-            let _ = write!(s, " stroke-opacity=\"{}\"", f(f64::from(op)));
-        }
+    if let Some(colour) = el.style.stroke {
+        let paint = SvgPaint {
+            attribute: PaintAttribute::Stroke,
+            colour,
+        };
+        let _ = write!(s, "{paint}");
         let _ = write!(s, " stroke-width=\"{}\"", f(f64::from(el.style.stroke_w)));
     }
     s
 }
 
-/// Split a packed ARGB into a `#rrggbb` string and a `0.0..=1.0` alpha.
-fn argb_hex_opacity(argb: Argb) -> (String, f32) {
-    let [r, g, b, a] = argb.channels();
-    (format!("#{r:02x}{g:02x}{b:02x}"), f32::from(a) / 255.0)
+/// The SVG attribute a colour paints.
+#[derive(Clone, Copy)]
+enum PaintAttribute {
+    Fill,
+    Stroke,
+}
+
+/// One colour as SVG attributes: the `#rrggbb` paint, then its opacity when
+/// the colour is translucent. SVG 1.1 readers take no alpha in the paint.
+struct SvgPaint {
+    attribute: PaintAttribute,
+    colour: Rgba,
+}
+
+impl std::fmt::Display for SvgPaint {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (paint, opacity) = match self.attribute {
+            PaintAttribute::Fill => ("fill", "fill-opacity"),
+            PaintAttribute::Stroke => ("stroke", "stroke-opacity"),
+        };
+        write!(out, " {paint}=\"{}\"", self.colour.rgb())?;
+        let [.., alpha] = self.colour.channels();
+        if alpha < u8::MAX {
+            // The ratio is taken in `f32`, so the digits stay those an export
+            // has always written.
+            write!(
+                out,
+                " {opacity}=\"{}\"",
+                f(f64::from(f32::from(alpha) / 255.0))
+            )?;
+        }
+        Ok(())
+    }
 }
 
 /// Union AABB of every element's rect, or `None` if the slice is empty.
@@ -284,8 +312,8 @@ mod tests {
             Rect::new(10.0, 20.0, 110.0, 70.0),
         );
         el.style = ElementStyle {
-            fill: Some(Argb::from_bits(0xFF33_66CC)),
-            stroke: Some(Argb::from_bits(0xFF00_0000)),
+            fill: Some(Rgba::from_bits(0x3366_CCFF)),
+            stroke: Some(Rgba::from_bits(0x0000_00FF)),
             stroke_w: 2.0,
             ..ElementStyle::default()
         };
@@ -418,7 +446,7 @@ mod tests {
         let mut el = ExportElement::new(ElementKind::Text, Rect::new(0.0, 0.0, 50.0, 20.0));
         el.text = Some("sized".to_owned());
         el.style.font.size = ambre_core::FontSize::from_whole_points(24);
-        el.style.text_color = Some(Argb::from_bits(0xFF11_2233));
+        el.style.text_color = Some(Rgba::from_bits(0x1122_33FF));
         let svg = export_svg(&[el]).document;
         assert!(
             svg.contains("font-size=\"32\" fill=\"#112233\""),

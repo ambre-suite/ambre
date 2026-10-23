@@ -592,13 +592,13 @@ fn draw_handle<S: DrawSurface>(surface: &mut S, p: Point, palette: &Palette) {
 mod tests {
     use super::*;
     use crate::ui::walk::{
-        STICKY_INK, STICKY_SHADOW, TextHost, anim_transform, argb, contrast, resolved_text_ink,
-        sticky_font_size, sticky_or_style_font_size,
+        STICKY_INK, STICKY_SHADOW, TextHost, anim_transform, contrast, resolved_text_ink,
+        sticky_font_size, sticky_or_style_font_size, style_color,
     };
     use ambre_bus::app::toile::{
         DisplayConnector, DisplayElement, ElementId, ElementKind, ElementStyle, ShapeKind,
     };
-    use ambre_core::Argb;
+    use ambre_core::Rgba;
     use ambre_draw::Color;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
@@ -764,7 +764,7 @@ mod tests {
                 bounds: Rect::new(20.0, 20.0, 70.0, 70.0),
                 rotation: 0.0,
                 opacity: 0.5,
-                fill: Some(Argb::from_bits(0xFF00_00FF)),
+                fill: Some(Rgba::from_bits(0x0000_FFFF)),
             },
         );
         let mut surface = RecordingSurface::new();
@@ -803,7 +803,7 @@ mod tests {
         id: &str,
         kind: ElementKind,
         geom: DisplayGeom,
-        fill: Option<Argb>,
+        fill: Option<Rgba>,
     ) -> DisplayNode {
         let style = ElementStyle {
             fill,
@@ -847,7 +847,7 @@ mod tests {
     /// sticky is therefore drawn over the card and stays readable.
     #[test]
     fn a_caption_plate_is_painted_over_the_element_bodies() {
-        let fill = Argb::from_bits(0xFFFE_F08A);
+        let fill = Rgba::from_bits(0xFEF0_8AFF);
         let mut path = ambre_draw::BezPath::new();
         path.move_to((-200.0, 40.0));
         path.line_to((300.0, 40.0));
@@ -881,7 +881,7 @@ mod tests {
         let card = ops
             .iter()
             .position(
-                |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == argb(fill, 1.0)),
+                |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == style_color(fill, 1.0)),
             )
             .expect("the sticky paints its card");
         let plates: Vec<usize> = ops
@@ -909,7 +909,7 @@ mod tests {
     // Text and paint no background, so it was invisible (toile-styles).
     #[test]
     fn sticky_paints_a_colored_card() {
-        let fill = Argb::from_bits(0xFFFE_F08A); // sticky yellow
+        let fill = Rgba::from_bits(0xFEF0_8AFF); // sticky yellow
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
             grid_unit: grid::BASE_GRID,
@@ -925,24 +925,23 @@ mod tests {
         };
         let surface = paint(&vp);
         // The card is a FillPath in the sticky's own colour.
-        let card = surface
-            .ops()
-            .iter()
-            .any(|op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == argb(fill, 1.0)));
+        let card = surface.ops().iter().any(
+            |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == style_color(fill, 1.0)),
+        );
         assert!(
             card,
             "a sticky must paint a coloured card in the geometry pass"
         );
         // A drop shadow is painted behind the card, in the translucent shadow colour.
         let shadow = surface.ops().iter().any(
-            |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == argb(STICKY_SHADOW, 1.0)),
+            |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == style_color(STICKY_SHADOW, 1.0)),
         );
         assert!(shadow, "a sticky must paint a drop shadow behind its card");
         // Any glyphs the body produces use the fixed ink, never the card colour
         // (the ink is independent of `fill`,). Font-availability agnostic:
         // if no glyphs are shaped this simply holds vacuously.
-        let card_color = argb(fill, 1.0);
-        let ink = argb(STICKY_INK, 1.0);
+        let card_color = style_color(fill, 1.0);
+        let ink = style_color(STICKY_INK, 1.0);
         for op in surface.ops() {
             if let DrawOp::Glyphs { color: Some(c), .. } = op {
                 assert_eq!(*c, ink, "sticky body must use the ink, not the card colour");
@@ -992,27 +991,27 @@ mod tests {
         assert_eq!(
             resolved_text_ink(
                 TextHost::Sticky,
-                Some(Argb::from_bits(0x1234)),
-                Some(Argb::from_bits(0x9999))
+                Some(Rgba::from_bits(0x0012_3400)),
+                Some(Rgba::from_bits(0x0099_9900))
             ),
-            Some(Argb::from_bits(0x1234))
+            Some(Rgba::from_bits(0x0012_3400))
         );
         assert_eq!(
             resolved_text_ink(
                 TextHost::Text,
-                Some(Argb::from_bits(0x1234)),
-                Some(Argb::from_bits(0x9999))
+                Some(Rgba::from_bits(0x0012_3400)),
+                Some(Rgba::from_bits(0x0099_9900))
             ),
-            Some(Argb::from_bits(0x1234))
+            Some(Rgba::from_bits(0x0012_3400))
         );
         // No text_color: a sticky uses its ink; a text element uses its fill.
         assert_eq!(
-            resolved_text_ink(TextHost::Sticky, None, Some(Argb::from_bits(0x9999))),
+            resolved_text_ink(TextHost::Sticky, None, Some(Rgba::from_bits(0x0099_9900))),
             Some(STICKY_INK)
         );
         assert_eq!(
-            resolved_text_ink(TextHost::Text, None, Some(Argb::from_bits(0x9999))),
-            Some(Argb::from_bits(0x9999))
+            resolved_text_ink(TextHost::Text, None, Some(Rgba::from_bits(0x0099_9900))),
+            Some(Rgba::from_bits(0x0099_9900))
         );
         // A text element with neither falls back to the theme (None).
         assert_eq!(resolved_text_ink(TextHost::Text, None, None), None);
@@ -1047,7 +1046,7 @@ mod tests {
                 "t",
                 ElementKind::Text,
                 DisplayGeom::Text("hi".into()),
-                Some(Argb::from_bits(0xFF00_00FF)),
+                Some(Rgba::from_bits(0x0000_FFFF)),
             )],
         };
         let surface = paint(&vp);
@@ -1872,7 +1871,7 @@ mod tests {
         out
     }
 
-    fn filled(id: &str, fill: Argb, bounds: Rect) -> DisplayNode {
+    fn filled(id: &str, fill: Rgba, bounds: Rect) -> DisplayNode {
         let DisplayNode::Element(mut e) = elem(id, DisplayGeom::Rect, bounds) else {
             panic!("elem builds an element")
         };
@@ -1881,7 +1880,7 @@ mod tests {
         DisplayNode::Element(e)
     }
 
-    fn arrow(id: &str, stroke: Argb, from: (f64, f64), to: (f64, f64)) -> DisplayNode {
+    fn arrow(id: &str, stroke: Rgba, from: (f64, f64), to: (f64, f64)) -> DisplayNode {
         let mut path = BezPath::new();
         path.move_to(from);
         path.line_to(to);
@@ -1900,7 +1899,7 @@ mod tests {
         })
     }
 
-    fn note(id: &str, body: &str, fill: Argb, bounds: Rect) -> DisplayNode {
+    fn note(id: &str, body: &str, fill: Rgba, bounds: Rect) -> DisplayNode {
         let DisplayNode::Element(mut e) = styled_elem(
             id,
             ElementKind::Sticky,
@@ -1918,22 +1917,22 @@ mod tests {
     #[test]
     fn the_walk_paints_in_the_order_it_is_handed() {
         let (red, blue, green) = (
-            Argb::from_bits(0xFFFF_0000),
-            Argb::from_bits(0xFF00_00FF),
-            Argb::from_bits(0xFF00_FF00),
+            Rgba::from_bits(0xFF00_00FF),
+            Rgba::from_bits(0x0000_FFFF),
+            Rgba::from_bits(0x00FF_00FF),
         );
         let a = filled("a", red, Rect::new(0.0, 0.0, 50.0, 50.0));
         let b = filled("b", green, Rect::new(20.0, 20.0, 70.0, 70.0));
         let c = arrow("c", blue, (-40.0, 30.0), (120.0, 30.0));
         let order = |nodes: Vec<DisplayNode>| {
             let surface = paint_pass(&board(nodes), &cam(), &Pass::default());
-            let at = |want: Argb| {
+            let at = |want: Rgba| {
                 surface
                     .ops()
                     .iter()
                     .position(|op| match op {
-                        DrawOp::FillPath { color: Some(k) } => *k == argb(want, 1.0),
-                        DrawOp::StrokePath { color: Some(k), .. } => *k == argb(want, 1.0),
+                        DrawOp::FillPath { color: Some(k) } => *k == style_color(want, 1.0),
+                        DrawOp::StrokePath { color: Some(k), .. } => *k == style_color(want, 1.0),
                         _ => false,
                     })
                     .expect("every node paints")
@@ -1953,13 +1952,13 @@ mod tests {
     fn a_note_body_is_drawn_in_an_ink_that_reads_on_its_card() {
         let bounds = Rect::new(0.0, 0.0, 200.0, 160.0);
         let cards = [
-            Argb::from_bits(0xFFFE_F08A),
-            Argb::from_bits(0xFFFF_FFFF),
-            Argb::from_bits(0xFF00_0000),
+            Rgba::from_bits(0xFEF0_8AFF),
+            Rgba::from_bits(0xFFFF_FFFF),
+            Rgba::from_bits(0x0000_00FF),
             STICKY_INK,
-            Argb::from_bits(0xFF1E_3A8A),
-            Argb::from_bits(0xFF77_7777),
-            Argb::from_bits(0xFFE5_3935),
+            Rgba::from_bits(0x1E3A_8AFF),
+            Rgba::from_bits(0x7777_77FF),
+            Rgba::from_bits(0xE539_35FF),
         ];
         for card in cards {
             let vp = board(vec![note("s", "Plan the week", card, bounds)]);
@@ -1970,7 +1969,7 @@ mod tests {
             assert_ne!(ink, card, "card {card:08x}");
             assert!(contrast(ink, card) >= 4.0, "card {card:08x}");
             for (color, _, _) in painted {
-                assert_eq!(color, Some(argb(ink, 1.0)), "card {card:08x}");
+                assert_eq!(color, Some(style_color(ink, 1.0)), "card {card:08x}");
             }
         }
     }
@@ -2030,7 +2029,7 @@ mod tests {
         let vp = board(vec![note(
             "s",
             "Plan",
-            Argb::from_bits(0xFFFE_F08A),
+            Rgba::from_bits(0xFEF0_8AFF),
             bounds,
         )]);
         let origin = |zoom: f64| {
@@ -2161,13 +2160,13 @@ mod tests {
             note(
                 "a",
                 "First",
-                Argb::from_bits(0xFFFE_F08A),
+                Rgba::from_bits(0xFEF0_8AFF),
                 Rect::new(0.0, 0.0, 160.0, 120.0),
             ),
             note(
                 "b",
                 "Second note",
-                Argb::from_bits(0xFFFE_F08A),
+                Rgba::from_bits(0xFEF0_8AFF),
                 Rect::new(200.0, 0.0, 360.0, 120.0),
             ),
         ]);
@@ -2209,7 +2208,7 @@ mod tests {
     fn the_background_comes_first_and_focus_drops_the_grid() {
         let vp = board(vec![filled(
             "a",
-            Argb::from_bits(0xFFFF_0000),
+            Rgba::from_bits(0xFF00_00FF),
             Rect::new(0.0, 0.0, 50.0, 50.0),
         )]);
         let canvas = Rect::new(0.0, 0.0, 1000.0, 800.0);

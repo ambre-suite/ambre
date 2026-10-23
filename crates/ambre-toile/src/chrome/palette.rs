@@ -123,17 +123,14 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
                     <div class="swatches">
                         {STICKY_SWATCHES
                             .iter()
-                            .map(|&argb| {
+                            .map(|&card| {
                                 view! {
                                     <button
-                                        aria-label=format!("#{:06x}", argb.rgb().bits())
-                                        style:background-color=format!(
-                                            "#{:06x}",
-                                            argb.rgb().bits(),
-                                        )
+                                        aria-label=card.rgb().to_string()
+                                        style:background-color=card.rgb().to_string()
                                         on:mousedown=move |ev| ev.prevent_default()
                                         on:click=move |_| {
-                                            active.set(Tool::Sticky(argb));
+                                            active.set(Tool::Sticky(card));
                                             open.set(false);
                                         }
                                     ></button>

@@ -369,7 +369,7 @@ mod tests {
     use super::*;
     use crate::logic::model::ElementKind;
     use crate::logic::state::{BoardKey, ConfigKey, ToileState};
-    use ambre_core::Argb;
+    use ambre_core::Rgba;
 
     /// A snapshot of a board carrying `version` in its register. A `None`
     /// version writes no register at all, which is every board written before
@@ -480,7 +480,7 @@ mod tests {
     #[test]
     fn a_board_whose_styles_carry_no_version_keeps_them() {
         let style = ElementStyle {
-            fill: Some(Argb::from_bits(0xffaa_bbcc)),
+            fill: Some(Rgba::from_bits(0xaabb_ccff)),
             corner: 8.0,
             ..ElementStyle::default()
         };

@@ -71,8 +71,8 @@ use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
 use ambre_bus::UserId;
-use ambre_core::HistoryStep;
 use ambre_core::schema::SchemaError;
+use ambre_core::{HistoryStep, Rgba};
 
 use crate::logic::command::{
     Broadcast, PresencePayload, PresentMode, SelectionStats, StatsRequestKind, ToileCommand,
@@ -229,10 +229,13 @@ fn write_edits(text: &loro::LoroText, edits: &[Edit]) -> loro::LoroResult<()> {
     Ok(())
 }
 
+/// The board background the scaffolding stores: a dark grey, opaque.
+const BOARD_BG: Rgba = Rgba::from_bits(0x1E1E_1EFF);
+
 /// The board scaffolding, which every peer writes on open, before any edit.
 fn write_scaffold(doc: &LoroDoc) {
     let board = names::board(doc);
-    let _ = board.insert(BoardKey::BgColor, 0xFF1E_1E1Eu32 as i64);
+    let _ = board.insert(BoardKey::BgColor, i64::from(BOARD_BG.bits()));
     let _ = board.insert(BoardKey::GridSize, 32.0);
     let _ = board.insert(BoardKey::GridSnap, false);
     // The presentation defaults sit in a root map, so they are registers on

@@ -16,7 +16,7 @@
 // palette (and the keyboard) write a shared `RwSignal<Tool>` the view applies.
 // ============================================================================
 
-use ambre_core::Argb;
+use ambre_core::Rgba;
 use std::borrow::Cow;
 
 use ambre_bus::app::toile::{STICKY_DEFAULT_FILL, ShapeKind};
@@ -89,18 +89,18 @@ pub fn tool_for_command(id: CommandId) -> Option<Tool> {
 }
 
 /// The sticky-note colour swatches offered by the palette's colour picker
-/// (`toile-tools`), ARGB. The first entry is [`STICKY_DEFAULT_FILL`]
+/// (`toile-tools`), RGBA. The first entry is [`STICKY_DEFAULT_FILL`]
 /// (the bare-key / default colour); the rest are the standard whiteboard pastels
 /// (blue, green, pink, orange, purple, grey). Shared with the chrome popover so
 /// the offered set is host-tested here rather than buried in wasm-only code.
-pub const STICKY_SWATCHES: &[Argb] = &[
+pub const STICKY_SWATCHES: &[Rgba] = &[
     STICKY_DEFAULT_FILL,          // yellow (default)
-    Argb::from_bits(0xFFA5_D8FF), // blue
-    Argb::from_bits(0xFFB2_F2BB), // green
-    Argb::from_bits(0xFFFF_C9C9), // pink
-    Argb::from_bits(0xFFFF_D8A8), // orange
-    Argb::from_bits(0xFFD0_BFFF), // purple
-    Argb::from_bits(0xFFDE_E2E6), // grey
+    Rgba::from_bits(0xA5D8_FFFF), // blue
+    Rgba::from_bits(0xB2F2_BBFF), // green
+    Rgba::from_bits(0xFFC9_C9FF), // pink
+    Rgba::from_bits(0xFFD8_A8FF), // orange
+    Rgba::from_bits(0xD0BF_FFFF), // purple
+    Rgba::from_bits(0xDEE2_E6FF), // grey
 ];
 
 /// Bind the bare-key tool chords into the launcher keymap. These are the de-facto
@@ -428,7 +428,7 @@ mod tests {
         assert_eq!(seen.len(), STICKY_SWATCHES.len(), "swatch colours collide");
         // Every swatch is fully opaque (alpha = 0xFF), so a note is never
         // accidentally transparent.
-        assert!(STICKY_SWATCHES.iter().all(|c| c.alpha() == 0xFF));
+        assert!(STICKY_SWATCHES.iter().all(|c| c.channels()[3] == 0xFF));
     }
 
     #[test]

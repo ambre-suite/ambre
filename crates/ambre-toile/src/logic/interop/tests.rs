@@ -6,7 +6,7 @@
 //! safety-limit reject path aborting atomically, embedded raster import, and the
 //! report of dropped constructs.
 
-use ambre_core::Argb;
+use ambre_core::Rgba;
 use std::io::Cursor;
 
 use image::ImageFormat;
@@ -256,9 +256,9 @@ fn rect_import_preserves_fill_and_stroke_style() {
     let style = batch.styles[0]
         .as_ref()
         .expect("rect carries an imported style");
-    // fill="#3366cc" -> opaque ARGB; stroke="#000000" width 2.
-    assert_eq!(style.fill, Some(Argb::from_bits(0xFF_3366CC)));
-    assert_eq!(style.stroke, Some(Argb::from_bits(0xFF_000000)));
+    // fill="#3366cc" -> opaque RGBA; stroke="#000000" width 2.
+    assert_eq!(style.fill, Some(Rgba::from_bits(0x3366_CCFF)));
+    assert_eq!(style.stroke, Some(Rgba::from_bits(0x0000_00FF)));
     assert_eq!(style.stroke_w, 2.0);
 }
 
@@ -377,7 +377,7 @@ fn round_trip_rect_is_stable() {
         ElementKind::Shape(ShapeKind::Rect),
         Rect::new(10.0, 20.0, 110.0, 70.0),
     );
-    el.style.fill = Some(Argb::from_bits(0xFF33_66CC));
+    el.style.fill = Some(Rgba::from_bits(0x3366_CCFF));
 
     let svg1 = export_svg(std::slice::from_ref(&el)).document;
     let batch = import_svg(svg1.as_bytes(), &Limits::default()).unwrap();

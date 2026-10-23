@@ -3,7 +3,7 @@
 //! freehand stroke commit. Split out of `state/mod.rs`; every method here is a
 //! `handle_command` target and commits exactly one undo item.
 
-use ambre_core::Argb;
+use ambre_core::Rgba;
 use std::collections::HashSet;
 
 use kurbo::{Point, Rect, Vec2};
@@ -31,7 +31,7 @@ impl ToileState {
         at: Point,
         size: kurbo::Size,
         content: InitContent,
-        fill: Option<Argb>,
+        fill: Option<Rgba>,
         correlate: u64,
     ) -> ToileOutcome {
         let id = match self.create_element_inner(kind, at, size, content, fill) {
@@ -56,7 +56,7 @@ impl ToileState {
         at: Point,
         size: kurbo::Size,
         content: InitContent,
-        fill: Option<Argb>,
+        fill: Option<Rgba>,
     ) -> Result<ElementId, ToileError> {
         // Group and Drawing are not creatable here: a group is born via
         // GroupElements, a stroke via CommitStroke.
@@ -637,7 +637,7 @@ mod inner_tests {
     //! a restyle and a group must share ONE `doc.commit()` and collapse to ONE
     //! undo item, the invariant `apply_import` relies on.
 
-    use ambre_core::Argb;
+    use ambre_core::Rgba;
     use kurbo::{Point, Size};
 
     use crate::logic::align::AlignOp;
@@ -675,7 +675,7 @@ mod inner_tests {
         let a = rect_at(&mut st, 0.0);
         let b = rect_at(&mut st, 20.0);
         let style = ElementStyle {
-            fill: Some(Argb::from_bits(0xFF_3366CC)),
+            fill: Some(Rgba::from_bits(0x3366_CCFF)),
             ..ElementStyle::default()
         };
         assert!(st.restyle_inner(std::slice::from_ref(&a), &style));
@@ -882,13 +882,13 @@ mod inner_tests {
         let b = rect(&mut st, 40.0, 0.0, 10.0);
         // Seed two members with differing hidden fields, whole (the import path).
         let shadow = ambre_bus::app::toile::Shadow {
-            color: Argb::from_bits(0),
+            color: Rgba::from_bits(0x0000_0000),
             dx: 1.0,
             dy: 1.0,
             blur: 2.0,
         };
         let style_a = ElementStyle {
-            fill: Some(Argb::from_bits(0xffff_0000)),
+            fill: Some(Rgba::from_bits(0xff00_00ff)),
             corner: 12.0,
             shadow: Some(shadow),
             font: ambre_bus::app::toile::FontSpec {
@@ -898,7 +898,7 @@ mod inner_tests {
             ..ElementStyle::default()
         };
         let style_b = ElementStyle {
-            fill: Some(Argb::from_bits(0xff00_ff00)),
+            fill: Some(Rgba::from_bits(0x00ff_00ff)),
             corner: 0.0,
             shadow: None,
             font: ambre_bus::app::toile::FontSpec {
@@ -915,7 +915,7 @@ mod inner_tests {
         st.handle_command(ToileCommand::RestyleElements {
             ids: vec![a.clone(), b.clone()],
             style: ElementStyle {
-                fill: Some(Argb::from_bits(0xff00_00ff)),
+                fill: Some(Rgba::from_bits(0x0000_ffff)),
                 ..ElementStyle::default()
             },
         });
@@ -927,8 +927,8 @@ mod inner_tests {
         assert_eq!(st.style_of(&b).corner, 0.0);
         assert!(st.style_of(&b).shadow.is_none());
         assert_eq!(st.style_of(&b).font.weight, 400);
-        assert_eq!(st.style_of(&a).fill, Some(Argb::from_bits(0xff00_00ff)));
-        assert_eq!(st.style_of(&b).fill, Some(Argb::from_bits(0xff00_00ff)));
+        assert_eq!(st.style_of(&a).fill, Some(Rgba::from_bits(0x0000_ffff)));
+        assert_eq!(st.style_of(&b).fill, Some(Rgba::from_bits(0x0000_ffff)));
     }
 
     /// `TOILE-UI-194`: a create echoes its correlate token, so a deferred open

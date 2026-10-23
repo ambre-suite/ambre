@@ -15,7 +15,7 @@
 //! red under an unchanged `SCHEMA_VERSION`.
 //!
 //! **Absolute units.** A reading names its unit: a length in world px, an
-//! angle in degrees, a duration in ms, a colour as `#aarrggbb`. A position in
+//! angle in degrees, a duration in ms, a colour as `#rrggbbaa`. A position in
 //! a list is one-based.
 //!
 //! **What no reader reads.** A few registers are written and read by nothing
@@ -28,7 +28,7 @@
 //! shape belt's, so the two belts read the same board. Its values are frozen
 //! here, so a command added to it lands with a raised version, like a new key.
 
-use ambre_core::Argb;
+use ambre_core::Rgba;
 use std::collections::BTreeSet;
 
 use ambre_core::schema::verdict;
@@ -173,14 +173,14 @@ fn frozen_path(stored: &Stored) -> String {
     path
 }
 
-/// A packed `0xAARRGGBB` colour.
-fn colour(argb: Argb) -> String {
-    format!("#{:08x}", argb.bits())
+/// A packed `0xRRGGBBAA` colour.
+fn colour(rgba: Rgba) -> String {
+    rgba.to_string()
 }
 
 /// A colour that may be absent, which the painter reads as none.
-fn maybe_colour(argb: Option<Argb>) -> String {
-    argb.map_or_else(|| "none".to_owned(), colour)
+fn maybe_colour(rgba: Option<Rgba>) -> String {
+    rgba.map_or_else(|| "none".to_owned(), colour)
 }
 
 /// What a decoded style sets, field by field, each in its unit.

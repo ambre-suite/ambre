@@ -23,7 +23,7 @@ use ambre_bus::app::toile::{
     ElementId, ElementStyle,
 };
 use ambre_canvas::{Palette, TextCache};
-use ambre_core::Argb;
+use ambre_core::Rgba;
 use ambre_draw::{
     Affine, Alignment, BezPath, Brush, Color, DocumentWalk, DrawSurface, FontContext, ImageKey,
     ImageSource, Point, PositionedLayoutItem, Rect, Size, Stroke,
@@ -143,12 +143,12 @@ impl DocumentWalk for BoardWalk<'_> {
     }
 }
 
-/// The dark ink (ARGB) of a sticky-note body: a near-black, readable on a light
+/// The dark ink (RGBA) of a sticky-note body: a near-black, readable on a light
 /// card. Independent of the theme (the card is not).
-pub(crate) const STICKY_INK: Argb = Argb::from_bits(0xFF1A_1A1A);
+pub(crate) const STICKY_INK: Rgba = Rgba::from_bits(0x1A1A_1AFF);
 
-/// The light ink (ARGB) of a sticky-note body, for a dark card.
-pub(crate) const STICKY_INK_ON_DARK: Argb = Argb::from_bits(0xFFFF_FFFF);
+/// The light ink (RGBA) of a sticky-note body, for a dark card.
+pub(crate) const STICKY_INK_ON_DARK: Rgba = Rgba::from_bits(0xFFFF_FFFF);
 
 /// The linear value of each 8-bit sRGB channel (WCAG 2), built once. A sticky
 /// body weighs four colours, and computing their powers on every frame cost an
@@ -164,16 +164,16 @@ static LINEAR: LazyLock<[f64; 256]> = LazyLock::new(|| {
     })
 });
 
-/// The relative luminance of an ARGB colour, alpha ignored (WCAG 2).
-fn luminance(argb: Argb) -> f64 {
+/// The relative luminance of an RGBA colour, alpha ignored (WCAG 2).
+fn luminance(colour: Rgba) -> f64 {
     // A byte is always inside the table.
     let channel = |c: u8| LINEAR.get(usize::from(c)).copied().unwrap_or(0.0);
-    let [r, g, b] = argb.rgb().channels();
+    let [r, g, b] = colour.rgb().channels();
     0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
 }
 
-/// The WCAG 2 contrast ratio of two ARGB colours, from 1 to 21.
-pub(crate) fn contrast(a: Argb, b: Argb) -> f64 {
+/// The WCAG 2 contrast ratio of two RGBA colours, from 1 to 21.
+pub(crate) fn contrast(a: Rgba, b: Rgba) -> f64 {
     let (la, lb) = (luminance(a), luminance(b));
     (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
 }
@@ -181,16 +181,16 @@ pub(crate) fn contrast(a: Argb, b: Argb) -> f64 {
 /// The ink of a sticky body on `card`: of the two inks, the one that contrasts
 /// more with the card (`TOILE-UI-262`). The worst card, a mid grey, still
 /// reads at four to one. A note with no fill paints the dark ink.
-fn sticky_ink(card: Option<Argb>) -> Argb {
+fn sticky_ink(card: Option<Rgba>) -> Rgba {
     match card {
         Some(c) if contrast(c, STICKY_INK_ON_DARK) > contrast(c, STICKY_INK) => STICKY_INK_ON_DARK,
         _ => STICKY_INK,
     }
 }
 
-/// Sticky drop-shadow colour (ARGB): a soft translucent black offset to the
+/// Sticky drop-shadow colour (RGBA): a soft translucent black offset to the
 /// bottom-right so the note reads as a physical card (feedback).
-pub(crate) const STICKY_SHADOW: Argb = Argb::from_bits(0x3300_0000);
+pub(crate) const STICKY_SHADOW: Rgba = Rgba::from_bits(0x0000_0033);
 /// Drop-shadow offset in world units (bottom-right).
 const STICKY_SHADOW_OFFSET: f64 = 4.0;
 
@@ -226,7 +226,7 @@ pub(crate) fn sticky_or_style_font_size(host: TextHost, style: &ElementStyle, bo
     }
 }
 
-/// Resolve a sticky / text body's ink (ARGB), or `None` to fall back to the theme
+/// Resolve a sticky / text body's ink (RGBA), or `None` to fall back to the theme
 /// text colour. An explicit `text_color` always wins. Otherwise a sticky uses the
 /// ink chosen for its card (its `fill` is the card background, not the text). A free text element
 /// falls back to its `fill` (legacy: a text element's fill was its glyph colour)
@@ -234,9 +234,9 @@ pub(crate) fn sticky_or_style_font_size(host: TextHost, style: &ElementStyle, bo
 /// editor via the same precedence in `edit.rs`.
 pub(crate) fn resolved_text_ink(
     host: TextHost,
-    text_color: Option<Argb>,
-    fill: Option<Argb>,
-) -> Option<Argb> {
+    text_color: Option<Rgba>,
+    fill: Option<Rgba>,
+) -> Option<Rgba> {
     match (text_color, host) {
         (Some(tc), _) => Some(tc),
         (None, TextHost::Sticky) => Some(sticky_ink(fill)),
@@ -246,7 +246,7 @@ pub(crate) fn resolved_text_ink(
 
 /// Convert a Toile style colour to a `peniko::Color`, pre-multiplying the
 /// element `opacity` into the alpha channel.
-pub(crate) fn argb(v: Argb, opacity: f32) -> Color {
+pub(crate) fn style_color(v: Rgba, opacity: f32) -> Color {
     let [r, g, b, a] = v.channels();
     let a = f32::from(a) / 255.0;
     let alpha = (a * opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -358,14 +358,14 @@ pub(crate) fn polyline_path(pts: &[Point]) -> BezPath {
 /// Fill then stroke a path from an element's style.
 fn fill_and_stroke<S: DrawSurface>(surface: &mut S, path: &BezPath, style: &ElementStyle) {
     if let Some(fill) = style.fill {
-        surface.fill_path(path, &Brush::Solid(argb(fill, style.opacity)));
+        surface.fill_path(path, &Brush::Solid(style_color(fill, style.opacity)));
     }
     if let Some(stroke) = style.stroke
         && style.stroke_w > 0.0
     {
         surface.stroke_path(
             path,
-            &Brush::Solid(argb(stroke, style.opacity)),
+            &Brush::Solid(style_color(stroke, style.opacity)),
             &Stroke::new(style.stroke_w as f64),
         );
     }
@@ -504,7 +504,7 @@ fn paint_element<S: DrawSurface>(
             if let Some(stroke) = style.stroke {
                 surface.stroke_path(
                     &polyline_path(pts),
-                    &Brush::Solid(argb(stroke, style.opacity)),
+                    &Brush::Solid(style_color(stroke, style.opacity)),
                     &Stroke::new(style.stroke_w.max(1.0) as f64),
                 );
             }
@@ -543,7 +543,7 @@ fn paint_element<S: DrawSurface>(
             let shadow = bounds + ambre_draw::Vec2::new(STICKY_SHADOW_OFFSET, STICKY_SHADOW_OFFSET);
             surface.fill_path(
                 &roundrect_path(shadow, style.corner as f64),
-                &Brush::Solid(argb(STICKY_SHADOW, style.opacity)),
+                &Brush::Solid(style_color(STICKY_SHADOW, style.opacity)),
             );
             fill_and_stroke(
                 surface,
@@ -558,10 +558,10 @@ fn paint_element<S: DrawSurface>(
 }
 
 fn paint_connector<S: DrawSurface>(surface: &mut S, c: &DisplayConnector) {
-    let color = c.style.stroke.unwrap_or(Argb::from_bits(0xFF33_3333));
+    let color = c.style.stroke.unwrap_or(Rgba::from_bits(0x3333_33FF));
     surface.stroke_path(
         &c.path,
-        &Brush::Solid(argb(color, c.style.opacity)),
+        &Brush::Solid(style_color(color, c.style.opacity)),
         &Stroke::new(c.style.stroke_w.max(1.0) as f64),
     );
 }
@@ -597,7 +597,7 @@ fn paint_text<S: DrawSurface>(
     // Text (foreground) colour, (see `resolved_text_ink`): `None` means "use
     // the theme text colour" (only a text element with neither text_color nor fill).
     let color = resolved_text_ink(host, e.style.text_color, fill)
-        .map(|c| argb(c, opacity))
+        .map(|c| style_color(c, opacity))
         .unwrap_or(palette.cell_text);
     let layout = walk.text_cache.get_or_build_font(
         walk.font_cx,

@@ -1,9 +1,10 @@
 //! Colours, typed by their packing.
 //!
-//! Each application packs a colour into a `u32`, in its own byte order. Prose
-//! stores `0xRRGGBBAA`, Trame `0xRRGGBB` and Toile `0xAARRGGBB`. A bare `u32` lets one packing reach a reader of another, and
-//! the colour comes out with its channels shifted. One type per packing makes
-//! that a compile error, and a conversion between two packings a named call.
+//! An application packs a colour into a `u32`, in one of two byte orders.
+//! Prose and Toile store `0xRRGGBBAA`, and Trame stores `0xRRGGBB`. A bare `u32`
+//! lets one packing reach a reader of the other, and the colour comes out with
+//! its channels shifted. One type per packing makes that a compile error, and
+//! a conversion between the two packings a named call.
 //!
 //! Each type serializes as the bare `u32` it wraps, so a stored style and a
 //! bus message keep the bytes they had.
@@ -19,11 +20,6 @@ pub struct Rgba(u32);
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Rgb(u32);
-
-/// A colour packed `0xAARRGGBB`: alpha in the top byte, blue in the bottom one.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Argb(u32);
 
 impl Rgba {
     /// The colour a `0xRRGGBBAA` integer packs.
@@ -55,12 +51,6 @@ impl Rgba {
     pub const fn rgb(self) -> Rgb {
         Rgb(self.0 >> 8)
     }
-
-    /// The same colour packed alpha first.
-    #[must_use]
-    pub const fn to_argb(self) -> Argb {
-        Argb(self.0.rotate_right(8))
-    }
 }
 
 impl Rgb {
@@ -90,55 +80,10 @@ impl Rgb {
         [r, g, b]
     }
 
-    /// This colour with an alpha, packed alpha first.
-    #[must_use]
-    pub const fn to_argb(self, alpha: u8) -> Argb {
-        Argb(((alpha as u32) << 24) | self.0)
-    }
-
     /// This colour with an alpha, packed alpha last.
     #[must_use]
     pub const fn to_rgba(self, alpha: u8) -> Rgba {
         Rgba((self.0 << 8) | alpha as u32)
-    }
-}
-
-impl Argb {
-    /// The colour a `0xAARRGGBB` integer packs.
-    #[must_use]
-    pub const fn from_bits(bits: u32) -> Self {
-        Self(bits)
-    }
-
-    /// The `0xAARRGGBB` integer, as a document or a message stores it.
-    #[must_use]
-    pub const fn bits(self) -> u32 {
-        self.0
-    }
-
-    /// The four channels, in the order red, green, blue, alpha.
-    #[must_use]
-    pub const fn channels(self) -> [u8; 4] {
-        let [a, r, g, b] = self.0.to_be_bytes();
-        [r, g, b, a]
-    }
-
-    /// The alpha channel.
-    #[must_use]
-    pub const fn alpha(self) -> u8 {
-        self.0.to_be_bytes()[0]
-    }
-
-    /// The colour without its alpha.
-    #[must_use]
-    pub const fn rgb(self) -> Rgb {
-        Rgb(self.0 & 0x00ff_ffff)
-    }
-
-    /// The same colour packed alpha last.
-    #[must_use]
-    pub const fn to_rgba(self) -> Rgba {
-        Rgba(self.0.rotate_left(8))
     }
 }
 
@@ -153,7 +98,7 @@ macro_rules! lower_hex {
     )*};
 }
 
-lower_hex!(Rgba, Rgb, Argb);
+lower_hex!(Rgba, Rgb);
 
 /// The CSS hexadecimal notation `#rrggbbaa`, which a style property reads.
 impl std::fmt::Display for Rgba {
@@ -172,13 +117,12 @@ impl std::fmt::Display for Rgb {
 
 #[cfg(test)]
 mod tests {
-    use super::{Argb, Rgb, Rgba};
+    use super::{Rgb, Rgba};
 
-    // One orange in the three packings: red 0xff, green 0x80, blue 0x20,
+    // One orange in the two packings: red 0xff, green 0x80, blue 0x20,
     // alpha 0x40.
     const ORANGE_RGBA: u32 = 0xff80_2040;
     const ORANGE_RGB: u32 = 0x00ff_8020;
-    const ORANGE_ARGB: u32 = 0x40ff_8020;
 
     #[test]
     fn each_packing_reads_the_known_channels() {
@@ -187,11 +131,6 @@ mod tests {
             [0xff, 0x80, 0x20, 0x40]
         );
         assert_eq!(Rgb::from_bits(ORANGE_RGB).channels(), [0xff, 0x80, 0x20]);
-        assert_eq!(
-            Argb::from_bits(ORANGE_ARGB).channels(),
-            [0xff, 0x80, 0x20, 0x40]
-        );
-        assert_eq!(Argb::from_bits(ORANGE_ARGB).alpha(), 0x40);
         assert_eq!(
             Rgba::from_channels(0xff, 0x80, 0x20, 0x40).bits(),
             ORANGE_RGBA
@@ -202,20 +141,15 @@ mod tests {
     #[test]
     fn a_conversion_keeps_the_channels() {
         let rgba = Rgba::from_bits(ORANGE_RGBA);
-        let argb = Argb::from_bits(ORANGE_ARGB);
         let rgb = Rgb::from_bits(ORANGE_RGB);
-        assert_eq!(rgba.to_argb(), argb);
-        assert_eq!(argb.to_rgba(), rgba);
-        assert_eq!(rgba.to_argb().to_rgba(), rgba);
         assert_eq!(rgba.rgb(), rgb);
-        assert_eq!(argb.rgb(), rgb);
-        assert_eq!(rgb.to_argb(0x40), argb);
         assert_eq!(rgb.to_rgba(0x40), rgba);
+        assert_eq!(rgba.rgb().to_rgba(0x40), rgba);
     }
 
     #[test]
     fn rgb_drops_a_top_byte() {
-        assert_eq!(Rgb::from_bits(ORANGE_ARGB).bits(), ORANGE_RGB);
+        assert_eq!(Rgb::from_bits(0x40ff_8020).bits(), ORANGE_RGB);
     }
 
     #[test]
@@ -227,8 +161,8 @@ mod tests {
 
     #[test]
     fn each_packing_serializes_as_its_integer() {
-        let json = serde_json::to_string(&Argb::from_bits(ORANGE_ARGB)).ok();
-        assert_eq!(json, serde_json::to_string(&ORANGE_ARGB).ok());
+        let json = serde_json::to_string(&Rgb::from_bits(ORANGE_RGB)).ok();
+        assert_eq!(json, serde_json::to_string(&ORANGE_RGB).ok());
         let bytes = postcard::to_allocvec(&Rgba::from_bits(ORANGE_RGBA)).ok();
         assert_eq!(bytes, postcard::to_allocvec(&ORANGE_RGBA).ok());
         let back: Option<Rgb> = serde_json::from_str("16744480").ok();

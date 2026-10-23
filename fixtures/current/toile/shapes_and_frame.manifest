@@ -1,11 +1,11 @@
 {
   "generator": "toile/shapes_and_frame",
-  "generator_version": 1,
+  "generator_version": 2,
   "seed": 1669982087086081,
   "doc_type": "Toile",
   "ambre_version": 1,
   "schema_version": 5,
-  "digest": "9c15a3197cf066b2c14064569a75d02323fc9cd09610cc7278d24745647377b1",
+  "digest": "8acf7a6a92c67a2fa120e85affb39894cf863724f40ef0adead79dd00d0bc6cb",
   "shape": {
     "peers": 1,
     "body": {

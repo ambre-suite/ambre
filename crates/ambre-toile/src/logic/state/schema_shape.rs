@@ -32,7 +32,7 @@
 //! `LoroText` reads as `text` and a register as `string`, so a body demoted
 //! from a text container moves a line.
 
-use ambre_core::Argb;
+use ambre_core::Rgba;
 use ambre_core::{CharCount, CharOffset};
 use std::collections::BTreeSet;
 
@@ -243,8 +243,8 @@ fn shape_of(doc: &LoroDoc) -> Shape {
 /// records must fail to compile rather than encode silently.
 fn postcard_layouts() -> Vec<(String, String)> {
     let style = ElementStyle {
-        fill: Some(Argb::from_bits(0x0102_0304)),
-        stroke: Some(Argb::from_bits(0x0506_0708)),
+        fill: Some(Rgba::from_bits(0x0203_0401)),
+        stroke: Some(Rgba::from_bits(0x0607_0805)),
         stroke_w: 1.5,
         opacity: 0.25,
         corner: 3.5,
@@ -257,12 +257,12 @@ fn postcard_layouts() -> Vec<(String, String)> {
             strikethrough: true,
         },
         shadow: Some(Shadow {
-            color: Argb::from_bits(0x090a_0b0c),
+            color: Rgba::from_bits(0x0a0b_0c09),
             dx: 11.5,
             dy: 12.5,
             blur: 13.5,
         }),
-        text_color: Some(Argb::from_bits(0x0d0e_0f10)),
+        text_color: Some(Rgba::from_bits(0x0e0f_100d)),
     };
     let layout = AutoLayout {
         direction: Direction::Vertical,
@@ -735,7 +735,7 @@ fn canonical(from: u32) -> LoroDoc {
         // The bare style registers the `1 -> 2` step versions.
         1 => board_at(Some(1), |doc| {
             let style = ElementStyle {
-                fill: Some(Argb::from_bits(0xffaa_bbcc)),
+                fill: Some(Rgba::from_bits(0xaabb_ccff)),
                 corner: 8.0,
                 ..ElementStyle::default()
             };

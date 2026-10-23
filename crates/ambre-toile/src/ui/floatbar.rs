@@ -20,7 +20,7 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{DisplayElement, ElementId, ElementKind, ElementStyle, FontFamily};
-use ambre_core::{Argb, FontSize};
+use ambre_core::{FontSize, Rgba};
 use ambre_draw::{Point, Rect};
 
 use super::style::MixedFlags;
@@ -48,9 +48,9 @@ pub struct FloatBar {
     pub any_locked: bool,
     /// At least one selected element is unlocked -> Lock applies.
     pub any_unlocked: bool,
-    /// The selection's common fill (`ElementStyle` ARGB), or `None` when unset or
+    /// The selection's common fill (`ElementStyle` RGBA), or `None` when unset or
     /// diverging across the selection -- the quick-colour swatch seed.
-    pub fill: Option<Argb>,
+    pub fill: Option<Rgba>,
     /// The fields the bar edits that differ across the selection. A set flag
     /// means the bar shows a mixed state for that control, not a value.
     pub mixed: MixedFlags,
@@ -64,20 +64,20 @@ pub struct FloatBar {
 /// folds the result into a whole-register `RestyleElements` over the live selection
 /// (`TOILE-018`), attaching the ids the DOM bar cannot name.
 ///
-/// Colours are `Option<Argb>` (`None` == unset / no fill). The font
+/// Colours are `Option<Rgba>` (`None` == unset / no fill). The font
 /// family is the picker label (`None` == the "Default" reset).
 #[derive(Clone, PartialEq, Debug)]
 pub enum StyleEdit {
     /// Fill colour (`None` == no fill).
-    Fill(Option<Argb>),
+    Fill(Option<Rgba>),
     /// Stroke colour (`None` == no stroke). The panel alone emits it.
-    Stroke(Option<Argb>),
+    Stroke(Option<Rgba>),
     /// Stroke width in world px, floored at zero. The panel alone emits it.
     StrokeWidth(f32),
     /// Opacity, clamped to `[0, 1]`. The panel alone emits it.
     Opacity(f32),
     /// Text (foreground ink) colour (`None` == the kind default ink).
-    TextColor(Option<Argb>),
+    TextColor(Option<Rgba>),
     /// Font family label (`None` == the "Default" reset -> the app default face).
     Font(Option<String>),
     /// Font size in points (`0.0` == the auto sentinel: size to the card).
@@ -241,7 +241,7 @@ mod tests {
         kind: ElementKind,
         bounds: Rect,
         locked: bool,
-        fill: Option<Argb>,
+        fill: Option<Rgba>,
     ) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
             id: eid(id),
@@ -346,13 +346,13 @@ mod tests {
             ElementKind::Sticky,
             Rect::new(10.0, 20.0, 30.0, 60.0),
             false,
-            Some(Argb::from_bits(0xff00_ff00)),
+            Some(Rgba::from_bits(0x00ff_00ff)),
         )]);
         let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
         assert!((bar.x - 520.0).abs() < 1e-9);
         assert!((bar.y - 420.0).abs() < 1e-9);
         assert!(!bar.multi);
-        assert_eq!(bar.fill, Some(Argb::from_bits(0xff00_ff00)));
+        assert_eq!(bar.fill, Some(Rgba::from_bits(0x00ff_00ff)));
     }
 
     #[test]
@@ -432,14 +432,14 @@ mod tests {
                 ElementKind::Sticky,
                 Rect::new(0.0, 0.0, 5.0, 5.0),
                 false,
-                Some(Argb::from_bits(0xffff_0000)),
+                Some(Rgba::from_bits(0xff00_00ff)),
             ),
             elem(
                 "b",
                 ElementKind::Sticky,
                 Rect::new(6.0, 0.0, 10.0, 5.0),
                 false,
-                Some(Argb::from_bits(0xff00_00ff)),
+                Some(Rgba::from_bits(0x0000_ffff)),
             ),
         ]);
         let bar =
@@ -455,19 +455,19 @@ mod tests {
                 ElementKind::Shape(ShapeKind::Rect),
                 Rect::new(0.0, 0.0, 5.0, 5.0),
                 false,
-                Some(Argb::from_bits(0xff11_2233)),
+                Some(Rgba::from_bits(0x1122_33ff)),
             ),
             elem(
                 "b",
                 ElementKind::Shape(ShapeKind::Rect),
                 Rect::new(6.0, 0.0, 10.0, 5.0),
                 false,
-                Some(Argb::from_bits(0xff11_2233)),
+                Some(Rgba::from_bits(0x1122_33ff)),
             ),
         ]);
         let bar =
             build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
-        assert_eq!(bar.fill, Some(Argb::from_bits(0xff11_2233)));
+        assert_eq!(bar.fill, Some(Rgba::from_bits(0x1122_33ff)));
     }
 
     // A `StyleEdit` overwrites exactly its own field and nothing else. That is the
@@ -476,8 +476,8 @@ mod tests {
     #[test]
     fn style_edit_touches_only_its_field() {
         let base = ElementStyle {
-            fill: Some(Argb::from_bits(0xff11_2233)),
-            text_color: Some(Argb::from_bits(0xff44_5566)),
+            fill: Some(Rgba::from_bits(0x1122_33ff)),
+            text_color: Some(Rgba::from_bits(0x4455_66ff)),
             font: ambre_bus::app::toile::FontSpec {
                 size: ambre_core::FontSize::from_whole_points(18),
                 weight: 700,
@@ -550,12 +550,12 @@ mod tests {
     #[test]
     fn a_panel_edit_keeps_every_field_it_did_not_edit() {
         let base = ElementStyle {
-            fill: Some(Argb::from_bits(0xff11_2233)),
-            stroke: Some(Argb::from_bits(0xff44_5566)),
+            fill: Some(Rgba::from_bits(0x1122_33ff)),
+            stroke: Some(Rgba::from_bits(0x4455_66ff)),
             stroke_w: 3.0,
             opacity: 0.5,
             corner: 7.0,
-            text_color: Some(Argb::from_bits(0xff77_8899)),
+            text_color: Some(Rgba::from_bits(0x7788_99ff)),
             font: FontSpec {
                 family: FontFamily::Other("Comic Sans MS".to_owned()),
                 size: ambre_core::FontSize::from_whole_points(18),
@@ -574,9 +574,9 @@ mod tests {
                 },
             ),
             (
-                StyleEdit::Stroke(Some(Argb::from_bits(1))),
+                StyleEdit::Stroke(Some(Rgba::from_bits(0x0000_0100))),
                 ElementStyle {
-                    stroke: Some(Argb::from_bits(1)),
+                    stroke: Some(Rgba::from_bits(0x0000_0100)),
                     ..base.clone()
                 },
             ),
@@ -615,8 +615,8 @@ mod tests {
     #[test]
     fn bar_reports_every_edited_field_mixed() {
         let a = ElementStyle {
-            fill: Some(Argb::from_bits(0xff11_2233)),
-            text_color: Some(Argb::from_bits(0xff00_0000)),
+            fill: Some(Rgba::from_bits(0x1122_33ff)),
+            text_color: Some(Rgba::from_bits(0x0000_00ff)),
             font: FontSpec {
                 family: FontFamily::Sans,
                 size: ambre_core::FontSize::from_whole_points(12),
@@ -628,8 +628,8 @@ mod tests {
             ..ElementStyle::default()
         };
         let b = ElementStyle {
-            fill: Some(Argb::from_bits(0xff11_2233)),
-            text_color: Some(Argb::from_bits(0xffff_ffff)),
+            fill: Some(Rgba::from_bits(0x1122_33ff)),
+            text_color: Some(Rgba::from_bits(0xffff_ffff)),
             font: FontSpec {
                 family: FontFamily::Serif,
                 size: ambre_core::FontSize::from_whole_points(24),

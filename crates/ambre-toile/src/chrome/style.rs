@@ -30,7 +30,7 @@ use std::time::Duration;
 use ambre_bus::app::toile::{ElementStyle, STICKY_AUTO_FONT_SIZE};
 use ambre_chrome::commands::CommandId;
 use ambre_chrome::{ColorPopover, Debouncer, FontPicker, FontSizeSelect, FormatToggle};
-use ambre_core::{Argb, FontSize};
+use ambre_core::{FontSize, Rgba};
 use leptos::prelude::*;
 
 use crate::ui::floatbar::StyleEdit;
@@ -58,12 +58,12 @@ pub fn StyleInspector(
     // style and mutated in place by every control. The four edited fields also get
     // their own signals so `ColorPopover` / the inputs can bind directly.
     let working = RwSignal::new(ElementStyle::default());
-    let fill = RwSignal::new(None::<Argb>);
-    let stroke = RwSignal::new(None::<Argb>);
+    let fill = RwSignal::new(None::<Rgba>);
+    let stroke = RwSignal::new(None::<Rgba>);
     let stroke_w = RwSignal::new(1.0_f32);
     let opacity = RwSignal::new(1.0_f32);
     // Text (foreground) colour + font controls.
-    let text_color = RwSignal::new(None::<Argb>);
+    let text_color = RwSignal::new(None::<Rgba>);
     let font_family = RwSignal::new(None::<String>);
     let font_size = RwSignal::new(FontSize::default());
     let bold = RwSignal::new(false);
@@ -104,15 +104,15 @@ pub fn StyleInspector(
     };
 
     // Colour picks: update the local signal (so the swatch strip tracks) and commit.
-    let on_fill = Callback::new(move |c: Option<Argb>| {
+    let on_fill = Callback::new(move |c: Option<Rgba>| {
         fill.set(c);
         commit(StyleEdit::Fill(c));
     });
-    let on_stroke = Callback::new(move |c: Option<Argb>| {
+    let on_stroke = Callback::new(move |c: Option<Rgba>| {
         stroke.set(c);
         commit(StyleEdit::Stroke(c));
     });
-    let on_text_color = Callback::new(move |c: Option<Argb>| {
+    let on_text_color = Callback::new(move |c: Option<Rgba>| {
         text_color.set(c);
         commit(StyleEdit::TextColor(c));
     });
@@ -181,7 +181,7 @@ pub fn StyleInspector(
                             title="Fill"
                             icon=icondata::MdiFormatColorFill
                             current=fill
-                            default=Signal::derive(|| Argb::from_bits(0xffff_ffff))
+                            default=Signal::derive(|| Rgba::from_bits(0xffff_ffff))
                             reset_label="No fill"
                             on_pick=on_fill
                         />
@@ -192,7 +192,7 @@ pub fn StyleInspector(
                             title="Stroke"
                             icon=icondata::MdiBorderColor
                             current=stroke
-                            default=Signal::derive(|| Argb::from_bits(0xff33_3333))
+                            default=Signal::derive(|| Rgba::from_bits(0x3333_33ff))
                             reset_label="No stroke"
                             on_pick=on_stroke
                         />
@@ -241,7 +241,7 @@ pub fn StyleInspector(
                             title="Text colour"
                             icon=icondata::MdiFormatColorText
                             current=text_color
-                            default=Signal::derive(|| Argb::from_bits(0xff1a_1a1a))
+                            default=Signal::derive(|| Rgba::from_bits(0x1a1a_1aff))
                             reset_label="Default"
                             on_pick=on_text_color
                         />

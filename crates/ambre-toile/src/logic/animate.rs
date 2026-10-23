@@ -20,7 +20,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::Argb;
+use ambre_core::Rgba;
 use kurbo::Rect;
 
 use crate::logic::model::ElementId;
@@ -39,7 +39,7 @@ pub struct AnimatedElement {
     pub bounds: Rect,
     pub rotation: f64,
     pub opacity: f32,
-    pub fill: Option<Argb>,
+    pub fill: Option<Rgba>,
 }
 
 impl AnimatedElement {
@@ -145,13 +145,13 @@ fn lerp_rect(a: Rect, b: Rect, t: f64) -> Rect {
     )
 }
 
-/// Interpolate two ARGB fills. Both present -> per-channel lerp. Otherwise there
+/// Interpolate two RGBA fills. Both present -> per-channel lerp. Otherwise there
 /// is no common color to blend, so crossfade to the `t`-dominant side (`< 0.5`
 /// keeps `a`, `>= 0.5` takes `b`). This keeps the tween deterministic and never
 /// invents a color out of `None`.
-fn lerp_fill(a: Option<Argb>, b: Option<Argb>, t: f64) -> Option<Argb> {
+fn lerp_fill(a: Option<Rgba>, b: Option<Rgba>, t: f64) -> Option<Rgba> {
     match (a, b) {
-        (Some(ca), Some(cb)) => Some(lerp_argb(ca, cb, t)),
+        (Some(ca), Some(cb)) => Some(lerp_rgba(ca, cb, t)),
         _ => {
             if t < 0.5 {
                 a
@@ -162,15 +162,15 @@ fn lerp_fill(a: Option<Argb>, b: Option<Argb>, t: f64) -> Option<Argb> {
     }
 }
 
-/// Per-channel lerp of two ARGB colors.
-fn lerp_argb(a: Argb, b: Argb, t: f64) -> Argb {
+/// Per-channel lerp of two RGBA colors.
+fn lerp_rgba(a: Rgba, b: Rgba, t: f64) -> Rgba {
     let (a, b) = (a.bits(), b.bits());
     let ch = |shift: u32| {
         let ca = ((a >> shift) & 0xFF) as f64;
         let cb = ((b >> shift) & 0xFF) as f64;
         (lerp_f64(ca, cb, t).round().clamp(0.0, 255.0) as u32) << shift
     };
-    Argb::from_bits(ch(24) | ch(16) | ch(8) | ch(0))
+    Rgba::from_bits(ch(24) | ch(16) | ch(8) | ch(0))
 }
 
 #[cfg(test)]
@@ -182,7 +182,7 @@ mod tests {
         bounds: Rect,
         rotation: f64,
         opacity: f32,
-        fill: Option<Argb>,
+        fill: Option<Rgba>,
     ) -> SnapElement {
         SnapElement {
             id: ElementId(id.to_owned()),
@@ -204,14 +204,14 @@ mod tests {
             rect(0.0, 0.0, 10.0, 10.0),
             0.0,
             1.0,
-            Some(Argb::from_bits(0xFF00_0000)),
+            Some(Rgba::from_bits(0x0000_00FF)),
         );
         let b = snap(
             "e1",
             rect(20.0, 40.0, 30.0, 50.0),
             2.0,
             0.0,
-            Some(Argb::from_bits(0xFF00_00FF)),
+            Some(Rgba::from_bits(0x0000_FFFF)),
         );
         let from = FrameSnapshot {
             elements: vec![a.clone()],
@@ -228,7 +228,7 @@ mod tests {
         assert_eq!(m.rotation, 1.0);
         assert_eq!(m.opacity, 0.5);
         // Blue channel midpoint of 0x00 -> 0xFF is 0x80 (128), alpha stays 0xFF.
-        assert_eq!(m.fill, Some(Argb::from_bits(0xFF00_0080)));
+        assert_eq!(m.fill, Some(Rgba::from_bits(0x0000_80FF)));
     }
 
     #[test]
@@ -238,7 +238,7 @@ mod tests {
             rect(0.0, 0.0, 5.0, 5.0),
             0.0,
             0.8,
-            Some(Argb::from_bits(0xFFAA_BBCC)),
+            Some(Rgba::from_bits(0xAABB_CCFF)),
         );
         let from = FrameSnapshot::default();
         let to = FrameSnapshot {
@@ -258,7 +258,7 @@ mod tests {
             rect(1.0, 2.0, 3.0, 4.0),
             0.5,
             0.6,
-            Some(Argb::from_bits(0xFF11_2233)),
+            Some(Rgba::from_bits(0x1122_33FF)),
         );
         let from = FrameSnapshot {
             elements: vec![a.clone()],
@@ -278,14 +278,14 @@ mod tests {
             rect(0.0, 0.0, 10.0, 10.0),
             0.0,
             1.0,
-            Some(Argb::from_bits(0xFF00_0000)),
+            Some(Rgba::from_bits(0x0000_00FF)),
         );
         let b = snap(
             "e",
             rect(100.0, 100.0, 20.0, 20.0),
             3.0,
             0.2,
-            Some(Argb::from_bits(0xFFFF_FFFF)),
+            Some(Rgba::from_bits(0xFFFF_FFFF)),
         );
         // t = 0 reproduces A, t = 1 reproduces B.
         let at0 = AnimatedElement::lerp(&a, &b, 0.0);
