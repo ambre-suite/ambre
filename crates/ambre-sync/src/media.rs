@@ -1,5 +1,6 @@
 use super::*;
 use crate::error::{Part, SyncError};
+use crate::http::Reported;
 use crate::sharing::GlooHttp;
 use serde::Serialize;
 use serde::de::DeserializeOwned;

@@ -1440,6 +1440,7 @@
   {"edge": "verified-by", "from": "SYNC-034", "to": "ambre_sync::updates::tests::a_copy_unwraps_against_its_wrapper_and_never_its_holder"},
   {"edge": "cites-section", "from": "SYNC-040", "section": "3", "to": "1-Foundations/ambre-spec-membership.md"},
   {"edge": "verified-by", "from": "SYNC-040", "to": "ambre_sync::updates::tests::a_failed_members_request_is_not_an_absent_document"},
+  {"edge": "verified-by", "from": "SYNC-040", "to": "ambre_sync::updates::tests::a_refused_members_request_keeps_the_relay_refusal"},
   {"edge": "verified-by", "from": "SYNC-012", "to": "ambre_sync::updates::tests::a_key_that_does_not_unwrap_opens_nothing"},
   {"edge": "cites-section", "from": "SYNC-173", "section": "3", "to": "1-Foundations/ambre-spec-membership.md"},
   {"edge": "cites-rule", "from": "SYNC-173", "to": "MURMURE-218"},

@@ -687,17 +687,19 @@ impl std::fmt::Display for HttpError {
 pub(crate) trait Reported: std::fmt::Display {
     /// The failure as the bus carries it.
     fn failure(&self) -> ApiFailure;
+
+    /// This error as the failure of `step`, its text after the step's name.
+    fn at(&self, step: &str) -> Failed {
+        Failed {
+            failure: self.failure(),
+            message: format!("{step}: {self}"),
+        }
+    }
 }
 
 impl Reported for HttpError {
     fn failure(&self) -> ApiFailure {
         Self::failure(self)
-    }
-}
-
-impl Reported for String {
-    fn failure(&self) -> ApiFailure {
-        ApiFailure::Local
     }
 }
 
@@ -717,16 +719,6 @@ impl Failed {
         Self {
             failure: ApiFailure::Local,
             message,
-        }
-    }
-}
-
-impl HttpError {
-    /// This error as the failure of `step`, its text after the step's name.
-    pub(crate) fn at(&self, step: &str) -> Failed {
-        Failed {
-            failure: self.failure(),
-            message: format!("{step}: {self}"),
         }
     }
 }
@@ -755,12 +747,6 @@ impl From<&str> for HttpError {
 impl From<String> for HttpError {
     fn from(message: String) -> Self {
         Self::Local(message)
-    }
-}
-
-impl From<HttpError> for String {
-    fn from(error: HttpError) -> Self {
-        error.to_string()
     }
 }
 

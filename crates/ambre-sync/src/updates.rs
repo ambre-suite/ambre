@@ -581,11 +581,11 @@ impl SyncState {
                     // A failed request says nothing about the document. Opening it
                     // local-only would mint a throwaway key and edit a copy nobody
                     // receives, so the open fails and the user may retry (`SYNC-040`).
-                    MembersAnswer::Unreachable(message) => {
+                    MembersAnswer::Failed(error) => {
                         let _ = tx.send(SyncEvent::OpenDocumentFailed {
                             document_id: doc_id,
                             cause: OpenFailure::Transient,
-                            message: format!("the server could not be reached: {message}"),
+                            message: members_failure_message(&error),
                         });
                         return;
                     }
@@ -1391,10 +1391,13 @@ impl SyncState {
             let (doc_key_enc, entry) =
                 match sharing::creation(document_id, &doc_key, &exchange_key, &author) {
                     Ok(created) => created,
-                    Err(message) => {
+                    Err(error) => {
                         let _ = tx.send(SyncEvent::DocumentCreateFailed {
                             document_id,
-                            failure: http::Failed::local(message.to_string()),
+                            failure: http::Failed {
+                                failure: http::Reported::failure(&error),
+                                message: error.to_string(),
+                            },
                         });
                         return;
                     }
@@ -1671,19 +1674,35 @@ pub(crate) enum MembersAnswer<T> {
     Exists(T),
     /// The server answered that it holds no such document: the open is local-only.
     Absent,
-    /// The request failed, so nothing is known about the document.
-    Unreachable(String),
+    /// The request failed, so nothing is known about the document. The
+    /// relay's answer, a refusal among them, is kept whole.
+    Failed(crate::http::HttpError),
 }
 
 impl<T> MembersAnswer<T> {
     /// Classifies the outcome of the members request. Only a `404` is an absent
     /// document; a transport or decoding failure is never read as one.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    pub(crate) fn classify(outcome: Result<Option<T>, impl Into<String>>) -> Self {
+    pub(crate) fn classify(outcome: Result<Option<T>, crate::http::HttpError>) -> Self {
         match outcome {
             Ok(Some(members)) => Self::Exists(members),
             Ok(None) => Self::Absent,
-            Err(message) => Self::Unreachable(message.into()),
+            Err(error) => Self::Failed(error),
+        }
+    }
+}
+
+/// What an open that met `error` on its members request tells the user. A
+/// relay that refused, or whose answer does not read, was reached.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub(crate) fn members_failure_message(error: &crate::http::HttpError) -> String {
+    match error.failure() {
+        ApiFailure::Relay { .. } => format!("the relay refused the members request: {error}"),
+        ApiFailure::Unreadable { .. } => {
+            format!("the relay's members answer does not read: {error}")
+        }
+        ApiFailure::Local | ApiFailure::NoAnswer => {
+            format!("the server could not be reached: {error}")
         }
     }
 }
@@ -1704,18 +1723,40 @@ mod tests {
 
     #[test]
     fn a_failed_members_request_is_not_an_absent_document() {
-        let failed = MembersAnswer::<()>::classify(Err::<Option<()>, _>("GET /members: timeout"));
+        let lost = crate::http::HttpError::from("GET /members: timeout");
+        let failed = MembersAnswer::<()>::classify(Err(lost.clone()));
+        assert_eq!(failed, MembersAnswer::Failed(lost));
         assert_eq!(
-            failed,
-            MembersAnswer::Unreachable("GET /members: timeout".into())
-        );
-        assert_eq!(
-            MembersAnswer::<()>::classify(Ok::<_, String>(None)),
+            MembersAnswer::<()>::classify(Ok(None)),
             MembersAnswer::Absent
         );
         assert_eq!(
-            MembersAnswer::classify(Ok::<_, String>(Some(7))),
+            MembersAnswer::classify(Ok(Some(7))),
             MembersAnswer::Exists(7)
+        );
+    }
+
+    /// A relay that refuses the members request did answer. The open keeps
+    /// its refusal, and never tells the user the relay could not be reached
+    /// (`SYNC-040`).
+    #[test]
+    fn a_refused_members_request_keeps_the_relay_refusal() {
+        let refused = crate::http::HttpError::refused(
+            crate::http::Method::Get,
+            &crate::http::Target::relay("https://relay.test/api/documents/d/members"),
+            ambre_core::HttpStatus(403),
+            Some(ambre_core::RefusalCode::Forbidden),
+        );
+        let answer = MembersAnswer::<()>::classify(Err(refused.clone()));
+        assert_eq!(answer, MembersAnswer::Failed(refused.clone()));
+        assert_eq!(
+            members_failure_message(&refused),
+            format!("the relay refused the members request: {refused}")
+        );
+        let lost = crate::http::HttpError::from("GET /members: timeout");
+        assert_eq!(
+            members_failure_message(&lost),
+            "the server could not be reached: GET /members: timeout"
         );
     }
 

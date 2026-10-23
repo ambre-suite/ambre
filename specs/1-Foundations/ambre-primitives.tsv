@@ -3612,7 +3612,6 @@ ambre-sync | src/http.rs | crate::http | Failed.message | field | String	free-te
 ambre-sync | src/http.rs | crate::http | Failed::local(message) | param | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::Local.0 | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::Unreadable.reason | field | String	free-text	error message text
-ambre-sync | src/http.rs | crate::http | HttpError::at(step) | param | &str	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::is() | ret | bool	generic	predicate
 ambre-sync | src/http.rs | crate::http | HttpError::is_conflict() | ret | bool	generic	predicate
 ambre-sync | src/http.rs | crate::http | Incoming.body | field | Vec<u8>	generic	generic byte/text API or codec
@@ -3626,6 +3625,7 @@ ambre-sync | src/http.rs | crate::http | RelayHost::new(host) | param | String	n
 ambre-sync | src/http.rs | crate::http | RelayUrl.0 | field | String	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayUrl::as_str() | ret | &str	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayUrl::join(path) | param | impl AsRef<str>	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
+ambre-sync | src/http.rs | crate::http | Reported::at(step) | param | &str	free-text	error message text
 ambre-sync | src/http.rs | crate::http | SecretToken.0 | field | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | SecretToken::expose() | ret | &str	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | ThreadResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3780,14 +3780,13 @@ ambre-sync | src/sharing.rs | crate::sharing | api_error(message) | param | Stri
 ambre-sync | src/sharing.rs | crate::sharing | close_segment_task() | ret | Result<(SegmentId,bool),http::HttpError>	generic	fact flag on an event
 ambre-sync | src/sharing.rs | crate::sharing | invitee_keys() | ret | Result<InviteeKeys,(ApiFailure,String)>	free-text	error message text
 ambre-sync | src/updates.rs | crate::updates | HoldCause::Failed.0 | field | u32	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/updates.rs | crate::updates | MembersAnswer::Unreachable.0 | field | String	free-text	free text: message, label, name or report
-ambre-sync | src/updates.rs | crate::updates | MembersAnswer<T>::classify(outcome) | param | Result<Option<T>,impl Into<String>>	free-text	error message text
 ambre-sync | src/updates.rs | crate::updates | OpenedMembers.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | RESEND_RETRY_LIMIT | const | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/updates.rs | crate::updates | SyncState::check_held_snapshot() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | ret | Result<(),(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | Vouch::Report.0 | field | String	free-text	free text: message, label, name or report
+ambre-sync | src/updates.rs | crate::updates | members_failure_message() | ret | String	free-text	error message text
 ambre-sync | src/updates.rs | crate::updates | resend_retry_delay_ms(failure) | param | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | REPLAY_RETRY_LIMIT | const | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | ReplayStops.count | field | u32	math	count, size, limit, index or jitter local to an algorithm
