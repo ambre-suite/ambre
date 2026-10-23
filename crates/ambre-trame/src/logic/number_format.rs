@@ -11,7 +11,7 @@
 // stands, so no pattern is refused. A mistyped pattern still renders, and the
 // result shows the mistake.
 
-use crate::formula::functions::ymd_from_serial;
+use crate::formula::calendar::{CivilDate, DateSerial};
 
 /// Month names, for `mmm` (the first three letters) and `mmmm`.
 const MONTHS: [&str; 12] = [
@@ -44,21 +44,25 @@ const DAYS: [&str; 7] = [
 /// A day serial as an ISO calendar date, `2026-09-29` (`TRAME-107`). The ISO
 /// order is the one no locale misreads; the document has no locale yet
 /// (`TRAME-110`).
-pub(crate) fn format_date(serial: f64) -> String {
-    let (y, m, d) = ymd_from_serial(serial.floor() as i64);
+pub(crate) fn format_date(serial: DateSerial) -> String {
+    let CivilDate {
+        year: y,
+        month: m,
+        day: d,
+    } = serial.day().civil();
     format!("{y:04}-{m:02}-{d:02}")
 }
 
 /// The time of day a serial carries in its fraction, `14:05:09` (`TRAME-107`).
-pub(crate) fn format_time(serial: f64) -> String {
+pub(crate) fn format_time(serial: DateSerial) -> String {
     let (h, m, s) = hms(serial);
     format!("{h:02}:{m:02}:{s:02}")
 }
 
 /// Hours, minutes and seconds of the fraction of `serial`, rounded to the
 /// second. A fraction that rounds up to midnight reads `00:00:00`.
-fn hms(serial: f64) -> (u32, u32, u32) {
-    let seconds = ((serial - serial.floor()) * 86_400.0).round() as u32 % 86_400;
+fn hms(serial: DateSerial) -> (u32, u32, u32) {
+    let seconds = (serial.time_of_day() * 86_400.0).round() as u32 % 86_400;
     (seconds / 3600, seconds / 60 % 60, seconds % 60)
 }
 
@@ -77,10 +81,25 @@ enum Token {
     Comma,
     /// `%`: the value is shown times a hundred.
     Percent,
-    /// A run of one date or time letter, lower-cased, with its length.
-    Date(char, usize),
+    /// A run of one date or time letter, with its length.
+    Date(DateLetter, usize),
     /// `AM/PM`: a twelve-hour clock.
     AmPm,
+}
+
+/// The letter of a date or time token, in either case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DateLetter {
+    /// `y`.
+    Year,
+    /// `m`: the month, or the minutes beside an hour or a second.
+    Month,
+    /// `d`.
+    Day,
+    /// `h`.
+    Hour,
+    /// `s`.
+    Second,
 }
 
 /// Render `value` through `pattern` (`TRAME-109`).
@@ -96,7 +115,7 @@ pub(crate) fn format_custom(value: f64, pattern: &str) -> String {
     };
     let tokens = lex(section);
     if tokens.iter().any(|t| matches!(t, Token::Date(..))) {
-        render_date(&tokens, value)
+        render_date(&tokens, DateSerial::new(value))
     } else {
         render_number(&tokens, value)
     }
@@ -159,11 +178,18 @@ fn lex(section: &str) -> Vec<Token> {
                 Token::AmPm
             }
             'y' | 'Y' | 'm' | 'M' | 'd' | 'D' | 'h' | 'H' | 's' | 'S' => {
-                let letter = c.to_ascii_lowercase();
+                let lower = c.to_ascii_lowercase();
+                let letter = match lower {
+                    'y' => DateLetter::Year,
+                    'm' => DateLetter::Month,
+                    'd' => DateLetter::Day,
+                    'h' => DateLetter::Hour,
+                    _ => DateLetter::Second,
+                };
                 let run = chars
                     .iter()
                     .skip(i)
-                    .take_while(|n| n.to_ascii_lowercase() == letter)
+                    .take_while(|n| n.to_ascii_lowercase() == lower)
                     .count();
                 i += run;
                 Token::Date(letter, run + 1)
@@ -327,8 +353,12 @@ fn place_fraction(tokens: &[Token], digits: &str) -> String {
 }
 
 /// Render a date or time section.
-fn render_date(tokens: &[Token], serial: f64) -> String {
-    let (y, mo, d) = ymd_from_serial(serial.floor() as i64);
+fn render_date(tokens: &[Token], serial: DateSerial) -> String {
+    let CivilDate {
+        year: y,
+        month: mo,
+        day: d,
+    } = serial.day().civil();
     let (h, mi, s) = hms(serial);
     let twelve_hour = tokens.contains(&Token::AmPm);
     let month = |len: usize| -> String {
@@ -346,34 +376,34 @@ fn render_date(tokens: &[Token], serial: f64) -> String {
     let mut out = String::new();
     for (i, token) in tokens.iter().enumerate() {
         match token {
-            Token::Date('y', len) => match len {
+            Token::Date(DateLetter::Year, len) => match len {
                 1 | 2 => out.push_str(&format!("{:02}", y.rem_euclid(100))),
                 _ => out.push_str(&format!("{y:04}")),
             },
-            Token::Date('m', len) => {
+            Token::Date(DateLetter::Month, len) => {
                 // `m` after an hour or before a second is the minutes.
                 let after_hour = tokens
                     .iter()
                     .take(i)
                     .rev()
                     .find(|t| matches!(t, Token::Date(..)))
-                    .is_some_and(|t| matches!(t, Token::Date('h', _)));
+                    .is_some_and(|t| matches!(t, Token::Date(DateLetter::Hour, _)));
                 let before_second = tokens
                     .iter()
                     .skip(i + 1)
                     .find(|t| matches!(t, Token::Date(..)))
-                    .is_some_and(|t| matches!(t, Token::Date('s', _)));
+                    .is_some_and(|t| matches!(t, Token::Date(DateLetter::Second, _)));
                 if *len <= 2 && (after_hour || before_second) {
                     out.push_str(&pad(mi, *len));
                 } else {
                     out.push_str(&month(*len));
                 }
             }
-            Token::Date('d', len) => match len {
+            Token::Date(DateLetter::Day, len) => match len {
                 1 | 2 => out.push_str(&pad(d as u32, *len)),
                 _ => {
                     let name = DAYS
-                        .get((serial.floor() as i64).rem_euclid(7) as usize)
+                        .get(serial.day().get().rem_euclid(7) as usize)
                         .copied()
                         .unwrap_or("");
                     let shown: String = if *len == 3 {
@@ -384,7 +414,7 @@ fn render_date(tokens: &[Token], serial: f64) -> String {
                     out.push_str(&shown);
                 }
             },
-            Token::Date('h', len) => {
+            Token::Date(DateLetter::Hour, len) => {
                 let hour = match (twelve_hour, h % 12) {
                     (true, 0) => 12,
                     (true, hour) => hour,
@@ -392,8 +422,7 @@ fn render_date(tokens: &[Token], serial: f64) -> String {
                 };
                 out.push_str(&pad(hour, *len));
             }
-            Token::Date('s', len) => out.push_str(&pad(s, *len)),
-            Token::Date(..) => {}
+            Token::Date(DateLetter::Second, len) => out.push_str(&pad(s, *len)),
             Token::AmPm => out.push_str(if h < 12 { "AM" } else { "PM" }),
             Token::Literal(text) => out.push_str(text),
             Token::Zero => out.push('0'),
@@ -422,10 +451,13 @@ mod tests {
     #[test]
     fn date_and_time_render_the_calendar() {
         // 46294 is 2026-09-29; .5 is noon.
-        assert_eq!(format_date(46294.0), "2026-09-29");
-        assert_eq!(format_date(46294.75), "2026-09-29");
-        assert_eq!(format_time(46294.5), "12:00:00");
-        assert_eq!(format_time(0.25 + 5.0 / 86_400.0), "06:00:05");
+        assert_eq!(format_date(DateSerial::new(46294.0)), "2026-09-29");
+        assert_eq!(format_date(DateSerial::new(46294.75)), "2026-09-29");
+        assert_eq!(format_time(DateSerial::new(46294.5)), "12:00:00");
+        assert_eq!(
+            format_time(DateSerial::new(0.25 + 5.0 / 86_400.0)),
+            "06:00:05"
+        );
     }
 
     #[test]

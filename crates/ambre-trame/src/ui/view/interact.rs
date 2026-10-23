@@ -202,7 +202,7 @@ impl TrameView {
     pub(crate) fn end_fill_drag(&mut self, mods: ambre_commands::Modifiers) {
         // The drag is over: drop the crosshair (the next hover re-arms it).
         self.set_fill_cursor(false);
-        self.hover_cursor = String::new();
+        self.hover_cursor = GridCursor::Unset;
         let (Some((src, block)), Some(dest)) =
             (self.fill_drag.take(), self.state.fill_preview.take())
         else {

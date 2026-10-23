@@ -116,7 +116,7 @@ impl TrameState {
         for (r, record) in records.into_iter().enumerate() {
             for (c, value) in record.into_iter().enumerate() {
                 if !value.is_empty() {
-                    self.write_cell(land(r, c), &value);
+                    self.write_cell(land(r, c), &FormulaSource::new(value));
                 }
             }
         }

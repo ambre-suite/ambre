@@ -34,7 +34,7 @@ impl TrameUiState {
         // ViewportData carries the computed value. Never echo the formula
         // source as its own result. For a plain literal, raw == display.
         let is_formula = text.starts_with('=');
-        entry.raw = text.clone();
+        entry.raw = DisplayFormula::new(text.clone());
         // A literal the engine would read as a number aligns as one until the
         // pack confirms it.
         entry.numeric = !is_formula && text.parse::<f64>().is_ok_and(f64::is_finite);

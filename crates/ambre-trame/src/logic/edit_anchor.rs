@@ -103,7 +103,7 @@ impl TrameState {
     pub(super) fn commit_cell_edit(
         &mut self,
         session: crate::EditSessionId,
-        text: &str,
+        text: &FormulaSource,
     ) -> TrameOutcome {
         let Some(anchor) = self.edit_anchor.take_if(|a| a.session == session) else {
             // Dropped when its cell went, and the UI was told then.
@@ -126,7 +126,7 @@ impl TrameState {
     }
 
     /// Write `text` to the anchored cell of the active sheet, or report it gone.
-    fn write_at_anchor(&mut self, anchor: &EditAnchor, text: &str) -> TrameOutcome {
+    fn write_at_anchor(&mut self, anchor: &EditAnchor, text: &FormulaSource) -> TrameOutcome {
         let Some(at) = self.locate_anchor(anchor) else {
             let session = anchor.session;
             return TrameOutcome::display_only(vec![TrameEvent::EditTargetGone { session }]);

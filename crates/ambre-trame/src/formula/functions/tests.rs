@@ -3,6 +3,7 @@
 
 use super::super::types::RangeValue;
 use super::*;
+use crate::formula::test_index::function;
 
 #[test]
 fn sum_basic() {
@@ -533,21 +534,34 @@ fn lookup_reference_functions() {
     );
     let r = range(3, 4, vec![CellValue::Empty; 12]);
     assert_eq!(
-        call_builtin("ROWS", std::slice::from_ref(&r), FnCtx::at_clock(0.0)).to_display(),
+        call_builtin(
+            &function("ROWS"),
+            std::slice::from_ref(&r),
+            FnCtx::at_clock(DateSerial::new(0.0))
+        )
+        .to_display(),
         "3"
     );
     assert_eq!(
-        call_builtin("COLUMNS", &[r], FnCtx::at_clock(0.0)).to_display(),
+        call_builtin(
+            &function("COLUMNS"),
+            &[r],
+            FnCtx::at_clock(DateSerial::new(0.0))
+        )
+        .to_display(),
         "4"
     );
     // ROW()/COLUMN() with the evaluating cell at B7.
     let ctx = FnCtx {
-        now_serial: 0.0,
+        now_serial: DateSerial::new(0.0),
         cell_row: Some(Row::new(6)),
         cell_col: Some(Col::new(1)),
     };
-    assert_eq!(call_builtin("ROW", &[], ctx).to_display(), "7");
-    assert_eq!(call_builtin("COLUMN", &[], ctx).to_display(), "2");
+    assert_eq!(call_builtin(&function("ROW"), &[], ctx).to_display(), "7");
+    assert_eq!(
+        call_builtin(&function("COLUMN"), &[], ctx).to_display(),
+        "2"
+    );
     // The reference form is deferred -> #N/A.
     assert!(matches!(
         row_col(&[num(1.0)], Some(7.0)),
@@ -587,9 +601,9 @@ fn datetime_functions() {
         CellValue::Number(n) => n,
         other => panic!("{other:?}"),
     };
-    assert_eq!(time_part(&[num(t)], 0).to_display(), "13");
-    assert_eq!(time_part(&[num(t)], 1).to_display(), "30");
-    assert_eq!(time_part(&[num(t)], 2).to_display(), "15");
+    assert_eq!(time_part(&[num(t)], TimePart::Hour).to_display(), "13");
+    assert_eq!(time_part(&[num(t)], TimePart::Minute).to_display(), "30");
+    assert_eq!(time_part(&[num(t)], TimePart::Second).to_display(), "15");
     // 2024-06-13 was a Thursday -> type 1 gives 5 (Sun=1).
     let serial = match date(&[num(2024.0), num(6.0), num(13.0)]) {
         CellValue::Number(n) => n,
@@ -640,14 +654,24 @@ fn total_propagates_an_error_it_cannot_read() {
     ];
     for name in totals {
         assert_eq!(
-            call_builtin(name, &[with_ref()], FnCtx::at_clock(0.0)).to_display(),
+            call_builtin(
+                &function(name),
+                &[with_ref()],
+                FnCtx::at_clock(DateSerial::new(0.0))
+            )
+            .to_display(),
             "#REF!",
             "{name}"
         );
     }
     // COUNT counts the numbers it finds and skips an error, as the spreadsheets do.
     assert_eq!(
-        call_builtin("COUNT", &[with_ref()], FnCtx::at_clock(0.0)).to_display(),
+        call_builtin(
+            &function("COUNT"),
+            &[with_ref()],
+            FnCtx::at_clock(DateSerial::new(0.0))
+        )
+        .to_display(),
         "2"
     );
 }
@@ -716,11 +740,21 @@ fn catalogue_lists_every_dispatched_name() {
 #[test]
 fn power_without_a_real_root_is_a_num_error() {
     assert_eq!(
-        call_builtin("POWER", &[num(-1.0), num(0.5)], FnCtx::at_clock(0.0)).to_display(),
+        call_builtin(
+            &function("POWER"),
+            &[num(-1.0), num(0.5)],
+            FnCtx::at_clock(DateSerial::new(0.0))
+        )
+        .to_display(),
         "#NUM!"
     );
     assert_eq!(
-        call_builtin("POWER", &[num(-8.0), num(3.0)], FnCtx::at_clock(0.0)).to_display(),
+        call_builtin(
+            &function("POWER"),
+            &[num(-8.0), num(3.0)],
+            FnCtx::at_clock(DateSerial::new(0.0))
+        )
+        .to_display(),
         "-512"
     );
 }

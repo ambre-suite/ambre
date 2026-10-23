@@ -6,6 +6,7 @@
 // `styles.rs`), so `CellStyle` is stored serde-encoded verbatim.
 
 use super::*;
+use crate::formula::calendar::DateSerial;
 
 /// Merge a [`StylePatch`] into a [`CellStyle`] in place: each `Some` field of the
 /// patch overwrites the style; `None` leaves it. Bold/italic are not part of
@@ -87,8 +88,8 @@ pub(crate) fn format_number(value: f64, fmt: &CellFormat, decimals: Option<u8>) 
                 format!("{whole} {frac}/16")
             }
         }
-        CellFormat::Date => super::number_format::format_date(value),
-        CellFormat::Time => super::number_format::format_time(value),
+        CellFormat::Date => super::number_format::format_date(DateSerial::new(value)),
+        CellFormat::Time => super::number_format::format_time(DateSerial::new(value)),
         CellFormat::Custom(pattern) => super::number_format::format_custom(value, pattern),
         // General and Text leave the value untouched.
         CellFormat::General | CellFormat::Text => format!("{value}"),

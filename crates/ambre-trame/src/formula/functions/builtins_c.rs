@@ -569,8 +569,16 @@ pub(crate) fn time_fn(args: &[CellValue]) -> CellValue {
     CellValue::Number((secs / 86_400.0).rem_euclid(1.0))
 }
 
-/// HOUR/MINUTE/SECOND -- `which` selects 0=hour, 1=minute, 2=second.
-pub(crate) fn time_part(args: &[CellValue], which: u8) -> CellValue {
+/// The part of a time of day HOUR, MINUTE and SECOND read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TimePart {
+    Hour,
+    Minute,
+    Second,
+}
+
+/// HOUR/MINUTE/SECOND -- `which` selects the part.
+pub(crate) fn time_part(args: &[CellValue], which: TimePart) -> CellValue {
     let serial = match first_num(args) {
         Some(n) => n,
         None => return CellValue::Error(FormulaError::TypeError),
@@ -578,9 +586,9 @@ pub(crate) fn time_part(args: &[CellValue], which: u8) -> CellValue {
     let frac = serial - serial.floor();
     let total = (frac * 86_400.0).round() as i64;
     let value = match which {
-        0 => (total / 3600) % 24,
-        1 => (total / 60) % 60,
-        _ => total % 60,
+        TimePart::Hour => (total / 3600) % 24,
+        TimePart::Minute => (total / 60) % 60,
+        TimePart::Second => total % 60,
     };
     CellValue::Number(value as f64)
 }
@@ -614,15 +622,21 @@ pub(crate) fn weekday(args: &[CellValue]) -> CellValue {
     CellValue::Number(value as f64)
 }
 
-/// Number of days in month `m` of year `y`.
-pub(crate) fn days_in_month(y: i64, m: i64) -> i64 {
-    serial_from_ymd(y, m + 1, 1) - serial_from_ymd(y, m, 1)
+/// Number of days in the month of `date`.
+pub(crate) fn days_in_month(date: CivilDate) -> i64 {
+    let first = CivilDate { day: 1, ..date };
+    first.next_month_start().serial().days_since(first.serial())
 }
 
-/// Shift `(year, month)` by `months`, normalizing into a valid month.
-pub(crate) fn shift_month(y: i64, m: i64, months: i64) -> (i64, i64) {
-    let total = (m - 1) + months;
-    (y + total.div_euclid(12), total.rem_euclid(12) + 1)
+/// Shift the month of `date` by `months`, normalizing into a valid month. The
+/// day is kept as it stands.
+pub(crate) fn shift_month(date: CivilDate, months: i64) -> CivilDate {
+    let total = (date.month - 1) + months;
+    CivilDate {
+        year: date.year + total.div_euclid(12),
+        month: total.rem_euclid(12) + 1,
+        day: date.day,
+    }
 }
 
 /// EDATE(start, months) -- same day-of-month `months` away (clamped to the
@@ -635,10 +649,9 @@ pub(crate) fn edate(args: &[CellValue]) -> CellValue {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
     };
-    let (y, m, d) = ymd_from_serial(serial);
-    let (ny, nm) = shift_month(y, m, months);
-    let nd = d.min(days_in_month(ny, nm));
-    CellValue::Number(serial_from_ymd(ny, nm, nd) as f64)
+    let shifted = shift_month(DaySerial::new(serial).civil(), months);
+    let day = shifted.day.min(days_in_month(shifted));
+    CellValue::Number(CivilDate { day, ..shifted }.serial().get() as f64)
 }
 
 /// EOMONTH(start, months) -- last day of the month `months` away.
@@ -650,7 +663,7 @@ pub(crate) fn eomonth(args: &[CellValue]) -> CellValue {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
     };
-    let (y, m, _) = ymd_from_serial(serial);
-    let (ny, nm) = shift_month(y, m, months);
-    CellValue::Number(serial_from_ymd(ny, nm, days_in_month(ny, nm)) as f64)
+    let shifted = shift_month(DaySerial::new(serial).civil(), months);
+    let day = days_in_month(shifted);
+    CellValue::Number(CivilDate { day, ..shifted }.serial().get() as f64)
 }

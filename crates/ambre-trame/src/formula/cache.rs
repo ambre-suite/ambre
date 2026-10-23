@@ -11,6 +11,7 @@ use super::compile::{SheetIndices, compile};
 use super::dag::DependencyGraph;
 use super::identity::unbind;
 use super::parser::{parse_formula, resolve_refs};
+use super::text::StoredFormula;
 use super::types::{CellBytecode, CellId, CellValue, FormulaCtx, FormulaError, SheetQualifier};
 
 /// Caches compiled bytecode and tracks stale cells for incremental compilation.
@@ -22,7 +23,7 @@ pub struct BytecodeCache {
     /// The raw text each entry of `entries` was compiled from, so a cell
     /// retyped with the same text is recognised and not recompiled
     /// (`TRAME-212`).
-    sources: HashMap<CellId, Box<str>>,
+    sources: HashMap<CellId, StoredFormula>,
     /// Formulas compiled since construction, for the tests that hold
     /// `TRAME-212`.
     compiles: u64,
@@ -45,10 +46,8 @@ impl BytecodeCache {
 
     /// Whether `cell` holds bytecode compiled from exactly `raw`: retyping it
     /// changes nothing, so the edit path skips it (`TRAME-212`).
-    pub fn compiled_from(&self, cell: CellId, raw: &str) -> bool {
-        self.sources
-            .get(&cell)
-            .is_some_and(|source| **source == *raw)
+    pub fn compiled_from(&self, cell: CellId, raw: &StoredFormula) -> bool {
+        self.sources.get(&cell).is_some_and(|source| source == raw)
     }
 
     /// Formulas compiled since construction.
@@ -83,7 +82,7 @@ impl BytecodeCache {
     pub fn recompile_if_stale(
         &mut self,
         cell: CellId,
-        raw: &str,
+        raw: &StoredFormula,
         indices: &SheetIndices,
         deps: &mut DependencyGraph,
         ctx: &dyn FormulaCtx,
@@ -92,16 +91,14 @@ impl BytecodeCache {
             return None;
         }
 
-        if !raw.starts_with('=') {
+        let Some(formula_text) = raw.formula_body() else {
             // No longer a formula: drop its bytecode and the dependencies it
             // declared. The graph node stays if other formulas read this cell.
             self.entries.remove(&cell);
             self.sources.remove(&cell);
             deps.clear_deps(cell);
             return Some(CellValue::Empty);
-        }
-
-        let formula_text = &raw[1..]; // Strip leading '='.
+        };
         // Parse (context-free), then give each stored line its position in
         // today's layout (`TRAME-228`). Then resolve sheet-qualified refs and
         // named ranges against the host context; unqualified refs land on the
@@ -125,7 +122,7 @@ impl BytecodeCache {
                 match deps.update(cell, bc.cell_deps.clone(), bc.range_deps.clone()) {
                     Ok(()) => {
                         self.entries.insert(cell, bc);
-                        self.sources.insert(cell, raw.into());
+                        self.sources.insert(cell, raw.clone());
                         None // No error -- caller evaluates normally.
                     }
                     Err(_cycle_err) => {
@@ -161,7 +158,7 @@ impl Default for BytecodeCache {
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_index::indices_with;
+    use super::super::test_index::{indices_with, stored};
     use super::super::types::{AxisId, EngineSheet, SingleSheetCtx};
     use super::*;
     use crate::model::Uid;
@@ -188,7 +185,7 @@ mod tests {
         let c = cell(0, 0);
 
         cache.invalidate(c);
-        let err = cache.recompile_if_stale(c, "=42", &idx, &mut deps, &SingleSheetCtx);
+        let err = cache.recompile_if_stale(c, &stored("=42"), &idx, &mut deps, &SingleSheetCtx);
         assert!(err.is_none());
         assert!(cache.get(&c).is_some());
         assert!(!cache.stale.contains(&c));
@@ -202,11 +199,11 @@ mod tests {
         let c = cell(0, 0);
 
         cache.invalidate(c);
-        cache.recompile_if_stale(c, "=42", &idx, &mut deps, &SingleSheetCtx);
+        cache.recompile_if_stale(c, &stored("=42"), &idx, &mut deps, &SingleSheetCtx);
         assert!(cache.get(&c).is_some());
 
         cache.invalidate(c);
-        cache.recompile_if_stale(c, "hello", &idx, &mut deps, &SingleSheetCtx);
+        cache.recompile_if_stale(c, &stored("hello"), &idx, &mut deps, &SingleSheetCtx);
         assert!(cache.get(&c).is_none());
     }
 
@@ -218,7 +215,7 @@ mod tests {
         let c = cell(0, 0);
 
         cache.invalidate(c);
-        let err = cache.recompile_if_stale(c, "=SUM(", &idx, &mut deps, &SingleSheetCtx);
+        let err = cache.recompile_if_stale(c, &stored("=SUM("), &idx, &mut deps, &SingleSheetCtx);
         assert!(matches!(
             err,
             Some(CellValue::Error(FormulaError::ParseError(_)))
@@ -232,7 +229,7 @@ mod tests {
         let mut deps = DependencyGraph::new();
         let c = cell(0, 0);
 
-        let err = cache.recompile_if_stale(c, "=42", &idx, &mut deps, &SingleSheetCtx);
+        let err = cache.recompile_if_stale(c, &stored("=42"), &idx, &mut deps, &SingleSheetCtx);
         assert!(err.is_none());
         assert!(cache.get(&c).is_none());
     }
@@ -246,7 +243,7 @@ mod tests {
         let c = cell(0, 1);
 
         cache.invalidate(c);
-        cache.recompile_if_stale(c, "=A1", &idx, &mut deps, &SingleSheetCtx);
+        cache.recompile_if_stale(c, &stored("=A1"), &idx, &mut deps, &SingleSheetCtx);
         let bc = cache.get(&c).unwrap();
         assert!(matches!(
             bc.cell_deps[0],

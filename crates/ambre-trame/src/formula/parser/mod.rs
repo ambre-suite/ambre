@@ -7,13 +7,14 @@ use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while1};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, multispace0, one_of};
-use nom::combinator::{map, map_res, opt, recognize, value};
+use nom::combinator::{map, map_opt, map_res, opt, recognize, value};
 use nom::multi::{many0, many1, separated_list0};
 use nom::sequence::{delimited, preceded};
 
 use super::types::{
     AxisSpan, BinOpKind, CellRef, CellValue, EngineSheet, Expr, FormulaCtx, FormulaError,
-    NameTarget, RangeDep, SheetQualifier, StoredAxis, StoredCell, UnaryOpKind, alpha_to_col,
+    FunctionName, NameTarget, ParseError, RangeDep, SheetQualifier, StoredAxis, StoredCell,
+    UnaryOpKind, alpha_to_col,
 };
 use crate::model::Uid;
 use ambre_bus::{DefinedName, Row, SheetId};
@@ -295,17 +296,11 @@ fn identifier(input: &str) -> nom::IResult<&str, &str> {
 }
 
 fn function_call(input: &str) -> nom::IResult<&str, Expr> {
-    let (input, name) = identifier.parse(input)?;
+    let (input, name) = map_opt(identifier, FunctionName::parse).parse(input)?;
     let (input, _) = char('(').parse(input)?;
     let (input, args) = separated_list0(ws(char(',')), expr).parse(input)?;
     let (input, _) = ws(char(')')).parse(input)?;
-    Ok((
-        input,
-        Expr::FnCall {
-            name: name.to_uppercase(),
-            args,
-        },
-    ))
+    Ok((input, Expr::FnCall { name, args }))
 }
 
 // -----------------------------------------------------------------------------
@@ -517,7 +512,7 @@ pub const MAX_FORMULA_OPERATORS: usize = 512;
 /// A stored reference between braces counts as no character: it renders as a
 /// few-character `A1`, and the limit is on what the user typed. Nothing between
 /// braces nests or adds an operator.
-fn within_bounds(input: &str) -> Result<(), String> {
+fn within_bounds(input: &str) -> Result<(), ParseError> {
     let (mut depth, mut deepest, mut operators) = (0_usize, 0_usize, 0_usize);
     let (mut quoted, mut braced, mut chars) = (false, false, 0_usize);
     for c in input.chars() {
@@ -540,19 +535,13 @@ fn within_bounds(input: &str) -> Result<(), String> {
         }
     }
     if chars > MAX_FORMULA_CHARS {
-        return Err(format!(
-            "formula longer than {MAX_FORMULA_CHARS} characters"
-        ));
+        return Err(ParseError::TooLong);
     }
     if deepest > MAX_FORMULA_NESTING {
-        return Err(format!(
-            "formula nested deeper than {MAX_FORMULA_NESTING} levels"
-        ));
+        return Err(ParseError::TooDeep);
     }
     if operators > MAX_FORMULA_OPERATORS {
-        return Err(format!(
-            "formula with more than {MAX_FORMULA_OPERATORS} operators"
-        ));
+        return Err(ParseError::TooManyOperators);
     }
     Ok(())
 }
@@ -563,22 +552,21 @@ fn within_bounds(input: &str) -> Result<(), String> {
 ///
 /// A message for an empty formula, and one for trailing input the grammar does
 /// not take. A parse failure names the text it stopped near.
-pub fn parse_formula(input: &str) -> Result<Expr, String> {
+pub fn parse_formula(input: &str) -> Result<Expr, ParseError> {
     if input.trim().is_empty() {
-        return Err("empty formula".into());
+        return Err(ParseError::Empty);
     }
     within_bounds(input)?;
     match expr.parse(input.trim()) {
         Ok(("", ast)) => Ok(ast),
-        Ok((rest, _)) => Err(format!("unexpected trailing input: '{rest}'")),
+        Ok((rest, _)) => Err(ParseError::TrailingInput(rest.to_owned())),
         Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
             // Point at the unparsed remainder. Slice by `chars()` so a
             // multi-byte codepoint at the failure site cannot split a UTF-8
             // boundary (a byte-range slice here panics on non-ASCII input).
-            let near: String = e.input.chars().take(12).collect();
-            Err(format!("parse error near '{near}'"))
+            Err(ParseError::Near(e.input.chars().take(12).collect()))
         }
-        Err(nom::Err::Incomplete(_)) => Err("incomplete input".into()),
+        Err(nom::Err::Incomplete(_)) => Err(ParseError::Incomplete),
     }
 }
 
@@ -604,7 +592,7 @@ pub fn resolve_refs(
     expr: Expr,
     default_sheet: EngineSheet,
     ctx: &dyn FormulaCtx,
-) -> Result<Expr, String> {
+) -> Result<Expr, ParseError> {
     match expr {
         Expr::CellRef(mut r) => {
             r.sheet = default_sheet;
@@ -626,7 +614,7 @@ pub fn resolve_refs(
             let resolved = match &sheet {
                 SheetQualifier::Name(name) => Some(
                     ctx.resolve_sheet(name)
-                        .ok_or_else(|| format!("unknown sheet: {name}"))?,
+                        .ok_or_else(|| ParseError::UnknownSheet(name.clone()))?,
                 ),
                 SheetQualifier::Id(id) => ctx.resolve_sheet_id(id),
             };

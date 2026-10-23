@@ -34,7 +34,7 @@ use super::compile::compile;
 use super::functions::{FnCtx, call_builtin};
 use super::parser::parse_formula;
 use super::render::render;
-use super::test_index::indices_with;
+use super::test_index::{function, indices_with, stored};
 use super::types::EngineSheet;
 use super::types::{
     BinOpKind, CellId, CellRef, CellValue, Expr, Op, RangeDep, RangeValue, UnaryOpKind,
@@ -67,7 +67,7 @@ fn cell(row: u32, col: u32) -> CellId {
 /// test ignore all three fields).
 fn fnctx() -> FnCtx {
     FnCtx {
-        now_serial: 0.0,
+        now_serial: super::calendar::DateSerial::new(0.0),
         cell_row: None,
         cell_col: None,
     }
@@ -181,8 +181,12 @@ fn expr_strategy() -> impl Strategy<Value = Expr> {
                 kind: UnaryOpKind::Neg,
                 operand: Box::new(e),
             }),
-            (fn_name(), proptest::collection::vec(inner, 0..3))
-                .prop_map(|(name, args)| { Expr::FnCall { name, args } }),
+            (fn_name(), proptest::collection::vec(inner, 0..3)).prop_map(|(name, args)| {
+                Expr::FnCall {
+                    name: function(&name),
+                    args,
+                }
+            }),
         ]
     })
 }
@@ -238,7 +242,12 @@ fn eval_ast(ast: &Expr) -> CellValue {
     bcc.insert(c, bc);
     let owned = bcc.get(&c).expect("just inserted").clone();
     let cache: HashMap<CellId, CellValue> = HashMap::new();
-    let mut ctx = EvalContext::new(&bcc, &cache, &indices, 0.0);
+    let mut ctx = EvalContext::new(
+        &bcc,
+        &cache,
+        &indices,
+        super::calendar::DateSerial::new(0.0),
+    );
     ctx.execute(&owned)
 }
 
@@ -331,14 +340,14 @@ proptest! {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
         for ((r, c), v) in &grid {
-            engine.on_cell_changed(cell(*r, *c), &v.to_string(), &idx, &SingleSheetCtx);
+            engine.on_cell_changed(cell(*r, *c), &stored(&v.to_string()), &idx, &SingleSheetCtx);
         }
         engine.compute_all_dirty(&idx);
         engine.dirty.clear();
 
         // Formula lives outside the summed range (row 6).
         let f = cell(6, 0);
-        engine.on_cell_changed(f, "=SUM(A1:C5)", &idx, &SingleSheetCtx);
+        engine.on_cell_changed(f, &stored("=SUM(A1:C5)"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         prop_assert_eq!(engine.evaluated_text(f).unwrap(), oracle.to_string());
 
@@ -362,10 +371,10 @@ proptest! {
     /// SUM equals the naive total and is invariant under argument order.
     #[test]
     fn sum_is_exact_and_order_independent(xs in proptest::collection::vec(-100_000i64..100_000, 0..24)) {
-        let forward = as_num(&call_builtin("SUM", &nums(&xs), fnctx()));
+        let forward = as_num(&call_builtin(&function("SUM"), &nums(&xs), fnctx()));
         let mut reversed = xs.clone();
         reversed.reverse();
-        let backward = as_num(&call_builtin("SUM", &nums(&reversed), fnctx()));
+        let backward = as_num(&call_builtin(&function("SUM"), &nums(&reversed), fnctx()));
         prop_assert_eq!(forward, backward);
         prop_assert_eq!(forward, xs.iter().sum::<i64>() as f64);
     }
@@ -383,7 +392,7 @@ proptest! {
     ) {
         let total = |v: &[f64]| {
             let args: Vec<CellValue> = v.iter().map(|&n| CellValue::Number(n)).collect();
-            as_num(&call_builtin("SUM", &args, fnctx()))
+            as_num(&call_builtin(&function("SUM"), &args, fnctx()))
         };
         let mut reversed = xs.clone();
         reversed.reverse();
@@ -397,10 +406,10 @@ proptest! {
         xs in proptest::collection::vec(-100_000i64..100_000, 0..16),
         zeros in 0usize..8,
     ) {
-        let base = as_num(&call_builtin("SUM", &nums(&xs), fnctx()));
+        let base = as_num(&call_builtin(&function("SUM"), &nums(&xs), fnctx()));
         let mut padded = xs.clone();
         padded.extend(std::iter::repeat_n(0, zeros));
-        let padded_sum = as_num(&call_builtin("SUM", &nums(&padded), fnctx()));
+        let padded_sum = as_num(&call_builtin(&function("SUM"), &nums(&padded), fnctx()));
         prop_assert_eq!(base, padded_sum);
     }
 
@@ -408,9 +417,9 @@ proptest! {
     /// `SUM(range) == SUM(v1, v2, ...)`.
     #[test]
     fn sum_flattens_range_like_scalars(xs in proptest::collection::vec(-100_000i64..100_000, 0..24)) {
-        let scalar = as_num(&call_builtin("SUM", &nums(&xs), fnctx()));
+        let scalar = as_num(&call_builtin(&function("SUM"), &nums(&xs), fnctx()));
         let range = CellValue::Range(RangeValue::new(1, xs.len(), nums(&xs)));
-        let ranged = as_num(&call_builtin("SUM", &[range], fnctx()));
+        let ranged = as_num(&call_builtin(&function("SUM"), &[range], fnctx()));
         prop_assert_eq!(scalar, ranged);
     }
 
@@ -418,9 +427,9 @@ proptest! {
     #[test]
     fn average_times_count_equals_sum(xs in proptest::collection::vec(-100_000i64..100_000, 1..24)) {
         let args = nums(&xs);
-        let avg = as_num(&call_builtin("AVERAGE", &args, fnctx()));
-        let count = as_num(&call_builtin("COUNT", &args, fnctx()));
-        let sum = as_num(&call_builtin("SUM", &args, fnctx()));
+        let avg = as_num(&call_builtin(&function("AVERAGE"), &args, fnctx()));
+        let count = as_num(&call_builtin(&function("COUNT"), &args, fnctx()));
+        let sum = as_num(&call_builtin(&function("SUM"), &args, fnctx()));
         prop_assert_eq!(count, xs.len() as f64);
         // avg*count reconstructs sum; integers keep this within a tiny epsilon.
         prop_assert!((avg * count - sum).abs() < 1e-6);
@@ -430,8 +439,8 @@ proptest! {
     #[test]
     fn min_max_bound_every_element(xs in proptest::collection::vec(-100_000i64..100_000, 1..24)) {
         let args = nums(&xs);
-        let lo = as_num(&call_builtin("MIN", &args, fnctx()));
-        let hi = as_num(&call_builtin("MAX", &args, fnctx()));
+        let lo = as_num(&call_builtin(&function("MIN"), &args, fnctx()));
+        let hi = as_num(&call_builtin(&function("MAX"), &args, fnctx()));
         prop_assert!(lo <= hi);
         for &x in &xs {
             prop_assert!(lo <= x as f64);
@@ -445,10 +454,10 @@ proptest! {
     /// product exact in f64).
     #[test]
     fn product_is_order_independent(xs in proptest::collection::vec(-10i64..10, 0..10)) {
-        let forward = as_num(&call_builtin("PRODUCT", &nums(&xs), fnctx()));
+        let forward = as_num(&call_builtin(&function("PRODUCT"), &nums(&xs), fnctx()));
         let mut reversed = xs.clone();
         reversed.reverse();
-        let backward = as_num(&call_builtin("PRODUCT", &nums(&reversed), fnctx()));
+        let backward = as_num(&call_builtin(&function("PRODUCT"), &nums(&reversed), fnctx()));
         prop_assert_eq!(forward, backward);
     }
 }

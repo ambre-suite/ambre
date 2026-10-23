@@ -381,11 +381,10 @@ pub struct TrameView {
     /// on the origin). Armed only when the press lands on an already-selected
     /// header body, so a plain click still selects/extends the axis.
     reorder_drag: Option<AxisPos>,
-    /// The CSS cursor currently set on `#ambre-canvas` from bare hover feedback
-    /// (`trame-resize`, `trame-autofill`): `"col-resize"` / `"row-resize"` /
-    /// `"pointer"` / `"crosshair"` / `""`. Tracked to avoid redundant DOM writes
-    /// every move.
-    hover_cursor: String,
+    /// The cursor currently set on `#ambre-canvas` from bare hover feedback
+    /// (`trame-resize`, `trame-autofill`). Tracked to avoid redundant DOM
+    /// writes every move.
+    hover_cursor: GridCursor,
     /// The edit overlay changed this frame (keystroke, caret move, IME pass).
     edit_dirty: bool,
     /// Caret blink phase: `true` = caret drawn. Toggled every `BLINK_MS`, reset
@@ -464,6 +463,37 @@ mod interact;
 mod lifecycle;
 mod scroll;
 
+/// A cursor the view sets on `#ambre-canvas` (`trame-resize`,
+/// `trame-autofill`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum GridCursor {
+    /// No cursor of the view's own: the stylesheet's applies.
+    #[default]
+    Unset,
+    /// Over a header body or a filter button.
+    Pointer,
+    /// Over a column boundary, or dragging one.
+    ColResize,
+    /// Over a row boundary, or dragging one.
+    RowResize,
+    /// Over the fill handle.
+    Crosshair,
+}
+
+impl GridCursor {
+    /// The CSS `cursor` value, the empty one for [`Self::Unset`].
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) const fn css(self) -> &'static str {
+        match self {
+            Self::Unset => "",
+            Self::Pointer => "pointer",
+            Self::ColResize => "col-resize",
+            Self::RowResize => "row-resize",
+            Self::Crosshair => "crosshair",
+        }
+    }
+}
+
 /// What the view does with a focused formula bar and no edit session.
 #[derive(Debug, PartialEq, Eq)]
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
@@ -475,21 +505,6 @@ pub(crate) enum FormulaBarSync {
     /// The cell changed under an untouched bar, a collaborator's write: show
     /// the new value, and open nothing.
     Refresh,
-}
-
-/// Decide from the bar's `input`, the text the view last `shown` in it, and
-/// the active cell's stored `seed`. Only a text the user typed opens a session
-/// (`TRAME-UI-155`). A stored value that moved under the bar is a
-/// collaborator's. The session it would open is one the user never started.
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-pub(crate) fn formula_bar_sync(input: &str, shown: &str, seed: &str) -> FormulaBarSync {
-    if input != shown {
-        FormulaBarSync::OpenSession
-    } else if seed != shown {
-        FormulaBarSync::Refresh
-    } else {
-        FormulaBarSync::Idle
-    }
 }
 
 /// The formula bar as the view sees it for one frame (`trame-cell-editing`).
@@ -509,6 +524,24 @@ pub(crate) struct FormulaBar {
     pub(crate) action: Option<FormulaAction>,
     /// Whether the bar holds the keyboard focus.
     pub(crate) focused: bool,
+}
+
+impl FormulaBar {
+    /// Decide from the bar's text, the text the view last showed in it, and
+    /// the active cell's stored `seed`. Only a text the user typed opens a
+    /// session (`TRAME-UI-155`). A stored value that moved under the bar is a
+    /// collaborator's. The session it would open is one the user never
+    /// started.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) fn sync(&self, seed: &str) -> FormulaBarSync {
+        if self.text != self.shown {
+            FormulaBarSync::OpenSession
+        } else if seed != self.shown {
+            FormulaBarSync::Refresh
+        } else {
+            FormulaBarSync::Idle
+        }
+    }
 }
 
 // The view as a host test drives it, on a detached pipe and no DOM. The
@@ -561,22 +594,18 @@ mod tests {
     /// nothing.
     #[test]
     fn only_a_typed_text_opens_an_edit_from_the_formula_bar() {
+        let bar = |text: &str| FormulaBar {
+            text: text.to_owned(),
+            shown: "old".to_owned(),
+            ..FormulaBar::default()
+        };
         // The bar shows "old"; a peer rewrote the cell to "new".
-        assert_eq!(
-            formula_bar_sync("old", "old", "new"),
-            FormulaBarSync::Refresh
-        );
+        assert_eq!(bar("old").sync("new"), FormulaBarSync::Refresh);
         // The user typed a character.
-        assert_eq!(
-            formula_bar_sync("old5", "old", "old"),
-            FormulaBarSync::OpenSession
-        );
+        assert_eq!(bar("old5").sync("old"), FormulaBarSync::OpenSession);
         // The user typed while the peer wrote: the typing wins.
-        assert_eq!(
-            formula_bar_sync("old5", "old", "new"),
-            FormulaBarSync::OpenSession
-        );
-        assert_eq!(formula_bar_sync("old", "old", "old"), FormulaBarSync::Idle);
+        assert_eq!(bar("old5").sync("new"), FormulaBarSync::OpenSession);
+        assert_eq!(bar("old").sync("old"), FormulaBarSync::Idle);
     }
 
     fn scroll_cmd(version: u64) -> TrameCommand {

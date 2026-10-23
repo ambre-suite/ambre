@@ -491,7 +491,7 @@ impl TrameUiState {
                 at,
                 CellData {
                     text: cell.text,
-                    raw: cell.raw,
+                    raw: DisplayFormula::new(cell.raw),
                     bold: cell.bold,
                     italic: cell.italic,
                     underline: cell.underline,

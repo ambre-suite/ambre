@@ -88,12 +88,12 @@ status values are normative in `ambre-spec-template.md`.
 
 ```rust
 pub struct FnCtx {
-    pub now_serial: f64,   // the recomputation clock, one instant per pass
+    pub now_serial: DateSerial, // the recomputation clock, one instant per pass
     pub cell_row: u32,     // 1-based position of the cell being computed; 0 means unknown
     pub cell_col: u32,
 }
 
-pub fn call_builtin(name: &str, args: &[CellValue], ctx: FnCtx) -> CellValue;
+pub fn call_builtin(name: &FunctionName, args: &[CellValue], ctx: FnCtx) -> CellValue;
 ```
 
 **Reading arguments.** Three flattenings, and the choice between them is the semantics:

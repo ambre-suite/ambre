@@ -82,19 +82,6 @@ pub(crate) fn flatten_all(args: &[CellValue]) -> Vec<CellValue> {
     out
 }
 
-/// Require exactly `n` arguments; return an error if not met.
-#[allow(dead_code)]
-pub(crate) fn check_argc(
-    args: &[CellValue],
-    expected: usize,
-    _name: &str,
-) -> Result<(), CellValue> {
-    if args.len() != expected {
-        return Err(CellValue::Error(FormulaError::NaError));
-    }
-    Ok(())
-}
-
 /// Terms at or above this magnitude could overflow a partial sum, so the exact
 /// path stops there. Far above any value a sheet holds (about 1e301).
 const EXACT_SUM_LIMIT: f64 = 1.0e301;

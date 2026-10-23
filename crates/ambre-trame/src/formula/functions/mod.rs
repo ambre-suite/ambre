@@ -7,7 +7,8 @@
 
 use ambre_bus::{Col, Row};
 
-use super::types::{CellValue, FormulaError, nearly_equal};
+use super::calendar::{CivilDate, DateSerial, DaySerial};
+use super::types::{CellValue, FormulaError, FunctionName, nearly_equal};
 
 // -----------------------------------------------------------------------------
 // Dispatch
@@ -22,8 +23,6 @@ mod builtins_c;
 use builtins_a::*;
 use builtins_b::*;
 use builtins_c::*;
-// The calendar conversion, for the `Date` number format (`TRAME-107`).
-pub(crate) use builtins_b::ymd_from_serial;
 
 /// Ambient evaluation context threaded into every built-in call.
 ///
@@ -32,7 +31,7 @@ pub(crate) use builtins_b::ymd_from_serial;
 /// cell being evaluated, consumed by the no-argument `ROW()`/`COLUMN()`.
 #[derive(Clone, Copy)]
 pub struct FnCtx {
-    pub now_serial: f64,
+    pub now_serial: DateSerial,
     /// The row of the evaluating cell, `None` when it is unknown.
     pub cell_row: Option<Row>,
     /// The column of the evaluating cell, `None` when it is unknown.
@@ -42,7 +41,7 @@ pub struct FnCtx {
 impl FnCtx {
     /// Context with only the clock set (helper for tests / non-positional calls).
     #[cfg(test)]
-    fn at_clock(now_serial: f64) -> Self {
+    fn at_clock(now_serial: DateSerial) -> Self {
         Self {
             now_serial,
             cell_row: None,
@@ -52,9 +51,9 @@ impl FnCtx {
 }
 
 /// Call the named built-in function with pre-evaluated arguments.
-pub fn call_builtin(name: &str, args: &[CellValue], ctx: FnCtx) -> CellValue {
+pub fn call_builtin(name: &FunctionName, args: &[CellValue], ctx: FnCtx) -> CellValue {
     let now_serial = ctx.now_serial;
-    match name {
+    match name.as_str() {
         // Math
         "SUM" => sum(args),
         "AVERAGE" => average(args),
@@ -167,16 +166,16 @@ pub fn call_builtin(name: &str, args: &[CellValue], ctx: FnCtx) -> CellValue {
         "VALUE" => value_fn(args),
 
         // Date / time (serial-number based, epoch 1899-12-30)
-        "TODAY" => CellValue::Number(now_serial.floor()),
-        "NOW" => CellValue::Number(now_serial),
+        "TODAY" => CellValue::Number(now_serial.get().floor()),
+        "NOW" => CellValue::Number(now_serial.get()),
         "DATE" => date(args),
         "YEAR" => year(args),
         "MONTH" => month(args),
         "DAY" => day(args),
         "TIME" => time_fn(args),
-        "HOUR" => time_part(args, 0),
-        "MINUTE" => time_part(args, 1),
-        "SECOND" => time_part(args, 2),
+        "HOUR" => time_part(args, TimePart::Hour),
+        "MINUTE" => time_part(args, TimePart::Minute),
+        "SECOND" => time_part(args, TimePart::Second),
         "WEEKDAY" => weekday(args),
         "EDATE" => edate(args),
         "EOMONTH" => eomonth(args),

@@ -44,7 +44,7 @@ impl TrameState {
 
     /// Raw cell text as stored in the CRDT (the formula source for a formula
     /// cell, the literal otherwise). Empty for virtual/cleared cells.
-    pub(super) fn cell_raw(&self, at: CellPos) -> String {
+    pub(super) fn cell_raw(&self, at: CellPos) -> StoredFormula {
         if let Some((rl, cl)) = self.index.resolve(at) {
             let map = self
                 .doc
@@ -53,16 +53,16 @@ impl TrameState {
                 .get(CellKey::of(rl, cl).as_str())
                 .map(|v| v.get_deep_value())
             {
-                return s.to_string();
+                return StoredFormula::new(s.to_string());
             }
         }
-        String::new()
+        StoredFormula::default()
     }
 
     /// The text of an active-sheet cell with a formula's references at their
     /// positions ([`formula_source`](Self::formula_source)). A fill or a copy
     /// shifts this text, never the stored one (`TRAME-228`).
-    pub(super) fn cell_source(&self, at: CellPos) -> String {
+    pub(super) fn cell_source(&self, at: CellPos) -> FormulaSource {
         self.formula_source(&self.cell_raw(at), &self.active_sheet, &self.sheet_lines())
     }
 
@@ -81,12 +81,13 @@ impl TrameState {
     /// appears and break the day that sheet is renamed.
     pub(super) fn canonicalize_input(
         &self,
-        text: &str,
+        text: &FormulaSource,
         sheet_id: &SheetId,
         lines: &SheetLines<'_>,
-    ) -> Result<String, String> {
-        let Some(body) = text.strip_prefix('=') else {
-            return Ok(text.to_string());
+    ) -> Result<StoredFormula, String> {
+        let verbatim = || StoredFormula::new(text.as_str().to_owned());
+        let Some(body) = text.formula_body() else {
+            return Ok(verbatim());
         };
         let name_to_id = |name: &str| {
             self.engine_sheet_by_name
@@ -95,14 +96,14 @@ impl TrameState {
                 .cloned()
         };
         let Ok(ast) = parse_formula(body) else {
-            return Ok(text.to_string());
+            return Ok(verbatim());
         };
         let canonical = render::canonicalize(ast, &name_to_id);
         if let Some(unknown) = render::first_name_qualifier(&canonical) {
             return Err(unknown);
         }
         let bound = identity::bind(canonical, &|q| lines.of(sheet_id, q));
-        Ok(format!("={}", render::render(&bound)))
+        Ok(StoredFormula::new(format!("={}", render::render(&bound))))
     }
 
     /// The source of a stored formula with each reference back at its position
@@ -111,24 +112,25 @@ impl TrameState {
     /// fill shifts, and what a copy carries. Plain text passes through.
     pub(super) fn formula_source(
         &self,
-        stored: &str,
+        stored: &StoredFormula,
         sheet_id: &SheetId,
         lines: &SheetLines<'_>,
-    ) -> String {
-        let Some(body) = stored.strip_prefix('=') else {
-            return stored.to_string();
+    ) -> FormulaSource {
+        let verbatim = || FormulaSource::new(stored.as_str().to_owned());
+        let Some(body) = stored.formula_body() else {
+            return verbatim();
         };
         // A stored line is the only `{` the canonical form writes outside a
         // string; a formula without one is already positional.
         if !body.contains('{') {
-            return stored.to_string();
+            return verbatim();
         }
         match parse_formula(body) {
-            Ok(ast) => format!(
+            Ok(ast) => FormulaSource::new(format!(
                 "={}",
                 render::render(&identity::unbind(ast, &|q| lines.of(sheet_id, q)))
-            ),
-            Err(_) => stored.to_string(),
+            )),
+            Err(_) => verbatim(),
         }
     }
 
@@ -141,25 +143,26 @@ impl TrameState {
     /// reference. Plain text passes through.
     pub(super) fn formula_display(
         &self,
-        stored: &str,
+        stored: &StoredFormula,
         sheet_id: &SheetId,
         lines: &SheetLines<'_>,
-    ) -> String {
+    ) -> DisplayFormula {
         let source = self.formula_source(stored, sheet_id, lines);
-        let Some(body) = source.strip_prefix('=') else {
-            return source;
+        let verbatim = || DisplayFormula::new(source.as_str().to_owned());
+        let Some(body) = source.formula_body() else {
+            return verbatim();
         };
         // The canonical id qualifier is the only other `#` we persist in `v`.
         if !body.contains('#') {
-            return source;
+            return verbatim();
         }
         let id_to_name = |id: &SheetId| self.sheet_id_to_name.get(id).cloned();
         match parse_formula(body) {
-            Ok(ast) => format!(
+            Ok(ast) => DisplayFormula::new(format!(
                 "={}",
                 render::render(&render::to_display_form(ast, &id_to_name))
-            ),
-            Err(_) => source,
+            )),
+            Err(_) => verbatim(),
         }
     }
 
@@ -297,7 +300,7 @@ impl TrameState {
     /// excluded commit interleaved between two value commits splits them into
     /// separate undo items. Materializing up front keeps all value writes in one
     /// final commit, hence one undo item.
-    pub(super) fn write_cell(&mut self, at: CellPos, text: &str) {
+    pub(super) fn write_cell(&mut self, at: CellPos, text: &FormulaSource) {
         if text.is_empty() {
             // Clearing: only touch the CRDT if the cell was materialized.
             if let Some((rl, cl)) = self.index.resolve(at) {
@@ -313,7 +316,8 @@ impl TrameState {
                 engine_sheet_by_id: &self.engine_sheet_by_id,
                 named: &self.named,
             };
-            self.engine.on_cell_changed(cell, "", &indices, &ctx);
+            self.engine
+                .on_cell_changed(cell, &StoredFormula::default(), &indices, &ctx);
         } else {
             // Persist the canonical form: sheet ids, so cross-sheet references
             // survive rename/reorder (`trame-sheets`), and lines, so references
@@ -337,7 +341,7 @@ impl TrameState {
             // or column names that line rather than a position.
             let stored = self
                 .canonicalize_input(text, &sheet, &self.sheet_lines())
-                .unwrap_or_else(|_| text.to_string());
+                .unwrap_or_else(|_| StoredFormula::new(text.as_str().to_owned()));
             let _ = self
                 .doc
                 .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str())

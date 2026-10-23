@@ -367,7 +367,7 @@ fn filter_register_step(doc: &LoroDoc) -> Result<(), String> {
         let mut sheets: Vec<SheetId> = sheets.keys().cloned().map(SheetId).collect();
         sheets.sort();
         for sheet in &sheets {
-            fold_filter_keys(doc, sheet)?;
+            fold_filter_keys(doc, sheet).map_err(|e| e.to_string())?;
         }
     }
     // Stamp the new version inside the same commit as the shape change
@@ -440,9 +440,36 @@ fn stored_reference_step(doc: &LoroDoc) -> Result<(), String> {
     Ok(())
 }
 
+/// Why a version-1 filter does not fold into the register.
+#[derive(Debug)]
+enum FilterFoldError {
+    /// The `col` key holds no column uid: the text it holds.
+    UnreadableColumn(String),
+    /// The `op` key holds no operator: the text it holds.
+    UnreadableOperator(String),
+    /// A condition filter with no `op` key.
+    NoOperator,
+    /// A `kind` key that is absent or names no kind.
+    NoKind,
+    /// The register did not encode.
+    Encode(postcard::Error),
+}
+
+impl std::fmt::Display for FilterFoldError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnreadableColumn(col) => write!(f, "an unreadable filter column {col}"),
+            Self::UnreadableOperator(op) => write!(f, "an unreadable filter operator {op}"),
+            Self::NoOperator => write!(f, "a condition filter with no operator"),
+            Self::NoKind => write!(f, "a filter with no readable kind"),
+            Self::Encode(e) => write!(f, "encoding the filter register failed: {e}"),
+        }
+    }
+}
+
 /// Convert one sheet's flat filter shape into the single register. A sheet with
 /// no filter (an empty or absent map) is left untouched.
-fn fold_filter_keys(doc: &LoroDoc, sheet: &SheetId) -> Result<(), String> {
+fn fold_filter_keys(doc: &LoroDoc, sheet: &SheetId) -> Result<(), FilterFoldError> {
     let map = doc.get_map(SheetContainer::of(SheetRoot::Filters, sheet).as_str());
     // `get_deep_value` resolves the `values` child list, which the shallow read
     // in `load_active_filter` could not (`TRAME-FEAT-004`).
@@ -455,7 +482,7 @@ fn fold_filter_keys(doc: &LoroDoc, sheet: &SheetId) -> Result<(), String> {
         return Ok(());
     };
     let col_uid = Uid::parse(col.as_str())
-        .ok_or_else(|| format!("an unreadable filter column {}", col.as_str()))?;
+        .ok_or_else(|| FilterFoldError::UnreadableColumn(col.to_string()))?;
     let kind = match fields.get(LegacyFilterKey::Kind) {
         Some(LoroValue::String(kind)) if kind.as_str() == "values" => {
             let values = match fields.get(LegacyFilterKey::Values) {
@@ -473,8 +500,8 @@ fn fold_filter_keys(doc: &LoroDoc, sheet: &SheetId) -> Result<(), String> {
         Some(LoroValue::String(kind)) if kind.as_str() == "condition" => {
             let op = match fields.get(LegacyFilterKey::Op) {
                 Some(LoroValue::String(s)) => op_from_str(s.as_str())
-                    .ok_or_else(|| format!("an unreadable filter operator {}", s.as_str()))?,
-                _ => return Err("a condition filter with no operator".to_owned()),
+                    .ok_or_else(|| FilterFoldError::UnreadableOperator(s.to_string()))?,
+                _ => return Err(FilterFoldError::NoOperator),
             };
             let value = match fields.get(LegacyFilterKey::Value) {
                 Some(LoroValue::String(s)) => s.to_string(),
@@ -482,14 +509,13 @@ fn fold_filter_keys(doc: &LoroDoc, sheet: &SheetId) -> Result<(), String> {
             };
             FilterKind::Condition { op, value }
         }
-        _ => return Err("a filter with no readable kind".to_owned()),
+        _ => return Err(FilterFoldError::NoKind),
     };
     let record = FilterRecord {
         col: col_uid.to_key_part(),
         kind,
     };
-    let bytes = postcard::to_allocvec(&record)
-        .map_err(|e| format!("encoding the filter register failed: {e}"))?;
+    let bytes = postcard::to_allocvec(&record).map_err(FilterFoldError::Encode)?;
     // Replace the flat keys with the one register.
     let mut old_keys: Vec<&String> = deep.keys().collect();
     old_keys.sort();

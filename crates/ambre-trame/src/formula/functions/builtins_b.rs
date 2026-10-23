@@ -452,59 +452,38 @@ pub(crate) fn date(args: &[CellValue]) -> CellValue {
     // Normalize month overflow/underflow into the year (Excel allows it).
     let year = year + (m - 1).div_euclid(12);
     let month = (m - 1).rem_euclid(12) + 1;
-    let serial = serial_from_ymd(year, month, d);
-    CellValue::Number(serial as f64)
+    let serial = CivilDate {
+        year,
+        month,
+        day: d,
+    }
+    .serial();
+    CellValue::Number(serial.get() as f64)
 }
 
 pub(crate) fn year(args: &[CellValue]) -> CellValue {
-    date_part(args, |(y, _, _)| y)
+    date_part(args, |date| date.year)
 }
 
 pub(crate) fn month(args: &[CellValue]) -> CellValue {
-    date_part(args, |(_, m, _)| m)
+    date_part(args, |date| date.month)
 }
 
 pub(crate) fn day(args: &[CellValue]) -> CellValue {
-    date_part(args, |(_, _, d)| d)
+    date_part(args, |date| date.day)
 }
 
-pub(crate) fn date_part(args: &[CellValue], pick: fn((i64, i64, i64)) -> i64) -> CellValue {
+pub(crate) fn date_part(args: &[CellValue], pick: fn(CivilDate) -> i64) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
     match arg(args, 0).as_number() {
         Ok(serial) => {
-            let ymd = ymd_from_serial(serial.floor() as i64);
-            CellValue::Number(pick(ymd) as f64)
+            let date = DateSerial::new(serial).day().civil();
+            CellValue::Number(pick(date) as f64)
         }
         Err(_) => CellValue::Error(FormulaError::TypeError),
     }
-}
-
-/// Days from the Excel epoch (1899-12-30) for a proleptic-Gregorian date.
-/// Uses Howard Hinnant's `days_from_civil` algorithm against the Unix epoch.
-pub(crate) fn serial_from_ymd(y: i64, m: i64, d: i64) -> i64 {
-    let yy = y - i64::from(m <= 2);
-    let era = if yy >= 0 { yy } else { yy - 399 } / 400;
-    let yoe = yy - era * 400;
-    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let unix_days = era * 146_097 + doe - 719_468;
-    unix_days + 25_569
-}
-
-/// Inverse of [`serial_from_ymd`]: `(year, month, day)` from an Excel serial.
-pub(crate) fn ymd_from_serial(serial: i64) -> (i64, i64, i64) {
-    let z = serial - 25_569 + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
 /// Flatten a value (including nested ranges) into a string builder.

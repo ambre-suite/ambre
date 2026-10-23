@@ -5,6 +5,7 @@
 // Submodule of `logic`, so it reaches the private fields/helpers of the parent
 // module through the `use super::*` glob.
 
+use super::find::{FindText, Replacement};
 use super::*;
 use ambre_core::HistoryStep;
 
@@ -75,7 +76,7 @@ impl TrameState {
                 // commit (filter recompute) merge into a single undo item. The
                 // next `CommitEdit` seals it, or the fallback seal above.
                 let _ = self.undo_manager.group_start();
-                self.write_cell(CellPos::new(row, col), &text);
+                self.write_cell(CellPos::new(row, col), &FormulaSource::new(text));
                 self.finish_cell_writes()
             }
             TrameCommand::BeginCellEdit { session, row, col } => {
@@ -83,7 +84,7 @@ impl TrameState {
             }
             TrameCommand::CommitCellEdit { session, text } => {
                 tracing::info!("[Logic] CommitCellEdit session={session} text='{text:.80}'");
-                self.commit_cell_edit(session, &text)
+                self.commit_cell_edit(session, &FormulaSource::new(text))
             }
             TrameCommand::EndCellEdit { session } => self.end_cell_edit(session),
             TrameCommand::SetCellsBatch { cells } => {
@@ -104,7 +105,7 @@ impl TrameState {
                     }
                 }
                 for (at, text) in cells {
-                    self.write_cell(at, &text);
+                    self.write_cell(at, &FormulaSource::new(text));
                 }
                 self.finish_cell_writes()
             }
@@ -272,12 +273,18 @@ impl TrameState {
                 mode,
             } => self.fill_range(&sheet_id, src, dest, mode),
 
-            TrameCommand::FindNext { query, options } => self.find_next(query, options),
+            TrameCommand::FindNext { query, options } => match FindText::new(query) {
+                Some(query) => self.find_next(&query, options),
+                None => Self::find_nothing(),
+            },
             TrameCommand::ReplaceAll {
                 query,
                 replacement,
                 options,
-            } => self.replace_all(query, replacement, options),
+            } => match FindText::new(query) {
+                Some(query) => self.replace_all(&query, &Replacement::new(replacement), options),
+                None => Self::replace_nothing(),
+            },
             TrameCommand::ImportCsv {
                 data,
                 delimiter,
@@ -318,7 +325,10 @@ impl TrameState {
                 query,
                 replacement,
                 options,
-            } => self.replace_one(query, replacement, options),
+            } => match FindText::new(query) {
+                Some(query) => self.replace_one(&query, &Replacement::new(replacement), options),
+                None => Self::replace_nothing(),
+            },
 
             // Deferred feature surface (`trame-engine`): the command vocabulary
             // is complete and typed. These handlers land in later phases
@@ -425,6 +435,7 @@ impl TrameState {
                     // cross-sheet qualifiers from the stable id to the
                     // display name (`TRAME-228`, `trame-sheets`).
                     self.formula_display(&self.cell_raw(at), &self.active_sheet, &lines)
+                        .into_string()
                 },
                 bold: self.bold.contains(&at),
                 italic: self.italic.contains(&at),

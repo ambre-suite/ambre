@@ -29,3 +29,13 @@ pub fn indices_with(rows: usize, cols: usize) -> super::SheetIndices {
     m.insert(super::EngineSheet::ACTIVE, index_with(rows, cols));
     m
 }
+
+/// `text` as the CRDT would store it.
+pub fn stored(text: &str) -> super::text::StoredFormula {
+    super::text::StoredFormula::new(text.to_owned())
+}
+
+/// The function name `text`, which must be an identifier.
+pub fn function(text: &str) -> super::types::FunctionName {
+    super::types::FunctionName::parse(text).expect("an identifier")
+}

@@ -146,7 +146,8 @@ impl TrameState {
                     .step_by(bh)
                     .map(|top| CellPos::new(top, left))
                     .collect();
-                let sources: Vec<String> = masters.iter().map(|&m| self.cell_source(m)).collect();
+                let sources: Vec<FormulaSource> =
+                    masters.iter().map(|&m| self.cell_source(m)).collect();
                 let series = series_params(mode, &sources);
                 let tiles = merged_tiles(
                     src.top_left.row,
@@ -174,7 +175,8 @@ impl TrameState {
                     .step_by(bw)
                     .map(|left| CellPos::new(top, left))
                     .collect();
-                let sources: Vec<String> = masters.iter().map(|&m| self.cell_source(m)).collect();
+                let sources: Vec<FormulaSource> =
+                    masters.iter().map(|&m| self.cell_source(m)).collect();
                 let series = series_params(mode, &sources);
                 let tiles = merged_tiles(
                     src.top_left.col,
@@ -211,26 +213,26 @@ impl TrameState {
         &mut self,
         tile: CellRect,
         term: Term,
-        src_raw: &str,
+        src_raw: &FormulaSource,
         src_master: CellPos,
         series: Option<(f64, f64)>,
     ) {
         let master = tile.top_left;
         let text = if let Some((first, step)) = series {
-            format_number(first + term.0 as f64 * step)
-        } else if src_raw.starts_with('=') {
+            FormulaSource::new(format_number(first + term.0 as f64 * step))
+        } else if src_raw.is_formula() {
             shift_formula(
                 src_raw,
                 master.row - src_master.row,
                 master.col - src_master.col,
             )
         } else {
-            src_raw.to_string()
+            src_raw.clone()
         };
         // Clear the covered cells first: merge_cells/rebuild only accept an empty
         // block, and a previous value there would otherwise be masked.
         for at in tile.cells().filter(|&at| at != master) {
-            self.write_cell(at, "");
+            self.write_cell(at, &FormulaSource::default());
         }
         self.write_cell(master, &text);
         // Carry the source master's formatting onto the tile master.
@@ -246,7 +248,7 @@ impl TrameState {
     fn fill_vertical(&mut self, src: CellRect, dest: CellRect, mode: FillMode) {
         let origin = src.top_left.row;
         for col in src.cols() {
-            let sources: Vec<String> = src
+            let sources: Vec<FormulaSource> = src
                 .rows()
                 .into_iter()
                 .map(|r| self.cell_source(CellPos::new(r, col)))
@@ -269,7 +271,7 @@ impl TrameState {
     fn fill_horizontal(&mut self, src: CellRect, dest: CellRect, mode: FillMode) {
         let origin = src.top_left.col;
         for row in src.rows() {
-            let sources: Vec<String> = src
+            let sources: Vec<FormulaSource> = src
                 .cols()
                 .into_iter()
                 .map(|c| self.cell_source(CellPos::new(row, c)))
@@ -298,22 +300,23 @@ impl TrameState {
         at: CellPos,
         from: CellPos,
         term: Term,
-        sources: &[String],
+        sources: &[FormulaSource],
         series: Option<(f64, f64)>,
     ) {
         let _ = self.materialize(at);
 
         let text = if let Some((first, step)) = series {
-            format_number(first + term.0 as f64 * step)
+            FormulaSource::new(format_number(first + term.0 as f64 * step))
         } else {
             // Tiled source index: wrap into the source line so a fill longer
             // than the source repeats the pattern (an upward fill stays in range).
             let k = term.0.rem_euclid(sources.len().max(1) as i64) as usize;
-            let raw = sources.get(k).map(String::as_str).unwrap_or_default();
-            if raw.starts_with('=') {
-                shift_formula(raw, at.row - from.row, at.col - from.col)
-            } else {
-                raw.to_owned()
+            match sources.get(k) {
+                Some(raw) if raw.is_formula() => {
+                    shift_formula(raw, at.row - from.row, at.col - from.col)
+                }
+                Some(raw) => raw.clone(),
+                None => FormulaSource::default(),
             }
         };
         self.write_cell(at, &text);
@@ -392,7 +395,7 @@ pub(super) fn merged_tiles<P: Line>(s1: P, s2: P, d1: P, d2: P, block: P::Count)
 /// - [`FillMode::Series`] with a single numeric source: step `1` (Excel/Sheets
 ///   "Fill Series" on a lone number).
 /// - Anything else: `None` (the line is copied).
-fn series_params(mode: FillMode, sources: &[String]) -> Option<(f64, f64)> {
+fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<(f64, f64)> {
     if mode == FillMode::Copy {
         return None;
     }
@@ -400,7 +403,7 @@ fn series_params(mode: FillMode, sources: &[String]) -> Option<(f64, f64)> {
     // the series and the line falls back to copy/reindex).
     let nums: Vec<f64> = sources
         .iter()
-        .map(|s| parse_num(s))
+        .map(|s| parse_num(s.as_str()))
         .collect::<Option<_>>()?;
     match nums.as_slice() {
         [] => None,

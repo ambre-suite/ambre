@@ -286,7 +286,11 @@ fn viewport_data_preserves_formula_raw_for_editing() {
 
     let cell = state.cell_cache.get(&at(0, 2)).expect("cell cached");
     assert_eq!(cell.text, "3", "renders the result");
-    assert_eq!(cell.raw, "=SUM(A1:B1)", "editor reopens on the formula");
+    assert_eq!(
+        cell.raw.as_str(),
+        "=SUM(A1:B1)",
+        "editor reopens on the formula"
+    );
 }
 
 /// Optimistic commit of a formula must not display the formula source as its
@@ -300,7 +304,7 @@ fn optimistic_commit_does_not_echo_formula_as_result() {
     state.set_cell_text(CellPos::new(Row::new(0), Col::new(0)), "5".to_owned());
     let plain = state.cell_cache.get(&at(0, 0)).unwrap();
     assert_eq!(plain.text, "5");
-    assert_eq!(plain.raw, "5");
+    assert_eq!(plain.raw.as_str(), "5");
 
     state.set_cell_text(
         CellPos::new(Row::new(0), Col::new(2)),
@@ -308,7 +312,11 @@ fn optimistic_commit_does_not_echo_formula_as_result() {
     );
     let formula = state.cell_cache.get(&at(0, 2)).unwrap();
     assert_eq!(formula.text, "", "result blank until recomputed");
-    assert_eq!(formula.raw, "=SUM(A1:B1)", "formula kept for editing");
+    assert_eq!(
+        formula.raw.as_str(),
+        "=SUM(A1:B1)",
+        "formula kept for editing"
+    );
 }
 
 /// An optimistic edit marks a cell dirty; the authoritative `ViewportData`

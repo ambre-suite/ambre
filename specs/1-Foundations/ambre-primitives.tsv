@@ -4753,28 +4753,20 @@ ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.underline 
 ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.wrap | field | RwSignal<bool>	generic	state flag
 ambre-trame | src/chrome/style.rs | crate::chrome::style | Toggles.redo_enabled | field | RwSignal<bool>	generic	state flag
 ambre-trame | src/chrome/style.rs | crate::chrome::style | Toggles.undo_enabled | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/columns.rs | crate::columns | alpha_to_col() | ret | Result<Col,String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/columns.rs | crate::columns | alpha_to_col(s) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | col_to_alpha() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | row_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.compiles | field | u64	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.sources | field | HashMap<CellId,Box<str>>	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::compiled_from() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::compiled_from(raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::is_empty() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::len() | ret | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::recompile_if_stale(raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/formula/dag.rs | crate::formula::dag | DependencyGraph::node_count() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::evaluated_text() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::formula_count() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::is_formula_cell() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::on_cell_changed(raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/formula/engine.rs | crate::formula::engine | literal_value(raw) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/formula/engine.rs | crate::formula::engine | now_serial() | ret | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | EXACT_SUM_LIMIT | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | arg(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | check_argc(_name) | param | &str	debt	finding: (FINDING, confirmed): builtin function name as String
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | check_argc(expected) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum(nums) | param | impl IntoIterator<Item=f64>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | first_num() | ret | Option<f64>	math	count, length, local index, limit or calendar/arith helper
@@ -4787,46 +4779,31 @@ ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | str_count_arg() | ret | Result<usize,FormulaError>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | str_count_arg(default) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | average_at(idx) | param | &[usize]	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn((i64,i64,i64))->i64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands(s) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | keys_ascending() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | log_checked(f) | param | fn(f64)->f64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | matching_indices() | ret | Vec<usize>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | push_display(out) | param | &mut String	free-text	free text: user content, label, message or display string
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | serial_from_ymd() | ret | i64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | serial_from_ymd(d) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | serial_from_ymd(m) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | serial_from_ymd(y) | param | i64	debt	finding: (FINDING, confirmed): grid row and column as bare u32
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at(idx) | param | &[usize]	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | to_index() | ret | Option<usize>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | unary_math(f) | param | fn(f64)->f64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | values_equal_ci() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | ymd_from_serial() | ret | (i64,i64,i64)	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | ymd_from_serial(serial) | param | i64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor(nper) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor(paytype) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor(rate) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | days_in_month() | ret | i64	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | days_in_month(m) | param | i64	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | days_in_month(y) | param | i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | range_dims() | ret | Option<(usize,usize)>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | row_col(current) | param | Option<f64>	math	formula number: the evaluating cell's 1-based row or column
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | shift_month() | ret | (i64,i64)	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | shift_month(m) | param | i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | shift_month(months) | param | i64	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | shift_month(y) | param | i64	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | time_part(which) | param | u8	debt	finding: (FINDING, confirmed): closed sets held as int, char or bool
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.1 | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.1 | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::matches() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | FnCtx.now_serial | field | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
-ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | call_builtin(name) | param | &str	debt	finding: (FINDING, confirmed): builtin function name as String
 ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor_on(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_CHARS | const | usize	math	count, length, local index, limit or calendar/arith helper
@@ -4868,13 +4845,11 @@ ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | number() | re
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | number(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | parse_bool() | ret | nom::IResult<&str,bool>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | parse_bool(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | parse_formula() | ret | Result<Expr,String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | parse_formula(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | pow_expr() | ret | nom::IResult<&str,Expr>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | pow_expr(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | range() | ret | nom::IResult<&str,Expr>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | range(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | resolve_refs() | ret | Result<Expr,String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | row_number() | ret | nom::IResult<&str,Row>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | row_number(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_id_token() | ret | nom::IResult<&str,SheetId>	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -4895,7 +4870,6 @@ ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | whole_cols() 
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | whole_cols(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | whole_rows() | ret | nom::IResult<&str,AxisSpan>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | whole_rows(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | within_bounds() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | within_bounds(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | ws() | ret | impl Parser<&'a str,Output=O,Error=nom::error::Error<&'a str>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | binop_symbol() | ret | &'static str	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -4906,7 +4880,7 @@ ambre-trame | src/formula/render.rs | crate::formula::render | first_name_qualif
 ambre-trame | src/formula/render.rs | crate::formula::render | needs_quoting() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/render.rs | crate::formula::render | needs_quoting(name) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | precedence() | ret | u8	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/formula/render.rs | crate::formula::render | render() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
+ambre-trame | src/formula/render.rs | crate::formula::render | render() | ret | String	generic	renderer: an expression as formula text, whose form the caller names
 ambre-trame | src/formula/render.rs | crate::formula::render | render_cell() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_literal() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_node() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -4916,8 +4890,6 @@ ambre-trame | src/formula/render.rs | crate::formula::render | render_span() | r
 ambre-trame | src/formula/render.rs | crate::formula::render | render_stored() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_uid() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | to_display_form(id_to_name) | param | &impl Fn(&SheetId)->Option<String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_formula() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_formula(raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/formula/types.rs | crate::formula::types | <SingleSheetCtx as FormulaCtx>::resolve_sheet(_name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Boolean.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Number.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
@@ -4928,11 +4900,8 @@ ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet.0 | fie
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::index() | ret | u16	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::new(index) | param | u16	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::position() | ret | usize	newtype-inner	EngineSheet field, constructor or accessor
-ambre-trame | src/formula/types.rs | crate::formula::types | Expr::FnCall.name | field | String	debt	finding: (FINDING, confirmed): builtin function name as String
 ambre-trame | src/formula/types.rs | crate::formula::types | FormulaCtx::resolve_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/formula/types.rs | crate::formula::types | FormulaError::ParseError.0 | field | String	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::CallFn.n_args | field | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/types.rs | crate::formula::types | Op::CallFn.name | field | String	debt	finding: (FINDING, confirmed): builtin function name as String
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushBool.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushNum.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushStr.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
@@ -4950,9 +4919,7 @@ ambre-trame | src/formula/types.rs | crate::formula::types | SheetQualifier::Nam
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/vm.rs | crate::formula::vm | EvalContext.now_serial | field | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/formula/vm.rs | crate::formula::vm | EvalContext.range_cells_left | field | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/vm.rs | crate::formula::vm | EvalContext<'a>::new(now_serial) | param | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/formula/vm.rs | crate::formula::vm | MAX_PASS_RANGE_CELLS | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/vm.rs | crate::formula::vm | MAX_RANGE_CELLS | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/vm.rs | crate::formula::vm | RangeGrant.0 | field | usize	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
@@ -4960,67 +4927,31 @@ ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(cols) | param
 ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(left) | param | &mut usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(rows) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::canonicalize_input() | ret | Result<String,String>	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::canonicalize_input(text) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_raw() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_source() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_display() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_display(stored) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_source() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_source(stored) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::write_cell(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::commit_cell_edit(text) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::write_at_anchor(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term.0 | field | i64	newtype-inner	newtype inner field
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(series) | param | Option<(f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(src_raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(series) | param | Option<(f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(sources) | param | &[String]	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/fill.rs | crate::logic::fill | format_number() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | format_number(v) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/fill.rs | crate::logic::fill | parse_num() | ret | Option<f64>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/fill.rs | crate::logic::fill | parse_num(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | series_params() | ret | Option<(f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/logic/fill.rs | crate::logic::fill | series_params(sources) | param | &[String]	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::find_next(query) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(needle) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_all(query) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_all(replacement) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active() | ret | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active(needle) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other() | ret | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(needle) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_one(query) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_one(replacement) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(haystack) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(needle) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len() | ret | Option<usize>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len(hay) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len(needle_lower) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | fold() | ret | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
+ambre-trame | src/logic/find.rs | crate::logic::find | fold() | ret | String	generic	case-folds any text; a folded query is a FoldedNeedle
 ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci(raw) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | rewrite() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/find.rs | crate::logic::find | rewrite(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | rewrite(raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/find.rs | crate::logic::find | rewrite(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::build() | ret | Vec<u8>	trait	fixture trait from the shared fixtures harness
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::generator_version() | ret | u32	trait	fixture trait from the shared fixtures harness
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::name() | ret | &'static str	trait	fixture trait from the shared fixtures harness
@@ -5063,20 +4994,16 @@ ambre-trame | src/logic/mod.rs | crate::logic | TrameState.undecodable | field |
 ambre-trame | src/logic/mod.rs | crate::logic | WriteRefusal::UnknownSheet.0 | field | String	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | DAYS | const | [&str;7]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | MONTHS | const | [&str;12]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Token::Date.0 | field | char	debt	finding: (FINDING, confirmed): closed sets held as int, char or bool
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Token::Date.1 | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Token::Literal.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom(pattern) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom(value) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_date() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_date(serial) | param | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_time() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_time(serial) | param | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_thousands() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_thousands(text) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | hms() | ret | (u32,u32,u32)	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | hms(serial) | param | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | lex(section) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | pad() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | pad(len) | param | usize	math	count, length, local index, limit or calendar/arith helper
@@ -5087,7 +5014,6 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_i
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_integer(digits) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_integer(grouped) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_date() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_date(serial) | param | f64	debt	finding: (FINDING, confirmed): spreadsheet date serial as f64/i64
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_number() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_number(value) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | split_sections() | ret | Vec<String>	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -5096,16 +5022,15 @@ ambre-trame | src/logic/packing.rs | crate::logic::packing | MAX_DECIMALS | cons
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(decimals) | param | Option<u8>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterRecord.col | field | String	debt	finding: (FINDING, confirmed): FilterRecord.col holds a Uid key part as String
+ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterRecord.col | field | String	generic	wire form: the postcard record field holding the column uid key part; the reader parses it with Uid::parse
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_CAP | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	foreign-api	the per-sheet root name, for the Loro call that opens it
-ambre-trame | src/logic/schema.rs | crate::logic::schema | filter_register_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
-ambre-trame | src/logic/schema.rs | crate::logic::schema | fold_filter_keys() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
+ambre-trame | src/logic/schema.rs | crate::logic::schema | filter_register_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate(payload) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
-ambre-trame | src/logic/schema.rs | crate::logic::schema | stored_reference_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
+ambre-trame | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
+ambre-trame | src/logic/schema.rs | crate::logic::schema | stored_reference_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::create_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::define_name(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
@@ -5251,7 +5176,6 @@ ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.font | field | Opt
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.is_filtered | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.italic | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.numeric | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.raw | field | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.strikethrough | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.text | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.underline | field | bool	generic	independent state or style flag, not a mode selector
@@ -5341,8 +5265,6 @@ ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_wheel() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_goto() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_move() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::set_cursor(_css) | param | &str	debt	finding: (FINDING, confirmed): CSS cursor as a string
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::set_cursor(css) | param | &str	debt	finding: (FINDING, confirmed): CSS cursor as a string
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::set_fill_cursor(_on) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::set_fill_cursor(on) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::touch_down(x) | param | f32	math	local geometry / pixel arithmetic
@@ -5393,16 +5315,12 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.editor_text_drag 
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.fatal | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.formula_ref | field | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.formula_text | field | RwSignal<String>	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.hover_cursor | field | String	debt	finding: (FINDING, confirmed): CSS cursor as a string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.initial_viewport_sent | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.needs_full | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.selecting_drag | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.viewport_changed | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement(value) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | formula_bar_sync(input) | param | &str	debt	finding: (FINDING, confirmed, low): formula_bar_sync(input, shown, seed)
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | formula_bar_sync(seed) | param | &str	debt	finding: (FINDING, confirmed, low): formula_bar_sync(input, shown, seed)
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | formula_bar_sync(shown) | param | &str	debt	finding: (FINDING, confirmed, low): formula_bar_sync(input, shown, seed)
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | formula_input_focused() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_mark(name) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_measure(name) | param | &str	free-text	free text: user content, label, message or display string
@@ -5488,3 +5406,36 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidPer
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent.0 | field | f32	newtype-inner	the value of a validated percentage
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent::new(value) | param | f32	newtype-inner	the fallible constructor that checks the range
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent::value() | ret | f32	newtype-inner	enum/newtype own accessor or constructor
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | CivilDate.day | field | i64	math	calendar arithmetic (y/m/d), local
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | CivilDate.month | field | i64	math	calendar arithmetic (y/m/d), local
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | CivilDate.year | field | i64	math	calendar arithmetic (y/m/d), local
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DateSerial.0 | field | f64	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DateSerial::get() | ret | f64	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DateSerial::new(serial) | param | f64	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DateSerial::from_unix_days(unix_days) | param | f64	math	calendar arithmetic: days on the Unix clock
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DateSerial::time_of_day() | ret | f64	math	calendar arithmetic: the fraction of a day
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DaySerial.0 | field | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DaySerial::get() | ret | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DaySerial::new(days) | param | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DaySerial::days_since() | ret | i64	math	calendar arithmetic: a count of days
+ambre-trame | src/formula/calendar.rs | crate::formula::calendar | UNIX_EPOCH_SERIAL | const | i64	math	calendar arithmetic: a count of days
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(CivilDate)->i64	math	calendar arithmetic (y/m/d), local
+ambre-trame | src/logic/find.rs | crate::logic::find | FindText.0 | field | String	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/logic/find.rs | crate::logic::find | FindText::new(text) | param | String	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/logic/find.rs | crate::logic::find | FoldedNeedle.text | field | String	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/logic/find.rs | crate::logic::find | Replacement.0 | field | String	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::new(text) | param | String	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/ui/view/mod.rs | crate::ui::view | GridCursor::css() | ret | &'static str	foreign-api	the CSS cursor value the DOM style takes
+ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::canonicalize_input() | ret | Result<StoredFormula,String>	debt	finding: the error is the display name of an unknown sheet, a bare String until the SheetName rule lands
+ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar::sync(seed) | param | &str	free-text	free text: user content, label, message or display string
+ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Invalid.0 | field | String	free-text	the column text it could not read, echoed in the message
+ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Overflow.0 | field | String	free-text	the column text past the last column, echoed in the message
+ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName.0 | field | String	newtype-inner	the upper-cased identifier FunctionName::parse checks
+ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName::as_str() | ret | &str	newtype-inner	borrow of the checked name
+ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName::parse(text) | param | &str	newtype-inner	the text the constructor checks
+ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::Near.0 | field | String	free-text	the formula text where parsing stopped, echoed in the message
+ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::TrailingInput.0 | field | String	free-text	the formula text left unread, echoed in the message
+ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::UnknownSheet.0 | field | String	free-text	the qualifier text no sheet answers, echoed in the message
+ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterFoldError::UnreadableColumn.0 | field | String	free-text	the stored key text it could not read, echoed in the message
+ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterFoldError::UnreadableOperator.0 | field | String	free-text	the stored key text it could not read, echoed in the message

@@ -25,24 +25,45 @@ pub fn col_to_alpha(col: Col) -> String {
     chars.into_iter().rev().collect()
 }
 
+/// Why column letters name no column. Each holds the letters as given.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ColumnParseError {
+    /// Empty, or a character outside `A..Z`.
+    Invalid(String),
+    /// Past the last index a `u32` holds.
+    Overflow(String),
+}
+
+impl std::fmt::Display for ColumnParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Invalid(s) => write!(f, "invalid column reference: {s}"),
+            Self::Overflow(s) => write!(f, "column overflow: {s}"),
+        }
+    }
+}
+
+impl std::error::Error for ColumnParseError {}
+
 /// Convert spreadsheet column letters back to a 0-based index.
 ///
 /// Inverse of [`col_to_alpha`]. Rejects an empty or non-`A..Z` string.
 ///
 /// # Errors
 ///
-/// A message naming `s` when it is empty or holds a byte outside `A..Z`, and
-/// another when the accumulated index overflows a `u32`.
-pub fn alpha_to_col(s: &str) -> Result<Col, String> {
+/// [`ColumnParseError::Invalid`] when `s` is empty or holds a byte outside
+/// `A..Z`, and [`ColumnParseError::Overflow`] when the accumulated index
+/// overflows a `u32`.
+pub fn alpha_to_col(s: &str) -> Result<Col, ColumnParseError> {
     if s.is_empty() || !s.bytes().all(|b| b.is_ascii_uppercase()) {
-        return Err(format!("invalid column reference: {s}"));
+        return Err(ColumnParseError::Invalid(s.to_owned()));
     }
     let mut col = 0u32;
     for b in s.bytes() {
         col = col
             .checked_mul(26)
             .and_then(|c| c.checked_add((b - b'A') as u32 + 1))
-            .ok_or_else(|| format!("column overflow: {s}"))?;
+            .ok_or_else(|| ColumnParseError::Overflow(s.to_owned()))?;
     }
     Ok(Col::new(col.saturating_sub(1)))
 }
@@ -88,5 +109,13 @@ mod tests {
         assert!(alpha_to_col("").is_err());
         assert!(alpha_to_col("a").is_err());
         assert!(alpha_to_col("A1").is_err());
+    }
+
+    #[test]
+    fn a_column_error_reads_its_message() {
+        let invalid = alpha_to_col("a1").unwrap_err();
+        assert_eq!(invalid.to_string(), "invalid column reference: a1");
+        let overflow = alpha_to_col("ZZZZZZZZ").unwrap_err();
+        assert_eq!(overflow.to_string(), "column overflow: ZZZZZZZZ");
     }
 }

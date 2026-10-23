@@ -732,7 +732,9 @@ fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
     assert_eq!(read_cell(&mut state, 0, 1), "10");
     // Stored canonical form is id-bound, its cell named by its row and column
     // (`TRAME-228`); the formula bar shows the name and the position.
-    let stored = state.cell_raw(CellPos::new(Row::new(0), Col::new(1)));
+    let stored = state
+        .cell_raw(CellPos::new(Row::new(0), Col::new(1)))
+        .into_string();
     assert!(
         stored.starts_with(&format!("=#{s2}!{{")) && stored.ends_with("}*2"),
         "v is sheet_id-bound: {stored}"

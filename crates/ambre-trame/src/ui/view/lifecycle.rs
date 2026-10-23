@@ -90,7 +90,7 @@ impl TrameView {
             pending_column_fit: None,
             fill_drag: None,
             reorder_drag: None,
-            hover_cursor: String::new(),
+            hover_cursor: GridCursor::Unset,
             edit_dirty: false,
             caret_on: true,
             caret_drawn: None,
@@ -308,7 +308,7 @@ impl TrameView {
         self.state
             .cell_cache
             .get(&at)
-            .map(|c| c.raw.clone())
+            .map(|c| c.raw.as_str().to_owned())
             .unwrap_or_default()
     }
 
@@ -529,7 +529,7 @@ impl TrameView {
                 }
             } else {
                 let seed = self.cell_seed(self.state.active_cell());
-                match super::formula_bar_sync(&text, &self.formula.shown, &seed) {
+                match self.formula.sync(&seed) {
                     // The first character typed in the bar opens a session on
                     // the active cell, seeded with what was typed. The focus
                     // stays in the bar (`TRAME-UI-092`).

@@ -238,7 +238,7 @@ mod tests {
         let bc = compile_str("SUM(A1:B10)");
         assert_eq!(bc.ops.len(), 2); // EvalRange + CallFn
         assert!(matches!(&bc.ops[0], Op::EvalRange(_)));
-        assert!(matches!(&bc.ops[1], Op::CallFn { name, n_args: 1 } if name == "SUM"));
+        assert!(matches!(&bc.ops[1], Op::CallFn { name, n_args: 1 } if name.as_str() == "SUM"));
     }
 
     #[test]

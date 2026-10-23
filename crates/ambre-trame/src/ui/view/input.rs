@@ -212,17 +212,17 @@ impl TrameView {
             // the crosshair, everything else the default. Pure feedback.
             InputEvent::PointerMove { x, y } => {
                 let hit = self.state.header_hit(*x, *y);
-                let css = match hit {
-                    Some(HeaderHit::ColBorder(_)) => "col-resize",
-                    Some(HeaderHit::RowBorder(_)) => "row-resize",
-                    Some(_) => "pointer",
-                    None if self.state.filter_button_at(*x, *y).is_some() => "pointer",
-                    None if self.state.fill_handle_at(*x, *y) => "crosshair",
-                    None => "",
+                let cursor = match hit {
+                    Some(HeaderHit::ColBorder(_)) => GridCursor::ColResize,
+                    Some(HeaderHit::RowBorder(_)) => GridCursor::RowResize,
+                    Some(_) => GridCursor::Pointer,
+                    None if self.state.filter_button_at(*x, *y).is_some() => GridCursor::Pointer,
+                    None if self.state.fill_handle_at(*x, *y) => GridCursor::Crosshair,
+                    None => GridCursor::Unset,
                 };
-                if css != self.hover_cursor {
-                    self.hover_cursor = css.to_owned();
-                    self.set_cursor(css);
+                if cursor != self.hover_cursor {
+                    self.hover_cursor = cursor;
+                    self.set_cursor(cursor);
                 }
                 // Show the inline "+" badge while hovering an insert zone.
                 let insert = matches!(hit, Some(HeaderHit::ColInsert(_) | HeaderHit::RowInsert(_)))
@@ -667,23 +667,22 @@ impl TrameView {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn set_fill_cursor(&self, _on: bool) {}
 
-    /// Set an arbitrary CSS cursor on `#ambre-canvas` (`trame-resize`):
-    /// `"col-resize"` / `"row-resize"` over a header boundary, `"pointer"` over a
-    /// header body, `""` to reset. Generalises [`set_fill_cursor`]. No-op off-wasm.
+    /// Set `cursor` on `#ambre-canvas` (`trame-resize`); [`GridCursor::Unset`]
+    /// resets it. Generalises [`set_fill_cursor`]. No-op off-wasm.
     #[cfg(target_arch = "wasm32")]
-    pub(crate) fn set_cursor(&self, css: &str) {
+    pub(crate) fn set_cursor(&self, cursor: GridCursor) {
         use wasm_bindgen::JsCast;
         if let Some(el) = web_sys::window()
             .and_then(|w| w.document())
             .and_then(|d| d.get_element_by_id("ambre-canvas"))
             .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
         {
-            let _ = el.style().set_property("cursor", css);
+            let _ = el.style().set_property("cursor", cursor.css());
         }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn set_cursor(&self, _css: &str) {}
+    pub(crate) fn set_cursor(&self, _cursor: GridCursor) {}
 
     /// Publish the surface the latest right-click landed on so the launcher picks
     /// the cell vs header menu layout (`trame-context-menu`). Only re-writes
@@ -701,7 +700,7 @@ impl TrameView {
     pub(crate) fn arm_col_resize(&mut self, c: Col, x: f64) {
         self.resize_drag = Some(HeaderHit::ColBorder(c));
         self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(x));
-        self.set_cursor("col-resize");
+        self.set_cursor(GridCursor::ColResize);
         self.edit_dirty = true;
     }
 
@@ -709,7 +708,7 @@ impl TrameView {
     pub(crate) fn arm_row_resize(&mut self, r: Row, y: f64) {
         self.resize_drag = Some(HeaderHit::RowBorder(r));
         self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(y));
-        self.set_cursor("row-resize");
+        self.set_cursor(GridCursor::RowResize);
         self.edit_dirty = true;
     }
 
@@ -740,7 +739,7 @@ impl TrameView {
     pub(crate) fn end_resize_drag(&mut self) {
         let drag = self.resize_drag.take();
         let preview = self.state.resize_preview.take();
-        self.set_cursor("");
+        self.set_cursor(GridCursor::Unset);
         self.edit_dirty = true;
         let (Some(drag), Some(preview)) = (drag, preview) else {
             return;

@@ -1,4 +1,5 @@
 pub mod cache;
+pub mod calendar;
 pub mod compile;
 pub mod dag;
 pub mod engine;
@@ -7,6 +8,7 @@ pub mod identity;
 pub mod parser;
 pub mod render;
 pub mod shift;
+pub mod text;
 pub mod types;
 pub mod vm;
 
@@ -24,6 +26,6 @@ mod prop_tests;
 pub use compile::SheetIndices;
 pub use engine::FormulaEngine;
 pub use types::{
-    AxisId, CellId, CellRef, CellValue, EngineSheet, FormulaCtx, FormulaError, NameTarget,
-    RangeDep, RangeEndpoint, RangeId, SheetQualifier, SingleSheetCtx,
+    AxisId, CellId, CellRef, CellValue, EngineSheet, FormulaCtx, FormulaError, FunctionName,
+    NameTarget, ParseError, RangeDep, RangeEndpoint, RangeId, SheetQualifier, SingleSheetCtx,
 };

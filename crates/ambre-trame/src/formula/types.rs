@@ -463,6 +463,55 @@ impl CellValue {
 }
 
 // -----------------------------------------------------------------------------
+// ParseError
+// -----------------------------------------------------------------------------
+
+/// Why a formula's text did not parse, or named a sheet no tab carries. Its
+/// display is the message `#PARSE!(...)` shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParseError {
+    /// Nothing but blanks after the `=`.
+    Empty,
+    /// More characters than the parser reads (`TRAME-013`).
+    TooLong,
+    /// Nested deeper than the parser reads (`TRAME-013`).
+    TooDeep,
+    /// More operators than the parser reads (`TRAME-013`).
+    TooManyOperators,
+    /// Text the grammar does not take after a whole expression.
+    TrailingInput(String),
+    /// The grammar stopped here: the first characters of what it left.
+    Near(String),
+    /// The text ended inside an expression.
+    Incomplete,
+    /// A sheet display name no tab carries, as the formula spells it.
+    UnknownSheet(String),
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use super::parser::{MAX_FORMULA_CHARS, MAX_FORMULA_NESTING, MAX_FORMULA_OPERATORS};
+        match self {
+            Self::Empty => write!(f, "empty formula"),
+            Self::TooLong => write!(f, "formula longer than {MAX_FORMULA_CHARS} characters"),
+            Self::TooDeep => write!(f, "formula nested deeper than {MAX_FORMULA_NESTING} levels"),
+            Self::TooManyOperators => {
+                write!(
+                    f,
+                    "formula with more than {MAX_FORMULA_OPERATORS} operators"
+                )
+            }
+            Self::TrailingInput(rest) => write!(f, "unexpected trailing input: '{rest}'"),
+            Self::Near(near) => write!(f, "parse error near '{near}'"),
+            Self::Incomplete => write!(f, "incomplete input"),
+            Self::UnknownSheet(name) => write!(f, "unknown sheet: {name}"),
+        }
+    }
+}
+
+impl std::error::Error for ParseError {}
+
+// -----------------------------------------------------------------------------
 // FormulaError
 // -----------------------------------------------------------------------------
 
@@ -473,7 +522,7 @@ pub enum FormulaError {
     /// dynamically).
     CircularReference,
     /// A formula failed to parse.
-    ParseError(String),
+    ParseError(ParseError),
     /// A reference points at something that no longer exists (a deleted sheet,
     /// row, or column). Rendered as `#REF!`.
     BrokenRef,
@@ -556,7 +605,7 @@ pub enum Op {
     /// `n_args` values are popped from the stack and passed to the named
     /// built-in function; the result is pushed back.
     CallFn {
-        name: String,
+        name: FunctionName,
         n_args: usize,
     },
 }
@@ -622,6 +671,37 @@ impl StoredCell {
     }
 }
 
+/// The name of a function a formula calls, upper-cased. It reads as the
+/// parser reads it: a letter or `_`, then letters, digits and `_`, all ASCII.
+///
+/// A name no built-in answers is still a name: the call evaluates to `#N/A`,
+/// and the formula renders it back as written.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FunctionName(String);
+
+impl FunctionName {
+    /// The name `text` reads as, upper-cased, or `None` when `text` is not an
+    /// identifier.
+    pub fn parse(text: &str) -> Option<Self> {
+        let mut chars = text.chars();
+        let head = chars.next()?;
+        let ok = (head.is_ascii_alphabetic() || head == '_')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+        ok.then(|| Self(text.to_ascii_uppercase()))
+    }
+
+    /// The name, upper-cased.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for FunctionName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Expr -- AST produced by the parser
 // -----------------------------------------------------------------------------
@@ -666,7 +746,7 @@ pub enum Expr {
         operand: Box<Expr>,
     },
     FnCall {
-        name: String,
+        name: FunctionName,
         args: Vec<Expr>,
     },
 }
@@ -829,9 +909,53 @@ mod tests {
             "#DIV/0!"
         );
         assert_eq!(
-            CellValue::Error(FormulaError::ParseError("oops".into())).to_display(),
-            "#PARSE!(oops)"
+            CellValue::Error(FormulaError::ParseError(ParseError::Incomplete)).to_display(),
+            "#PARSE!(incomplete input)"
         );
+    }
+
+    /// A function name reads upper-cased, and only an identifier is one.
+    #[test]
+    fn a_function_name_is_an_upper_cased_identifier() {
+        assert_eq!(
+            FunctionName::parse("sum").map(|n| n.to_string()),
+            Some("SUM".into())
+        );
+        assert_eq!(
+            FunctionName::parse("_x1").map(|n| n.to_string()),
+            Some("_X1".into())
+        );
+        for bad in ["", "1A", "A-B", "\u{e9}t\u{e9}"] {
+            assert_eq!(FunctionName::parse(bad), None, "{bad}");
+        }
+    }
+
+    /// Each parse failure reads the message the parser wrote as text before
+    /// it had a type of its own.
+    #[test]
+    fn a_parse_error_reads_its_message() {
+        let cases = [
+            (ParseError::Empty, "empty formula"),
+            (ParseError::TooLong, "formula longer than 8192 characters"),
+            (ParseError::TooDeep, "formula nested deeper than 64 levels"),
+            (
+                ParseError::TooManyOperators,
+                "formula with more than 512 operators",
+            ),
+            (
+                ParseError::TrailingInput(")".to_owned()),
+                "unexpected trailing input: ')'",
+            ),
+            (ParseError::Near("+*".to_owned()), "parse error near '+*'"),
+            (ParseError::Incomplete, "incomplete input"),
+            (
+                ParseError::UnknownSheet("Nope".to_owned()),
+                "unknown sheet: Nope",
+            ),
+        ];
+        for (error, message) in cases {
+            assert_eq!(error.to_string(), message);
+        }
     }
 
     // -- Engine uid range resolution -----------------------------------------

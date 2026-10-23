@@ -168,7 +168,7 @@ fn concatenation() {
 fn function_no_args() {
     match parse("PI()") {
         Expr::FnCall { name, args } => {
-            assert_eq!(name, "PI");
+            assert_eq!(name.as_str(), "PI");
             assert!(args.is_empty());
         }
         other => panic!("expected FnCall, got {other:?}"),
@@ -179,7 +179,7 @@ fn function_no_args() {
 fn function_single_arg() {
     match parse("SUM(A1:A10)") {
         Expr::FnCall { name, args } => {
-            assert_eq!(name, "SUM");
+            assert_eq!(name.as_str(), "SUM");
             assert_eq!(args.len(), 1);
             assert!(matches!(&args[0], Expr::Range(_)));
         }
@@ -243,7 +243,7 @@ impl FormulaCtx for TestCtx {
     }
 }
 
-fn resolve(src: &str, default_sheet: EngineSheet) -> Result<Expr, String> {
+fn resolve(src: &str, default_sheet: EngineSheet) -> Result<Expr, ParseError> {
     resolve_refs(parse(src), default_sheet, &TestCtx)
 }
 
@@ -344,7 +344,7 @@ fn unknown_sheet_is_error() {
 fn named_range_resolves() {
     match resolve("SUM(TOTAL)", S0).unwrap() {
         Expr::FnCall { name, args } => {
-            assert_eq!(name, "SUM");
+            assert_eq!(name.as_str(), "SUM");
             assert!(matches!(
                 &args[0],
                 Expr::Range(RangeDep {
@@ -395,7 +395,7 @@ fn bareword_name_does_not_shadow_cell_ref() {
 fn function_multiple_args() {
     match parse("IF(A1>5, 1, 0)") {
         Expr::FnCall { name, args } => {
-            assert_eq!(name, "IF");
+            assert_eq!(name.as_str(), "IF");
             assert_eq!(args.len(), 3);
         }
         other => panic!("expected FnCall IF, got {other:?}"),

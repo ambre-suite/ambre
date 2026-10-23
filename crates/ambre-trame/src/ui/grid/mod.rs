@@ -16,6 +16,7 @@ use std::collections::{HashMap, HashSet};
 use ambre_canvas::{TextEditor, TextEditorStyle};
 use ambre_draw::Color;
 
+use crate::formula::text::DisplayFormula;
 use crate::render::BODY_SIZE;
 use crate::{
     CellPos, CellRect, Col, ColCount, ColDelta, ColSpan, EditSessionId, LAST_COL, LAST_ROW,
@@ -51,7 +52,7 @@ pub struct CellData {
     pub text: String,
     /// Raw cell text (formula source for formula cells, equal to `text`
     /// otherwise). Seeds the in-cell editor so formulas are editable as text.
-    pub raw: String,
+    pub raw: DisplayFormula,
     pub bold: bool,
     pub italic: bool,
     /// Rich manual formatting (`trame-cell-styles`): underline run, alignments,

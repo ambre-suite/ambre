@@ -51,10 +51,11 @@ impl TrameState {
             // copied verbatim. The shifted text is in display form -- `write_cell`
             // re-canonicalizes it, so cross-sheet qualifiers survive
             // (`trame-sheets`).
-            let text = if cell.raw.starts_with('=') {
-                shift_formula(&cell.raw, dr, dc)
+            let raw = FormulaSource::new(cell.raw.clone());
+            let text = if raw.is_formula() {
+                shift_formula(&raw, dr, dc)
             } else {
-                cell.raw.clone()
+                raw
             };
             self.write_cell(at, &text);
             self.apply_pasted_style(at, cell);
@@ -130,6 +131,7 @@ impl TrameState {
             if raw.is_empty() {
                 continue;
             }
+            let raw = raw.into_string();
             cells.push(ClipboardCell {
                 dr: pos.row.count_from(first.row),
                 dc: pos.col.count_from(first.col),

@@ -15,19 +15,20 @@ use ambre_bus::{ColDelta, RowDelta};
 
 use super::parser::parse_formula;
 use super::render::render;
+use super::text::FormulaSource;
 use super::types::{AxisSpan, CellRef, CellValue, Expr, FormulaError, RangeDep, SpanLines};
 
 /// Re-index a stored formula's relative references by `(dr, dc)` rows/columns
 /// and return the new formula text *with* its leading `=`. A formula that fails
 /// to parse is returned verbatim (a paste must never silently drop user input).
-pub fn shift_formula(raw: &str, dr: RowDelta, dc: ColDelta) -> String {
+pub fn shift_formula(raw: &FormulaSource, dr: RowDelta, dc: ColDelta) -> FormulaSource {
     if dr == RowDelta::ZERO && dc == ColDelta::ZERO {
-        return raw.to_owned();
+        return raw.clone();
     }
-    let body = raw.strip_prefix('=').unwrap_or(raw);
+    let body = raw.formula_body().unwrap_or(raw.as_str());
     match parse_formula(body) {
-        Ok(expr) => format!("={}", render(&shift_expr(expr, dr, dc))),
-        Err(_) => raw.to_owned(),
+        Ok(expr) => FormulaSource::new(format!("={}", render(&shift_expr(expr, dr, dc)))),
+        Err(_) => raw.clone(),
     }
 }
 
@@ -125,15 +126,17 @@ fn shift_expr(expr: Expr, dr: RowDelta, dc: ColDelta) -> Expr {
 mod tests {
     use super::*;
 
+    /// `raw` shifted by `(dr, dc)`, as text.
+    fn shift(raw: &str, dr: RowDelta, dc: ColDelta) -> String {
+        shift_formula(&FormulaSource::new(raw.to_owned()), dr, dc).into_string()
+    }
+
     #[test]
     fn shifts_cell_and_range_down_right() {
         // Pasted 2 rows down, 1 column right.
+        assert_eq!(shift("=A1", RowDelta::new(2), ColDelta::new(1)), "=B3");
         assert_eq!(
-            shift_formula("=A1", RowDelta::new(2), ColDelta::new(1)),
-            "=B3"
-        );
-        assert_eq!(
-            shift_formula("=SUM(A1:B2)", RowDelta::new(2), ColDelta::new(1)),
+            shift("=SUM(A1:B2)", RowDelta::new(2), ColDelta::new(1)),
             "=SUM(B3:C4)"
         );
     }
@@ -141,15 +144,15 @@ mod tests {
     #[test]
     fn whole_lines_shift_along_their_own_axis() {
         assert_eq!(
-            shift_formula("=SUM(A:B)", RowDelta::new(2), ColDelta::new(1)),
+            shift("=SUM(A:B)", RowDelta::new(2), ColDelta::new(1)),
             "=SUM(B:C)"
         );
         assert_eq!(
-            shift_formula("=SUM(2:3)", RowDelta::new(2), ColDelta::new(1)),
+            shift("=SUM(2:3)", RowDelta::new(2), ColDelta::new(1)),
             "=SUM(4:5)"
         );
         assert_eq!(
-            shift_formula("=SUM(A:A)", RowDelta::new(0), ColDelta::new(-1)),
+            shift("=SUM(A:A)", RowDelta::new(0), ColDelta::new(-1)),
             "=SUM(#REF!)"
         );
     }
@@ -157,7 +160,7 @@ mod tests {
     #[test]
     fn no_shift_is_verbatim() {
         assert_eq!(
-            shift_formula("=A1+B2", RowDelta::new(0), ColDelta::new(0)),
+            shift("=A1+B2", RowDelta::new(0), ColDelta::new(0)),
             "=A1+B2"
         );
     }
@@ -165,16 +168,13 @@ mod tests {
     #[test]
     fn off_grid_reference_becomes_ref_error() {
         // A1 shifted up one row leaves the grid.
-        assert_eq!(
-            shift_formula("=A1", RowDelta::new(-1), ColDelta::new(0)),
-            "=#REF!"
-        );
+        assert_eq!(shift("=A1", RowDelta::new(-1), ColDelta::new(0)), "=#REF!");
     }
 
     #[test]
     fn keeps_operators_and_functions() {
         assert_eq!(
-            shift_formula("=A1*2+SUM(C1:C3)", RowDelta::new(1), ColDelta::new(0)),
+            shift("=A1*2+SUM(C1:C3)", RowDelta::new(1), ColDelta::new(0)),
             "=A2*2+SUM(C2:C4)"
         );
     }
@@ -184,7 +184,7 @@ mod tests {
         // The shifted text is written back to the CRDT and re-parsed by the
         // engine. If `#REF!` is not part of the grammar the pasted cell settles
         // on `#PARSE!(...)` instead of the `#REF!` the shift decided on.
-        let shifted = shift_formula("=A1+B1", RowDelta::new(-1), ColDelta::new(0));
+        let shifted = shift("=A1+B1", RowDelta::new(-1), ColDelta::new(0));
         assert_eq!(shifted, "=#REF!+#REF!");
         let body = shifted.strip_prefix('=').unwrap();
         assert!(
@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn unparseable_left_verbatim() {
         assert_eq!(
-            shift_formula(
+            shift(
                 "=this is not (a formula",
                 RowDelta::new(1),
                 ColDelta::new(1)

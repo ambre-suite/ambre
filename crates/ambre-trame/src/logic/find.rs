@@ -13,6 +13,49 @@ use crate::formula::types::CellId;
 
 pub use ambre_bus::app::trame::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
+/// The text a find looks for, as the user typed it. Never empty: an empty
+/// query finds nothing and replaces nothing, so it never reaches a scan.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct FindText(String);
+
+impl FindText {
+    /// The query `text`, or `None` when it is empty.
+    pub(super) fn new(text: String) -> Option<Self> {
+        (!text.is_empty()).then_some(Self(text))
+    }
+
+    /// The query folded by `case`, the form every comparison takes.
+    fn fold(&self, case: CaseMatch) -> FoldedNeedle {
+        FoldedNeedle {
+            text: fold(&self.0, case),
+            case,
+        }
+    }
+}
+
+/// The text a replace writes in place of each match, as the user typed it.
+/// Any text, the empty one included, is a replacement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Replacement(String);
+
+impl Replacement {
+    /// The replacement `text`.
+    pub(super) fn new(text: String) -> Self {
+        Self(text)
+    }
+
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A query folded by the case it is compared under. Only
+/// [`FindText::fold`] makes one, so no comparison meets an unfolded query.
+struct FoldedNeedle {
+    text: String,
+    case: CaseMatch,
+}
+
 impl TrameState {
     /// Scan the active sheet for cells whose **displayed** value matches `query`
     /// and reply with a [`TrameEvent::FindResult`] (`trame-find-replace`).
@@ -21,15 +64,9 @@ impl TrameState {
     /// row-major order. `active` is the index of the first hit strictly after
     /// the tracked active cell, wrapping to the top. The UI moves the active
     /// cell onto that hit, so a repeated `FindNext` advances naturally. An
-    /// empty `query` clears the highlight (no matches).
-    pub(super) fn find_next(&self, query: String, options: FindOptions) -> TrameOutcome {
-        if query.is_empty() {
-            return TrameOutcome::display_only(vec![TrameEvent::FindResult {
-                matches: Vec::new(),
-                active: None,
-            }]);
-        }
-        let needle = fold(&query, options.case);
+    /// empty query clears the highlight: see [`Self::find_nothing`].
+    pub(super) fn find_next(&self, query: &FindText, options: FindOptions) -> TrameOutcome {
+        let needle = query.fold(options.case);
         let mut matches: Vec<CellPos> = Vec::new();
         for at in self
             .index
@@ -39,7 +76,7 @@ impl TrameState {
         {
             // The displayed value, format included (`TRAME-UI-078`).
             let text = self.displayed_text(at);
-            if !text.is_empty() && cell_matches(&text, &needle, options) {
+            if !text.is_empty() && cell_matches(&text, &needle, options.extent) {
                 matches.push(at);
             }
         }
@@ -54,6 +91,19 @@ impl TrameState {
         TrameOutcome::display_only(vec![TrameEvent::FindResult { matches, active }])
     }
 
+    /// The reply to an empty find: no matches, so the highlight clears.
+    pub(super) fn find_nothing() -> TrameOutcome {
+        TrameOutcome::display_only(vec![TrameEvent::FindResult {
+            matches: Vec::new(),
+            active: None,
+        }])
+    }
+
+    /// The reply to an empty replace: nothing replaced.
+    pub(super) fn replace_nothing() -> TrameOutcome {
+        TrameOutcome::display_only(vec![TrameEvent::ReplaceDone { replaced: 0 }])
+    }
+
     /// Replace every match of `query` with `replacement` across the active sheet
     /// (or every sheet for [`SheetScope::All`]) in one undo group
     /// (`trame-find-replace`). A cell matches on its **displayed** value, by the
@@ -64,21 +114,18 @@ impl TrameState {
     /// a [`TrameEvent::DataReset`] so the UI re-fetches.
     pub(super) fn replace_all(
         &mut self,
-        query: String,
-        replacement: String,
+        query: &FindText,
+        replacement: &Replacement,
         options: FindOptions,
     ) -> TrameOutcome {
-        if query.is_empty() {
-            return TrameOutcome::display_only(vec![TrameEvent::ReplaceDone { replaced: 0 }]);
-        }
-        let needle = fold(&query, options.case);
+        let needle = query.fold(options.case);
 
         // One undo group for the whole replace (sealed by the next command's
         // fallback `group_end`), mirroring `fill_range`.
         let _ = self.undo_manager.group_start();
 
         // Active sheet first, through the regular write path (engine-aware).
-        let mut replaced = self.replace_in_active(&needle, &query, &replacement, options);
+        let mut replaced = self.replace_in_active(&needle, replacement, options);
 
         // Other sheets: edit their cells map directly, then reseed the engine so
         // their formula results recompute. The active write path only tracks the
@@ -91,7 +138,7 @@ impl TrameState {
                 .filter(|id| *id != self.active_sheet)
                 .collect();
             for sheet_id in others {
-                let n = self.replace_in_other(&sheet_id, &needle, &query, &replacement, options);
+                let n = self.replace_in_other(&sheet_id, &needle, replacement, options);
                 if n > 0 {
                     touched_other = true;
                     replaced += n;
@@ -116,19 +163,15 @@ impl TrameState {
     /// match. One undo group.
     pub(super) fn replace_one(
         &mut self,
-        query: String,
-        replacement: String,
+        query: &FindText,
+        replacement: &Replacement,
         options: FindOptions,
     ) -> TrameOutcome {
-        if query.is_empty() {
-            return TrameOutcome::display_only(vec![TrameEvent::ReplaceDone { replaced: 0 }]);
-        }
-        let needle = fold(&query, options.case);
+        let needle = query.fold(options.case);
         let at = self.active;
 
         let _ = self.undo_manager.group_start();
-        let replaced =
-            u32::from(self.replace_active_cell(at, &needle, &query, &replacement, options));
+        let replaced = u32::from(self.replace_active_cell(at, &needle, replacement, options));
 
         // Recompute the match set so the UI can advance to (and highlight) the
         // next hit. After a successful replace the active cell no longer matches,
@@ -151,9 +194,8 @@ impl TrameState {
     /// Returns the number of cells actually rewritten.
     fn replace_in_active(
         &mut self,
-        needle: &str,
-        query: &str,
-        replacement: &str,
+        needle: &FoldedNeedle,
+        replacement: &Replacement,
         options: FindOptions,
     ) -> u32 {
         let mut replaced = 0;
@@ -163,7 +205,7 @@ impl TrameState {
             .into_iter()
             .flat_map(CellRect::cells)
         {
-            if self.replace_active_cell(at, needle, query, replacement, options) {
+            if self.replace_active_cell(at, needle, replacement, options) {
                 replaced += 1;
             }
         }
@@ -177,36 +219,35 @@ impl TrameState {
     fn replace_active_cell(
         &mut self,
         at: CellPos,
-        needle: &str,
-        query: &str,
-        replacement: &str,
+        needle: &FoldedNeedle,
+        replacement: &Replacement,
         options: FindOptions,
     ) -> bool {
-        let raw = self.cell_raw(at);
-        if raw.is_empty() {
+        let stored = self.cell_raw(at);
+        if stored.is_empty() {
             return false;
         }
-        let is_formula = raw.starts_with('=');
+        let is_formula = stored.is_formula();
         // A formula is searched and rewritten in its positional source, the
         // text the user reads (`TRAME-228`); the write binds it again.
         let raw = if is_formula {
             let active = self.active_sheet.clone();
-            self.formula_source(&raw, &active, &self.sheet_lines())
+            self.formula_source(&stored, &active, &self.sheet_lines())
         } else {
-            raw
+            FormulaSource::new(stored.into_string())
         };
         if is_formula && options.scope == SearchScope::Values {
             return false;
         }
         let haystack = if is_formula {
-            raw.clone()
+            raw.as_str().to_owned()
         } else {
             self.displayed_text(at)
         };
-        if !cell_matches(&haystack, needle, options) {
+        if !cell_matches(&haystack, needle, options.extent) {
             return false;
         }
-        let new_raw = rewrite(&raw, query, replacement, options);
+        let new_raw = rewrite(&raw, needle, replacement, options.extent);
         if new_raw == raw {
             return false;
         }
@@ -220,9 +261,8 @@ impl TrameState {
     fn replace_in_other(
         &mut self,
         sheet_id: &SheetId,
-        needle: &str,
-        query: &str,
-        replacement: &str,
+        needle: &FoldedNeedle,
+        replacement: &Replacement,
         options: FindOptions,
     ) -> u32 {
         let Some(&idx) = self.engine_sheet_by_id.get(sheet_id) else {
@@ -232,7 +272,7 @@ impl TrameState {
         let map = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str());
-        let mut edits: Vec<((Uid, Uid), Option<String>)> = Vec::new();
+        let mut edits: Vec<((Uid, Uid), Option<StoredFormula>)> = Vec::new();
         let mut refusals = Vec::new();
         let lines = self.sheet_lines();
         for at in index.used_range().into_iter().flat_map(CellRect::cells) {
@@ -243,28 +283,28 @@ impl TrameState {
                 .get(CellKey::of(rl, cl).as_str())
                 .map(|v| v.get_deep_value())
             {
-                Some(LoroValue::String(s)) => s.to_string(),
+                Some(LoroValue::String(s)) => StoredFormula::new(s.to_string()),
                 _ => continue,
             };
-            let is_formula = raw.starts_with('=');
+            let is_formula = raw.is_formula();
             if is_formula && options.scope == SearchScope::Values {
                 continue;
             }
             let raw = if is_formula {
                 self.formula_source(&raw, sheet_id, &lines)
             } else {
-                raw
+                FormulaSource::new(raw.into_string())
             };
             // Formula cells (in the formulas scope) match on their raw formula
             // text; plain cells match on the engine's displayed value.
             let haystack = if is_formula {
-                raw.clone()
+                raw.as_str().to_owned()
             } else {
                 let cell = CellId::bound(idx, rl, cl);
                 let text = if self.engine.is_formula_cell(cell) {
                     self.engine.evaluated_text(cell).unwrap_or_default()
                 } else {
-                    raw.clone()
+                    raw.as_str().to_owned()
                 };
                 // The displayed value, format included (`TRAME-UI-078`).
                 match self.stored_style(sheet_id, rl, cl) {
@@ -272,10 +312,10 @@ impl TrameState {
                     None => text,
                 }
             };
-            if !cell_matches(&haystack, needle, options) {
+            if !cell_matches(&haystack, needle, options.extent) {
                 continue;
             }
-            let new_raw = rewrite(&raw, query, replacement, options);
+            let new_raw = rewrite(&raw, needle, replacement, options.extent);
             if new_raw != raw {
                 let stored = if new_raw.is_empty() {
                     None
@@ -317,38 +357,44 @@ fn fold(s: &str, case: CaseMatch) -> String {
     }
 }
 
-/// Whether `haystack` matches the already-folded `needle`: exact equality for a
-/// whole-cell match, else substring containment.
-fn cell_matches(haystack: &str, needle: &str, options: FindOptions) -> bool {
-    let hay = fold(haystack, options.case);
-    match options.extent {
-        MatchExtent::WholeCell => hay == needle,
-        MatchExtent::Substring => hay.contains(needle),
+/// Whether `haystack` matches `needle`, folded by the needle's case: exact
+/// equality for a whole-cell match, else substring containment.
+fn cell_matches(haystack: &str, needle: &FoldedNeedle, extent: MatchExtent) -> bool {
+    let hay = fold(haystack, needle.case);
+    match extent {
+        MatchExtent::WholeCell => hay == needle.text,
+        MatchExtent::Substring => hay.contains(needle.text.as_str()),
     }
 }
 
 /// Produce the rewritten raw text for a matched cell: the whole-cell case swaps
 /// the entire content for `replacement`. The substring case replaces every
-/// occurrence of `query`, case-insensitively unless the case is sensitive.
-fn rewrite(raw: &str, query: &str, replacement: &str, options: FindOptions) -> String {
-    if options.extent == MatchExtent::WholeCell {
-        return replacement.to_string();
-    }
-    match options.case {
-        CaseMatch::Sensitive => raw.replace(query, replacement),
-        CaseMatch::Insensitive => replace_ci(raw, query, replacement),
-    }
+/// occurrence of the needle, case-insensitively unless its case is sensitive.
+fn rewrite(
+    raw: &FormulaSource,
+    needle: &FoldedNeedle,
+    replacement: &Replacement,
+    extent: MatchExtent,
+) -> FormulaSource {
+    let raw = raw.as_str();
+    FormulaSource::new(match (extent, needle.case) {
+        (MatchExtent::WholeCell, _) => replacement.as_str().to_owned(),
+        (MatchExtent::Substring, CaseMatch::Sensitive) => {
+            raw.replace(needle.text.as_str(), replacement.as_str())
+        }
+        (MatchExtent::Substring, CaseMatch::Insensitive) => replace_ci(raw, needle, replacement),
+    })
 }
 
-/// Byte length, measured in `hay`, of a case-insensitive match of `needle_lower`
-/// anchored at the start of `hay`. `None` when `hay` does not start with it.
+/// Byte length, measured in `hay`, of a case-insensitive match of the
+/// lower-cased `needle` anchored at the start of `hay`. `None` when `hay` does not start with it.
 ///
 /// Lowercasing is compared character by character rather than on a pre-folded
 /// copy of `hay`, because `to_lowercase` is not length-preserving. `I` (U+0130)
 /// grows from 2 bytes to 3, the Kelvin sign `K` (U+212A) shrinks from 3 to 1. An
 /// offset found in the folded text therefore does not address the original.
-fn ci_match_len(hay: &str, needle_lower: &str) -> Option<usize> {
-    let mut needle = needle_lower.chars();
+fn ci_match_len(hay: &str, needle: &FoldedNeedle) -> Option<usize> {
+    let mut needle = needle.text.chars();
     let mut pending = needle.next();
     for (offset, ch) in hay.char_indices() {
         if pending.is_none() {
@@ -366,19 +412,19 @@ fn ci_match_len(hay: &str, needle_lower: &str) -> Option<usize> {
     pending.is_none().then_some(hay.len())
 }
 
-/// Case-insensitive substring replace: replace every occurrence of `query` in
-/// `raw` (compared case-folded) with `replacement`, preserving the surrounding
-/// text verbatim. `query` is assumed non-empty.
-fn replace_ci(raw: &str, query: &str, replacement: &str) -> String {
-    let needle = query.to_lowercase();
+/// Case-insensitive substring replace: replace every occurrence of `needle`
+/// in `raw` (compared case-folded) with `replacement`, preserving the
+/// surrounding text verbatim. A needle comes from a [`FindText`], so it is
+/// never empty.
+fn replace_ci(raw: &str, needle: &FoldedNeedle, replacement: &Replacement) -> String {
     let mut out = String::with_capacity(raw.len());
     let mut rest = raw;
     while let Some(ch) = rest.chars().next() {
         // A non-empty needle always consumes at least one char, so `rest` shrinks
         // on every iteration whichever branch is taken.
-        match ci_match_len(rest, &needle) {
+        match ci_match_len(rest, needle) {
             Some(len) if len > 0 => {
-                out.push_str(replacement);
+                out.push_str(replacement.as_str());
                 rest = &rest[len..];
             }
             _ => {
@@ -392,7 +438,32 @@ fn replace_ci(raw: &str, query: &str, replacement: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{CaseMatch, FindOptions, MatchExtent, replace_ci, rewrite};
+    use super::{
+        CaseMatch, FindText, FoldedNeedle, FormulaSource, MatchExtent, Replacement, replace_ci,
+        rewrite,
+    };
+
+    /// `query` folded by `case`.
+    fn needle(query: &str, case: CaseMatch) -> FoldedNeedle {
+        FindText::new(query.to_owned())
+            .expect("a test query is not empty")
+            .fold(case)
+    }
+
+    /// `raw` with every case-insensitive match of `query` replaced by `with`.
+    fn ci(raw: &str, query: &str, with: &str) -> String {
+        replace_ci(
+            raw,
+            &needle(query, CaseMatch::Insensitive),
+            &Replacement::new(with.to_owned()),
+        )
+    }
+
+    #[test]
+    fn an_empty_query_is_no_query() {
+        assert_eq!(FindText::new(String::new()), None);
+        assert!(FindText::new("a".to_owned()).is_some());
+    }
 
     #[test]
     fn case_insensitive_replace_survives_a_non_length_preserving_lowercase() {
@@ -401,33 +472,31 @@ mod tests {
         // original string, which panicked the Logic worker. That was out of bounds
         // on the first and off a char boundary on the second, and it killed the
         // session.
-        assert_eq!(replace_ci("\u{0130}x", "x", "Z"), "\u{0130}Z");
-        assert_eq!(replace_ci("\u{212A}elvin", "elvin", "Z"), "\u{212A}Z");
+        assert_eq!(ci("\u{0130}x", "x", "Z"), "\u{0130}Z");
+        assert_eq!(ci("\u{212A}elvin", "elvin", "Z"), "\u{212A}Z");
         // The match may also start on the offending char itself.
-        assert_eq!(replace_ci("a\u{212A}b", "k", "Z"), "aZb");
+        assert_eq!(ci("a\u{212A}b", "k", "Z"), "aZb");
     }
 
     #[test]
     fn case_insensitive_replace_handles_the_ordinary_cases() {
-        assert_eq!(replace_ci("Hello hello", "HELLO", "hi"), "hi hi");
-        assert_eq!(replace_ci("aaa", "aa", "b"), "ba");
-        assert_eq!(replace_ci("abc", "z", "y"), "abc");
-        assert_eq!(replace_ci("abc", "abc", ""), "");
+        assert_eq!(ci("Hello hello", "HELLO", "hi"), "hi hi");
+        assert_eq!(ci("aaa", "aa", "b"), "ba");
+        assert_eq!(ci("abc", "z", "y"), "abc");
+        assert_eq!(ci("abc", "abc", ""), "");
         // A replacement containing the query must not be rescanned.
-        assert_eq!(replace_ci("a", "a", "aa"), "aa");
+        assert_eq!(ci("a", "a", "aa"), "aa");
     }
 
     #[test]
     fn whole_cell_rewrite_swaps_the_entire_content() {
-        let whole = FindOptions {
-            extent: MatchExtent::WholeCell,
-            ..FindOptions::default()
-        };
-        let sensitive = FindOptions {
-            case: CaseMatch::Sensitive,
-            ..FindOptions::default()
-        };
-        assert_eq!(rewrite("=A1+1", "x", "y", whole), "y");
-        assert_eq!(rewrite("Xx", "x", "y", sensitive), "Xy");
+        let y = Replacement::new("y".to_owned());
+        let raw = |text: &str| FormulaSource::new(text.to_owned());
+        let x = needle("x", CaseMatch::Insensitive);
+        let whole = rewrite(&raw("=A1+1"), &x, &y, MatchExtent::WholeCell);
+        assert_eq!(whole.as_str(), "y");
+        let x = needle("x", CaseMatch::Sensitive);
+        let part = rewrite(&raw("Xx"), &x, &y, MatchExtent::Substring);
+        assert_eq!(part.as_str(), "Xy");
     }
 }

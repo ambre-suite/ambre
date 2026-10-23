@@ -28,7 +28,9 @@ fn column(values: &[&str]) -> TrameState {
 fn a_stored_formula_names_its_lines() {
     let mut state = column(&["1", "2"]);
     set(&mut state, 0, 1, "=A2+Z99");
-    let stored = state.cell_raw(CellPos::new(Row::new(0), Col::new(1)));
+    let stored = state
+        .cell_raw(CellPos::new(Row::new(0), Col::new(1)))
+        .into_string();
     assert!(
         !stored.contains("A2"),
         "no position for a used cell: {stored}"
@@ -160,10 +162,14 @@ fn a_reference_typed_during_a_concurrent_delete_keeps_its_cell() {
 fn a_delete_leaves_a_cell_reference_untouched() {
     let mut state = column(&["1", "2", "3", "4"]);
     set(&mut state, 0, 1, "=A4*2");
-    let stored = state.cell_raw(CellPos::new(Row::new(0), Col::new(1)));
+    let stored = state
+        .cell_raw(CellPos::new(Row::new(0), Col::new(1)))
+        .into_string();
     state.handle_command(TrameCommand::DeleteRow { at: Row::new(1) });
     assert_eq!(
-        state.cell_raw(CellPos::new(Row::new(0), Col::new(1))),
+        state
+            .cell_raw(CellPos::new(Row::new(0), Col::new(1)))
+            .into_string(),
         stored,
         "the stored text is the same"
     );
@@ -200,7 +206,9 @@ fn a_positional_workbook_migrates_onto_its_cells() {
         .import_snapshot(&old.export_snapshot())
         .expect("version 2 migrates");
     assert_eq!(state.schema_version(), SCHEMA_VERSION);
-    let stored = state.cell_raw(CellPos::new(Row::new(0), Col::new(1)));
+    let stored = state
+        .cell_raw(CellPos::new(Row::new(0), Col::new(1)))
+        .into_string();
     assert!(
         !stored.contains("A2"),
         "the migration named the lines: {stored}"
@@ -219,7 +227,9 @@ fn a_whole_column_range_reads_the_used_rows() {
     let mut state = column(&["1", "2", "3"]);
     set(&mut state, 0, 1, "=SUM(A:A)");
     assert_eq!(read_cell(&mut state, 0, 1), "6");
-    let stored = state.cell_raw(CellPos::new(Row::new(0), Col::new(1)));
+    let stored = state
+        .cell_raw(CellPos::new(Row::new(0), Col::new(1)))
+        .into_string();
     assert!(stored.contains("{*|"), "rows are stored whole: {stored}");
     assert_eq!(read_raw(&mut state, 0, 1), "=SUM(A:A)");
     set(&mut state, 99, 0, "10");

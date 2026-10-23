@@ -214,7 +214,7 @@ pub enum CellValue {
 pub enum FormulaError {
     CircularReference,
     BrokenRef,
-    ParseError(String),
+    ParseError(ParseError), // why the text did not parse
     DivisionByZero,
     TypeError,
     InvalidRef(String),
