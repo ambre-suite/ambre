@@ -19,7 +19,7 @@ use crate::commands::{
 use crate::drafts::DraftShelf;
 use crate::emoji;
 use crate::markers::{Cover, MarkBar};
-use crate::mention_list::MentionList;
+use crate::mention_list::{MentionList, OfferIndex};
 use crate::uploads::PickedFile;
 use crate::{
     Activity, MessageRef, MurmurePane, Region, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
@@ -362,7 +362,7 @@ pub struct MurmureRelay {
     /// (`MURMURE-555`).
     pub mentions: RwSignal<Option<MentionList>>,
     /// The entry a click picked in the `@` list, until its region takes it.
-    picked: RwSignal<Option<(Region, usize)>>,
+    picked: RwSignal<Option<(Region, OfferIndex)>>,
     /// The format bar a region of the page shows, `None` while nothing is
     /// selected (`MURMURE-432`).
     pub mark_bar: RwSignal<Option<MarkBar>>,
@@ -1221,7 +1221,7 @@ impl MurmureRelay {
 
     /// A click on the entry `index` of the `@` list shown: its region takes
     /// the pick at its next frame (`MURMURE-555`).
-    pub fn pick_mention(&self, index: usize) {
+    pub fn pick_mention(&self, index: OfferIndex) {
         if let Some(region) = self
             .mentions
             .with_untracked(|m| m.as_ref().map(|m| m.region))
@@ -1231,7 +1231,7 @@ impl MurmureRelay {
     }
 
     /// The pick of `region`, taken once.
-    pub fn take_pick(&self, region: Region) -> Option<usize> {
+    pub fn take_pick(&self, region: Region) -> Option<OfferIndex> {
         let (picked, index) = self.picked.get_untracked()?;
         if picked != region {
             return None;
@@ -1607,9 +1607,9 @@ pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
             let (x, y) = (at.x.get(), at.y.get());
             let entries = list
                 .entries
-                .into_iter()
-                .enumerate()
+                .iter_enumerated()
                 .map(|(index, name)| {
+                    let name = name.clone();
                     let chosen = (index == list.chosen).to_string();
                     let pick = move |ev: leptos::ev::MouseEvent| {
                         ev.prevent_default();

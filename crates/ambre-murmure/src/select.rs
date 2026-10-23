@@ -56,10 +56,11 @@ impl TextSelection {
         })
     }
 
-    /// The bytes it selects of row `i`, whose body is `len` bytes long.
-    /// `None` when it selects none of them.
-    pub fn range_in(&self, keys: &[RowKey], i: usize, len: ByteCount) -> Option<ByteSpan> {
+    /// The bytes it selects of the row `row`, whose body is `len` bytes
+    /// long. `None` when it selects none of them, or `row` left the list.
+    pub fn range_in(&self, keys: &[RowKey], row: RowKey, len: ByteCount) -> Option<ByteSpan> {
         let ((first, from), (last, to)) = self.ordered(keys)?;
+        let i = keys.iter().position(|k| *k == row)?;
         if i < first || i > last {
             return None;
         }
@@ -100,7 +101,10 @@ impl TextSelection {
             // The body may end on the edited mark, which is no text of its.
             let body = row.words(name_of, time_of).body;
             let text = message.shown(name_of).len();
-            let Some(span) = self.range_in(&keys, i, ByteCount::from_len(body.len())) else {
+            let Some(span) = keys
+                .get(i)
+                .and_then(|&key| self.range_in(&keys, key, ByteCount::from_len(body.len())))
+            else {
                 continue;
             };
             let (start, end) = (span.start.get(), span.end.get());
@@ -164,15 +168,15 @@ mod tests {
         };
         for selection in [down, up] {
             assert_eq!(
-                selection.range_in(&keys, 0, ByteCount::new(5)),
+                selection.range_in(&keys, keys[0], ByteCount::new(5)),
                 Some(ByteSpan::from_usize_range(2..5))
             );
             assert_eq!(
-                selection.range_in(&keys, 1, ByteCount::new(5)),
+                selection.range_in(&keys, keys[1], ByteCount::new(5)),
                 Some(ByteSpan::from_usize_range(0..5))
             );
             assert_eq!(
-                selection.range_in(&keys, 2, ByteCount::new(5)),
+                selection.range_in(&keys, keys[2], ByteCount::new(5)),
                 Some(ByteSpan::from_usize_range(0..3))
             );
         }
@@ -181,11 +185,11 @@ mod tests {
             focus: spot(&list, 1, 2),
         };
         assert_eq!(
-            none.range_in(&keys, 1, ByteCount::new(5)),
+            none.range_in(&keys, keys[1], ByteCount::new(5)),
             None,
             "a collapsed one"
         );
-        assert_eq!(none.range_in(&keys, 0, ByteCount::new(5)), None);
+        assert_eq!(none.range_in(&keys, keys[0], ByteCount::new(5)), None);
     }
 
     /// `MURMURE-426`: a copy puts each message under its author and its

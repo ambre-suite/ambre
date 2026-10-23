@@ -2001,13 +2001,10 @@ ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.unnamed | field | &'s
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.word | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::run() | ret | bool	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.keys | field | RwSignal<bool>	math	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.picked | field | RwSignal<Option<(Region,usize)>>	debt	finding: the region is typed; the picked entry is still a bare usize index
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::has_members() | ret | Signal<bool>	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::in_channel() | ret | bool	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::notice(visible) | param | bool	math	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::pick_mention(index) | param | usize	math	local count/index/counter
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::take_pick() | ret | Option<usize>	math	local count/index/counter
 ambre-murmure | src/chrome.rs | crate::chrome | Notice.title | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | ROOT_LOST | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | SPACE_NOT_OPENED | const | &str	free-text	UI text/label const
@@ -2053,7 +2050,6 @@ ambre-murmure | src/commands.rs | crate::commands | search_title() | ret | Strin
 ambre-murmure | src/composer.rs | crate::composer | ALSO_CHORD | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | ALSO_IN_CHANNEL | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | ALSO_PX | const | f32	math	layout geometry in logical px
-ambre-murmure | src/composer.rs | crate::composer | Asking.chosen | field | usize	math	local count/index/counter
 ambre-murmure | src/composer.rs | crate::composer | Asking.query | field | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | BOX_PX | const | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | COMPOSER_HINT | const | &str	free-text	UI text/label const
@@ -2066,7 +2062,6 @@ ambre-murmure | src/composer.rs | crate::composer | Composer.file_chips | field 
 ambre-murmure | src/composer.rs | crate::composer | Composer.focused | field | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer.losses_seen | field | usize	math	local count/index/counter
 ambre-murmure | src/composer.rs | crate::composer | Composer.origin | field | (f32,f32)	math	layout geometry in logical px
-ambre-murmure | src/composer.rs | crate::composer | Composer.picked | field | Option<(DraftOf,usize)>	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/composer.rs | crate::composer | Composer.said | field | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer.typed | field | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::band() | ret | f32	math	layout geometry in logical px
@@ -2098,7 +2093,6 @@ ambre-murmure | src/composer.rs | crate::composer | Composer::paint(size) | para
 ambre-murmure | src/composer.rs | crate::composer | Composer::paint(typing) | param | Option<&str>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::paint_files(top) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Composer::paint_files(width) | param | f32	math	layout geometry in logical px
-ambre-murmure | src/composer.rs | crate::composer | Composer::pick(index) | param | usize	math	local count/index/counter
 ambre-murmure | src/composer.rs | crate::composer | Composer::press(x) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Composer::press(y) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Composer::release() | ret | bool	math	state flag/predicate
@@ -2264,8 +2258,6 @@ ambre-murmure | src/mention.rs | crate::mention | names() | ret | bool	math	stat
 ambre-murmure | src/mention.rs | crate::mention | screen(confirmed) | param | bool	math	state flag/predicate
 ambre-murmure | src/mention.rs | crate::mention | value_of() | ret | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | AT_CHANNEL | const | &str	free-text	UI text/label const
-ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.chosen | field | usize	math	local count/index/counter
-ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.entries | field | Vec<String>	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | Offer.name | field | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | Offer::written() | ret | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | matches() | ret | bool	math	state flag/predicate
@@ -2274,6 +2266,7 @@ ambre-murmure | src/mention_list.rs | crate::mention_list | matches(query) | par
 ambre-murmure | src/mention_list.rs | crate::mention_list | offers(query) | param | &str	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | query_at() | ret | Option<(ByteOffset,&str)>	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
+ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.entries | field | OfferVec<String>	free-text	text, label or user content
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::expects() | ret | bool	math	state flag/predicate
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::receive() | ret | bool	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::receive(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -2422,7 +2415,6 @@ ambre-murmure | src/select.rs | crate::select | Selecting.press | field | Option
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied(time_of) | param | &dyn Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/select.rs | crate::select | TextSelection::ordered() | ret | Option<((usize,ByteOffset),(usize,ByteOffset))>	math	count, size or local index
-ambre-murmure | src/select.rs | crate::select | TextSelection::range_in(i) | param | usize	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/sequence.rs | crate::sequence | FRAME_MAGIC | const | &[u8;4]	debt	finding: Two schema-version spaces, and a duplicated frame magic
 ambre-murmure | src/sequence.rs | crate::sequence | Framed.loro | field | &'a[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/sequence.rs | crate::sequence | Framed.rows | field | &'a[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -2528,7 +2520,6 @@ ambre-murmure | src/view.rs | crate::view | MurmureView::touch_up() | ret | Opti
 ambre-murmure | src/view.rs | crate::view | PRIMARY_BUTTON | const | i16	debt	finding: `SECONDARY_BUTTON` and `PRIMARY_BUTTON` as `i16`
 ambre-murmure | src/view.rs | crate::view | PageReads.announce | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.still | field | Rc<dyn Fn()->bool>	math	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | PageReads.take_pick | field | Rc<dyn Fn(Region)->Option<usize>>	debt	finding: the region is typed; the picked entry is still a bare usize index
 ambre-murmure | src/view.rs | crate::view | PageReads.time_of | field | Rc<dyn Fn(Timestamp)->String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.warn | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | REVEAL_SLACK_PX | const | f32	math	layout geometry in logical px

@@ -45,7 +45,7 @@ use crate::commands::PendingEdit;
 use crate::drafts::{DraftShelf, Loss};
 use crate::look;
 use crate::markers::{self, MarkBar};
-use crate::mention_list::{MentionList, Offer, offers, query_at};
+use crate::mention_list::{MentionList, Offer, OfferIndex, OfferVec, offers, query_at};
 use crate::paint::{draw, shape};
 use crate::read_aloud::{self, Say};
 use crate::uploads::Uploads;
@@ -323,8 +323,8 @@ struct Asking {
     at: ByteOffset,
     query: String,
     /// The entries of the members the view last offered.
-    offers: Vec<Offer>,
-    chosen: usize,
+    offers: OfferVec<Offer>,
+    chosen: OfferIndex,
 }
 
 /// What the composer hands the view to send, once a paint read it.
@@ -460,7 +460,7 @@ pub struct Composer {
     /// lasts (`MURMURE-554`).
     dismissed: Option<(DraftOf, ByteOffset)>,
     /// The entry picked, which the next paint writes into the draft.
-    picked: Option<(DraftOf, usize)>,
+    picked: Option<(DraftOf, OfferIndex)>,
     /// A key that can close a marker was typed in this draft: the next paint
     /// looks before the caret (`MURMURE-197`).
     closing: Option<DraftOf>,
@@ -923,8 +923,8 @@ impl Composer {
         };
         let len = asking.offers.len();
         match key {
-            "ArrowDown" => asking.chosen = (asking.chosen + 1) % len,
-            "ArrowUp" => asking.chosen = (asking.chosen + len - 1) % len,
+            "ArrowDown" => asking.chosen = asking.chosen.after(len),
+            "ArrowUp" => asking.chosen = asking.chosen.before(len),
             "Enter" | "Tab" => {
                 let chosen = asking.chosen;
                 self.pick(of, chosen);
@@ -941,11 +941,11 @@ impl Composer {
     /// Pick the entry `index` of the `@` list of the draft `of`: the next
     /// paint writes it over the query (`MURMURE-552`). A pick is a step of
     /// its own in the history.
-    pub fn pick(&mut self, of: DraftOf, index: usize) {
+    pub fn pick(&mut self, of: DraftOf, index: OfferIndex) {
         let shows = self
             .asking
             .as_ref()
-            .is_some_and(|asking| asking.of == of && index < asking.offers.len());
+            .is_some_and(|asking| asking.of == of && asking.offers.get(index).is_some());
         if shows {
             self.picked = Some((of, index));
             self.typed = true;
@@ -957,8 +957,8 @@ impl Composer {
     /// the list. `me` is never offered (`MURMURE-551`).
     pub fn offer(&mut self, members: &[(UserId, ambre_core::DisplayName)], me: Option<UserId>) {
         if let Some(asking) = &mut self.asking {
-            asking.offers = offers(&asking.query, members, me);
-            asking.chosen = asking.chosen.min(asking.offers.len().saturating_sub(1));
+            asking.offers = OfferVec::from(offers(&asking.query, members, me));
+            asking.chosen = asking.chosen.within(asking.offers.len());
         }
     }
 
@@ -1230,8 +1230,8 @@ impl Composer {
                     of,
                     at,
                     query: query.to_owned(),
-                    offers: Vec::new(),
-                    chosen: 0,
+                    offers: OfferVec::default(),
+                    chosen: OfferIndex::ZERO,
                 });
             }
         }

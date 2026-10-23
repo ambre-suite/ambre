@@ -201,8 +201,9 @@ pub fn paint_list<S: DrawSurface>(
         let Some((row, line)) = words.get(&i) else {
             continue;
         };
-        let band =
-            selection.and_then(|s| s.range_in(&keys, i, ByteCount::from_len(row.body.len())));
+        let band = selection
+            .zip(keys.get(i))
+            .and_then(|(s, &key)| s.range_in(&keys, key, ByteCount::from_len(row.body.len())));
         let tints: Vec<(ByteSpan, Color)> = row
             .marks
             .iter()

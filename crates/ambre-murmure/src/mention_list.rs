@@ -13,6 +13,45 @@ use crate::Region;
 /// The word an `@channel` writes, after its `@`.
 pub const AT_CHANNEL: &str = "channel";
 
+ambre_core::define_index! {
+    /// The place of an entry in the `@` list, `@channel` first.
+    pub struct OfferIndex(u32);
+    /// A number of entries of the `@` list.
+    pub struct OfferCount;
+    /// The signed gap between two entries of the `@` list.
+    pub struct OfferDelta(i64);
+    /// A run of entries of the `@` list.
+    pub struct OfferSpan;
+    /// A list indexed by the entries of the `@` list.
+    pub struct OfferVec;
+}
+
+impl OfferIndex {
+    /// The entry after this one in a list of `len` entries, the first after
+    /// the last.
+    pub fn after(self, len: OfferCount) -> Self {
+        let next = self.next();
+        if next < len.as_end() {
+            next
+        } else {
+            Self::ZERO
+        }
+    }
+
+    /// The entry before this one in a list of `len` entries, the last
+    /// before the first.
+    pub fn before(self, len: OfferCount) -> Self {
+        self.prev()
+            .unwrap_or_else(|| len.as_end().prev().unwrap_or(Self::ZERO))
+    }
+
+    /// This entry, or the last of a list of `len` entries when it is past
+    /// it.
+    pub fn within(self, len: OfferCount) -> Self {
+        self.min(len.as_end().prev().unwrap_or(Self::ZERO))
+    }
+}
+
 /// One entry of the list: what a pick names, and the name it writes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Offer {
@@ -32,9 +71,9 @@ impl Offer {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MentionList {
     /// Each entry as the list shows it, `@channel` first.
-    pub entries: Vec<String>,
+    pub entries: OfferVec<String>,
     /// The entry Enter or Tab picks.
-    pub chosen: usize,
+    pub chosen: OfferIndex,
     /// The top-left of the caret, in pixels of the region's canvas.
     pub at: ViewPoint,
     /// The region the list hangs from.
@@ -157,5 +196,19 @@ mod tests {
         assert_eq!(names("b", None), ["@Bob"]);
         assert_eq!(names("zed", None), Vec::<String>::new());
         assert_eq!(offers("", &members, None)[0].target, MentionTarget::Channel);
+    }
+
+    /// The arrows go round the list, and a list that shrank keeps the
+    /// choice on its last entry.
+    #[test]
+    fn the_choice_goes_round_the_list_and_stays_on_it() {
+        let three = OfferCount::new(3);
+        let (first, last) = (OfferIndex::ZERO, OfferIndex::new(2));
+        assert_eq!(first.after(three), OfferIndex::new(1));
+        assert_eq!(last.after(three), first);
+        assert_eq!(first.before(three), last);
+        assert_eq!(last.before(three), OfferIndex::new(1));
+        assert_eq!(OfferIndex::new(5).within(three), last);
+        assert_eq!(OfferIndex::new(1).within(three), OfferIndex::new(1));
     }
 }

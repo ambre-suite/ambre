@@ -38,6 +38,7 @@ use crate::drafts::DraftShelf;
 use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
 use crate::markers::MarkBar;
 use crate::mention_list::MentionList;
+use crate::mention_list::OfferIndex;
 use crate::paint::{Painted, Pictured, Shown, paint_jump, paint_list};
 use crate::pictures::Pictures;
 use crate::select::Selecting;
@@ -95,7 +96,7 @@ pub struct PageReads {
     pub show_mentions: Rc<dyn Fn(Region, Option<MentionList>)>,
     /// Take the entry a click picked in the `@` list. Given `true`, it takes
     /// a pick in the thread's list alone (`MURMURE-555`).
-    pub take_pick: Rc<dyn Fn(Region) -> Option<usize>>,
+    pub take_pick: Rc<dyn Fn(Region) -> Option<OfferIndex>>,
     /// Hand the page the format bar to draw over a selection, or `None` to
     /// close it. The flag names the thread's region (`MURMURE-432`).
     pub show_bar: Rc<dyn Fn(Region, Option<MarkBar>)>,
@@ -1786,7 +1787,7 @@ mod tests {
         /// Each `@` list the view handed the page, oldest first.
         lists: Rc<RefCell<Vec<Listed>>>,
         /// The entry a click picked, for the region it names.
-        picked: Rc<Cell<Option<(Region, usize)>>>,
+        picked: Rc<Cell<Option<(Region, OfferIndex)>>>,
         /// The send a cancelled `@channel` question gives back.
         returned: Rc<RefCell<Option<AskedAll>>>,
         /// Each address the view opened, oldest first.
@@ -1843,7 +1844,7 @@ mod tests {
         let listed = Rc::clone(&members);
         let lists = Rc::new(RefCell::new(Vec::new()));
         let shown_lists = Rc::clone(&lists);
-        let picked = Rc::new(Cell::new(None::<(Region, usize)>));
+        let picked = Rc::new(Cell::new(None::<(Region, OfferIndex)>));
         let pick = Rc::clone(&picked);
         let returned = Rc::new(RefCell::new(None::<AskedAll>));
         let given = Rc::clone(&returned);
@@ -4924,7 +4925,7 @@ mod tests {
         let lists = page.lists.borrow();
         lists
             .last()
-            .and_then(|(_, list)| list.as_ref().map(|l| l.entries.clone()))
+            .and_then(|(_, list)| list.as_ref().map(|l| l.entries.as_slice().to_vec()))
     }
 
     /// The entry the `@` list chose, as the page holds it.
@@ -4932,7 +4933,7 @@ mod tests {
         let lists = page.lists.borrow();
         lists
             .last()
-            .and_then(|(_, list)| list.as_ref().map(|l| l.chosen))
+            .and_then(|(_, list)| list.as_ref().map(|l| l.chosen.to_usize()))
     }
 
     /// The drafts sent since the last call.
@@ -5663,11 +5664,11 @@ mod tests {
         let (mut page, ..) = mentioning(channel);
         type_text(&mut page, "@");
         frame_with_fonts(&mut page.view);
-        page.picked.set(Some((Region::Thread, 1)));
+        page.picked.set(Some((Region::Thread, OfferIndex::new(1))));
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().draft(channel).as_deref(), Some("@"));
         assert!(page.picked.get().is_some(), "the thread's pick waits");
-        page.picked.set(Some((Region::Channel, 1)));
+        page.picked.set(Some((Region::Channel, OfferIndex::new(1))));
         frame_with_fonts(&mut page.view);
         frame_with_fonts(&mut page.view);
         assert_eq!(

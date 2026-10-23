@@ -1511,7 +1511,7 @@ fn the_channel_being_read_notifies_nothing_until_the_page_is_hidden() {
 /// region closes the list (`MURMURE-555`).
 #[wasm_bindgen_test]
 async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
-    use ambre_murmure::mention_list::MentionList;
+    use ambre_murmure::mention_list::{MentionList, OfferIndex};
     use wasm_bindgen::JsCast;
 
     let (_owner, relay, _) = shown_direct();
@@ -1521,10 +1521,13 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
     let _handle = leptos::mount::mount_to(mount, move || view! { <MentionPanel relay=relay /> });
     assert!(root.query_selector("[role=listbox]").unwrap().is_none());
 
-    let entries = ["@channel", "@Bob", "@Carol"].map(str::to_owned).to_vec();
+    let entries = ["@channel", "@Bob", "@Carol"]
+        .map(str::to_owned)
+        .into_iter()
+        .collect();
     let list = MentionList {
         entries,
-        chosen: 0,
+        chosen: OfferIndex::ZERO,
         at: ViewPoint::new(ViewPx::new(10.0), ViewPx::new(20.0)),
         region: Region::Channel,
     };
@@ -1550,7 +1553,7 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
         None,
         "the thread picked nothing"
     );
-    assert_eq!(relay.take_pick(Region::Channel), Some(1));
+    assert_eq!(relay.take_pick(Region::Channel), Some(OfferIndex::new(1)));
     assert_eq!(
         relay.take_pick(Region::Channel),
         None,
