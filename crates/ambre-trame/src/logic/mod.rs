@@ -25,7 +25,7 @@ use crate::formula::{
     AxisId, CellId, EngineSheet, FormulaCtx, FormulaEngine, NameTarget, SheetIndices, render,
 };
 use crate::model::{CellKey, Line, SheetIndex, Uid, parse_cell_key};
-use crate::{DisplayCell, TrameCommand, TrameEvent};
+use crate::{DefinedName, DisplayCell, TrameCommand, TrameEvent};
 use ambre_bus::{
     BorderPreset, CellBorder, CellFormat, CellPos, CellRect, CellStyle, ClipboardCell,
     ClipboardPayload, Col, ColCount, FilterKind, FilterOp, MergeSpan, Row, RowCount, RowSpan,
@@ -46,7 +46,7 @@ pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 struct TrameCtx<'a> {
     engine_sheet_by_name: &'a HashMap<String, EngineSheet>,
     engine_sheet_by_id: &'a HashMap<SheetId, EngineSheet>,
-    named: &'a HashMap<String, NameTarget>,
+    named: &'a HashMap<DefinedName, NameTarget>,
 }
 
 impl FormulaCtx for TrameCtx<'_> {
@@ -56,7 +56,7 @@ impl FormulaCtx for TrameCtx<'_> {
     fn resolve_sheet_id(&self, id: &SheetId) -> Option<EngineSheet> {
         self.engine_sheet_by_id.get(id).copied()
     }
-    fn resolve_name(&self, name: &str) -> Option<NameTarget> {
+    fn resolve_name(&self, name: &DefinedName) -> Option<NameTarget> {
         self.named.get(name).cloned()
     }
 }
@@ -207,7 +207,7 @@ pub struct TrameState {
     sheet_id_to_name: HashMap<SheetId, String>,
     /// Resolved named ranges: defined name -> target cell/range. Rebuilt from the
     /// `named_ranges` CRDT map by [`Self::rebuild_named`] on every reseed.
-    named: HashMap<String, NameTarget>,
+    named: HashMap<DefinedName, NameTarget>,
     /// The cell writes refused since the last [`finish_cell_writes`], which
     /// reports them to the user (`TRAME-211`, `TRAME-UI-164`). Every write path
     /// ends there, so none of them can refuse in silence.

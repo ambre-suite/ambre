@@ -146,7 +146,7 @@ fn render_node(expr: &Expr) -> String {
         Expr::StoredRange(start, end) => {
             format!("{}:{}", render_stored(start), render_stored(end))
         }
-        Expr::Name(n) => n.clone(),
+        Expr::Name(n) => n.as_str().to_owned(),
         Expr::SheetRef { sheet, inner } => {
             format!("{}!{}", render_qualifier(sheet), render_node(inner))
         }

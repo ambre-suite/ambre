@@ -16,7 +16,7 @@ use super::types::{
     NameTarget, RangeDep, SheetQualifier, StoredAxis, StoredCell, UnaryOpKind, alpha_to_col,
 };
 use crate::model::Uid;
-use ambre_bus::{Row, SheetId};
+use ambre_bus::{DefinedName, Row, SheetId};
 
 // -----------------------------------------------------------------------------
 // Whitespace
@@ -276,9 +276,10 @@ fn error_literal(input: &str) -> nom::IResult<&str, FormulaError> {
 }
 
 /// A bareword reference to a named range. Resolution happens in
-/// [`resolve_refs`]; here we only capture the identifier.
+/// [`resolve_refs`]; here we only capture the identifier, which always has a
+/// name's shape.
 fn name_ref(input: &str) -> nom::IResult<&str, Expr> {
-    map(identifier, |s: &str| Expr::Name(s.to_string())).parse(input)
+    map_res(identifier, |s: &str| DefinedName::new(s).map(Expr::Name)).parse(input)
 }
 
 // -----------------------------------------------------------------------------

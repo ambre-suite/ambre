@@ -89,7 +89,7 @@ fn a_paste_and_a_fill_leave_a_name_in_place() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["1", "2", "3"]);
     state.handle_command(TrameCommand::DefineName {
-        name: "TOTAL".to_owned(),
+        name: crate::test_support::name("TOTAL"),
         reference: "A1:A3".to_owned(),
     });
     let formula = |raw: &str| crate::ClipboardCell {
@@ -140,7 +140,7 @@ fn removing_an_unknown_name_changes_nothing() {
     let mut state = with_one_edit();
     let before = state.doc.len_ops();
     let out = state.handle_command(TrameCommand::DeleteName {
-        name: "NOWHERE".to_owned(),
+        name: crate::test_support::name("NOWHERE"),
     });
     assert!(out.display.is_empty() && out.update.is_none());
     assert_eq!(state.doc.len_ops(), before);

@@ -340,7 +340,7 @@ fn named_range_defines_resolves_and_deletes() {
     }
     // Define TOTAL = A1:A3, then C1 = SUM(TOTAL).
     state.handle_command(TrameCommand::DefineName {
-        name: "TOTAL".to_owned(),
+        name: crate::test_support::name("TOTAL"),
         reference: "A1:A3".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
@@ -388,13 +388,13 @@ fn named_range_defines_resolves_and_deletes() {
     // Deleting the name stops it resolving: its consumer shows an error where
     // the total stood, never the stale 15 nor its own source (`TRAME-065`).
     restored.handle_command(TrameCommand::DeleteName {
-        name: "TOTAL".to_owned(),
+        name: crate::test_support::name("TOTAL"),
     });
     assert_eq!(read_c1(&mut restored, 4), "#NAME?");
 
     // Defining it again brings the total back.
     restored.handle_command(TrameCommand::DefineName {
-        name: "TOTAL".to_owned(),
+        name: crate::test_support::name("TOTAL"),
         reference: "A1:A3".to_owned(),
     });
     assert_eq!(read_c1(&mut restored, 5), "15");
@@ -444,7 +444,7 @@ fn unqualified_name_resolves_the_same_for_every_reader() {
         sheet_id: SheetId("s0".to_owned()),
     });
     state.handle_command(TrameCommand::DefineName {
-        name: "TOTAL".to_owned(),
+        name: crate::test_support::name("TOTAL"),
         reference: "A1:A2".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
@@ -486,7 +486,7 @@ fn name_on_another_sheet_survives_its_rename() {
         sheet_id: SheetId("s0".to_owned()),
     });
     state.handle_command(TrameCommand::DefineName {
-        name: "RATE".to_owned(),
+        name: crate::test_support::name("RATE"),
         reference: "Data!A1".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
@@ -513,7 +513,7 @@ fn definition_that_is_not_a_reference_is_refused() {
     let mut state = TrameState::new();
     for reference in ["A1+1", "SUM(A1:A3)", "Nowhere!A1", "not a ref", ""] {
         let evts = state.handle_command(TrameCommand::DefineName {
-            name: "TOTAL".to_owned(),
+            name: crate::test_support::name("TOTAL"),
             reference: reference.to_owned(),
         });
         assert!(
@@ -524,14 +524,18 @@ fn definition_that_is_not_a_reference_is_refused() {
     }
 }
 
-/// A name no formula can read is refused when it is made (`TRAME-155`): a
-/// cell reference, a boolean, a leading digit, a space.
+/// A name no formula can read is refused when it is made (`TRAME-155`). A
+/// leading digit, a space or an empty text is not a name at all. A cell
+/// reference or a boolean has a name's shape, but parses as something else.
 #[test]
 fn name_a_formula_cannot_read_is_refused() {
+    for text in ["1TOTAL", "MY TOTAL", ""] {
+        assert!(crate::DefinedName::new(text).is_err(), "{text:?} is no name");
+    }
     let mut state = TrameState::new();
-    for name in ["A1", "TRUE", "1TOTAL", "MY TOTAL", ""] {
+    for name in ["A1", "TRUE"] {
         let evts = state.handle_command(TrameCommand::DefineName {
-            name: name.to_owned(),
+            name: crate::test_support::name(name),
             reference: "B1:B3".to_owned(),
         });
         assert!(
@@ -541,7 +545,7 @@ fn name_a_formula_cannot_read_is_refused() {
         assert!(evts.update.is_none(), "{name:?} writes nothing");
     }
     let evts = state.handle_command(TrameCommand::DefineName {
-        name: "_TOTAL_2".to_owned(),
+        name: crate::test_support::name("_TOTAL_2"),
         reference: "B1:B3".to_owned(),
     });
     assert!(evts.update.is_some(), "a readable name is stored");

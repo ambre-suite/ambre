@@ -125,3 +125,12 @@ pub fn span(rows: u32, cols: u32) -> crate::MergeSpan {
 pub fn session(n: u64) -> crate::EditSessionId {
     (1..n).fold(crate::EditSessionId::FIRST, |token, _| token.next())
 }
+
+/// The defined name `text`, which a test writes with a name's shape.
+///
+/// # Panics
+///
+/// When `text` does not have a name's shape.
+pub fn name(text: &str) -> crate::DefinedName {
+    crate::DefinedName::new(text).expect("a test name has a name's shape")
+}

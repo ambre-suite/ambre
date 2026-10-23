@@ -381,7 +381,7 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         ),
     });
     state.handle_command(TrameCommand::DefineName {
-        name: "N".to_owned(),
+        name: crate::test_support::name("N"),
         reference: "A1".to_owned(),
     });
     state.handle_command(TrameCommand::ApplyFilter {

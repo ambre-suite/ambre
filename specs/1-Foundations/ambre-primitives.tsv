@@ -488,9 +488,7 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddValidation.message | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CommitCellEdit.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CreateSheet.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.reference | field | String	free-text	A1 reference text, parsed by the formula engine
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DeleteName.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ExportCsv.delimiter | field | Option<u8>	debt	finding: CSV delimiter as Option<u8> (low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.data | field | Vec<u8>	generic	imported CSV bytes
@@ -4953,7 +4951,6 @@ ambre-trame | src/formula/render.rs | crate::formula::render | render_uid() | re
 ambre-trame | src/formula/render.rs | crate::formula::render | to_display_form(id_to_name) | param | &impl Fn(&SheetId)->Option<String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_formula() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_formula(raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/formula/types.rs | crate::formula::types | <SingleSheetCtx as FormulaCtx>::resolve_name(_name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/formula/types.rs | crate::formula::types | <SingleSheetCtx as FormulaCtx>::resolve_sheet(_name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Boolean.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Number.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
@@ -4965,8 +4962,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::index(
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::new(index) | param | u16	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::position() | ret | usize	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | Expr::FnCall.name | field | String	debt	finding: (FINDING, confirmed): builtin function name as String
-ambre-trame | src/formula/types.rs | crate::formula::types | Expr::Name.0 | field | String	debt	finding: (FINDING, confirmed): defined names and their reference text
-ambre-trame | src/formula/types.rs | crate::formula::types | FormulaCtx::resolve_name(name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/formula/types.rs | crate::formula::types | FormulaCtx::resolve_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/types.rs | crate::formula::types | FormulaError::ParseError.0 | field | String	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::CallFn.n_args | field | usize	math	count, length, local index, limit or calendar/arith helper
@@ -5091,14 +5086,11 @@ ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimite
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | has_raw_value() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/mod.rs | crate::logic | <TrameCtx<'_> as FormulaCtx>::resolve_name(name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/mod.rs | crate::logic | <TrameCtx<'_> as FormulaCtx>::resolve_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/mod.rs | crate::logic | DEFAULT_SHEET_NAME | const | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/mod.rs | crate::logic | TrameCtx.engine_sheet_by_name | field | &'a HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
-ambre-trame | src/logic/mod.rs | crate::logic | TrameCtx.named | field | &'a HashMap<String,NameTarget>	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.engine_sheet_by_name | field | HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.entry_end | field | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.named | field | HashMap<String,NameTarget>	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_counter | field | u32	newtype-inner	per-session mint counter feeding the id formatter
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_id_to_name | field | HashMap<SheetId,String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_list_sent | field | bool	generic	independent state or style flag, not a mode selector
@@ -5150,12 +5142,9 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | gate() | ret | Result
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate(payload) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | stored_reference_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference() | ret | Option<String>	debt	finding: (FINDING, confirmed): defined names and their reference text
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
+ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::create_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::define_name(name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::define_name(reference) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::delete_name(name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
+ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::define_name(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::free_sheet_name() | ret | String	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::free_sheet_name(wanted) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::hold_default_sheet() | ret | bool	generic	predicate or did-it-change return
@@ -5522,3 +5511,8 @@ ambre-prose | src/doc.rs | crate::doc | WriteError::Refused.0 | field | &'static
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Missing.0 | field | &'static str	free-text	a diagnostic sentence naming the part a fixture build could not find
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Refused.command | field | &'static str	free-text	the literal name of the fixture command, printed in the failure message only
 ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	looks a name table up by the key text the document stores
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName.0 | field | String	newtype-inner	the text of a validated defined name
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName::as_str() | ret | &str	newtype-inner	enum/newtype own accessor or constructor
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName::new(text) | param | &str	newtype-inner	the fallible constructor that checks the name shape
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidDefinedName.0 | field | String	free-text	the refused text, echoed in the refusal

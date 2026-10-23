@@ -1,6 +1,6 @@
 use std::fmt;
 
-use ambre_bus::{CellPos, Col, Row, SheetId};
+use ambre_bus::{CellPos, Col, DefinedName, Row, SheetId};
 
 use crate::model::{Line, SheetIndex, Uid};
 
@@ -655,7 +655,7 @@ pub enum Expr {
         inner: Box<Expr>,
     },
     /// A bareword reference to a named range, resolved by the context.
-    Name(String),
+    Name(DefinedName),
     BinOp {
         kind: BinOpKind,
         lhs: Box<Expr>,
@@ -709,7 +709,7 @@ pub trait FormulaCtx {
     /// or `None` if the sheet was deleted (the reference becomes `#REF!`).
     fn resolve_sheet_id(&self, id: &SheetId) -> Option<EngineSheet>;
     /// Resolve a defined name (`TOTAL`) to its target, or `None` if undefined.
-    fn resolve_name(&self, name: &str) -> Option<NameTarget>;
+    fn resolve_name(&self, name: &DefinedName) -> Option<NameTarget>;
 }
 
 /// Default context: a single sheet (index 0), no cross-sheet references, no
@@ -723,7 +723,7 @@ impl FormulaCtx for SingleSheetCtx {
     fn resolve_sheet_id(&self, _id: &SheetId) -> Option<EngineSheet> {
         None
     }
-    fn resolve_name(&self, _name: &str) -> Option<NameTarget> {
+    fn resolve_name(&self, _name: &DefinedName) -> Option<NameTarget> {
         None
     }
 }

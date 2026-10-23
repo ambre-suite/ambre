@@ -230,11 +230,11 @@ impl Op {
                     .collect(),
             },
             Op::DefineName { reference } => TrameCommand::DefineName {
-                name: "TOTAL".to_owned(),
+                name: crate::test_support::name("TOTAL"),
                 reference: reference.to_owned(),
             },
             Op::DeleteName => TrameCommand::DeleteName {
-                name: "TOTAL".to_owned(),
+                name: crate::test_support::name("TOTAL"),
             },
         }
     }

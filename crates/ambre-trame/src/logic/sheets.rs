@@ -126,13 +126,15 @@ impl TrameState {
             return;
         };
         // Names cannot reference other names: resolve sheet qualifiers only.
-        let no_names: HashMap<String, NameTarget> = HashMap::new();
+        let no_names: HashMap<DefinedName, NameTarget> = HashMap::new();
         // Resolved on first need. Reading the order list registers its root
         // container in the snapshot, and a workbook with no legacy definition
         // must not pay for it.
         let mut legacy_sheet: Option<EngineSheet> = None;
         for (name, reference) in names.iter() {
-            let LoroValue::String(reference) = reference else {
+            // A key without a name's shape is one no formula can write.
+            let (Ok(name), LoroValue::String(reference)) = (DefinedName::new(name), reference)
+            else {
                 continue;
             };
             let ctx = TrameCtx {
@@ -165,7 +167,7 @@ impl TrameState {
                 .ok()
                 .and_then(expr_to_name_target);
             if let Some(target) = target {
-                self.named.insert(name.clone(), target);
+                self.named.insert(name, target);
             }
         }
     }
@@ -189,11 +191,12 @@ impl TrameState {
     /// that is not a cell or range reference (`TRAME-069`). A refusal is said,
     /// and writes nothing. The reference is stored in canonical form: see
     /// [`canonical_name_reference`](Self::canonical_name_reference).
-    pub(super) fn define_name(&mut self, name: &str, reference: &str) -> TrameOutcome {
+    pub(super) fn define_name(&mut self, name: &DefinedName, reference: &str) -> TrameOutcome {
         // The grammar tries a bareword as a name last, after a function call, a
-        // reference and a boolean. `A1` or `TRUE` parse as something else, and
-        // `1TOTAL` does not parse. The parse is the one rule that decides.
-        let readable = matches!(parse_formula(name), Ok(Expr::Name(parsed)) if parsed == name);
+        // reference and a boolean. `A1` or `TRUE` have a name's shape and parse
+        // as something else. The parse is the one rule that decides.
+        let readable =
+            matches!(parse_formula(name.as_str()), Ok(Expr::Name(parsed)) if parsed == *name);
         if !readable {
             return TrameOutcome::display_only(vec![TrameEvent::Error {
                 message: format!(
@@ -209,7 +212,7 @@ impl TrameState {
         let _ = self
             .doc
             .get_map(Root::NamedRanges.as_str())
-            .insert(name, stored.as_str());
+            .insert(name.as_str(), render::render(&stored).as_str());
         self.doc.commit();
         self.reseed_engine();
         let update = self.flush_delta();
@@ -220,13 +223,14 @@ impl TrameState {
         }
     }
 
-    /// The stored form of a name's definition, or `None` when it is not a cell
-    /// or range reference on a sheet that exists. The qualifier is always a
+    /// The reference a name's definition stores, written out as its text. It
+    /// is `None` when `reference` is not a cell or range reference on a live
+    /// sheet. The qualifier is always a
     /// stable sheet id. An unqualified reference takes the sheet the user is on
     /// when defining it, so every reader resolves one target (`TRAME-062`). A
     /// display name becomes its id, so a rename leaves the name resolving
     /// (`TRAME-067`).
-    fn canonical_name_reference(&self, reference: &str) -> Option<String> {
+    fn canonical_name_reference(&self, reference: &str) -> Option<Expr> {
         let body = reference.trim().trim_start_matches('=');
         let qualified = match parse_formula(body).ok()? {
             bare @ (Expr::CellRef(_) | Expr::Range(_)) => Expr::SheetRef {
@@ -249,7 +253,7 @@ impl TrameState {
         };
         // The target must resolve now: the qualifier names a live sheet, and the
         // inner node is a reference and not, say, a nested name.
-        let no_names: HashMap<String, NameTarget> = HashMap::new();
+        let no_names: HashMap<DefinedName, NameTarget> = HashMap::new();
         let ctx = TrameCtx {
             engine_sheet_by_name: &self.engine_sheet_by_name,
             engine_sheet_by_id: &self.engine_sheet_by_id,
@@ -258,16 +262,16 @@ impl TrameState {
         resolve_refs(qualified.clone(), EngineSheet::ACTIVE, &ctx)
             .ok()
             .and_then(expr_to_name_target)?;
-        Some(render::render(&qualified))
+        Some(qualified)
     }
 
     /// Remove a named range and reseed. A no-op if the name is undefined.
-    pub(super) fn delete_name(&mut self, name: &str) -> TrameOutcome {
+    pub(super) fn delete_name(&mut self, name: &DefinedName) -> TrameOutcome {
         let map = self.doc.get_map(Root::NamedRanges.as_str());
-        if map.get(name).is_none() {
+        if map.get(name.as_str()).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
-        let _ = map.delete(name);
+        let _ = map.delete(name.as_str());
         self.doc.commit();
         self.reseed_engine();
         let update = self.flush_delta();

@@ -18,6 +18,56 @@ crate::token::define_token! {
     pub struct EditSessionId;
 }
 
+/// A text refused as a defined name: empty, or not a letter or underscore
+/// followed by letters, digits and underscores.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{0:?} is not a name: a letter or underscore, then letters, digits and underscores")]
+pub struct InvalidDefinedName(pub String);
+
+/// The name of a workbook named range, as a formula writes it (`TOTAL`), case
+/// kept (`trame-named-ranges`). It is an ASCII letter or underscore, then ASCII
+/// letters, digits and underscores, which is the shape of a formula bareword.
+/// The grammar reads some such words as something else first, a cell
+/// reference (`A1`) or a boolean (`TRUE`). `DefineName` refuses those.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct DefinedName(String);
+
+impl DefinedName {
+    /// The name `text` is.
+    ///
+    /// # Errors
+    ///
+    /// [`InvalidDefinedName`] when `text` does not have the shape of a name.
+    pub fn new(text: &str) -> Result<Self, InvalidDefinedName> {
+        let mut chars = text.chars();
+        let starts = chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+        if starts && chars.all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            Ok(Self(text.to_owned()))
+        } else {
+            Err(InvalidDefinedName(text.to_owned()))
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for DefinedName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// A name table is looked up by the key text the document stores.
+impl std::borrow::Borrow<str> for DefinedName {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Shape of a Trame selection band (`trame-selection`), the bus-side mirror of
 /// `ambre_trame`'s `SelKind`. `Cells` is the ordinary rectangle; `Cols`/`Rows`
 /// are whole-axis bands the Logic thread resolves to the used range.
@@ -449,18 +499,21 @@ pub enum TrameCommand {
 
     /// Define (or redefine) a workbook named range.
     ///
-    /// `name` is the case-sensitive identifier used in formulas (`=SUM(TOTAL)`);
+    /// `name` is the case-sensitive name used in formulas (`=SUM(TOTAL)`);
     /// `reference` is its target written in A1 syntax, optionally sheet-qualified
     /// (`A1`, `A1:B10`, `Sheet2!A1:B10`). Stored in the shared `named_ranges`
     /// CRDT map (LWW) and resolved positionally against the current grid each
     /// recomputation (`trame-named-ranges`). A reference that
     /// fails to parse leaves any formula using the name as `#PARSE!`.
-    DefineName { name: String, reference: String },
+    DefineName {
+        name: DefinedName,
+        reference: String,
+    },
 
     /// Remove a named range. Formulas referencing the now-undefined name
     /// re-evaluate to a parse error on the next recomputation. A no-op if the
     /// name does not exist.
-    DeleteName { name: String },
+    DeleteName { name: DefinedName },
 
     /// Switch the sheet the UI is looking at to `sheet_id`. The Logic thread rebuilds its
     /// active-sheet derived caches (index, merges, formatting, formula engine). It then
@@ -759,5 +812,23 @@ impl TrameCommand {
                 | Self::ExportAmbreFile
                 | Self::ExportAmbreFileSealed { .. }
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DefinedName;
+
+    #[test]
+    fn a_name_is_a_letter_or_underscore_then_word_characters() {
+        for name in ["TOTAL", "_TOTAL_2", "a", "_", "A1", "TRUE"] {
+            assert!(
+                DefinedName::new(name).is_ok(),
+                "{name:?} has a name's shape"
+            );
+        }
+        for text in ["", "1TOTAL", "MY TOTAL", "TOTAL!", "TÔTAL", "A-B"] {
+            assert!(DefinedName::new(text).is_err(), "{text:?} is refused");
+        }
     }
 }

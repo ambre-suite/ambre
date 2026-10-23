@@ -224,8 +224,8 @@ impl FormulaCtx for TestCtx {
             _ => None,
         }
     }
-    fn resolve_name(&self, name: &str) -> Option<NameTarget> {
-        match name {
+    fn resolve_name(&self, name: &ambre_bus::DefinedName) -> Option<NameTarget> {
+        match name.as_str() {
             "TOTAL" => Some(NameTarget::Range(RangeDep::with_sheet(
                 S2,
                 Row::new(0),
@@ -466,7 +466,7 @@ fn sheet_qualifier_still_wins_over_the_error_literal() {
 fn row_zero_is_not_a_reference() {
     // Rows are 1-based in A1 syntax, so `A0` names nothing. It must fall through
     // to the named-range parser rather than silently aliasing row 1.
-    assert!(matches!(parse("A0"), Expr::Name(n) if n == "A0"));
+    assert!(matches!(parse("A0"), Expr::Name(n) if n.as_str() == "A0"));
     assert!(matches!(parse("A1"), Expr::CellRef(r) if r.row == Row::new(0)));
 }
 
@@ -474,8 +474,8 @@ fn row_zero_is_not_a_reference() {
 fn bool_literal_matches_only_a_whole_word() {
     // A named range that merely starts with TRUE/FALSE must stay a bareword;
     // consuming the prefix left ":VALUE" as unparsed trailing input.
-    assert!(matches!(parse("TRUEVALUE"), Expr::Name(n) if n == "TRUEVALUE"));
-    assert!(matches!(parse("FALSEY"), Expr::Name(n) if n == "FALSEY"));
+    assert!(matches!(parse("TRUEVALUE"), Expr::Name(n) if n.as_str() == "TRUEVALUE"));
+    assert!(matches!(parse("FALSEY"), Expr::Name(n) if n.as_str() == "FALSEY"));
     assert!(matches!(
         parse("TRUE"),
         Expr::Literal(CellValue::Boolean(true))
