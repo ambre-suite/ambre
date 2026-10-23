@@ -2921,6 +2921,7 @@
   {"edge": "verified-by", "from": "SYNC-134", "to": "ambre_sync::setup_tests::a_request_refused_for_a_setup_owed_reaches_logic_as_a_setup"},
   {"edge": "verified-by", "from": "SYNC-134", "to": "ambre_sync::http::tests::only_a_setup_refusal_reads_as_one"},
   {"edge": "verified-by", "from": "SYNC-134", "to": "ambre_sync::http::tests::an_account_without_master_material_owes_its_setup"},
+  {"edge": "verified-by", "from": "SYNC-134", "to": "ambre_sync::sharing::tests::a_refused_leave_keeps_the_relay_refusal"},
   {"edge": "verified-by", "from": "SYNC-134", "to": "ambre_logic::dispatch::tests::a_setup_owed_reaches_the_ui_as_a_setup"},
   {"edge": "cites-section", "from": "SYNC-137", "section": "2", "to": "1-Foundations/ambre-spec-sync.md"},
   {"edge": "cites-document", "from": "SYNC-137", "to": "ambre-spec-broadcast.md"},
